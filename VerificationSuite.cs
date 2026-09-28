@@ -229,7 +229,15 @@ internal static class VerificationSuite
         var dry = new short[4410 * 2]; dry[0] = 24000; dry[1] = 12000;
         new StereoHallReverb(44100) { Enabled = false }.Process(dry, 4410);
         Assert(dry.Take(2).SequenceEqual(new short[] { 24000, 12000 }) && dry.Skip(2).All(sample => sample == 0), "Turning reverb off should preserve the dry signal and produce no reflections.");
-        Results.Add("PASS reverb: stereo room tail, stable dry path and selectable bypass.");
+        var ringing = new StereoHallReverb(44100);
+        var tailImpulse = new short[4410 * 2]; tailImpulse[0] = 24000; tailImpulse[1] = 12000;
+        ringing.Process(tailImpulse, 4410);
+        ringing.Enabled = false;
+        var fading = new short[4410 * 2]; ringing.Process(fading, 4410);
+        Assert(fading.Any(sample => sample != 0), "Bypassing the reverb while it rings should fade the existing tail out instead of cutting it.");
+        var settled = new short[4410 * 2]; ringing.Process(settled, 4410);
+        Assert(settled.All(sample => sample == 0), "Once the faded tail ends, the bypassed reverb must stay silent.");
+        Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
     }
 
     private static void VerifyMidiDevicesAndKeyboardMap()

@@ -201,11 +201,14 @@ internal sealed class StereoHallReverb
     private readonly Comb[] _rightCombs;
     private readonly AllPass[] _leftDiffusers;
     private readonly AllPass[] _rightDiffusers;
-    private bool _tailPending;
+    private double _fade;
+    private bool _wetActive;
+    private readonly double _fadeStep;
     public volatile bool Enabled = true;
 
     public StereoHallReverb(int sampleRate)
     {
+        _fadeStep = 1 / (sampleRate * 0.12);
         int Samples(double milliseconds) => Math.Max(1, (int)Math.Round(sampleRate * milliseconds / 1000));
         _leftCombs = new double[] { 29.7, 37.1, 41.1, 43.7 }.Select(ms => new Comb(Samples(ms))).ToArray();
         _rightCombs = new double[] { 31.1, 36.7, 40.3, 44.1 }.Select(ms => new Comb(Samples(ms))).ToArray();
@@ -217,27 +220,33 @@ internal sealed class StereoHallReverb
     {
         if (!Enabled)
         {
-            // Clear the delay lines once when bypassed instead of on every buffer, so re-enabling starts from silence.
-            if (_tailPending) { Reset(); _tailPending = false; }
-            return;
+            // Bypass leaves the dry signal untouched. A tail that is still ringing fades out over
+            // ~120 ms instead of cutting abruptly; once silent, the delay lines are cleared once.
+            if (!_wetActive) return;
         }
-        _tailPending = true;
+        else { _fade = 1; _wetActive = true; }
         for (var i = 0; i < frames; i++)
         {
             var offset = i * 2;
             var dryLeft = interleaved[offset] / 32768f;
             var dryRight = interleaved[offset + 1] / 32768f;
-            var sendLeft = dryLeft + dryRight * .16f;
-            var sendRight = dryRight + dryLeft * .16f;
+            // While fading out the delay lines keep ringing but no new energy is fed in.
+            var sendLeft = Enabled ? dryLeft + dryRight * .16f : 0f;
+            var sendRight = Enabled ? dryRight + dryLeft * .16f : 0f;
             var wetLeft = 0f; var wetRight = 0f;
             foreach (var comb in _leftCombs) wetLeft += comb.Process(sendLeft);
             foreach (var comb in _rightCombs) wetRight += comb.Process(sendRight);
-            wetLeft *= .25f; wetRight *= .25f;
+            wetLeft *= .25f * (float)_fade; wetRight *= .25f * (float)_fade;
             foreach (var diffuser in _leftDiffusers) wetLeft = diffuser.Process(wetLeft);
             foreach (var diffuser in _rightDiffusers) wetRight = diffuser.Process(wetRight);
-            interleaved[offset] = ToPcm(dryLeft * .91f + wetLeft * .38f);
-            interleaved[offset + 1] = ToPcm(dryRight * .91f + wetRight * .38f);
+            // The enabled path keeps dry at .91 to leave headroom for the wet sum; while the tail
+            // fades, ramp dry back to unity so bypassing never clicks.
+            var dryGain = Enabled ? .91f : .91f + .09f * (1 - (float)_fade);
+            interleaved[offset] = ToPcm(dryLeft * dryGain + wetLeft * .38f);
+            interleaved[offset + 1] = ToPcm(dryRight * dryGain + wetRight * .38f);
+            if (!Enabled) _fade = Math.Max(0, _fade - _fadeStep);
         }
+        if (!Enabled && _fade == 0) { Reset(); _wetActive = false; }
     }
 
     private void Reset()

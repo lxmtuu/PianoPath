@@ -327,11 +327,14 @@ internal sealed class SoundFontSynthesizer
             case 0x80: NoteOff(channel, data1); break;
             case 0x90: if (data2 == 0) NoteOff(channel, data1); else NoteOn(channel, data1, data2); break;
             case 0xB0:
-                if (data1 == 0) _bank[channel] = data2 << 7;
-                else if (data1 == 32) _bank[channel] = (_bank[channel] & 0x3f80) | data2;
-                else if (data1 == 64) SetSustain(channel, data2 >= 64);
+                lock (_gate)
+                {
+                    if (data1 == 0) _bank[channel] = data2 << 7;
+                    else if (data1 == 32) _bank[channel] = (_bank[channel] & 0x3f80) | data2;
+                    else if (data1 == 67) _soft[channel] = data2 >= 64;
+                }
+                if (data1 == 64) SetSustain(channel, data2 >= 64);
                 else if (data1 == 66) SetSostenuto(channel, data2 >= 64);
-                else if (data1 == 67) _soft[channel] = data2 >= 64;
                 else if (data1 == 120 || data1 == 123) AllNotesOff(channel);
                 break;
             case 0xC0:
