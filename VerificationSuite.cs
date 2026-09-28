@@ -265,8 +265,9 @@ internal static class VerificationSuite
         ringing.Enabled = false;
         var fading = new short[4410 * 2]; ringing.Process(fading, 4410);
         Assert(fading.Any(sample => sample != 0), "Bypassing the reverb while it rings should fade the existing tail out instead of cutting it.");
+        var settling = new short[4410 * 2]; ringing.Process(settling, 4410);
         var settled = new short[4410 * 2]; ringing.Process(settled, 4410);
-        Assert(settled.All(sample => sample == 0), "Once the faded tail ends, the bypassed reverb must stay silent.");
+        Assert(settled.All(sample => sample == 0), "Once the 120 ms bypass fade has fully elapsed, the reverb must stay silent.");
         Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
     }
 
