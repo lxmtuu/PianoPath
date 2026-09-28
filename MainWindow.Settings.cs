@@ -4,6 +4,7 @@ using System.IO;
 using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 
@@ -31,8 +32,13 @@ public partial class MainWindow
     /// <summary>Every generated switch; a layer such as sparks appears both on the Style page and on its own page.</summary>
     private readonly List<CheckBox> _visualToggleList = [];
     private readonly List<Button> _trackPaletteSwatches = [];
+    /// <summary>Every generated color row; a color can appear on more than one page (the Colors hub and its feature page).</summary>
+    private readonly List<(string Property, TextBox Box, Button Swatch)> _visualColorRows = [];
+    private readonly Dictionary<Button, TextBox> _colorBoxBySwatch = [];
+    private readonly List<Button> _paletteChips = [];
     private readonly HashSet<int> _mutedTracks = [];
     private readonly List<VisualPreset> _presets = [];
+    private Border? _palettePreview;
     private bool _presetListLoading;
     private static readonly Regex NoteNamePattern = new(@"^\s*([A-Ga-g])\s*([#♯bB]?)\s*(-?\d)\s*$", RegexOptions.Compiled);
     private static readonly PianoVisualSettings DefaultVisualSettings = VisualPresets.NeonViolet();
@@ -44,48 +50,127 @@ public partial class MainWindow
     private void BuildVisualSettingsControls()
     {
         _loadingVisualSettings = true;
-        BuildStylePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage();
+        BuildStylePage(); BuildColorsPage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildScenePage(); BuildShaderPage(); BuildRecordingPage();
         _loadingVisualSettings = false;
         LoadPresetList();
         RefreshDependentRows();
         UpdateRecordingInfo();
+        UpdatePalettePreview();
         UpdatePresetLabels();
+        SyncQuickLayerPills();
+    }
+
+    /// <summary>The layer pills floating over the stage: they toggle the same settings as the Style page.</summary>
+    private void QuickLayer_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loadingVisualSettings || !_uiReady || sender is not ToggleButton { Tag: string property } pill) return;
+        var value = pill.IsChecked == true;
+        Prop(property).SetValue(_visualSettings, value);
+        if (_visualToggles.TryGetValue(property, out var box))
+        {
+            _loadingVisualSettings = true;
+            try { box.IsChecked = value; }
+            finally { _loadingVisualSettings = false; }
+        }
+        MarkModified();
+        RefreshDependentRows();
+        UpdatePalettePreview();
+        ApplyVisualSettings($"{pill.Content} {(value ? "on" : "off")}");
+    }
+
+    /// <summary>Mirrors the settings into the stage pills without re-entering the change handlers.</summary>
+    private void SyncQuickLayerPills()
+    {
+        if (QuickNotesToggle is null) return;
+        _loadingVisualSettings = true;
+        try
+        {
+            foreach (var pill in new[] { QuickNotesToggle, QuickSparksToggle, QuickFlamesToggle, QuickWispsToggle, QuickHaloToggle, QuickKeysToggle })
+                if (pill.Tag is string property) pill.IsChecked = (bool)Prop(property).GetValue(_visualSettings)!;
+        }
+        finally { _loadingVisualSettings = false; }
     }
 
     private void BuildStylePage()
     {
-        var body = Card(StyleSettingsHost, "LAYERS", "Quick switches for every layer of the stage. Detailed controls live on the other pages.");
-        Toggle(body, "Falling notes", nameof(PianoVisualSettings.ShowNotes), "Draw the piano-roll bars for MIDI playback and live playing.");
-        Toggle(body, "Sparks", nameof(PianoVisualSettings.ShowEmbers), "Particle burst when a note reaches the keyboard.");
-        Toggle(body, "Wisps", nameof(PianoVisualSettings.ShowWisps), "Smoke-like plasma streams rising from held keys (Embers style).");
-        Toggle(body, "Flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts at the impact point.");
-        Toggle(body, "Impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding shock ring when a note hits the key line.");
-        Toggle(body, "Light beams", nameof(PianoVisualSettings.ShowLightBeams), "Soft columns of light above every sounding key.");
-        Toggle(body, "Hit line halo", nameof(PianoVisualSettings.ShowHalo), "Glowing line where the notes meet the keys.");
-        Toggle(body, "Piano keys", nameof(PianoVisualSettings.ShowKeys), "Show the 88-key keyboard.");
-        Toggle(body, "Background layers", nameof(PianoVisualSettings.ShowBackground), "Image, gradient, stars and guide lanes.");
-        Toggle(body, "Keyflow watermark", nameof(PianoVisualSettings.ShowWatermark), "Small logo above the keyboard.");
-        Toggle(body, "Key counter", nameof(PianoVisualSettings.ShowCounter), "Show how many keys are held.");
-        Toggle(body, "FPS & particle HUD", nameof(PianoVisualSettings.ShowFps), "Performance overlay in the top-right corner.");
+        var layers = Card(StyleSettingsHost, "LAYERS", "Flick any layer of the stage on or off; the fine controls sit on the page that owns them.");
+        var notes = Group(layers, "NOTES & LIGHT");
+        Toggle(notes, "Falling notes", nameof(PianoVisualSettings.ShowNotes), "Draw the piano-roll bars for MIDI playback and live playing.");
+        Toggle(notes, "Note shadows", nameof(PianoVisualSettings.ShowNoteShadow), "Soft drop shadow under every bar.");
+        Toggle(notes, "Light beams", nameof(PianoVisualSettings.ShowLightBeams), "Soft columns of light above every sounding key.");
+        Toggle(notes, "Hit line halo", nameof(PianoVisualSettings.ShowHalo), "Glowing line where the notes meet the keys.");
+        var particles = Group(layers, "PARTICLES");
+        Toggle(particles, "Sparks", nameof(PianoVisualSettings.ShowEmbers), "Particle burst when a note reaches the keyboard.");
+        Toggle(particles, "Wisps", nameof(PianoVisualSettings.ShowWisps), "Smoke-like plasma streams rising from held keys.");
+        Toggle(particles, "Flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts at the impact point.");
+        Toggle(particles, "Impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding shock ring when a note hits the key line.");
+        Toggle(particles, "Floating dust", nameof(PianoVisualSettings.ShowDust), "Motes drifting through the light.");
+        var stage = Group(layers, "STAGE");
+        Toggle(stage, "Piano keys", nameof(PianoVisualSettings.ShowKeys), "Show the 88-key keyboard.");
+        Toggle(stage, "Key reflections", nameof(PianoVisualSettings.ShowKeyReflection), "Mirror the note glow on the polished key faces.");
+        Toggle(stage, "Case lip", nameof(PianoVisualSettings.ShowFallboard), "Glossy front edge of the piano above the keys.");
+        Toggle(stage, "Background layers", nameof(PianoVisualSettings.ShowBackground), "Image, aura gradient, stars, grid and guide lanes.");
+        Toggle(stage, "Stage grid", nameof(PianoVisualSettings.ShowGrid), "Perspective grid receding behind the keyboard.");
+        var hud = Group(layers, "OVERLAYS");
+        Toggle(hud, "Keyflow watermark", nameof(PianoVisualSettings.ShowWatermark), "Small logo above the keyboard.");
+        Toggle(hud, "Key counter", nameof(PianoVisualSettings.ShowCounter), "Show how many keys are held.");
+        Toggle(hud, "FPS & particle HUD", nameof(PianoVisualSettings.ShowFps), "Performance overlay in the top-right corner.");
+    }
+
+    /// <summary>Central color hub: every picker on one page, with a live palette preview and one-click palettes.</summary>
+    private void BuildColorsPage()
+    {
+        var palette = Card(ColorSettingsHost, "NOTE PALETTE", "Pick a palette, then fine-tune the three stops. Editing a stop switches the palette to Custom.");
+        Choice(palette, "Color mode", nameof(PianoVisualSettings.ColorMode), "Gradient across the keyboard, one color per hand, per MIDI track, or animated rainbows.",
+            ("Gradient", "Gradient by pitch"), ("PerHand", "Left / right hand"), ("PerTrack", "Per MIDI track"), ("RainbowPitch", "Rainbow by pitch"), ("RainbowTime", "Rainbow cycling in time"));
+        Choice(palette, "Palette", nameof(PianoVisualSettings.Palette), "Built-in palette families. Editing a stop switches to Custom.",
+            ("Spectrum", "Spectrum"), ("Aurora", "Aurora"), ("Violet", "Violet"), ("Sunset", "Sunset"), ("Cyberpunk", "Cyberpunk"), ("Candy", "Candy"),
+            ("Emerald", "Emerald"), ("Ocean", "Ocean"), ("Fire", "Fire"), ("Mono", "Mono"), ("Custom", "Custom"))
+            .VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        _palettePreview = new Border
+        {
+            Height = 26, CornerRadius = new CornerRadius(8), Margin = new Thickness(0, 8, 0, 6),
+            BorderBrush = (Brush)FindResource("ControlBorderBrush"), BorderThickness = new Thickness(1)
+        };
+        palette.Children.Add(_palettePreview);
+        var chips = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+        _paletteChips.Clear();
+        foreach (var (name, stops) in PianoVisualSettings.PaletteStops)
+        {
+            var chip = new Button
+            {
+                Content = name, Tag = name, Height = 26, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 6, 6),
+                FontSize = 10, ToolTip = $"Apply the {name} palette ({stops.Start} → {stops.Mid} → {stops.End})"
+            };
+            chip.Click += PaletteChip_Click;
+            _paletteChips.Add(chip);
+            chips.Children.Add(chip);
+        }
+        var random = new Button { Content = "SURPRISE ME", Height = 26, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 6, 6), FontSize = 10, ToolTip = "Roll a new random three-stop palette" };
+        random.Click += RandomPalette_Click;
+        chips.Children.Add(random);
+        palette.Children.Add(chips);
+        ColorRow(palette, "Gradient start (low keys)", nameof(PianoVisualSettings.NoteColorStart), "Color of the lowest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        ColorRow(palette, "Gradient middle", nameof(PianoVisualSettings.NoteColorMid), "Middle stop of the gradient; turn it off below for a plain two-stop blend.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        ColorRow(palette, "Gradient end (high keys)", nameof(PianoVisualSettings.NoteColorEnd), "Color of the highest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        Toggle(palette, "Use the middle stop", nameof(PianoVisualSettings.ShowMidStop), "Three stops read richer; turn this off to blend start straight into end.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        SliderRow(palette, "Rainbow speed", nameof(PianoVisualSettings.RainbowSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.ColorMode == "RainbowTime";
+        SliderRow(palette, "Hand split point", nameof(PianoVisualSettings.HandSplitPitch), 21, 108, "MIDI note where the right hand begins (C4 = 60). Type a note name such as C4 or F#3.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
+        ColorRow(palette, "Left hand", nameof(PianoVisualSettings.LeftHandColor), "Notes below the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
+        ColorRow(palette, "Right hand", nameof(PianoVisualSettings.RightHandColor), "Notes at or above the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
+        TrackPaletteRow(palette).VisibleWhen = () => _visualSettings.ColorMode == "PerTrack";
+
+        var accents = Card(ColorSettingsHost, "ACCENTS", "Which colors the halo, the keys and the background carry.");
+        ColorRow(accents, "Halo color", nameof(PianoVisualSettings.HaloColor), "Core color of the hit line, the horizon glow and the keyboard rim light.");
+        ColorRow(accents, "Pressed key color", nameof(PianoVisualSettings.PressedKeyColor), "Used when pressed keys take a fixed color.").VisibleWhen = () => _visualSettings.PressedKeyColorMode == "Fixed";
+        ColorRow(accents, "Felt color", nameof(PianoVisualSettings.KeyFeltColor), "Color of the felt strip above the keys.").VisibleWhen = () => _visualSettings.ShowKeyFelt;
+        ColorRow(accents, "Background color", nameof(PianoVisualSettings.BackgroundColor), "Base color of the stage behind everything.").VisibleWhen = () => _visualSettings.BackgroundMode == "Solid";
+
     }
 
     private void BuildNotesPage()
     {
-        var color = Card(NoteSettingsHost, "COLOR", "How each note picks its color.");
-        Choice(color, "Color mode", nameof(PianoVisualSettings.ColorMode), "Gradient across the keyboard, one color per hand, per MIDI track, or animated rainbows.",
-            ("Gradient", "Gradient by pitch"), ("PerHand", "Left / right hand"), ("PerTrack", "Per MIDI track"), ("RainbowPitch", "Rainbow by pitch"), ("RainbowTime", "Rainbow cycling in time"));
-        Choice(color, "Palette", nameof(PianoVisualSettings.Palette), "Built-in gradient families. Editing the start/end colors switches to Custom.",
-            ("Spectrum", "Spectrum"), ("Aurora", "Aurora"), ("Fire", "Fire"), ("Ocean", "Ocean"), ("Violet", "Violet"), ("Custom", "Custom"))
-            .VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Gradient start (low keys)", nameof(PianoVisualSettings.NoteColorStart), "Color of the lowest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Gradient end (high keys)", nameof(PianoVisualSettings.NoteColorEnd), "Color of the highest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Left hand", nameof(PianoVisualSettings.LeftHandColor), "Notes below the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
-        ColorRow(color, "Right hand", nameof(PianoVisualSettings.RightHandColor), "Notes at or above the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
-        SliderRow(color, "Hand split point", nameof(PianoVisualSettings.HandSplitPitch), 21, 108, "MIDI note where the right hand begins (C4 = 60). Type a note name such as C4 or F#3.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
-        TrackPaletteRow(color).VisibleWhen = () => _visualSettings.ColorMode == "PerTrack";
-        SliderRow(color, "Rainbow speed", nameof(PianoVisualSettings.RainbowSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.ColorMode == "RainbowTime";
-
-        var shape = Card(NoteSettingsHost, "SHAPE & STYLE", "Silhouette of the falling bars.");
+        var shape = Card(NoteSettingsHost, "SHAPE", "Silhouette of the falling bars.");
         Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Solid bars, hollow neon tubes, glossy glass or burning fire notes.",
             ("Solid", "Solid"), ("Neon", "Neon outline"), ("Glass", "Glass"), ("Fire", "Fire / burning"));
         SliderRow(shape, "Note width", nameof(PianoVisualSettings.NoteWidth), 30, 100, "Width of a note relative to its key lane.");
@@ -96,16 +181,26 @@ public partial class MainWindow
         Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Inner shadow and highlight on solid and glass notes.");
         Toggle(shape, "Note names on bars", nameof(PianoVisualSettings.ShowNoteLabels), "Print the note name inside each bar when there is room.");
 
-        var glow = Card(NoteSettingsHost, "GLOW & EDGES", "Bloom, outline and highlights.");
-        SliderRow(glow, "Tint / opacity", nameof(PianoVisualSettings.NoteTint), 0, 100, "Fill opacity of the bars.");
-        SliderRow(glow, "Bloom / glow", nameof(PianoVisualSettings.NoteGlow), 0, 200, "Soft halo around every note.");
-        SliderRow(glow, "Edge brightness", nameof(PianoVisualSettings.NoteEdge), 0, 200, "Brightness of the outline stroke.");
-        SliderRow(glow, "Edge width", nameof(PianoVisualSettings.NoteEdgeWidth), 0, 100, "Thickness of the outline (the tube in Neon style).");
-        SliderRow(glow, "Leading-edge glow", nameof(PianoVisualSettings.NoteHeadGlow), 0, 100, "Bright cap at the bottom of the bar, stronger while the note sounds.");
-        SliderRow(glow, "Light refraction", nameof(PianoVisualSettings.NoteRefraction), 0, 100, "Thin white highlight along the left edge.");
+        var shading = Card(NoteSettingsHost, "SHADING & DEPTH", "Turns a flat bar into a lit, glossy block.");
+        SliderRow(shading, "Depth shading", nameof(PianoVisualSettings.NoteDepth), 0, 100, "Extruded side that gives the bar physical thickness.");
+        SliderRow(shading, "Specular gloss", nameof(PianoVisualSettings.NoteSpecular), 0, 100, "Glossy highlight streak across the face.");
+        SliderRow(shading, "Rim light", nameof(PianoVisualSettings.NoteRimLight), 0, 100, "Bright edge light on both long sides.");
+        SliderRow(shading, "Tint / opacity", nameof(PianoVisualSettings.NoteTint), 0, 100, "Fill opacity of the bars.");
+        SliderRow(shading, "Bloom / glow", nameof(PianoVisualSettings.NoteGlow), 0, 200, "Soft halo around every note.");
+        SliderRow(shading, "Edge brightness", nameof(PianoVisualSettings.NoteEdge), 0, 200, "Brightness of the outline stroke.");
+        SliderRow(shading, "Edge width", nameof(PianoVisualSettings.NoteEdgeWidth), 0, 100, "Thickness of the outline (the tube in Neon style).");
+        SliderRow(shading, "Leading-edge glow", nameof(PianoVisualSettings.NoteHeadGlow), 0, 100, "Bright cap at the bottom of the bar, stronger while the note sounds.");
+        SliderRow(shading, "Light refraction", nameof(PianoVisualSettings.NoteRefraction), 0, 100, "Thin white highlight along the left edge.");
 
-        var motion = Card(NoteSettingsHost, "MOTION", "Speed of the piano roll.");
+        var shadows = Card(NoteSettingsHost, "DROP SHADOW", "Soft shadow that lifts every bar off the background.");
+        Toggle(shadows, "Note shadow", nameof(PianoVisualSettings.ShowNoteShadow), "Blurred shadow under each falling note.");
+        SliderRow(shadows, "Shadow strength", nameof(PianoVisualSettings.NoteShadowStrength), 0, 100, "Opacity of the shadow.").VisibleWhen = () => _visualSettings.ShowNoteShadow;
+        SliderRow(shadows, "Shadow distance", nameof(PianoVisualSettings.NoteShadowDistance), 0, 60, "How far the shadow is offset from the bar.").VisibleWhen = () => _visualSettings.ShowNoteShadow;
+        SliderRow(shadows, "Shadow softness", nameof(PianoVisualSettings.NoteShadowBlur), 0, 100, "How far the shadow spreads.").VisibleWhen = () => _visualSettings.ShowNoteShadow;
+
+        var motion = Card(NoteSettingsHost, "MOTION", "Speed and shape of the piano roll.");
         SliderRow(motion, "Fall speed", nameof(PianoVisualSettings.NoteFallSpeed), 100, 1000, "Pixels per second for live trails; MIDI notes scale with it.");
+        SliderRow(motion, "Comet trail", nameof(PianoVisualSettings.NoteTrail), 0, 100, "Fading trail streaming off the top of each note.");
         Note(motion, "Only a physically held key extends its visual note. Pedals sustain the audio without stretching the bar after key release.");
     }
 
@@ -151,7 +246,15 @@ public partial class MainWindow
         Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Classic warm fire or the color of the note.", ("Warm", "Warm fire"), ("Note", "Note color"));
         Toggle(flames, "Enable impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding ring on every hit.");
         SliderRow(flames, "Ring size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the ring.");
+
+        var dust = Card(ParticleSettingsHost, "FLOATING DUST", "Motes drifting through the light above the keyboard.");
+        Toggle(dust, "Enable dust", nameof(PianoVisualSettings.ShowDust), "Slow drifting particles that add depth to the stage.");
+        SliderRow(dust, "Density", nameof(PianoVisualSettings.DustDensity), 0, 100, "How many motes float through the stage.").VisibleWhen = () => _visualSettings.ShowDust;
     }
+
+
+
+
 
     private void BuildKeyboardPage()
     {
@@ -172,9 +275,15 @@ public partial class MainWindow
         SliderRow(light, "Light intensity", nameof(PianoVisualSettings.KeyLighting), 0, 100, "Brightness of the glow around lit keys.");
         SliderRow(light, "Glow radius", nameof(PianoVisualSettings.KeyGlowRadius), 0, 100, "How far the light bleeds over the keyboard.");
         SliderRow(light, "Press depth", nameof(PianoVisualSettings.KeyPressDepth), 0, 100, "How much a key sinks when pressed.");
+    
+        var realism = Card(KeyboardSettingsHost, "REALISM & MATERIALS", "Surface detail that makes the keys read as physical objects.");
+        SliderRow(realism, "Gloss / sheen", nameof(PianoVisualSettings.KeyGloss), 0, 100, "Specular sheen on the key faces.");
+        SliderRow(realism, "Bevel & occlusion", nameof(PianoVisualSettings.KeyBevel), 0, 100, "Edge bevels and dark contact occlusion in the key gaps.");
+        SliderRow(realism, "Black key shadow", nameof(PianoVisualSettings.KeyContactShadow), 0, 100, "Contact shadow a black key casts on the white keys below it.");
+        Toggle(realism, "Note reflections on keys", nameof(PianoVisualSettings.ShowKeyReflection), "Mirror the note glow on the polished key faces.");
+        Toggle(realism, "Glossy case lip", nameof(PianoVisualSettings.ShowFallboard), "Front edge of the piano case above the keys.");
     }
-
-    private void BuildBackgroundPage()
+    private void BuildScenePage()
     {
         var background = Card(SceneSettingsHost, "BACKGROUND", "What sits behind the notes.");
         Choice(background, "Mode", nameof(PianoVisualSettings.BackgroundMode), "Solid color, your own image, or a pure green stage for chroma keying in OBS.", ("Solid", "Solid color"), ("Image", "Image"), ("ChromaGreen", "Green screen (chroma key)"));
@@ -195,24 +304,47 @@ public partial class MainWindow
         SliderRow(atmosphere, "Horizon glow", nameof(PianoVisualSettings.HorizonGlow), 0, 100, "Colored glow rising from the keyboard line.");
         SliderRow(atmosphere, "Light beam intensity", nameof(PianoVisualSettings.BeamIntensity), 0, 100, "Brightness of the columns above sounding keys.");
 
-        var halo = Card(SceneSettingsHost, "HIT LINE", "The line where notes meet the keys.");
+        var halo = Card(SceneSettingsHost, "HIT LINE & HALO", "The line where the notes meet the keys, and how it reacts to playing.");
         Toggle(halo, "Show halo line", nameof(PianoVisualSettings.ShowHalo), "Glowing line across the stage at key height.");
-        ColorRow(halo, "Halo color", nameof(PianoVisualSettings.HaloColor), "Also tints the horizon glow and the keyboard rim light.");
+        ColorRow(halo, "Halo color", nameof(PianoVisualSettings.HaloColor), "Core color of the line, the horizon glow and the keyboard rim light.");
+        Choice(halo, "Halo tint", nameof(PianoVisualSettings.HaloTintMode), "A single halo color, a pitch rainbow running through it, or the color of the note that just hit.", ("Halo", "Halo color"), ("Rainbow", "Rainbow line"), ("Note", "Impact color"));
+        SliderRow(halo, "Thickness", nameof(PianoVisualSettings.HaloThickness), 0, 100, "Width of the crisp core line.");
+        SliderRow(halo, "Brightness", nameof(PianoVisualSettings.HaloIntensity), 0, 100, "Brightness of the line and its colored bleed.");
+        SliderRow(halo, "Glow size", nameof(PianoVisualSettings.HaloGlowSize), 0, 100, "How far the soft glow reaches around the line.");
+        SliderRow(halo, "Reacts to playing", nameof(PianoVisualSettings.HaloPulse), 0, 100, "Extra brightness while notes sound and hit.");
     }
 
-    private void BuildCameraPage()
+    private void BuildShaderPage()
     {
         var camera = Card(CameraSettingsHost, "CAMERA", "Framing and subtle motion.");
         SliderRow(camera, "Parallax", nameof(PianoVisualSettings.CameraParallax), 0, 100, "The stage drifts slightly with the mouse.");
         SliderRow(camera, "Zoom", nameof(PianoVisualSettings.CameraZoom), 65, 150, "Scale of the whole stage.");
         SliderRow(camera, "Horizontal framing", nameof(PianoVisualSettings.CameraOffset), 0, 100, "Where the zoomed stage is anchored.");
 
-        var post = Card(CameraSettingsHost, "POST FX", "Color grading applied to notes, particles and lights.");
-        SliderRow(post, "Saturation", nameof(PianoVisualSettings.Saturation), 0, 200, "Color intensity.");
-        SliderRow(post, "Contrast", nameof(PianoVisualSettings.Contrast), 0, 200, "Difference between bright and dark tones.");
-        SliderRow(post, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150, "Global glow strength.");
-        SliderRow(post, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150, "How far the glow spreads.");
+        var bloom = Card(CameraSettingsHost, "BLOOM PASS", "The emissive parts of the scene are re-rendered at half resolution and blurred into the glow you see.");
+        SliderRow(bloom, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150, "How much of the bright pass is added back over the scene.");
+        SliderRow(bloom, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150, "Radius of the blur used by the glow pass.");
+        SliderRow(bloom, "Bloom threshold", nameof(PianoVisualSettings.BloomThreshold), 0, 100, "How bright something must be before it feeds the glow.");
+
+        var lens = Card(CameraSettingsHost, "LENS PASS", "Shader layers applied on top of the rendered stage.");
+        SliderRow(lens, "Anamorphic streaks", nameof(PianoVisualSettings.AnamorphicStreaks), 0, 100, "Wide horizontal lens flares across every lit key.");
+        SliderRow(lens, "Chromatic aberration", nameof(PianoVisualSettings.ChromaticAberration), 0, 100, "Color fringing at the edges of bright shapes.");
+
+        var film = Card(CameraSettingsHost, "FILM & FRAME", "Camera character and framing.");
+        SliderRow(film, "Vignette", nameof(PianoVisualSettings.Vignette), 0, 100, "Darkens the corners for a cinematic frame.");
+        SliderRow(film, "Film grain", nameof(PianoVisualSettings.FilmGrain), 0, 100, "Moving grain over the whole image.");
+        SliderRow(film, "Scanlines", nameof(PianoVisualSettings.Scanlines), 0, 100, "CRT-style horizontal lines.");
+        SliderRow(film, "Cinematic bars", nameof(PianoVisualSettings.CinematicBars), 0, 25, "Letterbox bars as a percentage of the stage height.");
+
+        var grade = Card(CameraSettingsHost, "COLOR GRADE", "Applied to notes, particles, lights and keys at once.");
+        SliderRow(grade, "Saturation", nameof(PianoVisualSettings.Saturation), 0, 200, "Color intensity.");
+        SliderRow(grade, "Vibrance", nameof(PianoVisualSettings.Vibrance), 0, 100, "Selective saturation: lifts muted colors more than vivid ones. 50 is neutral.");
+        SliderRow(grade, "Hue shift", nameof(PianoVisualSettings.HueShift), -180, 180, "Rotate every hue around the wheel.");
+        SliderRow(grade, "Temperature", nameof(PianoVisualSettings.ColorTemperature), -100, 100, "Warm (right) or cool (left) tint.");
+        SliderRow(grade, "Contrast", nameof(PianoVisualSettings.Contrast), 0, 200, "Difference between bright and dark tones.");
+        Note(grade, "The bloom, lens and film layers are GPU blur passes over a half-resolution bright pass, so the whole post chain stays far cheaper than a full-resolution shader chain.");
     }
+
 
     private void BuildRecordingPage()
     {
@@ -232,13 +364,14 @@ public partial class MainWindow
         body.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("EyebrowTextStyle") });
         body.Children.Add(new TextBlock { Text = subtitle, Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 6) });
         card.Child = body; page.Children.Add(card); _settingCards.Add(card);
+        body.Tag = card;
         return body;
     }
 
     private SettingRow Register(Panel body, FrameworkElement element, string searchText, string? property = null)
     {
         body.Children.Add(element);
-        var card = (Border)((FrameworkElement)body).Parent;
+        var card = body.Tag as Border ?? (Border)((FrameworkElement)body).Parent;
         var page = (Panel)card.Parent;
         var row = new SettingRow { Element = element, SearchText = searchText.ToLowerInvariant(), Page = page, Card = card, Property = property };
         _settingRows.Add(row);
@@ -248,6 +381,7 @@ public partial class MainWindow
     private SettingRow Toggle(Panel body, string label, string property, string tooltip)
     {
         var check = new CheckBox { Content = label, Tag = property, IsChecked = (bool)Prop(property).GetValue(_visualSettings)!, Margin = new Thickness(0, 6, 0, 6), ToolTip = tooltip, HorizontalAlignment = HorizontalAlignment.Stretch };
+        if (body is WrapPanel) { check.Width = 208; check.Margin = new Thickness(0, 4, 10, 4); }
         check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed;
         _visualToggles[property] = check; _visualToggleList.Add(check);
         return Register(body, check, label + " " + tooltip, property);
@@ -305,6 +439,8 @@ public partial class MainWindow
         Grid.SetColumn(swatch, 1); Grid.SetColumn(box, 2);
         row.Children.Add(text); row.Children.Add(swatch); row.Children.Add(box);
         _visualColorInputs[property] = box; _visualColorButtons[property] = swatch;
+        _visualColorRows.Add((property, box, swatch));
+        _colorBoxBySwatch[swatch] = box;
         return Register(body, row, label + " " + tooltip + " color", property);
     }
 
@@ -322,6 +458,15 @@ public partial class MainWindow
         }
         stack.Children.Add(wrap);
         return Register(body, stack, "track colors palette per track", nameof(PianoVisualSettings.TrackColors));
+    }
+
+    /// <summary>A labelled sub-group inside a card; its rows keep resolving back to the owning card.</summary>
+    private WrapPanel Group(Panel body, string title)
+    {
+        body.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("EyebrowTextStyle"), Margin = new Thickness(0, 12, 0, 2) });
+        var panel = new WrapPanel { Tag = body.Tag, Margin = new Thickness(0, 0, 0, 2) };
+        body.Children.Add(panel);
+        return panel;
     }
 
     private SettingRow ButtonRow(Panel body, params (string Text, RoutedEventHandler Click)[] buttons)
@@ -386,7 +531,7 @@ public partial class MainWindow
         _loadingVisualSettings = true;
         try { foreach (var other in _visualToggleList) if (!ReferenceEquals(other, check) && Equals(other.Tag, property)) other.IsChecked = value; }
         finally { _loadingVisualSettings = false; }
-        MarkModified(); RefreshDependentRows();
+        MarkModified(); RefreshDependentRows(); SyncQuickLayerPills();
         ApplyVisualSettings($"{check.Content} {(check.IsChecked == true ? "on" : "off")}");
     }
 
@@ -430,7 +575,7 @@ public partial class MainWindow
         if (_loadingVisualSettings || sender is not ComboBox { Tag: string property, SelectedValue: string value }) return;
         Prop(property).SetValue(_visualSettings, value);
         if (property == nameof(PianoVisualSettings.BackgroundMode) && value == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) ChooseStageBackground(sender, e);
-        MarkModified(); RefreshDependentRows(); RebuildTrackList();
+        MarkModified(); RefreshDependentRows(); RebuildTrackList(); UpdatePalettePreview();
         if (property is nameof(PianoVisualSettings.RecordingResolution)) UpdateRecordingInfo();
         var what = property switch { nameof(PianoVisualSettings.NoteStyle) => "Note style", nameof(PianoVisualSettings.ColorMode) => "Color mode", nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style", nameof(PianoVisualSettings.BackgroundMode) => "Background mode", _ => "Setting" };
         ApplyVisualSettings(what + " updated");
@@ -439,7 +584,7 @@ public partial class MainWindow
     private void VisualColorButton_Click(object sender, RoutedEventArgs e)
     {
         if (sender is not Button { Tag: string property }) return;
-        var input = _visualColorInputs[property];
+        var input = _colorBoxBySwatch.TryGetValue((Button)sender, out var paired) ? paired : _visualColorInputs[property];
         var picker = new ColorPickerWindow(input.Text) { Owner = this };
         if (picker.ShowDialog() != true || picker.SelectedHex is not { } selected) return;
         input.Text = selected;
@@ -467,8 +612,73 @@ public partial class MainWindow
             if (_visualChoices.TryGetValue(nameof(PianoVisualSettings.Palette), out var palette)) { _loadingVisualSettings = true; palette.SelectedValue = "Custom"; _loadingVisualSettings = false; }
         }
         MarkModified();
+        UpdatePalettePreview();
         ApplyVisualSettings(property == nameof(PianoVisualSettings.HaloColor) ? "Halo color applied" : "Color applied");
     }
+
+    /// <summary>One-click palette from the palette library: writes all three stops and switches to Custom.</summary>
+    private void PaletteChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string name } || !PianoVisualSettings.PaletteStops.TryGetValue(name, out var stops)) return;
+        _visualSettings.Palette = "Custom";
+        _visualSettings.NoteColorStart = stops.Start;
+        _visualSettings.NoteColorMid = stops.Mid;
+        _visualSettings.NoteColorEnd = stops.End;
+        _visualSettings.ShowMidStop = true;
+        RefreshSettingControls();
+        MarkModified();
+        ApplyVisualSettings($"Palette “{name}” applied");
+    }
+
+    /// <summary>Rolls a fresh three-stop palette with evenly spread hues.</summary>
+    private void RandomPalette_Click(object sender, RoutedEventArgs e)
+    {
+        var hue = Random.Shared.NextDouble() * 360;
+        var spread = 70 + Random.Shared.NextDouble() * 110;
+        var saturation = .62 + Random.Shared.NextDouble() * .33;
+        _visualSettings.Palette = "Custom";
+        _visualSettings.NoteColorStart = ColorToHex(ColorPickerWindow.FromHsv(hue, saturation, .95));
+        _visualSettings.NoteColorMid = ColorToHex(ColorPickerWindow.FromHsv(hue + spread * .5, Math.Min(1, saturation * .9), 1));
+        _visualSettings.NoteColorEnd = ColorToHex(ColorPickerWindow.FromHsv(hue + spread, Math.Min(1, saturation * .85), .98));
+        _visualSettings.ShowMidStop = true;
+        RefreshSettingControls();
+        MarkModified();
+        ApplyVisualSettings("Random palette rolled");
+    }
+
+    private static string ColorToHex(Color color) => ColorPickerWindow.ToHex(color);
+
+    /// <summary>The gradient preview above the palette editor.</summary>
+    private void UpdatePalettePreview()
+    {
+        if (_palettePreview is null) return;
+        var (start, mid, end) = PaletteStops();
+        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        gradient.GradientStops.Add(new GradientStop(start, 0));
+        if (_visualSettings.ShowMidStop) gradient.GradientStops.Add(new GradientStop(mid, .5));
+        gradient.GradientStops.Add(new GradientStop(end, 1));
+        gradient.Freeze();
+        _palettePreview.Background = gradient;
+        _palettePreview.ToolTip = _visualSettings.ColorMode == "Gradient"
+            ? $"{_visualSettings.Palette} · {ColorToHex(start)} → {(_visualSettings.ShowMidStop ? ColorToHex(mid) + " → " : "")}{ColorToHex(end)}"
+            : $"{_visualSettings.ColorMode} · the palette applies to Gradient mode";
+        foreach (var chip in _paletteChips)
+            chip.BorderBrush = chip.Tag is string name && string.Equals(name, _visualSettings.Palette, StringComparison.OrdinalIgnoreCase)
+                ? (Brush)FindResource("AccentBrush") : (Brush)FindResource("ControlBorderBrush");
+    }
+
+    /// <summary>Stops used by the preview: named palettes first, then the custom pickers.</summary>
+    private (Color Start, Color Mid, Color End) PaletteStops()
+    {
+        var start = ParseColor(_visualSettings.NoteColorStart, Colors.DeepSkyBlue);
+        var mid = ParseColor(_visualSettings.NoteColorMid, Colors.MediumPurple);
+        var end = ParseColor(_visualSettings.NoteColorEnd, Colors.MediumPurple);
+        if (PianoVisualSettings.PaletteStops.TryGetValue(_visualSettings.Palette, out var stops))
+            return (ParseColor(stops.Start, start), ParseColor(stops.Mid, mid), ParseColor(stops.End, end));
+        return (start, mid, end);
+    }
+
+    private static Color ParseColor(string value, Color fallback) { try { return (Color)ColorConverter.ConvertFromString(value)!; } catch { return fallback; } }
 
     private void TrackPaletteButton_Click(object sender, RoutedEventArgs e)
     {
@@ -518,15 +728,15 @@ public partial class MainWindow
             }
             foreach (var check in _visualToggleList) if (check.Tag is string toggleProperty) check.IsChecked = (bool)Prop(toggleProperty).GetValue(_visualSettings)!;
             foreach (var (property, combo) in _visualChoices) combo.SelectedValue = (string)Prop(property).GetValue(_visualSettings)!;
-            foreach (var (property, box) in _visualColorInputs)
+            foreach (var (property, box, swatch) in _visualColorRows)
             {
                 var value = (string)Prop(property).GetValue(_visualSettings)!;
-                box.Text = value; if (_visualColorButtons.TryGetValue(property, out var swatch)) SetColorSwatch(swatch, value);
+                box.Text = value; SetColorSwatch(swatch, value);
             }
             for (var i = 0; i < _trackPaletteSwatches.Count && i < _visualSettings.TrackColors.Count; i++) SetColorSwatch(_trackPaletteSwatches[i], _visualSettings.TrackColors[i]);
         }
         finally { _loadingVisualSettings = false; }
-        RefreshDependentRows(); RebuildTrackList(); UpdateRecordingInfo(); UpdatePresetLabels();
+        RefreshDependentRows(); RebuildTrackList(); UpdateRecordingInfo(); UpdatePalettePreview(); UpdatePresetLabels(); SyncQuickLayerPills();
     }
 
     private void UpdatePresetLabels()
@@ -575,7 +785,7 @@ public partial class MainWindow
         var query = SettingsSearchBox.Text.Trim();
         if (query.Length == 0) return;
         // Jump to the first page that has a match when the current page shows none.
-        var pages = new Panel?[] { StyleSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost };
+        var pages = new Panel?[] { StyleSettingsHost, ColorSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost };
         var currentIndex = SettingsTabs.SelectedIndex;
         bool HasMatch(Panel? page) => page is not null && _settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible);
         if (currentIndex >= 0 && currentIndex < pages.Length && HasMatch(pages[currentIndex])) return;
@@ -596,7 +806,7 @@ public partial class MainWindow
 
     private void ResetPage_Click(object sender, RoutedEventArgs e)
     {
-        var pages = new Panel?[] { StyleSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, RecordingSettingsHost };
+        var pages = new Panel?[] { StyleSettingsHost, ColorSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, null, RecordingSettingsHost };
         var index = SettingsTabs.SelectedIndex;
         if (index < 0 || index >= pages.Length || pages[index] is not { } page) { SettingsSaveLabel.Text = "This page has no visual settings to reset"; return; }
         var source = BasePresetSettings();
@@ -695,6 +905,7 @@ public partial class MainWindow
         _visualSettings.CopyFrom(preset.Settings, keepBackgroundImage: true);
         _visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;
         if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";
+        UpdatePalettePreview();
         RefreshSettingControls();
         ApplyVisualSettings($"Preset “{preset.Name}” applied");
     }

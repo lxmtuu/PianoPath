@@ -4,28 +4,53 @@
              xmlns:local="clr-namespace:PianoPath">
     <Application.Resources>
         <!-- ===== Palette ===== -->
-        <Color x:Key="AccentColor">#B46BFF</Color>
+        <Color x:Key="AccentColor">#A66BFF</Color>
         <Color x:Key="AccentColor2">#FF5FD2</Color>
-        <SolidColorBrush x:Key="AccentBrush" Color="#B46BFF"/>
-        <SolidColorBrush x:Key="AccentSoftBrush" Color="#33B46BFF"/>
+        <Color x:Key="AccentColor3">#38E1FF</Color>
+        <SolidColorBrush x:Key="AccentBrush" Color="#A66BFF"/>
+        <SolidColorBrush x:Key="AccentCyanBrush" Color="#38E1FF"/>
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#33A66BFF"/>
+        <SolidColorBrush x:Key="AccentCyanSoftBrush" Color="#2238E1FF"/>
         <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#8E4BFF" Offset="0"/>
-            <GradientStop Color="#E255D6" Offset="1"/>
+            <GradientStop Color="#7C4DFF" Offset="0"/>
+            <GradientStop Color="#B44BF0" Offset=".55"/>
+            <GradientStop Color="#FF4FC8" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="WindowBrush" Color="#0B0A12"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#F2100E19"/>
-        <SolidColorBrush x:Key="PanelAltBrush" Color="#161422"/>
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#2A2540"/>
-        <SolidColorBrush x:Key="ControlBrush" Color="#1D1A2C"/>
-        <SolidColorBrush x:Key="ControlHoverBrush" Color="#2A2540"/>
-        <SolidColorBrush x:Key="ControlBorderBrush" Color="#37324F"/>
-        <SolidColorBrush x:Key="PopupBrush" Color="#F9161322"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#F1EAFB"/>
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#9B92B4"/>
-        <SolidColorBrush x:Key="DimTextBrush" Color="#6A627F"/>
-        <SolidColorBrush x:Key="DangerBrush" Color="#FF4D6D"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="#4FE3B0"/>
-        <SolidColorBrush x:Key="TrackBrush" Color="#2B2740"/>
+        <LinearGradientBrush x:Key="AccentHairlineBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#00A66BFF" Offset="0"/>
+            <GradientStop Color="#889B6BFF" Offset=".35"/>
+            <GradientStop Color="#8838E1FF" Offset=".72"/>
+            <GradientStop Color="#0038E1FF" Offset="1"/>
+        </LinearGradientBrush>
+
+        <SolidColorBrush x:Key="WindowBrush" Color="#05050B"/>
+        <LinearGradientBrush x:Key="PanelBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F4141220" Offset="0"/>
+            <GradientStop Color="#F20C0B16" Offset=".55"/>
+            <GradientStop Color="#F4090811" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PanelAltBrush" Color="#0C0B15"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#2E2946"/>
+        <SolidColorBrush x:Key="HairlineBrush" Color="#3A3357"/>
+        <SolidColorBrush x:Key="ControlBrush" Color="#1A1728"/>
+        <SolidColorBrush x:Key="ControlHoverBrush" Color="#262038"/>
+        <SolidColorBrush x:Key="ControlBorderBrush" Color="#3A3457"/>
+        <LinearGradientBrush x:Key="CardBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F21B1830" Offset="0"/>
+            <GradientStop Color="#F2141124" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="StageHudBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#E6151322" Offset="0"/>
+            <GradientStop Color="#D90C0A15" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PopupBrush" Color="#FA151223"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#F4EEFF"/>
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#A79Dc4"/>
+        <SolidColorBrush x:Key="DimTextBrush" Color="#736B92"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#FF5E7A"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#57E8B6"/>
+        <SolidColorBrush x:Key="TrackBrush" Color="#282343"/>
+        <SolidColorBrush x:Key="WarningBrush" Color="#FFB45B"/>
 
         <!-- ===== Text ===== -->
         <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
@@ -37,6 +62,7 @@
         <Style x:Key="MutedTextStyle" TargetType="TextBlock">
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
             <Setter Property="FontSize" Value="10.5"/>
+            <Setter Property="LineHeight" Value="15"/>
             <Setter Property="TextWrapping" Value="Wrap"/>
         </Style>
         <Style x:Key="LabelTextStyle" TargetType="TextBlock">
@@ -49,6 +75,11 @@
             <Setter Property="FontSize" Value="9"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
         </Style>
+        <Style x:Key="StatValueStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
 
         <!-- ===== ToolTip ===== -->
         <Style TargetType="ToolTip">
@@ -56,13 +87,17 @@
             <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
             <Setter Property="BorderThickness" Value="1"/>
-            <Setter Property="Padding" Value="10,6"/>
+            <Setter Property="Padding" Value="10,7"/>
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="MaxWidth" Value="320"/>
+            <Setter Property="MaxWidth" Value="340"/>
+            <Setter Property="HasDropShadow" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToolTip">
-                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6" Padding="{TemplateBinding Padding}">
+                        <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <Border.Effect>
+                                <DropShadowEffect Color="#000000" BlurRadius="18" ShadowDepth="4" Opacity=".55"/>
+                            </Border.Effect>
                             <ContentPresenter>
                                 <ContentPresenter.Resources>
                                     <Style TargetType="TextBlock">
@@ -90,19 +125,30 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                        </Border>
+                        <Grid>
+                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </Border>
+                            <Border x:Name="FocusRing" CornerRadius="11" BorderThickness="1" BorderBrush="{StaticResource AccentCyanBrush}" Opacity="0" Margin="-2"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
                             </Trigger>
+                            <Trigger Property="IsKeyboardFocused" Value="True">
+                                <Setter TargetName="FocusRing" Property="Opacity" Value=".75"/>
+                            </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                <Setter TargetName="Chrome" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <TranslateTransform Y="1"/>
+                                    </Setter.Value>
+                                </Setter>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -111,8 +157,31 @@
         </Style>
         <Style x:Key="AccentButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="{StaticResource AccentGradientBrush}"/>
-            <Setter Property="BorderBrush" Value="#55FFFFFF"/>
+            <Setter Property="BorderBrush" Value="#66FFFFFF"/>
             <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}">
+                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </Border>
+                            <Border x:Name="Glow" CornerRadius="10" Background="#00000000" BorderBrush="#55FFFFFF" BorderThickness="1" Opacity="0" Margin="-1"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Glow" Property="Opacity" Value="1"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Opacity" Value=".88"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
         <Style x:Key="GhostButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="Transparent"/>
@@ -125,31 +194,28 @@
             <Setter Property="Padding" Value="0"/>
             <Setter Property="FontSize" Value="14"/>
         </Style>
-        <Style x:Key="TransportButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
-            <Setter Property="Width" Value="44"/>
-            <Setter Property="Height" Value="44"/>
+        <Style x:Key="TransportButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="46"/>
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="FontSize" Value="17"/>
-            <Setter Property="Background" Value="{StaticResource AccentGradientBrush}"/>
-            <Setter Property="BorderBrush" Value="#66FFFFFF"/>
-            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="FontSize" Value="18"/>
         </Style>
         <Style x:Key="DangerButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Background" Value="#3A1420"/>
-            <Setter Property="BorderBrush" Value="#7A2A44"/>
-            <Setter Property="Foreground" Value="#FFB3C4"/>
+            <Setter Property="BorderBrush" Value="#8A2F4A"/>
+            <Setter Property="Foreground" Value="#FFB9C8"/>
         </Style>
         <Style x:Key="MiniButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Padding" Value="0"/>
-            <Setter Property="Width" Value="22"/>
-            <Setter Property="Height" Value="22"/>
+            <Setter Property="Width" Value="24"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="FontSize" Value="11"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
         </Style>
 
-        <!-- ===== Toggle buttons (pedals, pills) ===== -->
+        <!-- ===== Toggle buttons (pedals, pills, quick layers) ===== -->
         <Style x:Key="PedalToggleStyle" TargetType="ToggleButton">
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
             <Setter Property="Background" Value="{StaticResource ControlBrush}"/>
@@ -161,12 +227,15 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}">
-                            <StackPanel Orientation="Horizontal">
-                                <Ellipse x:Name="Dot" Width="7" Height="7" Fill="#3F3A55" Margin="0,0,7,0" VerticalAlignment="Center"/>
-                                <ContentPresenter VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </Border>
+                        <Grid>
+                            <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <Ellipse x:Name="Dot" Width="7" Height="7" Fill="#443E60" Margin="0,0,7,0" VerticalAlignment="Center"/>
+                                    <ContentPresenter VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <Border x:Name="Halo" CornerRadius="14" BorderBrush="{StaticResource AccentBrush}" BorderThickness="1" Opacity="0" Margin="-2"/>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
@@ -175,12 +244,20 @@
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Halo" Property="Opacity" Value=".6"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+        <Style x:Key="QuickPillStyle" TargetType="ToggleButton" BasedOn="{StaticResource PedalToggleStyle}">
+            <Setter Property="Padding" Value="10,4"/>
+            <Setter Property="Margin" Value="2,0"/>
+            <Setter Property="FontSize" Value="9"/>
         </Style>
 
         <!-- ===== Switch (CheckBox) ===== -->
@@ -198,14 +275,19 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <ContentPresenter Grid.Column="0" VerticalAlignment="Center" HorizontalAlignment="Left" Margin="0,0,10,0" RecognizesAccessKey="True"/>
-                            <Border x:Name="Track" Grid.Column="1" Width="34" Height="18" CornerRadius="9" Background="{StaticResource TrackBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" VerticalAlignment="Center">
-                                <Ellipse x:Name="Knob" Width="12" Height="12" Fill="#8F86A8" HorizontalAlignment="Left" Margin="2,0,0,0"/>
+                            <Border x:Name="Track" Grid.Column="1" Width="36" Height="19" CornerRadius="9.5" Background="{StaticResource TrackBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" VerticalAlignment="Center">
+                                <Ellipse x:Name="Knob" Width="13" Height="13" Fill="#978EAF" HorizontalAlignment="Left" Margin="2,0,0,0"/>
                             </Border>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="Track" Property="Background" Value="{StaticResource AccentGradientBrush}"/>
-                                <Setter TargetName="Track" Property="BorderBrush" Value="#66FFFFFF"/>
+                                <Setter TargetName="Track" Property="BorderBrush" Value="#77FFFFFF"/>
+                                <Setter TargetName="Track" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="#A66BFF" BlurRadius="14" ShadowDepth="0" Opacity=".55"/>
+                                    </Setter.Value>
+                                </Setter>
                                 <Setter TargetName="Knob" Property="Fill" Value="White"/>
                                 <Setter TargetName="Knob" Property="HorizontalAlignment" Value="Right"/>
                                 <Setter TargetName="Knob" Property="Margin" Value="0,0,2,0"/>
@@ -214,7 +296,7 @@
                                 <Setter TargetName="Track" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -233,7 +315,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
                         <Grid Background="Transparent">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource AccentGradientBrush}" VerticalAlignment="Center"/>
+                            <Border Height="5" CornerRadius="2.5" Background="{StaticResource AccentGradientBrush}" VerticalAlignment="Center"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -246,7 +328,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="RepeatButton">
                         <Grid Background="Transparent">
-                            <Border Height="4" CornerRadius="2" Background="{StaticResource TrackBrush}" VerticalAlignment="Center"/>
+                            <Border Height="5" CornerRadius="2.5" Background="{StaticResource TrackBrush}" VerticalAlignment="Center"/>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -260,7 +342,7 @@
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
                         <Grid>
-                            <Ellipse x:Name="Halo" Fill="{StaticResource AccentSoftBrush}" Margin="-5" Opacity="0"/>
+                            <Ellipse x:Name="Halo" Fill="{StaticResource AccentSoftBrush}" Margin="-6" Opacity="0"/>
                             <Ellipse x:Name="Knob" Fill="White" Stroke="{StaticResource AccentBrush}" StrokeThickness="2"/>
                         </Grid>
                         <ControlTemplate.Triggers>
@@ -277,14 +359,14 @@
             </Setter>
         </Style>
         <Style TargetType="Slider">
-            <Setter Property="Height" Value="22"/>
+            <Setter Property="Height" Value="24"/>
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="IsMoveToPointEnabled" Value="True"/>
             <Setter Property="Focusable" Value="False"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Slider">
-                        <Border Background="{TemplateBinding Background}" CornerRadius="3" VerticalAlignment="Center" Height="22">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="3" VerticalAlignment="Center" Height="24">
                             <Track x:Name="PART_Track">
                                 <Track.DecreaseRepeatButton>
                                     <RepeatButton Command="Slider.DecreaseLarge" Style="{StaticResource SliderFillButtonStyle}"/>
@@ -299,7 +381,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -321,7 +403,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TextBox">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="6">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
                             <ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}" VerticalAlignment="Center" Focusable="False" HorizontalScrollBarVisibility="Hidden" VerticalScrollBarVisibility="Hidden"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -329,11 +411,16 @@
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                             <Trigger Property="IsKeyboardFocused" Value="True">
-                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentCyanBrush}"/>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
+                                <Setter TargetName="Chrome" Property="Effect">
+                                    <Setter.Value>
+                                        <DropShadowEffect Color="#38E1FF" BlurRadius="12" ShadowDepth="0" Opacity=".3"/>
+                                    </Setter.Value>
+                                </Setter>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -350,7 +437,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="7">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="8">
                             <Path x:Name="Arrow" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,10,0" Data="M 0 0 L 4 4 L 8 0" Stroke="{StaticResource MutedTextBrush}" StrokeThickness="1.5"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -374,7 +461,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ComboBoxItem">
-                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="5" Padding="{TemplateBinding Padding}" Margin="2,1">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="6" Padding="{TemplateBinding Padding}" Margin="2,1">
                             <ContentPresenter VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
@@ -385,7 +472,7 @@
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -415,9 +502,13 @@
                                     </Style>
                                 </ContentPresenter.Resources>
                             </ContentPresenter>
-                            <Popup x:Name="Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                            <Popup x:Name="PART_Popup" Placement="Bottom" IsOpen="{TemplateBinding IsDropDownOpen}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
                                 <Grid x:Name="DropDown" SnapsToDevicePixels="True" MinWidth="{TemplateBinding ActualWidth}" MaxHeight="{TemplateBinding MaxDropDownHeight}">
-                                    <Border x:Name="DropDownBorder" Background="{StaticResource PopupBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" CornerRadius="8" Margin="0,4,0,0"/>
+                                    <Border x:Name="DropDownBorder" Background="{StaticResource PopupBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" CornerRadius="10" Margin="0,4,0,0">
+                                        <Border.Effect>
+                                            <DropShadowEffect Color="#000000" BlurRadius="22" ShadowDepth="6" Opacity=".6"/>
+                                        </Border.Effect>
+                                    </Border>
                                     <ScrollViewer Margin="3,8,3,4" SnapsToDevicePixels="True">
                                         <StackPanel IsItemsHost="True" KeyboardNavigation.DirectionalNavigation="Contained"/>
                                     </ScrollViewer>
@@ -429,7 +520,7 @@
                                 <Setter TargetName="DropDownBorder" Property="MinHeight" Value="60"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".4"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -454,7 +545,7 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Thumb">
-                        <Border x:Name="Bar" Background="#4D8F86A8" CornerRadius="3" Margin="1"/>
+                        <Border x:Name="Bar" Background="#59A098C0" CornerRadius="3" Margin="1"/>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Bar" Property="Background" Value="{StaticResource AccentBrush}"/>
@@ -466,8 +557,8 @@
         </Style>
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Width" Value="8"/>
-            <Setter Property="MinWidth" Value="8"/>
+            <Setter Property="Width" Value="9"/>
+            <Setter Property="MinWidth" Value="9"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ScrollBar">
@@ -491,8 +582,8 @@
                 <Trigger Property="Orientation" Value="Horizontal">
                     <Setter Property="Width" Value="Auto"/>
                     <Setter Property="MinWidth" Value="0"/>
-                    <Setter Property="Height" Value="8"/>
-                    <Setter Property="MinHeight" Value="8"/>
+                    <Setter Property="Height" Value="9"/>
+                    <Setter Property="MinHeight" Value="9"/>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="ScrollBar">
@@ -518,7 +609,7 @@
 
         <!-- ===== ProgressBar ===== -->
         <Style TargetType="ProgressBar">
-            <Setter Property="Height" Value="3"/>
+            <Setter Property="Height" Value="4"/>
             <Setter Property="Background" Value="{StaticResource TrackBrush}"/>
             <Setter Property="Foreground" Value="{StaticResource AccentGradientBrush}"/>
             <Setter Property="BorderThickness" Value="0"/>
@@ -527,7 +618,11 @@
                     <ControlTemplate TargetType="ProgressBar">
                         <Grid>
                             <Border x:Name="PART_Track" Background="{TemplateBinding Background}" CornerRadius="2"/>
-                            <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="2" HorizontalAlignment="Left"/>
+                            <Border x:Name="PART_Indicator" Background="{TemplateBinding Foreground}" CornerRadius="2" HorizontalAlignment="Left">
+                                <Border.Effect>
+                                    <DropShadowEffect Color="#B44BF0" BlurRadius="12" ShadowDepth="0" Opacity=".65"/>
+                                </Border.Effect>
+                            </Border>
                         </Grid>
                     </ControlTemplate>
                 </Setter.Value>
@@ -537,32 +632,37 @@
         <!-- ===== Settings navigation (TabControl) ===== -->
         <Style x:Key="SettingsNavItemStyle" TargetType="TabItem">
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
-            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="FontSize" Value="11.5"/>
             <Setter Property="FontWeight" Value="SemiBold"/>
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="8" Margin="6,2" Padding="10,8">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="10" Margin="8,2" Padding="10,9">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="22"/>
+                                    <ColumnDefinition Width="26"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="Icon" Text="{TemplateBinding Tag}" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource DimTextBrush}"/>
-                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                                <Border x:Name="Marker" Width="3" Height="16" CornerRadius="2" Background="{StaticResource AccentBrush}" HorizontalAlignment="Left" Margin="-10,0,0,0" Visibility="Collapsed"/>
+                                <Border x:Name="IconTile" Width="22" Height="22" CornerRadius="7" Background="#1C1830" BorderBrush="#2E2946" BorderThickness="1" VerticalAlignment="Center">
+                                    <TextBlock x:Name="Icon" Text="{TemplateBinding Tag}" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" Foreground="{StaticResource DimTextBrush}"/>
+                                </Border>
+                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" Margin="8,0,0,0" RecognizesAccessKey="True"/>
+                                <Border x:Name="Marker" Width="3" Height="18" CornerRadius="2" Background="{StaticResource AccentGradientBrush}" HorizontalAlignment="Left" Margin="-11,0,0,0" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
-                                <Setter TargetName="Icon" Property="Foreground" Value="{StaticResource TextBrush}"/>
+                                <Setter TargetName="IconTile" Property="Background" Value="{StaticResource AccentGradientBrush}"/>
+                                <Setter TargetName="IconTile" Property="BorderBrush" Value="#55FFFFFF"/>
+                                <Setter TargetName="Icon" Property="Foreground" Value="White"/>
                                 <Setter TargetName="Marker" Property="Visibility" Value="Visible"/>
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
+                                <Setter TargetName="IconTile" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -578,12 +678,12 @@
                     <ControlTemplate TargetType="TabControl">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="164"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,1,0">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                    <TabPanel IsItemsHost="True" Margin="0,8"/>
+                                    <TabPanel IsItemsHost="True" Margin="0,10"/>
                                 </ScrollViewer>
                             </Border>
                             <Border Grid.Column="1" Background="Transparent">
@@ -605,13 +705,13 @@
                 <Setter.Value>
                     <Style TargetType="ListBoxItem">
                         <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-                        <Setter Property="Margin" Value="0,0,0,6"/>
+                        <Setter Property="Margin" Value="0,0,0,7"/>
                         <Setter Property="Cursor" Value="Hand"/>
                         <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Chrome" Background="{StaticResource ControlBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" CornerRadius="10" Padding="12,9">
+                                    <Border x:Name="Chrome" Background="{StaticResource CardBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" CornerRadius="11" Padding="12,10">
                                         <ContentPresenter/>
                                     </Border>
                                     <ControlTemplate.Triggers>
@@ -621,6 +721,11 @@
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
                                             <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                            <Setter TargetName="Chrome" Property="Effect">
+                                                <Setter.Value>
+                                                    <DropShadowEffect Color="#A66BFF" BlurRadius="16" ShadowDepth="0" Opacity=".35"/>
+                                                </Setter.Value>
+                                            </Setter>
                                         </Trigger>
                                     </ControlTemplate.Triggers>
                                 </ControlTemplate>

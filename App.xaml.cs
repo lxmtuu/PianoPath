@@ -26,8 +26,8 @@ public partial class App : Application
                 var tab = e.Args.FirstOrDefault(a => a.StartsWith("--settings-tab=", StringComparison.Ordinal))?[15..];
                 tabs.SelectedIndex = tab?.ToLowerInvariant() switch
                 {
-                    "notes" => 1, "particles" => 2, "keyboard" => 3, "background" or "scene" => 4, "camera" => 5,
-                    "audio" => 6, "midi" => 7, "practice" => 8, "recording" => 9, _ => 0
+                    "colors" or "colour" or "palette" => 1, "notes" => 2, "particles" => 3, "keyboard" => 4, "background" or "scene" => 5,
+                    "camera" or "shader" or "fx" => 6, "audio" => 7, "midi" => 8, "practice" => 9, "recording" => 10, _ => 0
                 };
             }
         }

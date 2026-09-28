@@ -395,19 +395,9 @@ internal sealed partial class PianoStage
         var start = ParseColor(_visual.NoteColorStart, Colors.DeepSkyBlue);
         var mid = ParseColor(_visual.NoteColorMid, Colors.MediumPurple);
         var end = ParseColor(_visual.NoteColorEnd, Colors.MediumPurple);
-        return _visual.Palette switch
-        {
-            "Aurora" => (Color.FromRgb(42, 245, 198), Color.FromRgb(46, 155, 255), Color.FromRgb(180, 92, 255)),
-            "Violet" => (Color.FromRgb(139, 92, 246), Color.FromRgb(198, 97, 255), Color.FromRgb(255, 95, 210)),
-            "Sunset" => (Color.FromRgb(255, 203, 107), Color.FromRgb(255, 122, 89), Color.FromRgb(255, 61, 154)),
-            "Cyberpunk" => (Color.FromRgb(0, 240, 255), Color.FromRgb(59, 91, 255), Color.FromRgb(255, 43, 214)),
-            "Candy" => (Color.FromRgb(110, 231, 255), Color.FromRgb(196, 181, 253), Color.FromRgb(255, 143, 208)),
-            "Emerald" => (Color.FromRgb(123, 241, 168), Color.FromRgb(34, 197, 94), Color.FromRgb(14, 165, 165)),
-            "Ocean" => (Color.FromRgb(70, 246, 237), Color.FromRgb(46, 168, 255), Color.FromRgb(55, 106, 255)),
-            "Fire" => (Color.FromRgb(255, 204, 72), Color.FromRgb(255, 122, 47), Color.FromRgb(255, 53, 91)),
-            "Mono" => (Color.FromRgb(255, 255, 255), Color.FromRgb(199, 201, 217), Color.FromRgb(122, 127, 156)),
-            _ => (start, mid, end)
-        };
+        if (PianoVisualSettings.PaletteStops.TryGetValue(_visual.Palette, out var stops))
+            return (ParseColor(stops.Start, start), ParseColor(stops.Mid, mid), ParseColor(stops.End, end));
+        return (start, mid, end);
     }
 
     /// <summary>The three stops the palette editor and the live preview show.</summary>

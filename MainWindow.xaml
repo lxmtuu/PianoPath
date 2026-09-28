@@ -65,7 +65,7 @@
             <local:PianoStage x:Name="Stage" PianoKeyChanged="Stage_PianoKeyChanged"/>
 
             <!-- Settings dock: full height, docked to the right, category navigation on the left. -->
-            <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="660" Margin="0,8,0,8" Background="{StaticResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
+            <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="712" Margin="0,10,0,10" Background="{StaticResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -112,6 +112,9 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
+                        <TabItem Header="Colors" Tag="◈">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="ColorSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        </TabItem>
                         <TabItem Header="Notes" Tag="▮">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="NoteSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
@@ -124,7 +127,7 @@
                         <TabItem Header="Background" Tag="◐">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="SceneSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Camera &amp; FX" Tag="◎">
+                        <TabItem Header="Shader &amp; FX" Tag="◎">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="CameraSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
                         <TabItem Header="Audio" Tag="♪">
@@ -217,6 +220,17 @@
             </Border>
 
             <Grid x:Name="LiveChromeOverlay" Panel.ZIndex="5" IsHitTestVisible="True">
+                <Border HorizontalAlignment="Center" VerticalAlignment="Top" Margin="0,20,0,0" Padding="10,7" CornerRadius="16" Background="#B80C0912" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource PanelGlow}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="LAYERS" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="4,0,10,0"/>
+                        <ToggleButton x:Name="QuickNotesToggle" Content="NOTES" Tag="ShowNotes" Style="{StaticResource QuickPillStyle}" Checked="QuickLayer_Changed" Unchecked="QuickLayer_Changed" ToolTip="Falling notes"/>
+                        <ToggleButton x:Name="QuickSparksToggle" Content="SPARKS" Tag="ShowEmbers" Style="{StaticResource QuickPillStyle}" Checked="QuickLayer_Changed" Unchecked="QuickLayer_Changed" ToolTip="Impact sparks"/>
+                        <ToggleButton x:Name="QuickFlamesToggle" Content="FIRE" Tag="ShowFlame" Style="{StaticResource QuickPillStyle}" Checked="QuickLayer_Changed" Unchecked="QuickLayer_Changed" ToolTip="Flames at the key line"/>
+                        <ToggleButton x:Name="QuickWispsToggle" Content="WISPS" Tag="ShowWisps" Style="{StaticResource QuickPillStyle}" Checked="QuickLayer_Changed" Unchecked="QuickLayer_Changed" ToolTip="Plasma wisps above held keys"/>
+                        <ToggleButton x:Name="QuickHaloToggle" Content="HALO" Tag="ShowHalo" Style="{StaticResource QuickPillStyle}" Checked="QuickLayer_Changed" Unchecked="QuickLayer_Changed" ToolTip="Hit line halo"/>
+                        <ToggleButton x:Name="QuickKeysToggle" Content="KEYS" Tag="ShowKeys" Style="{StaticResource QuickPillStyle}" Checked="QuickLayer_Changed" Unchecked="QuickLayer_Changed" ToolTip="Piano keys"/>
+                    </StackPanel>
+                </Border>
                 <Button x:Name="RecordButton" Content="●  REC" Style="{StaticResource DangerButtonStyle}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="28,20,0,0" Padding="16,10" Click="RecordVideo_Click" ToolTip="Record the live piano visualizer"/>
                 <Button x:Name="LiveSettingsButton" Content="☰  MENU" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,28,0" Padding="18,10" Click="Settings_Click" ToolTip="Show visual, audio, MIDI and practice settings (Escape)"/>
             </Grid>

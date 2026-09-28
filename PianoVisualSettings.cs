@@ -197,6 +197,20 @@ internal sealed class PianoVisualSettings
     public string RecordingResolution { get; set; } = "Window";
     public double RecordingFrameRate { get; set; } = 30;
 
+    /// <summary>Three-stop definitions behind every named palette; the palette editor and the renderer share them.</summary>
+    internal static readonly Dictionary<string, (string Start, string Mid, string End)> PaletteStops = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Aurora"] = ("#2AF5C6", "#2E9BFF", "#B45CFF"),
+        ["Violet"] = ("#8B5CF6", "#C661FF", "#FF5FD2"),
+        ["Sunset"] = ("#FFCB6B", "#FF7A59", "#FF3D9A"),
+        ["Cyberpunk"] = ("#00F0FF", "#3B5BFF", "#FF2BD6"),
+        ["Candy"] = ("#6EE7FF", "#C4B5FD", "#FF8FD0"),
+        ["Emerald"] = ("#7BF1A8", "#22C55E", "#0EA5A5"),
+        ["Ocean"] = ("#46F6ED", "#2EA8FF", "#376AFF"),
+        ["Fire"] = ("#FFCC48", "#FF7A2F", "#FF355B"),
+        ["Mono"] = ("#FFFFFF", "#C7C9D9", "#7A7F9C"),
+    };
+
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Violet", "Sunset", "Cyberpunk", "Candy", "Emerald", "Ocean", "Fire", "Mono", "Custom"];
     internal static readonly string[] HaloTintModes = ["Halo", "Rainbow", "Note"];
