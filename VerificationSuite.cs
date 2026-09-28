@@ -1,0 +1,513 @@
+using System.Diagnostics;
+using System.IO;
+using System.Reflection;
+using System.Text;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+
+namespace PianoPath;
+
+/// <summary>In-app smoke and regression checks, runnable with PianoPath.exe --verify.</summary>
+internal static class VerificationSuite
+{
+    private static readonly List<string> Results = [];
+    private static int _assertions;
+
+    public static void Run(string[] args, App app)
+    {
+        Results.Clear(); _assertions = 0;
+        try { VerifyMidiImport(); VerifyVisualSettings(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+        catch (Exception ex) { Finish(app, args, ex); return; }
+
+        var startupWindow = new MainWindow { WindowState = WindowState.Normal, Width = 1240, Height = 780 };
+        startupWindow.ContentRendered += (_, _) =>
+        {
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+            var deadline = DateTime.UtcNow.AddSeconds(8);
+            timer.Tick += (_, _) =>
+            {
+                var audio = (PianoAudioEngine)Field(startupWindow, "_audio");
+                var soundFontLabel = (TextBlock)startupWindow.FindName("SoundFontLabel");
+                if (audio.HasSoundFont && soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal))
+                {
+                    timer.Stop();
+                    try
+                    {
+                        Assert(soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal), "A normal app startup should show the bundled piano as its active SoundFont.");
+                        Assert(((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled && ((ComboBox)startupWindow.FindName("PresetCombo")).SelectedIndex == 0, "Startup should select the bundled acoustic-grand preset.");
+                        Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The bundled piano should start with hall reverb active in the UI and audio engine.");
+                        Results.Add("PASS WPF startup: bundled grand loads automatically, its preset is selected and room reverb starts enabled.");
+                        startupWindow.Close();
+                        VerifyPracticeWindow(args, app);
+                    }
+                    catch (Exception ex) { Finish(app, args, ex); }
+                }
+                else if (DateTime.UtcNow >= deadline) { timer.Stop(); Finish(app, args, new TimeoutException("The bundled grand did not finish loading during the startup smoke check.")); }
+            };
+            timer.Start();
+        };
+        startupWindow.Show();
+    }
+
+    private static void VerifyPracticeWindow(string[] args, App app)
+    {
+        var window = new MainWindow(loadBuiltInSoundFont: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780 };
+        window.ContentRendered += (_, _) =>
+        {
+            var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+            delay.Tick += (_, _) =>
+            {
+                delay.Stop();
+                try { VerifyWpfInteractions(window, () => Finish(app, args, null), ex => Finish(app, args, ex)); }
+                catch (Exception ex) { Finish(app, args, ex); }
+            };
+            delay.Start();
+        };
+        window.Show();
+    }
+
+    private static void VerifyMidiImport()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-fixture.mid");
+        File.WriteAllBytes(path, CreateFormatOneMidi()); var notes = MidiReader.Read(path);
+        Assert(notes.Count == 3, "MIDI format 1 should read notes from multiple tracks.");
+        var middleC = notes.Single(n => n.Pitch == 60);
+        Assert(middleC.Track == 0 && middleC.Velocity == 100, "MIDI pitch, track and velocity should be retained.");
+        Assert(Math.Abs(middleC.Start) < .001 && Math.Abs(middleC.Duration - .5) < .001, "Default tempo should map ticks to seconds correctly.");
+        Assert(Math.Abs(notes.Single(n => n.Pitch == 64).Duration - .25) < .001, "Short note duration should be retained.");
+        var changed = notes.Single(n => n.Pitch == 67);
+        Assert(Math.Abs(changed.Start - .5) < .001 && Math.Abs(changed.Duration - .25) < .001, "Tempo changes should affect following notes.");
+        File.WriteAllBytes(path, Encoding.ASCII.GetBytes("BAD!")); var rejected = false;
+        try { MidiReader.Read(path); } catch (InvalidDataException) { rejected = true; }
+        Assert(rejected, "Invalid MIDI headers should be rejected cleanly.");
+        Results.Add("PASS MIDI: multi-track import, tempo map, timing, velocity and malformed input.");
+    }
+
+    private static void VerifyVisualSettings()
+    {
+        var defaults = new PianoVisualSettings();
+        Assert(!defaults.BackgroundGradient && !defaults.BackgroundGuide && !defaults.ShowStars && defaults.BackgroundImagePath == "", "A fresh visual profile should open on a black stage with no image or decorative background layers.");
+        var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
+        Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 1 && migrated.BackgroundImagePath == "C:\\piano.png",
+            "Legacy settings should switch to the black stage while preserving an optional selected image path.");
+        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5 };
+        settings.Clamp();
+        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum", "Visual settings should clamp unsafe ranges and reject unknown palettes.");
+        var restored = PianoVisualSettings.FromJson(settings.ToJson());
+        Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum", "Visual settings should round-trip through the persisted JSON format.");
+        Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
+        var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
+        Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
+        Results.Add("PASS stage settings: black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+    }
+
+    private static void VerifyAviVideoRecorder()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"keyflow-test-{Guid.NewGuid():N}.avi");
+        bool mjpeg;
+        try
+        {
+            using (var recorder = new AviVideoRecorder(path, 64, 48, 12))
+            {
+                mjpeg = recorder.UsesMjpeg;
+                var frame = new byte[AviVideoRecorder.BgrStride(64) * 48];
+                for (var y = 0; y < 48; y++) for (var x = 0; x < 64; x++)
+                {
+                    var pixel = (47 - y) * AviVideoRecorder.BgrStride(64) + x * 3;
+                    frame[pixel] = (byte)(x * 4); frame[pixel + 1] = (byte)(y * 5); frame[pixel + 2] = (byte)(255 - x * 3);
+                }
+                for (var i = 0; i < 4; i++) { frame[2] = (byte)(40 + i * 40); recorder.WriteBgrFrame(frame); }
+            }
+            var bytes = File.ReadAllBytes(path); var text = Encoding.ASCII.GetString(bytes);
+            Assert(bytes.Length > 1000 && text.StartsWith("RIFF", StringComparison.Ordinal) && text.Substring(8, 4) == "AVI ", "The recorder should finalize a non-empty RIFF/AVI file.");
+            var movi = text.IndexOf("movi", StringComparison.Ordinal);
+            var frameChunks = movi < 0 ? 0 : CountToken(text[(movi + 4)..], "00dc") + CountToken(text[(movi + 4)..], "00db");
+            Assert(frameChunks >= 4, "The AVI should contain all four submitted video frames.");
+            Results.Add($"PASS video recording: 4 frames finalized into AVI ({(mjpeg ? "MJPEG" : "uncompressed RGB")}).");
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    private static void VerifySoundFontEngine()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(path, CreateTestSoundFont());
+        var font = SoundFontReader.Read(path);
+        Assert(font.Name == "Keyflow test piano" && font.Presets.Count == 1 && font.Presets[0].Name == "Test Grand", "SF2 metadata and instrument zones should load.");
+        Assert(font.Presets[0].Regions.Count == 1 && font.Presets[0].Regions[0].RootKey == 69, "Preset zones should map a sample to its root note.");
+        Assert(font.SampleCount > 1000 && font.ReadSample(1) != 0 && font.Presets[0].Regions[0].Start == 0 && font.Presets[0].Regions[0].End > 1000, "SF2 sample bytes and sample boundaries should be retained.");
+        var synth = new SoundFontSynthesizer(font, 22050); synth.NoteOn(0, 69, 100);
+        var first = new short[4410 * 2]; synth.Render(first, 4410);
+        var testRegion = font.Presets[0].Regions[0];
+        Assert(first.Any(sample => sample != 0), $"A loaded SoundFont should render non-silent sampled audio (voices={synth.ActiveVoiceCount}, sample1={font.ReadSample(1)}, sampleCount={font.SampleCount}, range={testRegion.Start}..{testRegion.End}, rate={testRegion.SampleRate}, attack={testRegion.AttackSeconds}, sustain={testRegion.SustainLevel}, gain={testRegion.Attenuation}, pan={testRegion.Pan}).");
+        synth.NoteOff(0, 69); var release = new short[4410 * 2]; synth.Render(release, 4410);
+        Assert(release.Any(sample => sample != 0), "SoundFont Note Off should preserve the release tail.");
+        var tail = new short[22050 * 2]; synth.Render(tail, 22050);
+        Assert(tail.All(sample => sample == 0), "A released SoundFont note should eventually stop consuming voices.");
+
+        var sustainSynth = new SoundFontSynthesizer(font, 22050);
+        sustainSynth.ProcessMidi(0, 0xB0, 64, 127); sustainSynth.NoteOn(0, 69, 100);
+        var heldAudio = new short[2205 * 2]; sustainSynth.Render(heldAudio, 2205); sustainSynth.NoteOff(0, 69);
+        var sustainAudio = new short[2205 * 2]; sustainSynth.Render(sustainAudio, 2205);
+        Assert(sustainAudio.Any(sample => sample != 0) && sustainSynth.ActiveVoiceCount == 1, "Sustain CC 64 should keep a released key sounding.");
+        sustainSynth.ProcessMidi(0, 0xB0, 64, 0); var sustainTail = new short[22050 * 2]; sustainSynth.Render(sustainTail, 22050);
+        Assert(sustainSynth.ActiveVoiceCount == 0, "Releasing sustain CC 64 should release held voices.");
+
+        var sostenutoSynth = new SoundFontSynthesizer(font, 22050); sostenutoSynth.NoteOn(0, 60, 100);
+        var beforeCapture = new short[2205 * 2]; sostenutoSynth.Render(beforeCapture, 2205);
+        sostenutoSynth.ProcessMidi(0, 0xB0, 66, 127); sostenutoSynth.NoteOff(0, 60);
+        sostenutoSynth.NoteOn(0, 64, 100); var laterVoice = new short[2205 * 2]; sostenutoSynth.Render(laterVoice, 2205); sostenutoSynth.NoteOff(0, 64);
+        var sostenutoAudio = new short[4410 * 2]; sostenutoSynth.Render(sostenutoAudio, 4410);
+        Assert(sostenutoSynth.ActiveVoiceCount == 1, "Sostenuto CC 66 should hold notes already down, but release notes played afterward.");
+        sostenutoSynth.ProcessMidi(0, 0xB0, 66, 0); var sostenutoTail = new short[22050 * 2]; sostenutoSynth.Render(sostenutoTail, 22050);
+        Assert(sostenutoSynth.ActiveVoiceCount == 0, "Releasing sostenuto CC 66 should release captured voices.");
+
+        var normalSynth = new SoundFontSynthesizer(font, 22050); var normalAudio = new short[2205 * 2]; normalSynth.NoteOn(0, 69, 100); normalSynth.Render(normalAudio, 2205);
+        var softSynth = new SoundFontSynthesizer(font, 22050); softSynth.ProcessMidi(0, 0xB0, 67, 127); var softAudio = new short[2205 * 2]; softSynth.NoteOn(0, 69, 100); softSynth.Render(softAudio, 2205);
+        var normalLevel = normalAudio.Select(x => Math.Abs((int)x)).Average(); var softLevel = softAudio.Select(x => Math.Abs((int)x)).Average();
+        Assert(softLevel < normalLevel * .82, "Soft CC 67 should reduce volume and mellow the rendered sample.");
+        var rejected = false;
+        try { _ = SoundFontReader.Read(Path.Combine(Path.GetTempPath(), "missing-soundfont.sf2")); } catch (FileNotFoundException) { rejected = true; }
+        Assert(rejected, "A missing SoundFont should be reported rather than replaced by a fallback tone.");
+        using (var engine = new PianoAudioEngine())
+        {
+            Assert(!engine.HasSoundFont, "Integrated piano audio must stay silent before a SoundFont is loaded.");
+            engine.LoadSoundFont(path); Assert(engine.HasSoundFont && engine.Presets.Count == 1, "Loading an SF2 should activate its presets and audio stream.");
+            engine.NoteOn(69, 95); Thread.Sleep(110); engine.NoteOff(69); Thread.Sleep(60);
+            engine.UnloadSoundFont(); Assert(!engine.HasSoundFont, "Unloading the SoundFont should return to silent mode.");
+        }
+        Results.Add("PASS SoundFont: SF2 playback, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output and silent unload.");
+    }
+
+    private static void VerifyBundledPiano()
+    {
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
+        Assert(File.Exists(path), "The bundled Yamaha grand SoundFont should be copied beside the built application.");
+        var font = SoundFontReader.Read(path);
+        Assert(font.Name.Contains("Grand Piano", StringComparison.OrdinalIgnoreCase), "The bundled SoundFont should identify its grand-piano program in the SF2 metadata.");
+        var piano = font.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0);
+        Assert(piano is not null && piano.Regions.Count > 0, "The bundled SF2 should contain the standard acoustic-grand preset.");
+        var synth = new SoundFontSynthesizer(font, 22050); synth.NoteOn(0, 60, 96);
+        var attack = new short[4410 * 2]; synth.Render(attack, 4410);
+        Assert(attack.Any(sample => sample != 0), "The bundled Yamaha grand preset should produce audio for middle C.");
+        synth.NoteOff(0, 60); var release = new short[4410 * 2]; synth.Render(release, 4410);
+        Assert(release.Any(sample => sample != 0), "The bundled piano should keep its recorded release after key-up.");
+        using var engine = new PianoAudioEngine(); engine.LoadSoundFont(path);
+        Assert(engine.HasSoundFont && engine.Presets.Any(p => p.Program == 0), "The real bundled piano SF2 should open in the production waveOut engine.");
+        engine.NoteOn(60, 96); Thread.Sleep(80); engine.NoteOff(60); Thread.Sleep(60); engine.UnloadSoundFont();
+        Results.Add($"PASS built-in piano: {font.Name}, {font.Presets.Count} preset(s), {font.SampleCount:N0} samples, acoustic-grand audio and live waveOut playback.");
+    }
+
+    private static void VerifyStereoHallReverb()
+    {
+        var impulse = new short[4410 * 2]; impulse[0] = 24000; impulse[1] = 12000;
+        new StereoHallReverb(44100).Process(impulse, 4410);
+        Assert(impulse.Skip(1000 * 2).Any(sample => sample != 0), "Hall reverb should create a stereo decay after the dry piano impulse.");
+        var dry = new short[4410 * 2]; dry[0] = 24000; dry[1] = 12000;
+        new StereoHallReverb(44100) { Enabled = false }.Process(dry, 4410);
+        Assert(dry.Take(2).SequenceEqual(new short[] { 24000, 12000 }) && dry.Skip(2).All(sample => sample == 0), "Turning reverb off should preserve the dry signal and produce no reflections.");
+        Results.Add("PASS reverb: stereo room tail, stable dry path and selectable bypass.");
+    }
+
+    private static void VerifyMidiDevicesAndKeyboardMap()
+    {
+        Assert(MainWindow.MapComputerKey(Key.A) == 48 && MainWindow.MapComputerKey(Key.K) == 69, "Computer keyboard map should span the expected octave.");
+        Assert(MainWindow.MapComputerKey(Key.Q) == -1, "Unmapped computer keys should be ignored.");
+        var on = MidiDeviceService.PackNoteMessage(60, 100, true, 2);
+        Assert((on & 255) == 0x92 && ((on >> 8) & 127) == 60 && ((on >> 16) & 127) == 100, "MIDI output Note On bytes should be correct.");
+        var off = MidiDeviceService.PackNoteMessage(60, 0, false, 2);
+        Assert((off & 255) == 0x82 && ((off >> 8) & 127) == 60, "MIDI output Note Off bytes should be correct.");
+        using var service = new MidiDeviceService(); var messages = new List<(int pitch, int velocity, bool on)>();
+        var pedals = new List<(PianoPedal pedal, bool down)>();
+        service.NoteChanged += (pitch, velocity, pressed) => messages.Add((pitch, velocity, pressed));
+        service.PedalChanged += (pedal, down) => pedals.Add((pedal, down));
+        service.ProcessNativeInputMessage(0x3C1, (UIntPtr)on); // MIM_OPEN must not be parsed as a note.
+        service.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)on);
+        service.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)off);
+        service.ProcessShortMessage(0x00407BB0);
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(67, 127));
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(66, 127));
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(64, 127));
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(67, 0));
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(66, 0));
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(64, 0));
+        Assert(messages.Count == 2 && messages[0] == (60, 100, true) && messages[1] == (60, 0, false), "The WinMM MIM_DATA callback should translate packed Note On/Off messages and ignore other callback messages.");
+        Assert(pedals.Count == 6 && pedals.Take(3).Select(x => x.pedal).SequenceEqual([PianoPedal.Soft, PianoPedal.Sostenuto, PianoPedal.Sustain]) && pedals.All(x => x.down == pedals.IndexOf(x) < 3), "MIDI CC 67/66/64 should report real-time soft, sostenuto and sustain pedal edges.");
+        Assert(MidiDeviceService.ControllerFor(PianoPedal.Sustain) == 64 && MidiDeviceService.ControllerFor(PianoPedal.Sostenuto) == 66 && MidiDeviceService.ControllerFor(PianoPedal.Soft) == 67, "Pedal output should use the standard MIDI controller numbers.");
+        var controllerMessage = MidiDeviceService.PackControllerMessage(64, 127, 3);
+        Assert((controllerMessage & 255) == 0xB3 && ((controllerMessage >> 8) & 127) == 64 && ((controllerMessage >> 16) & 127) == 127, "MIDI pedal output should pack controller, value and channel correctly.");
+        var ins = MidiDeviceService.Inputs; var outs = MidiDeviceService.Outputs;
+        Assert(ins.All(x => !string.IsNullOrWhiteSpace(x)) && outs.All(x => !string.IsNullOrWhiteSpace(x)), "Windows MIDI endpoints should enumerate with valid names.");
+        if (outs.Count > 0)
+        {
+            using var output = new MidiDeviceService(); output.OpenOutput(0); output.SendNote(69, 64, true); Thread.Sleep(90); output.SendNote(69, 0, false);
+            output.SendController(67, 127); output.SendController(66, 127); output.SendController(64, 127);
+            output.SendController(67, 0); output.SendController(66, 0); output.SendController(64, 0);
+            Results.Add($"PASS native MIDI output: sent Note On/Off and three-pedal CC events to {outs[0]}.");
+        }
+        Results.Add($"PASS MIDI devices: key map, input/output encoding, inputs=[{string.Join(", ", ins)}], outputs=[{string.Join(", ", outs)}].");
+    }
+
+    private static void VerifyWpfInteractions(MainWindow window, Action completed, Action<Exception> failed)
+    {
+        var stage = (PianoStage)window.FindName("Stage"); var mode = (ComboBox)window.FindName("ModeCombo"); var tracks = (ComboBox)window.FindName("TrackCombo");
+        var panel = (Border)window.FindName("SettingsPanel"); var overlay = (Grid)window.FindName("LiveChromeOverlay");
+        var rowDefinitions = ((Grid)window.Content).RowDefinitions;
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Live Play should start immersive with settings hidden and the idle toolbar available.");
+        SetField(window, "_lastPointerActivity", DateTime.UtcNow.AddSeconds(-4)); Invoke(window, "CheckChromeIdle");
+        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "Idle should hide the video/menu toolbar and collapse top and bottom chrome.");
+        var source = PresentationSource.FromVisual(window)!;
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && rowDefinitions[0].Height.Value > 0 && ((Button)window.FindName("RecordButton")).Visibility == Visibility.Collapsed, "Escape should reveal the settings/menu control without opening an obstructing panel or showing REC.");
+        var mouse = new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent };
+        Invoke(window, "Window_MouseMove", window, mouse);
+        Assert(((Button)window.FindName("RecordButton")).Visibility == Visibility.Visible, "Mouse movement should reveal the video recording action alongside the settings control.");
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed, "Opening Stage Design should dismiss its overlapping floating toolbar.");
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Escape should close Stage Design and restore the live toolbar.");
+        Assert(window.FindName("RecordButton") is Button, "The revealed Live Play chrome should expose its video recording action.");
+        var visualSettings = (PianoVisualSettings)Field(window, "_visualSettings"); var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        Assert(sliders.Count >= 30 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "The detailed scene, note, particle and camera controls should drive the renderer configuration.");
+        var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
+        Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorButtons.Count == 3,
+            "Live design settings should provide an interactive color picker for both note colors and the halo.");
+        VerifyBackgroundImageLoad(stage, visualSettings);
+        var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
+        Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
+        var glowSlider = sliders[nameof(PianoVisualSettings.NoteGlow)]; var originalGlow = glowSlider.Value; glowSlider.Value = 127;
+        Assert(visualSettings.NoteGlow == 127 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "Adjusting note bloom should update the stage renderer immediately.");
+        glowSlider.Value = originalGlow; ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
+        var wasShowingEmbers = visualSettings.ShowEmbers;
+        visualSettings.ShowEmbers = false; stage.SetVisualSettings(visualSettings); stage.Impact(60);
+        Assert(stage.SparkCount == 0, "Turning off the ember layer should stop new particle bursts.");
+        visualSettings.ShowEmbers = wasShowingEmbers; stage.SetVisualSettings(visualSettings);
+        var piano = (PianoAudioEngine)Field(window, "_audio"); var silentLabel = (TextBlock)window.FindName("SoundFontLabel");
+        var midi = (MidiDeviceService)Field(window, "_midi"); var inputCombo = (ComboBox)window.FindName("InputDeviceCombo");
+        Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
+            "The first detected physical MIDI input should be opened automatically and remain visibly selected.");
+        Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
+        Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
+            "Refreshing the MIDI list should preserve or auto-select an available input instead of silently switching to computer-only mode.");
+        Assert(!piano.HasSoundFont && !((ComboBox)window.FindName("PresetCombo")).IsEnabled && silentLabel.Text.Contains("SILENT"), "The initial UI must expose silent mode until a SoundFont is loaded.");
+        var reverb = (ToggleButton)window.FindName("ReverbToggle");
+        Assert(reverb.IsChecked == true && piano.ReverbEnabled, "The built-in concert room reverb should start enabled.");
+        reverb.IsChecked = false; Assert(!piano.ReverbEnabled, "The reverb control should bypass the live audio effect.");
+        reverb.IsChecked = true; Assert(piano.ReverbEnabled, "Reverb should be switchable back on while the piano is running.");
+        Assert(!(bool)Field(window, "_playing") && ((IEnumerable<NoteEvent>)Field(window, "_notes")).Count() == 0 && !((Button)window.FindName("PlayButton")).IsEnabled, "Startup should be live-play only with no demo MIDI or automatic transport.");
+        Invoke(window, "PressNote", 60, 90);
+        Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position")) < .001, "A live piano key must not start or advance MIDI playback.");
+        Assert(stage.LiveTrailCount == 1 && stage.SparkCount >= 12, "A keypress should create a short falling note and a neon impact burst.");
+        Assert(!piano.HasSoundFont, "Keyboard input should not synthesize a replacement piano voice in silent mode.");
+        Assert((int)Field(window, "_hits") == 0 && (int)Field(window, "_misses") == 0, "Free-play notes should not affect song practice scoring.");
+        midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackNoteMessage(61, 90, true));
+        midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackControllerMessage(67, 127));
+        var livePosition = (double)Field(window, "_position"); var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            try
+            {
+                Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position") - livePosition) < .001, "MIDI Note On should remain live-only and leave the song playhead stopped.");
+                Assert(stage.LiveTrailCount == 2 && stage.SparkCount > 0, "MIDI Note On should create its own animation and sparks.");
+                Assert(stage.FirstLiveTrailY > 0 && stage.FirstLiveTrailY < stage.ActualHeight - stage.KeyboardHeight, "A pressed-key note should fall down its own lane while the song playhead stays still.");
+                Assert(((ToggleButton)window.FindName("SoftPedalToggle")).IsChecked == true && ((HashSet<PianoPedal>)Field(window, "_pedalsDown")).Contains(PianoPedal.Soft), "Incoming MIDI CC 67 should update the soft pedal control immediately.");
+                var heldLength = stage.LiveTrailHeightFor(60);
+                Assert(heldLength > 28, "A held key should extend its falling note over time.");
+                Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.A) { RoutedEvent = Keyboard.KeyDownEvent });
+                Assert(((HashSet<int>)Field(window, "_pressed")).Contains(48), "Computer key down should press its mapped piano key.");
+                Invoke(window, "Window_KeyUp", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.A) { RoutedEvent = Keyboard.KeyUpEvent });
+                Assert(!((HashSet<int>)Field(window, "_pressed")).Contains(48), "Computer key up should release the same piano key.");
+                Invoke(window, "ReleaseNote", 60); var releasedLength = stage.LiveTrailHeightFor(60); stage.Advance(.05);
+                Assert(Math.Abs(stage.LiveTrailHeightFor(60) - releasedLength) < .001, "Releasing the key should freeze its note length.");
+                midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackNoteMessage(61, 0, false));
+
+                var sustainToggle = (ToggleButton)window.FindName("SustainPedalToggle"); sustainToggle.IsChecked = true;
+                Invoke(window, "PressNote", 63, 90); stage.Advance(.05); var sustainLength = stage.LiveTrailHeightFor(63);
+                Invoke(window, "ReleaseNote", 63); stage.Advance(.05);
+                Assert(Math.Abs(stage.LiveTrailHeightFor(63) - sustainLength) < .001, "Sustain should extend the audio only; the visual bar should freeze on physical key release.");
+                sustainToggle.IsChecked = false; var sustainReleasedLength = stage.LiveTrailHeightFor(63); stage.Advance(.05);
+                Assert(Math.Abs(stage.LiveTrailHeightFor(63) - sustainReleasedLength) < .001, "Releasing sustain should not change the frozen visual note length.");
+
+                var sostenutoToggle = (ToggleButton)window.FindName("SostenutoPedalToggle");
+                Invoke(window, "PressNote", 64, 90); stage.Advance(.03); sostenutoToggle.IsChecked = true;
+                Invoke(window, "ReleaseNote", 64); stage.Advance(.05); var sostenutoLength = stage.LiveTrailHeightFor(64);
+                Assert(Math.Abs(sostenutoLength - (28 + .03 * visualSettings.NoteFallSpeed)) < .001, "Sostenuto should sustain audio without capturing extra visual note length after key release.");
+                sostenutoToggle.IsChecked = false; var sostenutoReleasedLength = stage.LiveTrailHeightFor(64); stage.Advance(.05);
+                Assert(Math.Abs(stage.LiveTrailHeightFor(64) - sostenutoReleasedLength) < .001, "Releasing sostenuto should end its captured visual note.");
+
+                var softToggle = (ToggleButton)window.FindName("SoftPedalToggle"); softToggle.IsChecked = false; softToggle.IsChecked = true;
+                Assert(((HashSet<PianoPedal>)Field(window, "_pedalsDown")).Contains(PianoPedal.Soft), "The soft pedal control should update in real time.");
+                softToggle.IsChecked = false;
+
+                var practiceSong = MainWindow.CreateDemoSong();
+                SetField(window, "_allNotes", practiceSong); SetField(window, "_notes", practiceSong);
+                Invoke(window, "PopulateTracks"); Invoke(window, "UpdateSongUi"); Invoke(window, "UpdatePlaybackLabel");
+                Assert(((Button)window.FindName("PlayButton")).IsEnabled, "Opening a MIDI song should enable the transport.");
+                Invoke(window, "Play_Click", window, new RoutedEventArgs());
+                Assert((bool)Field(window, "_playing"), "MIDI playback should start from an explicit Play command.");
+                var songStart = (double)Field(window, "_position");
+                var playbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
+                playbackTimer.Tick += (_, _) =>
+                {
+                    playbackTimer.Stop();
+                    try
+                    {
+                        Assert((double)Field(window, "_position") > songStart, "Explicit Play should advance the song playhead in real time.");
+                        VerifySongControls(window, stage, mode, tracks);
+                        completed();
+                    }
+                    catch (Exception ex) { failed(ex); }
+                };
+                playbackTimer.Start();
+            }
+            catch (Exception ex) { failed(ex); }
+        };
+        timer.Start();
+    }
+
+    private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"keyflow-background-{Guid.NewGuid():N}.png");
+        var originalPath = settings.BackgroundImagePath;
+        try
+        {
+            var pixels = new byte[] { 20, 80, 240, 255, 40, 120, 220, 255, 60, 160, 200, 255, 80, 200, 180, 255 };
+            var bitmap = BitmapSource.Create(2, 2, 96, 96, PixelFormats.Bgra32, null, pixels, 8); bitmap.Freeze();
+            var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using (var stream = File.Create(path)) encoder.Save(stream);
+
+            stage.SetVisualSettings(settings);
+            settings.BackgroundImagePath = path; // Deliberately mutate the shared settings object, as the UI does.
+            stage.SetVisualSettings(settings);
+            var loaded = (BitmapSource?)Field(stage, "_backgroundImage");
+            Assert(stage.HasBackgroundImage && loaded?.PixelWidth == 2 && loaded.PixelHeight == 2 && stage.BackgroundLoadError is null,
+                $"The stage should load a selected local PNG after in-place settings changes and release the source file handle (has={stage.HasBackgroundImage}, size={loaded?.PixelWidth}x{loaded?.PixelHeight}, error={stage.BackgroundLoadError ?? "none"}).");
+
+            settings.BackgroundImagePath = path + ".missing";
+            stage.SetVisualSettings(settings);
+            Assert(!stage.HasBackgroundImage && !string.IsNullOrWhiteSpace(stage.BackgroundLoadError), "An unreadable or missing background should expose a useful load error without crashing the stage.");
+        }
+        finally
+        {
+            settings.BackgroundImagePath = originalPath;
+            stage.SetVisualSettings(settings, reloadBackground: true);
+            if (File.Exists(path)) File.Delete(path);
+        }
+        Results.Add("PASS background images: changed-path detection, PNG decoding, file release and missing-file diagnostics.");
+    }
+
+    private static int CountToken(string source, string token)
+    {
+        var count = 0; var offset = 0;
+        while ((offset = source.IndexOf(token, offset, StringComparison.Ordinal)) >= 0) { count++; offset += token.Length; }
+        return count;
+    }
+
+    private static void VerifySongControls(MainWindow window, PianoStage stage, ComboBox mode, ComboBox tracks)
+    {
+        mode.SelectedIndex = 2; Assert(((IEnumerable<NoteEvent>)Field(window, "_notes")).All(n => n.Pitch >= 60), "Right hand should filter lower pitches.");
+        mode.SelectedIndex = 3; Assert(((IEnumerable<NoteEvent>)Field(window, "_notes")).All(n => n.Pitch < 60), "Left hand should filter upper pitches.");
+        mode.SelectedIndex = 0; tracks.SelectedIndex = 1; Assert(((IEnumerable<NoteEvent>)Field(window, "_notes")).All(n => n.Track == 0), "Track selection should isolate a track."); tracks.SelectedIndex = 0;
+
+        SetField(window, "_position", 1.0); Invoke(window, "SetLoopA_Click", window, new RoutedEventArgs());
+        SetField(window, "_position", 3.0); Invoke(window, "SetLoopB_Click", window, new RoutedEventArgs());
+        Assert(((TextBlock)window.FindName("LoopLabel")).Text == "00:01–00:03", "A/B loop should retain its selected times.");
+        SetField(window, "_position", 3.1); Invoke(window, "Tick"); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
+
+        mode.SelectedIndex = 1;
+        foreach (var note in ((IEnumerable<NoteEvent>)Field(window, "_notes")).Where(n => n.Start < .99)) note.Played = true;
+        SetField(window, "_position", 1.2); ((Stopwatch)Field(window, "_clock")).Restart(); Invoke(window, "StartPlayback"); Invoke(window, "Tick");
+        Assert(Math.Abs((double)Field(window, "_position") - 1.0) < .02, "Wait mode should hold at the next note.");
+        Invoke(window, "PressNote", 72, 90);
+        Assert(((IEnumerable<NoteEvent>)Field(window, "_notes")).Any(n => n.Pitch == 72 && Math.Abs(n.Start - 1) < .01 && n.Played), "The expected note should score and release wait mode.");
+        Invoke(window, "Stop"); mode.SelectedIndex = 0;
+
+        var tempo = (Slider)window.FindName("TempoSlider"); tempo.Value = 120;
+        Assert(Math.Abs((double)Field(window, "_tempo") - 1.2) < .01, "Tempo control should update playback rate."); tempo.Value = 100;
+        SetField(window, "_isSeeking", true); ((Slider)window.FindName("SeekSlider")).Value = 50;
+        var duration = ((IEnumerable<NoteEvent>)Field(window, "_allNotes")).Max(n => n.End);
+        Assert(Math.Abs((double)Field(window, "_position") - duration * .5) < .02, "Seek slider should move the playhead."); SetField(window, "_isSeeking", false);
+        Invoke(window, "Stop");
+        Assert(stage.LiveTrailCount == 0 && stage.SparkCount == 0, "Pausing should clear transient note blocks and sparks.");
+        window.Width = 1080; window.Height = 700; window.UpdateLayout();
+        Assert(stage.ActualWidth > 500 && stage.KeyboardHeight > 100, "Compact window size should keep the keyboard usable.");
+        Results.Add("PASS WPF: immersive toolbar, Escape/mouse reveal behavior, live AVI frame capture, duration-scaled notes, pedals and MIDI practice controls.");
+    }
+
+    public static void PressPreviewNote(MainWindow window, int pitch) => Invoke(window, "PressNote", pitch, 90);
+    public static void Capture(Window window, string path)
+    {
+        var dpi = VisualTreeHelper.GetDpi(window); var width = Math.Max(1, (int)(window.ActualWidth * dpi.DpiScaleX)); var height = Math.Max(1, (int)(window.ActualHeight * dpi.DpiScaleY));
+        var bitmap = new RenderTargetBitmap(width, height, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32); bitmap.Render(window);
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
+        using var file = File.Create(path); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); encoder.Save(file);
+    }
+
+    private static byte[] CreateTestSoundFont()
+    {
+        const int sampleCount = 11025; var pcm = new byte[(sampleCount + 46) * 2];
+        for (var i = 0; i < sampleCount; i++) { var value = (short)(Math.Sin(i * 2 * Math.PI * 440 / 22050) * 11000); BitConverter.GetBytes(value).CopyTo(pcm, i * 2); }
+        var info = List("INFO", list => { Chunk(list, "ifil", Bytes(w => { U16(w, 2); U16(w, 1); })); Chunk(list, "isng", Encoding.ASCII.GetBytes("EMU8000\0")); Chunk(list, "INAM", Encoding.ASCII.GetBytes("Keyflow test piano\0")); });
+        var sdta = List("sdta", list => Chunk(list, "smpl", pcm));
+        var pdta = List("pdta", list =>
+        {
+            Chunk(list, "phdr", Bytes(w => { PresetHeader(w, "Test Grand", 0, 0, 0); PresetHeader(w, "EOP", 0, 0, 1); }));
+            Chunk(list, "pbag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
+            Chunk(list, "pmod", new byte[10]);
+            Chunk(list, "pgen", Bytes(w => { Generator(w, 41, 0); Generator(w, 0, 0); }));
+            Chunk(list, "inst", Bytes(w => { InstrumentHeader(w, "Piano", 0); InstrumentHeader(w, "EOI", 1); }));
+            Chunk(list, "ibag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
+            Chunk(list, "imod", new byte[10]);
+            Chunk(list, "igen", Bytes(w => { Generator(w, 53, 0); Generator(w, 0, 0); }));
+            Chunk(list, "shdr", Bytes(w => { SampleHeader(w, "Test sine", 0, sampleCount, 512, sampleCount - 512, 22050, 69); SampleHeader(w, "EOS", sampleCount, sampleCount, sampleCount, sampleCount, 0, 0); }));
+        });
+        using var body = new MemoryStream(); using (var writer = new BinaryWriter(body, Encoding.ASCII, true)) { writer.Write(Encoding.ASCII.GetBytes("sfbk")); WriteChunk(writer, "LIST", info); WriteChunk(writer, "LIST", sdta); WriteChunk(writer, "LIST", pdta); }
+        using var result = new MemoryStream(); using (var writer = new BinaryWriter(result, Encoding.ASCII, true)) { writer.Write(Encoding.ASCII.GetBytes("RIFF")); writer.Write((uint)body.Length); body.Position = 0; body.CopyTo(result); }
+        return result.ToArray();
+    }
+    private static byte[] List(string type, Action<BinaryWriter> children)
+    {
+        using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream, Encoding.ASCII, true); writer.Write(Encoding.ASCII.GetBytes(type)); children(writer); return stream.ToArray();
+    }
+    private static void Chunk(BinaryWriter writer, string id, byte[] data) => WriteChunk(writer, id, data);
+    private static void WriteChunk(BinaryWriter writer, string id, byte[] data) { writer.Write(Encoding.ASCII.GetBytes(id)); writer.Write((uint)data.Length); writer.Write(data); if ((data.Length & 1) != 0) writer.Write((byte)0); }
+    private static byte[] Bytes(Action<BinaryWriter> action) { using var stream = new MemoryStream(); using (var writer = new BinaryWriter(stream, Encoding.ASCII, true)) action(writer); return stream.ToArray(); }
+    private static void PresetHeader(BinaryWriter w, string name, int program, int bank, int bag) { FixedName(w, name, 20); U16(w, program); U16(w, bank); U16(w, bag); w.Write(0u); w.Write(0u); w.Write(0u); }
+    private static void InstrumentHeader(BinaryWriter w, string name, int bag) { FixedName(w, name, 20); U16(w, bag); }
+    private static void SampleHeader(BinaryWriter w, string name, int start, int end, int loopStart, int loopEnd, int rate, int root)
+    {
+        FixedName(w, name, 20); w.Write((uint)start); w.Write((uint)end); w.Write((uint)loopStart); w.Write((uint)loopEnd); w.Write((uint)rate); w.Write((byte)root); w.Write((sbyte)0); U16(w, 0); U16(w, 1);
+    }
+    private static void Generator(BinaryWriter w, int op, int amount) { U16(w, op); U16(w, amount); }
+    private static void FixedName(BinaryWriter w, string value, int length) { var bytes = new byte[length]; Encoding.ASCII.GetBytes(value).AsSpan(0, Math.Min(value.Length, length - 1)).CopyTo(bytes); w.Write(bytes); }
+    private static void U16(BinaryWriter w, int value) => w.Write((ushort)value);
+
+    private static void Finish(App app, string[] args, Exception? failure)
+    {
+        var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
+        var path = logOption is null ? Path.Combine(Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
+        if (failure is not null) Results.Add("FAIL: " + failure);
+        Results.Add(failure is null ? $"Verification passed: {_assertions} assertions." : "Verification failed.");
+        File.WriteAllLines(path, Results); app.Shutdown(failure is null ? 0 : 1);
+    }
+
+    private static byte[] CreateFormatOneMidi()
+    {
+        var a = new byte[] { 0, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0, 0xFF, 0x51, 3, 3, 0xD0, 0x90, 0, 0xFF, 0x2F, 0 };
+        var b = new byte[] { 0, 0x90, 64, 80, 0x81, 0x70, 0x80, 64, 0, 0x81, 0x70, 0x90, 67, 90, 0x83, 0x60, 0x80, 67, 0, 0, 0xFF, 0x2F, 0 };
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, 1); Write16(w, 2); Write16(w, 480); WriteTrack(w, a); WriteTrack(w, b); return s.ToArray();
+    }
+    private static void WriteTrack(BinaryWriter w, byte[] data) { w.Write(Encoding.ASCII.GetBytes("MTrk")); Write32(w, data.Length); w.Write(data); }
+    private static void Write16(BinaryWriter w, int value) { w.Write((byte)(value >> 8)); w.Write((byte)value); }
+    private static void Write32(BinaryWriter w, int value) { w.Write((byte)(value >> 24)); w.Write((byte)(value >> 16)); w.Write((byte)(value >> 8)); w.Write((byte)value); }
+    private static object Field(object target, string name) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
+    private static void SetField(object target, string name, object value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
+    private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
+    private static void Assert(bool condition, string message) { _assertions++; if (!condition) throw new InvalidOperationException(message); }
+}
