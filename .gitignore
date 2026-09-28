@@ -1,4 +1,27 @@
+# Build output
 bin/
 obj/
+out/
+publish/
+*.binlog
+
+# IDE / tooling state
 .vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.swp
+*.DotSettings.user
+launchSettings.json
+
+# Test / runtime artifacts
+TestResults/
+*.log
+*.avi
 *.zip
+keyflow-verification*.log
+
+# OS files
+Thumbs.db
+.DS_Store

@@ -11,10 +11,17 @@ internal sealed class AviVideoRecorder : IDisposable
     private readonly int _width, _height, _stride;
     private int _frameIndex;
     private bool _initialized, _disposed;
+    /// <summary>Classic AVI (RIFF with 32-bit offsets) cannot grow past 2 GiB; stop a little before that so the index still fits.</summary>
+    public const long SizeLimitBytes = 1_900_000_000;
     public bool UsesMjpeg { get; private set; }
     public int Width => _width;
     public int Height => _height;
     public int FrameRate { get; }
+    /// <summary>Frames written so far, including repeated frames used to keep the file in sync with wall-clock time.</summary>
+    public int FrameCount => _frameIndex;
+    /// <summary>Approximate payload written so far (uncompressed size of every frame handed to the stream).</summary>
+    public long BytesWritten { get; private set; }
+    public bool IsNearSizeLimit => BytesWritten >= SizeLimitBytes;
 
     public AviVideoRecorder(string path, int width, int height, int frameRate = 20)
     {
@@ -56,19 +63,23 @@ internal sealed class AviVideoRecorder : IDisposable
         if (_writeStream == IntPtr.Zero) _writeStream = _rawStream;
     }
 
-    /// <summary>Write one bottom-up, padded 24-bit BGR frame.</summary>
-    public void WriteBgrFrame(byte[] pixels)
+    /// <summary>Write one bottom-up, padded 24-bit BGR frame, optionally repeated so the stream keeps real-time pacing.</summary>
+    public void WriteBgrFrame(byte[] pixels, int repeat = 1)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var expected = _stride * _height;
         if (pixels.Length != expected) throw new ArgumentException($"Expected a {_width}×{_height} BGR frame ({expected} bytes).", nameof(pixels));
+        if (repeat < 1) return;
         var pinned = GCHandle.Alloc(pixels, GCHandleType.Pinned);
         try
         {
-            var result = AVIStreamWrite(_writeStream, _frameIndex, 1, pinned.AddrOfPinnedObject(), pixels.Length, AviIfKeyFrame, out var written, out _);
-            Check(result, "Could not write a video frame");
-            if (written != 1) throw new IOException("The AVI writer did not accept the video frame.");
-            _frameIndex++;
+            for (var i = 0; i < repeat; i++)
+            {
+                var result = AVIStreamWrite(_writeStream, _frameIndex, 1, pinned.AddrOfPinnedObject(), pixels.Length, AviIfKeyFrame, out var written, out var bytes);
+                Check(result, "Could not write a video frame");
+                if (written != 1) throw new IOException("The AVI writer did not accept the video frame.");
+                _frameIndex++; BytesWritten += bytes > 0 ? bytes : pixels.Length;
+            }
         }
         finally { pinned.Free(); }
     }
