@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Media.Effects;
 
 namespace PianoPath;
 
@@ -44,10 +43,6 @@ internal sealed class PianoStage : FrameworkElement
     private BitmapSource? _backgroundImage;
     private Brush? _vignetteBrush;
     private double _vignetteValue = -1;
-    // WPF's built-in Effect is GPU-accelerated when the active render tier supports it,
-    // and falls back to software rendering on systems without suitable hardware support.
-    private BlurEffect? _gpuBloomEffect;
-    private double _gpuBloomRadius = -1;
     private string? _loadedBackgroundPath = "\0";
     private double _pointerX = .5, _pointerY = .5;
     private IReadOnlyList<NoteEvent> _notes = [];
@@ -318,23 +313,6 @@ internal sealed class PianoStage : FrameworkElement
             if (_visual.ShowLightBeams && _visual.BeamIntensity > 0) DrawKeyBeams(dc, width, keyTop, lane);
         }
         dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, keyTop + 2)));
-        // Render a soft, GPU-accelerated WPF bloom pass under the crisp vector pass.
-        // Keeping the effect scoped to notes/trails avoids blurring the keyboard, labels,
-        // background and overlay UI. WPF transparently uses its software fallback if needed.
-        var bloomRadius = chroma ? 0 : Math.Clamp(_visual.BloomSize / 100 * _visual.BloomIntensity / 100 * 18, 0, 18);
-        if (bloomRadius >= .5)
-        {
-            if (_gpuBloomEffect is null || Math.Abs(_gpuBloomRadius - bloomRadius) >= .25)
-            {
-                _gpuBloomEffect = new BlurEffect { Radius = bloomRadius, KernelType = KernelType.Gaussian, RenderingBias = RenderingBias.Performance };
-                _gpuBloomEffect.Freeze();
-                _gpuBloomRadius = bloomRadius;
-            }
-            dc.PushEffect(_gpuBloomEffect, null);
-            DrawNotes(dc, width, keyTop, lane);
-            DrawLiveTrails(dc, width, keyTop, lane);
-            dc.Pop();
-        }
         DrawNotes(dc, width, keyTop, lane);
         DrawLiveTrails(dc, width, keyTop, lane);
         dc.Pop();
