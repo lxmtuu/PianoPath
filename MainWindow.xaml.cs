@@ -633,7 +633,12 @@ public partial class MainWindow : Window
             _midi.OpenOutput(OutputDeviceCombo.SelectedIndex - 1);
             foreach (var pedal in _pedalsDown) _midi.SendController(MidiDeviceService.ControllerFor(pedal), 127);
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "MIDI output", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex)
+        {
+            // Never leave the picker pointing at a device that is not actually open.
+            _suppressDevices = true; OutputDeviceCombo.SelectedIndex = 0; _suppressDevices = false;
+            SettingsSaveLabel.Text = ex.Message;
+        }
     }
     private void PopulateTracks()
     {
