@@ -38,6 +38,8 @@ public partial class MainWindow : Window
     private int _hits, _misses, _streak, _bestStreak, _activeTrack = -1;
     private double _position, _tempo = 1, _loopA = -1, _loopB = -1, _metronomeOffAt = -1;
     private bool _playing, _isSeeking, _updatingSeek, _updatingPedals, _suppressDevices, _suppressTracks, _suppressPreset, _processCurrentOnsets, _fullScreen = true, _uiReady, _isBuiltInSoundFont, _closing, _chromeVisible = true, _loadingVisualSettings;
+    /// <summary>True once the user deliberately picked a MIDI input; until then refreshes auto-connect the first keyboard.</summary>
+    private bool _inputChoiceByUser;
     private DateTime _lastPointerActivity = DateTime.UtcNow;
     private Point? _lastPointerPoint;
     private bool _settingsHiddenByIdle;
@@ -605,8 +607,10 @@ public partial class MainWindow : Window
         var inputItems = new[] { "Computer keyboard only" }.Concat(inputs).ToList();
         var outputItems = new[] { "No MIDI output" }.Concat(outputs).ToList();
         var inputIndex = previousInput is null ? -1 : inputItems.IndexOf(previousInput);
-        // Automatically connect the first available keyboard on startup or after a hot-plug refresh.
-        if (inputIndex < 1) inputIndex = inputItems.Count > 1 ? 1 : 0;
+        // Without a deliberate user choice (startup, or a refresh after plugging a keyboard in) connect
+        // the first available input. An explicit selection - including "Computer keyboard only" -
+        // survives refreshes; a selected device that vanished falls back to auto-connect.
+        if (!_inputChoiceByUser || inputIndex < 0) inputIndex = inputItems.Count > 1 ? 1 : 0;
         var outputIndex = previousOutput is null ? 0 : Math.Max(0, outputItems.IndexOf(previousOutput));
         _suppressDevices = true;
         try
@@ -621,6 +625,7 @@ public partial class MainWindow : Window
     private void InputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressDevices || InputDeviceCombo.SelectedIndex < 0) return;
+        _inputChoiceByUser = true;
         ConnectInput();
     }
     private void ConnectInput(bool showErrors = true)

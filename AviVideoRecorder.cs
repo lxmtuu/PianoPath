@@ -75,7 +75,10 @@ internal sealed class AviVideoRecorder : IDisposable
         {
             for (var i = 0; i < repeat; i++)
             {
-                var result = AVIStreamWrite(_writeStream, _frameIndex, 1, pinned.AddrOfPinnedObject(), pixels.Length, AviIfKeyFrame, out var written, out var bytes);
+                // Every raw frame stands alone; an MJPEG stream only has a real key frame every
+                // FrameRate samples (see AviCompressOptions.KeyFrameEvery), so claim exactly those.
+                var flags = UsesMjpeg && _frameIndex % FrameRate != 0 ? 0u : AviIfKeyFrame;
+                var result = AVIStreamWrite(_writeStream, _frameIndex, 1, pinned.AddrOfPinnedObject(), pixels.Length, flags, out var written, out var bytes);
                 Check(result, "Could not write a video frame");
                 if (written != 1) throw new IOException("The AVI writer did not accept the video frame.");
                 _frameIndex++; BytesWritten += bytes > 0 ? bytes : pixels.Length;

@@ -16,6 +16,9 @@ internal sealed class PianoStage : FrameworkElement
     private static readonly int[] WhitePitches = Enumerable.Range(FirstPitch, KeyCount).Where(p => !IsBlack(p)).ToArray();
     /// <summary>For every MIDI pitch, how many white keys lie below it; gives each black key its x position without per-frame counting.</summary>
     private static readonly int[] WhitesBelow = BuildWhitesBelow();
+    /// <summary>Horizontal centre of every key as a fraction of the stage width, matching the drawn keyboard geometry
+    /// so falling notes, sparks, flames and beams land exactly on their keys.</summary>
+    private static readonly double[] KeyCenters = BuildKeyCenters();
     private static readonly Brush Ink = Freeze(new SolidColorBrush(Colors.Black));
     private static readonly Brush ChromaGreen = Freeze(new SolidColorBrush(Color.FromRgb(0, 255, 0)));
     private static readonly Brush KeyBlack = Freeze(new LinearGradientBrush(Color.FromRgb(14, 15, 24), Color.FromRgb(3, 4, 9), 90));
@@ -169,7 +172,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         var keyWidth = ActualWidth / KeyCount;
         var clamped = Math.Clamp(pitch, FirstPitch, FirstPitch + KeyCount - 1);
-        var x = (clamped - FirstPitch + .5) * keyWidth;
+        var x = KeyCenters[clamped] * ActualWidth;
         var y = ActualHeight - KeyboardHeight - 1;
         var noteColor = AdjustColor(_activeKey[clamped] ? _activeKeyColor[clamped] : NoteColor(clamped, 0));
         if (_visual.ShowImpactRings && _visual.RingSize > 0 && ActualWidth >= 1) _rings.Add(new Ring { X = x, Y = y, Color = noteColor, Life = .55 });
@@ -254,7 +257,7 @@ internal sealed class PianoStage : FrameworkElement
         var count = (int)_wispBudget[pitch]; if (count <= 0) return;
         _wispBudget[pitch] -= count;
         var color = AdjustColor(_activeKeyColor[pitch]);
-        var x = (pitch - FirstPitch + .5) * lane;
+        var x = KeyCenters[pitch] * ActualWidth;
         var life = .35 + _visual.WispHeight / 100 * 1.9;
         for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
         {
@@ -346,12 +349,13 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawLanes(DrawingContext dc, double width, double height, double lane)
     {
-        for (var i = 0; i <= KeyCount; i++)
+        // Guide lines sit on the centre of every key so they line up with the falling notes.
+        for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
-            var pitch = FirstPitch + i;
             var alpha = pitch % 12 == 0 ? 23 : pitch % 12 is 2 or 4 or 7 or 9 or 11 ? 10 : 5;
             var color = Color.FromArgb((byte)alpha, 186, 141, 255);
-            dc.DrawLine(new Pen(Brush(color), pitch % 12 == 0 ? 1 : .6), new Point(i * lane, 0), new Point(i * lane, height));
+            var x = KeyCenters[pitch] * width;
+            dc.DrawLine(new Pen(Brush(color), pitch % 12 == 0 ? 1 : .6), new Point(x, 0), new Point(x, height));
         }
     }
 
@@ -387,7 +391,7 @@ internal sealed class PianoStage : FrameworkElement
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(20 + _visual.BeamIntensity * .9), color.R, color.G, color.B), 1));
                 gradient.Freeze(); brush = CacheGradient(key, gradient);
             }
-            var x = (pitch - FirstPitch + .5) * lane;
+            var x = KeyCenters[pitch] * width;
             dc.DrawRectangle(brush, null, new Rect(x - beamWidth / 2, 0, beamWidth, keyTop));
         }
     }
@@ -400,7 +404,6 @@ internal sealed class PianoStage : FrameworkElement
         // Notes are sorted by start time: anything still on screen started no earlier than (position - 1 s - longest note).
         var latestStart = _position + lookBehind;
         var noteWidth = lane * _visual.NoteWidth / 100;
-        var inset = (lane - noteWidth) / 2;
         var gap = Math.Min(_visual.NoteGap, 12);
         for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _position - 1 - _maxNoteDuration); i < _notes.Count; i++)
         {
@@ -411,7 +414,7 @@ internal sealed class PianoStage : FrameworkElement
             var bottom = hitY - (note.Start - _position) * noteSpeed;
             var top = bottom - noteHeight;
             if (top > hitY || bottom < 0) continue;
-            var rect = new Rect((note.Pitch - FirstPitch) * lane + inset, top, noteWidth, noteHeight);
+            var rect = new Rect(KeyCenters[note.Pitch] * width - noteWidth / 2, top, noteWidth, noteHeight);
             var color = note.Played ? Color.FromRgb(82, 237, 208) : note.Missed ? Color.FromRgb(255, 83, 113) : NoteColor(note.Pitch, note.Track);
             var sounding = note.Start <= _position && note.End > _position;
             DrawConfiguredNote(dc, rect, color, note.Played ? .42 : 1, sounding, note.Pitch);
@@ -540,7 +543,7 @@ internal sealed class PianoStage : FrameworkElement
 
     private Brush CacheGradient(ulong key, Brush brush)
     {
-        if (_gradientCache.Count > 512) _gradientCache.Clear();
+        if (_gradientCache.Count > 2048) _gradientCache.Clear();
         _gradientCache[key] = brush; return brush;
     }
 
@@ -561,7 +564,9 @@ internal sealed class PianoStage : FrameworkElement
             case "RainbowPitch":
                 return ColorFromHue(t * 300);
             case "RainbowTime":
-                return ColorFromHue(_elapsed * _visual.RainbowSpeed * 3.6 + t * 120);
+                // The time term steps at 30 Hz so the hue cycles smoothly on screen but the brush
+                // cache sees a stable colour between steps instead of a fresh one every frame.
+                return ColorFromHue(Math.Floor(_elapsed * 30) / 30 * _visual.RainbowSpeed * 3.6 + t * 120);
         }
         return _visual.Palette switch
         {
@@ -590,7 +595,6 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)
     {
         var noteWidth = lane * Math.Max(_visual.NoteWidth, 60) / 100;
-        var inset = (lane - noteWidth) / 2;
         foreach (var trail in _liveTrails)
         {
             if (!_visual.ShowNotes) break;
@@ -599,7 +603,7 @@ internal sealed class PianoStage : FrameworkElement
             var bottom = Math.Min(hitY + 6, y);
             if (bottom <= tailY) continue;
             var opacity = Math.Clamp(1 - tailY / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
-            var r = new Rect((trail.Pitch - FirstPitch) * lane + inset, tailY, noteWidth, bottom - tailY);
+            var r = new Rect(KeyCenters[trail.Pitch] * width - noteWidth / 2, tailY, noteWidth, bottom - tailY);
             DrawConfiguredNote(dc, r, NoteColor(trail.Pitch, 0), opacity, trail.KeyDown && trail.Hit, trail.Pitch);
         }
     }
@@ -692,7 +696,7 @@ internal sealed class PianoStage : FrameworkElement
             {
                 if (!_activeKey[pitch]) continue;
                 var color = KeyColor(pitch);
-                var x = IsBlack(pitch) ? WhitesBelow[pitch] * whiteWidth : (WhitesBelow[pitch] + .5) * whiteWidth;
+                var x = KeyCenters[pitch] * width;
                 var radiusX = 14 + glowRadius * 70; var radiusY = 10 + glowRadius * 60;
                 var key = GradientKey(4, Color.FromArgb((byte)Math.Clamp(_visual.KeyLighting, 0, 255), color.R, color.G, color.B));
                 if (!_gradientCache.TryGetValue(key, out var glowBrush))
@@ -785,7 +789,7 @@ internal sealed class PianoStage : FrameworkElement
         {
             var heat = _keyHeat[pitch];
             if (heat <= .02) continue;
-            var x = (pitch - FirstPitch + .5) * lane;
+            var x = KeyCenters[pitch] * width;
             var pulse = .65 + .35 * Math.Sin(_elapsed * 13 + pitch);
             var radius = (8 + 30 * pulse) * heat * (.6 + intensity * .6);
             var tint = warm ? Color.FromRgb(255, 178, 73) : AdjustColor(_activeKey[pitch] ? _activeKeyColor[pitch] : NoteColor(pitch, 0));
@@ -862,6 +866,13 @@ internal sealed class PianoStage : FrameworkElement
         }
         return result;
     }
+    private static double[] BuildKeyCenters()
+    {
+        var result = new double[128]; var whiteWidth = 1.0 / WhitePitches.Length;
+        for (var pitch = 0; pitch < 128; pitch++)
+            result[pitch] = IsBlack(pitch) ? WhitesBelow[pitch] * whiteWidth : (WhitesBelow[pitch] + .5) * whiteWidth;
+        return result;
+    }
 
     /// <summary>Tileable value-noise alpha texture used as an opacity mask for the burning note style.</summary>
     private static BitmapSource BuildFireMask()
@@ -910,7 +921,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         var key = PackColor(color);
         if (_brushCache.TryGetValue(key, out var brush)) return brush;
-        if (_brushCache.Count > 6000) _brushCache.Clear();
+        if (_brushCache.Count > 12000) _brushCache.Clear();
         brush = new SolidColorBrush(color); brush.Freeze(); _brushCache[key] = brush; return brush;
     }
     private static Brush Freeze(Brush brush) { if (brush.CanFreeze) brush.Freeze(); return brush; }

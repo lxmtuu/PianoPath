@@ -6,6 +6,7 @@
 ;   → installer\Output\Keyflow-Setup-<version>.exe
 ;
 ; Pass /DAppVersion=0.3.0 to override the version, /DSourceDir=..\publish\win-arm64 for another build.
+; Keep the fallback below in sync with <Version> in PianoPath.csproj when bumping the release version.
 
 #ifndef AppVersion
   #define AppVersion "0.3.0"

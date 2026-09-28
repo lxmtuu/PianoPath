@@ -24,7 +24,7 @@ param(
     [ValidateSet('SelfContained', 'FrameworkDependent')]
     [string] $Mode = 'SelfContained',
 
-    [ValidateSet('win-x64', 'win-arm64', 'win-x86')]
+    [ValidateSet('win-x64', 'win-arm64')]
     [string] $Runtime = 'win-x64',
 
     [string] $Configuration = 'Release',

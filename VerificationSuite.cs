@@ -259,7 +259,15 @@ internal static class VerificationSuite
         var dry = new short[4410 * 2]; dry[0] = 24000; dry[1] = 12000;
         new StereoHallReverb(44100) { Enabled = false }.Process(dry, 4410);
         Assert(dry.Take(2).SequenceEqual(new short[] { 24000, 12000 }) && dry.Skip(2).All(sample => sample == 0), "Turning reverb off should preserve the dry signal and produce no reflections.");
-        Results.Add("PASS reverb: stereo room tail, stable dry path and selectable bypass.");
+        var ringing = new StereoHallReverb(44100);
+        var tailImpulse = new short[4410 * 2]; tailImpulse[0] = 24000; tailImpulse[1] = 12000;
+        ringing.Process(tailImpulse, 4410);
+        ringing.Enabled = false;
+        var fading = new short[4410 * 2]; ringing.Process(fading, 4410);
+        Assert(fading.Any(sample => sample != 0), "Bypassing the reverb while it rings should fade the existing tail out instead of cutting it.");
+        var settled = new short[4410 * 2]; ringing.Process(settled, 4410);
+        Assert(settled.All(sample => sample == 0), "Once the faded tail ends, the bypassed reverb must stay silent.");
+        Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
     }
 
     private static void VerifyMidiDevicesAndKeyboardMap()
@@ -354,6 +362,10 @@ internal static class VerificationSuite
         Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
         Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
             "Refreshing the MIDI list should preserve or auto-select an available input instead of silently switching to computer-only mode.");
+        inputCombo.SelectedIndex = 0;
+        Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
+        Assert(inputCombo.SelectedIndex == 0 && !midi.InputOpen,
+            "An explicit 'Computer keyboard only' choice must survive a device refresh instead of snapping back to a MIDI input.");
         Assert(!piano.HasSoundFont && !((ComboBox)window.FindName("PresetCombo")).IsEnabled && silentLabel.Text.Contains("SILENT"), "The initial UI must expose silent mode until a SoundFont is loaded.");
         var reverb = (ToggleButton)window.FindName("ReverbToggle");
         Assert(reverb.IsChecked == true && piano.ReverbEnabled, "The built-in concert room reverb should start enabled.");
