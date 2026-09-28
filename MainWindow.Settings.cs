@@ -806,7 +806,7 @@ public partial class MainWindow
 
     private void ResetPage_Click(object sender, RoutedEventArgs e)
     {
-        var pages = new Panel?[] { StyleSettingsHost, ColorSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, null, RecordingSettingsHost };
+        var pages = new Panel?[] { StyleSettingsHost, ColorSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, RecordingSettingsHost };
         var index = SettingsTabs.SelectedIndex;
         if (index < 0 || index >= pages.Length || pages[index] is not { } page) { SettingsSaveLabel.Text = "This page has no visual settings to reset"; return; }
         var source = BasePresetSettings();

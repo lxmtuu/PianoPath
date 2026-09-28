@@ -24,11 +24,11 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
-      - name: Verification suite (needs an interactive desktop, so failures do not block the build)
-        continue-on-error: true
+      - name: Verification suite
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
           if (Test-Path $log) { Get-Content $log }
+          if ($proc.ExitCode -ne 0) { Write-Host "::error::Keyflow verification suite reported failures"; }
           exit $proc.ExitCode

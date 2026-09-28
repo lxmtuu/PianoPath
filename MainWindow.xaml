@@ -124,7 +124,7 @@
                         <TabItem Header="Keyboard" Tag="⌨">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="KeyboardSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Background" Tag="◐">
+                        <TabItem Header="Scene" Tag="◐">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="SceneSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
                         <TabItem Header="Shader &amp; FX" Tag="◎">

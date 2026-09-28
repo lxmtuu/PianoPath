@@ -437,10 +437,32 @@ internal static class VerificationSuite
     private static void VerifySettingsDock(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         var tabs = (TabControl)window.FindName("SettingsTabs");
-        Assert(tabs.Items.Count == 10 && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[9]).Header.ToString() == "Recording", "The settings dock should expose ten categorized pages from Style to Recording.");
+        Assert(tabs.Items.Count == 11 && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[1]).Header.ToString() == "Colors" && ((TabItem)tabs.Items[10]).Header.ToString() == "Recording",
+            "The settings dock should expose eleven categorized pages from Style to Recording, with the colour hub second.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)),
             "Note style, color mode, keyboard style, background mode and wisps should be editable from the dock.");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.HaloTintMode)), "The hit line should offer a halo tint mode next to its colour picker.");
+        var haloControls = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        foreach (var property in new[]
+                 {
+                     nameof(PianoVisualSettings.HaloThickness), nameof(PianoVisualSettings.HaloIntensity), nameof(PianoVisualSettings.HaloGlowSize), nameof(PianoVisualSettings.HaloPulse),
+                     nameof(PianoVisualSettings.NoteShadowStrength), nameof(PianoVisualSettings.NoteShadowDistance), nameof(PianoVisualSettings.NoteShadowBlur),
+                     nameof(PianoVisualSettings.NoteDepth), nameof(PianoVisualSettings.NoteSpecular), nameof(PianoVisualSettings.NoteRimLight), nameof(PianoVisualSettings.NoteTrail),
+                     nameof(PianoVisualSettings.KeyGloss), nameof(PianoVisualSettings.KeyBevel), nameof(PianoVisualSettings.KeyContactShadow),
+                     nameof(PianoVisualSettings.BloomThreshold), nameof(PianoVisualSettings.AnamorphicStreaks), nameof(PianoVisualSettings.ChromaticAberration),
+                     nameof(PianoVisualSettings.FilmGrain), nameof(PianoVisualSettings.Scanlines), nameof(PianoVisualSettings.CinematicBars),
+                     nameof(PianoVisualSettings.DustDensity), nameof(PianoVisualSettings.GridIntensity), nameof(PianoVisualSettings.HueShift), nameof(PianoVisualSettings.Vibrance), nameof(PianoVisualSettings.ColorTemperature)
+                 })
+            Assert(haloControls.ContainsKey(property), $"The dock should expose a slider for {property}.");
+        var fresh = new PianoVisualSettings();
+        Assert(fresh.ShowNoteShadow && fresh.NoteShadowStrength > 0 && fresh.ShowKeyReflection && fresh.ShowFallboard && fresh.KeyGloss > 0 && fresh.HaloIntensity > 0 && fresh.NoteTrail > 0,
+            "Note shadows, key reflections, the case lip, key gloss, the halo and comet trails should be on by default so the stage reads as physical objects.");
+        var pill = (ToggleButton)window.FindName("QuickNotesToggle");
+        pill.IsChecked = false;
+        Assert(!visualSettings.ShowNotes && toggles[nameof(PianoVisualSettings.ShowNotes)].IsChecked == false, "The layer pills over the stage should drive the same settings as the Style page.");
+        pill.IsChecked = true;
+        Assert(visualSettings.ShowNotes, "Re-enabling a layer pill should restore the layer.");
         var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode;
         choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = "Fire";
         Assert(visualSettings.NoteStyle == "Fire" && visualSettings.PresetModified, "Choosing a note style should update the renderer settings and flag the preset as modified.");
@@ -470,7 +492,7 @@ internal static class VerificationSuite
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: ten pages, style/color-mode controls, per-hand and per-track colors, search filter and preset application.");
+        Results.Add("PASS settings dock: eleven pages, colour hub with palette library, halo/shadow/material/shader controls, layer pills, search filter and preset application.");
     }
 
     private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)
