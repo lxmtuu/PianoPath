@@ -11,6 +11,10 @@ internal sealed class PianoAudioEngine : IDisposable
     public bool HasSoundFont => Volatile.Read(ref _pump) is not null;
     public string? LoadedName => Volatile.Read(ref _pump)?.Font.Name;
     public IReadOnlyList<SoundFontPreset> Presets => Volatile.Read(ref _pump)?.Font.Presets ?? [];
+    /// <summary>True while the loaded SoundFont is actually streaming to a Windows audio device.</summary>
+    public bool HasAudioOutput => Volatile.Read(ref _pump)?.HasAudioOutput ?? false;
+    /// <summary>Why the speakers are silent although a SoundFont is loaded; <c>null</c> when audio output works.</summary>
+    public string? PlaybackError => Volatile.Read(ref _pump)?.OutputError;
     public bool ReverbEnabled
     {
         get => Volatile.Read(ref _reverbEnabled) != 0;
@@ -58,6 +62,9 @@ internal sealed class PianoAudioEngine : IDisposable
         private bool _disposed;
         public SoundFontSynthesizer Synth { get; }
         public SoundFontData Font => Synth.Font;
+        /// <summary>Reason the pump is silent, or <c>null</c> when waveOut accepted the stream.</summary>
+        public string? OutputError { get; private set; }
+        public bool HasAudioOutput => _device != IntPtr.Zero;
 
         public AudioPump(SoundFontSynthesizer synth, bool reverbEnabled) { Synth = synth; _reverb.Enabled = reverbEnabled; }
         public void SetReverbEnabled(bool enabled) => _reverb.Enabled = enabled;
@@ -67,7 +74,17 @@ internal sealed class PianoAudioEngine : IDisposable
             var format = new WaveFormatEx { FormatTag = WaveFormatPcm, Channels = 2, SamplesPerSec = SampleRate, BitsPerSample = 16, BlockAlign = 4, AverageBytesPerSecond = SampleRate * 4 };
             var eventHandle = _ready.SafeWaitHandle.DangerousGetHandle();
             var result = WaveOutOpen(out _device, WaveMapper, ref format, eventHandle, IntPtr.Zero, CallbackEvent);
-            if (result != 0) { _ready.Dispose(); throw new InvalidOperationException($"Windows could not open the audio output (waveOut error {result})."); }
+            if (result != 0)
+            {
+                // A machine with no usable playback device (VM, headless CI runner, a sound card claimed
+                // exclusively by another app) must not stop the SoundFont from loading: the stage, the
+                // practice scoring and MIDI keep working and only the speakers stay silent.
+                _device = IntPtr.Zero;
+                OutputError = result == 2
+                    ? "Windows reported no audio output device (waveOut error 2)."
+                    : $"Windows could not open the audio output (waveOut error {result}).";
+                return;
+            }
             try
             {
                 for (var i = 0; i < BufferCount; i++)
@@ -85,7 +102,9 @@ internal sealed class PianoAudioEngine : IDisposable
                 _thread = new Thread(Pump) { IsBackground = true, Name = "Keyflow SoundFont audio", Priority = ThreadPriority.Highest };
                 _thread.Start();
             }
-            catch { Dispose(); throw; }
+            // The device opened but rejected the buffers: release it and keep synthesizing silently
+            // instead of failing the whole SoundFont load.
+            catch (Exception ex) { OutputError = $"Windows rejected the audio buffers: {ex.Message}"; CloseDevice(); }
         }
 
         private void Pump()
@@ -103,7 +122,7 @@ internal sealed class PianoAudioEngine : IDisposable
                         RenderBuffer(buffer);
                         Check(WaveOutWrite(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "queue audio buffer");
                     }
-                    catch { _stopping = true; break; }
+                    catch (Exception ex) { OutputError = $"Windows stopped accepting audio buffers: {ex.Message}"; _stopping = true; break; }
                 }
             }
         }
@@ -122,9 +141,17 @@ internal sealed class PianoAudioEngine : IDisposable
 
         public void Dispose()
         {
-            if (_disposed) return; _disposed = true; _stopping = true;
+            if (_disposed) return; _disposed = true;
+            CloseDevice();
+            _ready.Dispose();
+        }
+
+        /// <summary>Tears the waveOut stream down but keeps the pump alive, so the synthesizer can keep running silently.</summary>
+        private void CloseDevice()
+        {
+            _stopping = true;
             if (_device != IntPtr.Zero) WaveOutReset(_device);
-            _ready.Set(); _thread?.Join(1000);
+            _ready.Set(); _thread?.Join(1000); _thread = null;
             foreach (var buffer in _buffers)
             {
                 if (_device != IntPtr.Zero) WaveOutUnprepareHeader(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>());
@@ -133,7 +160,7 @@ internal sealed class PianoAudioEngine : IDisposable
             }
             _buffers.Clear();
             if (_device != IntPtr.Zero) { WaveOutClose(_device); _device = IntPtr.Zero; }
-            _ready.Dispose();
+            _stopping = false;
         }
     }
 
