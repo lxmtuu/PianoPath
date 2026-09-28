@@ -28,6 +28,11 @@ internal sealed class PianoVisualSettings
     public bool ShowNoteLabels { get; set; } = false;
     public bool ShowKeyFelt { get; set; } = false;
     public bool ShowKeyShadow { get; set; } = true;
+    public bool ShowDust { get; set; } = true;
+    public bool ShowGrid { get; set; } = false;
+    public bool ShowNoteShadow { get; set; } = true;
+    public bool ShowKeyReflection { get; set; } = true;
+    public bool ShowFallboard { get; set; } = true;
     public int BackgroundAppearanceVersion { get; set; }
 
     // ---- Style / preset -----------------------------------------------------------------------------
@@ -41,16 +46,35 @@ internal sealed class PianoVisualSettings
     public string ColorMode { get; set; } = "Gradient";
     public string Palette { get; set; } = "Spectrum";
     public string NoteColorStart { get; set; } = "#43E6FF";
+    public string NoteColorMid { get; set; } = "#7C6CFF";
     public string NoteColorEnd { get; set; } = "#D95EFF";
+    /// <summary>Three-stop gradients read richer than a plain two-stop ramp; turn it off for a hard start-to-end blend.</summary>
+    public bool ShowMidStop { get; set; } = true;
     public string LeftHandColor { get; set; } = "#3FA9FF";
     public string RightHandColor { get; set; } = "#FF6FD8";
     public string HaloColor { get; set; } = "#C66EFF";
+    /// <summary>Halo (single color), Rainbow (pitch rainbow through the halo color) or Note (color of the loudest sounding note).</summary>
+    public string HaloTintMode { get; set; } = "Halo";
+    /// <summary>Thickness of the crisp core line.</summary>
+    public double HaloThickness { get; set; } = 45;
+    /// <summary>Brightness of the line and its colored bleed.</summary>
+    public double HaloIntensity { get; set; } = 70;
+    /// <summary>How far the soft glow reaches above and below the line.</summary>
+    public double HaloGlowSize { get; set; } = 55;
+    /// <summary>Extra brightness while keys sound, so the line breathes with the music.</summary>
+    public double HaloPulse { get; set; } = 45;
     public string PressedKeyColor { get; set; } = "#F782FF";
     public string KeyFeltColor { get; set; } = "#C41C4A";
     public string BackgroundColor { get; set; } = "#000000";
     public List<string> TrackColors { get; set; } = ["#43E6FF", "#FF6FD8", "#FFD166", "#7CFF6B", "#FF7A59", "#8C7BFF", "#5CF2E8", "#FF4D8D"];
     public double HandSplitPitch { get; set; } = 60;
     public double RainbowSpeed { get; set; } = 30;
+    /// <summary>Global hue rotation in degrees applied to every note, glow and light.</summary>
+    public double HueShift { get; set; }
+    /// <summary>Selective saturation: lifts muted colors more than already vivid ones.</summary>
+    public double Vibrance { get; set; } = 45;
+    /// <summary>Warm (+) or cool (-) grade applied on top of the color controls.</summary>
+    public double ColorTemperature { get; set; }
 
     // ---- Note shape ---------------------------------------------------------------------------------
     /// <summary>Solid, Neon (hollow glowing outline), Glass or Fire (burning texture).</summary>
@@ -67,6 +91,20 @@ internal sealed class PianoVisualSettings
     public double NoteRoundness { get; set; } = 70;
     public double NoteEdgeWidth { get; set; } = 55;
     public double NoteFallSpeed { get; set; } = 550;
+    /// <summary>Depth shading that turns a flat bar into a lit 3D block.</summary>
+    public double NoteDepth { get; set; } = 58;
+    /// <summary>Glossy specular streak across the bar face.</summary>
+    public double NoteSpecular { get; set; } = 55;
+    /// <summary>Bright rim on both long edges, as if lit from behind.</summary>
+    public double NoteRimLight { get; set; } = 42;
+    /// <summary>Comet trail left behind a falling note.</summary>
+    public double NoteTrail { get; set; } = 34;
+    /// <summary>Opacity of the drop shadow under every note.</summary>
+    public double NoteShadowStrength { get; set; } = 58;
+    /// <summary>How far the shadow is offset from the note (pixels, down-right).</summary>
+    public double NoteShadowDistance { get; set; } = 16;
+    /// <summary>Softness of the shadow.</summary>
+    public double NoteShadowBlur { get; set; } = 60;
 
     // ---- Particles: sparks --------------------------------------------------------------------------
     public double EmitterSize { get; set; } = 24;
@@ -114,6 +152,12 @@ internal sealed class PianoVisualSettings
     public double KeyGlowRadius { get; set; } = 50;
     public double KeyOverhang { get; set; } = 18;
     public double KeyPressDepth { get; set; } = 40;
+    /// <summary>Glossy sheen and reflection strength on the key faces.</summary>
+    public double KeyGloss { get; set; } = 55;
+    /// <summary>Beveled edges plus ambient occlusion in the key gaps.</summary>
+    public double KeyBevel { get; set; } = 60;
+    /// <summary>Contact shadow a black key casts on the white keys beneath it.</summary>
+    public double KeyContactShadow { get; set; } = 55;
 
     // ---- Background & camera ------------------------------------------------------------------------
     /// <summary>Solid, Image or ChromaGreen (pure green stage for OBS chroma keying).</summary>
@@ -131,6 +175,22 @@ internal sealed class PianoVisualSettings
     public double Contrast { get; set; } = 100;
     public double BloomIntensity { get; set; } = 65;
     public double BloomSize { get; set; } = 62;
+    /// <summary>How bright a pixel must be before it feeds the bloom pass.</summary>
+    public double BloomThreshold { get; set; } = 45;
+    /// <summary>Horizontal lens streaks smeared out of the brightest pixels.</summary>
+    public double AnamorphicStreaks { get; set; } = 22;
+    /// <summary>Color fringing at the edges of bright shapes.</summary>
+    public double ChromaticAberration { get; set; } = 16;
+    /// <summary>Animated film grain over the whole stage.</summary>
+    public double FilmGrain { get; set; } = 10;
+    /// <summary>CRT-style horizontal scanlines.</summary>
+    public double Scanlines { get; set; }
+    /// <summary>Cinematic letterbox bars, as a percentage of the stage height.</summary>
+    public double CinematicBars { get; set; }
+    /// <summary>Floating dust motes drifting through the light.</summary>
+    public double DustDensity { get; set; } = 45;
+    /// <summary>Perspective grid receding behind the keyboard.</summary>
+    public double GridIntensity { get; set; } = 30;
 
     // ---- Recording ----------------------------------------------------------------------------------
     /// <summary>Window, 720p or 1080p.</summary>
@@ -138,7 +198,8 @@ internal sealed class PianoVisualSettings
     public double RecordingFrameRate { get; set; } = 30;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
-    internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
+    internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Violet", "Sunset", "Cyberpunk", "Candy", "Emerald", "Ocean", "Fire", "Mono", "Custom"];
+    internal static readonly string[] HaloTintModes = ["Halo", "Rainbow", "Note"];
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
@@ -189,6 +250,15 @@ internal sealed class PianoVisualSettings
         ParticleSizeRandomness = Math.Clamp(ParticleSizeRandomness, 0, 100); ParticleGlow = Math.Clamp(ParticleGlow, 0, 200); Gravity = Math.Clamp(Gravity, -600, 1200);
         Drag = Math.Clamp(Drag, 0, 100); VectorField = Math.Clamp(VectorField, 0, 1000); FieldScale = Math.Clamp(FieldScale, 10, 300); EvolutionSpeed = Math.Clamp(EvolutionSpeed, 0, 400);
         PhysicsTimeFactor = Math.Clamp(PhysicsTimeFactor, 10, 300);
+        NoteDepth = Math.Clamp(NoteDepth, 0, 100); NoteSpecular = Math.Clamp(NoteSpecular, 0, 100); NoteRimLight = Math.Clamp(NoteRimLight, 0, 100);
+        NoteTrail = Math.Clamp(NoteTrail, 0, 100); NoteShadowStrength = Math.Clamp(NoteShadowStrength, 0, 100); NoteShadowBlur = Math.Clamp(NoteShadowBlur, 0, 100);
+        NoteShadowDistance = Math.Clamp(NoteShadowDistance, 0, 60);
+        HueShift = Math.Clamp(HueShift, -180, 180); Vibrance = Math.Clamp(Vibrance, 0, 100); ColorTemperature = Math.Clamp(ColorTemperature, -100, 100);
+        HaloThickness = Math.Clamp(HaloThickness, 0, 100); HaloIntensity = Math.Clamp(HaloIntensity, 0, 100); HaloGlowSize = Math.Clamp(HaloGlowSize, 0, 100); HaloPulse = Math.Clamp(HaloPulse, 0, 100);
+        KeyGloss = Math.Clamp(KeyGloss, 0, 100); KeyBevel = Math.Clamp(KeyBevel, 0, 100); KeyContactShadow = Math.Clamp(KeyContactShadow, 0, 100);
+        BloomThreshold = Math.Clamp(BloomThreshold, 0, 100); AnamorphicStreaks = Math.Clamp(AnamorphicStreaks, 0, 100); ChromaticAberration = Math.Clamp(ChromaticAberration, 0, 100);
+        FilmGrain = Math.Clamp(FilmGrain, 0, 100); Scanlines = Math.Clamp(Scanlines, 0, 100); CinematicBars = Math.Clamp(CinematicBars, 0, 25);
+        DustDensity = Math.Clamp(DustDensity, 0, 100); GridIntensity = Math.Clamp(GridIntensity, 0, 100);
         WispAmount = Math.Clamp(WispAmount, 0, 150); WispSpeed = Math.Clamp(WispSpeed, 20, 600); WispHeight = Math.Clamp(WispHeight, 5, 100);
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
@@ -201,6 +271,7 @@ internal sealed class PianoVisualSettings
         Vignette = Math.Clamp(Vignette, 0, 100); StarDensity = Math.Clamp(StarDensity, 0, 100); HorizonGlow = Math.Clamp(HorizonGlow, 0, 100); BeamIntensity = Math.Clamp(BeamIntensity, 0, 100);
         RecordingFrameRate = Math.Clamp(Math.Round(RecordingFrameRate), 15, 60);
         if (!Palettes.Contains(Palette)) Palette = "Spectrum";
+        if (!HaloTintModes.Contains(HaloTintMode)) HaloTintMode = "Halo";
         if (!ColorModes.Contains(ColorMode)) ColorMode = "Gradient";
         if (!NoteStyles.Contains(NoteStyle)) NoteStyle = "Neon";
         if (!FlameColorModes.Contains(FlameColorMode)) FlameColorMode = "Warm";
