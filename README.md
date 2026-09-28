@@ -300,6 +300,8 @@ dotnet run --project .\PianoPath.csproj -- --verify
 
 Mã thoát `0` là đạt, `1` là có lỗi; nhật ký ghi từng mục PASS/FAIL. Bộ kiểm thử tạo tệp MIDI, SoundFont SF2 và AVI nhỏ trong thư mục tạm; kiểm tra parser MIDI (đa track, tempo map, lưới phách, tên track, bỏ kênh trống, tệp hỏng), giải mã preset/zone/sample và ngữ nghĩa generator SF2 (instrument ghi đè, preset cộng dồn), loop qua giai đoạn release, giới hạn đa âm, tín hiệu âm thanh và Note Off, sustain/sostenuto/soft, lưu và clamp cấu hình hiệu ứng, preset có sẵn/preset người dùng (lưu, nhập, xuất, xóa, tệp hỏng), dock cài đặt (10 trang, chế độ màu theo tay/track, hàng phụ thuộc, tìm kiếm, áp preset), ghi AVI frame, đóng/mở MIDI input thật nếu có, giải mã WinMM `MIM_DATA` tới nốt rơi WPF, MIDI output, tự ẩn/hiện giao diện theo chuột và Esc, độ dài nốt khi giữ phím, chế độ tập, loop, tua, tempo và render WPF. Chỉ xác nhận được phím đàn vật lý phát sự kiện khi nhấn một phím MIDI thực tế.
 
+CI (`build.yml`) chạy đúng bộ kiểm thử này sau mỗi lần build và **coi `FAIL` là lỗi build**; toàn bộ nhật ký được dán vào job summary. Vì runner không có Git LFS, card âm thanh hay cổng MIDI thật, các mục tương ứng sẽ ra `SKIP`/`NOTE` chứ không làm đỏ build.
+
 Nhật ký dùng bốn tiền tố: `PASS` (đã kiểm tra và đạt), `FAIL` (có lỗi, mã thoát `1`), `SKIP` (điều kiện môi trường không cho phép kiểm tra) và `NOTE` (thông tin môi trường). Bộ kiểm thử tự bỏ qua thay vì báo lỗi khi máy thiếu phần cứng: nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ Git LFS (clone chưa `git lfs pull`, hoặc CI checkout với `lfs: false`) thì các mục piano đi kèm bị `SKIP` và ứng dụng được xác minh ở chế độ im lặng; nếu Windows không mở được thiết bị âm thanh (`waveOut error 2`) hoặc một cổng MIDI output không mở được, engine vẫn nạp SoundFont và chạy im lặng, kết quả ghi `NOTE` chứ không `FAIL`.
 
 Các tham số dòng lệnh khác: `--show-settings [--settings-tab=style|notes|particles|keyboard|background|camera|audio|midi|practice|recording]` mở sẵn dock cài đặt, `--snapshot <file.png> [--compact] [--play-preview]` chụp màn hình rồi thoát (dùng để tạo `preview.png`/`settings-preview.png`).
@@ -317,7 +319,7 @@ Các tham số dòng lệnh khác: `--show-settings [--settings-tab=style|notes|
 - `ColorPickerWindow.cs`: bảng chọn màu HSV/HEX.
 - `VerificationSuite.cs`: bộ kiểm tra hồi quy chạy bằng `--verify`, fixtures tự tạo.
 - `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `installer/Keyflow.iss`: script Inno Setup tạo bộ cài.
-- `.github/workflows/build.yml`: CI biên dịch trên `windows-latest`; `.github/workflows/release.yml`: publish và đính kèm ZIP vào GitHub Release khi đẩy tag `v*`.
+- `.github/workflows/build.yml`: CI trên `windows-latest` — restore, build Release rồi chạy `--verify` (bước kiểm thử **làm hỏng build nếu FAIL**); `.github/workflows/release.yml`: publish và đính kèm ZIP vào GitHub Release khi đẩy tag `v*`, kèm smoke test bản đã đóng gói.
 
 ## Giấy phép
 

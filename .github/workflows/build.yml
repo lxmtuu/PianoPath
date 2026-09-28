@@ -25,24 +25,25 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
-      # A hosted runner has no interactive desktop, no audio device and (with lfs: false) no real
-      # SoundFont, so a red suite here does not necessarily mean a broken build. It still runs on
-      # every push and publishes each PASS/SKIP/NOTE/FAIL line as a check annotation so a real
-      # regression is visible without downloading the log.
-      - name: Verification suite (needs an interactive desktop, so failures do not block the build)
-        continue-on-error: true
+      # Runs on every push and blocks the build. The suite detects what the runner is missing
+      # (no Git LFS SoundFont, no audio device, an unopenable MIDI port) and reports those as
+      # SKIP/NOTE instead of failing, so a red step here means a real regression.
+      # Every log line is also echoed into the job summary; annotations stay under GitHub's
+      # 10-per-level cap by only surfacing SKIP/NOTE/FAIL plus the final summary line.
+      - name: Verification suite
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
-          if (Test-Path $log) {
-            Get-Content $log
-            Get-Content $log | ForEach-Object {
-              $level = if ($_ -like 'FAIL*') { 'error' } elseif ($_ -like 'PASS*' -or $_ -like 'Verification passed*') { 'notice' } else { 'warning' }
-              $text = $_ -replace '%', '%25'
-              "::${level} title=Keyflow verification::$text"
-            }
-          } else {
-            "::error title=Keyflow verification::PianoPath.exe did not write $log"
+          $lines = if (Test-Path $log) { Get-Content $log } else { @() }
+          $lines | ForEach-Object {
+            if ($_ -like 'FAIL*') { $level = 'error' }
+            elseif ($_ -like 'SKIP*' -or $_ -like 'NOTE*') { $level = 'warning' }
+            elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
+            else { return }
+            $text = $_ -replace '%', '%25'
+            "::${level} title=Keyflow verification::$text"
           }
+          if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
+          @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
