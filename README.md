@@ -12,7 +12,7 @@ Keyflow là ứng dụng desktop Windows viết bằng C# và WPF để học đ
 winget install --id Git.Git -e; winget install --id GitHub.GitLFS -e; winget install --id Microsoft.DotNet.SDK.10 -e
 git lfs install
 git clone https://github.com/lxmtuu/PianoPath.git; cd PianoPath; git lfs pull
-dotnet run --project .\PianoPath.csproj -c Release     # biên dịch và chạy
+dotnet publish PianoPath.csproj -c Release -r win-x64 --self-contained true //p:PublishSingleFile=true //p:IncludeNativeLibrariesForSelfExtract=true  # biên dịch và chạy
 .\publish.ps1 -Zip                                    # xuất PianoPath.exe + ZIP để gửi đi
 ```
 
