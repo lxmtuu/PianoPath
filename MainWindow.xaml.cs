@@ -1,7 +1,6 @@
 using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
-using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -42,7 +41,19 @@ public partial class MainWindow : Window
     private double _position, _tempo = 1, _loopA = -1, _loopB = -1, _metronomeOffAt = -1;
     private bool _playing, _isSeeking, _updatingSeek, _updatingPedals, _suppressDevices, _suppressTracks, _suppressPreset, _processCurrentOnsets, _fullScreen = true, _uiReady, _isBuiltInSoundFont, _closing, _chromeVisible = true, _loadingVisualSettings;
     private DateTime _lastPointerActivity = DateTime.UtcNow;
-    private int _lastBeat = -1;
+    private Point? _lastPointerPoint;
+    private bool _settingsHiddenByIdle;
+    /// <summary>Notes before this index are already played, missed or intentionally skipped by a seek; only later notes can still be missed.</summary>
+    private int _missScanIndex;
+    private IReadOnlyList<double> _beatTimes = [];
+    private IReadOnlyDictionary<int, string> _trackNames = new Dictionary<int, string>();
+    private int _beatsPerBar = 4, _nextBeat;
+    private IReadOnlyList<NoteEvent>? _songDurationSource;
+    private double _songDuration;
+    private const int MetronomePitch = 77;
+    private static readonly TimeSpan ChromeIdleDelay = TimeSpan.FromSeconds(2.8);
+    /// <summary>Set to false for automated snapshots so the toolbar and settings never disappear while a capture is pending.</summary>
+    internal bool AutoHideChrome { get; set; } = true;
     private static readonly int[] ComputerMap = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
     private static readonly Key[] ComputerKeys = [Key.A, Key.W, Key.S, Key.E, Key.D, Key.F, Key.T, Key.G, Key.Y, Key.H, Key.U, Key.J, Key.K];
 
@@ -89,7 +100,7 @@ public partial class MainWindow : Window
     private void StartPlayback()
     {
         if (_playing || SongDuration() <= 0) return;
-        if (_position >= SongDuration()) { _position = 0; _outputFinished.Clear(); foreach (var n in _notes) { n.Played = false; n.Missed = false; } }
+        if (_position >= SongDuration()) { _position = 0; _outputFinished.Clear(); foreach (var n in _notes) { n.Played = false; n.Missed = false; } SyncPlayhead(); }
         _clock.Restart(); _playing = true; _processCurrentOnsets = true; _timer.Start(); PlayButton.Content = "Ⅱ"; UpdatePlaybackLabel();
         UpdateStage();
     }
@@ -111,40 +122,37 @@ public partial class MainWindow : Window
             if (_loopB > _loopA && _loopA >= 0 && _position >= _loopB)
             {
                 _position = _loopA; previous = _loopA; forceOnset = true; _outputFinished.Clear(); ReleasePlaybackNotes();
+                // Every pass through the loop is a fresh attempt: clear the scoring flags inside the loop so the notes can be played and judged again.
+                for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _loopA); i < _notes.Count; i++) { _notes[i].Played = false; _notes[i].Missed = false; _notes[i].Timing = 0; }
+                SyncPlayhead();
             }
             if (ModeCombo.SelectedIndex == 1)
             {
-                var next = _notes.Where(n => !n.Played && !n.Missed).OrderBy(n => n.Start).FirstOrDefault();
+                var next = NextExpectedNote();
                 if (next != null && _position >= next.Start) { _position = next.Start; if (previous > _position) forceOnset = true; _clock.Restart(); }
             }
-            foreach (var note in _notes)
+            // Release song notes whose end has passed before starting new ones, so a repeated pitch is not cut off by the previous note's Note Off.
+            if (_audioHeld.Count > 0) foreach (var note in _audioHeld.Where(n => n.End <= _position).ToArray()) { _audioHeld.Remove(note); _audio.NoteOff(note.Pitch); }
+            if (_outputHeld.Count > 0) foreach (var note in _outputHeld.Where(n => n.End <= _position).ToArray()) { _outputHeld.Remove(note); SendOutput(note.Pitch, 0, false); }
+            // Onsets in (onsetFrom, position]; after a jump the window also covers notes within 25 ms of the new playhead.
+            var onsetFrom = forceOnset ? Math.Min(previous, _position - .025) : previous;
+            for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, onsetFrom); i < _notes.Count; i++)
             {
-                var forced = forceOnset && Math.Abs(note.Start - _position) < .025;
-                if (!_outputFinished.Contains(note) && note.Start <= _position && (note.Start > previous || forced))
-                {
-                    if (!note.Played)
-                    {
-                        _audio.NoteOn(note.Pitch, note.Velocity); _audioHeld.Add(note);
-                        SendOutput(note.Pitch, note.Velocity, true); _outputHeld.Add(note);
-                        Stage.Impact(note.Pitch, .82);
-                    }
-                    _outputFinished.Add(note);
-                }
-                if (note.End <= _position)
-                {
-                    if (_outputHeld.Remove(note)) SendOutput(note.Pitch, 0, false);
-                    if (_audioHeld.Remove(note)) _audio.NoteOff(note.Pitch);
-                    _outputFinished.Add(note);
-                }
-                if (!note.Played && !note.Missed && note.Start < _position - .38) { note.Missed = true; _misses++; _streak = 0; }
+                var note = _notes[i];
+                if (note.Start > _position) break;
+                if (note.Start <= onsetFrom || !_outputFinished.Add(note) || note.Played) continue;
+                _audio.NoteOn(note.Pitch, note.Velocity); _audioHeld.Add(note);
+                SendOutput(note.Pitch, note.Velocity, true); _outputHeld.Add(note);
+                Stage.Impact(note.Pitch, .82);
             }
-
-            if (MetronomeCheck.IsChecked == true && _audio.HasSoundFont)
+            // Notes are sorted by start, so the miss scan only ever advances instead of re-reading the whole song every frame.
+            var missLimit = _position - .38;
+            while (_missScanIndex < _notes.Count && _notes[_missScanIndex].Start < missLimit)
             {
-                if (_metronomeOffAt >= 0 && _position >= _metronomeOffAt) { _audio.NoteOff(77); _metronomeOffAt = -1; }
-                var beat = (int)Math.Floor(_position / .6);
-                if (beat > _lastBeat) { _lastBeat = beat; _audio.NoteOn(77, 62); _metronomeOffAt = _position + .08; }
+                var note = _notes[_missScanIndex++];
+                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; }
             }
+            TickMetronome(previous, forceOnset);
         }
         Stage.Advance(elapsed);
         if (_playing && _position >= SongDuration()) { _position = SongDuration(); Stop(); }
@@ -153,6 +161,31 @@ public partial class MainWindow : Window
     }
 
     private void UpdateStage() => Stage.SetState(_notes, _position, _playing, _pressed);
+    private NoteEvent? NextExpectedNote()
+    {
+        for (var i = _missScanIndex; i < _notes.Count; i++) { var note = _notes[i]; if (!note.Played && !note.Missed) return note; }
+        return null;
+    }
+    /// <summary>Re-anchors the miss scanner and metronome after the playhead jumps (seek, restart, loop, filter change).</summary>
+    private void SyncPlayhead()
+    {
+        _missScanIndex = NoteTimeline.FirstIndexAtOrAfter(_notes, _position - .38);
+        if (_metronomeOffAt >= 0) { _audio.NoteOff(MetronomePitch); _metronomeOffAt = -1; }
+        _nextBeat = NoteTimeline.FirstIndexAtOrAfter(_beatTimes, _position);
+    }
+    /// <summary>Metronome that follows the MIDI tempo map and time signature instead of a fixed 100 BPM grid.</summary>
+    private void TickMetronome(double previous, bool forceOnset)
+    {
+        if (_metronomeOffAt >= 0 && _position >= _metronomeOffAt) { _audio.NoteOff(MetronomePitch); _metronomeOffAt = -1; }
+        if (MetronomeCheck.IsChecked != true || !_audio.HasSoundFont || _beatTimes.Count == 0) return;
+        var click = false; var downbeat = false;
+        while (_nextBeat < _beatTimes.Count && _beatTimes[_nextBeat] <= _position)
+        {
+            if (_beatTimes[_nextBeat] > previous || forceOnset) { click = true; downbeat = _beatsPerBar > 0 && _nextBeat % _beatsPerBar == 0; }
+            _nextBeat++;
+        }
+        if (click) { _audio.NoteOn(MetronomePitch, downbeat ? 84 : 62); _metronomeOffAt = _position + .08; }
+    }
     private void TempoSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         _tempo = e.NewValue / 100; if (TempoLabel is not null) TempoLabel.Text = $"{e.NewValue:0}%";
@@ -170,7 +203,8 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            Stop(); _allNotes = MidiReader.Read(dialog.FileName); if (_allNotes.Count == 0) throw new InvalidDataException("No notes were found in this MIDI file.");
+            Stop(); var song = MidiReader.ReadSong(dialog.FileName); if (song.Notes.Count == 0) throw new InvalidDataException("No notes were found in this MIDI file.");
+            _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
             SongTitle.Text = Path.GetFileNameWithoutExtension(dialog.FileName); _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
         }
         catch (Exception ex) { MessageBox.Show(this, $"Could not read this MIDI file.\n{ex.Message}", "MIDI import", MessageBoxButton.OK, MessageBoxImage.Warning); }
@@ -251,6 +285,7 @@ public partial class MainWindow : Window
         RestartButton.IsEnabled = hasNotes;
         SeekSlider.IsEnabled = hasNotes;
         if (!hasNotes) { _position = 0; _outputFinished.Clear(); }
+        SyncPlayhead();
     }
 
     private void UpdatePlaybackLabel()
@@ -265,23 +300,12 @@ public partial class MainWindow : Window
         if (e.Key == Key.F11) { ToggleFullScreen(); e.Handled = true; return; }
         if (e.Key == Key.Escape)
         {
-            if (SettingsPanel.Visibility == Visibility.Visible)
-            {
-                SettingsPanel.Visibility = Visibility.Collapsed; SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
-            }
-            else if (!_chromeVisible)
-            {
-                // Escape first restores the live controls; pressing it again opens settings.
-                SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
-            }
-            else
-            {
-                SettingsTabs.SelectedIndex = 0; SettingsPanel.Visibility = Visibility.Visible; SetChromeVisible(true, showRecordButton: false);
-            }
+            // Escape always toggles the main Stage Design panel, even while the stage is in its idle full-screen state.
+            if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel(); else OpenSettingsPanel();
             e.Handled = true; return;
         }
-        var focused = Keyboard.FocusedElement;
-        if (focused is ComboBox or TextBox or Slider or CheckBox or Button) return;
+        // Typing inside the settings panel (hex colors, combo boxes) counts as activity and must not play piano keys.
+        if (SettingsPanel.IsKeyboardFocusWithin || Keyboard.FocusedElement is TextBox) { _lastPointerActivity = DateTime.UtcNow; return; }
         var pitch = MapComputerKey(e.Key);
         if (pitch >= 0)
         {
@@ -292,14 +316,41 @@ public partial class MainWindow : Window
     }
     private void Window_MouseMove(object sender, MouseEventArgs e)
     {
+        // WPF re-raises MouseMove when the layout under a stationary cursor changes (which hiding the toolbar does); only real movement counts.
+        var point = e.GetPosition(this);
+        if (_lastPointerPoint is { } last && Math.Abs(last.X - point.X) < .5 && Math.Abs(last.Y - point.Y) < .5) return;
+        _lastPointerPoint = point;
         _lastPointerActivity = DateTime.UtcNow;
+        if (_settingsHiddenByIdle) { _settingsHiddenByIdle = false; SettingsPanel.Visibility = Visibility.Visible; }
         SetChromeVisible(true, showRecordButton: true);
         if (Stage is not null) Stage.SetPointerPosition(e.GetPosition(Stage));
     }
     private void CheckChromeIdle()
     {
-        if (_closing || SettingsPanel.Visibility == Visibility.Visible) return;
-        if (DateTime.UtcNow - _lastPointerActivity >= TimeSpan.FromSeconds(2.8)) SetChromeVisible(false);
+        if (_closing || !AutoHideChrome) return;
+        // Keep everything on screen while a color picker is open or the user is dragging a slider / browsing a drop-down.
+        if (OwnedWindows.Count > 0 || Mouse.Captured is not null) return;
+        if (DateTime.UtcNow - _lastPointerActivity >= ChromeIdleDelay) HideChromeForIdle();
+    }
+    /// <summary>Idle state: only the stage (keys, background, falling notes) stays visible; the toolbar and settings return on mouse movement.</summary>
+    private void HideChromeForIdle()
+    {
+        if (SettingsPanel.Visibility == Visibility.Visible) { _settingsHiddenByIdle = true; SettingsPanel.Visibility = Visibility.Collapsed; }
+        SetChromeVisible(false);
+    }
+    private void OpenSettingsPanel()
+    {
+        _settingsHiddenByIdle = false;
+        SettingsTabs.SelectedIndex = Math.Max(0, SettingsTabs.SelectedIndex);
+        SettingsPanel.Visibility = Visibility.Visible;
+        SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
+    }
+    private void CloseSettingsPanel()
+    {
+        _settingsHiddenByIdle = false;
+        SettingsPanel.Visibility = Visibility.Collapsed;
+        SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
+        Stage.Focus();
     }
     private void SetChromeVisible(bool visible, bool showRecordButton = true)
     {
@@ -550,11 +601,13 @@ public partial class MainWindow : Window
             var height = Math.Max(360, (int)(width * ratio)) & ~1;
             _videoRecorder = new AviVideoRecorder(dialog.FileName, width, height, 20);
             _recordingPath = dialog.FileName;
-            _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
+            // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
+            _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
             _recordTimer.Tick += RecordTimer_Tick; _recordTimer.Start();
             RecordButton.Content = "■  REC 00:00"; RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
-            RecordButton.ToolTip = _videoRecorder.UsesMjpeg ? "Recording MJPEG AVI · click to stop" : "Recording raw AVI · large file · click to stop";
-            SettingsSaveLabel.Text = "Video recording started";
+            var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
+            RecordButton.ToolTip = _videoRecorder.UsesMjpeg ? "Recording MJPEG AVI · click to stop" : $"Recording raw AVI (no MJPEG codec installed) · about {rawSeconds:0} s fit in the 2 GB AVI limit · click to stop";
+            SettingsSaveLabel.Text = _videoRecorder.UsesMjpeg ? "Video recording started" : $"Recording raw AVI · about {rawSeconds:0} s fit before the 2 GB limit";
         }
         catch (Exception ex)
         {
@@ -568,7 +621,13 @@ public partial class MainWindow : Window
         try
         {
             if (_videoRecorder is null) return;
-            _videoRecorder.WriteBgrFrame(CaptureStageBgr(_videoRecorder.Width, _videoRecorder.Height));
+            // Frames are due by wall-clock time. A slow capture repeats the last frame instead of letting the video play back too fast.
+            var due = (int)Math.Floor(_recordClock.Elapsed.TotalSeconds * _videoRecorder.FrameRate) + 1 - _videoRecorder.FrameCount;
+            if (due > 0)
+            {
+                _videoRecorder.WriteBgrFrame(CaptureStageBgr(_videoRecorder.Width, _videoRecorder.Height), Math.Min(due, _videoRecorder.FrameRate * 2));
+                if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, "The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically."); return; }
+            }
             var elapsed = _recordClock.Elapsed;
             RecordButton.Content = $"■  REC {elapsed.Minutes:00}:{elapsed.Seconds:00}";
         }
@@ -579,13 +638,21 @@ public partial class MainWindow : Window
         }
     }
 
+    private RenderTargetBitmap? _captureBitmap;
+    private byte[]? _captureSource, _captureTarget;
     private byte[] CaptureStageBgr(int width, int height)
     {
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen()) context.DrawRectangle(new VisualBrush(Stage) { Stretch = Stretch.Uniform }, null, new Rect(0, 0, width, height));
-        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32); bitmap.Render(visual);
-        var sourceStride = width * 4; var source = new byte[sourceStride * height]; bitmap.CopyPixels(source, sourceStride, 0);
-        var targetStride = AviVideoRecorder.BgrStride(width); var target = new byte[targetStride * height];
+        // Reuse the capture bitmap and buffers between frames; at 1280×720 fresh arrays would add roughly 130 MB/s of garbage while recording.
+        if (_captureBitmap is null || _captureBitmap.PixelWidth != width || _captureBitmap.PixelHeight != height)
+        {
+            _captureBitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            _captureSource = new byte[width * 4 * height]; _captureTarget = new byte[AviVideoRecorder.BgrStride(width) * height];
+        }
+        var bitmap = _captureBitmap; bitmap.Clear(); bitmap.Render(visual);
+        var sourceStride = width * 4; var source = _captureSource!; bitmap.CopyPixels(source, sourceStride, 0);
+        var targetStride = AviVideoRecorder.BgrStride(width); var target = _captureTarget!;
         for (var y = 0; y < height; y++)
         {
             var sourceRow = y * sourceStride; var targetRow = (height - 1 - y) * targetStride;
@@ -598,7 +665,7 @@ public partial class MainWindow : Window
         return target;
     }
 
-    private void StopVideoRecording(bool showMessage)
+    private void StopVideoRecording(bool showMessage, string? note = null)
     {
         _recordTimer?.Stop(); _recordTimer = null; _recordClock.Stop();
         var recorder = _videoRecorder; _videoRecorder = null;
@@ -607,7 +674,7 @@ public partial class MainWindow : Window
         try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) MessageBox.Show(this, ex.Message, "Video recording", MessageBoxButton.OK, MessageBoxImage.Warning); }
         RecordButton.Content = "●  REC"; RecordButton.Background = new SolidColorBrush(Color.FromRgb(39, 19, 24));
         RecordButton.ToolTip = "Record the live piano visualizer";
-        if (showMessage && !_closing) MessageBox.Show(this, $"Video saved.\n{path}\n\nThis AVI contains the piano visuals; system audio is not mixed into the recording.", "Recording complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        if (showMessage && !_closing) MessageBox.Show(this, $"Video saved.\n{path}\n\n{(note is null ? "" : note + "\n\n")}This AVI contains the piano visuals; system audio is not mixed into the recording.", "Recording complete", MessageBoxButton.OK, MessageBoxImage.Information);
     }
     internal static int MapComputerKey(Key key) { var index = Array.IndexOf(ComputerKeys, key); return index < 0 ? -1 : 48 + ComputerMap[index]; }
     private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }
@@ -704,7 +771,12 @@ public partial class MainWindow : Window
         if (!_updatingSeek && SongDuration() > 0) { _updatingSeek = true; SeekSlider.Value = Math.Clamp(100 * _position / SongDuration(), 0, 100); _updatingSeek = false; }
     }
     private static string Fmt(double seconds) => $"{(int)seconds / 60:00}:{(int)seconds % 60:00}";
-    private double SongDuration() => _notes.Count == 0 ? 0 : _notes.Max(n => n.End);
+    private double SongDuration()
+    {
+        // Called several times per frame; recompute only when the note list itself is replaced.
+        if (!ReferenceEquals(_songDurationSource, _notes)) { _songDurationSource = _notes; _songDuration = _notes.Count == 0 ? 0 : _notes.Max(n => n.End); }
+        return _songDuration;
+    }
     private void SeekSlider_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e) => _isSeeking = true;
     private void SeekSlider_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e) { _isSeeking = false; SeekToSlider(); }
     private void SeekSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (_isSeeking && !_updatingSeek) SeekToSlider(); }
@@ -785,7 +857,7 @@ public partial class MainWindow : Window
     private void PopulateTracks()
     {
         _suppressTracks = true; TrackCombo.Items.Clear(); TrackCombo.Items.Add("All notes");
-        foreach (var track in _allNotes.Select(n => n.Track).Distinct().Order()) TrackCombo.Items.Add($"Track {track + 1}");
+        foreach (var track in _allNotes.Select(n => n.Track).Distinct().Order()) TrackCombo.Items.Add(_trackNames.TryGetValue(track, out var name) ? $"Track {track + 1} · {name}" : $"Track {track + 1}");
         TrackCombo.SelectedIndex = 0; _activeTrack = -1; _suppressTracks = false;
     }
     private void TrackCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -800,11 +872,14 @@ public partial class MainWindow : Window
         if (ModeCombo.SelectedIndex == 2) notes = notes.Where(n => n.Pitch >= 60);
         if (ModeCombo.SelectedIndex == 3) notes = notes.Where(n => n.Pitch < 60);
         _notes = notes.OrderBy(n => n.Start).ToList();
+        SyncPlayhead();
     }
     private void ResetScore()
     {
         _hits = _misses = _streak = _bestStreak = 0;
         foreach (var note in _allNotes) { note.Played = false; note.Missed = false; note.Timing = 0; }
+        // Notes already behind the playhead are skipped, not counted as misses, so seeking or changing filters never zeroes the accuracy.
+        SyncPlayhead();
         UpdateStats();
     }
     private void ReleasePlaybackNotes()
@@ -817,10 +892,7 @@ public partial class MainWindow : Window
     private void Window_Deactivated(object? sender, EventArgs e) { ReleaseAllPressed(); }
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        var opening = SettingsPanel.Visibility != Visibility.Visible;
-        SettingsPanel.Visibility = opening ? Visibility.Visible : Visibility.Collapsed;
-        if (opening) SettingsTabs.SelectedIndex = Math.Max(0, SettingsTabs.SelectedIndex);
-        SetChromeVisible(true); _lastPointerActivity = DateTime.UtcNow;
+        if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel(); else OpenSettingsPanel();
     }
     private void ToggleFullScreen()
     {
@@ -845,63 +917,4 @@ public partial class MainWindow : Window
         foreach (var pedal in _pedalsDown.ToArray()) SetPedalState(pedal, false);
         _midi.Dispose(); _audio.Dispose();
     }
-}
-
-internal sealed class NoteEvent
-{
-    public int Pitch { get; init; }
-    public double Start { get; init; }
-    public double Duration { get; init; }
-    public double End => Start + Duration;
-    public int Velocity { get; init; } = 90;
-    public int Track { get; init; }
-    public bool Played { get; set; }
-    public bool Missed { get; set; }
-    public double Timing { get; set; }
-}
-
-internal static class MidiReader
-{
-    public static List<NoteEvent> Read(string path)
-    {
-        using var stream = File.OpenRead(path); using var reader = new BinaryReader(stream);
-        if (new string(reader.ReadChars(4)) != "MThd") throw new InvalidDataException("Missing MIDI header.");
-        var headerLength = Read32(reader); var format = Read16(reader); var tracks = Read16(reader); var division = Read16(reader);
-        if (headerLength < 6 || division == 0 || (division & 0x8000) != 0) throw new InvalidDataException("Unsupported MIDI time division.");
-        if (headerLength > 6) reader.ReadBytes(headerLength - 6);
-        var raw = new List<(long start, long end, int pitch, int velocity, int track)>(); var tempos = new SortedDictionary<long, int> { [0] = 500000 };
-        for (var track = 0; track < tracks && stream.Position < stream.Length; track++)
-        {
-            if (new string(reader.ReadChars(4)) != "MTrk") throw new InvalidDataException("Invalid MIDI track chunk.");
-            var chunkLength = Read32(reader); var end = stream.Position + chunkLength; long tick = 0; var running = 0; var active = new Dictionary<(int channel, int pitch), Queue<(long tick, int velocity)>>();
-            while (stream.Position < end)
-            {
-                tick += ReadVar(reader); var status = reader.ReadByte();
-                if (status < 0x80) { stream.Position--; if (running == 0) throw new InvalidDataException("Invalid MIDI running status."); status = (byte)running; }
-                else if (status < 0xF0) running = status;
-                if (status == 0xFF)
-                {
-                    var type = reader.ReadByte(); var length = ReadVar(reader);
-                    if (type == 0x51 && length == 3) { var b = reader.ReadBytes(3); tempos[tick] = (b[0] << 16) | (b[1] << 8) | b[2]; }
-                    else stream.Position += length;
-                    continue;
-                }
-                if (status is 0xF0 or 0xF7) { stream.Position += ReadVar(reader); continue; }
-                var kind = status & 0xF0; var channel = status & 15; var pitch = reader.ReadByte(); var velocity = kind is 0xC0 or 0xD0 ? 0 : reader.ReadByte();
-                if (kind == 0x90 && velocity > 0) { var key = (channel, pitch); if (!active.ContainsKey(key)) active[key] = new Queue<(long, int)>(); active[key].Enqueue((tick, velocity)); }
-                else if (kind == 0x80 || kind == 0x90 && velocity == 0)
-                {
-                    var key = (channel, pitch); if (active.TryGetValue(key, out var queue) && queue.Count > 0) { var on = queue.Dequeue(); raw.Add((on.tick, Math.Max(on.tick + 1, tick), pitch, on.velocity, track)); }
-                }
-            }
-            stream.Position = end;
-        }
-        if (format == 2) throw new InvalidDataException("MIDI format 2 sequences are not supported yet.");
-        var points = tempos.ToArray();
-        double Seconds(long target) { long prev = 0; double seconds = 0; var micros = 500000; foreach (var t in points) { if (t.Key >= target) break; seconds += (t.Key - prev) * (double)micros / division / 1_000_000; prev = t.Key; micros = t.Value; } return seconds + (target - prev) * (double)micros / division / 1_000_000; }
-        return raw.Select(n => new NoteEvent { Pitch = n.pitch, Start = Seconds(n.start), Duration = Math.Max(.06, Seconds(n.end) - Seconds(n.start)), Velocity = n.velocity, Track = n.track }).OrderBy(n => n.Start).ToList();
-    }
-    private static long ReadVar(BinaryReader reader) { long value = 0; byte current; do { current = reader.ReadByte(); value = (value << 7) | (uint)(current & 127); } while ((current & 128) != 0); return value; }
-    private static int Read16(BinaryReader reader) => (reader.ReadByte() << 8) | reader.ReadByte();
-    private static int Read32(BinaryReader reader) => (reader.ReadByte() << 24) | (reader.ReadByte() << 16) | (reader.ReadByte() << 8) | reader.ReadByte();
 }

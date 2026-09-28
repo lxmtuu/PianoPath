@@ -13,6 +13,9 @@ public partial class App : Application
 
         var window = new MainWindow();
         MainWindow = window;
+        var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
+        // Automated captures wait several seconds for the SoundFont; the idle auto-hide must not blank the toolbar or settings meanwhile.
+        if (snapshotIndex >= 0 || e.Args.Contains("--show-settings")) window.AutoHideChrome = false;
         if (e.Args.Contains("--show-settings"))
         {
             if (window.FindName("SettingsPanel") is System.Windows.Controls.Border panel) panel.Visibility = Visibility.Visible;
@@ -24,7 +27,6 @@ public partial class App : Application
                 tabs.SelectedIndex = tab?.ToLowerInvariant() switch { "notes" => 1, "particles" => 2, "camera" => 3, "audio" => 4, "practice" => 5, _ => 0 };
             }
         }
-        var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
         if (snapshotIndex >= 0 && snapshotIndex + 1 < e.Args.Length)
         {
             if (e.Args.Contains("--compact")) { window.WindowState = WindowState.Normal; window.Width = 1080; window.Height = 700; }

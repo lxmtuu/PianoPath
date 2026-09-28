@@ -74,8 +74,12 @@ internal static class VerificationSuite
     private static void VerifyMidiImport()
     {
         var path = Path.Combine(Path.GetTempPath(), "keyflow-fixture.mid");
-        File.WriteAllBytes(path, CreateFormatOneMidi()); var notes = MidiReader.Read(path);
-        Assert(notes.Count == 3, "MIDI format 1 should read notes from multiple tracks.");
+        File.WriteAllBytes(path, CreateFormatOneMidi()); var song = MidiReader.ReadSong(path); var notes = song.Notes;
+        Assert(notes.Count == 3 && notes.All(n => n.Pitch != 36), "MIDI format 1 should read notes from multiple tracks and skip the percussion channel.");
+        Assert(song.BeatsPerBar == 4 && song.BeatTimes.Count >= 3 && Math.Abs(song.BeatTimes[1] - .5) < .001 && Math.Abs(song.BeatTimes[2] - .75) < .001, "The beat grid should follow the tempo map for the metronome.");
+        Assert(song.TrackNames.TryGetValue(0, out var trackName) && trackName == "Lead", "Track name meta events should be exposed for the track picker.");
+        Assert(NoteTimeline.FirstIndexAtOrAfter(notes, .5) == 2 && NoteTimeline.FirstIndexAtOrAfter(notes, 9) == 3 && NoteTimeline.FirstIndexAtOrAfter(notes, -1) == 0, "Binary search over sorted note starts should find the first note at or after a time.");
+        Assert(MidiReader.Read(path).Count == 3, "The note-only reader should stay compatible.");
         var middleC = notes.Single(n => n.Pitch == 60);
         Assert(middleC.Track == 0 && middleC.Velocity == 100, "MIDI pitch, track and velocity should be retained.");
         Assert(Math.Abs(middleC.Start) < .001 && Math.Abs(middleC.Duration - .5) < .001, "Default tempo should map ticks to seconds correctly.");
@@ -85,7 +89,7 @@ internal static class VerificationSuite
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes("BAD!")); var rejected = false;
         try { MidiReader.Read(path); } catch (InvalidDataException) { rejected = true; }
         Assert(rejected, "Invalid MIDI headers should be rejected cleanly.");
-        Results.Add("PASS MIDI: multi-track import, tempo map, timing, velocity and malformed input.");
+        Results.Add("PASS MIDI: multi-track import, tempo map, beat grid, track names, percussion skip, timing, velocity and malformed input.");
     }
 
     private static void VerifyVisualSettings()
@@ -157,6 +161,19 @@ internal static class VerificationSuite
         sustainSynth.ProcessMidi(0, 0xB0, 64, 0); var sustainTail = new short[22050 * 2]; sustainSynth.Render(sustainTail, 22050);
         Assert(sustainSynth.ActiveVoiceCount == 0, "Releasing sustain CC 64 should release held voices.");
 
+        var layeredPath = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont-layered.sf2"); File.WriteAllBytes(layeredPath, CreateTestSoundFont(layered: true));
+        var layered = SoundFontReader.Read(layeredPath).Presets[0].Regions[0];
+        Assert(Math.Abs(layered.Attenuation - Math.Pow(10, -90 / 200.0)) < 1e-6, "Instrument-local generators should replace global ones and preset generators should be added on top (SF2 §8.5 / §9.4).");
+        Assert(layered.SampleMode == 1 && Math.Abs(layered.ReleaseSeconds - 1) < .01, "Instrument global generators should apply, and a preset offset should add to the generator default.");
+        var loopSynth = new SoundFontSynthesizer(SoundFontReader.Read(layeredPath), 22050); loopSynth.NoteOn(0, 69, 100);
+        var loopHeld = new short[4410 * 2]; loopSynth.Render(loopHeld, 4410); loopSynth.NoteOff(0, 69);
+        var loopRelease = new short[8820 * 2]; loopSynth.Render(loopRelease, 8820);
+        Assert(loopRelease.Skip(8820 * 2 - 400).Any(sample => sample != 0), "A continuously looped sample should keep looping through its release tail instead of running off the sample end.");
+        var loopTail = new short[22050 * 2]; loopSynth.Render(loopTail, 22050);
+        Assert(loopSynth.ActiveVoiceCount == 0, "A looped voice should still be freed once its release envelope finishes.");
+        var polySynth = new SoundFontSynthesizer(font, 22050); for (var i = 0; i < 120; i++) polySynth.NoteOn(0, 60 + i % 12, 100);
+        Assert(polySynth.ActiveVoiceCount <= 96, "Voice stealing should keep polyphony within the voice limit.");
+
         var sostenutoSynth = new SoundFontSynthesizer(font, 22050); sostenutoSynth.NoteOn(0, 60, 100);
         var beforeCapture = new short[2205 * 2]; sostenutoSynth.Render(beforeCapture, 2205);
         sostenutoSynth.ProcessMidi(0, 0xB0, 66, 127); sostenutoSynth.NoteOff(0, 60);
@@ -180,7 +197,7 @@ internal static class VerificationSuite
             engine.NoteOn(69, 95); Thread.Sleep(110); engine.NoteOff(69); Thread.Sleep(60);
             engine.UnloadSoundFont(); Assert(!engine.HasSoundFont, "Unloading the SoundFont should return to silent mode.");
         }
-        Results.Add("PASS SoundFont: SF2 playback, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output and silent unload.");
+        Results.Add("PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output and silent unload.");
     }
 
     private static void VerifyBundledPiano()
@@ -255,22 +272,27 @@ internal static class VerificationSuite
     private static void VerifyWpfInteractions(MainWindow window, Action completed, Action<Exception> failed)
     {
         var stage = (PianoStage)window.FindName("Stage"); var mode = (ComboBox)window.FindName("ModeCombo"); var tracks = (ComboBox)window.FindName("TrackCombo");
-        var panel = (Border)window.FindName("SettingsPanel"); var overlay = (Grid)window.FindName("LiveChromeOverlay");
+        var panel = (Border)window.FindName("SettingsPanel"); var overlay = (Grid)window.FindName("LiveChromeOverlay"); var recordButton = (Button)window.FindName("RecordButton");
         var rowDefinitions = ((Grid)window.Content).RowDefinitions;
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Live Play should start immersive with settings hidden and the idle toolbar available.");
-        SetField(window, "_lastPointerActivity", DateTime.UtcNow.AddSeconds(-4)); Invoke(window, "CheckChromeIdle");
-        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "Idle should hide the video/menu toolbar and collapse top and bottom chrome.");
         var source = PresentationSource.FromVisual(window)!;
-        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && rowDefinitions[0].Height.Value > 0 && ((Button)window.FindName("RecordButton")).Visibility == Visibility.Collapsed, "Escape should reveal the settings/menu control without opening an obstructing panel or showing REC.");
-        var mouse = new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent };
-        Invoke(window, "Window_MouseMove", window, mouse);
-        Assert(((Button)window.FindName("RecordButton")).Visibility == Visibility.Visible, "Mouse movement should reveal the video recording action alongside the settings control.");
-        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
-        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed, "Opening Stage Design should dismiss its overlapping floating toolbar.");
-        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Escape should close Stage Design and restore the live toolbar.");
-        Assert(window.FindName("RecordButton") is Button, "The revealed Live Play chrome should expose its video recording action.");
+        void PressEscape() => Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        void MoveMouse() { SetField(window, "_lastPointerPoint", null!); Invoke(window, "Window_MouseMove", window, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent }); }
+        void GoIdle() { SetField(window, "_lastPointerActivity", DateTime.UtcNow.AddSeconds(-4)); Invoke(window, "CheckChromeIdle"); }
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Live Play should start immersive with settings hidden and the idle toolbar available.");
+        GoIdle();
+        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "An idle pointer should hide the toolbar, menu and REC so only the stage remains.");
+        MoveMouse();
+        Assert(overlay.Visibility == Visibility.Visible && rowDefinitions[0].Height.Value > 0 && recordButton.Visibility == Visibility.Visible && panel.Visibility == Visibility.Collapsed, "Mouse movement should bring the toolbar, menu and REC back without opening settings.");
+        GoIdle(); PressEscape();
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value > 0, "Escape should open the Stage Design panel directly, even from the idle stage.");
+        GoIdle();
+        Assert(panel.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "An idle pointer should also hide an open settings panel.");
+        MoveMouse();
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed, "Mouse movement should restore the settings panel that idle hid.");
+        PressEscape();
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Collapsed, "Escape should close Stage Design and restore the live toolbar.");
+        MoveMouse(); PressEscape(); PressEscape();
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Escape should toggle the settings panel.");
         var visualSettings = (PianoVisualSettings)Field(window, "_visualSettings"); var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
         Assert(sliders.Count >= 30 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "The detailed scene, note, particle and camera controls should drive the renderer configuration.");
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
@@ -436,7 +458,7 @@ internal static class VerificationSuite
         Assert(stage.LiveTrailCount == 0 && stage.SparkCount == 0, "Pausing should clear transient note blocks and sparks.");
         window.Width = 1080; window.Height = 700; window.UpdateLayout();
         Assert(stage.ActualWidth > 500 && stage.KeyboardHeight > 100, "Compact window size should keep the keyboard usable.");
-        Results.Add("PASS WPF: immersive toolbar, Escape/mouse reveal behavior, live AVI frame capture, duration-scaled notes, pedals and MIDI practice controls.");
+        Results.Add("PASS WPF: idle auto-hide of toolbar and settings, mouse reveal, Escape toggling Stage Design, live AVI frame capture, duration-scaled notes, pedals and MIDI practice controls.");
     }
 
     public static void PressPreviewNote(MainWindow window, int pitch) => Invoke(window, "PressNote", pitch, 90);
@@ -448,7 +470,7 @@ internal static class VerificationSuite
         using var file = File.Create(path); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); encoder.Save(file);
     }
 
-    private static byte[] CreateTestSoundFont()
+    private static byte[] CreateTestSoundFont(bool layered = false)
     {
         const int sampleCount = 11025; var pcm = new byte[(sampleCount + 46) * 2];
         for (var i = 0; i < sampleCount; i++) { var value = (short)(Math.Sin(i * 2 * Math.PI * 440 / 22050) * 11000); BitConverter.GetBytes(value).CopyTo(pcm, i * 2); }
@@ -457,13 +479,28 @@ internal static class VerificationSuite
         var pdta = List("pdta", list =>
         {
             Chunk(list, "phdr", Bytes(w => { PresetHeader(w, "Test Grand", 0, 0, 0); PresetHeader(w, "EOP", 0, 0, 1); }));
-            Chunk(list, "pbag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
-            Chunk(list, "pmod", new byte[10]);
-            Chunk(list, "pgen", Bytes(w => { Generator(w, 41, 0); Generator(w, 0, 0); }));
-            Chunk(list, "inst", Bytes(w => { InstrumentHeader(w, "Piano", 0); InstrumentHeader(w, "EOI", 1); }));
-            Chunk(list, "ibag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
-            Chunk(list, "imod", new byte[10]);
-            Chunk(list, "igen", Bytes(w => { Generator(w, 53, 0); Generator(w, 0, 0); }));
+            if (layered)
+            {
+                // Preset zone: +50 cB attenuation and +12000 timecents release (relative to the -12000 default → 1 s).
+                Chunk(list, "pbag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 3); U16(w, 0); }));
+                Chunk(list, "pmod", new byte[10]);
+                Chunk(list, "pgen", Bytes(w => { Generator(w, 48, 50); Generator(w, 38, 12000); Generator(w, 41, 0); }));
+                Chunk(list, "inst", Bytes(w => { InstrumentHeader(w, "Piano", 0); InstrumentHeader(w, "EOI", 2); }));
+                // Instrument global zone: 100 cB attenuation + continuous loop. Local zone overrides attenuation to 40 cB.
+                Chunk(list, "ibag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 2); U16(w, 0); U16(w, 4); U16(w, 0); }));
+                Chunk(list, "imod", new byte[10]);
+                Chunk(list, "igen", Bytes(w => { Generator(w, 48, 100); Generator(w, 54, 1); Generator(w, 48, 40); Generator(w, 53, 0); }));
+            }
+            else
+            {
+                Chunk(list, "pbag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
+                Chunk(list, "pmod", new byte[10]);
+                Chunk(list, "pgen", Bytes(w => { Generator(w, 41, 0); Generator(w, 0, 0); }));
+                Chunk(list, "inst", Bytes(w => { InstrumentHeader(w, "Piano", 0); InstrumentHeader(w, "EOI", 1); }));
+                Chunk(list, "ibag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
+                Chunk(list, "imod", new byte[10]);
+                Chunk(list, "igen", Bytes(w => { Generator(w, 53, 0); Generator(w, 0, 0); }));
+            }
             Chunk(list, "shdr", Bytes(w => { SampleHeader(w, "Test sine", 0, sampleCount, 512, sampleCount - 512, 22050, 69); SampleHeader(w, "EOS", sampleCount, sampleCount, sampleCount, sampleCount, 0, 0); }));
         });
         using var body = new MemoryStream(); using (var writer = new BinaryWriter(body, Encoding.ASCII, true)) { writer.Write(Encoding.ASCII.GetBytes("sfbk")); WriteChunk(writer, "LIST", info); WriteChunk(writer, "LIST", sdta); WriteChunk(writer, "LIST", pdta); }
@@ -498,8 +535,9 @@ internal static class VerificationSuite
 
     private static byte[] CreateFormatOneMidi()
     {
-        var a = new byte[] { 0, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0, 0xFF, 0x51, 3, 3, 0xD0, 0x90, 0, 0xFF, 0x2F, 0 };
-        var b = new byte[] { 0, 0x90, 64, 80, 0x81, 0x70, 0x80, 64, 0, 0x81, 0x70, 0x90, 67, 90, 0x83, 0x60, 0x80, 67, 0, 0, 0xFF, 0x2F, 0 };
+        // Track 0: name "Lead", C4 for one beat, then a tempo change to 240 BPM. Track 1: a channel-10 drum hit (must be ignored), E4, G4.
+        var a = new byte[] { 0, 0xFF, 0x03, 4, 0x4C, 0x65, 0x61, 0x64, 0, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0, 0xFF, 0x51, 3, 3, 0xD0, 0x90, 0, 0xFF, 0x2F, 0 };
+        var b = new byte[] { 0, 0x99, 36, 100, 0, 0x89, 36, 0, 0, 0x90, 64, 80, 0x81, 0x70, 0x80, 64, 0, 0x81, 0x70, 0x90, 67, 90, 0x83, 0x60, 0x80, 67, 0, 0, 0xFF, 0x2F, 0 };
         using var s = new MemoryStream(); using var w = new BinaryWriter(s);
         w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, 1); Write16(w, 2); Write16(w, 480); WriteTrack(w, a); WriteTrack(w, b); return s.ToArray();
     }

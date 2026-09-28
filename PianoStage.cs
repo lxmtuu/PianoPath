@@ -11,6 +11,10 @@ internal sealed class PianoStage : FrameworkElement
 {
     private const int FirstPitch = 21, KeyCount = 88;
     private const double FallSpeed = 258;
+    /// <summary>MIDI pitches of the 52 white keys, in keyboard order.</summary>
+    private static readonly int[] WhitePitches = Enumerable.Range(FirstPitch, KeyCount).Where(p => !IsBlack(p)).ToArray();
+    /// <summary>For every MIDI pitch, how many white keys lie below it; gives each black key its x position without per-frame counting.</summary>
+    private static readonly int[] WhitesBelow = BuildWhitesBelow();
     private static readonly Brush Ink = Freeze(new SolidColorBrush(Colors.Black));
     private static readonly Brush KeyBlack = Freeze(new LinearGradientBrush(Color.FromRgb(14, 15, 24), Color.FromRgb(3, 4, 9), 90));
     private static readonly Brush KeyWhite = Freeze(new LinearGradientBrush(Color.FromRgb(253, 250, 255), Color.FromRgb(157, 166, 188), 90));
@@ -24,7 +28,7 @@ internal sealed class PianoStage : FrameworkElement
     private double _pointerX = .5, _pointerY = .5;
     private IReadOnlyList<NoteEvent> _notes = [];
     private IReadOnlySet<int> _pressed = new HashSet<int>();
-    private double _position, _elapsed;
+    private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip = 1;
     private bool _playing;
     private bool _mouseDown;
     private int _mousePitch = -1;
@@ -90,7 +94,13 @@ internal sealed class PianoStage : FrameworkElement
 
     public void SetState(IReadOnlyList<NoteEvent> notes, double position, bool playing, IReadOnlySet<int> pressed)
     {
-        _notes = notes; _position = position; _playing = playing; _pressed = pressed;
+        if (!ReferenceEquals(_notes, notes))
+        {
+            _notes = notes;
+            _maxNoteDuration = 0;
+            foreach (var note in notes) if (note.Duration > _maxNoteDuration) _maxNoteDuration = note.Duration;
+        }
+        _position = position; _playing = playing; _pressed = pressed;
         InvalidateVisual();
     }
 
@@ -170,6 +180,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         base.OnRender(dc);
         var width = ActualWidth; var height = ActualHeight; if (width < 1 || height < 1) return;
+        _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
         var keyHeight = KeyboardHeight; var keyTop = height - keyHeight; var lane = width / KeyCount;
         var scale = _visual.CameraZoom / 100;
         var parallax = _visual.CameraParallax / 100;
@@ -210,7 +221,8 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawStars(DrawingContext dc, double width, double height)
     {
-        if (_stars.Count == 0 || Math.Abs(_stars[^1].X - width) > .5) RebuildStars(width, height);
+        // The star field is cleared on resize; rebuilding it here every frame made the stars flicker like noise.
+        if (_stars.Count == 0) RebuildStars(width, height);
         foreach (var star in _stars)
         {
             var twinkle = .35 + .65 * (.5 + .5 * Math.Sin(_elapsed * star.Speed + star.Phase));
@@ -241,27 +253,21 @@ internal sealed class PianoStage : FrameworkElement
         if (!_visual.ShowNotes || !_playing) return;
         var noteSpeed = FallSpeed * _visual.NoteFallSpeed / 550;
         var lookBehind = hitY / noteSpeed + 1;
-        foreach (var note in _notes)
+        // Notes are sorted by start time: anything still on screen started no earlier than (position - 1 s - longest note).
+        var latestStart = _position + lookBehind;
+        for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _position - 1 - _maxNoteDuration); i < _notes.Count; i++)
         {
-            if (note.Pitch < FirstPitch || note.Pitch >= FirstPitch + KeyCount || note.Start > _position + lookBehind || note.End < _position - 1) continue;
+            var note = _notes[i];
+            if (note.Start > latestStart) break;
+            if (note.Pitch < FirstPitch || note.Pitch >= FirstPitch + KeyCount || note.End < _position - 1) continue;
             var noteHeight = Math.Clamp(note.Duration * noteSpeed, 16, hitY * .9);
             var bottom = hitY - (note.Start - _position) * noteSpeed;
             var top = bottom - noteHeight;
             if (top > hitY || bottom < 0) continue;
             var rect = new Rect((note.Pitch - FirstPitch) * lane + lane * .1, top, lane * .8, noteHeight);
             var color = note.Played ? Color.FromRgb(82, 237, 208) : note.Missed ? Color.FromRgb(255, 83, 113) : NoteColor(note.Pitch);
-            DrawNeonNote(dc, rect, color, note.Played ? .42 : 1);
+            DrawConfiguredNote(dc, rect, color, note.Played ? .42 : 1);
         }
-    }
-
-    private void DrawNeonNote(DrawingContext dc, Rect r, Color color, double opacity)
-    {
-        DrawConfiguredNote(dc, r, color, opacity);
-    }
-
-    private void DrawGlowPill(DrawingContext dc, Rect r, Color color, double opacity)
-    {
-        DrawConfiguredNote(dc, r, color, opacity);
     }
 
     private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity)
@@ -329,7 +335,7 @@ internal sealed class PianoStage : FrameworkElement
             if (bottom <= tailY) continue;
             var opacity = Math.Clamp(1 - tailY / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
             var r = new Rect((trail.Pitch - FirstPitch) * lane + lane * .03, tailY, lane * .94, bottom - tailY);
-            DrawGlowPill(dc, r, NoteColor(trail.Pitch), opacity);
+            DrawConfiguredNote(dc, r, NoteColor(trail.Pitch), opacity);
         }
     }
 
@@ -377,7 +383,7 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawKeyboard(DrawingContext dc, double width, double height, double lane, double top)
     {
         dc.DrawRectangle(Brush(Color.FromArgb(248, 8, 8, 15)), null, new Rect(0, top, width, height - top));
-        var whites = Enumerable.Range(FirstPitch, KeyCount).Where(p => !IsBlack(p)).ToArray(); var whiteWidth = width / whites.Length;
+        var whites = WhitePitches; var whiteWidth = width / whites.Length;
         var glowPen = new Pen(Brush(Color.FromArgb((byte)(30 + _visual.KeyLighting * .95), 246, 92, 255)), 5 + _visual.BloomSize / 10); dc.DrawLine(glowPen, new Point(0, top + 1), new Point(width, top + 1));
         for (var i = 0; i < whites.Length; i++)
         {
@@ -393,7 +399,7 @@ internal sealed class PianoStage : FrameworkElement
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!IsBlack(pitch)) continue;
-            var before = whites.Count(p => p < pitch); var x = before * whiteWidth - whiteWidth * .29;
+            var x = WhitesBelow[pitch] * whiteWidth - whiteWidth * .29;
             var rect = new Rect(x, top + 4, whiteWidth * .58, (height - top) * (.52 + _visual.KeyOverhang / 100 * .35));
             if (_pressed.Contains(pitch))
             {
@@ -429,26 +435,26 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawWatermark(DrawingContext dc, double width, double height)
     {
         var text = new FormattedText("KEYFLOW", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI Semibold"), 11, Brush(Color.FromArgb(110, 232, 224, 250)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            new Typeface("Segoe UI Semibold"), 11, Brush(Color.FromArgb(110, 232, 224, 250)), _pixelsPerDip);
         dc.DrawText(text, new Point(width / 2 - text.Width / 2, height - KeyboardHeight - text.Height - 18));
     }
 
     private void DrawCounter(DrawingContext dc, double width)
     {
         var text = new FormattedText($"{_pressed.Count:00} KEYS", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI Semibold"), 12, Brush(Color.FromArgb(190, 243, 229, 255)), VisualTreeHelper.GetDpi(this).PixelsPerDip);
+            new Typeface("Segoe UI Semibold"), 12, Brush(Color.FromArgb(190, 243, 229, 255)), _pixelsPerDip);
         dc.DrawText(text, new Point(width - text.Width - 30, 28));
     }
 
-    private static void DrawLabel(DrawingContext dc, string text, Point center, double size, Color color, bool bold)
+    private void DrawLabel(DrawingContext dc, string text, Point center, double size, Color color, bool bold)
     {
-        var formatted = new FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface(bold ? "Segoe UI Semibold" : "Segoe UI"), size, Brush(color), VisualTreeHelper.GetDpi(Application.Current.MainWindow).PixelsPerDip);
+        var formatted = new FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface(bold ? "Segoe UI Semibold" : "Segoe UI"), size, Brush(color), _pixelsPerDip);
         dc.DrawText(formatted, new Point(center.X - formatted.Width / 2, center.Y - formatted.Height / 2));
     }
 
     private void Stage_MouseDown(object sender, MouseButtonEventArgs e)
     {
-        var point = e.GetPosition(this); if (point.Y < ActualHeight - KeyboardHeight) return;
+        var point = e.GetPosition(this); Focus(); if (point.Y < ActualHeight - KeyboardHeight) return;
         _mouseDown = true; _mousePitch = PitchAt(point); CaptureMouse(); PianoKeyChanged?.Invoke(_mousePitch, true); e.Handled = true;
     }
     private void Stage_MouseUp(object sender, MouseButtonEventArgs e) { ReleaseMouseKey(); if (_mouseDown) e.Handled = true; }
@@ -458,17 +464,27 @@ internal sealed class PianoStage : FrameworkElement
     }
     private int PitchAt(Point point)
     {
-        var whites = Enumerable.Range(FirstPitch, KeyCount).Where(p => !IsBlack(p)).ToArray(); var keyWidth = ActualWidth / whites.Length;
+        var whites = WhitePitches; var keyWidth = ActualWidth / whites.Length;
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!IsBlack(pitch)) continue;
-            var x = whites.Count(p => p < pitch) * keyWidth - keyWidth * .29;
+            var x = WhitesBelow[pitch] * keyWidth - keyWidth * .29;
             if (point.X >= x && point.X < x + keyWidth * .58 && point.Y < ActualHeight - KeyboardHeight + KeyboardHeight * .63) return pitch;
         }
         return whites[Math.Clamp((int)(point.X / keyWidth), 0, whites.Length - 1)];
     }
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); base.OnRenderSizeChanged(sizeInfo); InvalidateVisual(); }
     private static bool IsBlack(int pitch) => pitch % 12 is 1 or 3 or 6 or 8 or 10;
+    private static int[] BuildWhitesBelow()
+    {
+        var result = new int[128]; var count = 0;
+        for (var pitch = 0; pitch < 128; pitch++)
+        {
+            result[pitch] = count;
+            if (pitch >= FirstPitch && pitch < FirstPitch + KeyCount && !IsBlack(pitch)) count++;
+        }
+        return result;
+    }
     private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }
     private static double Hue(int pitch) => 188 + (pitch - FirstPitch) / 87.0 * 112;
     private static Color ColorFromHue(double hue)
