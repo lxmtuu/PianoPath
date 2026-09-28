@@ -28,3 +28,7 @@ Thumbs.db
 
 # Installer output
 installer/Output/
+
+# Session transcripts and handoff dumps are local-only; never commit them
+keyflow-session*.txt
+handoff/
