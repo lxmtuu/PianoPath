@@ -203,10 +203,31 @@ internal static class VerificationSuite
         Results.Add("PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output or graceful silent fallback, and silent unload.");
     }
 
+    /// <summary>True when the file on disk is still a Git LFS pointer rather than the real asset.</summary>
+    private static bool IsGitLfsPointer(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            var probe = new byte[(int)Math.Min(256, stream.Length)];
+            if (probe.Length == 0) return false;
+            stream.ReadExactly(probe, 0, probe.Length);
+            return System.Text.Encoding.ASCII.GetString(probe).Contains("git-lfs.github.com/spec/v1", StringComparison.Ordinal);
+        }
+        catch { return false; }
+    }
+
     private static void VerifyBundledPiano()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
         Assert(File.Exists(path), "The bundled Yamaha grand SoundFont should be copied beside the built application.");
+        if (IsGitLfsPointer(path))
+        {
+            // Fresh clones that skip Git LFS (including CI) only carry the pointer file; the SF2 reader is
+            // still exercised by the generated fixture, so this is an environment note rather than a failure.
+            Results.Add("NOTE the bundled SoundFont is still a Git LFS pointer here, so the deep bundled-piano checks were skipped; run `git lfs pull` to test it locally.");
+            return;
+        }
         var font = SoundFontReader.Read(path);
         Assert(font.Name.Contains("Grand Piano", StringComparison.OrdinalIgnoreCase), "The bundled SoundFont should identify its grand-piano program in the SF2 metadata.");
         var piano = font.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0);
