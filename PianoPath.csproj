@@ -16,6 +16,7 @@
   <ItemGroup>
     <Content Include="Assets\ConcertGrand.sf2" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\ATTRIBUTION.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Assets\Shaders\**\*" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
