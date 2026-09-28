@@ -70,7 +70,7 @@ float3 EvaluateLight(float3 N, float3 V, float3 L, float3 radiance, float3 albed
     float NdotV = saturate(dot(N, V));
     float NdotH = saturate(dot(N, H));
     float VdotH = saturate(dot(V, H));
-    float3 f0 = lerp(0.04.xxx, albedo, metallic);
+    float3 f0 = lerp(float3(0.04, 0.04, 0.04), albedo, metallic);
     float3 F = FresnelSchlick(VdotH, f0);
     float D = DistributionGGX(NdotH, roughness);
     float G = GeometrySchlickGGX(NdotV, roughness) * GeometrySchlickGGX(NdotL, roughness);
