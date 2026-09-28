@@ -21,10 +21,8 @@ public partial class MainWindow : Window
     private readonly MidiDeviceService _midi = new();
     private readonly PianoAudioEngine _audio = new();
     private readonly Dictionary<string, Slider> _visualSliders = [];
-    private readonly Dictionary<string, TextBlock> _visualValueLabels = [];
     private readonly Dictionary<string, TextBox> _visualColorInputs = [];
     private readonly Dictionary<string, Button> _visualColorButtons = [];
-    private ComboBox? _paletteCombo;
     private PianoVisualSettings _visualSettings = new();
     private AviVideoRecorder? _videoRecorder;
     private DispatcherTimer? _recordTimer;
@@ -157,7 +155,7 @@ public partial class MainWindow : Window
         Stage.Advance(elapsed);
         if (_playing && _position >= SongDuration()) { _position = SongDuration(); Stop(); }
         UpdateStage(); UpdateTime(); UpdateStats();
-        if (!_playing && Stage.LiveTrailCount == 0 && Stage.SparkCount == 0) { _timer.Stop(); _clock.Stop(); }
+        if (!_playing && !Stage.HasActiveEffects) { _timer.Stop(); _clock.Stop(); }
     }
 
     private void UpdateStage() => Stage.SetState(_notes, _position, _playing, _pressed);
@@ -300,7 +298,8 @@ public partial class MainWindow : Window
         if (e.Key == Key.F11) { ToggleFullScreen(); e.Handled = true; return; }
         if (e.Key == Key.Escape)
         {
-            // Escape always toggles the main Stage Design panel, even while the stage is in its idle full-screen state.
+            // Escape first clears an active settings search, otherwise it toggles the settings dock, even while the stage is in its idle full-screen state.
+            if (SettingsSearchBox.IsKeyboardFocused && SettingsSearchBox.Text.Length > 0) { SettingsSearchBox.Text = ""; e.Handled = true; return; }
             if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel(); else OpenSettingsPanel();
             e.Handled = true; return;
         }
@@ -368,227 +367,6 @@ public partial class MainWindow : Window
         DeviceStatusBadge.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
     }
 
-    private void BuildVisualSettingsControls()
-    {
-        _loadingVisualSettings = true;
-        AddSection(SceneSettingsHost, "LIVE SCENE", "Toggle each layer without interrupting MIDI input.");
-        AddToggleGrid(SceneSettingsHost,
-            ("Background", nameof(PianoVisualSettings.ShowBackground)), ("Gradient", nameof(PianoVisualSettings.BackgroundGradient)),
-            ("Guide lanes", nameof(PianoVisualSettings.BackgroundGuide)), ("Stars", nameof(PianoVisualSettings.ShowStars)),
-            ("Falling notes", nameof(PianoVisualSettings.ShowNotes)),
-            ("Embers", nameof(PianoVisualSettings.ShowEmbers)), ("Halo", nameof(PianoVisualSettings.ShowHalo)),
-            ("Flame impact", nameof(PianoVisualSettings.ShowFlame)), ("Piano keys", nameof(PianoVisualSettings.ShowKeys)),
-            ("Key animation", nameof(PianoVisualSettings.AnimateKeys)), ("Key counter", nameof(PianoVisualSettings.ShowCounter)),
-            ("Keyflow watermark", nameof(PianoVisualSettings.ShowWatermark)), ("3D note shading", nameof(PianoVisualSettings.Notes3D)));
-        SceneSettingsHost.Children.Add(SettingsButton("CHOOSE BACKGROUND IMAGE", ChooseStageBackground));
-        SceneSettingsHost.Children.Add(SettingsButton("CLEAR BACKGROUND IMAGE", (_, _) => { _visualSettings.BackgroundImagePath = ""; ApplyVisualSettings("Background image removed"); }));
-        AddSingleColor(SceneSettingsHost, "Halo color", nameof(PianoVisualSettings.HaloColor));
-        AddSection(SceneSettingsHost, "SCENE PERFORMANCE", "Layers and bloom are applied directly to the live renderer.");
-        AddSlider(SceneSettingsHost, "Keyboard light", nameof(PianoVisualSettings.KeyLighting), 0, 100);
-        AddSlider(SceneSettingsHost, "Black key overhang", nameof(PianoVisualSettings.KeyOverhang), 0, 100);
-
-        AddSection(NoteSettingsHost, "NOTE STYLE", "Choose a color family or specify custom endpoint colors.");
-        _paletteCombo = new ComboBox { ItemsSource = new[] { "Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom" }, SelectedItem = _visualSettings.Palette, Height = 36, Margin = new Thickness(0, 3, 0, 12) };
-        _paletteCombo.SelectionChanged += (_, _) => { if (_paletteCombo.SelectedItem is string value) { _visualSettings.Palette = value; ApplyVisualSettings("Note palette updated"); } };
-        NoteSettingsHost.Children.Add(_paletteCombo);
-        AddColorPair(NoteSettingsHost, "Gradient start", nameof(PianoVisualSettings.NoteColorStart), "Gradient end", nameof(PianoVisualSettings.NoteColorEnd));
-        AddSlider(NoteSettingsHost, "Tint / opacity", nameof(PianoVisualSettings.NoteTint), 0, 100);
-        AddSlider(NoteSettingsHost, "Bloom / glow", nameof(PianoVisualSettings.NoteGlow), 0, 200);
-        AddSlider(NoteSettingsHost, "Edge brightness", nameof(PianoVisualSettings.NoteEdge), 0, 200);
-        AddSlider(NoteSettingsHost, "Light refraction", nameof(PianoVisualSettings.NoteRefraction), 0, 100);
-        AddSlider(NoteSettingsHost, "Corner roundness", nameof(PianoVisualSettings.NoteRoundness), 0, 100);
-        AddSlider(NoteSettingsHost, "Edge width", nameof(PianoVisualSettings.NoteEdgeWidth), 0, 100);
-        AddSlider(NoteSettingsHost, "Live fall speed", nameof(PianoVisualSettings.NoteFallSpeed), 100, 1000);
-        NoteSettingsHost.Children.Add(new TextBlock { Text = "Only a physically held key extends its visual note. Pedals sustain the audio without stretching the bar after key release.", Foreground = new SolidColorBrush(Color.FromRgb(143, 132, 157)), FontSize = 9, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 7, 0, 13) });
-
-        AddSection(ParticleSettingsHost, "EMBERS · EMITTER", "Particle response, spread, life and motion are adjustable in real time.");
-        AddSlider(ParticleSettingsHost, "Emitter size", nameof(PianoVisualSettings.EmitterSize), 0, 100);
-        AddSlider(ParticleSettingsHost, "Spiral", nameof(PianoVisualSettings.Spiral), 0, 100);
-        AddSlider(ParticleSettingsHost, "Speed", nameof(PianoVisualSettings.ParticleSpeed), 0, 300);
-        AddSlider(ParticleSettingsHost, "Amount", nameof(PianoVisualSettings.ParticleAmount), 0, 120);
-        AddSlider(ParticleSettingsHost, "Velocity", nameof(PianoVisualSettings.ParticleVelocity), 0, 800);
-        AddSlider(ParticleSettingsHost, "Velocity randomness", nameof(PianoVisualSettings.ParticleRandomness), 0, 100);
-        AddSlider(ParticleSettingsHost, "Spread", nameof(PianoVisualSettings.ParticleSpread), 0, 100);
-        AddSlider(ParticleSettingsHost, "Note response", nameof(PianoVisualSettings.ParticleResponse), 0, 100);
-        AddSection(ParticleSettingsHost, "PARTICLE · MOTION", "Simulated gravity, drag and a scrolling vector field.");
-        AddSlider(ParticleSettingsHost, "Particle lifetime", nameof(PianoVisualSettings.ParticleLife), .05, 3);
-        AddSlider(ParticleSettingsHost, "Lifetime randomness", nameof(PianoVisualSettings.ParticleLifeRandomness), 0, 100);
-        AddSlider(ParticleSettingsHost, "Particle size", nameof(PianoVisualSettings.ParticleSize), .2, 16);
-        AddSlider(ParticleSettingsHost, "Size randomness", nameof(PianoVisualSettings.ParticleSizeRandomness), 0, 100);
-        AddSlider(ParticleSettingsHost, "Particle glow", nameof(PianoVisualSettings.ParticleGlow), 0, 200);
-        AddSlider(ParticleSettingsHost, "Gravity", nameof(PianoVisualSettings.Gravity), -600, 1200);
-        AddSlider(ParticleSettingsHost, "Drag", nameof(PianoVisualSettings.Drag), 0, 100);
-        AddSlider(ParticleSettingsHost, "Vector field", nameof(PianoVisualSettings.VectorField), 0, 1000);
-        AddSlider(ParticleSettingsHost, "Field scale", nameof(PianoVisualSettings.FieldScale), 10, 300);
-        AddSlider(ParticleSettingsHost, "Evolution speed", nameof(PianoVisualSettings.EvolutionSpeed), 0, 400);
-        AddSlider(ParticleSettingsHost, "Physics time factor", nameof(PianoVisualSettings.PhysicsTimeFactor), 10, 300);
-
-        AddSection(CameraSettingsHost, "CAMERA & BACKGROUND", "Subtle parallax and framing keep the keyboard anchored.");
-        AddSlider(CameraSettingsHost, "Parallax", nameof(PianoVisualSettings.CameraParallax), 0, 100);
-        AddSlider(CameraSettingsHost, "Zoom", nameof(PianoVisualSettings.CameraZoom), 65, 150);
-        AddSlider(CameraSettingsHost, "Horizontal framing", nameof(PianoVisualSettings.CameraOffset), 0, 100);
-        AddSlider(CameraSettingsHost, "Background dim", nameof(PianoVisualSettings.BackgroundDim), 0, 100);
-        AddSection(CameraSettingsHost, "IMAGE & POST FX", "Tone and bloom are evaluated by the live stage renderer.");
-        AddSlider(CameraSettingsHost, "Saturation", nameof(PianoVisualSettings.Saturation), 0, 200);
-        AddSlider(CameraSettingsHost, "Contrast", nameof(PianoVisualSettings.Contrast), 0, 200);
-        AddSlider(CameraSettingsHost, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150);
-        AddSlider(CameraSettingsHost, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150);
-        CameraSettingsHost.Children.Add(SettingsButton("CHOOSE BACKGROUND IMAGE", ChooseStageBackground));
-        CameraSettingsHost.Children.Add(SettingsButton("CLEAR BACKGROUND IMAGE", (_, _) => { _visualSettings.BackgroundImagePath = ""; ApplyVisualSettings("Background image removed"); }));
-        _loadingVisualSettings = false;
-    }
-
-    private static void AddSection(Panel host, string title, string subtitle)
-    {
-        host.Children.Add(new TextBlock { Text = title, Foreground = new SolidColorBrush(Color.FromRgb(224, 184, 244)), FontSize = 9, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 3) });
-        host.Children.Add(new TextBlock { Text = subtitle, Foreground = new SolidColorBrush(Color.FromRgb(137, 128, 151)), FontSize = 8, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
-    }
-
-    private void AddToggleGrid(Panel host, params (string label, string property)[] toggles)
-    {
-        var grid = new UniformGrid { Columns = 2, Margin = new Thickness(0, 0, 0, 7) };
-        foreach (var (label, property) in toggles)
-        {
-            var check = new CheckBox { Content = label, Tag = property, IsChecked = (bool)typeof(PianoVisualSettings).GetProperty(property)!.GetValue(_visualSettings)!, Margin = new Thickness(0, 5, 8, 5), FontSize = 9 };
-            check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed; grid.Children.Add(check);
-        }
-        host.Children.Add(grid);
-    }
-
-    private void AddSlider(Panel host, string label, string property, double minimum, double maximum)
-    {
-        var prop = typeof(PianoVisualSettings).GetProperty(property)!;
-        var row = new StackPanel { Margin = new Thickness(0, 2, 0, 7) };
-        var header = new DockPanel(); header.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(222, 216, 231)), FontSize = 9, VerticalAlignment = VerticalAlignment.Center });
-        var value = new TextBlock { Text = FormatSetting(property, (double)prop.GetValue(_visualSettings)!), Foreground = new SolidColorBrush(Color.FromRgb(234, 180, 255)), FontSize = 9, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Right };
-        DockPanel.SetDock(value, Dock.Right); header.Children.Add(value); row.Children.Add(header);
-        var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = Math.Clamp((double)prop.GetValue(_visualSettings)!, minimum, maximum), Tag = property, Margin = new Thickness(0, 1, 0, 0), ToolTip = label };
-        slider.ValueChanged += VisualSlider_ValueChanged; _visualSliders[property] = slider; _visualValueLabels[property] = value; row.Children.Add(slider); host.Children.Add(row);
-    }
-
-    private static string FormatSetting(string property, double value) => property switch
-    {
-        nameof(PianoVisualSettings.ParticleLife) => $"{value:0.00} s",
-        nameof(PianoVisualSettings.ParticleAmount) => $"{value:0}",
-        nameof(PianoVisualSettings.NoteFallSpeed) or nameof(PianoVisualSettings.ParticleVelocity) or nameof(PianoVisualSettings.Gravity) or nameof(PianoVisualSettings.VectorField) => $"{value:0}",
-        nameof(PianoVisualSettings.ParticleSize) => $"{value:0.0}",
-        _ => $"{value:0}%"
-    };
-
-    private void AddColorPair(Panel host, string firstLabel, string firstProperty, string secondLabel, string secondProperty)
-    {
-        var grid = new Grid { Margin = new Thickness(0, 3, 0, 11) }; grid.ColumnDefinitions.Add(new ColumnDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition());
-        AddColorBox(grid, 0, firstLabel, firstProperty); AddColorBox(grid, 1, secondLabel, secondProperty); host.Children.Add(grid);
-    }
-
-    private void AddSingleColor(Panel host, string label, string property)
-    {
-        var grid = new Grid { Margin = new Thickness(0, 3, 0, 11) }; grid.ColumnDefinitions.Add(new ColumnDefinition());
-        AddColorBox(grid, 0, label, property); host.Children.Add(grid);
-    }
-
-    private void AddColorBox(Grid grid, int column, string label, string property)
-    {
-        var stack = new StackPanel { Margin = new Thickness(column == 0 ? 0 : 8, 0, column == 0 ? 8 : 0, 0) };
-        if (!string.IsNullOrWhiteSpace(label)) stack.Children.Add(new TextBlock { Text = label, Foreground = new SolidColorBrush(Color.FromRgb(152, 143, 165)), FontSize = 8, Margin = new Thickness(0, 0, 0, 4) });
-        var currentValue = (string)typeof(PianoVisualSettings).GetProperty(property)!.GetValue(_visualSettings)!;
-        var row = new DockPanel { LastChildFill = true };
-        var swatch = new Button { Tag = property, Width = 30, Height = 30, Padding = new Thickness(2), Margin = new Thickness(0, 0, 6, 0), ToolTip = "Open color picker" };
-        swatch.Click += VisualColorButton_Click; SetColorSwatch(swatch, currentValue); DockPanel.SetDock(swatch, Dock.Left); row.Children.Add(swatch);
-        var box = new TextBox { Text = currentValue, Tag = property, Background = new SolidColorBrush(Color.FromRgb(25, 20, 33)), Foreground = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(84, 64, 101)), Padding = new Thickness(8, 6, 8, 6), FontSize = 10, VerticalContentAlignment = VerticalAlignment.Center };
-        box.LostFocus += VisualColor_LostFocus; row.Children.Add(box); stack.Children.Add(row);
-        _visualColorInputs[property] = box; _visualColorButtons[property] = swatch;
-        Grid.SetColumn(stack, column); grid.Children.Add(stack);
-    }
-
-    private static void SetColorSwatch(Button button, string value)
-    {
-        try { button.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(value)!); }
-        catch { button.Background = new SolidColorBrush(Color.FromRgb(198, 110, 255)); }
-    }
-
-    private void VisualColorButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (sender is not Button { Tag: string property }) return;
-        var input = _visualColorInputs[property];
-        var picker = new ColorPickerWindow(input.Text) { Owner = this };
-        if (picker.ShowDialog() != true || picker.SelectedHex is not { } selected) return;
-        input.Text = selected;
-        typeof(PianoVisualSettings).GetProperty(property)!.SetValue(_visualSettings, selected);
-        SetColorSwatch(_visualColorButtons[property], selected);
-        if (property is nameof(PianoVisualSettings.NoteColorStart) or nameof(PianoVisualSettings.NoteColorEnd))
-        {
-            _visualSettings.Palette = "Custom";
-            if (_paletteCombo is not null) _paletteCombo.SelectedItem = "Custom";
-        }
-        ApplyVisualSettings(property == nameof(PianoVisualSettings.HaloColor) ? "Halo color applied" : "Custom note color applied");
-    }
-
-    private static Button SettingsButton(string text, RoutedEventHandler click)
-    {
-        var button = new Button { Content = text, Padding = new Thickness(10, 7, 10, 7), Margin = new Thickness(0, 7, 0, 2), HorizontalAlignment = HorizontalAlignment.Stretch };
-        button.Click += click;
-        return button;
-    }
-
-    private void VisualToggle_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_loadingVisualSettings || sender is not CheckBox check || check.Tag is not string property) return;
-        typeof(PianoVisualSettings).GetProperty(property)!.SetValue(_visualSettings, check.IsChecked == true);
-        ApplyVisualSettings($"{check.Content} {(check.IsChecked == true ? "on" : "off")}");
-    }
-
-    private void VisualSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (!_uiReady || _loadingVisualSettings || sender is not Slider slider || slider.Tag is not string property) return;
-        typeof(PianoVisualSettings).GetProperty(property)!.SetValue(_visualSettings, slider.Value);
-        if (_visualValueLabels.TryGetValue(property, out var label)) label.Text = FormatSetting(property, slider.Value);
-        ApplyVisualSettings("Visual changes apply live");
-    }
-
-    private void VisualColor_LostFocus(object sender, RoutedEventArgs e)
-    {
-        if (sender is not TextBox box || box.Tag is not string property) return;
-        try
-        {
-            _ = ColorConverter.ConvertFromString(box.Text) ?? throw new FormatException();
-            typeof(PianoVisualSettings).GetProperty(property)!.SetValue(_visualSettings, box.Text);
-            if (_visualColorButtons.TryGetValue(property, out var swatch)) SetColorSwatch(swatch, box.Text);
-            if (property is nameof(PianoVisualSettings.NoteColorStart) or nameof(PianoVisualSettings.NoteColorEnd))
-            {
-                _visualSettings.Palette = "Custom";
-                if (_paletteCombo is not null) _paletteCombo.SelectedItem = "Custom";
-            }
-            ApplyVisualSettings("Custom note colors applied");
-        }
-        catch { box.Text = (string)typeof(PianoVisualSettings).GetProperty(property)!.GetValue(_visualSettings)!; }
-    }
-
-    private void ApplyVisualSettings(string status, bool reloadBackground = false)
-    {
-        _visualSettings.Clamp(); Stage.SetVisualSettings(_visualSettings, reloadBackground);
-        if (reloadBackground && Stage.BackgroundLoadError is { } error)
-        {
-            SettingsSaveLabel.Text = "Background image failed to load";
-            MessageBox.Show(this, $"Keyflow could not load this image. Choose a PNG, JPEG, BMP, GIF or TIFF file.\n\n{error}", "Background image", MessageBoxButton.OK, MessageBoxImage.Warning);
-        }
-        else SettingsSaveLabel.Text = status;
-        _settingsSaveTimer.Stop(); _settingsSaveTimer.Start();
-    }
-
-    private void SaveVisualSettings_Click(object sender, RoutedEventArgs e) => SaveVisualSettings();
-    private void SaveVisualSettings()
-    {
-        try { PianoVisualSettingsStore.Save(_visualSettings); SettingsSaveLabel.Text = "Saved to this computer"; }
-        catch (Exception ex) { SettingsSaveLabel.Text = "Save failed"; if (!_closing) MessageBox.Show(this, ex.Message, "Stage settings", MessageBoxButton.OK, MessageBoxImage.Warning); }
-    }
-
-    private void ChooseStageBackground(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files (*.*)|*.*", Title = "Choose a piano visualizer background", CheckFileExists = true, Multiselect = false };
-        if (dialog.ShowDialog(this) == true) { _visualSettings.BackgroundImagePath = dialog.FileName; ApplyVisualSettings("Background image applied", reloadBackground: true); }
-    }
-
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
@@ -596,10 +374,8 @@ public partial class MainWindow : Window
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            var ratio = Stage.ActualHeight / Math.Max(1, Stage.ActualWidth);
-            var width = Math.Max(640, Math.Min(1280, (int)Stage.ActualWidth)) & ~1;
-            var height = Math.Max(360, (int)(width * ratio)) & ~1;
-            _videoRecorder = new AviVideoRecorder(dialog.FileName, width, height, 20);
+            var (width, height) = RecordingSize();
+            _videoRecorder = new AviVideoRecorder(dialog.FileName, width, height, (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60));
             _recordingPath = dialog.FileName;
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
@@ -672,7 +448,7 @@ public partial class MainWindow : Window
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;
         try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) MessageBox.Show(this, ex.Message, "Video recording", MessageBoxButton.OK, MessageBoxImage.Warning); }
-        RecordButton.Content = "●  REC"; RecordButton.Background = new SolidColorBrush(Color.FromRgb(39, 19, 24));
+        RecordButton.Content = "●  REC"; RecordButton.ClearValue(BackgroundProperty);
         RecordButton.ToolTip = "Record the live piano visualizer";
         if (showMessage && !_closing) MessageBox.Show(this, $"Video saved.\n{path}\n\n{(note is null ? "" : note + "\n\n")}This AVI contains the piano visuals; system audio is not mixed into the recording.", "Recording complete", MessageBoxButton.OK, MessageBoxImage.Information);
     }
@@ -859,6 +635,7 @@ public partial class MainWindow : Window
         _suppressTracks = true; TrackCombo.Items.Clear(); TrackCombo.Items.Add("All notes");
         foreach (var track in _allNotes.Select(n => n.Track).Distinct().Order()) TrackCombo.Items.Add(_trackNames.TryGetValue(track, out var name) ? $"Track {track + 1} · {name}" : $"Track {track + 1}");
         TrackCombo.SelectedIndex = 0; _activeTrack = -1; _suppressTracks = false;
+        _mutedTracks.Clear(); RebuildTrackList();
     }
     private void TrackCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
@@ -869,8 +646,11 @@ public partial class MainWindow : Window
     {
         ReleasePlaybackNotes();
         IEnumerable<NoteEvent> notes = _activeTrack < 0 ? _allNotes : _allNotes.Where(n => n.Track == _activeTrack);
-        if (ModeCombo.SelectedIndex == 2) notes = notes.Where(n => n.Pitch >= 60);
-        if (ModeCombo.SelectedIndex == 3) notes = notes.Where(n => n.Pitch < 60);
+        if (_mutedTracks.Count > 0) notes = notes.Where(n => !_mutedTracks.Contains(n.Track));
+        // The hand split is shared with the per-hand color mode (Notes page), so practice filters and colors always agree.
+        var split = (int)Math.Round(_visualSettings.HandSplitPitch);
+        if (ModeCombo.SelectedIndex == 2) notes = notes.Where(n => n.Pitch >= split);
+        if (ModeCombo.SelectedIndex == 3) notes = notes.Where(n => n.Pitch < split);
         _notes = notes.OrderBy(n => n.Start).ToList();
         SyncPlayhead();
     }
