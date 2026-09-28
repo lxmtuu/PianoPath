@@ -22,6 +22,10 @@ TestResults/
 *.zip
 keyflow-verification*.log
 
+# Agent / handoff scratch that must never be committed
+handoff/
+keyflow-session*.txt
+
 # OS files
 Thumbs.db
 .DS_Store
