@@ -304,6 +304,10 @@ public partial class MainWindow
         SliderRow(atmosphere, "Horizon glow", nameof(PianoVisualSettings.HorizonGlow), 0, 100, "Colored glow rising from the keyboard line.");
         SliderRow(atmosphere, "Light beam intensity", nameof(PianoVisualSettings.BeamIntensity), 0, 100, "Brightness of the columns above sounding keys.");
 
+        var grid = Card(SceneSettingsHost, "STAGE GRID", "A receding perspective grid that turns the empty space into a stage.");
+        Toggle(grid, "Show stage grid", nameof(PianoVisualSettings.ShowGrid), "Perspective lines vanishing behind the keyboard.");
+        SliderRow(grid, "Grid intensity", nameof(PianoVisualSettings.GridIntensity), 0, 100, "Brightness of the grid lines.").VisibleWhen = () => _visualSettings.ShowGrid;
+
         var halo = Card(SceneSettingsHost, "HIT LINE & HALO", "The line where the notes meet the keys, and how it reacts to playing.");
         Toggle(halo, "Show halo line", nameof(PianoVisualSettings.ShowHalo), "Glowing line across the stage at key height.");
         ColorRow(halo, "Halo color", nameof(PianoVisualSettings.HaloColor), "Core color of the line, the horizon glow and the keyboard rim light.");
