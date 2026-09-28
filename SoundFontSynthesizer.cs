@@ -89,6 +89,23 @@ internal static class SoundFontReader
         }
     }
 
+    /// <summary>
+    /// True when <paramref name="path"/> exists but is still the ~134-byte Git LFS pointer text file
+    /// instead of the real SoundFont, which is what a clone without <c>git lfs pull</c> (or a CI checkout
+    /// with <c>lfs: false</c>) leaves behind. A missing file is not a pointer and returns false.
+    /// </summary>
+    internal static bool IsLfsPointer(string path)
+    {
+        if (!File.Exists(path)) return false;
+        var length = new FileInfo(path).Length;
+        if (length == 0) return false;
+        if (length >= 1024 * 1024) return false; // a real bank is far larger than any pointer file
+        var head = new byte[(int)Math.Min(48, length)];
+        using var stream = File.OpenRead(path);
+        var read = stream.Read(head);
+        return Encoding.ASCII.GetString(head, 0, read).StartsWith("version https://git-lfs.github.com/spec", StringComparison.Ordinal);
+    }
+
     public static SoundFontData Read(string path)
     {
         var file = File.ReadAllBytes(path);

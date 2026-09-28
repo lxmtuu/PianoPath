@@ -52,6 +52,8 @@ public partial class MainWindow : Window
     private static readonly TimeSpan ChromeIdleDelay = TimeSpan.FromSeconds(2.8);
     /// <summary>Set to false for automated snapshots so the toolbar and settings never disappear while a capture is pending.</summary>
     internal bool AutoHideChrome { get; set; } = true;
+    /// <summary>Set by the verification suite so a problem lands in the log instead of a modal dialog nobody can dismiss.</summary>
+    internal bool SuppressErrorDialogs { get; set; }
     private static readonly int[] ComputerMap = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
     private static readonly Key[] ComputerKeys = [Key.A, Key.W, Key.S, Key.E, Key.D, Key.F, Key.T, Key.G, Key.Y, Key.H, Key.U, Key.J, Key.K];
 
@@ -86,7 +88,15 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         Loaded -= MainWindow_Loaded;
-        await LoadSoundFontAsync(Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2"), builtIn: true);
+        var bundled = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
+        if (SoundFontReader.IsLfsPointer(bundled))
+        {
+            // The checkout skipped Git LFS. Report the fix instead of a confusing "not an SF2 file" parse error.
+            UpdateSoundFontUi();
+            SoundFontHint.Text = "ConcertGrand.sf2 is a Git LFS pointer · run 'git lfs install' then 'git lfs pull', or load another .sf2";
+            return;
+        }
+        await LoadSoundFontAsync(bundled, builtIn: true);
     }
 
     private void Play_Click(object sender, RoutedEventArgs e) => TogglePlay();
@@ -239,7 +249,7 @@ public partial class MainWindow : Window
         {
             if (_closing) return;
             SoundFontLabel.Text = _audio.HasSoundFont ? "PREVIOUS SOUNDFONT STILL ACTIVE" : "NO SOUNDFONT · SILENT";
-            SoundFontHint.Text = ex.Message; MessageBox.Show(this, $"Could not load this SoundFont.\n{ex.Message}", "SoundFont", MessageBoxButton.OK, MessageBoxImage.Warning);
+            SoundFontHint.Text = ex.Message; ShowError($"Could not load this SoundFont.\n{ex.Message}", "SoundFont");
         }
         finally { if (!_closing) SoundFontButton.IsEnabled = true; }
     }
@@ -251,12 +261,25 @@ public partial class MainWindow : Window
         SoundFontHint.Text = $"Instrument · {preset.Name}";
     }
     private void UnloadSoundFont_Click(object sender, RoutedEventArgs e) { _audio.UnloadSoundFont(); _isBuiltInSoundFont = false; _suppressPreset = true; PresetCombo.ItemsSource = null; PresetCombo.SelectedIndex = -1; _suppressPreset = false; UpdateSoundFontUi(); }
+    /// <summary>Shows a warning dialog, or only records it when dialogs are suppressed (verification runs, snapshots).</summary>
+    private void ShowError(string message, string title, MessageBoxImage icon = MessageBoxImage.Warning)
+    {
+        if (SuppressErrorDialogs || _closing) return;
+        MessageBox.Show(this, message, title, MessageBoxButton.OK, icon);
+    }
+
     private void UpdateSoundFontUi()
     {
         var loaded = _audio.HasSoundFont;
-        SoundFontLabel.Text = loaded ? (_isBuiltInSoundFont ? "BUILT-IN YAMAHA GRAND · READY" : $"SOUNDFONT READY · {_audio.LoadedName}") : "NO SOUNDFONT · SILENT";
-        SoundFontLabel.Foreground = loaded ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
-        SoundFontHint.Text = loaded ? $"Yamaha grand · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}" : "The built-in grand piano is loading";
+        // A loaded SoundFont without a usable playback device still drives the stage and scoring, but must not claim to be audible.
+        var audible = loaded && _audio.HasAudioOutput;
+        SoundFontLabel.Text = loaded
+            ? (_isBuiltInSoundFont ? $"BUILT-IN YAMAHA GRAND · {(audible ? "READY" : "NO AUDIO DEVICE")}" : $"SOUNDFONT {(audible ? "READY" : "LOADED · NO AUDIO DEVICE")} · {_audio.LoadedName}")
+            : "NO SOUNDFONT · SILENT";
+        SoundFontLabel.Foreground = audible ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
+        SoundFontHint.Text = loaded
+            ? (_audio.PlaybackError is { } playbackError ? $"No audio output · {playbackError}" : $"Yamaha grand · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}")
+            : "The built-in grand piano is loading";
         if (!loaded && PresetCombo.Items.Count == 0)
         {
             _suppressPreset = true;
@@ -612,7 +635,7 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             DeviceLabel.Text = "MIDI input unavailable · retry"; DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 91, 113));
-            if (showErrors) MessageBox.Show(this, ex.Message, "MIDI input", MessageBoxButton.OK, MessageBoxImage.Warning);
+            if (showErrors) ShowError(ex.Message, "MIDI input");
         }
     }
     private void OutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -628,7 +651,15 @@ public partial class MainWindow : Window
             _midi.OpenOutput(OutputDeviceCombo.SelectedIndex - 1);
             foreach (var pedal in _pedalsDown) _midi.SendController(MidiDeviceService.ControllerFor(pedal), 127);
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "MIDI output", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex)
+        {
+            // Windows lists devices it cannot always open (a synthesizer owned by another process, a
+            // unplugged USB port). Fall back to "No MIDI output" so the picker never shows a dead choice.
+            _suppressDevices = true;
+            try { OutputDeviceCombo.SelectedIndex = 0; }
+            finally { _suppressDevices = false; }
+            ShowError(ex.Message, "MIDI output");
+        }
     }
     private void PopulateTracks()
     {

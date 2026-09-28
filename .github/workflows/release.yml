@@ -33,12 +33,24 @@ jobs:
         run: .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64 -Zip
 
       - name: Smoke test the published executable
+        # Left non-blocking on purpose: a release must not be held hostage by a headless smoke test.
+        # The log is printed, annotated and attached to the job summary so a failure is still visible.
         continue-on-error: true
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
           $proc = Start-Process -FilePath 'publish/win-x64/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
-          if (Test-Path $log) { Get-Content $log }
+          $lines = if (Test-Path $log) { Get-Content $log } else { @() }
+          $lines | ForEach-Object {
+            if ($_ -like 'FAIL*') { $level = 'error' }
+            elseif ($_ -like 'SKIP*' -or $_ -like 'NOTE*') { $level = 'warning' }
+            elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
+            else { return }
+            $text = $_ -replace '%', '%25'
+            "::${level} title=Keyflow verification::$text"
+          }
+          if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
+          @('# Keyflow verification suite (published build)', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
 
       - name: Upload workflow artifacts

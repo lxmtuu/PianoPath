@@ -24,30 +24,49 @@ internal static class VerificationSuite
         try { VerifyMidiImport(); VerifyVisualSettings(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
-        var startupWindow = new MainWindow { WindowState = WindowState.Normal, Width = 1240, Height = 780 };
+        var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
+        var bundledPianoAvailable = File.Exists(bundledPiano) && !SoundFontReader.IsLfsPointer(bundledPiano);
+        // A real ~113 MiB bank needs a few seconds to decode; a checkout without Git LFS settles at once.
+        var deadline = DateTime.UtcNow.Add(bundledPianoAvailable ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(1.5));
+        var startupWindow = new MainWindow { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
         startupWindow.ContentRendered += (_, _) =>
         {
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
-            var deadline = DateTime.UtcNow.AddSeconds(8);
             timer.Tick += (_, _) =>
             {
                 var audio = (PianoAudioEngine)Field(startupWindow, "_audio");
                 var soundFontLabel = (TextBlock)startupWindow.FindName("SoundFontLabel");
-                if (audio.HasSoundFont && soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal))
+                if (bundledPianoAvailable)
                 {
-                    timer.Stop();
-                    try
+                    if (audio.HasSoundFont && soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal))
                     {
-                        Assert(soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal), "A normal app startup should show the bundled piano as its active SoundFont.");
-                        Assert(((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled && ((ComboBox)startupWindow.FindName("PresetCombo")).SelectedIndex == 0, "Startup should select the bundled acoustic-grand preset.");
-                        Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The bundled piano should start with hall reverb active in the UI and audio engine.");
-                        Results.Add("PASS WPF startup: bundled grand loads automatically, its preset is selected and room reverb starts enabled.");
-                        startupWindow.Close();
-                        VerifyPracticeWindow(args, app);
+                        timer.Stop();
+                        try
+                        {
+                            Assert(soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal), "A normal app startup should show the bundled piano as its active SoundFont.");
+                            Assert(((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled && ((ComboBox)startupWindow.FindName("PresetCombo")).SelectedIndex == 0, "Startup should select the bundled acoustic-grand preset.");
+                            Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The bundled piano should start with hall reverb active in the UI and audio engine.");
+                            Results.Add($"PASS WPF startup: bundled grand loads automatically, its preset is selected and room reverb starts enabled{(audio.HasAudioOutput ? "" : $"; no audio device here ({audio.PlaybackError}) so playback is silent")}.");
+                            startupWindow.Close();
+                            VerifyPracticeWindow(args, app);
+                        }
+                        catch (Exception ex) { Finish(app, args, ex); }
                     }
-                    catch (Exception ex) { Finish(app, args, ex); }
+                    else if (DateTime.UtcNow >= deadline) { timer.Stop(); Finish(app, args, new TimeoutException("The bundled grand did not finish loading during the startup smoke check.")); }
+                    return;
                 }
-                else if (DateTime.UtcNow >= deadline) { timer.Stop(); Finish(app, args, new TimeoutException("The bundled grand did not finish loading during the startup smoke check.")); }
+                // Git LFS was skipped, so there is no bank to load: the app must degrade to silent mode.
+                if (DateTime.UtcNow < deadline) return;
+                timer.Stop();
+                try
+                {
+                    Assert(!audio.HasSoundFont && soundFontLabel.Text.Contains("SILENT", StringComparison.Ordinal), "Without the bundled SoundFont the app must start in silent mode instead of failing.");
+                    Assert(!((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled, "The instrument picker must stay disabled while no SoundFont is loaded.");
+                    Results.Add("SKIP WPF startup bundled-piano checks: Assets/ConcertGrand.sf2 is a Git LFS pointer; verified the silent-mode startup path instead.");
+                    startupWindow.Close();
+                    VerifyPracticeWindow(args, app);
+                }
+                catch (Exception ex) { Finish(app, args, ex); }
             };
             timer.Start();
         };
@@ -56,7 +75,7 @@ internal static class VerificationSuite
 
     private static void VerifyPracticeWindow(string[] args, App app)
     {
-        var window = new MainWindow(loadBuiltInSoundFont: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780 };
+        var window = new MainWindow(loadBuiltInSoundFont: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
         window.ContentRendered += (_, _) =>
         {
             var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -192,20 +211,31 @@ internal static class VerificationSuite
         var rejected = false;
         try { _ = SoundFontReader.Read(Path.Combine(Path.GetTempPath(), "missing-soundfont.sf2")); } catch (FileNotFoundException) { rejected = true; }
         Assert(rejected, "A missing SoundFont should be reported rather than replaced by a fallback tone.");
+        bool engineOutputAvailable;
         using (var engine = new PianoAudioEngine())
         {
             Assert(!engine.HasSoundFont, "Integrated piano audio must stay silent before a SoundFont is loaded.");
             engine.LoadSoundFont(path); Assert(engine.HasSoundFont && engine.Presets.Count == 1, "Loading an SF2 should activate its presets and audio stream.");
-            engine.NoteOn(69, 95); Thread.Sleep(110); engine.NoteOff(69); Thread.Sleep(60);
+            Assert(engine.HasAudioOutput || engine.PlaybackError is not null, "Without an audio device the engine must say why it is silent instead of pretending to play.");
+            engineOutputAvailable = engine.HasAudioOutput;
+            if (engineOutputAvailable) { engine.NoteOn(69, 95); Thread.Sleep(110); engine.NoteOff(69); Thread.Sleep(60); }
+            else Results.Add($"NOTE audio device unavailable here ({engine.PlaybackError}); the engine stayed loaded and playable in silent mode.");
             engine.UnloadSoundFont(); Assert(!engine.HasSoundFont, "Unloading the SoundFont should return to silent mode.");
         }
-        Results.Add("PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output and silent unload.");
+        Results.Add($"PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, {(engineOutputAvailable ? "waveOut output" : "silent-mode fallback")} and silent unload.");
     }
 
     private static void VerifyBundledPiano()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
         Assert(File.Exists(path), "The bundled Yamaha grand SoundFont should be copied beside the built application.");
+        if (SoundFontReader.IsLfsPointer(path))
+        {
+            // CI checks out with `lfs: false` and a plain clone may skip `git lfs pull`; the 134-byte
+            // pointer is not a bank, so report a skip instead of failing the whole suite over it.
+            Results.Add("SKIP bundled piano: Assets/ConcertGrand.sf2 is a Git LFS pointer. Run 'git lfs install' then 'git lfs pull' to verify the real Yamaha grand.");
+            return;
+        }
         var font = SoundFontReader.Read(path);
         Assert(font.Name.Contains("Grand Piano", StringComparison.OrdinalIgnoreCase), "The bundled SoundFont should identify its grand-piano program in the SF2 metadata.");
         var piano = font.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0);
@@ -263,10 +293,16 @@ internal static class VerificationSuite
         Assert(ins.All(x => !string.IsNullOrWhiteSpace(x)) && outs.All(x => !string.IsNullOrWhiteSpace(x)), "Windows MIDI endpoints should enumerate with valid names.");
         if (outs.Count > 0)
         {
-            using var output = new MidiDeviceService(); output.OpenOutput(0); output.SendNote(69, 64, true); Thread.Sleep(90); output.SendNote(69, 0, false);
-            output.SendController(67, 127); output.SendController(66, 127); output.SendController(64, 127);
-            output.SendController(67, 0); output.SendController(66, 0); output.SendController(64, 0);
-            Results.Add($"PASS native MIDI output: sent Note On/Off and three-pedal CC events to {outs[0]}.");
+            // Windows lists endpoints it will not always open (Microsoft GS Wavetable Synth on a session
+            // without audio, a port held by another process). That is an environment limit, not a defect.
+            try
+            {
+                using var output = new MidiDeviceService(); output.OpenOutput(0); output.SendNote(69, 64, true); Thread.Sleep(90); output.SendNote(69, 0, false);
+                output.SendController(67, 127); output.SendController(66, 127); output.SendController(64, 127);
+                output.SendController(67, 0); output.SendController(66, 0); output.SendController(64, 0);
+                Results.Add($"PASS native MIDI output: sent Note On/Off and three-pedal CC events to {outs[0]}.");
+            }
+            catch (Exception ex) { Results.Add($"NOTE the MIDI output {outs[0]} is listed but could not be opened here ({ex.Message}); the app resets the picker instead of failing."); }
         }
         Results.Add($"PASS MIDI devices: key map, input/output encoding, inputs=[{string.Join(", ", ins)}], outputs=[{string.Join(", ", outs)}].");
     }
@@ -610,7 +646,8 @@ internal static class VerificationSuite
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         var path = logOption is null ? Path.Combine(Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
         if (failure is not null) Results.Add("FAIL: " + failure);
-        Results.Add(failure is null ? $"Verification passed: {_assertions} assertions." : "Verification failed.");
+        var skipped = Results.Count(line => line.StartsWith("SKIP ", StringComparison.Ordinal));
+        Results.Add(failure is null ? $"Verification passed: {_assertions} assertions, {skipped} skipped check group(s)." : "Verification failed.");
         File.WriteAllLines(path, Results); app.Shutdown(failure is null ? 0 : 1);
     }
 

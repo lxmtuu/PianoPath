@@ -12,9 +12,11 @@ Keyflow là ứng dụng desktop Windows viết bằng C# và WPF để học đ
 winget install --id Git.Git -e; winget install --id GitHub.GitLFS -e; winget install --id Microsoft.DotNet.SDK.10 -e
 git lfs install
 git clone https://github.com/lxmtuu/PianoPath.git; cd PianoPath; git lfs pull
-dotnet publish PianoPath.csproj -c Release -r win-x64 --self-contained true //p:PublishSingleFile=true //p:IncludeNativeLibrariesForSelfExtract=true  # biên dịch và chạy
-.\publish.ps1 -Zip                                    # xuất PianoPath.exe + ZIP để gửi đi
+dotnet run --project .\PianoPath.csproj -c Release    # biên dịch rồi mở ứng dụng
+.\publish.ps1 -Zip                                    # đóng gói publish\win-x64\PianoPath.exe + file ZIP để gửi đi
 ```
+
+Nếu máy chặn script PowerShell, chạy `Set-ExecutionPolicy -Scope Process Bypass` trước `.\publish.ps1`.
 
 ## Mục lục
 
@@ -283,6 +285,7 @@ Mỗi lần chạy workflow tải ~113 MiB từ Git LFS và tính vào hạn m�
 | `NETSDK1045: The current .NET SDK does not support targeting .NET 10.0` | Cài .NET 10 SDK, hoặc SDK cũ đang được ưu tiên bởi `global.json`; kiểm tra `dotnet --list-sdks`. |
 | Máy đích báo "To run this application, you must install .NET Desktop Runtime" | Bản framework-dependent; cài .NET 10 Desktop Runtime x64 hoặc dùng bản self-contained. |
 | Mở ứng dụng nhưng không có tiếng, trang Audio báo không nạp được SoundFont | Thư mục `Assets\` không nằm cạnh `.exe`, hoặc tệp là con trỏ LFS. |
+| Trang Audio báo `NO AUDIO DEVICE` dù SoundFont đã nạp | Windows không mở được thiết bị phát (`waveOut error 2`): máy chưa có card âm thanh, hoặc thiết bị đang bị ứng dụng khác giữ ở chế độ độc quyền. Ứng dụng vẫn chạy đầy đủ, chỉ không phát tiếng. |
 | `PublishTrimmed`/`PublishAot` báo lỗi hoặc ứng dụng crash khi mở | WPF không hỗ trợ; bỏ hai tuỳ chọn này. |
 | Publish `win-x86` báo lỗi runtime pack | Chỉ dùng `win-x64` hoặc `win-arm64`; các bản 32-bit không được kiểm thử. |
 
@@ -296,6 +299,10 @@ dotnet run --project .\PianoPath.csproj -- --verify
 ```
 
 Mã thoát `0` là đạt, `1` là có lỗi; nhật ký ghi từng mục PASS/FAIL. Bộ kiểm thử tạo tệp MIDI, SoundFont SF2 và AVI nhỏ trong thư mục tạm; kiểm tra parser MIDI (đa track, tempo map, lưới phách, tên track, bỏ kênh trống, tệp hỏng), giải mã preset/zone/sample và ngữ nghĩa generator SF2 (instrument ghi đè, preset cộng dồn), loop qua giai đoạn release, giới hạn đa âm, tín hiệu âm thanh và Note Off, sustain/sostenuto/soft, lưu và clamp cấu hình hiệu ứng, preset có sẵn/preset người dùng (lưu, nhập, xuất, xóa, tệp hỏng), dock cài đặt (10 trang, chế độ màu theo tay/track, hàng phụ thuộc, tìm kiếm, áp preset), ghi AVI frame, đóng/mở MIDI input thật nếu có, giải mã WinMM `MIM_DATA` tới nốt rơi WPF, MIDI output, tự ẩn/hiện giao diện theo chuột và Esc, độ dài nốt khi giữ phím, chế độ tập, loop, tua, tempo và render WPF. Chỉ xác nhận được phím đàn vật lý phát sự kiện khi nhấn một phím MIDI thực tế.
+
+CI (`build.yml`) chạy đúng bộ kiểm thử này sau mỗi lần build và **coi `FAIL` là lỗi build**; toàn bộ nhật ký được dán vào job summary. Vì runner không có Git LFS, card âm thanh hay cổng MIDI thật, các mục tương ứng sẽ ra `SKIP`/`NOTE` chứ không làm đỏ build.
+
+Nhật ký dùng bốn tiền tố: `PASS` (đã kiểm tra và đạt), `FAIL` (có lỗi, mã thoát `1`), `SKIP` (điều kiện môi trường không cho phép kiểm tra) và `NOTE` (thông tin môi trường). Bộ kiểm thử tự bỏ qua thay vì báo lỗi khi máy thiếu phần cứng: nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ Git LFS (clone chưa `git lfs pull`, hoặc CI checkout với `lfs: false`) thì các mục piano đi kèm bị `SKIP` và ứng dụng được xác minh ở chế độ im lặng; nếu Windows không mở được thiết bị âm thanh (`waveOut error 2`) hoặc một cổng MIDI output không mở được, engine vẫn nạp SoundFont và chạy im lặng, kết quả ghi `NOTE` chứ không `FAIL`.
 
 Các tham số dòng lệnh khác: `--show-settings [--settings-tab=style|notes|particles|keyboard|background|camera|audio|midi|practice|recording]` mở sẵn dock cài đặt, `--snapshot <file.png> [--compact] [--play-preview]` chụp màn hình rồi thoát (dùng để tạo `preview.png`/`settings-preview.png`).
 
@@ -312,7 +319,7 @@ Các tham số dòng lệnh khác: `--show-settings [--settings-tab=style|notes|
 - `ColorPickerWindow.cs`: bảng chọn màu HSV/HEX.
 - `VerificationSuite.cs`: bộ kiểm tra hồi quy chạy bằng `--verify`, fixtures tự tạo.
 - `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `installer/Keyflow.iss`: script Inno Setup tạo bộ cài.
-- `.github/workflows/build.yml`: CI biên dịch trên `windows-latest`; `.github/workflows/release.yml`: publish và đính kèm ZIP vào GitHub Release khi đẩy tag `v*`.
+- `.github/workflows/build.yml`: CI trên `windows-latest` — restore, build Release rồi chạy `--verify` (bước kiểm thử **làm hỏng build nếu FAIL**); `.github/workflows/release.yml`: publish và đính kèm ZIP vào GitHub Release khi đẩy tag `v*`, kèm smoke test bản đã đóng gói.
 
 ## Giấy phép
 
