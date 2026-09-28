@@ -318,6 +318,10 @@ internal static class VerificationSuite
         Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
         Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
             "Refreshing the MIDI list should preserve or auto-select an available input instead of silently switching to computer-only mode.");
+        inputCombo.SelectedIndex = 0;
+        Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
+        Assert(inputCombo.SelectedIndex == 0 && !midi.InputOpen,
+            "An explicit 'Computer keyboard only' choice must survive a device refresh instead of snapping back to a MIDI input.");
         Assert(!piano.HasSoundFont && !((ComboBox)window.FindName("PresetCombo")).IsEnabled && silentLabel.Text.Contains("SILENT"), "The initial UI must expose silent mode until a SoundFont is loaded.");
         var reverb = (ToggleButton)window.FindName("ReverbToggle");
         Assert(reverb.IsChecked == true && piano.ReverbEnabled, "The built-in concert room reverb should start enabled.");
