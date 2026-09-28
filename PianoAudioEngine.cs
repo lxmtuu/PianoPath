@@ -266,6 +266,15 @@ internal sealed class StereoHallReverb
             wetLeft *= .25f * (float)_fade; wetRight *= .25f * (float)_fade;
             foreach (var diffuser in _leftDiffusers) wetLeft = diffuser.Process(wetLeft);
             foreach (var diffuser in _rightDiffusers) wetRight = diffuser.Process(wetRight);
+            if (!Enabled && _fade <= 0 && _wetActive)
+            {
+                // The diffuser stages can retain a few samples after the comb fade reaches zero.
+                // Clear them at the exact end of the bypass ramp so no residual wet signal leaks
+                // into later audio blocks.
+                wetLeft = wetRight = 0;
+                Reset();
+                _wetActive = false;
+            }
             // The enabled path keeps dry at .91 to leave headroom for the wet sum; while the tail
             // fades, ramp dry back to unity so bypassing never clicks.
             var dryGain = Enabled ? .91f : .91f + .09f * (1 - (float)_fade);
