@@ -46,11 +46,11 @@ internal sealed class PianoAudioEngine : IDisposable
         private const uint WaveMapper = 0xFFFFFFFF;
         private const uint CallbackEvent = 0x00050000;
         private const uint HeaderDone = 0x00000001;
-    private const ushort WaveFormatPcm = 1;
+        private const ushort WaveFormatPcm = 1;
+        private const int BytesPerBuffer = FramesPerBuffer * 4;
         private readonly AutoResetEvent _ready = new(false);
         private readonly List<AudioBuffer> _buffers = [];
         private readonly short[] _pcm = new short[FramesPerBuffer * 2];
-        private readonly byte[] _bytes = new byte[FramesPerBuffer * 4];
         private readonly StereoHallReverb _reverb = new(SampleRate);
         private Thread? _thread;
         private IntPtr _device;
@@ -72,7 +72,7 @@ internal sealed class PianoAudioEngine : IDisposable
             {
                 for (var i = 0; i < BufferCount; i++)
                 {
-                    var buffer = new AudioBuffer { Data = new byte[_bytes.Length] };
+                    var buffer = new AudioBuffer { Data = new byte[BytesPerBuffer] };
                     buffer.DataPin = GCHandle.Alloc(buffer.Data, GCHandleType.Pinned);
                     buffer.Header = Marshal.AllocHGlobal(Marshal.SizeOf<WaveHeader>());
                     _buffers.Add(buffer);
@@ -81,7 +81,8 @@ internal sealed class PianoAudioEngine : IDisposable
                     RenderBuffer(buffer);
                     Check(WaveOutWrite(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "queue audio buffer");
                 }
-                _thread = new Thread(Pump) { IsBackground = true, Name = "Keyflow SoundFont audio" };
+                // Render ahead of the UI thread so busy frames do not turn into audio drop-outs.
+                _thread = new Thread(Pump) { IsBackground = true, Name = "Keyflow SoundFont audio", Priority = ThreadPriority.Highest };
                 _thread.Start();
             }
             catch { Dispose(); throw; }
@@ -111,8 +112,7 @@ internal sealed class PianoAudioEngine : IDisposable
         {
             Synth.Render(_pcm, FramesPerBuffer);
             _reverb.Process(_pcm, FramesPerBuffer);
-            Buffer.BlockCopy(_pcm, 0, _bytes, 0, _bytes.Length);
-            Buffer.BlockCopy(_bytes, 0, buffer.Data, 0, _bytes.Length);
+            Buffer.BlockCopy(_pcm, 0, buffer.Data, 0, BytesPerBuffer);
         }
 
         private void Check(uint result, string action)
@@ -201,6 +201,7 @@ internal sealed class StereoHallReverb
     private readonly Comb[] _rightCombs;
     private readonly AllPass[] _leftDiffusers;
     private readonly AllPass[] _rightDiffusers;
+    private bool _tailPending;
     public volatile bool Enabled = true;
 
     public StereoHallReverb(int sampleRate)
@@ -214,7 +215,13 @@ internal sealed class StereoHallReverb
 
     public void Process(short[] interleaved, int frames)
     {
-        if (!Enabled) { Reset(); return; }
+        if (!Enabled)
+        {
+            // Clear the delay lines once when bypassed instead of on every buffer, so re-enabling starts from silence.
+            if (_tailPending) { Reset(); _tailPending = false; }
+            return;
+        }
+        _tailPending = true;
         for (var i = 0; i < frames; i++)
         {
             var offset = i * 2;

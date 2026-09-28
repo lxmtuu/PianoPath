@@ -9,7 +9,10 @@ internal sealed record SoundFontPreset(int Bank, int Program, string Name, IRead
 internal sealed class SoundFontRegion
 {
     public required int[] LeftSamples { get; init; }
+    /// <summary>Linked partner sample (start, end, loop start, loop end) used only when the SoundFont omits the partner's own zone.</summary>
     public int[]? RightSamples { get; init; }
+    /// <summary>True when this zone holds the right channel of a pair, so the linked sample feeds the left output instead.</summary>
+    public bool StereoSwapped { get; init; }
     public required int Start { get; init; }
     public required int End { get; init; }
     public required int LoopStart { get; init; }
@@ -56,17 +59,33 @@ internal static class SoundFontReader
     private readonly record struct SampleHeader(string Name, int Start, int End, int LoopStart, int LoopEnd, int Rate, int Root, int Correction, int Link, int Type);
     private sealed class GeneratorSet
     {
+        /// <summary>Generators that only make sense inside an instrument zone; the SF2 specification says presets must not contribute them.</summary>
+        private static readonly HashSet<int> InstrumentOnly = [0, 1, 2, 3, 4, 12, 41, 45, 46, 47, 50, 53, 54, 57, 58];
+        /// <summary>Specification defaults for generators whose neutral value is not zero, used when a preset offsets a generator the instrument left unset.</summary>
+        private static readonly Dictionary<int, int> Defaults = new() { [8] = 13500, [33] = -12000, [34] = -12000, [35] = -12000, [36] = -12000, [38] = -12000, [25] = -12000, [26] = -12000, [27] = -12000, [28] = -12000, [30] = -12000, [56] = 100, [58] = -1 };
         public readonly Dictionary<int, int> Values = [];
         public (int Low, int High) Keys = (0, 127);
         public (int Low, int High) Velocities = (0, 127);
         public bool HasKeys, HasVelocities;
         public int Get(int op, int fallback = 0) => Values.TryGetValue(op, out var value) ? value : fallback;
-        public void Add(int op, int value) => Values[op] = Values.GetValueOrDefault(op) + value;
-        public void Merge(GeneratorSet other)
+        /// <summary>Local zone semantics: a generator in <paramref name="other"/> replaces the same generator here (global → local within one level).</summary>
+        public void Override(GeneratorSet other)
         {
-            foreach (var pair in other.Values) Add(pair.Key, pair.Value);
-            if (other.HasKeys) { Keys = HasKeys ? (Math.Max(Keys.Low, other.Keys.Low), Math.Min(Keys.High, other.Keys.High)) : other.Keys; HasKeys = true; }
-            if (other.HasVelocities) { Velocities = HasVelocities ? (Math.Max(Velocities.Low, other.Velocities.Low), Math.Min(Velocities.High, other.Velocities.High)) : other.Velocities; HasVelocities = true; }
+            foreach (var pair in other.Values) Values[pair.Key] = pair.Value;
+            if (other.HasKeys) { Keys = other.Keys; HasKeys = true; }
+            if (other.HasVelocities) { Velocities = other.Velocities; HasVelocities = true; }
+        }
+        /// <summary>Preset-level semantics: values are added to the instrument result (or to the generator default) and ranges are intersected.</summary>
+        public void AddPresetLevel(GeneratorSet preset)
+        {
+            foreach (var pair in preset.Values)
+            {
+                if (InstrumentOnly.Contains(pair.Key)) continue;
+                var current = Values.TryGetValue(pair.Key, out var existing) ? existing : Defaults.GetValueOrDefault(pair.Key);
+                Values[pair.Key] = current + pair.Value;
+            }
+            if (preset.HasKeys) { Keys = HasKeys ? (Math.Max(Keys.Low, preset.Keys.Low), Math.Min(Keys.High, preset.Keys.High)) : preset.Keys; HasKeys = true; }
+            if (preset.HasVelocities) { Velocities = HasVelocities ? (Math.Max(Velocities.Low, preset.Velocities.Low), Math.Min(Velocities.High, preset.Velocities.High)) : preset.Velocities; HasVelocities = true; }
         }
     }
 
@@ -98,22 +117,25 @@ internal static class SoundFontReader
         {
             var header = presetHeaders[p]; var headerEnd = presetHeaders[p + 1];
             var pZones = ReadZones(presetBags, presetGens, header.Bag, headerEnd.Bag);
-            var pGlobal = new GeneratorSet();
-            foreach (var zone in pZones) if (!zone.Values.ContainsKey(41)) { pGlobal.Merge(zone); break; }
+            // Only a leading zone without an instrument generator is a global zone (SF2 §7.3); later ones are ignored.
+            var pGlobal = pZones.Count > 0 && !pZones[0].Values.ContainsKey(41) ? pZones[0] : new GeneratorSet();
             var regions = new List<SoundFontRegion>();
             foreach (var pZone in pZones)
             {
                 if (!pZone.Values.TryGetValue(41, out var instrumentIndex)) continue;
-                var presetGenerators = new GeneratorSet(); presetGenerators.Merge(pGlobal); presetGenerators.Merge(pZone);
+                var presetGenerators = new GeneratorSet(); presetGenerators.Override(pGlobal); presetGenerators.Override(pZone);
                 if (instrumentIndex < 0 || instrumentIndex >= instrumentHeaders.Count - 1) continue;
                 var instrument = instrumentHeaders[instrumentIndex]; var instrumentEnd = instrumentHeaders[instrumentIndex + 1];
                 var iZones = ReadZones(instrumentBags, instrumentGens, instrument.Bag, instrumentEnd.Bag);
-                var iGlobal = new GeneratorSet();
-                foreach (var zone in iZones) if (!zone.Values.ContainsKey(53)) { iGlobal.Merge(zone); break; }
+                var iGlobal = iZones.Count > 0 && !iZones[0].Values.ContainsKey(53) ? iZones[0] : new GeneratorSet();
+                // Samples that already have their own zone in this instrument must not be mixed in a second time through sample links.
+                var zoneSamples = new HashSet<int>();
+                foreach (var zone in iZones) if (zone.Values.TryGetValue(53, out var used)) zoneSamples.Add(used);
                 foreach (var iZone in iZones)
                 {
                     if (!iZone.Values.TryGetValue(53, out var sampleIndex) || sampleIndex < 0 || sampleIndex >= samples.Count - 1) continue;
-                    var combined = new GeneratorSet(); combined.Merge(presetGenerators); combined.Merge(iGlobal); combined.Merge(iZone);
+                    // Instrument: local generators replace global ones. Preset: values are relative offsets added on top.
+                    var combined = new GeneratorSet(); combined.Override(iGlobal); combined.Override(iZone); combined.AddPresetLevel(presetGenerators);
                     var range = samples[sampleIndex];
                     var start = range.Start + combined.Get(0) + combined.Get(4) * 32768;
                     var end = range.End + combined.Get(1) + combined.Get(12) * 32768;
@@ -123,11 +145,17 @@ internal static class SoundFontReader
                     start = Math.Clamp(start, 0, sampleCount - 1); end = Math.Clamp(end, start + 8, sampleCount - 46);
                     loopStart = Math.Clamp(loopStart, start, end - 1); loopEnd = Math.Clamp(loopEnd, loopStart + 1, end);
                     var sampleMode = combined.Get(54) & 3;
-                    int[]? rightSamples = null;
-                    if ((range.Type & 0x7fff) is 2 or 4 && range.Link >= 0 && range.Link < samples.Count - 1)
+                    // A stereo pair is normally two mono zones (left + right) that are panned apart, so each zone plays on its own.
+                    // Only when the partner sample has no zone of its own do we render both channels from this one zone.
+                    int[]? rightSamples = null; var stereoSwapped = false; var sampleType = range.Type & 0x7fff;
+                    if (sampleType is 2 or 4 && range.Link >= 0 && range.Link < samples.Count - 1 && !zoneSamples.Contains(range.Link))
                     {
-                        var right = samples[range.Link];
-                        if (right.End <= sampleCount - 46 && right.End > right.Start && right.Start >= 0) rightSamples = [right.Start, right.End, right.LoopStart, right.LoopEnd];
+                        var partner = samples[range.Link];
+                        if (partner.End <= sampleCount - 46 && partner.End > partner.Start && partner.Start >= 0)
+                        {
+                            rightSamples = [partner.Start, partner.End, partner.LoopStart, partner.LoopEnd];
+                            stereoSwapped = sampleType == 2;
+                        }
                     }
                     var rootKey = combined.Get(58, range.Root); if (rootKey is < 0 or > 127) rootKey = range.Root;
                     var keyRange = combined.HasKeys ? combined.Keys : (0, 127); var velocityRange = combined.HasVelocities ? combined.Velocities : (0, 127);
@@ -135,12 +163,12 @@ internal static class SoundFontReader
                     var sustainCb = Math.Clamp(combined.Get(37), 0, 1440);
                     regions.Add(new SoundFontRegion
                     {
-                        LeftSamples = [start, end, loopStart, loopEnd], RightSamples = rightSamples,
+                        LeftSamples = [start, end, loopStart, loopEnd], RightSamples = rightSamples, StereoSwapped = stereoSwapped,
                         Start = start, End = end, LoopStart = loopStart, LoopEnd = loopEnd, SampleRate = range.Rate, RootKey = rootKey,
                         KeyLow = Math.Clamp(keyRange.Item1, 0, 127), KeyHigh = Math.Clamp(keyRange.Item2, 0, 127),
                         VelocityLow = Math.Clamp(velocityRange.Item1, 0, 127), VelocityHigh = Math.Clamp(velocityRange.Item2, 0, 127),
                         SampleMode = sampleMode, FineTuneCents = range.Correction + combined.Get(51) * 100 + combined.Get(52),
-                        ScaleTuning = combined.Get(56, 100), Pan = Math.Clamp(combined.Get(17), -500, 500),
+                        ScaleTuning = combined.Get(56, 100), Pan = rightSamples is null ? Math.Clamp(combined.Get(17), -500, 500) : 0,
                         Attenuation = Math.Pow(10, -Math.Clamp(combined.Get(48), 0, 1440) / 200.0),
                         AttackSeconds = Timecents(combined.Get(34, -12000)), DecaySeconds = Timecents(combined.Get(36, -12000)),
                         SustainLevel = Math.Pow(10, -sustainCb / 200.0), ReleaseSeconds = Math.Clamp(Timecents(combined.Get(38, -7200)), .015, 8)
@@ -201,7 +229,7 @@ internal static class SoundFontReader
         {
             var start = bags[i].Generator; var end = bags[i + 1].Generator;
             if (start < 0 || end < start || end > generators.Count) throw new InvalidDataException("SoundFont generator table contains an invalid zone.");
-            var zone = new GeneratorSet(); for (var g = start; g < end; g++) zone.Merge(generators[g]); result.Add(zone);
+            var zone = new GeneratorSet(); for (var g = start; g < end; g++) zone.Override(generators[g]); result.Add(zone);
         }
         return result;
     }
@@ -248,6 +276,8 @@ internal sealed class SoundFontSynthesizer
     private readonly bool[] _sostenuto = new bool[16];
     private readonly bool[] _soft = new bool[16];
     private readonly List<Voice> _voices = [];
+    private double[] _mixLeft = new double[512];
+    private double[] _mixRight = new double[512];
     private const int VoiceLimit = 96;
     private sealed class Voice
     {
@@ -256,6 +286,8 @@ internal sealed class SoundFontSynthesizer
         public required double Position, Step, Gain, PanLeft, PanRight;
         public required double Attack, Decay, Sustain, Release;
         public required bool Loop;
+        /// <summary>SF2 sample mode 3: loop only while the note is held, then play the remainder of the sample.</summary>
+        public bool LoopUntilRelease;
         public double Age, ReleaseAge = -1, ReleaseLevel;
         public bool KeyHeld = true, SustainHeld, SostenutoHeld;
         public double FilterLeft, FilterRight;
@@ -312,11 +344,12 @@ internal sealed class SoundFontSynthesizer
         if (velocity <= 0) { NoteOff(channel, pitch); return; }
         lock (_gate)
         {
-            if (_voices.Count >= VoiceLimit) _voices.RemoveAt(0);
             var preset = _channelPresets[channel & 15]; if (preset is null) return;
             foreach (var region in preset.Regions)
             {
                 if (pitch < region.KeyLow || pitch > region.KeyHigh || velocity < region.VelocityLow || velocity > region.VelocityHigh) continue;
+                // Layered presets add one voice per matching zone, so steal per voice rather than once per Note On.
+                if (_voices.Count >= VoiceLimit) StealVoice();
                 var semitones = (pitch - region.RootKey) * region.ScaleTuning / 100.0 + region.FineTuneCents / 100.0;
                 var step = region.SampleRate / (double)_sampleRate * Math.Pow(2, semitones / 12.0);
                 var pan = region.Pan / 500.0; var velocityGain = Math.Pow(velocity / 127.0, 1.75) * region.Attenuation;
@@ -326,7 +359,7 @@ internal sealed class SoundFontSynthesizer
                     PanLeft = Math.Sqrt((1 - pan) * .5), PanRight = Math.Sqrt((1 + pan) * .5),
                     Attack = Math.Clamp(region.AttackSeconds, .001, 20), Decay = Math.Clamp(region.DecaySeconds, .001, 20),
                     Sustain = Math.Clamp(region.SustainLevel, .015, 1), Release = Math.Clamp(region.ReleaseSeconds, .015, 8),
-                    Loop = (region.SampleMode & 1) != 0
+                    Loop = (region.SampleMode & 1) != 0, LoopUntilRelease = region.SampleMode == 3
                 });
             }
         }
@@ -379,28 +412,43 @@ internal sealed class SoundFontSynthesizer
             voice.KeyHeld = false; voice.SustainHeld = false; voice.SostenutoHeld = false; voice.ReleaseKey();
         }
     }
+    /// <summary>Drops the oldest voice that is already releasing, or the oldest voice overall, so a Note On can be honoured.</summary>
+    private void StealVoice()
+    {
+        for (var i = 0; i < _voices.Count; i++) if (_voices[i].ReleaseAge >= 0) { _voices.RemoveAt(i); return; }
+        _voices.RemoveAt(0);
+    }
     public void Render(short[] interleaved, int frames)
     {
         lock (_gate)
         {
             Array.Clear(interleaved, 0, frames * 2);
-            var left = new double[frames]; var right = new double[frames];
-            foreach (var voice in _voices.ToArray())
+            // Mixing buffers are reused between callbacks so the audio thread does not allocate.
+            if (_mixLeft.Length < frames) { _mixLeft = new double[frames]; _mixRight = new double[frames]; }
+            var left = _mixLeft; var right = _mixRight;
+            Array.Clear(left, 0, frames); Array.Clear(right, 0, frames);
+            var sampleSeconds = 1.0 / _sampleRate;
+            for (var v = _voices.Count - 1; v >= 0; v--)
             {
+                var voice = _voices[v];
                 var r = voice.Region; var envelope = 0.0;
                 var soft = _soft[voice.Channel]; var softGain = soft ? .72 : 1.0;
                 var filterAlpha = soft ? 1 - Math.Exp(-2 * Math.PI * 4200 / _sampleRate) : 1.0;
+                // Mode 1 keeps looping through the release tail; mode 3 leaves the loop once the note is released.
+                var looping = voice.Loop && r.LoopEnd > r.LoopStart && (!voice.LoopUntilRelease || voice.ReleaseAge < 0);
+                var stereo = r.RightSamples;
                 for (var i = 0; i < frames; i++)
                 {
-                    if (voice.Loop && (voice.KeyHeld || voice.SustainHeld || voice.SostenutoHeld) && voice.Position >= r.LoopEnd && r.LoopEnd > r.LoopStart) voice.Position = r.LoopStart + (voice.Position - r.LoopEnd) % (r.LoopEnd - r.LoopStart);
+                    if (looping && voice.Position >= r.LoopEnd) voice.Position = r.LoopStart + (voice.Position - r.LoopEnd) % (r.LoopEnd - r.LoopStart);
                     if (voice.Position >= r.End || voice.Position < r.Start) break;
                     var sampleIndex = (int)voice.Position; var fraction = voice.Position - sampleIndex;
-                    var sampleL = Interpolate(_font, sampleIndex, fraction);
-                    var sampleR = sampleL;
-                    if (r.RightSamples is { } stereo && _font.SampleCount > 0)
+                    var own = Interpolate(_font, sampleIndex, fraction);
+                    var sampleL = own; var sampleR = own;
+                    if (stereo is not null)
                     {
-                        var rightPosition = stereo[0] + (voice.Position - r.Start); var rightIndex = Math.Clamp((int)rightPosition, stereo[0], stereo[1] - 1);
-                        sampleR = Interpolate(_font, rightIndex, rightPosition - rightIndex);
+                        var partnerPosition = stereo[0] + (voice.Position - r.Start); var partnerIndex = Math.Clamp((int)partnerPosition, stereo[0], stereo[1] - 1);
+                        var partner = Interpolate(_font, partnerIndex, partnerPosition - partnerIndex);
+                        if (r.StereoSwapped) sampleL = partner; else sampleR = partner;
                     }
                     if (soft)
                     {
@@ -410,9 +458,9 @@ internal sealed class SoundFontSynthesizer
                     }
                     envelope = voice.Envelope(); var gain = envelope * voice.Gain * softGain;
                     left[i] += sampleL * gain * voice.PanLeft; right[i] += sampleR * gain * voice.PanRight;
-                    voice.Position += voice.Step; voice.Age += 1.0 / _sampleRate; if (voice.ReleaseAge >= 0) voice.ReleaseAge += 1.0 / _sampleRate;
+                    voice.Position += voice.Step; voice.Age += sampleSeconds; if (voice.ReleaseAge >= 0) voice.ReleaseAge += sampleSeconds;
                 }
-                if (envelope < .001 || voice.Position >= r.End || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * 1.1) _voices.Remove(voice);
+                if (envelope < .001 || voice.Position >= r.End || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * 1.1) _voices.RemoveAt(v);
             }
             for (var i = 0; i < frames; i++)
             {
