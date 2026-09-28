@@ -12,6 +12,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           # The bundled SoundFont lives in Git LFS; the build itself only needs the pointer, so skip the 113 MiB download.
+          # The verification suite detects the pointer and reports SKIP for the bundled-piano checks.
           lfs: false
 
       - uses: actions/setup-dotnet@v4
@@ -24,11 +25,24 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
+      # A hosted runner has no interactive desktop, no audio device and (with lfs: false) no real
+      # SoundFont, so a red suite here does not necessarily mean a broken build. It still runs on
+      # every push and publishes each PASS/SKIP/NOTE/FAIL line as a check annotation so a real
+      # regression is visible without downloading the log.
       - name: Verification suite (needs an interactive desktop, so failures do not block the build)
         continue-on-error: true
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
-          if (Test-Path $log) { Get-Content $log }
+          if (Test-Path $log) {
+            Get-Content $log
+            Get-Content $log | ForEach-Object {
+              $level = if ($_ -like 'FAIL*') { 'error' } elseif ($_ -like 'PASS*' -or $_ -like 'Verification passed*') { 'notice' } else { 'warning' }
+              $text = $_ -replace '%', '%25'
+              "::${level} title=Keyflow verification::$text"
+            }
+          } else {
+            "::error title=Keyflow verification::PianoPath.exe did not write $log"
+          }
           exit $proc.ExitCode
