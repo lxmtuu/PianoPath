@@ -10,7 +10,7 @@
     <Product>Keyflow · Piano VFX Studio</Product>
     <Authors>lxmtuu</Authors>
     <Description>Piano practice and visualizer for Windows: MIDI playback, SoundFont synthesis and a neon piano-roll stage.</Description>
-    <Version>0.2.0</Version>
+    <Version>0.3.0</Version>
   </PropertyGroup>
 
   <ItemGroup>

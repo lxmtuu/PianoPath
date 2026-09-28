@@ -24,7 +24,11 @@ public partial class App : Application
             if (window.FindName("SettingsTabs") is System.Windows.Controls.TabControl tabs)
             {
                 var tab = e.Args.FirstOrDefault(a => a.StartsWith("--settings-tab=", StringComparison.Ordinal))?[15..];
-                tabs.SelectedIndex = tab?.ToLowerInvariant() switch { "notes" => 1, "particles" => 2, "camera" => 3, "audio" => 4, "practice" => 5, _ => 0 };
+                tabs.SelectedIndex = tab?.ToLowerInvariant() switch
+                {
+                    "notes" => 1, "particles" => 2, "keyboard" => 3, "background" or "scene" => 4, "camera" => 5,
+                    "audio" => 6, "midi" => 7, "practice" => 8, "recording" => 9, _ => 0
+                };
             }
         }
         if (snapshotIndex >= 0 && snapshotIndex + 1 < e.Args.Length)

@@ -97,13 +97,15 @@ internal static class VerificationSuite
         var defaults = new PianoVisualSettings();
         Assert(!defaults.BackgroundGradient && !defaults.BackgroundGuide && !defaults.ShowStars && defaults.BackgroundImagePath == "", "A fresh visual profile should open on a black stage with no image or decorative background layers.");
         var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
-        Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 1 && migrated.BackgroundImagePath == "C:\\piano.png",
-            "Legacy settings should switch to the black stage while preserving an optional selected image path.");
-        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5 };
+        Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 2 && migrated.BackgroundImagePath == "C:\\piano.png" && migrated.BackgroundMode == "Image",
+            "Legacy settings should switch to the black stage while preserving an optional selected image path and enabling image mode for it.");
+        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5, NoteStyle = "Plasma", ColorMode = "??", KeyboardStyle = "", BackgroundMode = "Blue", TrackColors = ["#FFFFFF"] };
         settings.Clamp();
-        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum", "Visual settings should clamp unsafe ranges and reject unknown palettes.");
+        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum" && settings.NoteStyle == "Neon" && settings.ColorMode == "Gradient" && settings.KeyboardStyle == "Studio" && settings.BackgroundMode == "Solid" && settings.TrackColors.Count == 8 && settings.TrackColors[0] == "#FFFFFF",
+            "Visual settings should clamp unsafe ranges, reject unknown palettes, styles and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
-        Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum", "Visual settings should round-trip through the persisted JSON format.");
+        Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
+        VerifyPresets();
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
@@ -296,8 +298,9 @@ internal static class VerificationSuite
         var visualSettings = (PianoVisualSettings)Field(window, "_visualSettings"); var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
         Assert(sliders.Count >= 30 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "The detailed scene, note, particle and camera controls should drive the renderer configuration.");
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
-        Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorButtons.Count == 3,
-            "Live design settings should provide an interactive color picker for both note colors and the halo.");
+        Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
+            "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
+        VerifySettingsDock(window, stage, visualSettings);
         VerifyBackgroundImageLoad(stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -390,6 +393,84 @@ internal static class VerificationSuite
             catch (Exception ex) { failed(ex); }
         };
         timer.Start();
+    }
+
+    private static void VerifyPresets()
+    {
+        var names = VisualPresets.BuiltIn.Select(p => p.Name).ToList();
+        Assert(names.Count >= 6 && names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Count && names.Contains(VisualPresets.DefaultPresetName), "Built-in presets should have unique names and include the default look.");
+        foreach (var preset in VisualPresets.BuiltIn)
+        {
+            var copy = preset.Settings.Clone(); copy.Clamp();
+            Assert(copy.ToJson() == preset.Settings.ToJson(), $"The built-in preset '{preset.Name}' should already be within the allowed ranges.");
+        }
+        Assert(VisualPresets.FindBuiltIn("inferno")!.Settings.NoteStyle == "Fire" && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.ShowWisps && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMode == "ChromaGreen",
+            "The reference looks (burning notes, rainbow wisps, chroma key) should map to the matching renderer options.");
+        var target = new PianoVisualSettings { BackgroundImagePath = "C:\\keep.png", NoteGlow = 1 };
+        target.CopyFrom(VisualPresets.Inferno());
+        Assert(target.NoteStyle == "Fire" && target.BackgroundImagePath == "C:\\keep.png" && !ReferenceEquals(target.TrackColors, VisualPresets.Inferno().TrackColors),
+            "Applying a preset should copy every value but keep the user's background image and not share list instances.");
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-presets-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new VisualPresetStore(directory);
+            Assert(store.LoadUserPresets().Count == 0, "A missing preset folder should simply yield no user presets.");
+            var saved = store.Save("My: Look?", VisualPresets.AuroraRainbow());
+            var loaded = store.LoadUserPresets();
+            Assert(saved.Name == "My- Look-" && loaded.Count == 1 && loaded[0].Name == saved.Name && loaded[0].Settings.ShowWisps && loaded[0].Settings.BackgroundImagePath == "" && !loaded[0].BuiltIn,
+                "User presets should be sanitized, written as JSON and read back without the background image path.");
+            var exportPath = Path.Combine(directory, "out", "export.json"); Directory.CreateDirectory(Path.GetDirectoryName(exportPath)!);
+            VisualPresetStore.Export(VisualPresets.IceCrystal(), exportPath);
+            var imported = VisualPresetStore.Import(exportPath);
+            Assert(imported.Name == "Ice Crystal" && imported.Settings.NoteStyle == "Glass", "Exported presets should import with their name and values.");
+            File.WriteAllText(Path.Combine(directory, "broken.json"), "{ not json");
+            Assert(store.LoadUserPresets().Count == 1 && store.Delete(saved) && store.LoadUserPresets().Count == 0, "A corrupt preset file should be skipped and deleting a user preset should remove its file.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+        Assert(MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.HandSplitPitch), "C4", out var split) && split == 60 && MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.HandSplitPitch), "F#3", out var sharp) && sharp == 54
+            && MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.NoteGlow), " 85 % ", out var percent) && percent == 85 && MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.ParticleLife), "0,75 s", out var life) && Math.Abs(life - .75) < 1e-9
+            && !MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.NoteGlow), "abc", out _),
+            "Typed setting values should accept units, decimal commas and note names.");
+        Results.Add("PASS presets: built-in looks, apply/copy semantics, user preset store, import/export and typed value parsing.");
+    }
+
+    private static void VerifySettingsDock(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var tabs = (TabControl)window.FindName("SettingsTabs");
+        Assert(tabs.Items.Count == 10 && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[9]).Header.ToString() == "Recording", "The settings dock should expose ten categorized pages from Style to Recording.");
+        var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)),
+            "Note style, color mode, keyboard style, background mode and wisps should be editable from the dock.");
+        var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode;
+        choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = "Fire";
+        Assert(visualSettings.NoteStyle == "Fire" && visualSettings.PresetModified, "Choosing a note style should update the renderer settings and flag the preset as modified.");
+        choices[nameof(PianoVisualSettings.ColorMode)].SelectedValue = "PerHand";
+        var left = (Color)ColorConverter.ConvertFromString(visualSettings.LeftHandColor)!; var right = (Color)ColorConverter.ConvertFromString(visualSettings.RightHandColor)!;
+        Assert(stage.NoteColor(48, 0) == left && stage.NoteColor(72, 0) == right, "Per-hand coloring should split the keyboard at the configured pitch.");
+        choices[nameof(PianoVisualSettings.ColorMode)].SelectedValue = "PerTrack";
+        Assert(stage.NoteColor(60, 1) == (Color)ColorConverter.ConvertFromString(visualSettings.TrackColors[1])! && stage.NoteColor(60, 9) == (Color)ColorConverter.ConvertFromString(visualSettings.TrackColors[1])!, "Per-track coloring should use the track palette and wrap after eight tracks.");
+        var colorRows = (System.Collections.IList)Field(window, "_settingRows");
+        FrameworkElement RowElement(string property) => colorRows.Cast<object>().Where(r => (string?)r.GetType().GetField("Property")!.GetValue(r) == property).Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).First();
+        Assert(RowElement(nameof(PianoVisualSettings.LeftHandColor)).Visibility == Visibility.Collapsed && RowElement(nameof(PianoVisualSettings.TrackColors)).Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.NoteColorStart)).Visibility == Visibility.Collapsed,
+            "Dependent rows should follow the selected color mode.");
+        choices[nameof(PianoVisualSettings.ColorMode)].SelectedValue = originalMode; choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = originalStyle;
+        var search = (TextBox)window.FindName("SettingsSearchBox");
+        search.Text = "wisp";
+        var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
+        Assert(rows.Count > 40 && rows.Count(r => r.Visibility == Visibility.Visible) < rows.Count / 2, "Searching should hide the rows that do not match.");
+        search.Text = "";
+        Assert(rows.Count(r => r.Visibility == Visibility.Visible) > rows.Count / 2, "Clearing the search should restore the rows.");
+        var presetList = (ListBox)window.FindName("PresetList");
+        Assert(presetList.Items.Count >= VisualPresets.BuiltIn.Count, "The Style page should list every built-in preset.");
+        var beforeName = visualSettings.PresetName; var beforeJson = visualSettings.ToJson();
+        presetList.SelectedIndex = VisualPresets.BuiltIn.ToList().FindIndex(p => p.Name == "Classic Roll");
+        Invoke(window, "ApplyPreset_Click", window, new RoutedEventArgs());
+        Assert(visualSettings.PresetName == "Classic Roll" && !visualSettings.PresetModified && visualSettings.NoteStyle == "Solid" && !visualSettings.ShowEmbers && ReferenceEquals(Field(stage, "_visual"), visualSettings),
+            "Applying a preset should rewrite the live settings in place so the renderer keeps its reference.");
+        visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
+        Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
+        Results.Add("PASS settings dock: ten pages, style/color-mode controls, per-hand and per-track colors, search filter and preset application.");
     }
 
     private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)
