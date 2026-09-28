@@ -10,6 +10,10 @@ internal sealed class PianoAudioEngine : IDisposable
     private int _reverbEnabled = 1;
     public bool HasSoundFont => Volatile.Read(ref _pump) is not null;
     public string? LoadedName => Volatile.Read(ref _pump)?.Font.Name;
+    /// <summary>True when Windows has no usable audio output, so the engine renders silently instead of failing.</summary>
+    public bool IsSilent => Volatile.Read(ref _pump)?.Silent == true;
+    /// <summary>Why the audio device could not be opened, if it could not.</summary>
+    public string? SilentReason => Volatile.Read(ref _pump)?.SilentReason;
     public IReadOnlyList<SoundFontPreset> Presets => Volatile.Read(ref _pump)?.Font.Presets ?? [];
     public bool ReverbEnabled
     {
@@ -57,6 +61,9 @@ internal sealed class PianoAudioEngine : IDisposable
         private volatile bool _stopping;
         private bool _disposed;
         public SoundFontSynthesizer Synth { get; }
+        /// <summary>Set when waveOut is unavailable: the synth still runs, the samples are simply discarded.</summary>
+        public bool Silent { get; private set; }
+        public string? SilentReason { get; private set; }
         public SoundFontData Font => Synth.Font;
 
         public AudioPump(SoundFontSynthesizer synth, bool reverbEnabled) { Synth = synth; _reverb.Enabled = reverbEnabled; }
@@ -67,7 +74,15 @@ internal sealed class PianoAudioEngine : IDisposable
             var format = new WaveFormatEx { FormatTag = WaveFormatPcm, Channels = 2, SamplesPerSec = SampleRate, BitsPerSample = 16, BlockAlign = 4, AverageBytesPerSecond = SampleRate * 4 };
             var eventHandle = _ready.SafeWaitHandle.DangerousGetHandle();
             var result = WaveOutOpen(out _device, WaveMapper, ref format, eventHandle, IntPtr.Zero, CallbackEvent);
-            if (result != 0) { _ready.Dispose(); throw new InvalidOperationException($"Windows could not open the audio output (waveOut error {result})."); }
+            if (result != 0)
+            {
+                // No audio device (headless CI machines, RDP sessions, machines without a sound card):
+                // keep the piano playable and the timeline moving, just without sound.
+                Silent = true; SilentReason = $"waveOut error {result}";
+                _thread = new Thread(SilentPump) { IsBackground = true, Name = "Keyflow silent audio", Priority = ThreadPriority.BelowNormal };
+                _thread.Start();
+                return;
+            }
             try
             {
                 for (var i = 0; i < BufferCount; i++)
@@ -105,6 +120,20 @@ internal sealed class PianoAudioEngine : IDisposable
                     }
                     catch { _stopping = true; break; }
                 }
+            }
+        }
+
+        /// <summary>Runs the synth at real-time pace with nowhere to send the samples, so voices still age and release.</summary>
+        private void SilentPump()
+        {
+            var next = Environment.TickCount64;
+            while (!_stopping)
+            {
+                Synth.Render(_pcm, FramesPerBuffer);
+                _reverb.Process(_pcm, FramesPerBuffer);
+                next += FramesPerBuffer * 1000 / SampleRate;
+                var wait = (int)(next - Environment.TickCount64);
+                if (wait > 1) Thread.Sleep(wait); else next = Environment.TickCount64;
             }
         }
 

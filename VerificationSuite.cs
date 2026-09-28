@@ -196,10 +196,11 @@ internal static class VerificationSuite
         {
             Assert(!engine.HasSoundFont, "Integrated piano audio must stay silent before a SoundFont is loaded.");
             engine.LoadSoundFont(path); Assert(engine.HasSoundFont && engine.Presets.Count == 1, "Loading an SF2 should activate its presets and audio stream.");
+            if (engine.IsSilent) Results.Add($"NOTE audio device unavailable on this machine ({engine.SilentReason}); the engine stayed loaded and playable in silent mode.");
             engine.NoteOn(69, 95); Thread.Sleep(110); engine.NoteOff(69); Thread.Sleep(60);
             engine.UnloadSoundFont(); Assert(!engine.HasSoundFont, "Unloading the SoundFont should return to silent mode.");
         }
-        Results.Add("PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output and silent unload.");
+        Results.Add("PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, waveOut output or graceful silent fallback, and silent unload.");
     }
 
     private static void VerifyBundledPiano()

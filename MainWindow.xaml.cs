@@ -254,9 +254,14 @@ public partial class MainWindow : Window
     private void UpdateSoundFontUi()
     {
         var loaded = _audio.HasSoundFont;
-        SoundFontLabel.Text = loaded ? (_isBuiltInSoundFont ? "BUILT-IN YAMAHA GRAND · READY" : $"SOUNDFONT READY · {_audio.LoadedName}") : "NO SOUNDFONT · SILENT";
-        SoundFontLabel.Foreground = loaded ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
-        SoundFontHint.Text = loaded ? $"Yamaha grand · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}" : "The built-in grand piano is loading";
+        var silent = loaded && _audio.IsSilent;
+        SoundFontLabel.Text = loaded
+            ? silent ? "SOUNDFONT READY · NO AUDIO DEVICE" : _isBuiltInSoundFont ? "BUILT-IN YAMAHA GRAND · READY" : $"SOUNDFONT READY · {_audio.LoadedName}"
+            : "NO SOUNDFONT · SILENT";
+        SoundFontLabel.Foreground = silent ? new SolidColorBrush(Color.FromRgb(255, 196, 120))
+            : loaded ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
+        SoundFontHint.Text = silent ? $"Windows could not open an audio output ({_audio.SilentReason}) · playing without sound"
+            : loaded ? $"Yamaha grand · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}" : "The built-in grand piano is loading";
         if (!loaded && PresetCombo.Items.Count == 0)
         {
             _suppressPreset = true;
