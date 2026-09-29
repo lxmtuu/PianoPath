@@ -8,7 +8,7 @@ namespace PianoPath;
 /// <para>
 /// The rule is a one-dimensional two-means clustering of the notes, weighted by how long each pitch
 /// sounds, so a slow accompaniment of long low chords counts as much as a fast melodic line. A split is
-/// only used when it lies in a real gap between the hands (<see cref="MinimumGap"/> semitones at least)
+/// only used when it lies in a real gap between the hands (at least <see cref="MinimumGap"/> empty semitones)
 /// and both hands carry at least <see cref="MinimumShare"/> of that sounding time; a song that is
 /// really one hand, or whose hands overlap, keeps the split the user chose. Inside the gap the score is
 /// flat, so ties resolve to the candidate closest to middle C — the same note the default split uses,
@@ -29,7 +29,7 @@ internal static class HandSplit
     internal const int MiddleC = 60;
     /// <summary>Each hand needs at least this share of the sounding time for a split to be believed.</summary>
     internal const double MinimumShare = .10;
-    /// <summary>The hands must be separated by at least this many semitones (a fourth) for a split to be believed.</summary>
+    /// <summary>Empty semitones that must sit between the highest left-hand note and the lowest right-hand one.</summary>
     internal const int MinimumGap = 5;
 
     /// <summary>
@@ -62,12 +62,13 @@ internal static class HandSplit
         }
         static double Spread(double mass, double sum, double squares) => mass <= 0 ? 0 : squares - sum * sum / mass;
 
-        // The occupied pitches just outside a candidate split, so the gap between the hands can be measured.
-        var below = new int[129]; var above = new int[129];
+        // The occupied pitches just outside a candidate split, so the gap between the hands can be measured:
+        // below[split] is the highest sounding pitch under the split, above[split] the lowest one at or over it.
+        var below = new int[129]; var above = new int[128];
         var seen = -1;
-        for (var pitch = 0; pitch < 128; pitch++) { below[pitch + 1] = seen; if (weight[pitch] > 0) seen = pitch; }
+        for (var pitch = 0; pitch < 128; pitch++) { if (weight[pitch] > 0) seen = pitch; below[pitch + 1] = seen; }
         seen = -1;
-        for (var pitch = 127; pitch >= 0; pitch--) { above[pitch] = seen; if (weight[pitch] > 0) seen = pitch; }
+        for (var pitch = 127; pitch >= 0; pitch--) { if (weight[pitch] > 0) seen = pitch; above[pitch] = seen; }
 
         int? bestSplit = null;
         var bestScore = double.MaxValue;
@@ -78,7 +79,7 @@ internal static class HandSplit
             // A split only means "two hands" when a real gap sits between the lowest right-hand note and the
             // highest left-hand one; through a smooth run of notes the two-means score would still improve,
             // which says nothing about hands.
-            if (below[split] < 0 || above[split] < 0 || above[split] - below[split] < MinimumGap) continue;
+            if (below[split] < 0 || above[split] < 0 || above[split] - below[split] - 1 < MinimumGap) continue;
             var score = Spread(lowMass, sum[split], squares[split]) + Spread(highMass, sum[128] - sum[split], squares[128] - squares[split]);
             // A flat region between two clusters keeps the candidate nearest middle C, so the answer does not
             // depend on the order the candidates are tried in.

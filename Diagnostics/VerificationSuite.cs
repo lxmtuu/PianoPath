@@ -146,8 +146,10 @@ internal static class VerificationSuite
         // Hands that overlap through a smooth run of notes cannot be told apart from a single line.
         var overlapping = Notes(Enumerable.Range(48, 20).Select(pitch => (pitch, .5)));
         Assert(HandSplit.Infer(overlapping, 58) == 58, "A song whose hands overlap through a smooth run should keep the chosen split.");
-        var narrowGap = Notes([.. Enumerable.Range(50, 6).Select(pitch => (pitch, 1.0)), .. Enumerable.Range(57, 6).Select(pitch => (pitch, 1.0))]);
-        Assert(HandSplit.Infer(narrowGap, 54) == 54, "A gap narrower than a fourth should not be read as a hand separation.");
+        var narrowGap = Notes([.. Enumerable.Range(50, 6).Select(pitch => (pitch, 1.0)), .. Enumerable.Range(60, 6).Select(pitch => (pitch, 1.0))]);
+        Assert(HandSplit.Infer(narrowGap, 54) == 54, "Four empty semitones between the hands are too few to read as a hand separation.");
+        var justEnough = Notes([.. Enumerable.Range(50, 6).Select(pitch => (pitch, 1.0)), .. Enumerable.Range(61, 6).Select(pitch => (pitch, 1.0))]);
+        Assert(HandSplit.Infer(justEnough, 54) == HandSplit.MiddleC, "Five empty semitones between the hands are enough to read as a hand separation.");
         Results.Add("PASS hand split: two-hand clustering with middle-C tie-break, one-hand and stray-note protection, weighting by sounding time and a deterministic answer.");
     }
 
