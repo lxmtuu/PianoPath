@@ -218,6 +218,30 @@ internal static class ShellThemeManager
     /// <summary>Test hook for the high-contrast branch; never set outside <c>--verify</c>.</summary>
     internal static bool ForceHighContrast { get; set; }
 
+    /// <summary>
+    /// Windows raises <see cref="SystemParameters.StaticPropertyChanged"/> when an accessibility setting
+    /// changes. High contrast decides which palette wins, and the chrome has to repaint while the user is
+    /// looking at it, so the manager subscribes once for the life of the process.
+    /// </summary>
+    static ShellThemeManager() => SystemParameters.StaticPropertyChanged += (_, e) => OnSystemParametersChanged(e.PropertyName);
+
+    /// <summary>
+    /// The body of that hook. Split out of the event handler so <c>--verify</c> can raise the
+    /// notification on a runner whose Windows never actually switches to high contrast.
+    /// </summary>
+    internal static void OnSystemParametersChanged(string? propertyName)
+    {
+        // A null name means "something changed, the exact property is unknown" and is treated as ours;
+        // every other name is only ours when it is the contrast switch, because repainting on each
+        // system-parameter change would rebuild the whole palette whenever Windows reports anything.
+        if (propertyName is not (null or nameof(SystemParameters.HighContrast))) return;
+        // The notification does not have to arrive on the interface thread, and the palette lives in the
+        // application resources, so the repaint is posted to the dispatcher when it did not.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess()) { dispatcher.BeginInvoke(new Action(() => Apply(Current))); return; }
+        Apply(Current);
+    }
+
     /// <summary>Applies a theme by id or display name; returns the theme that ended up active.</summary>
     internal static ShellTheme Apply(string? id) => Apply(ShellThemes.Find(id));
 

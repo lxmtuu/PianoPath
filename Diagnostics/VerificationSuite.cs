@@ -877,25 +877,34 @@ internal static class VerificationSuite
             "The settings dock should keep Tab inside its own page instead of losing focus to the stage.");
 
         // High contrast: the published colours follow SystemColors while the user's chosen theme stays
-        // the stored one, so turning the system setting off republishes it without touching the settings.
+        // the stored one, and the repaint is driven by the SystemParameters notification alone - a runner
+        // never sees the real one, so the hook's body is called directly here.
         var chosen = ShellThemeManager.Current.Id;
         try
         {
             ShellThemeManager.ForceHighContrast = true;
-            ShellThemeManager.Apply(chosen);
+            ShellThemeManager.OnSystemParametersChanged(nameof(SystemParameters.HighContrast));
             var windowBrush = Application.Current.Resources["WindowBrush"] as SolidColorBrush;
             Assert(ShellThemeManager.IsHighContrast
                     && (Color)Application.Current.Resources["AccentColor"] == SystemColors.HighlightColor
                     && windowBrush is not null && windowBrush.Color == SystemColors.WindowColor,
-                "With high contrast on, the chrome must be painted from the Windows system colours.");
+                "Switching high contrast on must repaint the chrome from the Windows system colours by itself, without a second Apply call.");
             Assert(ShellThemeManager.Current.Id == ShellThemes.Find(chosen).Id,
                 "High contrast must not overwrite the theme the user chose.");
+            // An unrelated system parameter must leave the palette alone: only the contrast switch repaints.
+            ShellThemeManager.OnSystemParametersChanged("ClientAreaAnimation");
+            Assert((Color)Application.Current.Resources["AccentColor"] == SystemColors.HighlightColor,
+                "Only the contrast switch should repaint the chrome.");
         }
-        finally { ShellThemeManager.ForceHighContrast = false; ShellThemeManager.Apply(chosen); }
+        finally
+        {
+            ShellThemeManager.ForceHighContrast = false;
+            ShellThemeManager.OnSystemParametersChanged(nameof(SystemParameters.HighContrast));
+        }
         Assert(!ShellThemeManager.IsHighContrast && ShellThemeManager.Current.Id == ShellThemes.Find(chosen).Id
                 && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.Find(chosen).Accent,
-            "Turning high contrast off should republish the chosen concert theme.");
-        Results.Add("PASS accessibility: every interactive control carries a readable, localized name (glyph buttons through their tooltip, generated rows through their caption), the dock keeps Tab inside its page, and the high-contrast palette follows the Windows system colours without changing the chosen theme.");
+            "Turning high contrast off should republish the chosen concert theme through the same hook.");
+        Results.Add("PASS accessibility: every interactive control carries a readable, localized name (glyph buttons through their tooltip, generated rows through their caption), the dock keeps Tab inside its page, and high contrast repaints the chrome from the Windows system colours the moment Windows reports the switch, without changing the chosen theme.");
     }
 
     /// <summary>

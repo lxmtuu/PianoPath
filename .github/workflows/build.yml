@@ -14,13 +14,13 @@ jobs:
   build:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The bundled SoundFont lives in Git LFS; the build itself only needs the pointer, so skip the 113 MiB download.
           # The verification suite detects the pointer and reports SKIP for the bundled-piano checks.
           lfs: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -112,7 +112,7 @@ jobs:
 
       - name: Upload README previews
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: keyflow-previews
           path: docs/previews/*.png
