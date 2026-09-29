@@ -946,14 +946,16 @@ internal static class VerificationSuite
                 });
                 Assert(focusable.Count > 0, $"The '{header}' dock page should expose at least one control the keyboard can reach.");
                 // The generated rows of this page, in the order they were registered, which is the order
-                // the page prints them and the order the cards joined the visual tree.
+                // the page prints them and the order they joined the visual tree.
                 var host = InvokeReturn(window, "SettingsPageHost", index) as Panel;
                 var pageRows = catalogue.Where(row => ReferenceEquals(row.Page, host)).ToList();
-                var order = pageRows.Select((row, position) => (row.Card, Position: position)).ToDictionary(entry => entry.Card, entry => entry.Position);
+                // One card can hold several rows, so a control is matched to its row through the row
+                // element itself; the walk above and this order are what Tab follows.
                 int? RowOf(DependencyObject element)
                 {
-                    for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
-                        if (node is Border border && order.TryGetValue(border, out var position)) return position;
+                    for (var position = 0; position < pageRows.Count; position++)
+                        for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
+                            if (ReferenceEquals(node, pageRows[position].Element)) return position;
                     return null;
                 }
                 var previous = -1; var own = 0;
@@ -964,19 +966,24 @@ internal static class VerificationSuite
                     previous = position; own++;
                 }
                 Assert(pageRows.Count == 0 || own > 0, $"The generated rows of the '{header}' page should be reachable with the keyboard, not only with the mouse.");
+                var cards = new List<Border>();
+                foreach (var row in pageRows) if (!cards.Contains(row.Card)) cards.Add(row.Card);
+                foreach (var card in cards)
+                {
+                    var offset = card.TransformToAncestor(page).Transform(new Point(0, 0));
+                    Assert(offset.Y >= -1 && offset.Y + card.ActualHeight <= page.ExtentHeight + 1,
+                        $"Every '{header}' card should stay inside its scrollable content, not below it.");
+                    // The viewport may still be sized for the layout from before the vertical bar appeared,
+                    // so a card is allowed the width of that bar on top of the visible column.
+                    Assert(card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
+                        $"Every '{header}' card should fit the scroll column at the compact window size.");
+                    measured++;
+                }
                 foreach (var row in pageRows)
                 {
-                    var offset = row.Card.TransformToAncestor(page).Transform(new Point(0, 0));
-                    Assert(offset.Y >= -1 && offset.Y + row.Card.ActualHeight <= page.ExtentHeight + 1,
-                        $"Every '{header}' row should stay inside its scrollable content, not below it.");
-                    // The viewport may still be sized for the layout from before the vertical bar appeared,
-                    // so the row is allowed the width of that bar on top of the visible column.
-                    Assert(row.Card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
-                        $"Every '{header}' row should fit the scroll column at the compact window size.");
                     var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
                     Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
-                        $"The control of a '{header}' row should stay inside its card at the compact window size.");
-                    measured++;
+                        $"The control of a row on the '{header}' page should stay inside its card at the compact window size.");
                 }
                 pages++; reachable += focusable.Count;
             }
@@ -986,7 +993,7 @@ internal static class VerificationSuite
             tabs.SelectedIndex = wasIndex;
             window.Width = wasWidth; window.Height = wasHeight; window.WindowState = wasState; window.UpdateLayout();
         }
-        Results.Add($"PASS dock accessibility: all {pages} pages keep their {reachable} keyboard-reachable controls inside the scroll column at 1080x700, each of the {measured} generated rows stays inside its own card ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
+        Results.Add($"PASS dock accessibility: all {pages} pages keep their {reachable} keyboard-reachable controls inside the scroll column at 1080x700, each of the {measured} generated cards stays inside the scroll column ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
     }
 
     /// <summary>
