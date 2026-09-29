@@ -367,8 +367,18 @@ internal static class VerificationSuite
         ringing.Enabled = false;
         var fading = new short[4410 * 2]; ringing.Process(fading, 4410);
         Assert(fading.Any(sample => sample != 0), "Bypassing the reverb while it rings should fade the existing tail out instead of cutting it.");
-        var settled = new short[4410 * 2]; ringing.Process(settled, 4410);
+        // The tail fades over ~120 ms, i.e. across two 100 ms blocks; give the bypass a bounded
+        // number of blocks to reach digital silence, then require it to stay silent afterwards.
+        var settled = new short[4410 * 2];
+        for (var block = 0; block < 5; block++)
+        {
+            Array.Clear(settled);
+            ringing.Process(settled, 4410);
+            if (settled.All(sample => sample == 0)) break;
+        }
         Assert(settled.All(sample => sample == 0), "Once the faded tail ends, the bypassed reverb must stay silent.");
+        var after = new short[4410 * 2]; ringing.Process(after, 4410);
+        Assert(after.All(sample => sample == 0), "A settled bypassed reverb must keep the dry path silent.");
         Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
     }
 
@@ -654,15 +664,15 @@ internal static class VerificationSuite
 
     private static void VerifyEmbersShell(MainWindow window, PianoVisualSettings visualSettings)
     {
-        var menu = (FrameworkElement)window.FindName("MainMenuOverlay");
-        var play = (FrameworkElement)window.FindName("PlayDialogOverlay");
+        var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
+        var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
         Assert(menu is not null && play is not null, "The Embers-style shell should provide a main menu and a pre-flight play dialog.");
-        Assert(menu!.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
         window.ShowStartupMenu();
         Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
         Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
-        var notesToggle = (CheckBox)window.FindName("LayerNotesToggle");
+        var notesToggle = (CheckBox)window.FindName("LayerNotesToggle")!;
         Assert(notesToggle.IsChecked == visualSettings.ShowNotes, "Play-dialog layer switches should mirror the live stage settings.");
         notesToggle.IsChecked = false;
         Assert(!visualSettings.ShowNotes, "Switching the Notes layer off in the play dialog should update the stage settings.");
