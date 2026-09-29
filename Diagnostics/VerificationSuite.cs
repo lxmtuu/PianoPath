@@ -467,6 +467,7 @@ internal static class VerificationSuite
         VerifySettingsDock(window, stage, visualSettings);
         VerifyLanguageSwitching(window);
         VerifyAccessibility(window);
+        VerifyDockAccessibility(window);
         VerifySettingsHistory(window);
         VerifySettingsProfile(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
@@ -812,23 +813,31 @@ internal static class VerificationSuite
     /// marked controls). The check walks the window the way a screen reader does, then exercises the
     /// high-contrast branch of the theme manager, which a CI runner never actually turns on.
     /// </summary>
-    private static void VerifyAccessibility(MainWindow window)
+    /// <summary>
+    /// Walks the elements the application builds itself: template parts (the thumb of a slider, the
+    /// button of a combo box) carry their own automation peer and would only add noise to a check that
+    /// asks whether every control a user can operate has a name.
+    /// </summary>
+    private static void WalkApplicationTree(DependencyObject root, Action<FrameworkElement> visit)
     {
-        var controls = new List<FrameworkElement>();
         var seen = new HashSet<DependencyObject>();
         void Walk(DependencyObject node)
         {
             if (!seen.Add(node)) return;
-            // Template parts (the thumb of a slider, the button of a combo box) carry their own peer;
-            // only the controls the application builds itself are checked here.
-            if (node is FrameworkElement { TemplatedParent: null } element) controls.Add(element);
+            if (node is FrameworkElement { TemplatedParent: null } element) visit(element);
             foreach (var child in LogicalTreeHelper.GetChildren(node)) if (child is DependencyObject logical) Walk(logical);
             // A logical child can be content rather than a visual (a Run inside a TextBlock caption, for
             // instance, which the search highlight adds), and VisualTreeHelper throws on those.
             if (node is not Visual and not System.Windows.Media.Media3D.Visual3D) return;
             for (var index = 0; index < VisualTreeHelper.GetChildrenCount(node); index++) Walk(VisualTreeHelper.GetChild(node, index));
         }
-        Walk(window);
+        Walk(root);
+    }
+
+    private static void VerifyAccessibility(MainWindow window)
+    {
+        var controls = new List<FrameworkElement>();
+        WalkApplicationTree(window, controls.Add);
         static string VisibleLabel(FrameworkElement element) => element switch
         {
             ContentControl { Content: string text } => text,
@@ -887,6 +896,97 @@ internal static class VerificationSuite
                 && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.Find(chosen).Accent,
             "Turning high contrast off should republish the chosen concert theme.");
         Results.Add("PASS accessibility: every interactive control carries a readable, localized name (glyph buttons through their tooltip, generated rows through their caption), the dock keeps Tab inside its page, and the high-contrast palette follows the Windows system colours without changing the chosen theme.");
+    }
+
+    /// <summary>
+    /// Accessibility step 2: the dock at the size CI renders its previews at (1080x700) and the keyboard
+    /// path through every page. Each page has to keep its rows inside the scrollable content and every
+    /// control inside its own card - a longer word in another language must not push a slider out of
+    /// reach - and Tab has to visit a page the way it is printed: the generated rows in the order they
+    /// were registered, which is also the order their cards were added to the page.
+    /// </summary>
+    private static void VerifyDockAccessibility(MainWindow window)
+    {
+        var tabs = (TabControl)window.FindName("SettingsTabs");
+        var dock = (Border)window.FindName("SettingsPanel");
+        if (dock.Visibility != Visibility.Visible) Invoke(window, "OpenSettingsPanel");
+        // Leftover search text would collapse rows and make this check measure a page nobody sees.
+        if (window.FindName("SettingsSearchBox") is TextBox search && search.Text.Length > 0) search.Text = "";
+        window.UpdateLayout();
+        Assert(dock.Visibility == Visibility.Visible, "The design dock has to be open while its compact layout and its tab order are measured.");
+        Assert(tabs.Items.Count == SettingsPages.Order.Length, "Every page of the dock catalogue should have exactly one tab in the strip.");
+        var rows = (System.Collections.IList)Field(window, "_settingRows");
+        var catalogue = rows.Cast<object>().Select(row => (
+            Page: (Panel)row.GetType().GetField("Page")!.GetValue(row)!,
+            Card: (Border)row.GetType().GetField("Card")!.GetValue(row)!,
+            Element: (FrameworkElement)row.GetType().GetField("Element")!.GetValue(row)!)).ToList();
+        var (wasWidth, wasHeight, wasState, wasIndex) = (window.Width, window.Height, window.WindowState, tabs.SelectedIndex);
+        var pages = 0; var reachable = 0; var measured = 0; var handBuilt = 0;
+        try
+        {
+            window.WindowState = WindowState.Normal; window.Width = 1080; window.Height = 700; window.UpdateLayout();
+            for (var index = 0; index < tabs.Items.Count; index++)
+            {
+                var tab = (TabItem)tabs.Items[index];
+                tabs.SelectedIndex = index;
+                // Keep the pointer "recent", otherwise the idle timer hides the dock while it is measured.
+                SetField(window, "_lastPointerActivity", DateTime.UtcNow);
+                window.UpdateLayout();
+                var header = (string)tab.Header;
+                var content = (ScrollViewer?)tab.Content;
+                Assert(content is not null, $"The '{header}' dock page should scroll instead of clipping content that does not fit.");
+                var page = content!;
+                page.ScrollToTop(); window.UpdateLayout();
+                // The controls a keyboard can reach on this page, in the order WPF would visit them.
+                var focusable = new List<FrameworkElement>();
+                WalkApplicationTree(page, element =>
+                {
+                    if (element.Focusable && element.IsVisible && element.IsEnabled && element is ButtonBase or TextBox or Slider or ComboBox or ListBox)
+                        focusable.Add(element);
+                });
+                Assert(focusable.Count > 0, $"The '{header}' dock page should expose at least one control the keyboard can reach.");
+                // The generated rows of this page, in the order they were registered, which is the order
+                // the page prints them and the order the cards joined the visual tree.
+                var host = InvokeReturn(window, "SettingsPageHost", index) as Panel;
+                var pageRows = catalogue.Where(row => ReferenceEquals(row.Page, host)).ToList();
+                var order = pageRows.Select((row, position) => (row.Card, Position: position)).ToDictionary(entry => entry.Card, entry => entry.Position);
+                int? RowOf(DependencyObject element)
+                {
+                    for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
+                        if (node is Border border && order.TryGetValue(border, out var position)) return position;
+                    return null;
+                }
+                var previous = -1; var own = 0;
+                foreach (var control in focusable)
+                {
+                    if (RowOf(control) is not { } position) { handBuilt++; continue; }
+                    Assert(position >= previous, $"On the '{header}' page Tab would reach row {position} before row {previous}, which is printed above it.");
+                    previous = position; own++;
+                }
+                Assert(pageRows.Count == 0 || own > 0, $"The generated rows of the '{header}' page should be reachable with the keyboard, not only with the mouse.");
+                foreach (var row in pageRows)
+                {
+                    var offset = row.Card.TransformToAncestor(page).Transform(new Point(0, 0));
+                    Assert(offset.Y >= -1 && offset.Y + row.Card.ActualHeight <= page.ExtentHeight + 1,
+                        $"Every '{header}' row should stay inside its scrollable content, not below it.");
+                    // The viewport may still be sized for the layout from before the vertical bar appeared,
+                    // so the row is allowed the width of that bar on top of the visible column.
+                    Assert(row.Card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
+                        $"Every '{header}' row should fit the scroll column at the compact window size.");
+                    var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
+                    Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
+                        $"The control of a '{header}' row should stay inside its card at the compact window size.");
+                    measured++;
+                }
+                pages++; reachable += focusable.Count;
+            }
+        }
+        finally
+        {
+            tabs.SelectedIndex = wasIndex;
+            window.Width = wasWidth; window.Height = wasHeight; window.WindowState = wasState; window.UpdateLayout();
+        }
+        Results.Add($"PASS dock accessibility: all {pages} pages keep their {reachable} keyboard-reachable controls inside the scroll column at 1080x700, each of the {measured} generated rows stays inside its own card ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
     }
 
     /// <summary>

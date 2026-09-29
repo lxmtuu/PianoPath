@@ -21,7 +21,8 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 
 | Việc | Bằng chứng kiểm chứng |
 |---|---|
-| **Trợ năng**: mọi nút chỉ có glyph (`A`, `B`, `×`, `↺`, các nút icon, chevron của hộp thoại Play) có tên cho trình đọc màn hình, lấy từ tooltip đã dịch; mọi hàng sinh tự động của dock (slider, ô số, combo, swatch màu, ô màu) được đặt tên theo nhãn của hàng; **Tab** ở lại trong dock (`KeyboardNavigation.TabNavigation="Cycle"` tại `Ui/MainWindow.xaml`) | `VerifyAccessibility` + luật `scan_accessible_names` (checker) |
+| **Trợ năng**: mọi nút chỉ có glyph (`A`, `B`, `×`, `↺`, các nút icon, chevron của hộp thoại Play) có tên cho trình đọc màn hình, lấy từ tooltip đã dịch; mọi hàng sinh tự động của dock (slider, ô số, combo, swatch màu, ô màu) được đặt tên theo nhãn của hàng; **Tab** ở lại trong dock (`KeyboardNavigation.TabNavigation="Cycle"` tại `Ui/MainWindow.xaml`) và đi qua từng trang theo đúng thứ tự các hàng được in; ở cửa sổ 1080×700 mọi hàng vẫn nằm trong cột cuộn và mọi điều khiển vẫn nằm trong thẻ của hàng | `VerifyAccessibility` + `VerifyDockAccessibility` + luật `scan_accessible_names` (checker) |
+| **Bộ cài song ngữ**: `installer/Languages/Vietnamese.isl` ghi đè 108 câu của wizard (đúng `[Messages]`/`[CustomMessages]`, giữ nguyên mọi placeholder, lưu UTF‑8 có BOM) và `installer/Keyflow.iss` khai báo hai mục `[Languages]` + `[LangOptions] vietnamese.*` (`$041e`); `build.yml` biên dịch bộ cài trên `publish\win-x64` giả mỗi lần push, `release.yml` biên dịch từ bản publish thật rồi đính kèm bộ cài | `scan_installer` (checker) + `tools/inno_messages.py` + bước *Build the installer* trong cả hai workflow |
 | **High contrast**: khi Windows bật, khung giao diện vẽ bằng `SystemColors`; theme người dùng chọn vẫn nằm trong file cài đặt và tự quay lại khi tắt | `VerifyAccessibility` (nhánh `ShellThemeManager.ForceHighContrast`) |
 | **Undo / redo**: 32 ảnh chụp JSON, `Ctrl+Z` / `Ctrl+Shift+Z` / `Ctrl+Y`, một lần kéo slider là **một** bước (commit ở nhịp idle của `_settingsSaveTimer`), khôi phục qua `CopyFrom` + `RefreshSettingControls` | `VerifySettingsHistory` |
 | **Hồ sơ cài đặt**: `Keyflow.profile.json` (`Profile/SettingsProfile.cs`) gom cài đặt sân khấu + ngôn ngữ + theme; nhập/xuất ở trang General; kéo‑thả `.json` (hồ sơ), `.mid`/`.midi` (mở bài), ảnh (đặt nền) vào cửa sổ; ngôn ngữ không có trong build rơi về `en` | `VerifySettingsProfile` |
@@ -33,14 +34,15 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 
 ### 3.1 Việc đang mở trong P0
 
-* **Bộ cài đã có tiếng Việt, nhưng là bản dịch *một phần* — có chủ đích.** `installer/Languages/Vietnamese.isl`
+* **Không còn mục nào đang mở.** Cả bảy mục P0 đã xong và mỗi mục có lớp kiểm chứng riêng (bảng §2,
+  `docs/ROADMAP.md` §1); việc tiếp theo nằm ở P1 của roadmap (xuất MP4/alpha, thư viện bài, lịch sử
+  luyện tập…), không phải một mục P0 còn dở.
+* **Bộ cài tiếng Việt là bản dịch *một phần* — có chủ đích, không phải việc đang mở.** `installer/Languages/Vietnamese.isl`
   ghi đè 108 câu mà wizard thật sự hiện (trang welcome/license/thư mục/việc làm thêm/Start Menu/ready/
   tiến trình/kết thúc, các hộp thoại lỗi, trình gỡ cài đặt); ~162 câu còn lại của Inno Setup (các trang
   bộ cài này không dùng, chuỗi shell-extension, trang đĩa/component…) vẫn là tiếng Anh và trình biên dịch
   in ra một cảnh báo `… has not been defined for the "vietnamese" language` cho mỗi câu — đó là hành vi
   đã biết của tệp một phần, không phải lỗi. `tools/build_installer.ps1` chỉ tha đúng loại cảnh báo đó.
-* **Trợ năng bước 2**: font scale (case test `--compact` 1080×700) và thứ tự tiêu điểm (tab order)
-  theo từng trang dock chưa được assert.
 
 ### 3.2 Giới hạn kỹ thuật của sản phẩm (giữ nguyên, đã ghi ở README)
 
