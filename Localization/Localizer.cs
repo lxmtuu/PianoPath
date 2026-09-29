@@ -243,12 +243,14 @@ internal static class Loc
         return false;
     }
 
+    /// Order matters: a Window *is* a ContentControl and a TabItem *is* a HeaderedContentControl, so the
+    /// narrow types have to be matched before the wide ones or their text would land in the wrong property.
     private static DependencyProperty? DefaultProperty(DependencyObject element) => element switch
     {
-        HeaderedContentControl => HeaderedContentControl.HeaderProperty,
-        TextBlock => TextBlock.TextProperty,
-        ContentControl => ContentControl.ContentProperty,
         Window => Window.TitleProperty,
+        TextBlock => TextBlock.TextProperty,
+        HeaderedContentControl => HeaderedContentControl.HeaderProperty,
+        ContentControl => ContentControl.ContentProperty,
         FrameworkElement => FrameworkElement.ToolTipProperty,
         _ => null
     };

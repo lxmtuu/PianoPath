@@ -617,7 +617,7 @@ internal static class VerificationSuite
         // The navigation is grouped by intent. Order is derived from the sections, the XAML tab strip
         // must match that order, and the header printed above a page must be the header of the section
         // that owns it — so a page can never sit under a caption the code does not know about.
-        var headers = tabs.Items.Cast<TabItem>().Select(item => item.Header.ToString()).ToArray();
+        var headers = tabs.Items.Cast<TabItem>().Select(item => item.Header?.ToString() ?? "").ToArray();
         // A header may decorate the page name (Camera → "Camera & FX") but must start with it, which
         // is the same tolerance tools/check_sources.py applies to the markup.
         var pagesMatch = headers.Length == SettingsPages.Order.Length
