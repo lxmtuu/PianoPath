@@ -83,27 +83,27 @@ public partial class MainWindow
     /// </summary>
     private void BuildThemePage()
     {
-        var shell = Card(ThemeSettingsHost, "INTERFACE THEME", "The chrome around the stage: surfaces, accents and the animated backdrop. Applying a stage preset also switches the theme that belongs to it.");
+        var shell = Card(ThemeSettingsHost, "INTERFACE THEME", "The chrome around the stage: surfaces, accents and the animated acoustic backdrop. Applying a stage preset also switches the theme that belongs to it.");
         var chips = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
         themeChipHost = chips;
-        Register(shell, chips, "interface theme shell sakura nocturne concert noir velvet gold backdrop", nameof(PianoVisualSettings.ShellTheme));
+        Register(shell, chips, "interface theme shell concert grand noir obsidian velvet gold backdrop", nameof(PianoVisualSettings.ShellTheme));
         themeBlurbLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 8) };
         Register(shell, themeBlurbLabel, "theme description");
-        Choice(shell, "Motion", nameof(PianoVisualSettings.ChromeMotion), "How much the interface moves: the animated backdrop, panel entrances and button response. Off keeps everything still.",
+        Choice(shell, "Motion", nameof(PianoVisualSettings.ChromeMotion), "How much the interface moves: animated acoustic backdrop, panel transitions and button response. Off keeps everything still.",
             ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
-        SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the blossom petals, motes or golden dust in the animated backdrop.");
+        SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the floating concert dust motes and acoustic waves in the backdrop.");
 
-        var concert = Card(ThemeSettingsHost, "CONCERT STAGE", "Two extra layers that turn the visualizer into a recital: blossom petals drifting down the stage and coloured spotlights sweeping across it.");
-        Toggle(concert, "Blossom petals", nameof(PianoVisualSettings.ShowPetals), "Petals drift across the stage with the wind; the colour below tints them.");
-        SliderRow(concert, "Petal amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "How many petals are in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
-        ColorRow(concert, "Petal color", nameof(PianoVisualSettings.PetalColor), "Colour of the drifting petals.").VisibleWhen = () => _visualSettings.ShowPetals;
-        Toggle(concert, "Concert spotlights", nameof(PianoVisualSettings.ShowSpotlights), "Two coloured cones sweep the stage from above, like follow spots in an auditorium.");
-        SliderRow(concert, "Spotlight intensity", nameof(PianoVisualSettings.SpotlightIntensity), 0, 100, "Brightness of the sweeping spotlight cones.").VisibleWhen = () => _visualSettings.ShowSpotlights;
+        var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE LAYERS", "Optional recital layers: floating acoustic motes and soft ambient stage illumination.");
+        Toggle(concert, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
+        SliderRow(concert, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
+        ColorRow(concert, "Mote color", nameof(PianoVisualSettings.PetalColor), "Colour of the floating ambient particles.").VisibleWhen = () => _visualSettings.ShowPetals;
+        Toggle(concert, "Stage illumination", nameof(PianoVisualSettings.ShowSpotlights), "Soft atmospheric stage illumination across the concert keybed.");
+        SliderRow(concert, "Illumination intensity", nameof(PianoVisualSettings.SpotlightIntensity), 0, 100, "Brightness of the concert illumination.").VisibleWhen = () => _visualSettings.ShowSpotlights;
 
         var looks = Card(ThemeSettingsHost, "QUICK LOOKS", "One click applies a complete concert look: stage preset plus matching interface theme.");
         ButtonRow(looks,
-            ("Sakura night", (_, _) => ApplyBuiltInPreset("Sakura Nocturne")),
-            ("Concert gold", (_, _) => ApplyBuiltInPreset("Concert Gold")),
+            ("Concert Grand", (_, _) => ApplyBuiltInPreset("Neon Violet")),
+            ("Concert Gold", (_, _) => ApplyBuiltInPreset("Concert Gold")),
             ("Moonlight", (_, _) => ApplyBuiltInPreset("Moonlight Sonata")));
         Note(looks, "Every preset can be edited afterwards; the pages next to this one keep the piano roll, keyboard and camera in sync with the new theme.");
     }

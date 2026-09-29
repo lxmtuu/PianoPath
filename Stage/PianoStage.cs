@@ -213,18 +213,26 @@ internal sealed class PianoStage : FrameworkElement
         var amount = Math.Clamp((int)(_visual.ParticleAmount * strength * _visual.ParticleResponse / 55.0), 0, 120);
         for (var i = 0; i < amount; i++)
         {
+            var isNeedle = i % 3 != 0;
             var spread = _visual.ParticleSpread / 100 * Math.PI;
             var angle = Math.PI - spread / 2 + _random.NextDouble() * spread;
             angle += Math.Sin(i * .37 + _elapsed * _visual.EvolutionSpeed / 100) * _visual.Spiral / 100 * .3;
-            var speed = _visual.ParticleVelocity * (.45 + _random.NextDouble() * .9 * _visual.ParticleRandomness / 100) * _visual.ParticleSpeed / 100 * strength;
+            var speedMultiplier = isNeedle
+                ? (.65 + _random.NextDouble() * .85 * _visual.ParticleRandomness / 100)
+                : (.35 + _random.NextDouble() * .45 * _visual.ParticleRandomness / 100);
+            var speed = _visual.ParticleVelocity * speedMultiplier * _visual.ParticleSpeed / 100 * strength;
             var emitter = _visual.EmitterSize / 100 * keyWidth * 2;
-            var life = _visual.ParticleLife * (.5 + _random.NextDouble() * _visual.ParticleLifeRandomness / 100);
+            var life = isNeedle
+                ? _visual.ParticleLife * (.45 + _random.NextDouble() * .55 * _visual.ParticleLifeRandomness / 100)
+                : _visual.ParticleLife * (.85 + _random.NextDouble() * .75 * _visual.ParticleLifeRandomness / 100);
             _sparks.Add(new Spark
             {
                 X = x + (_random.NextDouble() - .5) * emitter, Y = y,
-                Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed - 30,
+                Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed - (isNeedle ? 35 : 15),
                 Life = life, Age = 0,
-                Size = _visual.ParticleSize * (.5 + _random.NextDouble() * _visual.ParticleSizeRandomness / 100),
+                Mass = isNeedle ? 0.6 : 1.5,
+                Phase = _random.NextDouble() * Math.PI * 2,
+                Size = _visual.ParticleSize * (isNeedle ? (.4 + _random.NextDouble() * .6) : (.7 + _random.NextDouble() * .8)),
                 Color = i % 4 == 0 ? Colors.White : Blend(noteColor, ColorFromHue(hue + (_random.NextDouble() - .5) * 28), .2)
             });
         }
@@ -263,7 +271,14 @@ internal sealed class PianoStage : FrameworkElement
             }
             p.X += p.Vx * dt; p.Y += p.Vy * dt;
             var field = _visual.VectorField / 100 * Math.Sin(p.Y / Math.Max(1, _visual.FieldScale) + _elapsed * _visual.EvolutionSpeed / 100);
-            p.Vx += field * dt * 14; p.Vy += _visual.Gravity * dt; var damping = Math.Exp(-_visual.Drag / 100 * dt); p.Vx *= damping; p.Vy *= damping;
+            p.Vx += field * dt * 14;
+            // Thermal buoyancy + micro curl turbulence
+            var heatRatio = Math.Clamp(1.0 - p.Age / p.Life, 0, 1);
+            var buoyancy = -38.0 * heatRatio * (1.0 / Math.Max(0.2, p.Mass));
+            p.Vy += (_visual.Gravity + buoyancy) * dt;
+            var curl = Math.Sin(p.Y * 0.04 + p.Phase + _elapsed * 3.2) * 14.0 * (1.0 - p.Age / p.Life);
+            p.Vx += curl * dt;
+            var damping = Math.Exp(-_visual.Drag / 100 * dt); p.Vx *= damping; p.Vy *= damping;
         }
         for (var i = _rings.Count - 1; i >= 0; i--)
         {
@@ -824,28 +839,94 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawSparks(DrawingContext dc, double width, double height)
     {
-        var bloom = 1.5 + _visual.BloomSize / 32;
+        var bloom = 1.4 + _visual.BloomSize / 36;
         var wispGlow = _visual.WispGlow / 100;
         foreach (var particle in _sparks)
         {
-            var fade = Math.Clamp(1 - particle.Age / particle.Life, 0, 1);
+            var u = Math.Clamp(particle.Age / particle.Life, 0, 1);
+            var fade = 1 - u;
             if (particle.Wisp)
             {
                 if (!_visual.ShowWisps) continue;
-                var wispAlpha = Alpha(210 * Math.Pow(fade, 1.3) * wispGlow);
-                var wispSize = particle.Size * (1 + particle.Age * 1.1);
+                var wispAlpha = Alpha(210 * Math.Pow(fade, 1.4) * wispGlow);
+                var wispSize = particle.Size * (1.2 + particle.Age * 1.3);
                 var wispCore = Color.FromArgb(wispAlpha, particle.Color.R, particle.Color.G, particle.Color.B);
-                var wispHalo = Color.FromArgb((byte)(wispAlpha * .22), particle.Color.R, particle.Color.G, particle.Color.B);
-                dc.DrawEllipse(Brush(wispHalo), null, new Point(particle.X, particle.Y), wispSize * 3.2, wispSize * 3.2);
+                var wispHalo = Color.FromArgb((byte)(wispAlpha * .25), particle.Color.R, particle.Color.G, particle.Color.B);
+                dc.DrawEllipse(Brush(wispHalo), null, new Point(particle.X, particle.Y), wispSize * 3.4, wispSize * 3.4);
                 dc.DrawEllipse(Brush(wispCore), null, new Point(particle.X, particle.Y), wispSize, wispSize);
                 continue;
             }
             if (!_visual.ShowEmbers) continue;
-            var alpha = Alpha(225 * fade * _visual.ParticleGlow / 100); var size = particle.Size * (.55 + fade * .55);
-            var color = Color.FromArgb(alpha, particle.Color.R, particle.Color.G, particle.Color.B);
-            var glow = Color.FromArgb((byte)(alpha * .3), particle.Color.R, particle.Color.G, particle.Color.B);
-            dc.DrawEllipse(Brush(glow), null, new Point(particle.X, particle.Y), size * bloom, size * bloom);
-            dc.DrawEllipse(Brush(color), null, new Point(particle.X, particle.Y), size, size);
+
+            // Thermal blackbody cooling: White-hot -> Incandescent Gold -> Molten Amber/Orange -> Ruby Ember -> Smoke
+            Color thermalCore, thermalGlow;
+            if (u < 0.20)
+            {
+                var t = u / 0.20;
+                thermalCore = Blend(Colors.White, Color.FromRgb(255, 240, 160), t);
+                thermalGlow = Blend(Color.FromRgb(255, 235, 140), particle.Color, t * 0.4);
+            }
+            else if (u < 0.55)
+            {
+                var t = (u - 0.20) / 0.35;
+                thermalCore = Blend(Color.FromRgb(255, 240, 160), Color.FromRgb(255, 175, 50), t);
+                thermalGlow = Blend(particle.Color, Color.FromRgb(255, 130, 30), t * 0.6);
+            }
+            else if (u < 0.85)
+            {
+                var t = (u - 0.55) / 0.30;
+                thermalCore = Blend(Color.FromRgb(255, 175, 50), Color.FromRgb(220, 60, 20), t);
+                thermalGlow = Blend(Color.FromRgb(255, 130, 30), Color.FromRgb(140, 20, 10), t);
+            }
+            else
+            {
+                var t = (u - 0.85) / 0.15;
+                thermalCore = Blend(Color.FromRgb(220, 60, 20), Color.FromRgb(70, 15, 15), t);
+                thermalGlow = Color.FromRgb(60, 10, 10);
+            }
+
+            var alpha = Alpha(255 * Math.Pow(fade, 1.2) * _visual.ParticleGlow / 100);
+            var color = Color.FromArgb(alpha, thermalCore.R, thermalCore.G, thermalCore.B);
+            var glow = Color.FromArgb((byte)(alpha * 0.35), thermalGlow.R, thermalGlow.G, thermalGlow.B);
+
+            var speedSq = particle.Vx * particle.Vx + particle.Vy * particle.Vy;
+            var speed = Math.Sqrt(speedSq);
+            var size = particle.Size * (0.6 + fade * 0.6);
+
+            // Aerodynamic velocity-stretched incandescent streak
+            if (speed > 25.0)
+            {
+                var angle = Math.Atan2(particle.Vy, particle.Vx) * 57.29577951308232;
+                var stretch = Math.Clamp(1.0 + speed * 0.018, 1.2, 5.0);
+                var streakLength = size * stretch;
+
+                dc.PushTransform(new TranslateTransform(particle.X, particle.Y));
+                dc.PushTransform(new RotateTransform(angle));
+
+                // Outer optical dispersion
+                dc.DrawEllipse(Brush(glow), null, new Point(0, 0), streakLength * 1.5 * bloom, size * 1.3 * bloom);
+                // Incandescent streak body
+                dc.DrawEllipse(Brush(color), null, new Point(0, 0), streakLength, size);
+                // White-hot filament core
+                if (u < 0.6)
+                {
+                    var whiteCoreAlpha = (byte)(alpha * (1.0 - u / 0.6));
+                    dc.DrawEllipse(Brush(Color.FromArgb(whiteCoreAlpha, 255, 255, 255)), null, new Point(0, 0), streakLength * 0.45, size * 0.55);
+                }
+
+                dc.Pop();
+                dc.Pop();
+            }
+            else
+            {
+                dc.DrawEllipse(Brush(glow), null, new Point(particle.X, particle.Y), size * 2.2 * bloom, size * 2.2 * bloom);
+                dc.DrawEllipse(Brush(color), null, new Point(particle.X, particle.Y), size, size);
+                if (u < 0.5)
+                {
+                    var whiteCoreAlpha = (byte)(alpha * (1.0 - u / 0.5));
+                    dc.DrawEllipse(Brush(Color.FromArgb(whiteCoreAlpha, 255, 255, 255)), null, new Point(particle.X, particle.Y), size * 0.5, size * 0.5);
+                }
+            }
         }
     }
 
@@ -854,11 +935,32 @@ internal sealed class PianoStage : FrameworkElement
         foreach (var ring in _rings)
         {
             var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
-            var radius = 6 + t * (16 + _visual.RingSize * 1.1);
-            var alpha = Alpha(210 * (1 - t) * (1 - t));
-            var pen = new Pen(Brush(Color.FromArgb(alpha, ring.Color.R, ring.Color.G, ring.Color.B)), .6 + (1 - t) * 2.6); pen.Freeze();
-            dc.DrawEllipse(null, pen, new Point(ring.X, ring.Y), radius, radius * .32);
-            if (t < .35) dc.DrawEllipse(Brush(Color.FromArgb(Alpha(140 * (1 - t / .35)), 255, 255, 255)), null, new Point(ring.X, ring.Y), 3 + radius * .25, 2 + radius * .1);
+            var progress = 1.0 - Math.Exp(-4.2 * t);
+            var radius = 5 + progress * (18 + _visual.RingSize * 1.25);
+            var alpha = Alpha(230 * Math.Pow(1 - t, 1.6));
+
+            // Primary acoustic compression wavefront
+            var penWidth = Math.Max(0.5, 2.2 * (1 - t));
+            var primaryPen = new Pen(Brush(Color.FromArgb(alpha, ring.Color.R, ring.Color.G, ring.Color.B)), penWidth);
+            primaryPen.Freeze();
+            dc.DrawEllipse(null, primaryPen, new Point(ring.X, ring.Y), radius, radius * .32);
+
+            // Secondary harmonic resonance wave
+            if (t > 0.08)
+            {
+                var harmonicRadius = radius * 0.68;
+                var harmonicAlpha = (byte)(alpha * 0.45);
+                var harmonicPen = new Pen(Brush(Color.FromArgb(harmonicAlpha, ring.Color.R, ring.Color.G, ring.Color.B)), penWidth * 0.7);
+                harmonicPen.Freeze();
+                dc.DrawEllipse(null, harmonicPen, new Point(ring.X, ring.Y), harmonicRadius, harmonicRadius * .32);
+            }
+
+            // Central impact optical flare during strike initiation
+            if (t < .30)
+            {
+                var flashAlpha = Alpha(170 * (1 - t / .30));
+                dc.DrawEllipse(Brush(Color.FromArgb(flashAlpha, 255, 255, 255)), null, new Point(ring.X, ring.Y), 4 + radius * .2, 2.5 + radius * .08);
+            }
         }
     }
 
@@ -1166,30 +1268,56 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawFlames(DrawingContext dc, double width, double keyTop, double lane)
     {
-        var intensity = _visual.FlameIntensity / 100; var heightScale = .4 + _visual.FlameHeight / 100 * 1.4;
+        var intensity = _visual.FlameIntensity / 100;
+        var heightScale = .4 + _visual.FlameHeight / 100 * 1.4;
         var warm = _visual.FlameColorMode != "Note";
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var heat = _keyHeat[pitch];
-            if (heat <= .02) continue;
+            if (heat <= .015) continue;
             var x = KeyCenters[pitch] * width;
-            var pulse = .65 + .35 * Math.Sin(_elapsed * 13 + pitch);
-            var radius = (8 + 30 * pulse) * heat * (.6 + intensity * .6);
-            var tint = warm ? Color.FromRgb(255, 178, 73) : AdjustColor(_activeKey[pitch] ? _activeKeyColor[pitch] : NoteColor(pitch, 0));
-            var deep = warm ? Color.FromRgb(255, 83, 54) : Blend(tint, Color.FromRgb(120, 0, 60), .45);
-            var flame = new RadialGradientBrush
+            var sway1 = Math.Sin(_elapsed * 13 + pitch * 2.7) * (2.0 + 5.0 * heat);
+            var sway2 = Math.Sin(_elapsed * 19 + pitch * 3.9) * (4.0 + 8.0 * heat) + Math.Cos(_elapsed * 25 + pitch) * 2.5;
+            var flicker = .84 + .16 * Math.Sin(_elapsed * 22 + pitch * 3.3);
+            var flameH = (22 + 62 * heat * heightScale) * flicker;
+            var flameW = (lane * 0.45 + 14 * heat) * (.7 + intensity * .5);
+
+            var tint = warm ? Color.FromRgb(255, 185, 75) : AdjustColor(_activeKey[pitch] ? _activeKeyColor[pitch] : NoteColor(pitch, 0));
+            var deep = warm ? Color.FromRgb(255, 60, 20) : Blend(tint, Color.FromRgb(140, 10, 50), .45);
+
+            // Layer 1: Ambient thermal bloom around combustion zone
+            var thermalBloom = new RadialGradientBrush
             {
-                Center = new Point(.5, .84), GradientOrigin = new Point(.5, .84), RadiusX = .8, RadiusY = 1.1,
+                Center = new Point(.5, .9), GradientOrigin = new Point(.5, .9), RadiusX = .85, RadiusY = .95,
                 MappingMode = BrushMappingMode.RelativeToBoundingBox
             };
-            flame.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(150 * intensity), 255, 255, 220), 0));
-            flame.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(105 * intensity), tint.R, tint.G, tint.B), .28));
-            flame.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(42 * intensity), deep.R, deep.G, deep.B), .72));
-            flame.GradientStops.Add(new GradientStop(Color.FromArgb(0, deep.R, deep.G, deep.B), 1)); flame.Freeze();
-            dc.DrawEllipse(flame, null, new Point(x, keyTop + 3), radius, (20 + radius * 1.35) * heightScale);
-            // A flickering inner tongue gives the flame some motion instead of a static blob.
-            var tongue = (6 + 14 * heat) * (.7 + .3 * Math.Sin(_elapsed * 21 + pitch * 1.7)) * heightScale;
-            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(120 * intensity * heat), 255, 250, 225)), null, new Point(x + Math.Sin(_elapsed * 17 + pitch) * 2, keyTop - tongue * .5), 2.5 + heat * 2, tongue);
+            thermalBloom.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(45 * intensity * heat), tint.R, tint.G, tint.B), 0));
+            thermalBloom.GradientStops.Add(new GradientStop(Color.FromArgb(0, tint.R, tint.G, tint.B), 1));
+            thermalBloom.Freeze();
+            dc.DrawEllipse(thermalBloom, null, new Point(x, keyTop - flameH * .35), flameW * 1.6, flameH * .8);
+
+            // Layer 2: Main organic aerodynamic combustion plume
+            var plume = new RadialGradientBrush
+            {
+                Center = new Point(.5, .92), GradientOrigin = new Point(.5, .92), RadiusX = .85, RadiusY = 1.15,
+                MappingMode = BrushMappingMode.RelativeToBoundingBox
+            };
+            plume.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(220 * intensity * heat), 255, 255, 235), 0));
+            plume.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(160 * intensity * heat), tint.R, tint.G, tint.B), .28));
+            plume.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(60 * intensity * heat), deep.R, deep.G, deep.B), .75));
+            plume.GradientStops.Add(new GradientStop(Color.FromArgb(0, deep.R, deep.G, deep.B), 1));
+            plume.Freeze();
+
+            dc.DrawEllipse(plume, null, new Point(x + sway1 * .4, keyTop - flameH * .42), flameW, flameH * .55);
+
+            // Layer 3: High-energy dancing flame tongues
+            var tongueH1 = (9 + 20 * heat) * (.8 + .2 * Math.Sin(_elapsed * 26 + pitch * 2.1)) * heightScale;
+            var tongueH2 = (7 + 16 * heat) * (.8 + .2 * Math.Sin(_elapsed * 30 + pitch * 3.7)) * heightScale;
+            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(180 * intensity * heat), 255, 252, 235)), null, new Point(x - flameW * .15 + sway2 * .4, keyTop - tongueH1 * .5), 2.2 + heat * 2.0, tongueH1 * .5);
+            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(150 * intensity * heat), 255, 245, 210)), null, new Point(x + flameW * .18 + sway2 * .6, keyTop - tongueH2 * .5), 1.8 + heat * 1.6, tongueH2 * .5);
+
+            // Layer 4: Base plasma contact flash
+            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(230 * intensity * heat), 255, 255, 250)), null, new Point(x, keyTop - 1), flameW * .55, 2.5 + heat * 1.5);
         }
     }
 
@@ -1348,7 +1476,7 @@ internal sealed class PianoStage : FrameworkElement
     private sealed record Petal(double X, double Y, double Size, double Speed, double Sway, double Drift, double Spin, double Phase);
     /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
     private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
-    private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase; public bool Wisp; public Color Color; }
+    private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; }
     private sealed class Ring { public double X, Y, Age, Life; public Color Color; }
     private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; }
 }

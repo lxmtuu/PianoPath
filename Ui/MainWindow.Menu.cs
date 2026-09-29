@@ -63,8 +63,8 @@ public partial class MainWindow
     private void MainMenuAbout_Click(object sender, RoutedEventArgs e)
     {
         MessageBox.Show(this,
-            "Keyflow · Piano VFX Studio\n\nA real-time MIDI piano visualizer: ray-traced keyboard shading, particle embers, flames, halos, blossom petals and a full stage designer.\n\nInterface themes: Sakura Nocturne (indigo night, blossom pink and gold), Concert Noir (violet and cyan studio) and Velvet Gold (burgundy velvet with brass light).\n\nThemes are drawn by the shared frame clock, so every panel animates in step with the monitor.\nSoundFont: FreePats YDP Grand Piano (CC BY 3.0).\nShading model: Cook-Torrance GGX + ACES filmic, in the spirit of Unreal Engine.",
-            "About Keyflow", MessageBoxButton.OK, MessageBoxImage.Information);
+            "Keyflow · Piano Performance & Concert VFX Studio\n\nA professional real-time MIDI piano visualizer: ray-traced keyboard shading, thermal sparks & embers, acoustic resonance waves, flames, and a full concert stage designer.\n\nInterface themes: Concert Grand (Steinway ebony & champagne gold), Concert Noir (obsidian slate with silvery platinum) and Velvet Gold (mahogany velvet & burnished brass).\n\nThemes and stage effects are driven by the shared vsync clock for fluid 60+ FPS motion.\nSoundFont: Bundled Yamaha Disklavier Grand Piano (88 Keys).\nShading model: Cook-Torrance GGX + ACES filmic tone mapping.",
+            "About Keyflow Concert Grand", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void MainMenuExit_Click(object sender, RoutedEventArgs e) => Close();
