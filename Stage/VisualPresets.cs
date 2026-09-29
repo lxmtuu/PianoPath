@@ -42,9 +42,13 @@ internal static class VisualPresets
         var s = Base(DefaultPresetName);
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Violet"; s.NoteColorStart = "#7B5CFF"; s.NoteColorEnd = "#F05CFF";
         s.HaloColor = "#C66EFF"; s.HaloIntensity = 95; s.NoteGlow = 110; s.NoteEdge = 120; s.NoteEdgeWidth = 62; s.NoteTint = 30; s.NoteHeadGlow = 55;
-        s.ShowFlame = true; s.FlameIntensity = 75; s.FlameHeight = 60; s.FlameColorMode = "Warm"; s.ShowWisps = false; s.ShowImpactRings = true;
+        s.ShowFlame = true; s.FlameIntensity = 75; s.FlameHeight = 60; s.FlameColorMode = "Warm"; s.ShowImpactRings = true;
+        // White-hot impact flash plus rising spark/smoke columns, matching the reference captures.
+        s.ShowImpactFlash = true; s.ImpactFlashIntensity = 80;
+        s.ShowWisps = true; s.WispAmount = 55; s.WispHeight = 70; s.WispTurbulence = 60; s.WispGlow = 95;
+        s.ParticleVelocity = 230; s.ParticleSize = 1.7; s.ParticleLife = .85;
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
-        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 100; s.ShaderRimLight = 75;
         s.ShellTheme = ShellThemes.ConcertGrandId;
         s.ShowPetals = false;
         return s;

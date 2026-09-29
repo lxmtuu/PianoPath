@@ -177,16 +177,32 @@ internal static class PianoKeyboardRenderer
 
         var radiance = Vec3.Zero;
 
-        // 1 · Softbox key light. Jittering the sample over the light rectangle is what gives a soft penumbra.
-        var samples = Math.Max(1, scene.ShadowSamples);
+        // 1 · Softbox key light. Stratifying the samples over a grid of the light rectangle makes the
+        // penumbra converge without per-pixel grain; a little hash jitter per cell keeps banding away.
+        // The bed, fallboard and key front faces sit in shadow almost everywhere, so they take one
+        // deterministic attenuated sample instead of stochastic rays and stay perfectly smooth; only the
+        // key tops - where the black-key penumbra actually moves - keep the stratified softbox rays.
+        var keyFace = topFace && material is MaterialWhite or MaterialBlack;
+        var samples = keyFace ? Math.Max(1, scene.ShadowSamples) : 1;
+        var grid = (int)Math.Ceiling(Math.Sqrt(samples));
         for (var i = 0; i < samples; i++)
         {
-            var jitterA = (ShaderMath.Hash(absX, absY, i * 2) - .5) * 2 * scene.LightSize;
-            var jitterB = (ShaderMath.Hash(absX, absY, i * 2 + 1) - .5) * 2 * scene.LightSize;
-            var toLight = (ctx.ToKeyLight + ctx.LightSideA * jitterA + ctx.LightSideB * jitterB).Normalized();
+            Vec3 toLight;
+            double visibility;
+            if (keyFace)
+            {
+                var jitterA = ((i % grid + .5 + (ShaderMath.Hash(absX, absY, i * 2) - .5) * .9) / grid * 2 - 1) * scene.LightSize;
+                var jitterB = ((i / grid + .5 + (ShaderMath.Hash(absX, absY, i * 2 + 1) - .5) * .9) / grid * 2 - 1) * scene.LightSize;
+                toLight = (ctx.ToKeyLight + ctx.LightSideA * jitterA + ctx.LightSideB * jitterB).Normalized();
+                visibility = IsShadowed(ctx, point, normal, toLight) ? 1 - scene.ShadowStrength : 1;
+            }
+            else
+            {
+                toLight = ctx.ToKeyLight;
+                visibility = 1 - scene.ShadowStrength * .85;
+            }
             var ndl = Vec3.Dot(normal, toLight);
             if (ndl <= 0) continue;
-            var visibility = IsShadowed(ctx, point, normal, toLight) ? 1 - scene.ShadowStrength : 1;
             radiance += EvaluateBrdf(albedo, roughness, ctx.F0, normal, view, toLight) * ctx.KeyLightLinear * (ndl * visibility);
         }
         radiance = radiance / samples;
@@ -328,8 +344,10 @@ internal static class PianoKeyboardRenderer
         var occluded = 0;
         for (var i = 0; i < samples; i++)
         {
-            var radial = Math.Sqrt(ShaderMath.Hash(absX, absY, 500 + i * 2));
-            var angle = ShaderMath.Hash(absX, absY, 501 + i * 2) * ShaderMath.Pi * 2;
+            // Fixed golden-angle spiral directions shared by every pixel: occlusion becomes a smooth spatial
+            // function instead of per-pixel noise, and the ordered dither hides any residual banding.
+            var radial = Math.Sqrt((i + .5) / samples);
+            var angle = i * 2.399963229728653;
             var height = Math.Sqrt(Math.Max(0, 1 - radial * radial));
             var direction = (tangent * (radial * Math.Cos(angle)) + bitangent * (radial * Math.Sin(angle)) + normal * height).Normalized();
             if (HitsOccluder(ctx, origin, direction)) occluded++;

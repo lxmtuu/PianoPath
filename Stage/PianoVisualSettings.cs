@@ -24,7 +24,7 @@ internal sealed class PianoVisualSettings
     public bool ShowStars { get; set; }
     public bool ShowWisps { get; set; } = false;
     public bool ShowImpactRings { get; set; } = true;
-    public bool ShowLightBeams { get; set; } = true;
+    public bool ShowLightBeams { get; set; } = false;
     public bool ShowNoteLabels { get; set; } = false;
     public bool ShowKeyFelt { get; set; } = false;
     /// <summary>Blossom petals drifting across the stage (the "Your Lie in April" layer).</summary>
@@ -57,7 +57,7 @@ internal sealed class PianoVisualSettings
     public string LeftHandColor { get; set; } = "#3FA9FF";
     public string RightHandColor { get; set; } = "#FF6FD8";
     public string HaloColor { get; set; } = "#C66EFF";
-    public double HaloIntensity { get; set; } = 80;
+    public double HaloIntensity { get; set; } = 90;
     public string PressedKeyColor { get; set; } = "#F782FF";
     public string KeyFeltColor { get; set; } = "#C41C4A";
     public string BackgroundColor { get; set; } = "#000000";
@@ -74,7 +74,7 @@ internal sealed class PianoVisualSettings
     public double NoteHeadGlow { get; set; } = 40;
     public double NoteTexture { get; set; } = 60;
     public double NoteTint { get; set; } = 78;
-    public double NoteGlow { get; set; } = 86;
+    public double NoteGlow { get; set; } = 100;
     public double NoteEdge { get; set; } = 88;
     public double NoteRefraction { get; set; } = 35;
     public double NoteRoundness { get; set; } = 70;
@@ -102,14 +102,14 @@ internal sealed class PianoVisualSettings
     public double EmitterSize { get; set; } = 24;
     public double Spiral { get; set; } = 30;
     public double ParticleSpeed { get; set; } = 100;
-    public double ParticleAmount { get; set; } = 24;
-    public double ParticleVelocity { get; set; } = 150;
+    public double ParticleAmount { get; set; } = 34;
+    public double ParticleVelocity { get; set; } = 210;
     public double ParticleRandomness { get; set; } = 38;
     public double ParticleSpread { get; set; } = 72;
     public double ParticleResponse { get; set; } = 55;
-    public double ParticleLife { get; set; } = .65;
+    public double ParticleLife { get; set; } = .9;
     public double ParticleLifeRandomness { get; set; } = 45;
-    public double ParticleSize { get; set; } = 2.2;
+    public double ParticleSize { get; set; } = 1.6;
     public double ParticleSizeRandomness { get; set; } = 80;
     public double ParticleGlow { get; set; } = 85;
     public double Gravity { get; set; } = 290;
@@ -138,9 +138,9 @@ internal sealed class PianoVisualSettings
     /// <summary>Brightness of the impact wave (0-150 %).</summary>
     public double ImpactWaveIntensity { get; set; } = 100;
     /// <summary>White-hot flare at the hit point, fading in about 180 ms.</summary>
-    public bool ShowImpactFlash { get; set; } = false;
+    public bool ShowImpactFlash { get; set; } = true;
     /// <summary>Brightness of the impact flash (0-100 %).</summary>
-    public double ImpactFlashIntensity { get; set; } = 70;
+    public double ImpactFlashIntensity { get; set; } = 80;
     /// <summary>Burst style: Embers, Splash, Fireworks, Confetti or Dust.</summary>
     public string ImpactBurst { get; set; } = "Embers";
     /// <summary>What the note becomes on impact: None, Shatter, Melt, Absorb, Bounce or Morph.</summary>
@@ -239,9 +239,9 @@ internal sealed class PianoVisualSettings
     /// <summary>Polish of the ivory and ebony; higher means tighter highlights.</summary>
     public double ShaderGloss { get; set; } = 72;
     /// <summary>Accent rim light rising from behind the fallboard.</summary>
-    public double ShaderRimLight { get; set; } = 62;
+    public double ShaderRimLight { get; set; } = 70;
     /// <summary>How strongly a sounding key glows and spills its color onto its neighbours.</summary>
-    public double ShaderEmissive { get; set; } = 80;
+    public double ShaderEmissive { get; set; } = 95;
     /// <summary>Exposure applied before the filmic tonemapper.</summary>
     public double ShaderExposure { get; set; } = 105;
     /// <summary>0 is a flat top-down bed, 100 a low camera with strong perspective.</summary>
@@ -263,8 +263,8 @@ internal sealed class PianoVisualSettings
     public double CameraOffset { get; set; } = 50;
     public double Saturation { get; set; } = 100;
     public double Contrast { get; set; } = 100;
-    public double BloomIntensity { get; set; } = 65;
-    public double BloomSize { get; set; } = 62;
+    public double BloomIntensity { get; set; } = 80;
+    public double BloomSize { get; set; } = 70;
 
     // ---- Recording ----------------------------------------------------------------------------------
     /// <summary>Window, 720p or 1080p.</summary>

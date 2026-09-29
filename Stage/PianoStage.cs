@@ -279,7 +279,9 @@ internal sealed class PianoStage : FrameworkElement
             }
             var isNeedle = i % 3 != 0 && kind != 2 && kind != 3;
             var spread = _visual.ParticleSpread / 100 * Math.PI;
-            var angle = Math.PI - spread / 2 + _random.NextDouble() * spread;
+            // The burst fountains upward off the key like the reference captures: centred on straight up
+            // (screen -Y) instead of a sideways fan, so sparks rise, hang and rain back down.
+            var angle = -Math.PI / 2 + (_random.NextDouble() - .5) * spread;
             angle += Math.Sin(i * .37 + _elapsed * _visual.EvolutionSpeed / 100) * _visual.Spiral / 100 * .3;
             var speedMultiplier = isNeedle
                 ? (.65 + _random.NextDouble() * .85 * _visual.ParticleRandomness / 100)
@@ -833,20 +835,28 @@ internal sealed class PianoStage : FrameworkElement
         var (cr, cg, cb) = (color.R, color.G, color.B);
         var bright = Blend(color, Colors.White, .35);
         if (!ghostPass) DrawFallingTrail(dc, r, color, opacity, pitch, rising);
-        // Outer bloom shared by every style; the neon style spreads it further to read as a glowing tube.
+        // Outer bloom shared by every style: stacked rounded shells with exponentially decaying alpha so the
+        // glow falls off like real light instead of showing two flat banded rings; neon spreads further.
         var bloomScale = style == "Neon" ? 1.4 : 1;
-        dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(16 * opacity * glow), cr, cg, cb)), null, Inflate(r, outer * 1.8 * bloomScale), radius + outer, radius + outer);
-        dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(34 * opacity * glow), cr, cg, cb)), null, Inflate(r, outer * .75 * bloomScale), radius + outer * .6, radius + outer * .6);
+        for (var layer = 4; layer >= 1; layer--)
+        {
+            var f = layer / 4.0;
+            var spread = outer * bloomScale * (.55 + 1.45 * f);
+            var shellAlpha = Alpha(58 * opacity * glow * Math.Exp(-2.2 * f));
+            dc.DrawRoundedRectangle(Brush(Color.FromArgb(shellAlpha, cr, cg, cb)), null, Inflate(r, spread), radius + spread, radius + spread);
+        }
         switch (style)
         {
             case "Neon":
             {
-                // Hollow tube: a dark tinted interior, a wide soft stroke and a crisp bright core stroke.
-                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(70 * opacity * tint), cr, cg, cb)), null, r, radius, radius);
-                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(90 * opacity), 6, 4, 14)), null, Inflate(r, -Math.Min(3, r.Width / 4)), radius, radius);
-                var soft = new Pen(Brush(Color.FromArgb(Alpha(120 * opacity * glow), cr, cg, cb)), edgeWidth * 2.6 + 1.5); soft.Freeze();
+                // Hollow neon tube: a near-black interior, a wide tinted soft stroke and a white-hot core
+                // stroke, matching the reference look of a glowing capsule outline.
+                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(50 * opacity * tint), cr, cg, cb)), null, r, radius, radius);
+                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(120 * opacity), 4, 3, 10)), null, Inflate(r, -Math.Min(3, r.Width / 4)), radius, radius);
+                var soft = new Pen(Brush(Color.FromArgb(Alpha(150 * opacity * glow), cr, cg, cb)), edgeWidth * 3 + 2); soft.Freeze();
                 dc.DrawRoundedRectangle(null, soft, Inflate(r, -.7), radius, radius);
-                var core = new Pen(Brush(Color.FromArgb(Alpha(255 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B)), edgeWidth + .8); core.Freeze();
+                var hot = Blend(color, Colors.White, .78);
+                var core = new Pen(Brush(Color.FromArgb(Alpha(255 * opacity * Math.Min(1, _visual.NoteEdge / 100)), hot.R, hot.G, hot.B)), edgeWidth + 1); core.Freeze();
                 dc.DrawRoundedRectangle(null, core, Inflate(r, -.7), radius, radius);
                 break;
             }
@@ -893,8 +903,12 @@ internal sealed class PianoStage : FrameworkElement
             {
                 if (_visual.Notes3D)
                 {
-                    // Vertical bevel: lit top edge, saturated middle, shadowed bottom, like a bar with thickness.
+                    // Cylindrical body: a lit rounded centre with darkened edges reads as a physical rod;
+                    // a translucent vertical bevel on top adds thickness so the bar has real volume.
                     dc.PushOpacity(Math.Clamp(opacity * tint, 0, 1));
+                    dc.DrawRoundedRectangle(NoteCylinderBrush(color), null, r, radius, radius);
+                    dc.Pop();
+                    dc.PushOpacity(.4 * Math.Clamp(opacity * tint, 0, 1));
                     dc.DrawRoundedRectangle(NoteBodyBrush(color), null, r, radius, radius);
                     dc.Pop();
                 }
@@ -954,6 +968,51 @@ internal sealed class PianoStage : FrameworkElement
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(top.R, top.G, top.B), 0));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(color.R, color.G, color.B), .55));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(bottom.R, bottom.G, bottom.B), 1));
+        gradient.Freeze();
+        return CacheGradient(key, gradient);
+    }
+
+    /// <summary>
+    /// A linear gradient whose alpha decays as a gaussian away from <paramref name="peak"/>, which reads on
+    /// screen as light scattering through air (inverse-square-ish falloff) instead of a flat banded stripe.
+    /// </summary>
+    private static Brush FalloffBrush(Color color, double peakAlpha, double peak, double falloff, bool horizontal)
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = horizontal ? new Point(1, 0) : new Point(0, 1),
+            MappingMode = BrushMappingMode.RelativeToBoundingBox
+        };
+        const int steps = 8;
+        for (var i = 0; i <= steps; i++)
+        {
+            var t = i / (double)steps;
+            var distance = t - peak;
+            var alpha = peakAlpha * Math.Exp(-falloff * distance * distance);
+            brush.GradientStops.Add(new GradientStop(Color.FromArgb((byte)Math.Clamp(alpha, 0, 255), color.R, color.G, color.B), t));
+        }
+        brush.Freeze();
+        return brush;
+    }
+
+    /// <summary>
+    /// Horizontal cylinder shading for a 3D note bar: dark rounded edges, a lit shoulder and a hot specular
+    /// centre, so the bar reads as a physical rod rather than a flat rectangle.
+    /// </summary>
+    private Brush NoteCylinderBrush(Color color)
+    {
+        var key = GradientKey(8, Color.FromArgb(255, color.R, color.G, color.B));
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        var edge = Blend(color, Color.FromRgb(6, 4, 12), .55);
+        var shoulder = Blend(color, Colors.White, .18);
+        var specular = Blend(color, Colors.White, .6);
+        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 0));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .28));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(specular.R, specular.G, specular.B), .46));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(color.R, color.G, color.B), .68));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 1));
         gradient.Freeze();
         return CacheGradient(key, gradient);
     }
@@ -1100,8 +1159,12 @@ internal sealed class PianoStage : FrameworkElement
                 var wispAlpha = Alpha(210 * Math.Pow(fade, 1.4) * wispGlow);
                 var wispSize = particle.Size * (1.2 + particle.Age * 1.3);
                 var wispCore = Color.FromArgb(wispAlpha, particle.Color.R, particle.Color.G, particle.Color.B);
-                var wispHalo = Color.FromArgb((byte)(wispAlpha * .25), particle.Color.R, particle.Color.G, particle.Color.B);
-                dc.DrawEllipse(Brush(wispHalo), null, new Point(particle.X, particle.Y), wispSize * 3.4, wispSize * 3.4);
+                // Three concentric shells approximate a smooth gaussian falloff, so the wisp reads as a
+                // soft mote of light/smoke instead of a flat disc with a hard rim.
+                var wispMid = Color.FromArgb((byte)(wispAlpha * .42), particle.Color.R, particle.Color.G, particle.Color.B);
+                var wispHalo = Color.FromArgb((byte)(wispAlpha * .16), particle.Color.R, particle.Color.G, particle.Color.B);
+                dc.DrawEllipse(Brush(wispHalo), null, new Point(particle.X, particle.Y), wispSize * 3.2, wispSize * 3.2);
+                dc.DrawEllipse(Brush(wispMid), null, new Point(particle.X, particle.Y), wispSize * 1.9, wispSize * 1.9);
                 dc.DrawEllipse(Brush(wispCore), null, new Point(particle.X, particle.Y), wispSize, wispSize);
                 continue;
             }
@@ -1140,7 +1203,8 @@ internal sealed class PianoStage : FrameworkElement
 
             var alpha = Alpha(255 * Math.Pow(fade, 1.2) * _visual.ParticleGlow / 100);
             var color = Color.FromArgb(alpha, thermalCore.R, thermalCore.G, thermalCore.B);
-            var glow = Color.FromArgb((byte)(alpha * 0.35), thermalGlow.R, thermalGlow.G, thermalGlow.B);
+            // A tighter, dimmer halo keeps sparks reading as crisp incandescent points, not soft blobs.
+            var glow = Color.FromArgb((byte)(alpha * 0.28), thermalGlow.R, thermalGlow.G, thermalGlow.B);
 
             var speedSq = particle.Vx * particle.Vx + particle.Vy * particle.Vy;
             var speed = Math.Sqrt(speedSq);
@@ -1271,9 +1335,16 @@ internal sealed class PianoStage : FrameworkElement
             glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, r, g, b), 1));
             glow.Freeze();
             dc.DrawEllipse(glow, null, new Point(flash.X, flash.Y), radius * 1.4, radius * .8);
-            var streak = new Pen(Brush(Color.FromArgb(Alpha(170 * fade), 255, 255, 255)), 1.6);
+            // Short incandescent dashes flicking upward off the dome instead of one hard horizontal streak.
+            var streak = new Pen(Brush(Color.FromArgb(Alpha(150 * fade), 255, 255, 255)), 1.2);
             streak.Freeze();
-            dc.DrawLine(streak, new Point(flash.X - radius * 1.8, flash.Y), new Point(flash.X + radius * 1.8, flash.Y));
+            for (var s = 0; s < 6; s++)
+            {
+                var ox = (SeededRandom(s * 57 + (int)flash.X) - .5) * radius * 1.5;
+                var len = radius * (.45 + SeededRandom(s * 91 + (int)flash.Y) * .8) * (1 - t * .4);
+                var y0 = flash.Y - 2 - SeededRandom(s * 13 + 5) * 5 - t * radius * .9;
+                dc.DrawLine(streak, new Point(flash.X + ox, y0), new Point(flash.X + ox, y0 - len));
+            }
         }
     }
 
@@ -2094,33 +2165,42 @@ internal sealed class PianoStage : FrameworkElement
         var haloSpread = 6 + _visual.BloomSize / 5.0;
         var haloAlpha = Alpha(Math.Clamp((24 + _visual.BloomIntensity * .75) * intensity, 0, 255));
 
-        // 1 · Soft volumetric bloom across the hit line
-        var glowHeight = haloSpread * 2.5;
-        var haloGlowBrush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
-        haloGlowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, baseColor.R, baseColor.G, baseColor.B), 0.0));
-        haloGlowBrush.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(haloAlpha * .55), baseColor.R, baseColor.G, baseColor.B), 0.5));
-        haloGlowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, baseColor.R, baseColor.G, baseColor.B), 1.0));
-        haloGlowBrush.Freeze();
-        dc.DrawRectangle(haloGlowBrush, null, new Rect(0, y - glowHeight * .5, width, glowHeight));
+        // 1 · Volumetric bloom: a wide band whose alpha decays as a gaussian away from the line, so the
+        //     glow reads as light scattering in air instead of a flat stripe.
+        var glowHeight = haloSpread * 6;
+        dc.DrawRectangle(FalloffBrush(baseColor, haloAlpha * .8, .5, 6.0, false), null, new Rect(0, y - glowHeight * .5, width, glowHeight));
 
-        // 2 · Radiant horizontal beams
-        var outerPen = new Pen(Brush(Color.FromArgb((byte)(haloAlpha * .4), baseColor.R, baseColor.G, baseColor.B)), haloSpread * 2.2); outerPen.Freeze();
-        dc.DrawLine(outerPen, new Point(0, y), new Point(width, y));
-        var midPen = new Pen(Brush(Color.FromArgb((byte)Math.Clamp(50 * intensity, 0, 255), baseColor.R, baseColor.G, baseColor.B)), haloSpread * .9); midPen.Freeze();
-        dc.DrawLine(midPen, new Point(0, y), new Point(width, y));
+        // 2 · Light spilling down onto the key tops just below the line, grounding the glow on the keyboard.
+        var spill = haloSpread * 3;
+        dc.DrawRectangle(FalloffBrush(baseColor, haloAlpha * .5, 0.0, 5.0, false), null, new Rect(0, y, width, spill));
 
+        // 3 · Hot emissive core: a tight gaussian saturating to white at the line, tinted along the run.
+        var coreHeight = Math.Max(3, haloSpread * .8);
         var rainbow = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0), MappingMode = BrushMappingMode.RelativeToBoundingBox };
         rainbow.GradientStops.Add(new GradientStop(AdjustColor(NoteColor(28, 0)), 0));
-        rainbow.GradientStops.Add(new GradientStop(baseColor, .5));
+        rainbow.GradientStops.Add(new GradientStop(Blend(baseColor, Colors.White, .5), .5));
         rainbow.GradientStops.Add(new GradientStop(AdjustColor(NoteColor(100, 0)), 1));
         rainbow.Freeze();
-        var corePen = new Pen(rainbow, Math.Max(2.0, 1.6 * intensity)); corePen.Freeze();
+        var corePen = new Pen(rainbow, Math.Max(1.5, 1.2 * intensity)); corePen.Freeze();
         dc.DrawLine(corePen, new Point(0, y), new Point(width, y));
+        dc.DrawRectangle(FalloffBrush(Colors.White, Math.Clamp(160 * intensity, 0, 255), .5, 26.0, false), null, new Rect(0, y - coreHeight * .5, width, coreHeight));
 
-        var whiteCore = new Pen(Brush(Color.FromArgb((byte)Math.Clamp(180 * intensity, 0, 255), 255, 255, 255)), 1.2); whiteCore.Freeze();
-        dc.DrawLine(whiteCore, new Point(0, y), new Point(width, y));
+        // 4 · Sparkle grain riding the line: tiny white-hot specks that twinkle in place, the way a real
+        //     emissive strip reads on camera instead of a clean vector line.
+        var sparkleCount = (int)Math.Clamp(width / 12, 24, 180);
+        for (var i = 0; i < sparkleCount; i++)
+        {
+            var twinkle = Math.Pow(.5 + .5 * Math.Sin(_elapsed * (2 + SeededRandom(i) * 7) + i * 2.4), 3);
+            var sparkleAlpha = Alpha(200 * intensity * twinkle);
+            if (sparkleAlpha < 6) continue;
+            var sx = SeededRandom(i * 131 + 7) * width;
+            var sy = y + (SeededRandom(i * 17 + 3) - .5) * 3.4;
+            var sr = .7 + SeededRandom(i * 29 + 1) * 1.0;
+            dc.DrawEllipse(Brush(Color.FromArgb(sparkleAlpha, 255, 255, 255)), null, new Point(sx, sy), sr, sr);
+        }
 
-        // 3 · Active note photon excitation & flares
+        // 5 · Per-key photon excitation: a radial bloom stretched upward like rising light plus a soft
+        //     contact shadow on the key bed; no hard cross lines.
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!_activeKey[pitch]) continue;
@@ -2132,21 +2212,18 @@ internal sealed class PianoStage : FrameworkElement
             var burstKey = GradientKey(12, Color.FromArgb((byte)pitch, hitColor.R, hitColor.G, hitColor.B));
             if (!_gradientCache.TryGetValue(burstKey, out var burstBrush))
             {
-                var burst = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
-                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(190 * intensity * hitAmount), 255, 255, 255), 0.0));
-                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(130 * intensity * hitAmount), hitColor.R, hitColor.G, hitColor.B), 0.35));
+                var burst = new RadialGradientBrush { Center = new Point(.5, .62), GradientOrigin = new Point(.5, .62), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
+                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(200 * intensity * hitAmount), 255, 255, 255), 0.0));
+                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(140 * intensity * hitAmount), hitColor.R, hitColor.G, hitColor.B), 0.3));
+                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(50 * intensity * hitAmount), hitColor.R, hitColor.G, hitColor.B), 0.62));
                 burst.GradientStops.Add(new GradientStop(Color.FromArgb(0, hitColor.R, hitColor.G, hitColor.B), 1.0));
                 burst.Freeze();
                 burstBrush = CacheGradient(burstKey, burst);
             }
-            dc.DrawEllipse(burstBrush, null, new Point(hitX, y), flareRadius * 1.5, flareRadius * .9);
-
-            var flarePen = new Pen(Brush(Color.FromArgb(Alpha(160 * intensity * hitAmount), 255, 255, 255)), 1.8); flarePen.Freeze();
-            var flareWidth = 32 + flareRadius * 1.8;
-            dc.DrawLine(flarePen, new Point(hitX - flareWidth, y), new Point(hitX + flareWidth, y));
-
-            var rayPen = new Pen(Brush(Color.FromArgb(Alpha(110 * intensity * hitAmount), hitColor.R, hitColor.G, hitColor.B)), 2.0); rayPen.Freeze();
-            dc.DrawLine(rayPen, new Point(hitX, y - 14), new Point(hitX, y + 20));
+            // A tall soft bloom rising off the key, fading in every direction.
+            dc.DrawEllipse(burstBrush, null, new Point(hitX, y - flareRadius * .55), flareRadius * 1.1, flareRadius * 1.9);
+            // Contact shadow grounding the flare on the key bed.
+            dc.DrawEllipse(Brush(Color.FromArgb(Alpha(60 * hitAmount), 0, 0, 0)), null, new Point(hitX, y + 3), flareRadius * .9, 4);
         }
     }
 

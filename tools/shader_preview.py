@@ -85,8 +85,8 @@ class Scene:
     KeyLightIntensity = 0.92 * 3.4
     ShadowStrength = 0.78
     Occlusion = 0.70
-    RimIntensity = 0.62 * 1.6
-    EmissiveIntensity = 0.85 * 2.2
+    RimIntensity = 0.75 * 1.6
+    EmissiveIntensity = 1.00 * 2.2
     Exposure = 1.05
     Saturation = 1.0
     Contrast = 1.0
@@ -94,8 +94,8 @@ class Scene:
     LightSize = 0.35 + 0.78 * 0.6
     EdgeDarkening = 0.55
     AmbientIntensity = 1.0
-    ShadowSamples = 3
-    OcclusionSamples = 2
+    ShadowSamples = 8
+    OcclusionSamples = 4
     KeyLightTravel = (-0.30, -0.90, 0.32)
     FillTravel = (0.55, -0.42, 0.72)
     RimTravel = (0.0, -0.35, 0.94)
@@ -321,8 +321,8 @@ class Renderer:
         o = add(p, scale(n, 0.004))
         hits = 0
         for i in range(s.OcclusionSamples):
-            r = math.sqrt(hash_noise(ax, ay, 500 + i * 2))
-            ang = hash_noise(ax, ay, 501 + i * 2) * math.pi * 2
+            r = math.sqrt((i + 0.5) / s.OcclusionSamples)
+            ang = i * 2.399963229728653
             h = math.sqrt(max(0.0, 1 - r * r))
             d = norm(add(add(scale(tangent, r * math.cos(ang)), scale(bitangent, r * math.sin(ang))), scale(n, h)))
             lo = min(o[0], o[0] + d[0] * 0.85) - BLACK_WIDTH
@@ -433,18 +433,25 @@ class Renderer:
             emissive = scale(lc, s.EmissiveIntensity * self.amount[pitch])
 
         rad = [0.0, 0.0, 0.0]
-        for i in range(max(1, s.ShadowSamples)):
-            ja = (hash_noise(ax, ay, i * 2) - 0.5) * 2 * s.LightSize
-            jb = (hash_noise(ax, ay, i * 2 + 1) - 0.5) * 2 * s.LightSize
-            to_light = norm(add(add(self.to_key, scale(self.side_a, ja)), scale(self.side_b, jb)))
+        key_face = material in (0, 1) and top
+        ns = max(1, s.ShadowSamples) if key_face else 1
+        grid = math.ceil(math.sqrt(ns))
+        for i in range(ns):
+            if key_face:
+                ja = (((i % grid) + 0.5 + (hash_noise(ax, ay, i * 2) - 0.5) * 0.9) / grid * 2 - 1) * s.LightSize
+                jb = (((i // grid) + 0.5 + (hash_noise(ax, ay, i * 2 + 1) - 0.5) * 0.9) / grid * 2 - 1) * s.LightSize
+                to_light = norm(add(add(self.to_key, scale(self.side_a, ja)), scale(self.side_b, jb)))
+                vis = (1 - s.ShadowStrength) if self.shadowed(p, n, to_light) else 1.0
+            else:
+                to_light = self.to_key
+                vis = 1 - s.ShadowStrength * 0.85
             ndl = dot(n, to_light)
             if ndl <= 0:
                 continue
-            vis = (1 - s.ShadowStrength) if self.shadowed(p, n, to_light) else 1.0
             b = evaluate(albedo, rough, self.f0, n, v, to_light)
             for c in range(3):
                 rad[c] += b[c] * self.key_light[c] * ndl * vis
-        rad = [c / max(1, s.ShadowSamples) for c in rad]
+        rad = [c / ns for c in rad]
 
         fd = dot(n, self.to_fill)
         if fd > 0:
