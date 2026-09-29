@@ -41,8 +41,8 @@ internal sealed record ShellTheme(
     Color ControlBorder,
     Color Track,
     Color Popup,
-    Color Petal,
-    Color PetalAlt)
+    Color Mote,
+    Color MoteAlt)
 {
     /// <summary>True when the palette is light enough that white hairlines would wash out.</summary>
     internal bool DeepSurfaces => Window.R + Window.G + Window.B < 120;
@@ -56,13 +56,33 @@ internal sealed record ShellTheme(
 /// <item><b>Concert Noir</b> — midnight obsidian slate with silvery acoustic platinum accents.</item>
 /// <item><b>Velvet Gold</b> — deep mahogany, imperial concert velvet and burnished antique brass.</item>
 /// </list>
+///
+/// An id is a stable slug derived from the name, so stored settings and presets read the same as the
+/// picker does. Older releases stored <c>sakura</c>, <c>noir</c> and <c>velvet</c>; those legacy ids
+/// (and the retired "Sakura Nocturne" display name) are still resolved through
+/// <see cref="LegacyIds"/> and rewritten to the canonical id by
+/// <see cref="PianoVisualSettings.ApplyMigrations"/>, so no saved look is lost.
 /// </summary>
 internal static class ShellThemes
 {
-    internal const string DefaultId = "sakura";
+    internal const string ConcertGrandId = "concert-grand";
+    internal const string ConcertNoirId = "concert-noir";
+    internal const string VelvetGoldId = "velvet-gold";
 
-    internal static readonly ShellTheme SakuraNocturne = new(
-        "sakura", "Concert Grand", "Steinway ebony lacquer & warm champagne gold — the prestigious concert grand look.", BackdropStyle.Acoustic,
+    internal const string DefaultId = ConcertGrandId;
+
+    /// <summary>Deprecated ids and display names from earlier releases, mapped to the current theme.</summary>
+    internal static readonly Dictionary<string, string> LegacyIds = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["sakura"] = ConcertGrandId,
+        ["sakura-nocturne"] = ConcertGrandId,
+        ["Sakura Nocturne"] = ConcertGrandId,
+        ["noir"] = ConcertNoirId,
+        ["velvet"] = VelvetGoldId,
+    };
+
+    internal static readonly ShellTheme ConcertGrand = new(
+        ConcertGrandId, "Concert Grand", "Steinway ebony lacquer & warm champagne gold — the prestigious concert grand look.", BackdropStyle.Acoustic,
         Accent: Color.FromRgb(0xD4, 0xAF, 0x37),
         AccentAlt: Color.FromRgb(0xF5, 0xD7, 0x7F),
         AccentSoft: Color.FromArgb(0x30, 0xD4, 0xAF, 0x37),
@@ -78,11 +98,11 @@ internal static class ShellThemes
         ControlBorder: Color.FromRgb(0x32, 0x38, 0x4D),
         Track: Color.FromRgb(0x1C, 0x20, 0x2C),
         Popup: Color.FromArgb(0xFA, 0x0E, 0x10, 0x17),
-        Petal: Color.FromRgb(0xE5, 0xC0, 0x6E),
-        PetalAlt: Color.FromRgb(0xFF, 0xF0, 0xC2));
+        Mote: Color.FromRgb(0xE5, 0xC0, 0x6E),
+        MoteAlt: Color.FromRgb(0xFF, 0xF0, 0xC2));
 
     internal static readonly ShellTheme ConcertNoir = new(
-        "noir", "Concert Noir", "Midnight obsidian slate with acoustic sapphire and silvery platinum accents.", BackdropStyle.Obsidian,
+        ConcertNoirId, "Concert Noir", "Midnight obsidian slate with acoustic sapphire and silvery platinum accents.", BackdropStyle.Obsidian,
         Accent: Color.FromRgb(0x6C, 0x8D, 0xF0),
         AccentAlt: Color.FromRgb(0xA8, 0xC2, 0xFB),
         AccentSoft: Color.FromArgb(0x2E, 0x6C, 0x8D, 0xF0),
@@ -98,11 +118,11 @@ internal static class ShellThemes
         ControlBorder: Color.FromRgb(0x2C, 0x34, 0x4A),
         Track: Color.FromRgb(0x18, 0x1D, 0x29),
         Popup: Color.FromArgb(0xFA, 0x0D, 0x0F, 0x14),
-        Petal: Color.FromRgb(0xA8, 0xC2, 0xFB),
-        PetalAlt: Color.FromRgb(0xE0, 0xEB, 0xFF));
+        Mote: Color.FromRgb(0xA8, 0xC2, 0xFB),
+        MoteAlt: Color.FromRgb(0xE0, 0xEB, 0xFF));
 
     internal static readonly ShellTheme VelvetGold = new(
-        "velvet", "Velvet Gold", "Rich mahogany, imperial concert velvet and burnished antique brass.", BackdropStyle.Imperial,
+        VelvetGoldId, "Velvet Gold", "Rich mahogany, imperial concert velvet and burnished antique brass.", BackdropStyle.Imperial,
         Accent: Color.FromRgb(0xE5, 0xA9, 0x3C),
         AccentAlt: Color.FromRgb(0xFF, 0xD4, 0x80),
         AccentSoft: Color.FromArgb(0x35, 0xE5, 0xA9, 0x3C),
@@ -118,18 +138,29 @@ internal static class ShellThemes
         ControlBorder: Color.FromRgb(0x44, 0x25, 0x34),
         Track: Color.FromRgb(0x27, 0x14, 0x1E),
         Popup: Color.FromArgb(0xFA, 0x17, 0x0C, 0x12),
-        Petal: Color.FromRgb(0xFF, 0xD4, 0x80),
-        PetalAlt: Color.FromRgb(0xFF, 0xF2, 0xD1));
+        Mote: Color.FromRgb(0xFF, 0xD4, 0x80),
+        MoteAlt: Color.FromRgb(0xFF, 0xF2, 0xD1));
 
-    internal static readonly ShellTheme[] All = [SakuraNocturne, ConcertNoir, VelvetGold];
+    internal static readonly ShellTheme[] All = [ConcertGrand, ConcertNoir, VelvetGold];
 
-    internal static ShellTheme Default => SakuraNocturne;
+    internal static ShellTheme Default => ConcertGrand;
 
-    /// <summary>Resolves a stored theme name; unknown or empty values fall back to the default look.</summary>
-    internal static ShellTheme Find(string? id) =>
-        All.FirstOrDefault(theme => string.Equals(theme.Id, id?.Trim(), StringComparison.OrdinalIgnoreCase))
-        ?? All.FirstOrDefault(theme => string.Equals(theme.Name, id?.Trim(), StringComparison.OrdinalIgnoreCase))
-        ?? Default;
+    /// <summary>
+    /// Resolves a stored theme name: canonical or legacy id first, then the display name; unknown or
+    /// empty values fall back to the default look.
+    /// </summary>
+    internal static ShellTheme Find(string? id)
+    {
+        var value = id?.Trim();
+        if (string.IsNullOrEmpty(value)) return Default;
+        if (LegacyIds.TryGetValue(value, out var canonical)) value = canonical;
+        return All.FirstOrDefault(theme => string.Equals(theme.Id, value, StringComparison.OrdinalIgnoreCase))
+            ?? All.FirstOrDefault(theme => string.Equals(theme.Name, value, StringComparison.OrdinalIgnoreCase))
+            ?? Default;
+    }
+
+    /// <summary>Canonical id for a stored value; what the settings file and presets are rewritten to.</summary>
+    internal static string Normalize(string? id) => Find(id).Id;
 }
 
 /// <summary>
@@ -160,7 +191,7 @@ internal static class ShellThemeManager
             Set(resources, "Accent2Brush", new SolidColorBrush(theme.AccentAlt));
             Set(resources, "AccentSoftBrush", new SolidColorBrush(theme.AccentSoft));
             Set(resources, "GlowBrush", new SolidColorBrush(theme.Glow));
-            Set(resources, "PetalBrush", new SolidColorBrush(theme.Petal));
+            Set(resources, "MoteBrush", new SolidColorBrush(theme.Mote));
             Set(resources, "AccentGradientBrush", Gradient(theme.Accent, theme.AccentAlt));
             Set(resources, "CurtainGradientBrush", Gradient(theme.Accent, theme.Glow, horizontal: true));
             Set(resources, "WindowBrush", new SolidColorBrush(theme.Window));

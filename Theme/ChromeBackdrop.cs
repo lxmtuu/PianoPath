@@ -209,7 +209,7 @@ internal sealed class ChromeBackdrop : FrameworkElement
         foreach (var mote in _motes)
         {
             var alpha = (byte)Math.Clamp(mote.Alpha * (.6 + .4 * Math.Sin(_time * 1.2 + mote.Phase)), 10, 200);
-            var color = WithAlpha(_theme.PetalAlt, alpha);
+            var color = WithAlpha(_theme.MoteAlt, alpha);
             var brush = Brush(color);
             var size = mote.Size;
             // Draw soft optical aura + crisp core
