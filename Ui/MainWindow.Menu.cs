@@ -160,7 +160,8 @@ public partial class MainWindow
     // Play dialog
     // =====================================================================================
 
-    private void OpenPlayDialog()
+    /// <summary>Opens the pre-flight performance dialog; also the target of <c>--play-dialog</c> captures.</summary>
+    internal void OpenPlayDialog()
     {
         _loadingVisualSettings = true;
         try

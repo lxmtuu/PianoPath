@@ -147,9 +147,11 @@ giữ nguyên stage + dock hiện có làm phần "Design" chi tiết:
 
 ## 8. Đợt nâng cấp "concert shell" (giao diện hoà nhạc / Your Lie in April)
 
-- **Ba giao diện** trong `Theme/ShellTheme.cs`: *Sakura Nocturne* (mặc định — đêm chàm, hồng hoa
-  anh đào #FF7BAC và vàng ấm), *Concert Noir* (violet #8B5CFF → cyan #25D0FF, bản gốc), *Velvet Gold*
-  (nhung đỏ + đồng thau). Mọi token màu (Accent, Glow, Petal, Panel, Control, Track, Popup…) được
+- **Ba giao diện** trong `Theme/ShellTheme.cs`: *Concert Grand* (mặc định — sơn mài ebony Steinway,
+  vàng champagne #D4AF37 và sheen ngà), *Concert Noir* (obsidian xanh đêm + bạc platinum), *Velvet Gold*
+  (mahogany + nhung đỏ + đồng thau). Id là slug khớp tên (`concert-grand` / `concert-noir` /
+  `velvet-gold`); id cũ `sakura` / `noir` / `velvet` vẫn được `ShellThemes.LegacyIds` đọc và
+  `ApplyMigrations` viết lại khi nạp file lưu. Mọi token màu (Accent, Glow, Petal, Panel, Control, Track, Popup…) được
   `ShellThemeManager` ghi đè vào `Application.Resources`; XAML đọc bằng `DynamicResource` nên cả
   header, dock, menu, hộp thoại và thanh trượt đổi màu trong một khung hình, không cần mở lại app.
 - **Backdrop động** (`Theme/ChromeBackdrop.cs`): hoa anh đào rơi, quầng cực quang hay nếp nhung tuỳ

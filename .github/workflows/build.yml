@@ -5,6 +5,11 @@ on:
     branches: ["main", "arena/**"]
   pull_request:
 
+# The preview step commits the freshly rendered screenshots back to the branch it built, which keeps
+# docs/previews in step with the interface without anyone copying files around by hand.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: windows-latest
@@ -18,6 +23,12 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
+      # Fast lane: syntax, XAML resources, the settings-navigation catalogue, the theme tokens and
+      # every README link are checked in seconds, before the Windows build can fail for a typo.
+      - name: Static source check
+        shell: pwsh
+        run: python tools/check_sources.py
 
       - name: Restore
         run: dotnet restore PianoPath.csproj
@@ -47,3 +58,57 @@ jobs:
           if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
+
+      # The README shows the real application, so the screenshots are rendered by the same executable
+      # that just passed the verification suite instead of being hand-made artwork that drifts out of
+      # date. Refresh the committed copies with:
+      #   gh run download <run-id> -n keyflow-previews -D docs/previews
+      - name: Render README previews
+        shell: pwsh
+        run: |
+          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $out = 'docs/previews'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $shots = @(
+            @{ Name = 'stage-live.png';  Args = @('--play-preview') },
+            @{ Name = 'main-menu.png';   Args = @('--menu') },
+            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style') },
+            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme') },
+            @{ Name = 'play-dialog.png'; Args = @('--play-dialog') },
+            @{ Name = 'shortcuts.png';   Args = @('--shortcuts') }
+          )
+          $failed = @()
+          foreach ($shot in $shots) {
+            $target = Join-Path $out $shot.Name
+            # A private settings folder per shot: the README must show a pristine first run, never the
+            # leftovers of the verification suite that ran before it in this job.
+            $settings = Join-Path $env:TEMP "keyflow-preview-$([IO.Path]::GetFileNameWithoutExtension($shot.Name))"
+            Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
+            $args = @('--snapshot', $target, '--compact', "--settings-dir=$settings") + $shot.Args
+            $proc = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
+            if (Test-Path $target) { "rendered $($shot.Name) ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
+            else { $failed += "$($shot.Name) (exit $($proc.ExitCode))" }
+          }
+          if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
+
+      - name: Upload README previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyflow-previews
+          path: docs/previews/*.png
+          if-no-files-found: warn
+
+      # Publish the screenshots with the change that produced them. The step is skipped for pull
+      # requests (the checkout is a merge commit then) and for runs triggered by its own commit, so a
+      # refresh can never loop.
+      - name: Commit refreshed previews
+        if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
+        shell: pwsh
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/previews
+          if (git diff --cached --quiet) { "docs/previews is already up to date."; exit 0 }
+          git commit -m "Refresh the README previews from CI [skip ci]"
+          git push

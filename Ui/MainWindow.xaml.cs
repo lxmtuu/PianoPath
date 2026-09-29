@@ -356,9 +356,12 @@ public partial class MainWindow : Window
     private void Window_KeyDown(object sender, KeyEventArgs e)
     {
         if (e.Key == Key.F11) { ToggleFullScreen(); e.Handled = true; return; }
+        if (e.Key == Key.F1) { ToggleShortcuts(); e.Handled = true; return; }
         if (e.Key == Key.Escape)
         {
-            // Escape first clears an active settings search, otherwise it toggles the settings dock, even while the stage is in its idle full-screen state.
+            // Escape closes the help card first, then clears an active settings search, then toggles
+            // the settings dock — the layer that is on screen always wins.
+            if (ShortcutsVisible) { HideShortcuts(); e.Handled = true; return; }
             if (SettingsSearchBox.IsKeyboardFocused && SettingsSearchBox.Text.Length > 0) { SettingsSearchBox.Text = ""; e.Handled = true; return; }
             if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel(); else OpenSettingsPanel();
             e.Handled = true; return;
@@ -380,7 +383,7 @@ public partial class MainWindow : Window
         if (_lastPointerPoint is { } last && Math.Abs(last.X - point.X) < .5 && Math.Abs(last.Y - point.Y) < .5) return;
         _lastPointerPoint = point;
         _lastPointerActivity = DateTime.UtcNow;
-        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible) return;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible || ShortcutsVisible) return;
         if (_settingsHiddenByIdle) { _settingsHiddenByIdle = false; SettingsPanel.Visibility = Visibility.Visible; }
         SetChromeVisible(true, showRecordButton: true);
         if (Stage is not null) Stage.SetPointerPosition(e.GetPosition(Stage));
@@ -388,7 +391,7 @@ public partial class MainWindow : Window
     private void CheckChromeIdle()
     {
         if (_closing || !AutoHideChrome) return;
-        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible) return;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible || ShortcutsVisible) return;
         // Keep everything on screen while a color picker is open or the user is dragging a slider / browsing a drop-down.
         if (OwnedWindows.Count > 0 || Mouse.Captured is not null) return;
         if (DateTime.UtcNow - _lastPointerActivity >= ChromeIdleDelay) HideChromeForIdle();
