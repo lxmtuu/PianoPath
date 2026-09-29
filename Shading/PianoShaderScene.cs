@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Windows.Media;
 
 namespace PianoPath;
@@ -188,12 +189,12 @@ internal sealed class PianoShaderScene
 
     /// <summary>Hash of everything that changes the baked image, used to know when the cache is still valid.</summary>
     internal string Signature() => string.Join('|',
-        BandWidth, BandHeight, RenderScale.ToString("0.###"), CameraHeight.ToString("0.###"), CameraDistance.ToString("0.###"),
-        BedFraction.ToString("0.###"), WhiteDepth.ToString("0.###"), BlackDepth.ToString("0.###"), PressDepth.ToString("0.###"),
-        WhiteRoughness.ToString("0.###"), BlackRoughness.ToString("0.###"), Specular.ToString("0.###"),
-        KeyLightIntensity.ToString("0.###"), ShadowStrength.ToString("0.###"), Occlusion.ToString("0.###"),
-        RimIntensity.ToString("0.###"), AmbientIntensity.ToString("0.###"), EmissiveIntensity.ToString("0.###"),
-        Exposure.ToString("0.###"), Saturation.ToString("0.###"), Contrast.ToString("0.###"), Filmic, LightSize.ToString("0.###"),
+        BandWidth, BandHeight, RenderScale.ToString("0.###", CultureInfo.InvariantCulture), CameraHeight.ToString("0.###", CultureInfo.InvariantCulture), CameraDistance.ToString("0.###", CultureInfo.InvariantCulture),
+        BedFraction.ToString("0.###", CultureInfo.InvariantCulture), WhiteDepth.ToString("0.###", CultureInfo.InvariantCulture), BlackDepth.ToString("0.###", CultureInfo.InvariantCulture), PressDepth.ToString("0.###", CultureInfo.InvariantCulture),
+        WhiteRoughness.ToString("0.###", CultureInfo.InvariantCulture), BlackRoughness.ToString("0.###", CultureInfo.InvariantCulture), Specular.ToString("0.###", CultureInfo.InvariantCulture),
+        KeyLightIntensity.ToString("0.###", CultureInfo.InvariantCulture), ShadowStrength.ToString("0.###", CultureInfo.InvariantCulture), Occlusion.ToString("0.###", CultureInfo.InvariantCulture),
+        RimIntensity.ToString("0.###", CultureInfo.InvariantCulture), AmbientIntensity.ToString("0.###", CultureInfo.InvariantCulture), EmissiveIntensity.ToString("0.###", CultureInfo.InvariantCulture),
+        Exposure.ToString("0.###", CultureInfo.InvariantCulture), Saturation.ToString("0.###", CultureInfo.InvariantCulture), Contrast.ToString("0.###", CultureInfo.InvariantCulture), Filmic, LightSize.ToString("0.###", CultureInfo.InvariantCulture),
         ShadowSamples, OcclusionSamples, WhiteKeyColor.ToString(), BlackKeyColor.ToString(),
         KeyLightColor.ToString(), FillColor.ToString(), RimColor.ToString(), SkyColor.ToString(), GroundColor.ToString());
 

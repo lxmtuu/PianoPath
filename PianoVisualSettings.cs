@@ -276,9 +276,9 @@ internal static class PianoVisualSettingsStore
         try
         {
             if (File.Exists(SettingsPath)) return PianoVisualSettings.FromJson(File.ReadAllText(SettingsPath));
-            var settings = new PianoVisualSettings(); settings.ApplyMigrations(); return settings;
+            var settings = new PianoVisualSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
         }
-        catch { return new PianoVisualSettings(); }
+        catch { var settings = new PianoVisualSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings; }
     }
 
     internal static void Save(PianoVisualSettings settings)

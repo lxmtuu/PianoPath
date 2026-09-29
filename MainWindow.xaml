@@ -355,7 +355,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Halo" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="LayerHaloToggle" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="2" Click="PlayDialogDeepLink_Click" ToolTip="The burning impact line above the keys"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="4" Click="PlayDialogDeepLink_Click" ToolTip="The burning impact line above the keys"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

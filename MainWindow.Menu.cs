@@ -80,8 +80,9 @@ public partial class MainWindow
         var right = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.RightHandColor : _visualSettings.NoteColorEnd);
         LeftStyleCard.BorderBrush = new SolidColorBrush(left);
         RightStyleCard.BorderBrush = new SolidColorBrush(right);
-        LeftStyleLabel.Text = _visualSettings.PresetName;
-        RightStyleLabel.Text = _visualSettings.PresetName;
+        var presetDisplay = _visualSettings.PresetModified ? _visualSettings.PresetName + " *" : _visualSettings.PresetName;
+        LeftStyleLabel.Text = presetDisplay;
+        RightStyleLabel.Text = presetDisplay;
         PlayDialogOverlay.Visibility = Visibility.Visible;
     }
 

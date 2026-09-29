@@ -132,6 +132,7 @@ internal sealed class PianoStage : FrameworkElement
         ClipToBounds = true;
         SnapsToDevicePixels = true;
         MouseDown += Stage_MouseDown;
+        MouseMove += Stage_MouseMove;
         MouseUp += Stage_MouseUp;
         LostMouseCapture += (_, _) => ReleaseMouseKey();
     }
@@ -1001,6 +1002,27 @@ internal sealed class PianoStage : FrameworkElement
     {
         var point = e.GetPosition(this); Focus(); if (point.Y < ActualHeight - KeyboardHeight) return;
         _mouseDown = true; _mousePitch = PitchAt(point); CaptureMouse(); PianoKeyChanged?.Invoke(_mousePitch, true); e.Handled = true;
+    }
+    private void Stage_MouseMove(object sender, MouseEventArgs e)
+    {
+        if (!_mouseDown || !IsMouseCaptured) return;
+        var point = e.GetPosition(this);
+        if (point.Y < ActualHeight - KeyboardHeight)
+        {
+            if (_mousePitch >= 0)
+            {
+                PianoKeyChanged?.Invoke(_mousePitch, false);
+                _mousePitch = -1;
+            }
+            return;
+        }
+        var newPitch = PitchAt(point);
+        if (newPitch != _mousePitch)
+        {
+            if (_mousePitch >= 0) PianoKeyChanged?.Invoke(_mousePitch, false);
+            _mousePitch = newPitch;
+            PianoKeyChanged?.Invoke(_mousePitch, true);
+        }
     }
     private void Stage_MouseUp(object sender, MouseButtonEventArgs e) { ReleaseMouseKey(); if (_mouseDown) e.Handled = true; }
     private void ReleaseMouseKey()

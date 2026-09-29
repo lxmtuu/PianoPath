@@ -26,7 +26,9 @@ internal sealed class AviVideoRecorder : IDisposable
     public AviVideoRecorder(string path, int width, int height, int frameRate = 20)
     {
         if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Video recording currently requires Windows.");
-        if (width < 2 || height < 2 || frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(width));
+        if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
+        if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
+        if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
         _width = width & ~1; _height = height & ~1; FrameRate = frameRate; _stride = ((_width * 3 + 3) / 4) * 4;
         AVIFileInit(); _initialized = true;
         try { Open(path); }

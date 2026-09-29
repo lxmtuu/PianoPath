@@ -161,6 +161,8 @@ internal sealed class VisualPresetStore(string directory)
     {
         var copy = settings.Clone();
         copy.BackgroundImagePath = "";
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
         File.WriteAllText(path, copy.ToJson());
     }
 

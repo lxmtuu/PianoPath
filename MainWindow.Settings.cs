@@ -402,10 +402,15 @@ public partial class MainWindow
         var value = check.IsChecked == true;
         Prop(property).SetValue(_visualSettings, value);
         _loadingVisualSettings = true;
-        try { foreach (var other in _visualToggleList) if (!ReferenceEquals(other, check) && Equals(other.Tag, property)) other.IsChecked = value; }
+        try
+        {
+            foreach (var other in _visualToggleList) if (!ReferenceEquals(other, check) && Equals(other.Tag, property)) other.IsChecked = value;
+            SyncPlayDialogToggle(property, value);
+        }
         finally { _loadingVisualSettings = false; }
         MarkModified(); RefreshDependentRows();
-        ApplyVisualSettings($"{check.Content} {(check.IsChecked == true ? "on" : "off")}");
+        var label = check.Content as string ?? check.Tag as string ?? "Setting";
+        ApplyVisualSettings($"{label} {(check.IsChecked == true ? "on" : "off")}");
     }
 
     private void VisualSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -416,6 +421,11 @@ public partial class MainWindow
         MarkModified();
         if (property is nameof(PianoVisualSettings.RecordingFrameRate)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.HandSplitPitch) && ModeCombo.SelectedIndex is 2 or 3) { ApplyTrackFilter(); UpdateSongUi(); }
+        if (property is nameof(PianoVisualSettings.NoteFallSpeed) && PlaySpeedSlider is not null)
+        {
+            PlaySpeedSlider.Value = Math.Clamp(_visualSettings.NoteFallSpeed, PlaySpeedSlider.Minimum, PlaySpeedSlider.Maximum);
+            if (PlaySpeedLabel is not null) PlaySpeedLabel.Text = ((int)_visualSettings.NoteFallSpeed).ToString();
+        }
         ApplyVisualSettings("Visual changes apply live");
     }
 
@@ -542,9 +552,47 @@ public partial class MainWindow
                 box.Text = value; if (_visualColorButtons.TryGetValue(property, out var swatch)) SetColorSwatch(swatch, value);
             }
             for (var i = 0; i < _trackPaletteSwatches.Count && i < _visualSettings.TrackColors.Count; i++) SetColorSwatch(_trackPaletteSwatches[i], _visualSettings.TrackColors[i]);
+            SyncAllPlayDialogControls();
         }
         finally { _loadingVisualSettings = false; }
         RefreshDependentRows(); RebuildTrackList(); UpdateRecordingInfo(); UpdatePresetLabels();
+    }
+
+    private void SyncPlayDialogToggle(string property, bool value)
+    {
+        switch (property)
+        {
+            case nameof(PianoVisualSettings.ShowBackground): if (LayerBackgroundToggle is not null) LayerBackgroundToggle.IsChecked = value; break;
+            case nameof(PianoVisualSettings.ShowNotes): if (LayerNotesToggle is not null) LayerNotesToggle.IsChecked = value; break;
+            case nameof(PianoVisualSettings.ShowEmbers): if (LayerEmbersToggle is not null) LayerEmbersToggle.IsChecked = value; break;
+            case nameof(PianoVisualSettings.ShowHalo): if (LayerHaloToggle is not null) LayerHaloToggle.IsChecked = value; break;
+            case nameof(PianoVisualSettings.ShowFlame): if (LayerFlameToggle is not null) LayerFlameToggle.IsChecked = value; break;
+            case nameof(PianoVisualSettings.ShowKeys): if (LayerKeysToggle is not null) LayerKeysToggle.IsChecked = value; break;
+            default:
+                if (ExtrasSubPanel is not null)
+                {
+                    foreach (var child in ExtrasSubPanel.Children.OfType<CheckBox>())
+                        if (Equals(child.Tag, property)) child.IsChecked = value;
+                }
+                break;
+        }
+    }
+
+    private void SyncAllPlayDialogControls()
+    {
+        if (LayerBackgroundToggle is not null) LayerBackgroundToggle.IsChecked = _visualSettings.ShowBackground;
+        if (LayerNotesToggle is not null) LayerNotesToggle.IsChecked = _visualSettings.ShowNotes;
+        if (LayerEmbersToggle is not null) LayerEmbersToggle.IsChecked = _visualSettings.ShowEmbers;
+        if (LayerHaloToggle is not null) LayerHaloToggle.IsChecked = _visualSettings.ShowHalo;
+        if (LayerFlameToggle is not null) LayerFlameToggle.IsChecked = _visualSettings.ShowFlame;
+        if (LayerKeysToggle is not null) LayerKeysToggle.IsChecked = _visualSettings.ShowKeys;
+        if (ExtrasSubPanel is not null)
+        {
+            foreach (var child in ExtrasSubPanel.Children.OfType<CheckBox>())
+                if (child.Tag is string prop) child.IsChecked = (bool)Prop(prop).GetValue(_visualSettings)!;
+        }
+        if (PlaySpeedSlider is not null) PlaySpeedSlider.Value = Math.Clamp(_visualSettings.NoteFallSpeed, PlaySpeedSlider.Minimum, PlaySpeedSlider.Maximum);
+        if (PlaySpeedLabel is not null) PlaySpeedLabel.Text = ((int)_visualSettings.NoteFallSpeed).ToString();
     }
 
     private void UpdatePresetLabels()
@@ -593,7 +641,7 @@ public partial class MainWindow
         var query = SettingsSearchBox.Text.Trim();
         if (query.Length == 0) return;
         // Jump to the first page that has a match when the current page shows none.
-        var pages = new Panel?[] { StyleSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost };
+        var pages = new Panel?[] { StyleSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, RecordingSettingsHost };
         var currentIndex = SettingsTabs.SelectedIndex;
         bool HasMatch(Panel? page) => page is not null && _settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible);
         if (currentIndex >= 0 && currentIndex < pages.Length && HasMatch(pages[currentIndex])) return;

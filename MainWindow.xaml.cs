@@ -280,8 +280,8 @@ public partial class MainWindow : Window
             : "NO SOUNDFONT · SILENT";
         SoundFontLabel.Foreground = audible ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
         SoundFontHint.Text = loaded
-            ? (_audio.PlaybackError is { } playbackError ? $"No audio output · {playbackError}" : $"Yamaha grand · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}")
-            : "The built-in grand piano is loading";
+            ? (_audio.PlaybackError is { } playbackError ? $"No audio output · {playbackError}" : $"{(_isBuiltInSoundFont ? "Yamaha grand" : _audio.LoadedName)} · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}")
+            : "Load a .sf2 SoundFont to enable piano audio";
         if (!loaded && PresetCombo.Items.Count == 0)
         {
             _suppressPreset = true;
