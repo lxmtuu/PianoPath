@@ -19,9 +19,9 @@ internal static class VisualPresets
         new("Two Hands", "Blue left hand / pink right hand split at middle C - ideal for tutorials and practice videos.", true, TwoHands()),
         new("Classic Roll", "Clean solid piano-roll bars without particles; low GPU cost for long recordings.", true, ClassicRoll()),
         new("Green Screen", "Pure green stage with no decorative layers, ready for OBS chroma keying.", true, GreenScreen()),
-        new("Sakura Nocturne", "Blossom petals under sweeping spotlights: pink-to-gold notes, a glass keyboard and a moonlit indigo night - the Your Lie in April mood.", true, SakuraNocturne()),
-        new("Concert Gold", "Amber notes on burgundy velvet: warm key light, stage beams and candlelit bloom, like an evening recital in a grand hall.", true, ConcertGold()),
-        new("Moonlight Sonata", "Silver-blue glass notes under a slow sweeping spot, with a deep star field, rising wisps and a cold blue vignette.", true, MoonlightSonata()),
+        new("Sakura Nocturne", "Warm rose-gold notes on indigo obsidian: crystal glass keyboard, gentle embers and refined nocturne bloom.", true, SakuraNocturne()),
+        new("Concert Gold", "Amber notes on burgundy velvet: warm key light, acoustic resonance and candlelit bloom, like an evening recital in a grand hall.", true, ConcertGold()),
+        new("Moonlight Sonata", "Silver-blue glass notes with acoustic resonance, deep star field, rising wisps and a midnight blue vignette.", true, MoonlightSonata()),
     ];
 
     internal static VisualPreset? FindBuiltIn(string name) => BuiltIn.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -41,8 +41,8 @@ internal static class VisualPresets
         s.ShowFlame = true; s.FlameIntensity = 75; s.FlameHeight = 60; s.FlameColorMode = "Warm"; s.ShowWisps = false; s.ShowImpactRings = true;
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
-        // The flagship pair: violet notes inside the indigo/pink Sakura shell.
         s.ShellTheme = "sakura";
+        s.ShowPetals = false; s.ShowSpotlights = false;
         return s;
     }
 
@@ -119,15 +119,15 @@ internal static class VisualPresets
         return s;
     }
 
-    /// <summary>Blossom petals, spotlights and a pink-to-gold roll: the *Your Lie in April* recital mood.</summary>
+    /// <summary>Warm rose-gold notes on indigo obsidian with crystal glass keyboard.</summary>
     internal static PianoVisualSettings SakuraNocturne()
     {
         var s = Base("Sakura Nocturne");
         s.ShellTheme = "sakura";
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#FF8FB8"; s.NoteColorEnd = "#FFD98A";
         s.HaloColor = "#FFC2D8"; s.HaloIntensity = 92; s.NoteGlow = 105; s.NoteEdge = 110; s.NoteEdgeWidth = 55; s.NoteTint = 42; s.NoteHeadGlow = 48; s.NoteRoundness = 55;
-        s.ShowPetals = true; s.PetalAmount = 70; s.PetalColor = "#FFB3CF";
-        s.ShowSpotlights = true; s.SpotlightIntensity = 65;
+        s.ShowPetals = false; s.PetalAmount = 50; s.PetalColor = "#E5C06E";
+        s.ShowSpotlights = false; s.SpotlightIntensity = 50;
         s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = true; s.RingSize = 45;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60; s.BloomIntensity = 72; s.BloomSize = 70; s.Vignette = 32; s.HorizonGlow = 42; s.StarDensity = 85;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 50; s.ShaderGloss = 80; s.ShaderShadows = 74; s.ShaderEmissive = 92; s.Saturation = 106;
@@ -141,23 +141,23 @@ internal static class VisualPresets
         s.ShellTheme = "velvet";
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#F3C05E"; s.NoteColorEnd = "#FFF0B8";
         s.HaloColor = "#FFD98A"; s.HaloIntensity = 100; s.NoteGlow = 115; s.NoteEdge = 100; s.NoteEdgeWidth = 45; s.NoteTint = 55; s.NoteHeadGlow = 52; s.NoteRoundness = 40;
-        s.ShowSpotlights = true; s.SpotlightIntensity = 85; s.ShowPetals = false;
+        s.ShowSpotlights = false; s.SpotlightIntensity = 60; s.ShowPetals = false;
         s.ShowFlame = true; s.FlameIntensity = 72; s.FlameHeight = 55; s.FlameColorMode = "Warm";
-        s.ShowLightBeams = true; s.BeamIntensity = 45; s.ShowImpactRings = true; s.RingSize = 50;
+        s.ShowLightBeams = false; s.BeamIntensity = 45; s.ShowImpactRings = true; s.RingSize = 50;
         s.KeyboardStyle = "Studio"; s.ShowKeyFelt = true; s.KeyFeltColor = "#B0703C"; s.KeyLighting = 70; s.KeyGlowRadius = 70; s.PressedKeyColorMode = "Note";
         s.BloomIntensity = 92; s.BloomSize = 82; s.Vignette = 36; s.HorizonGlow = 55; s.Saturation = 112;
         s.ShadingQuality = "Cinematic"; s.ShaderKeyLight = 82; s.ShaderGloss = 70; s.ShaderShadows = 82; s.ShaderEmissive = 100; s.ShaderRimLight = 72;
         return s;
     }
 
-    /// <summary>Cold silver-blue glass under a slow spotlight: the quiet nocturne look.</summary>
+    /// <summary>Cold silver-blue glass: the quiet nocturne look.</summary>
     internal static PianoVisualSettings MoonlightSonata()
     {
         var s = Base("Moonlight Sonata");
         s.ShellTheme = "noir";
         s.NoteStyle = "Glass"; s.ColorMode = "Gradient"; s.Palette = "Ocean"; s.NoteColorStart = "#8FA9FF"; s.NoteColorEnd = "#DCE6FF";
         s.HaloColor = "#B9C8FF"; s.HaloIntensity = 80; s.NoteGlow = 68; s.NoteEdge = 92; s.NoteEdgeWidth = 38; s.NoteTint = 76; s.NoteRefraction = 55; s.NoteRoundness = 42; s.Notes3D = true; s.NoteHeadGlow = 34;
-        s.ShowSpotlights = true; s.SpotlightIntensity = 45; s.ShowPetals = false;
+        s.ShowSpotlights = false; s.SpotlightIntensity = 40; s.ShowPetals = false;
         s.ShowWisps = true; s.WispAmount = 45; s.WispHeight = 62; s.WispGlow = 90; s.ShowFlame = false;
         s.ShowImpactRings = true; s.RingSize = 40;
         s.KeyboardStyle = "Glass"; s.KeyGlowRadius = 45; s.PressedKeyColorMode = "Note";

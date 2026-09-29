@@ -409,62 +409,67 @@
         </Grid>
 
         <!-- ===================== MAIN MENU (concert shell) =====================
-             The opening screen is the concert itself: an animated themed backdrop (blossom petals,
-             aurora haze or velvet folds), the brand, the primary actions, a live theme picker and a
+             The opening screen is the concert itself: an animated acoustic chamber backdrop,
+             the Steinway concert grand brand, primary performance actions, a live theme picker and a
              read-out of the stage look. Every animation is driven by the shared frame clock. -->
         <Grid x:Name="MainMenuOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="30">
             <local:ChromeBackdrop x:Name="MenuBackdrop"/>
             <Border Background="{StaticResource ConcertVeilBrush}"/>
-            <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.3" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,26"/>
+            <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.4 · Concert Grand Edition" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,26"/>
             <Grid HorizontalAlignment="Left" VerticalAlignment="Center" Margin="96,0,40,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel x:Name="MenuActionStack" Width="368" VerticalAlignment="Center">
+                <StackPanel x:Name="MenuActionStack" Width="388" VerticalAlignment="Center">
                     <StackPanel x:Name="MenuBrand" Orientation="Horizontal" Margin="8,0,0,26">
-                        <Border Width="58" Height="58" CornerRadius="17" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#40FFFFFF" BorderThickness="1">
-                            <Path Data="{StaticResource IconLogo}" Fill="White" Width="30" Height="30" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border Width="62" Height="62" CornerRadius="18" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#55FFFFFF" BorderThickness="1.5">
+                            <Path Data="{StaticResource IconLogo}" Fill="White" Width="32" Height="32" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="Keyflow" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                            <StackPanel Orientation="Horizontal" Margin="2,6,0,0">
-                                <Path Data="{StaticResource IconPetal}" Fill="{DynamicResource PetalBrush}" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                <TextBlock Text="PIANO VFX STUDIO" Style="{StaticResource EyebrowTextStyle}" FontSize="9"/>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Keyflow" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                                <Border Margin="10,0,0,0" Padding="7,2" CornerRadius="5" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center">
+                                    <TextBlock Text="CONCERT GRAND" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
+                                </Border>
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Margin="2,5,0,0">
+                                <Path Data="{StaticResource IconSparkle}" Fill="{DynamicResource AccentBrush}" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="PIANO PERFORMANCE &amp; VFX STUDIO" Style="{StaticResource EyebrowTextStyle}" FontSize="9"/>
                             </StackPanel>
                         </StackPanel>
                     </StackPanel>
-                    <Button x:Name="MenuPlayButton" Content="Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Choose a MIDI file or play live"/>
-                    <Button x:Name="MenuDesignButton" Content="Design" Style="{StaticResource MenuCardButtonStyle}" Margin="0,10,0,0" Click="MainMenuDesign_Click" ToolTip="Open the stage design dock"/>
-                    <StackPanel x:Name="MenuLinkStack" Margin="10,20,0,0">
-                        <Button Content="Settings" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Audio, MIDI and window settings"/>
-                        <Button Content="About" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
-                        <Button Content="Exit" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
+                    <Button x:Name="MenuPlayButton" Content="Perform &amp; Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Open a MIDI score or perform live on the concert stage (Space)"/>
+                    <Button x:Name="MenuDesignButton" Content="Stage Design Studio" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuDesign_Click" ToolTip="Fine-tune visual effects, ray-traced keyboard shading and colors"/>
+                    <StackPanel x:Name="MenuLinkStack" Margin="10,22,0,0">
+                        <Button Content="Audio &amp; MIDI Hardware Setup" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Disklavier SoundFonts, MIDI routing and latency settings"/>
+                        <Button Content="About Keyflow Concert Grand" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
+                        <Button Content="Exit Keyflow" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
                     </StackPanel>
                 </StackPanel>
-                <StackPanel x:Name="MenuSidePanel" Grid.Column="2" Width="352" VerticalAlignment="Center" Margin="64,0,0,0">
+                <StackPanel x:Name="MenuSidePanel" Grid.Column="2" Width="368" VerticalAlignment="Center" Margin="64,0,0,0">
                     <Border Style="{StaticResource GlassCardStyle}">
                         <StackPanel>
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{StaticResource IconTheme}" Fill="{DynamicResource Accent2Brush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock Text="INTERFACE THEME" Style="{StaticResource EyebrowTextStyle}"/>
+                                <TextBlock Text="CONCERT THEME PALETTE" Style="{StaticResource EyebrowTextStyle}"/>
                             </StackPanel>
                             <TextBlock x:Name="MenuThemeBlurb" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,8" TextWrapping="Wrap"/>
                             <StackPanel x:Name="MenuThemeHost" Margin="0,2,0,0"/>
-                            <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="0,4,0,12"/>
+                            <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="0,6,0,12"/>
                             <StackPanel Orientation="Horizontal">
                                 <Path Data="{StaticResource IconMotion}" Fill="{DynamicResource AccentBrush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <TextBlock Text="STAGE LOOK" Style="{StaticResource EyebrowTextStyle}"/>
+                                <TextBlock Text="ACTIVE STAGE LOOK" Style="{StaticResource EyebrowTextStyle}"/>
                             </StackPanel>
-                            <TextBlock x:Name="MenuPresetLabel" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,10" TextWrapping="Wrap"/>
+                            <TextBlock x:Name="MenuPresetLabel" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,12" TextWrapping="Wrap"/>
                             <WrapPanel>
                                 <Button Content="OPEN DESIGN" Style="{StaticResource AccentButtonStyle}" Click="MainMenuDesign_Click" Margin="0,0,8,0" ToolTip="Every stage setting lives in the design dock"/>
                                 <Button Content="TRY A LOOK" Click="MenuPresetShuffle_Click" ToolTip="Cycle through the built-in stage presets"/>
                             </WrapPanel>
                         </StackPanel>
                     </Border>
-                    <TextBlock x:Name="MenuQuoteText" Style="{StaticResource MenuQuoteStyle}" Margin="10,20,0,0" Text="Play the notes you cannot say out loud."/>
+                    <TextBlock x:Name="MenuQuoteText" Style="{StaticResource MenuQuoteStyle}" Margin="10,20,0,0" Text="The piano keys are black and white, but they sound like a million colors in your mind."/>
                 </StackPanel>
             </Grid>
         </Grid>

@@ -6,12 +6,12 @@ namespace PianoPath;
 /// <summary>Which family of animated chrome backdrop a theme draws behind the interface.</summary>
 internal enum BackdropStyle
 {
-    /// <summary>Slow ribbons of colour, like stage haze under coloured spots (concert hall).</summary>
-    Aurora,
-    /// <summary>Falling cherry-blossom petals over a moonlit sky (Your Lie in April).</summary>
-    Sakura,
-    /// <summary>Heavy velvet curtain folds with golden dust in the air.</summary>
-    Curtain
+    /// <summary>Harmonic acoustic standing resonance waves and delicate concert dust motes.</summary>
+    Acoustic,
+    /// <summary>Deep obsidian recital hall with silvery acoustic waves and stardust motes.</summary>
+    Obsidian,
+    /// <summary>Rich mahogany concert hall with warm burnished brass reflections and golden dust.</summary>
+    Imperial
 }
 
 /// <summary>
@@ -19,7 +19,7 @@ internal enum BackdropStyle
 ///
 /// The stage itself is themed by <see cref="PianoVisualSettings"/>; this record only describes the
 /// frame around it, which keeps "how the piano looks" and "how the app looks" independent — you can
-/// run a Sakura stage inside the Concert Noir shell or the other way round.
+/// run a Concert Grand stage inside the Obsidian shell or the other way round.
 /// </summary>
 internal sealed record ShellTheme(
     string Id,
@@ -49,13 +49,12 @@ internal sealed record ShellTheme(
 }
 
 /// <summary>
-/// The three built-in interface themes.
+/// The three built-in piano concert interface themes.
 ///
 /// <list type="bullet">
-/// <item><b>Sakura Nocturne</b> — the default: indigo night, blossom pink and gold. The palette of a
-/// piano recital under a tree in bloom.</item>
-/// <item><b>Concert Noir</b> — the original neon violet/cyan studio look.</item>
-/// <item><b>Velvet Gold</b> — deep burgundy and brass, the colour of a concert grand on a lit stage.</item>
+/// <item><b>Concert Grand</b> — the flagship concert look: Steinway ebony lacquer, warm champagne gold and ivory sheen.</item>
+/// <item><b>Concert Noir</b> — midnight obsidian slate with silvery acoustic platinum accents.</item>
+/// <item><b>Velvet Gold</b> — deep mahogany, imperial concert velvet and burnished antique brass.</item>
 /// </list>
 /// </summary>
 internal static class ShellThemes
@@ -63,64 +62,64 @@ internal static class ShellThemes
     internal const string DefaultId = "sakura";
 
     internal static readonly ShellTheme SakuraNocturne = new(
-        "sakura", "Sakura Nocturne", "Indigo night, blossom pink and gold — a recital under the trees.", BackdropStyle.Sakura,
-        Accent: Color.FromRgb(0xFF, 0x7B, 0xAC),
-        AccentAlt: Color.FromRgb(0xFF, 0xC9, 0x6B),
-        AccentSoft: Color.FromArgb(0x2E, 0xFF, 0x7B, 0xAC),
-        Glow: Color.FromRgb(0x9B, 0xB6, 0xFF),
-        Window: Color.FromRgb(0x08, 0x07, 0x12),
-        Panel: Color.FromArgb(0xF0, 0x14, 0x12, 0x24),
-        PanelTop: Color.FromArgb(0xF6, 0x1D, 0x1A, 0x31),
-        PanelBottom: Color.FromArgb(0xEE, 0x11, 0x10, 0x20),
-        PanelAlt: Color.FromRgb(0x11, 0x0F, 0x1E),
-        Control: Color.FromRgb(0x1A, 0x17, 0x2A),
-        ControlHover: Color.FromRgb(0x26, 0x21, 0x3C),
-        Border: Color.FromRgb(0x2A, 0x25, 0x40),
-        ControlBorder: Color.FromRgb(0x33, 0x2D, 0x4C),
-        Track: Color.FromRgb(0x25, 0x20, 0x3A),
-        Popup: Color.FromArgb(0xFA, 0x16, 0x13, 0x27),
-        Petal: Color.FromRgb(0xFF, 0xB3, 0xCF),
-        PetalAlt: Color.FromRgb(0xFF, 0xE1, 0xEE));
+        "sakura", "Concert Grand", "Steinway ebony lacquer & warm champagne gold — the prestigious concert grand look.", BackdropStyle.Acoustic,
+        Accent: Color.FromRgb(0xD4, 0xAF, 0x37),
+        AccentAlt: Color.FromRgb(0xF5, 0xD7, 0x7F),
+        AccentSoft: Color.FromArgb(0x30, 0xD4, 0xAF, 0x37),
+        Glow: Color.FromRgb(0xFF, 0xD2, 0x75),
+        Window: Color.FromRgb(0x06, 0x07, 0x0A),
+        Panel: Color.FromArgb(0xF0, 0x0B, 0x0D, 0x12),
+        PanelTop: Color.FromArgb(0xF6, 0x14, 0x18, 0x22),
+        PanelBottom: Color.FromArgb(0xEE, 0x09, 0x0B, 0x10),
+        PanelAlt: Color.FromRgb(0x0F, 0x12, 0x18),
+        Control: Color.FromRgb(0x12, 0x15, 0x1D),
+        ControlHover: Color.FromRgb(0x1C, 0x20, 0x2C),
+        Border: Color.FromRgb(0x26, 0x2B, 0x3B),
+        ControlBorder: Color.FromRgb(0x32, 0x38, 0x4D),
+        Track: Color.FromRgb(0x1C, 0x20, 0x2C),
+        Popup: Color.FromArgb(0xFA, 0x0E, 0x10, 0x17),
+        Petal: Color.FromRgb(0xE5, 0xC0, 0x6E),
+        PetalAlt: Color.FromRgb(0xFF, 0xF0, 0xC2));
 
     internal static readonly ShellTheme ConcertNoir = new(
-        "noir", "Concert Noir", "Near-black studio with a violet and cyan accent — the classic Keyflow look.", BackdropStyle.Aurora,
-        Accent: Color.FromRgb(0x8B, 0x5C, 0xFF),
-        AccentAlt: Color.FromRgb(0x25, 0xD0, 0xFF),
-        AccentSoft: Color.FromArgb(0x2E, 0x8B, 0x5C, 0xFF),
-        Glow: Color.FromRgb(0xB0, 0x92, 0xFF),
-        Window: Color.FromRgb(0x07, 0x07, 0x0C),
-        Panel: Color.FromArgb(0xF0, 0x0F, 0x10, 0x17),
-        PanelTop: Color.FromArgb(0xF6, 0x17, 0x1A, 0x25),
-        PanelBottom: Color.FromArgb(0xEE, 0x0D, 0x0E, 0x15),
-        PanelAlt: Color.FromRgb(0x0D, 0x0E, 0x15),
-        Control: Color.FromRgb(0x15, 0x17, 0x1F),
-        ControlHover: Color.FromRgb(0x1E, 0x22, 0x30),
-        Border: Color.FromRgb(0x23, 0x26, 0x33),
-        ControlBorder: Color.FromRgb(0x2B, 0x2F, 0x3E),
-        Track: Color.FromRgb(0x22, 0x25, 0x33),
-        Popup: Color.FromArgb(0xFA, 0x10, 0x12, 0x19),
-        Petal: Color.FromRgb(0xC9, 0xB6, 0xFF),
-        PetalAlt: Color.FromRgb(0xE7, 0xE1, 0xFF));
+        "noir", "Concert Noir", "Midnight obsidian slate with acoustic sapphire and silvery platinum accents.", BackdropStyle.Obsidian,
+        Accent: Color.FromRgb(0x6C, 0x8D, 0xF0),
+        AccentAlt: Color.FromRgb(0xA8, 0xC2, 0xFB),
+        AccentSoft: Color.FromArgb(0x2E, 0x6C, 0x8D, 0xF0),
+        Glow: Color.FromRgb(0x8F, 0xAE, 0xFF),
+        Window: Color.FromRgb(0x05, 0x06, 0x09),
+        Panel: Color.FromArgb(0xF0, 0x0A, 0x0C, 0x11),
+        PanelTop: Color.FromArgb(0xF6, 0x12, 0x15, 0x20),
+        PanelBottom: Color.FromArgb(0xEE, 0x08, 0x09, 0x0D),
+        PanelAlt: Color.FromRgb(0x0C, 0x0E, 0x14),
+        Control: Color.FromRgb(0x11, 0x14, 0x1C),
+        ControlHover: Color.FromRgb(0x1A, 0x1E, 0x2B),
+        Border: Color.FromRgb(0x22, 0x28, 0x38),
+        ControlBorder: Color.FromRgb(0x2C, 0x34, 0x4A),
+        Track: Color.FromRgb(0x18, 0x1D, 0x29),
+        Popup: Color.FromArgb(0xFA, 0x0D, 0x0F, 0x14),
+        Petal: Color.FromRgb(0xA8, 0xC2, 0xFB),
+        PetalAlt: Color.FromRgb(0xE0, 0xEB, 0xFF));
 
     internal static readonly ShellTheme VelvetGold = new(
-        "velvet", "Velvet Gold", "Burgundy velvet, brass and warm candlelight — an evening at the concert hall.", BackdropStyle.Curtain,
-        Accent: Color.FromRgb(0xE8, 0xB1, 0x4C),
-        AccentAlt: Color.FromRgb(0xFF, 0xE6, 0xB0),
-        AccentSoft: Color.FromArgb(0x33, 0xE8, 0xB1, 0x4C),
-        Glow: Color.FromRgb(0xFF, 0x9E, 0x6B),
-        Window: Color.FromRgb(0x0C, 0x05, 0x08),
-        Panel: Color.FromArgb(0xF0, 0x1B, 0x0D, 0x13),
-        PanelTop: Color.FromArgb(0xF6, 0x27, 0x13, 0x1B),
-        PanelBottom: Color.FromArgb(0xEE, 0x17, 0x0B, 0x11),
-        PanelAlt: Color.FromRgb(0x16, 0x0A, 0x10),
-        Control: Color.FromRgb(0x22, 0x12, 0x18),
-        ControlHover: Color.FromRgb(0x30, 0x1A, 0x22),
-        Border: Color.FromRgb(0x3A, 0x1E, 0x26),
-        ControlBorder: Color.FromRgb(0x45, 0x25, 0x2F),
-        Track: Color.FromRgb(0x33, 0x1B, 0x22),
-        Popup: Color.FromArgb(0xFA, 0x1D, 0x0E, 0x14),
-        Petal: Color.FromRgb(0xFF, 0xC9, 0x8A),
-        PetalAlt: Color.FromRgb(0xFF, 0xE9, 0xC9));
+        "velvet", "Velvet Gold", "Rich mahogany, imperial concert velvet and burnished antique brass.", BackdropStyle.Imperial,
+        Accent: Color.FromRgb(0xE5, 0xA9, 0x3C),
+        AccentAlt: Color.FromRgb(0xFF, 0xD4, 0x80),
+        AccentSoft: Color.FromArgb(0x35, 0xE5, 0xA9, 0x3C),
+        Glow: Color.FromRgb(0xFF, 0xA7, 0x4D),
+        Window: Color.FromRgb(0x0B, 0x06, 0x08),
+        Panel: Color.FromArgb(0xF0, 0x15, 0x0B, 0x10),
+        PanelTop: Color.FromArgb(0xF6, 0x20, 0x10, 0x18),
+        PanelBottom: Color.FromArgb(0xEE, 0x11, 0x08, 0x0D),
+        PanelAlt: Color.FromRgb(0x14, 0x0A, 0x0F),
+        Control: Color.FromRgb(0x1D, 0x0F, 0x16),
+        ControlHover: Color.FromRgb(0x2A, 0x16, 0x20),
+        Border: Color.FromRgb(0x36, 0x1D, 0x29),
+        ControlBorder: Color.FromRgb(0x44, 0x25, 0x34),
+        Track: Color.FromRgb(0x27, 0x14, 0x1E),
+        Popup: Color.FromArgb(0xFA, 0x17, 0x0C, 0x12),
+        Petal: Color.FromRgb(0xFF, 0xD4, 0x80),
+        PetalAlt: Color.FromRgb(0xFF, 0xF2, 0xD1));
 
     internal static readonly ShellTheme[] All = [SakuraNocturne, ConcertNoir, VelvetGold];
 
@@ -204,7 +203,7 @@ internal static class ShellThemeManager
         EndPoint = new Point(0, 1),
         GradientStops =
         {
-            new GradientStop(Color.FromArgb(0x24, theme.AccentAlt.R, theme.AccentAlt.G, theme.AccentAlt.B), 0),
+            new GradientStop(Color.FromArgb(0x28, theme.AccentAlt.R, theme.AccentAlt.G, theme.AccentAlt.B), 0),
             new GradientStop(Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF), 1)
         }
     });
