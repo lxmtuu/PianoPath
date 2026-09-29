@@ -45,6 +45,7 @@ internal sealed class PianoVisualSettings
     public string LeftHandColor { get; set; } = "#3FA9FF";
     public string RightHandColor { get; set; } = "#FF6FD8";
     public string HaloColor { get; set; } = "#C66EFF";
+    public double HaloIntensity { get; set; } = 80;
     public string PressedKeyColor { get; set; } = "#F782FF";
     public string KeyFeltColor { get; set; } = "#C41C4A";
     public string BackgroundColor { get; set; } = "#000000";
@@ -215,6 +216,7 @@ internal sealed class PianoVisualSettings
         WispAmount = Math.Clamp(WispAmount, 0, 150); WispSpeed = Math.Clamp(WispSpeed, 20, 600); WispHeight = Math.Clamp(WispHeight, 5, 100);
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
+        HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         KeyboardScale = Math.Clamp(KeyboardScale, 60, 140); KeyLighting = Math.Clamp(KeyLighting, 0, 100); KeyGlowRadius = Math.Clamp(KeyGlowRadius, 0, 100);
         KeyOverhang = Math.Clamp(KeyOverhang, 0, 100); KeyPressDepth = Math.Clamp(KeyPressDepth, 0, 100);
         ShaderKeyLight = Math.Clamp(ShaderKeyLight, 0, 200); ShaderShadows = Math.Clamp(ShaderShadows, 0, 100);

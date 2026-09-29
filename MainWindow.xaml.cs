@@ -345,6 +345,7 @@ public partial class MainWindow : Window
         if (_lastPointerPoint is { } last && Math.Abs(last.X - point.X) < .5 && Math.Abs(last.Y - point.Y) < .5) return;
         _lastPointerPoint = point;
         _lastPointerActivity = DateTime.UtcNow;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible) return;
         if (_settingsHiddenByIdle) { _settingsHiddenByIdle = false; SettingsPanel.Visibility = Visibility.Visible; }
         SetChromeVisible(true, showRecordButton: true);
         if (Stage is not null) Stage.SetPointerPosition(e.GetPosition(Stage));
@@ -352,6 +353,7 @@ public partial class MainWindow : Window
     private void CheckChromeIdle()
     {
         if (_closing || !AutoHideChrome) return;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible) return;
         // Keep everything on screen while a color picker is open or the user is dragging a slider / browsing a drop-down.
         if (OwnedWindows.Count > 0 || Mouse.Captured is not null) return;
         if (DateTime.UtcNow - _lastPointerActivity >= ChromeIdleDelay) HideChromeForIdle();

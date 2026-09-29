@@ -18,6 +18,8 @@ launchSettings.json
 # Test / runtime artifacts
 TestResults/
 tools/out/
+__pycache__/
+*.pyc
 *.log
 *.avi
 *.zip

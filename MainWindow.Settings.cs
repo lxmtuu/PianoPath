@@ -216,6 +216,7 @@ public partial class MainWindow
         var halo = Card(SceneSettingsHost, "HIT LINE", "The line where notes meet the keys.");
         Toggle(halo, "Show halo line", nameof(PianoVisualSettings.ShowHalo), "Glowing line across the stage at key height.");
         ColorRow(halo, "Halo color", nameof(PianoVisualSettings.HaloColor), "Also tints the horizon glow and the keyboard rim light.");
+        SliderRow(halo, "Halo intensity", nameof(PianoVisualSettings.HaloIntensity), 0, 200, "Brightness and photon emission of the hit line.");
     }
 
     private void BuildCameraPage()
@@ -489,6 +490,8 @@ public partial class MainWindow
     {
         Prop(property).SetValue(_visualSettings, value);
         if (_visualColorButtons.TryGetValue(property, out var swatch)) SetColorSwatch(swatch, value);
+        if (property == nameof(PianoVisualSettings.HaloColor) && PlayDialogHaloColorDot is not null)
+            PlayDialogHaloColorDot.Background = new SolidColorBrush(color);
         if (property is nameof(PianoVisualSettings.NoteColorStart) or nameof(PianoVisualSettings.NoteColorEnd))
         {
             _visualSettings.Palette = "Custom";

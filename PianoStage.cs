@@ -700,15 +700,66 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawImpactLine(DrawingContext dc, double width, double y)
     {
         var baseColor = AdjustColor(ParseColor(_visual.HaloColor, ColorFromHue(266)));
+        var intensity = Math.Clamp(_visual.HaloIntensity / 100.0, 0.0, 2.0);
+        if (intensity <= 0.001) return;
+
+        var haloSpread = 6 + _visual.BloomSize / 5.0;
+        var haloAlpha = Alpha(Math.Clamp((24 + _visual.BloomIntensity * .75) * intensity, 0, 255));
+
+        // 1 · Soft volumetric bloom across the hit line
+        var glowHeight = haloSpread * 2.5;
+        var haloGlowBrush = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        haloGlowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, baseColor.R, baseColor.G, baseColor.B), 0.0));
+        haloGlowBrush.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(haloAlpha * .55), baseColor.R, baseColor.G, baseColor.B), 0.5));
+        haloGlowBrush.GradientStops.Add(new GradientStop(Color.FromArgb(0, baseColor.R, baseColor.G, baseColor.B), 1.0));
+        haloGlowBrush.Freeze();
+        dc.DrawRectangle(haloGlowBrush, null, new Rect(0, y - glowHeight * .5, width, glowHeight));
+
+        // 2 · Radiant horizontal beams
+        var outerPen = new Pen(Brush(Color.FromArgb((byte)(haloAlpha * .4), baseColor.R, baseColor.G, baseColor.B)), haloSpread * 2.2); outerPen.Freeze();
+        dc.DrawLine(outerPen, new Point(0, y), new Point(width, y));
+        var midPen = new Pen(Brush(Color.FromArgb((byte)Math.Clamp(50 * intensity, 0, 255), baseColor.R, baseColor.G, baseColor.B)), haloSpread * .9); midPen.Freeze();
+        dc.DrawLine(midPen, new Point(0, y), new Point(width, y));
+
         var rainbow = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0), MappingMode = BrushMappingMode.RelativeToBoundingBox };
-        rainbow.GradientStops.Add(new GradientStop(AdjustColor(NoteColor(28, 0)), 0)); rainbow.GradientStops.Add(new GradientStop(baseColor, .51)); rainbow.GradientStops.Add(new GradientStop(AdjustColor(NoteColor(100, 0)), 1)); rainbow.Freeze();
-        var center = new Point(width / 2, y);
-        var glowWidth = 8 + _visual.BloomSize / 4; var haloAlpha = Alpha(20 + _visual.BloomIntensity * .8);
-        var halo = new Pen(Brush(Color.FromArgb(haloAlpha, baseColor.R, baseColor.G, baseColor.B)), glowWidth * 2.5); halo.Freeze();
-        dc.DrawLine(halo, new Point(0, y), new Point(width, y));
-        dc.DrawLine(new Pen(Brush(Color.FromArgb(60, baseColor.R, baseColor.G, baseColor.B)), glowWidth), new Point(0, y), new Point(width, y));
-        dc.DrawLine(new Pen(rainbow, 2.5), new Point(0, y), new Point(width, y));
-        dc.DrawEllipse(Brush(Color.FromArgb(82, baseColor.R, baseColor.G, baseColor.B)), null, center, 170, 8);
+        rainbow.GradientStops.Add(new GradientStop(AdjustColor(NoteColor(28, 0)), 0));
+        rainbow.GradientStops.Add(new GradientStop(baseColor, .5));
+        rainbow.GradientStops.Add(new GradientStop(AdjustColor(NoteColor(100, 0)), 1));
+        rainbow.Freeze();
+        var corePen = new Pen(rainbow, Math.Max(2.0, 1.6 * intensity)); corePen.Freeze();
+        dc.DrawLine(corePen, new Point(0, y), new Point(width, y));
+
+        var whiteCore = new Pen(Brush(Color.FromArgb((byte)Math.Clamp(180 * intensity, 0, 255), 255, 255, 255)), 1.2); whiteCore.Freeze();
+        dc.DrawLine(whiteCore, new Point(0, y), new Point(width, y));
+
+        // 3 · Active note photon excitation & flares
+        for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
+        {
+            if (!_activeKey[pitch]) continue;
+            var hitX = KeyCenters[pitch] * width;
+            var hitColor = KeyColor(pitch);
+            var hitAmount = Math.Clamp(_activeKeyAmount[pitch], 0.2, 1.0);
+            var flareRadius = (16 + _visual.BloomSize * .35) * hitAmount;
+
+            var burstKey = GradientKey(12, Color.FromArgb((byte)pitch, hitColor.R, hitColor.G, hitColor.B));
+            if (!_gradientCache.TryGetValue(burstKey, out var burstBrush))
+            {
+                var burst = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
+                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(190 * intensity * hitAmount), 255, 255, 255), 0.0));
+                burst.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(130 * intensity * hitAmount), hitColor.R, hitColor.G, hitColor.B), 0.35));
+                burst.GradientStops.Add(new GradientStop(Color.FromArgb(0, hitColor.R, hitColor.G, hitColor.B), 1.0));
+                burst.Freeze();
+                burstBrush = CacheGradient(burstKey, burst);
+            }
+            dc.DrawEllipse(burstBrush, null, new Point(hitX, y), flareRadius * 1.5, flareRadius * .9);
+
+            var flarePen = new Pen(Brush(Color.FromArgb(Alpha(160 * intensity * hitAmount), 255, 255, 255)), 1.8); flarePen.Freeze();
+            var flareWidth = 32 + flareRadius * 1.8;
+            dc.DrawLine(flarePen, new Point(hitX - flareWidth, y), new Point(hitX + flareWidth, y));
+
+            var rayPen = new Pen(Brush(Color.FromArgb(Alpha(110 * intensity * hitAmount), hitColor.R, hitColor.G, hitColor.B)), 2.0); rayPen.Freeze();
+            dc.DrawLine(rayPen, new Point(hitX, y - 14), new Point(hitX, y + 20));
+        }
     }
 
     private void DrawVignette(DrawingContext dc, double width, double keyTop)
@@ -801,11 +852,13 @@ internal sealed class PianoStage : FrameworkElement
         }
         var blackBrush = glass ? KeyBlackGlass : studio ? KeyBlackStudio : KeyBlack;
         var blackEdge = new Pen(Brush(Color.FromArgb(200, 72, 66, 96)), .75); blackEdge.Freeze();
+        var blackWidth = whiteWidth * .52;
+        var blackHeight = (height - top) * (.61 + _visual.KeyOverhang / 100 * .18);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!IsBlack(pitch)) continue;
-            var x = WhitesBelow[pitch] * whiteWidth - whiteWidth * .29;
-            var rect = new Rect(x, top + 4, whiteWidth * .58, (height - top) * (.52 + _visual.KeyOverhang / 100 * .35));
+            var x = KeyCenters[pitch] * width - blackWidth * .5;
+            var rect = new Rect(x, top + 4, blackWidth, blackHeight);
             if (studio) dc.DrawRoundedRectangle(Brush(Color.FromArgb(120, 0, 0, 0)), null, new Rect(rect.X - 1.5, rect.Y + 2, rect.Width + 3, rect.Height + 3), 3, 3);
             if (_activeKey[pitch] && _visual.AnimateKeys)
             {
@@ -1032,16 +1085,27 @@ internal sealed class PianoStage : FrameworkElement
     private int PitchAt(Point point)
     {
         var whites = WhitePitches; var keyWidth = ActualWidth / whites.Length;
+        var blackWidth = keyWidth * .52;
+        var blackHeight = KeyboardHeight * (.61 + _visual.KeyOverhang / 100 * .18);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!IsBlack(pitch)) continue;
-            var x = WhitesBelow[pitch] * keyWidth - keyWidth * .29;
-            if (point.X >= x && point.X < x + keyWidth * .58 && point.Y < ActualHeight - KeyboardHeight + KeyboardHeight * .63) return pitch;
+            var x = KeyCenters[pitch] * ActualWidth - blackWidth * .5;
+            if (point.X >= x && point.X < x + blackWidth && point.Y < ActualHeight - KeyboardHeight + blackHeight) return pitch;
         }
         return whites[Math.Clamp((int)(point.X / keyWidth), 0, whites.Length - 1)];
     }
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); base.OnRenderSizeChanged(sizeInfo); InvalidateVisual(); }
     private static bool IsBlack(int pitch) => pitch % 12 is 1 or 3 or 6 or 8 or 10;
+    internal static double BlackKeyOffset(int pitch) => (pitch % 12) switch
+    {
+        1 => -0.08,
+        3 => 0.08,
+        6 => -0.10,
+        8 => 0.00,
+        10 => 0.10,
+        _ => 0.0
+    };
     private static int[] BuildWhitesBelow()
     {
         var result = new int[128]; var count = 0;
@@ -1056,7 +1120,9 @@ internal sealed class PianoStage : FrameworkElement
     {
         var result = new double[128]; var whiteWidth = 1.0 / WhitePitches.Length;
         for (var pitch = 0; pitch < 128; pitch++)
-            result[pitch] = IsBlack(pitch) ? WhitesBelow[pitch] * whiteWidth : (WhitesBelow[pitch] + .5) * whiteWidth;
+            result[pitch] = IsBlack(pitch)
+                ? (WhitesBelow[pitch] + BlackKeyOffset(pitch)) * whiteWidth
+                : (WhitesBelow[pitch] + .5) * whiteWidth;
         return result;
     }
 
