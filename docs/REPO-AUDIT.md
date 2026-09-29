@@ -13,7 +13,7 @@ Rà soát chạy bằng ba lớp đã có của repo, không thêm công cụ m�
 |---|---|---|
 | `tools/check_sources.py` | mọi máy, ~2 s | Cân bằng ngoặc/chuỗi C#, XML hợp lệ, tham chiếu resource, khoá chuỗi in ra, bảng tham số dòng lệnh, ảnh/anchor của **cả hai** README, tên trợ năng của nút chỉ có glyph |
 | `--verify` (`Diagnostics/VerificationSuite.cs`) | Windows (CI) | Toán shader, MIDI, SoundFont, AVI, cài đặt, dock, ngôn ngữ, lịch sử, hồ sơ, trợ năng, high contrast, các lớp hiệu ứng |
-| Ảnh CI render | `build.yml` | Chín ảnh trong `docs/previews/` do chính `PianoPath.exe` chụp |
+| Ảnh CI render | `build.yml` | Tám ảnh trong `docs/previews/` (bảy `--lang=en`, một `--lang=vi`) do chính `PianoPath.exe` chụp, cộng ảnh mẫu `docs/samples/stage-backdrop.png` do script Python sinh |
 
 Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy nó (luật 0 của `docs/ROADMAP.md`).
 
