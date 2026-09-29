@@ -1,5 +1,9 @@
 # Keyflow · Piano Performance & Concert VFX Studio
 
+> **English version: [README.en.md](README.en.md)** · Bản dưới đây là bản gốc tiếng Việt. Hai tệp là
+> cùng một tài liệu, cùng ảnh (do CI render) và cùng bảng tham số dòng lệnh; `tools/check_sources.py`
+> kiểm cả hai nên không bản nào lệch khỏi bản kia.
+
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng.
 
 Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`) và được cập nhật tự động trong `docs/previews/` — không phải ảnh dàn dựng:
@@ -459,7 +463,7 @@ python tools/check_sources.py          # cú pháp C#, XML + resource XAML, danh
 python tools/shader_preview.py 780 180 0.6   # port Python của shader, xuất ảnh tools/out/ (không commit)
 ```
 
-`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` đều tồn tại**, **mọi tham số dòng lệnh mà app đọc đều có trong bảng tham số của README và ngược lại, mọi tham số/đường dẫn workflow `build.yml` truyền cho `PianoPath.exe` đều thật sự tồn tại**, và **ảnh mẫu trong `docs/samples` vẫn khớp với script sinh ra nó**; và **bảng chuỗi**: mọi ngôn ngữ dịch đúng tập khoá của inventory, placeholder và xuống dòng còn nguyên, mọi chuỗi mà mã nguồn in ra (kể cả chuỗi trong XAML có marker, tên trang, theme, preset và thẻ phím tắt) đều là một khoá của inventory. CI chạy script này trước bước build trên Windows.
+`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` lẫn `README.en.md` đều tồn tại, mỗi bản phải trỏ sang bản kia**, **mọi tham số dòng lệnh mà app đọc đều có trong bảng tham số của cả hai README và ngược lại, mọi tham số/đường dẫn workflow `build.yml` truyền cho `PianoPath.exe` đều thật sự tồn tại**, và **ảnh mẫu trong `docs/samples` vẫn khớp với script sinh ra nó**; và **bảng chuỗi**: mọi ngôn ngữ dịch đúng tập khoá của inventory, placeholder và xuống dòng còn nguyên, mọi chuỗi mà mã nguồn in ra (kể cả chuỗi trong XAML có marker, tên trang, theme, preset và thẻ phím tắt) đều là một khoá của inventory. CI chạy script này trước bước build trên Windows.
 
 Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạt), `FAIL` (có lỗi, mã thoát `1`), `SKIP` (điều kiện môi trường không cho phép kiểm tra) và `NOTE` (thông tin môi trường). Bộ kiểm thử tự bỏ qua thay vì báo lỗi khi máy thiếu phần cứng: nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ Git LFS (clone chưa `git lfs pull`, hoặc CI checkout với `lfs: false`) thì các mục piano đi kèm bị `SKIP` và ứng dụng được xác minh ở chế độ im lặng; nếu Windows không mở được thiết bị âm thanh (`waveOut error 2`) hoặc một cổng MIDI output không mở được, engine vẫn nạp SoundFont và chạy im lặng, kết quả ghi `NOTE` chứ không `FAIL`.
 
@@ -467,6 +471,7 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 
 | Tài liệu | Nội dung |
 | --- | --- |
+| [`README.en.md`](README.en.md) | Bản tiếng Anh của chính tài liệu này: cùng ảnh, cùng bảng tham số dòng lệnh, được `tools/check_sources.py` kiểm song song nên hai bản không thể lệch nhau. |
 | `docs/UI-SHADER-REVIEW.md` | Rà soát giao diện và đợt nâng cấp shader đổ bóng kiểu Unreal: mô hình shading, camera, cache bake, cách tự kiểm chứng. |
 | `docs/SETTINGS-WIRING-AUDIT.md` | Bảng đối chiếu **mọi** chức năng cài đặt với đoạn code tiêu thụ nó — chứng minh không có setting nào "chết". |
 | `docs/LOCALIZATION.md` | Kiến trúc đa ngôn ngữ: khoá là văn bản nguồn, một tệp bảng mỗi ngôn ngữ, nhãn sống, quy ước dịch tiếng Việt, cách thêm ngôn ngữ mới và ba lớp kiểm chứng. |

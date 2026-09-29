@@ -536,6 +536,12 @@ def scan_localization(cs_files):
         if rel.name == "SettingsPages.cs":
             for match in re.finditer(r'internal const string \w+ = "([^"]+)";', text):
                 note(match.group(1), f"{rel}: navigation")
+        if rel.name == "MainWindow.Menu.cs" and "PlayInlineSections = new()" in text:
+            # The Play dialog repeats rows of the dock inside each OPTIONS layer; their labels are
+            # records built from literals, so they are collected from the table itself.
+            block = text[text.index("PlayInlineSections = new()"):]
+            for match in re.finditer(r'new\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*nameof\(', block):
+                note(json.loads(f'"{match.group(1)}"'), f"{rel}: Play dialog layer row")
         if rel.name == "ShellTheme.cs":
             for match in re.finditer(r'new ShellTheme\(\s*"[^"]*",\s*"((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"', text, re.S):
                 note(json.loads(f'"{match.group(1)}"'), f"{rel}: theme name")
@@ -575,44 +581,58 @@ def readme_slug(heading):
     return re.sub(r"\s", "-", text)
 
 
+# The READMEs are one document in two languages: both have to stay complete, and a relative link in
+# either of them has to resolve. The Vietnamese file is the original; the English one is what a reader
+# who does not speak Vietnamese opens first, so neither may quietly lose a section.
+READMES = ["README.md", "README.en.md"]
+
+
 def scan_readme():
     """Documentation is part of the product: a screenshot that no longer exists or a table-of-contents
     link that points at a renamed heading is a broken README for everyone who reads it first."""
     errors = []
-    readme = ROOT / "README.md"
-    if not readme.exists():
-        return ["README.md is missing"]
-    text = readme.read_text(encoding="utf-8")
     # ``docs/previews`` is rendered by CI and committed back, so a shot the workflow knows about can be
     # one commit behind the README line that introduces it. Every other image has to exist right now.
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow.read_text(encoding="utf-8"))) if workflow.exists() else set()
     pending = []
-    for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text):
-        if re.match(r"^(https?:|data:)", target):
+    for name in READMES:
+        readme = ROOT / name
+        if not readme.exists():
+            errors.append(f"{name} is missing")
             continue
-        if (ROOT / target).exists():
-            continue
-        if target.replace("\\", "/").startswith("docs/previews/") and Path(target).name in rendered:
-            pending.append(Path(target).name)
-            continue
-        errors.append(f"README.md references the image '{target}', which does not exist")
-    headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
-    for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
-        if anchor not in headings:
-            errors.append(f"README.md links to '#{anchor}', which is not a heading in the file")
-    for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
-        if any(link.startswith(prefix) for prefix in ("!",)):
-            continue
-        if Path(link).name in pending:
-            continue
-        if not (ROOT / link).exists() and not link.startswith("http"):
-            # A repo-relative link to a file that is not in the checkout (a published binary, a
-            # user-preset folder…) is tolerated when it carries no path separator.
-            if "/" in link or "\\" in link:
-                errors.append(f"README.md links to '{link}', which does not exist")
+        text = readme.read_text(encoding="utf-8")
+        for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text):
+            if re.match(r"^(https?:|data:)", target):
+                continue
+            if (ROOT / target).exists():
+                continue
+            if target.replace("\\", "/").startswith("docs/previews/") and Path(target).name in rendered:
+                pending.append(f"{name}:{Path(target).name}")
+                continue
+            errors.append(f"{name} references the image '{target}', which does not exist")
+        headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
+        for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
+            if anchor not in headings:
+                errors.append(f"{name} links to '#{anchor}', which is not a heading in the file")
+        for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
+            if any(link.startswith(prefix) for prefix in ("!",)):
+                continue
+            if Path(link).name in {entry.split(":", 1)[1] for entry in pending if entry.startswith(name + ":")}:
+                continue
+            if not (ROOT / link).exists() and not link.startswith("http"):
+                # A repo-relative link to a file that is not in the checkout (a published binary, a
+                # user-preset folder…) is tolerated when it carries no path separator.
+                if "/" in link or "\\" in link:
+                    errors.append(f"{name} links to '{link}', which does not exist")
     if pending:
-        print(f"note: README points at {len(pending)} preview(s) CI renders — {', '.join(sorted(pending))} — which this commit does not carry yet")
+        print(f"note: {len(pending)} README image reference(s) point at previews CI renders — "
+              f"{', '.join(sorted(pending))} — which this commit does not carry yet")
+    # Both files document the same product, so they have to link to each other: a reader who lands on
+    # one of them must be able to reach the other without editing the URL.
+    for name, other in (("README.md", "README.en.md"), ("README.en.md", "README.md")):
+        if (ROOT / name).exists() and (ROOT / other).exists() and other not in (ROOT / name).read_text(encoding="utf-8"):
+            errors.append(f"{name} never links to {other}; the two language editions have to reference each other")
     return errors
 
 
@@ -629,16 +649,21 @@ def scan_cli_and_samples():
     parsed = set()
     for name in ("App.xaml.cs", "Diagnostics/VerificationSuite.cs"):
         parsed |= set(re.findall(r'"(--[a-z][a-z-]*)', (ROOT / name).read_text(encoding="utf-8")))
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    table = re.search(r"^### Tham số dòng lệnh$(.*?)^### ", readme, re.M | re.S)
-    if not table:
-        errors.append("README.md lost the '### Tham số dòng lệnh' section that documents every switch")
-    else:
+    # Both language editions carry their own command-line table, and each one has to stand on its own:
+    # a reader of ``README.en.md`` must never have to open the Vietnamese file for a switch name.
+    for name, heading in (("README.md", "Tham số dòng lệnh"), ("README.en.md", "Command line switches")):
+        readme = ROOT / name
+        if not readme.exists():
+            continue
+        table = re.search(rf"^### {re.escape(heading)}$(.*?)^### ", readme.read_text(encoding="utf-8"), re.M | re.S)
+        if not table:
+            errors.append(f"{name} lost the '### {heading}' section that documents every switch")
+            continue
         documented = set(re.findall(r"--[a-z][a-z-]*", table.group(1)))
         for flag in sorted(parsed - documented):
-            errors.append(f"the app parses {flag}, but the README CLI table does not document it")
+            errors.append(f"the app parses {flag}, but the {name} CLI table does not document it")
         for flag in sorted(documented - parsed):
-            errors.append(f"the README CLI table documents {flag}, which no source file parses")
+            errors.append(f"the {name} CLI table documents {flag}, which no source file parses")
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     if not workflow.exists():
         return errors

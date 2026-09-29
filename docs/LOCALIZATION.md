@@ -147,15 +147,25 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 
 ## 9. Còn mở
 
-* Chip phím tắt trong thẻ F1 in nguyên văn — chấp nhận được với `F1`/`Space`, nhưng
-  `Click the keys`, `MIDI keyboard`, `Pointer idle`, `Drag the timeline`, `Practice modes` là nhãn mô
-  tả, nên về sau cho chúng qua `Loc.T` rồi thêm năm khoá vào inventory.
+* **Chuỗi lạ đã là lỗi, không còn là `NOTE`.** `VerifyLanguageSwitching` khẳng định
+  `Loc.UnknownKeys` rỗng: một câu mà giao diện in ra nhưng không phải khoá của inventory thì không
+  bảng nào dịch được, nên nó là lỗi hồi quy chứ không phải thông tin môi trường. Muốn thêm câu mới
+  thì thêm khoá vào `Strings.English.cs` + `Strings.Vietnamese.cs` (đúng thứ tự ordinal) — bộ kiểm
+  tĩnh và `--verify` sẽ cùng báo nếu quên. Tên do người dùng đặt (thiết bị, tệp, preset tự lưu) đi
+  thẳng ra màn hình nguyên văn chứ không đi qua `Loc`, nên không bị tính là chuỗi lạ.
+* Chip phím tắt trong thẻ F1: nhãn mô tả (`Click the keys`, `MIDI keyboard`, `Pointer idle`,
+  `Drag the timeline`, `Practice modes`) **đã** đi qua `Loc.Set` và có khoá trong inventory; chỉ cột
+  phím (`A W S …`, `Space`, `A · B · ×`) là in nguyên văn theo đúng quy ước "phím thật không dịch".
 * `VisualPresets.SanitizeName` trả `"My preset"` làm **tên tệp** khi người dùng lưu mà không đặt tên;
   nhãn hiển thị của nó thì đã dịch (`Preset của tôi`) vì `DisplayName` đi qua bảng. Hệ quả phụ: một preset
   do người dùng tự đặt tên trùng hẳn một khoá của bảng (ví dụ `Custom`) sẽ bị dịch khi in — vô hại nhưng
   nên giới hạn `DisplayName` cho đúng các preset có sẵn (hiện đã làm vậy).
 * Mô tả preset *do người dùng lưu* là một chuỗi ghép (`User preset · x.json`); nó đã theo ngôn ngữ
   lúc dựng danh sách, nhưng một preset tự đặt tên tiếng Việt thì không nên bị `T()` chạm vào.
+* Tài liệu có hai bản: `README.md` (tiếng Việt, bản gốc) và `README.en.md` (tiếng Anh). `scan_readme`
+  trong `tools/check_sources.py` quét **cả hai** (ảnh, anchor, liên kết nội bộ) và bắt buộc mỗi bản
+  phải trỏ sang bản kia; `scan_cli_and_samples` kiểm bảng tham số dòng lệnh của từng bản, nên bản
+  tiếng Anh không thể thiếu một switch mà bản tiếng Việt đã có.
 * RTL (Ả Rập, Do Thái, Ba Tư) cần thêm `FlowDirection`, đảo `Margin`/`Grid` cột và đường rơi của nốt;
   bảng cho một ngôn ngữ RTL phải đi kèm đợt việc đó, không nên thêm bảng suông.
 * `installer/Keyflow.iss` vẫn dùng một tệp ngôn ngữ Inno; bản dịch installer tiếng Việt là việc riêng

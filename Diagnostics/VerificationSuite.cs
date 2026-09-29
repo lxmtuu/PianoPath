@@ -767,7 +767,14 @@ internal static class VerificationSuite
         search.Text = "";
         Assert(Loc.UntranslatedKeys.Count == 0,
             $"Every string the interface printed while in Vietnamese should have a translation ({Loc.UntranslatedKeys.FirstOrDefault() ?? "-"}).");
-        if (Loc.UnknownKeys.Count > 0) Results.Add($"NOTE {Loc.UnknownKeys.Count} printed string(s) are not keys of the English inventory ({string.Join(", ", Loc.UnknownKeys.Take(3))}) — a user-supplied name is allowed, a reworded caption is not.");
+        // A printed string that is not a key of the English inventory can never be translated by any
+        // table: it is either a caption that was reworded in the sources without adding the new key,
+        // or a template built by concatenating pieces. Both are defects, so this is an assertion now
+        // instead of the NOTE it used to be (see docs/LOCALIZATION.md §9). User-supplied text (a
+        // device name, a file name, a preset the user typed) never reaches Loc in this window.
+        var unknownKeys = Loc.UnknownKeys;
+        Assert(unknownKeys.Count == 0,
+            $"{unknownKeys.Count} printed string(s) are not keys of the English inventory — a reworded caption cannot be translated: {string.Join(" · ", unknownKeys.Take(5))}.");
         Loc.Apply("en");
         Assert(firstHeader() == "Style" && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
         Loc.Apply("");
