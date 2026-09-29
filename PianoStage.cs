@@ -738,7 +738,7 @@ internal sealed class PianoStage : FrameworkElement
             if (!_activeKey[pitch]) continue;
             var hitX = KeyCenters[pitch] * width;
             var hitColor = KeyColor(pitch);
-            var hitAmount = Math.Clamp(_activeKeyAmount[pitch], 0.2, 1.0);
+            var hitAmount = Math.Clamp(_keyHeat[pitch] > 0 ? _keyHeat[pitch] : 1.0, 0.35, 1.0);
             var flareRadius = (16 + _visual.BloomSize * .35) * hitAmount;
 
             var burstKey = GradientKey(12, Color.FromArgb((byte)pitch, hitColor.R, hitColor.G, hitColor.B));

@@ -131,20 +131,17 @@ public partial class MainWindow
 
     private void PlayDialogHaloColor_Click(object sender, RoutedEventArgs e)
     {
-        var picker = new ColorPickerWindow(SafeColor(_visualSettings.HaloColor), color =>
-        {
-            _visualSettings.HaloColor = $"#{color.R:X2}{color.G:X2}{color.B:X2}";
-            if (PlayDialogHaloColorDot is not null)
-                PlayDialogHaloColorDot.Background = new SolidColorBrush(color);
-            if (_visualColorInputs.TryGetValue(nameof(PianoVisualSettings.HaloColor), out var input))
-                input.Text = _visualSettings.HaloColor;
-            if (_visualColorButtons.TryGetValue(nameof(PianoVisualSettings.HaloColor), out var button) && button.Content is Border dot)
-                dot.Background = new SolidColorBrush(color);
-            MarkModified();
-            ApplyVisualSettings("Halo color applied");
-        })
-        { Owner = this };
-        picker.ShowDialog();
+        var picker = new ColorPickerWindow(_visualSettings.HaloColor) { Owner = this };
+        if (picker.ShowDialog() != true || picker.SelectedHex is not { } hex) return;
+        _visualSettings.HaloColor = hex;
+        if (PlayDialogHaloColorDot is not null)
+            PlayDialogHaloColorDot.Background = new SolidColorBrush(SafeColor(hex));
+        if (_visualColorInputs.TryGetValue(nameof(PianoVisualSettings.HaloColor), out var input))
+            input.Text = hex;
+        if (_visualColorButtons.TryGetValue(nameof(PianoVisualSettings.HaloColor), out var button))
+            SetColorSwatch(button, hex);
+        MarkModified();
+        ApplyVisualSettings("Halo color applied");
     }
 
     private void PlayDialogStyleCard_Click(object sender, MouseButtonEventArgs e)

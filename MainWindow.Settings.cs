@@ -491,7 +491,7 @@ public partial class MainWindow
         Prop(property).SetValue(_visualSettings, value);
         if (_visualColorButtons.TryGetValue(property, out var swatch)) SetColorSwatch(swatch, value);
         if (property == nameof(PianoVisualSettings.HaloColor) && PlayDialogHaloColorDot is not null)
-            PlayDialogHaloColorDot.Background = new SolidColorBrush(color);
+            PlayDialogHaloColorDot.Background = new SolidColorBrush(SafeColor(value));
         if (property is nameof(PianoVisualSettings.NoteColorStart) or nameof(PianoVisualSettings.NoteColorEnd))
         {
             _visualSettings.Palette = "Custom";
