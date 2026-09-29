@@ -28,16 +28,28 @@ jobs:
       - name: Capture shell snapshots
         shell: pwsh
         run: |
-          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $exe = (Resolve-Path 'bin/Release/net10.0-windows/PianoPath.exe').Path
           $out = Join-Path $env:RUNNER_TEMP 'snapshots'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
-          & $exe --snapshot (Join-Path $out 'menu-preview.png') --menu
-          & $exe --snapshot (Join-Path $out 'preview.png') --play-preview
-          & $exe --snapshot (Join-Path $out 'settings-preview.png') --show-settings --settings-tab=theme
-          Get-ChildItem $out | Select-Object Name, Length
+          # A GUI-subsystem process writes nothing to the console, so keep its redirected
+          # streams on disk: an unhandled startup exception is exactly what we need to see.
+          function Shot([string]$name, [string[]]$extra) {
+            $png = Join-Path $out $name
+            $so = Join-Path $out "$name.stdout.txt"; $se = Join-Path $out "$name.stderr.txt"
+            $p = Start-Process -FilePath $exe -ArgumentList (@('--snapshot', $png) + $extra) -PassThru -Wait -RedirectStandardOutput $so -RedirectStandardError $se
+            "--- $name exit=$($p.ExitCode) png=$(Test-Path $png)"
+            if (Test-Path $se) { Get-Content $se | Select-Object -First 40 }
+            if (Test-Path $so) { Get-Content $so | Select-Object -First 40 }
+          }
+          Shot 'menu-preview.png' @('--menu')
+          Shot 'preview.png' @('--play-preview')
+          Shot 'settings-preview.png' @('--show-settings', '--settings-tab=theme')
+          Get-ChildItem $out -Recurse | Select-Object FullName, Length
 
       - uses: actions/upload-artifact@v4
         with:
           name: keyflow-snapshots
-          path: ${{ runner.temp }}/snapshots/*.png
-          if-no-files-found: error
+          path: |
+            ${{ runner.temp }}/snapshots/*.png
+            ${{ runner.temp }}/snapshots/*.txt
+          if-no-files-found: warn
