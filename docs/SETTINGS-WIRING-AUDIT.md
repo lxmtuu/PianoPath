@@ -208,3 +208,29 @@ Phương pháp:
   4 họ ambient + modulators + themes), mỗi effect ghi rõ kênh renderer và trạng thái
   Available/Planned. Quy tắc: effect Planned không hiện UI cho đến khi có renderer thật.
 - Xem chi tiết kiến trúc và roadmap trong `docs/EFFECTS-REDESIGN.md`.
+
+## 12. Đợt effects-redesign v2–v7: hoàn thiện toàn bộ 87 effects
+
+- **v2 Falling + Impact còn lại**: `FallingTrail` 7 kiểu + Intensity/Length, `FallingPulse` +
+  Rate, `FallingGhost` + Amount (trang Notes, card FALLING FX); `ImpactBurst` 5 kiểu
+  (kèm `Spark.Kind`/`Grav`/`DragK` và 4 renderer hạt mới), `ImpactMorph` 5 kiểu (+ Intensity),
+  `ImpactFlashStyle` 3 kiểu (trang Particles); test `VerifyFallingFx`; sửa bug test v1
+  (`Advance` clamp 50 ms/step nên decay phải lặp nhiều step).
+- **v3 Hold**: `HoldBar`/`HoldBreath`/`HoldVibration`/`HoldColorCycle`/`HoldElectricArc` +
+  slider (card HOLD FX); `BreathFactor()` chỉ scale bán kính/glow nên không phá cache brush;
+  arc điện procedural nối tối đa 6 cặp phím; test `VerifyHoldFx`.
+- **v4 Release**: `ReleaseEffect` 6 kiểu + Intensity (card RELEASE FX); `ReleaseLiveNote` +
+  `ScanReleaseFx` bắt MIDI note-end (con trỏ đơn điệu, chặn seek ngược, trần 24/frame);
+  test `VerifyReleaseFx`.
+- **v5 Ambient**: 4 khe `AmbientEnergy`/`AmbientNature`/`AmbientLight`/`AmbientCosmic`
+  (Choice + Amount + Speed, Light thêm Color; card AMBIENT LAYERS trang Background),
+  render procedural sau background; `ImpactWave` thêm Ripple; `DrawBolt` dùng chung;
+  `HasActiveEffects` bao 4 khe; test `VerifyAmbientFx`.
+- **v6 Smart**: `VelocityColor`/`OctaveColor`/`ZoneSplit` (màu qua `NoteColor` bọc ngoài
+  `NoteColorCore`, zone ép kiểu burst), `PedalGlow`/`TempoSync`/`AudioReactive` (3 boost
+  nhân vào glow/halo/phím); nối dây thật — velocity MIDI/live → `Impact`, sustain →
+  `SetSustainPedal`, beat tempo map → `PulseBeat` (kể cả khi tắt metronome); card SMART
+  MODULATORS; test `VerifySmartFx`.
+- **v7 Themes**: 7 preset graphs (Inferno, Ice Crystal, Sakura Nocturne nâng cấp + Galaxy
+  Voyage, Electric Storm, Ocean Depths, Retro Arcade mới); test `VerifyThemes`. Toàn bộ
+  87/87 effects trong `EffectCatalog` đã Available; mọi control trên UI đều có logic thật.

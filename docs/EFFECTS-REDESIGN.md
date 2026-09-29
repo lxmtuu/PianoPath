@@ -219,15 +219,15 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 
 ### 3.10 Combo themes (7) — preset graphs
 
-| Theme | Falling → Impact → Hold → Release |
-|---|---|
-| Fire (Lửa) | Thanh lửa → nổ lửa + ember → cột lửa → khói |
-| Ice (Băng) | Tinh thể băng → vỡ kính + sương → đóng băng → tan chảy |
-| Galaxy (Vũ trụ) | Sao băng + vệt sáng → supernova + ripple → nebula thở → stardust |
-| Sakura (Hoa) | Cánh hoa → bắn cánh hoa → hoa nở (cycle hồng) → hoa bay đi |
-| Electric (Điện) | Tia sét nhỏ → sét đánh + shockwave → arc nối phím → tàn điện |
-| Ocean (Đại dương) | Giọt nước → ripple + splash → cột nước → bọt tan |
-| Retro / 8-bit | Khối pixel → nổ pixel → nhấp nháy → snap kiểu game |
+| Theme | Preset | Falling → Impact → Hold → Release | Trạng thái |
+|---|---|---|---|
+| Fire (Lửa) | Inferno | Vệt glow → ember + shockwave + bounce → cột lửa + hold bar → khói (+ pháo hoa) | ✅ v7 |
+| Ice (Băng) | Ice Crystal | Vệt sparkle → splash + ripple + absorb → rung nhẹ → tan hạt (+ tuyết) | ✅ v7 |
+| Galaxy (Vũ trụ) | Galaxy Voyage | Vệt rainbow → firework + shockwave + plasma → thở → tan hạt (+ thiên hà) | ✅ v7 |
+| Sakura (Hoa) | Sakura Nocturne | Vệt ribbon → confetti cánh hoa + flash → thở → bay lên (+ bướm) | ✅ v7 |
+| Electric (Điện) | Electric Storm | Vệt speed lines → ember + shockwave + sét → arc điện → snap (+ bão sét) | ✅ v7 |
+| Ocean (Đại dương) | Ocean Depths | Vệt glow → splash + ripple → cột nước → bay lên (+ mưa) | ✅ v7 |
+| Retro / 8-bit | Retro Arcade | Ghost + pulse → confetti + ring + bounce → — → snap (+ hình học) | ✅ v7 |
 
 ## 4. Mapping legacy → kiến trúc mới
 
@@ -261,6 +261,7 @@ Không đập bỏ: engine hiện có khớp hoàn toàn vào các kênh mới, 
 | (mới v6) `VelocityColor`/`OctaveColor`/`ZoneSplit` | `mod.*` | Lực→màu, quãng 8→màu, bass=lửa/treble=băng (+ tint nốt) |
 | (mới v6) `PedalGlow`/`TempoSync`/`AudioReactive` | `mod.*` | Pedal thật, beat thật từ tempo map, envelope năng lượng |
 | (mới v6) nối dây host | — | MIDI/live velocity thật → `Impact`; pedal → `SetSustainPedal`; beat → `PulseBeat` |
+| (mới v7) 7 combo themes | `theme` | Inferno/Ice Crystal/Sakura Nocturne nâng cấp + Galaxy Voyage/Electric Storm/Ocean Depths/Retro Arcade mới |
 | `ParticleResponse` / strength | `mod.velocity` | Mở rộng sang wave/flash (size + brightness theo lực nhấn) |
 
 File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ qua key lạ).
@@ -341,6 +342,15 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
   Audio Reactive v1 = envelope năng lượng từ note onset (FFT để tương lai).
 - **UI**: card SMART MODULATORS (trang Notes). **Kiểm thử**: `VerifySmartFx`.
 
+### 5.7 Phase 7 (v7) — Combo themes
+
+- **Preset graphs**: 3 preset cũ thành theme (Inferno=Fire, Ice Crystal=Ice,
+  Sakura Nocturne=Sakura + bật petals) và 4 preset mới (Galaxy Voyage, Electric Storm,
+  Ocean Depths, Retro Arcade) — mỗi preset cố định toàn bộ falling/impact/hold/release/
+  ambient/modulators theo đúng bảng §3.10.
+- **Không code renderer mới**: themes chứng minh kiến trúc đúng — mọi theme chỉ là tổ hợp
+  settings. **Kiểm thử**: `VerifyThemes` assert từng graph.
+
 ## 6. Roadmap các phase tiếp theo
 
 | Phase | Scope | Settings mới (dự kiến) | Renderer |
@@ -350,9 +360,9 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 | ✅ **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
 | ✅ **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
 | ✅ **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |
-| **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
+| ✅ **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
 
-Thứ tự này là logic nhất: Impact trước vì engine đã có sẵn một nửa (xong v1);
+Thứ tự này là logic nhất: Impact trước vì engine đã có sẵn một nửa (xong v1); toàn bộ 7 phase đã hoàn thiện (v1–v7), 87/87 effects Available.
 Falling/Hold/Release theo vòng đời nốt; Ambient độc lập nên sau; Smart cần các kênh
 để điều chế nên gần cuối; Themes cuối vì chúng chỉ là preset trên tất cả.
 

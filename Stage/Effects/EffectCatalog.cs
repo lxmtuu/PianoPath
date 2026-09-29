@@ -221,13 +221,13 @@ internal static class EffectCatalog
     {
         internal static readonly IReadOnlyList<EffectDefinition> All =
         [
-            new("theme.fire", "Fire Theme", "Chủ đề Lửa", "Fire bars → fire burst + embers → flame pillar → smoke.", EffectStatus.Planned, "theme"),
-            new("theme.ice", "Ice Theme", "Chủ đề Băng", "Ice shards → shatter + frost → frozen keys → melt.", EffectStatus.Planned, "theme"),
-            new("theme.galaxy", "Galaxy Theme", "Chủ đề Vũ trụ", "Meteors → supernova + ripples → nebula glow → stardust.", EffectStatus.Planned, "theme"),
-            new("theme.sakura", "Sakura Theme", "Chủ đề Hoa anh đào", "Petals → petal splash → blooming glow → petals drifting off.", EffectStatus.Planned, "theme"),
-            new("theme.electric", "Electric Theme", "Chủ đề Điện", "Sparks → lightning strike + shockwave → electric arcs → fading sparks.", EffectStatus.Planned, "theme"),
-            new("theme.ocean", "Ocean Theme", "Chủ đề Đại dương", "Water drops → ripples + splash → water column → dissolving foam.", EffectStatus.Planned, "theme"),
-            new("theme.retro", "Retro / 8-bit Theme", "Chủ đề Retro", "Pixel blocks → 8-bit burst → blinking → game-style snap.", EffectStatus.Planned, "theme"),
+            new("theme.fire", "Fire Theme", "Chủ đề Lửa", "Fire bars → fire burst + embers → flame pillar → smoke.", EffectStatus.Available, "theme"),
+            new("theme.ice", "Ice Theme", "Chủ đề Băng", "Ice shards → shatter + frost → frozen keys → melt.", EffectStatus.Available, "theme"),
+            new("theme.galaxy", "Galaxy Theme", "Chủ đề Vũ trụ", "Meteors → supernova + ripples → nebula glow → stardust.", EffectStatus.Available, "theme"),
+            new("theme.sakura", "Sakura Theme", "Chủ đề Hoa anh đào", "Petals → petal splash → blooming glow → petals drifting off.", EffectStatus.Available, "theme"),
+            new("theme.electric", "Electric Theme", "Chủ đề Điện", "Sparks → lightning strike + shockwave → electric arcs → fading sparks.", EffectStatus.Available, "theme"),
+            new("theme.ocean", "Ocean Theme", "Chủ đề Đại dương", "Water drops → ripples + splash → water column → dissolving foam.", EffectStatus.Available, "theme"),
+            new("theme.retro", "Retro / 8-bit Theme", "Chủ đề Retro", "Pixel blocks → 8-bit burst → blinking → game-style snap.", EffectStatus.Available, "theme"),
         ];
     }
 

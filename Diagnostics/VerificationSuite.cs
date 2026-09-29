@@ -670,6 +670,7 @@ internal static class VerificationSuite
         VerifyReleaseFx(window, stage, visualSettings, choices);
         VerifyAmbientFx(window, stage, visualSettings, choices);
         VerifySmartFx(window, stage, visualSettings);
+        VerifyThemes();
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -956,6 +957,37 @@ internal static class VerificationSuite
     {
         var sparks = (System.Collections.IList)Field(stage, "_sparks");
         return sparks.Cast<object>().Select(s => (int)s.GetType().GetField("Kind")!.GetValue(s)!).ToList();
+    }
+
+    /// <summary>
+    /// Combo themes (effects-redesign v7): every theme resolves to a built-in preset graph whose
+    /// falling/impact/hold/release/ambient/modulator combination matches the theme.
+    /// </summary>
+    private static void VerifyThemes()
+    {
+        Assert(EffectCatalog.Themes.All.All(e => e.Status == EffectStatus.Available),
+            "The whole theme catalogue should be implemented in v7.");
+        var fire = VisualPresets.FindBuiltIn("Inferno")!.Settings;
+        var ice = VisualPresets.FindBuiltIn("Ice Crystal")!.Settings;
+        var galaxy = VisualPresets.FindBuiltIn("Galaxy Voyage")!.Settings;
+        var sakura = VisualPresets.FindBuiltIn("Sakura Nocturne")!.Settings;
+        var electric = VisualPresets.FindBuiltIn("Electric Storm")!.Settings;
+        var ocean = VisualPresets.FindBuiltIn("Ocean Depths")!.Settings;
+        var retro = VisualPresets.FindBuiltIn("Retro Arcade")!.Settings;
+        Assert(fire.ImpactBurst == "Embers" && fire.ImpactWave == "Shockwave" && fire.AmbientEnergy == "Fireworks",
+            "The Fire theme (Inferno) should graph embers + shockwave + fireworks.");
+        Assert(ice.ImpactBurst == "Splash" && ice.ImpactWave == "Ripple" && ice.AmbientNature == "Snow",
+            "The Ice theme (Ice Crystal) should graph splash + ripple + snow.");
+        Assert(galaxy.AmbientCosmic == "Galaxy" && galaxy.ImpactFlashStyle == "Plasma" && galaxy.FallingTrail == "Rainbow",
+            "The Galaxy theme should graph rainbow trails + plasma + galaxy.");
+        Assert(sakura.ShowPetals && sakura.ImpactBurst == "Confetti" && sakura.ReleaseEffect == "Float Up",
+            "The Sakura theme should graph petals + petal confetti + floating goodbyes.");
+        Assert(electric.ImpactFlashStyle == "Lightning" && electric.HoldElectricArc && electric.AmbientEnergy == "Lightning Storm",
+            "The Electric theme should graph lightning + arcs + storm.");
+        Assert(ocean.ImpactBurst == "Splash" && ocean.ImpactWave == "Ripple" && ocean.AmbientNature == "Rain",
+            "The Ocean theme should graph splash + ripple + rain.");
+        Assert(retro.ImpactBurst == "Confetti" && retro.ImpactMorph == "Bounce" && retro.ReleaseEffect == "Snap Back" && retro.NoteRoundness == 0,
+            "The Retro theme should graph square pixels + confetti + bounce + snap.");
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
