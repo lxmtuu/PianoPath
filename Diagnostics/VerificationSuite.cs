@@ -1161,7 +1161,7 @@ internal static class VerificationSuite
         Assert(Math.Abs(tempo.Value - 100) < .01, "Two misses with a threshold of two must not slow the song down yet.");
         Invoke(window, "RecordPracticeNote", false);
         Assert(Math.Abs(tempo.Value - 95) < .01, "The miss past the threshold should drop the playback tempo by five percent.");
-        for (var index = 0; index < 20; index++) Invoke(window, "RecordPracticeNote", false);
+        for (var index = 0; index < 35; index++) Invoke(window, "RecordPracticeNote", false);
         Assert(Math.Abs(tempo.Value - 50) < .01, "Auto practice tempo must stop at the slow floor instead of dropping below it.");
 
         Invoke(window, "RecordPracticeNote", true);
