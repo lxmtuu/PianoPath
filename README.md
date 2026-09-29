@@ -2,7 +2,7 @@
 
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng.
 
-Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`, có cả ảnh giao diện tiếng Việt) và được cập nhật tự động trong `docs/previews/` — không phải ảnh dàn dựng:
+Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`) và được cập nhật tự động trong `docs/previews/` — không phải ảnh dàn dựng:
 
 ![Keyflow live piano stage](docs/previews/stage-live.png)
 
@@ -12,16 +12,12 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 | --- | --- |
 | ![Keyboard and shortcuts card](docs/previews/shortcuts.png) | ![Play dialog](docs/previews/play-dialog.png) |
 
-| Menu khởi động | Dock thiết kế (Style) | Dock thiết kế (Theme) |
+| Menu khởi động (thẻ giao diện có cả chọn ngôn ngữ) | Dock thiết kế (Style) | Dock thiết kế (Theme) |
 | --- | --- | --- |
 | ![Keyflow main menu](docs/previews/main-menu.png) | ![Design dock](docs/previews/design-dock.png) | ![Theme page](docs/previews/theme-dock.png) |
 
-| Trang General — chọn ngôn ngữ, đổi ngay trong app |
-| --- |
-| ![Vietnamese General page](docs/previews/language-dock.png) |
-
-> **Ảnh trong README do chính ứng dụng render** trong CI (`--snapshot`, bảy ảnh, trong đó một ảnh
-> tiếng Việt). Muốn làm mới sau khi sửa giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).
+> **Ảnh trong README do chính ứng dụng render** trong CI (`--snapshot`). Muốn làm mới sau khi sửa
+> giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).
 
 ## Mục lục
 
@@ -258,6 +254,12 @@ Giao diện có hai ngôn ngữ đóng gói — **English** và **Tiếng Việt
 | **Menu khởi động** | Thẻ *INTERFACE LANGUAGE* với chip chọn nhanh — mở app lần đầu là đổi được ngay, không phải đi tìm trang cài đặt. |
 | Dòng lệnh | `--lang=vi` (hoặc `en`) chạy một lần bằng ngôn ngữ chỉ định, **không** ghi vào `visual-settings.json`. CI dùng cờ này để render ảnh tiếng Việt. |
 | Tìm kiếm trong dock | Một hàng khớp cả từ tiếng Anh lẫn từ đã dịch: gõ `speed` hoặc `tốc độ` đều ra cùng slider *Fall speed*. |
+
+Ảnh chụp trang General khi app chạy tiếng Việt — cũng do CI render, với `--lang=vi`:
+
+![Keyflow General page in Vietnamese](docs/previews/language-dock.png)
+
+*Toàn bộ điều hướng, nhãn, chú thích và nút bấm đều là tiếng Việt; tên preset `Neon Violet` vẫn giữ nguyên vì đó là id đã lưu.*
 
 Ba điều nguyên tắc:
 
