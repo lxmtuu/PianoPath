@@ -1314,8 +1314,11 @@ internal static class VerificationSuite
         PracticeHistory.Record("Beta", @"C:\songs\beta.mid", 50, 50, 4);
         PracticeHistory.Record("Alpha", @"C:\songs\alpha.mid", 95, 5, 20);
         var runs = PracticeHistory.Runs;
-        Assert(runs.Count == 3 && runs[0].Song == "Alpha" && Math.Abs(runs[0].Accuracy - 95) < .01 && runs[^1].Song == "Beta",
-            "Recorded runs should be listed newest first, with their accuracy derived from the hits and misses.");
+        Assert(runs.Count == 3 && runs[0].Song == "Alpha" && Math.Abs(runs[0].Accuracy - 95) < .01
+                && runs[1].Song == "Beta" && Math.Abs(runs[1].Accuracy - 50) < .01
+                && runs[2].Song == "Alpha" && Math.Abs(runs[2].Accuracy - 90) < .01,
+            "Recorded runs should be listed newest first, with their accuracy derived from the hits and misses: "
+            + string.Join(", ", runs.Select(run => $"{run.Song} {run.Accuracy:0.#}%")));
         Assert(File.ReadAllLines(PracticeHistory.FilePath).Length == 3, "Every run should append exactly one line to the history file.");
         PracticeHistory.Reload();
         Assert(PracticeHistory.Runs.Count == 3 && PracticeHistory.Runs[0].Song == "Alpha" && PracticeHistory.Runs[0].BestStreak == 20,
