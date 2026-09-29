@@ -118,12 +118,12 @@ internal static class VerificationSuite
         var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
         Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 2 && migrated.BackgroundImagePath == "C:\\piano.png" && migrated.BackgroundMode == "Image",
             "Legacy settings should switch to the black stage while preserving an optional selected image path and enabling image mode for it.");
-        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5, NoteStyle = "Plasma", ColorMode = "??", KeyboardStyle = "", BackgroundMode = "Blue", ShadingQuality = "Ultra", TrackColors = ["#FFFFFF"] };
+        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5, NoteStyle = "Plasma", NoteDirection = "Sideways", ColorMode = "??", KeyboardStyle = "", BackgroundMode = "Blue", ShadingQuality = "Ultra", TrackColors = ["#FFFFFF"] };
         settings.Clamp();
-        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum" && settings.NoteStyle == "Neon" && settings.ColorMode == "Gradient" && settings.KeyboardStyle == "Studio" && settings.BackgroundMode == "Solid" && settings.ShadingQuality == "Balanced" && settings.TrackColors.Count == 8 && settings.TrackColors[0] == "#FFFFFF",
+        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum" && settings.NoteStyle == "Neon" && settings.NoteDirection == "Down" && settings.ColorMode == "Gradient" && settings.KeyboardStyle == "Studio" && settings.BackgroundMode == "Solid" && settings.ShadingQuality == "Balanced" && settings.TrackColors.Count == 8 && settings.TrackColors[0] == "#FFFFFF",
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
-        Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
+        Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
         VerifyPresets();
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
@@ -615,6 +615,23 @@ internal static class VerificationSuite
         Assert(RowElement(nameof(PianoVisualSettings.LeftHandColor)).Visibility == Visibility.Collapsed && RowElement(nameof(PianoVisualSettings.TrackColors)).Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.NoteColorStart)).Visibility == Visibility.Collapsed,
             "Dependent rows should follow the selected color mode.");
         choices[nameof(PianoVisualSettings.ColorMode)].SelectedValue = originalMode; choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = originalStyle;
+        // Direction: the dock combo drives the live renderer, and the live bar model flips with it
+        // (falling notes keep the 28 px spawn offset at the top; rising notes are born at the key line).
+        var direction = choices[nameof(PianoVisualSettings.NoteDirection)];
+        var originalDirection = visualSettings.NoteDirection;
+        var flipTo = originalDirection == "Up" ? "Down" : "Up";
+        direction.SelectedValue = flipTo;
+        Assert(visualSettings.NoteDirection == flipTo && visualSettings.PresetModified, "Choosing the note direction should update the live stage settings and flag the preset as modified.");
+        stage.SetVisualSettings(visualSettings);
+        var fallSpeed = visualSettings.NoteFallSpeed;
+        stage.AddLiveNote(60);
+        for (var i = 0; i < 6; i++) stage.Advance(.05);
+        var heldLength = stage.LiveTrailHeightFor(60);
+        var expectedLength = flipTo == "Up" ? .3 * fallSpeed : 28 + .3 * fallSpeed;
+        Assert(Math.Abs(heldLength - expectedLength) < 1, $"A held note in {flipTo} mode should match its bar model (length {heldLength:0} px vs {expectedLength:0} px expected).");
+        stage.ReleaseLiveNote(60);
+        direction.SelectedValue = originalDirection;
+        stage.ClearTransient();
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();

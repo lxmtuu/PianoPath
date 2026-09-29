@@ -83,10 +83,11 @@ internal sealed class PianoStage : FrameworkElement
     /// <summary>How many times the keyboard had to be re-shaded; a slider that does not affect the shader must not raise it.</summary>
     public int ShadedBakeCount => _shadedBakes;
     public double FirstLiveTrailY => _liveTrails.Count == 0 ? -1 : _liveTrails[0].Age * _visual.NoteFallSpeed;
+    /// <summary>Length of the visual bar for a pitch: falling notes keep the 28 px spawn offset at the top, rising notes are born at the key line.</summary>
     public double LiveTrailHeightFor(int pitch)
     {
         var trail = _liveTrails.LastOrDefault(note => note.Pitch == pitch);
-        return trail is null ? -1 : 28 + trail.HeldSeconds * _visual.NoteFallSpeed;
+        return trail is null ? -1 : (_visual.NoteDirection == "Up" ? trail.HeldSeconds * _visual.NoteFallSpeed : 28 + trail.HeldSeconds * _visual.NoteFallSpeed);
     }
 
     public void SetVisualSettings(PianoVisualSettings settings, bool reloadBackground = false)
@@ -265,10 +266,21 @@ internal sealed class PianoStage : FrameworkElement
         {
             var trail = _liveTrails[i]; trail.Age += dt;
             if (trail.KeyDown) trail.HeldSeconds += dt;
-            var y = 28 + trail.Age * _visual.NoteFallSpeed;
-            if (!trail.Hit && y >= hitY) { trail.Hit = true; Impact(trail.Pitch, .8); }
-            var tailY = y - 28 - trail.HeldSeconds * _visual.NoteFallSpeed;
-            if (trail.Released && tailY > hitY + 32) _liveTrails.RemoveAt(i);
+            if (_visual.NoteDirection == "Up")
+            {
+                // The bar is born at the hit line on the keypress and climbs out of the top of the
+                // stage; the press-time impact burst already fired, so no second landing burst.
+                trail.Hit = true;
+                var tailY = hitY - (trail.Age - trail.HeldSeconds) * _visual.NoteFallSpeed;
+                if (trail.Released && tailY < -32) _liveTrails.RemoveAt(i);
+            }
+            else
+            {
+                var y = 28 + trail.Age * _visual.NoteFallSpeed;
+                if (!trail.Hit && y >= hitY) { trail.Hit = true; Impact(trail.Pitch, .8); }
+                var tailY = y - 28 - trail.HeldSeconds * _visual.NoteFallSpeed;
+                if (trail.Released && tailY > hitY + 32) _liveTrails.RemoveAt(i);
+            }
         }
         InvalidateVisual();
     }
@@ -428,23 +440,34 @@ internal sealed class PianoStage : FrameworkElement
         var latestStart = _position + lookBehind;
         var noteWidth = lane * _visual.NoteWidth / 100;
         var gap = Math.Min(_visual.NoteGap, 12);
+        var rising = _visual.NoteDirection == "Up";
         for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _position - 1 - _maxNoteDuration); i < _notes.Count; i++)
         {
             var note = _notes[i];
             if (note.Start > latestStart) break;
             if (note.Pitch < FirstPitch || note.Pitch >= FirstPitch + KeyCount || note.End < _position - 1) continue;
             var noteHeight = Math.Clamp(note.Duration * noteSpeed - gap, _visual.NoteMinLength, hitY * .9);
-            var bottom = hitY - (note.Start - _position) * noteSpeed;
-            var top = bottom - noteHeight;
-            if (top > hitY || bottom < 0) continue;
-            var rect = new Rect(KeyCenters[note.Pitch] * width - noteWidth / 2, top, noteWidth, noteHeight);
             var color = note.Played ? Color.FromRgb(82, 237, 208) : note.Missed ? Color.FromRgb(255, 83, 113) : NoteColor(note.Pitch, note.Track);
             var sounding = note.Start <= _position && note.End > _position;
-            DrawConfiguredNote(dc, rect, color, note.Played ? .42 : 1, sounding, note.Pitch);
+            if (rising)
+            {
+                // The head is born at the hit line on onset and climbs out of the top of the stage; the
+                // pre-onset part of the bar sits behind the keyboard and the clip keeps it hidden.
+                var headY = hitY + (note.Start - _position) * noteSpeed;
+                if (headY > hitY || headY + noteHeight < 0) continue;
+                DrawConfiguredNote(dc, new Rect(KeyCenters[note.Pitch] * width - noteWidth / 2, headY, noteWidth, noteHeight), color, note.Played ? .42 : 1, sounding, note.Pitch, true);
+            }
+            else
+            {
+                var bottom = hitY - (note.Start - _position) * noteSpeed;
+                var top = bottom - noteHeight;
+                if (top > hitY || bottom < 0) continue;
+                DrawConfiguredNote(dc, new Rect(KeyCenters[note.Pitch] * width - noteWidth / 2, top, noteWidth, noteHeight), color, note.Played ? .42 : 1, sounding, note.Pitch);
+            }
         }
     }
 
-    private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity, bool sounding, int pitch)
+    private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity, bool sounding, int pitch, bool rising = false)
     {
         color = AdjustColor(color);
         var style = _visual.NoteStyle;
@@ -547,9 +570,11 @@ internal sealed class PianoStage : FrameworkElement
         }
         if (_visual.NoteHeadGlow > 0 && r.Height > 6)
         {
-            // Bright leading edge at the bottom of the bar, stronger while the note is sounding.
+            // Bright cap on the edge that leads: the bottom while falling, the top while rising.
             var headHeight = Math.Min(r.Height * .35, 4 + _visual.NoteHeadGlow / 100 * 8);
-            var head = new Rect(r.X + 1, r.Bottom - headHeight - 1, Math.Max(1, r.Width - 2), headHeight);
+            var head = rising
+                ? new Rect(r.X + 1, r.Y + 1, Math.Max(1, r.Width - 2), headHeight)
+                : new Rect(r.X + 1, r.Bottom - headHeight - 1, Math.Max(1, r.Width - 2), headHeight);
             var headAlpha = Alpha((sounding ? 230 : 120) * opacity * _visual.NoteHeadGlow / 100);
             dc.DrawRoundedRectangle(Brush(Color.FromArgb(headAlpha, bright.R, bright.G, bright.B)), null, head, Math.Min(radius, headHeight / 2), Math.Min(radius, headHeight / 2));
         }
@@ -644,16 +669,30 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)
     {
         var noteWidth = lane * Math.Max(_visual.NoteWidth, 60) / 100;
+        var rising = _visual.NoteDirection == "Up";
         foreach (var trail in _liveTrails)
         {
             if (!_visual.ShowNotes) break;
-            var y = 28 + trail.Age * _visual.NoteFallSpeed;
-            var tailY = Math.Max(0, y - 28 - trail.HeldSeconds * _visual.NoteFallSpeed);
-            var bottom = Math.Min(hitY + 6, y);
-            if (bottom <= tailY) continue;
-            var opacity = Math.Clamp(1 - tailY / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
-            var r = new Rect(KeyCenters[trail.Pitch] * width - noteWidth / 2, tailY, noteWidth, bottom - tailY);
-            DrawConfiguredNote(dc, r, NoteColor(trail.Pitch, 0), opacity, trail.KeyDown && trail.Hit, trail.Pitch);
+            var x = KeyCenters[trail.Pitch] * width - noteWidth / 2;
+            if (rising)
+            {
+                // The head is born at the hit line and climbs out of the top of the stage; while the
+                // key is held the bar stays pinned to the line and grows upward.
+                var headY = hitY - trail.Age * _visual.NoteFallSpeed;
+                var tailY = hitY - (trail.Age - trail.HeldSeconds) * _visual.NoteFallSpeed;
+                if (tailY <= headY) continue;
+                var opacity = Math.Clamp(1 - (hitY - tailY) / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
+                DrawConfiguredNote(dc, new Rect(x, headY, noteWidth, tailY - headY), NoteColor(trail.Pitch, 0), opacity, trail.KeyDown && trail.Hit, trail.Pitch, true);
+            }
+            else
+            {
+                var y = 28 + trail.Age * _visual.NoteFallSpeed;
+                var tailY = Math.Max(0, y - 28 - trail.HeldSeconds * _visual.NoteFallSpeed);
+                var bottom = Math.Min(hitY + 6, y);
+                if (bottom <= tailY) continue;
+                var opacity = Math.Clamp(1 - tailY / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
+                DrawConfiguredNote(dc, new Rect(x, tailY, noteWidth, bottom - tailY), NoteColor(trail.Pitch, 0), opacity, trail.KeyDown && trail.Hit, trail.Pitch);
+            }
         }
     }
 

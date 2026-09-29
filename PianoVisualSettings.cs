@@ -68,6 +68,8 @@ internal sealed class PianoVisualSettings
     public double NoteRoundness { get; set; } = 70;
     public double NoteEdgeWidth { get; set; } = 55;
     public double NoteFallSpeed { get; set; } = 550;
+    /// <summary>Down: notes fall onto the keys and sink below the hit line. Up: notes rise from the keys toward the top of the stage.</summary>
+    public string NoteDirection { get; set; } = "Down";
 
     // ---- Particles: sparks --------------------------------------------------------------------------
     public double EmitterSize { get; set; } = 24;
@@ -163,6 +165,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
+    internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
     internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
@@ -232,6 +235,7 @@ internal sealed class PianoVisualSettings
         if (!Palettes.Contains(Palette)) Palette = "Spectrum";
         if (!ColorModes.Contains(ColorMode)) ColorMode = "Gradient";
         if (!NoteStyles.Contains(NoteStyle)) NoteStyle = "Neon";
+        if (!NoteDirections.Contains(NoteDirection)) NoteDirection = "Down";
         if (!FlameColorModes.Contains(FlameColorMode)) FlameColorMode = "Warm";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
         if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
