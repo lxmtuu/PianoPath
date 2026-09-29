@@ -102,11 +102,13 @@ public partial class MainWindow
         SliderRow(glow, "Bloom / glow", nameof(PianoVisualSettings.NoteGlow), 0, 200, "Soft halo around every note.");
         SliderRow(glow, "Edge brightness", nameof(PianoVisualSettings.NoteEdge), 0, 200, "Brightness of the outline stroke.");
         SliderRow(glow, "Edge width", nameof(PianoVisualSettings.NoteEdgeWidth), 0, 100, "Thickness of the outline (the tube in Neon style).");
-        SliderRow(glow, "Leading-edge glow", nameof(PianoVisualSettings.NoteHeadGlow), 0, 100, "Bright cap at the bottom of the bar, stronger while the note sounds.");
+        SliderRow(glow, "Leading-edge glow", nameof(PianoVisualSettings.NoteHeadGlow), 0, 100, "Bright cap on the edge that leads (bottom while falling, top while rising), stronger while the note sounds.");
         SliderRow(glow, "Light refraction", nameof(PianoVisualSettings.NoteRefraction), 0, 100, "Thin white highlight along the left edge.");
 
-        var motion = Card(NoteSettingsHost, "MOTION", "Speed of the piano roll.");
+        var motion = Card(NoteSettingsHost, "MOTION", "Speed and travel of the piano roll.");
         SliderRow(motion, "Fall speed", nameof(PianoVisualSettings.NoteFallSpeed), 100, 1000, "Pixels per second for live trails; MIDI notes scale with it.");
+        Choice(motion, "Direction", nameof(PianoVisualSettings.NoteDirection), "Down: notes fall onto the keys and sink below the hit line. Up: notes are born at the keys on onset and rise out of the top of the stage.",
+            ("Down", "Fall down"), ("Up", "Rise up"));
         Note(motion, "Only a physically held key extends its visual note. Pedals sustain the audio without stretching the bar after key release.");
     }
 
@@ -461,7 +463,7 @@ public partial class MainWindow
         if (property == nameof(PianoVisualSettings.BackgroundMode) && value == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) ChooseStageBackground(sender, e);
         MarkModified(); RefreshDependentRows(); RebuildTrackList();
         if (property is nameof(PianoVisualSettings.RecordingResolution)) UpdateRecordingInfo();
-        var what = property switch { nameof(PianoVisualSettings.NoteStyle) => "Note style", nameof(PianoVisualSettings.ColorMode) => "Color mode", nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style", nameof(PianoVisualSettings.BackgroundMode) => "Background mode", _ => "Setting" };
+        var what = property switch { nameof(PianoVisualSettings.NoteStyle) => "Note style", nameof(PianoVisualSettings.NoteDirection) => "Note direction", nameof(PianoVisualSettings.ColorMode) => "Color mode", nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style", nameof(PianoVisualSettings.BackgroundMode) => "Background mode", _ => "Setting" };
         ApplyVisualSettings(what + " updated");
     }
 
