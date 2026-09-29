@@ -4,6 +4,12 @@ Keyflow là ứng dụng desktop Windows viết bằng C# và WPF để học đ
 
 ![Keyflow live piano stage](preview.png)
 
+Ảnh trên là sân khấu live; menu khởi động và trang Theme của dock cài đặt nằm ngay dưới đây (cả ba ảnh do chính ứng dụng render trên CI, không phải ảnh dàn dựng):
+
+![Keyflow concert main menu](menu-preview.png)
+
+![Keyflow theme settings](settings-preview.png)
+
 ## Bắt đầu nhanh
 
 Đã quen với .NET? Toàn bộ quy trình gói gọn trong vài lệnh PowerShell (chi tiết từng bước ở các mục bên dưới):
