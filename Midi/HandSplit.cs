@@ -53,7 +53,7 @@ internal static class HandSplit
         if (total <= 0) return keep;
 
         // Prefix sums let every candidate split be scored in constant time.
-        var mass = new double[129], sum = new double[129], squares = new double[129];
+        double[] mass = new double[129], sum = new double[129], squares = new double[129];
         for (var pitch = 0; pitch < 128; pitch++)
         {
             mass[pitch + 1] = mass[pitch] + weight[pitch];
