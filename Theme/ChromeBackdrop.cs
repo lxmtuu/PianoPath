@@ -23,7 +23,7 @@ internal sealed class ChromeBackdrop : FrameworkElement
     private ShellTheme _theme = ShellThemes.Default;
     private double _motion = 1;
     private double _density = 1;
-    private double _time, _width, _height;
+    private double _time;
     private bool _wantsFrames;
     private Drawing? _sky;
     private string _skyKey = "";
@@ -90,7 +90,7 @@ internal sealed class ChromeBackdrop : FrameworkElement
             var mote = _motes[i];
             mote.Y += mote.Fall * speed * delta * mote.Depth;
             mote.X += Math.Sin(time * mote.Sway + mote.Phase) * (6 + mote.Depth * 22) * delta + mote.Drift * delta * 8;
-            mote.Spin += delta * (.25 + mote.Depth) * (.6 + _motion);
+            mote.Spin += (float)(delta * (.25 + mote.Depth) * (.6 + _motion));
             if (mote.Y > height + 30) { mote.Y = -30; mote.X = _random.NextDouble() * width; }
             else if (mote.Y < -40) { mote.Y = height + 20; mote.X = _random.NextDouble() * width; }
             if (mote.X < -40) mote.X = width + 30; else if (mote.X > width + 40) mote.X = -30;

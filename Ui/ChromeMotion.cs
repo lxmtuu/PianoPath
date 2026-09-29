@@ -96,7 +96,7 @@ internal static class ChromeMotion
         brush.BeginAnimation(LinearGradientBrush.EndPointProperty, end);
     }
 
-    private static TranslateTransform Translate(FrameworkElement element)
+    private static TranslateTransform Translate(UIElement element)
     {
         if (element.RenderTransform is TranslateTransform translate) return translate;
         translate = new TranslateTransform();
@@ -104,7 +104,7 @@ internal static class ChromeMotion
         return translate;
     }
 
-    private static ScaleTransform Scale(FrameworkElement element)
+    private static ScaleTransform Scale(UIElement element)
     {
         if (element.RenderTransform is ScaleTransform scale) return scale;
         scale = new ScaleTransform(1, 1);
@@ -113,7 +113,7 @@ internal static class ChromeMotion
         return scale;
     }
 
-    private static void SetOffset(FrameworkElement element, double x, double y)
+    private static void SetOffset(UIElement element, double x, double y)
     {
         var translate = Translate(element);
         translate.X = x; translate.Y = y;

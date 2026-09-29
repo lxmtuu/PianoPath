@@ -599,7 +599,7 @@ internal static class VerificationSuite
     {
         var tabs = (TabControl)window.FindName("SettingsTabs");
         var pageCount = SettingsPages.Order.Length;
-        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[1]).Header.ToString() == "Theme" && ((TabItem)tabs.Items[^1]).Header.ToString() == "Recording",
+        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == "Theme" && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == "Recording",
             $"The settings dock should expose all {pageCount} categorized pages from Style to Recording.");
         Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.Recording) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
             "Settings page names should resolve to their tab-strip index so no code has to keep magic tab numbers.");
