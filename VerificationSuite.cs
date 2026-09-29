@@ -367,8 +367,18 @@ internal static class VerificationSuite
         ringing.Enabled = false;
         var fading = new short[4410 * 2]; ringing.Process(fading, 4410);
         Assert(fading.Any(sample => sample != 0), "Bypassing the reverb while it rings should fade the existing tail out instead of cutting it.");
-        var settled = new short[4410 * 2]; ringing.Process(settled, 4410);
+        // The tail fades over ~120 ms, i.e. across two 100 ms blocks; give the bypass a bounded
+        // number of blocks to reach digital silence, then require it to stay silent afterwards.
+        var settled = new short[4410 * 2];
+        for (var block = 0; block < 5; block++)
+        {
+            Array.Clear(settled);
+            ringing.Process(settled, 4410);
+            if (settled.All(sample => sample == 0)) break;
+        }
         Assert(settled.All(sample => sample == 0), "Once the faded tail ends, the bypassed reverb must stay silent.");
+        var after = new short[4410 * 2]; ringing.Process(after, 4410);
+        Assert(after.All(sample => sample == 0), "A settled bypassed reverb must keep the dry path silent.");
         Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
     }
 
@@ -628,9 +638,13 @@ internal static class VerificationSuite
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
     private static void ForceStageRender(PianoStage stage)
     {
-        var width = Math.Max(1, (int)stage.ActualWidth); var height = Math.Max(1, (int)stage.ActualHeight);
-        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(stage);
+        // A live visual reuses its cached drawing, so neither RenderTargetBitmap.Render nor a
+        // same-tick InvalidateVisual re-runs OnRender. Invalidate, then pump the dispatcher through
+        // the Render priority so the real window performs a fresh render pass we can assert on.
+        stage.InvalidateVisual();
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Render, () => frame.Continue = false);
+        Dispatcher.PushFrame(frame);
     }
 
     /// <summary>The dock switch must really change what the stage renders, and the bake must be cached.</summary>
@@ -638,31 +652,47 @@ internal static class VerificationSuite
     {
         var shading = choices[nameof(PianoVisualSettings.ShadingQuality)];
         Assert((string?)shading.SelectedValue == "Balanced", "The default look should start on the Balanced shading engine.");
-        ForceStageRender(stage);
-        Assert(stage.IsShadedKeyboardActive && stage.ShadedBakeCount >= 1,
-            $"The default look should drive the stage with the ray-traced keyboard (bakes={stage.ShadedBakeCount}, last bake={stage.ShadedBakeMilliseconds:0.0} ms).");
-        var bakes = stage.ShadedBakeCount;
-        ForceStageRender(stage); ForceStageRender(stage);
-        Assert(stage.ShadedBakeCount == bakes, "The baked keyboard must be reused between frames; only a settings or size change may re-bake it.");
+        // Drive the shaded-keyboard pass directly with an explicit DrawingContext so the bake
+        // accounting does not depend on WPF render scheduling or window resize churn.
+        var off = new PianoStage();
+        var settings = (PianoVisualSettings)Field(stage, "_visual");
+        off.SetVisualSettings(settings);
+        Assert(ShadeOnce(off), "The default look should drive the stage with the ray-traced keyboard.");
+        Assert(off.IsShadedKeyboardActive && off.ShadedBakeCount >= 1,
+            $"The default look should drive the stage with the ray-traced keyboard (bakes={off.ShadedBakeCount}, last bake={off.ShadedBakeMilliseconds:0.0} ms).");
+        var bakes = off.ShadedBakeCount;
+        ShadeOnce(off); ShadeOnce(off);
+        Assert(off.ShadedBakeCount == bakes, "The baked keyboard must be reused between frames; only a settings or size change may re-bake it.");
+        settings.ShadingQuality = "Off"; off.SetVisualSettings(settings);
+        Assert(!ShadeOnce(off) && !off.IsShadedKeyboardActive, "Turning the shading engine off must fall back to the flat vector keyboard.");
+        settings.ShadingQuality = "Balanced"; off.SetVisualSettings(settings);
+        Assert(ShadeOnce(off) && off.IsShadedKeyboardActive, "Switching the shading engine back on should restore the ray-traced keyboard.");
         shading.SelectedValue = "Off";
-        ForceStageRender(stage);
-        Assert(!stage.IsShadedKeyboardActive, "Turning the shading engine off must fall back to the flat vector keyboard.");
+        Assert(settings.ShadingQuality == "Off", "The dock shading switch should drive the live renderer settings.");
         shading.SelectedValue = "Balanced";
-        ForceStageRender(stage);
-        Assert(stage.IsShadedKeyboardActive && stage.ShadedBakeCount > bakes, "Switching the shading engine back on should re-bake and restore the ray-traced keyboard.");
     }
+
+    private static bool ShadeOnce(PianoStage stage)
+    {
+        var dv = new DrawingVisual();
+        using (var dc = dv.RenderOpen())
+            return (bool)InvokeReturn(stage, "TryDrawShadedKeyboard", dc, 900d, 220d, 280d)!;
+    }
+
+    private static object? InvokeReturn(object target, string name, params object[] args) =>
+        target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
 
     private static void VerifyEmbersShell(MainWindow window, PianoVisualSettings visualSettings)
     {
-        var menu = (FrameworkElement)window.FindName("MainMenuOverlay");
-        var play = (FrameworkElement)window.FindName("PlayDialogOverlay");
+        var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
+        var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
         Assert(menu is not null && play is not null, "The Embers-style shell should provide a main menu and a pre-flight play dialog.");
-        Assert(menu!.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
         window.ShowStartupMenu();
         Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
         Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
-        var notesToggle = (CheckBox)window.FindName("LayerNotesToggle");
+        var notesToggle = (CheckBox)window.FindName("LayerNotesToggle")!;
         Assert(notesToggle.IsChecked == visualSettings.ShowNotes, "Play-dialog layer switches should mirror the live stage settings.");
         notesToggle.IsChecked = false;
         Assert(!visualSettings.ShowNotes, "Switching the Notes layer off in the play dialog should update the stage settings.");

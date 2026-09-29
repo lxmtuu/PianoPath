@@ -8,13 +8,13 @@ internal readonly struct Vec3
     internal readonly double X, Y, Z;
     internal Vec3(double x, double y, double z) { X = x; Y = y; Z = z; }
     internal static Vec3 Zero => new(0, 0, 0);
-    internal static Vec3 operator +(Vec3 a, Vec3 b) => new(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
-    internal static Vec3 operator -(Vec3 a, Vec3 b) => new(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
-    internal static Vec3 operator -(Vec3 a) => new(-a.X, -a.Y, -a.Z);
-    internal static Vec3 operator *(Vec3 a, double s) => new(a.X * s, a.Y * s, a.Z * s);
-    internal static Vec3 operator *(double s, Vec3 a) => new(a.X * s, a.Y * s, a.Z * s);
-    internal static Vec3 operator *(Vec3 a, Vec3 b) => new(a.X * b.X, a.Y * b.Y, a.Z * b.Z);
-    internal static Vec3 operator /(Vec3 a, double s) => new(a.X / s, a.Y / s, a.Z / s);
+    public static Vec3 operator +(Vec3 a, Vec3 b) => new(a.X + b.X, a.Y + b.Y, a.Z + b.Z);
+    public static Vec3 operator -(Vec3 a, Vec3 b) => new(a.X - b.X, a.Y - b.Y, a.Z - b.Z);
+    public static Vec3 operator -(Vec3 a) => new(-a.X, -a.Y, -a.Z);
+    public static Vec3 operator *(Vec3 a, double s) => new(a.X * s, a.Y * s, a.Z * s);
+    public static Vec3 operator *(double s, Vec3 a) => new(a.X * s, a.Y * s, a.Z * s);
+    public static Vec3 operator *(Vec3 a, Vec3 b) => new(a.X * b.X, a.Y * b.Y, a.Z * b.Z);
+    public static Vec3 operator /(Vec3 a, double s) => new(a.X / s, a.Y / s, a.Z / s);
     internal double LengthSquared => X * X + Y * Y + Z * Z;
     internal double Length => Math.Sqrt(LengthSquared);
     internal Vec3 Normalized()
