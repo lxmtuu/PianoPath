@@ -649,23 +649,22 @@ internal static class VerificationSuite
         Invoke(window, "ApplyChromeTheme");
         Assert(ShellThemeManager.Current.Id == ShellThemes.Find(beforeTheme).Id, "Restoring the theme should republish the previous accents.");
         var petals = toggles[nameof(PianoVisualSettings.ShowPetals)];
-        var spots = toggles[nameof(PianoVisualSettings.ShowSpotlights)];
-        Assert(petals is not null && spots is not null && choices.ContainsKey(nameof(PianoVisualSettings.ChromeMotion)),
-            "The Theme page should expose the blossom layer, the spotlight layer and the motion budget.");
-        var wasPetals = visualSettings.ShowPetals; var wasAmount = visualSettings.PetalAmount; var wasSpots = visualSettings.ShowSpotlights;
-        visualSettings.ShowPetals = true; visualSettings.PetalAmount = 60; visualSettings.ShowSpotlights = true; visualSettings.SpotlightIntensity = 70;
+        Assert(petals is not null && choices.ContainsKey(nameof(PianoVisualSettings.ChromeMotion)),
+            "The Theme page should expose the ambient mote layer and the motion budget.");
+        var wasPetals = visualSettings.ShowPetals; var wasAmount = visualSettings.PetalAmount;
+        visualSettings.ShowPetals = true; visualSettings.PetalAmount = 60;
         stage.SetVisualSettings(visualSettings);
-        Assert(stage.HasActiveEffects, "The blossom and spotlight layers should keep the stage animating even without notes.");
+        Assert(stage.HasActiveEffects, "The ambient mote layer should keep the stage animating even without notes.");
         var concertVisual = new DrawingVisual();
         using (var dc = concertVisual.RenderOpen())
         {
             Invoke(stage, "DrawPetals", dc, 1280d, 480d);
-            Invoke(stage, "DrawSpotlights", dc, 1280d, 480d, 1280d / 88);
         }
-        Assert(stage.PetalCount > 0 && stage.PetalCount <= 150, $"The blossom layer should draw a bounded number of petals (drew {stage.PetalCount}).");
-        Assert(concertVisual.Drawing.Bounds.Height > 200 && concertVisual.Drawing.Bounds.Width > 100, "The concert layers should actually paint geometry into the stage.");
-        visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount; visualSettings.ShowSpotlights = wasSpots;
+        Assert(stage.PetalCount > 0 && stage.PetalCount <= 150, $"The mote layer should draw a bounded number of petals (drew {stage.PetalCount}).");
+        Assert(concertVisual.Drawing.Bounds.Height > 200 && concertVisual.Drawing.Bounds.Width > 100, "The ambient layer should actually paint geometry into the stage.");
+        visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount;
         stage.SetVisualSettings(visualSettings);
+        VerifyImpactFx(window, stage, visualSettings, choices);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -683,7 +682,45 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: eleven pages, theme chips and concert layers, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add("PASS settings dock: eleven pages, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, search filter, preset application and the ray-traced keyboard switch.");
+    }
+
+    /// <summary>
+    /// Impact phase FX (effects-redesign v1): the Particles page exposes the wave style choice and
+    /// the flash switch; hits spawn waves/flashes that paint real geometry and fade over time.
+    /// </summary>
+    private static void VerifyImpactFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactWave)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowImpactFlash)),
+            "The Particles page should expose the impact wave style and the impact flash switch.");
+        Assert(EffectCatalog.Impact.All.Count(e => e.Status == EffectStatus.Available) >= 6,
+            "The impact catalogue should list the implemented burst, ring, shockwave, flash and key-glow effects.");
+        var wasWave = visualSettings.ImpactWave; var wasRings = visualSettings.ShowImpactRings;
+        var wasWaveIntensity = visualSettings.ImpactWaveIntensity;
+        var wasFlash = visualSettings.ShowImpactFlash; var wasFlashIntensity = visualSettings.ImpactFlashIntensity;
+        visualSettings.ShowImpactRings = true; visualSettings.ImpactWave = "Shockwave"; visualSettings.ImpactWaveIntensity = 90;
+        visualSettings.ShowImpactFlash = true; visualSettings.ImpactFlashIntensity = 80;
+        stage.SetVisualSettings(visualSettings);
+        stage.Impact(60, 1);
+        Assert(stage.RingCount > 0, "A shockwave impact should spawn a wave.");
+        Assert(stage.FlashCount > 0, "An impact with flash enabled should spawn a flash.");
+        Assert(stage.HasActiveEffects, "Fresh impact waves and flashes should keep the stage animating.");
+        var impactVisual = new DrawingVisual();
+        using (var dc = impactVisual.RenderOpen())
+        {
+            Invoke(stage, "DrawRings", dc);
+            Invoke(stage, "DrawImpactFlashes", dc);
+        }
+        Assert(impactVisual.Drawing is not null && impactVisual.Drawing.Bounds.Width > 10 && impactVisual.Drawing.Bounds.Height > 4,
+            "Impact waves and flashes should actually paint geometry into the stage.");
+        stage.Advance(1.0);
+        Assert(stage.RingCount == 0 && stage.FlashCount == 0, "Impact waves (.55 s) and flashes (.18 s) should fade out over time.");
+        visualSettings.ImpactWave = wasWave; visualSettings.ShowImpactRings = wasRings;
+        visualSettings.ImpactWaveIntensity = wasWaveIntensity;
+        visualSettings.ShowImpactFlash = wasFlash; visualSettings.ImpactFlashIntensity = wasFlashIntensity;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>

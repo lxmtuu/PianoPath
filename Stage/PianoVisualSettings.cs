@@ -31,9 +31,6 @@ internal sealed class PianoVisualSettings
     public bool ShowPetals { get; set; } = false;
     public double PetalAmount { get; set; } = 55;
     public string PetalColor { get; set; } = "#FFB3CF";
-    /// <summary>Concert spotlights sweeping the stage from above.</summary>
-    public bool ShowSpotlights { get; set; } = false;
-    public double SpotlightIntensity { get; set; } = 55;
     public bool ShowKeyShadow { get; set; } = true;
     public int BackgroundAppearanceVersion { get; set; }
 
@@ -119,6 +116,16 @@ internal sealed class PianoVisualSettings
     /// <summary>Warm (classic fire) or Note (flame takes the note color).</summary>
     public string FlameColorMode { get; set; } = "Warm";
     public double RingSize { get; set; } = 50;
+    // ---- Impact phase FX (hit moment): wave channel + flash channel ---------------------------------
+    // The full catalogue lives in Stage/Effects/EffectCatalog.cs; these are the v1 implemented channels.
+    /// <summary>Impact wave style: None, Ring (hollow acoustic ring) or Shockwave (filled blast wave).</summary>
+    public string ImpactWave { get; set; } = "Ring";
+    /// <summary>Brightness of the impact wave (0-150 %).</summary>
+    public double ImpactWaveIntensity { get; set; } = 100;
+    /// <summary>White-hot flare at the hit point, fading in about 180 ms.</summary>
+    public bool ShowImpactFlash { get; set; } = false;
+    /// <summary>Brightness of the impact flash (0-100 %).</summary>
+    public double ImpactFlashIntensity { get; set; } = 70;
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -183,6 +190,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
+    internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
     internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
     internal static readonly string[] PressedKeyColorModes = ["Note", "Fixed"];
@@ -235,8 +243,9 @@ internal sealed class PianoVisualSettings
         WispAmount = Math.Clamp(WispAmount, 0, 150); WispSpeed = Math.Clamp(WispSpeed, 20, 600); WispHeight = Math.Clamp(WispHeight, 5, 100);
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
+        ImpactWaveIntensity = Math.Clamp(ImpactWaveIntensity, 0, 150); ImpactFlashIntensity = Math.Clamp(ImpactFlashIntensity, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
-        PetalAmount = Math.Clamp(PetalAmount, 0, 150); SpotlightIntensity = Math.Clamp(SpotlightIntensity, 0, 100);
+        PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);
         KeyboardScale = Math.Clamp(KeyboardScale, 60, 140); KeyLighting = Math.Clamp(KeyLighting, 0, 100); KeyGlowRadius = Math.Clamp(KeyGlowRadius, 0, 100);
         KeyOverhang = Math.Clamp(KeyOverhang, 0, 100); KeyPressDepth = Math.Clamp(KeyPressDepth, 0, 100);
@@ -255,6 +264,7 @@ internal sealed class PianoVisualSettings
         if (!NoteStyles.Contains(NoteStyle)) NoteStyle = "Neon";
         if (!NoteDirections.Contains(NoteDirection)) NoteDirection = "Down";
         if (!FlameColorModes.Contains(FlameColorMode)) FlameColorMode = "Warm";
+        if (!ImpactWaves.Contains(ImpactWave)) ImpactWave = "Ring";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
         if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
         if (!PressedKeyColorModes.Contains(PressedKeyColorMode)) PressedKeyColorMode = "Note";

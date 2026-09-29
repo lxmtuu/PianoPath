@@ -42,7 +42,7 @@ internal static class VisualPresets
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
         s.ShellTheme = "sakura";
-        s.ShowPetals = false; s.ShowSpotlights = false;
+        s.ShowPetals = false;
         return s;
     }
 
@@ -127,7 +127,6 @@ internal static class VisualPresets
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#FF8FB8"; s.NoteColorEnd = "#FFD98A";
         s.HaloColor = "#FFC2D8"; s.HaloIntensity = 92; s.NoteGlow = 105; s.NoteEdge = 110; s.NoteEdgeWidth = 55; s.NoteTint = 42; s.NoteHeadGlow = 48; s.NoteRoundness = 55;
         s.ShowPetals = false; s.PetalAmount = 50; s.PetalColor = "#E5C06E";
-        s.ShowSpotlights = false; s.SpotlightIntensity = 50;
         s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = true; s.RingSize = 45;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60; s.BloomIntensity = 72; s.BloomSize = 70; s.Vignette = 32; s.HorizonGlow = 42; s.StarDensity = 85;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 50; s.ShaderGloss = 80; s.ShaderShadows = 74; s.ShaderEmissive = 92; s.Saturation = 106;
@@ -141,7 +140,7 @@ internal static class VisualPresets
         s.ShellTheme = "velvet";
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#F3C05E"; s.NoteColorEnd = "#FFF0B8";
         s.HaloColor = "#FFD98A"; s.HaloIntensity = 100; s.NoteGlow = 115; s.NoteEdge = 100; s.NoteEdgeWidth = 45; s.NoteTint = 55; s.NoteHeadGlow = 52; s.NoteRoundness = 40;
-        s.ShowSpotlights = false; s.SpotlightIntensity = 60; s.ShowPetals = false;
+        s.ShowPetals = false;
         s.ShowFlame = true; s.FlameIntensity = 72; s.FlameHeight = 55; s.FlameColorMode = "Warm";
         s.ShowLightBeams = false; s.BeamIntensity = 45; s.ShowImpactRings = true; s.RingSize = 50;
         s.KeyboardStyle = "Studio"; s.ShowKeyFelt = true; s.KeyFeltColor = "#B0703C"; s.KeyLighting = 70; s.KeyGlowRadius = 70; s.PressedKeyColorMode = "Note";
@@ -157,7 +156,7 @@ internal static class VisualPresets
         s.ShellTheme = "noir";
         s.NoteStyle = "Glass"; s.ColorMode = "Gradient"; s.Palette = "Ocean"; s.NoteColorStart = "#8FA9FF"; s.NoteColorEnd = "#DCE6FF";
         s.HaloColor = "#B9C8FF"; s.HaloIntensity = 80; s.NoteGlow = 68; s.NoteEdge = 92; s.NoteEdgeWidth = 38; s.NoteTint = 76; s.NoteRefraction = 55; s.NoteRoundness = 42; s.Notes3D = true; s.NoteHeadGlow = 34;
-        s.ShowSpotlights = false; s.SpotlightIntensity = 40; s.ShowPetals = false;
+        s.ShowPetals = false;
         s.ShowWisps = true; s.WispAmount = 45; s.WispHeight = 62; s.WispGlow = 90; s.ShowFlame = false;
         s.ShowImpactRings = true; s.RingSize = 40;
         s.KeyboardStyle = "Glass"; s.KeyGlowRadius = 45; s.PressedKeyColorMode = "Note";

@@ -39,6 +39,7 @@ internal sealed class PianoStage : FrameworkElement
     private double _petalWidth = -1, _petalHeight = -1;
     private readonly List<Spark> _sparks = [];
     private readonly List<Ring> _rings = [];
+    private readonly List<Flash> _flashes = [];
     private readonly List<LiveTrail> _liveTrails = [];
     private readonly Random _random = new(7331);
     private readonly bool[] _activeKey = new bool[128];
@@ -76,12 +77,13 @@ internal sealed class PianoStage : FrameworkElement
     public double KeyboardHeight => Math.Max(80, Math.Min(300, Math.Max(110, Math.Min(228, ActualHeight * .205)) * _visual.KeyboardScale / 100));
     public int SparkCount => _sparks.Count;
     public int RingCount => _rings.Count;
+    public int FlashCount => _flashes.Count;
     /// <summary>Number of blossom petals currently in the air; surfaced by the verification suite.</summary>
     public int PetalCount => _petals.Count;
     public int LiveTrailCount => _liveTrails.Count;
     /// <summary>True while anything on the stage still animates on its own (particles, rings, cooling flames or held keys).</summary>
-    public bool HasActiveEffects => _sparks.Count > 0 || _rings.Count > 0 || _liveTrails.Count > 0 || _anyHeat || _pressed.Count > 0
-        || (_visual.ShowPetals && _visual.PetalAmount > 0) || (_visual.ShowSpotlights && _visual.SpotlightIntensity > 0);
+    public bool HasActiveEffects => _sparks.Count > 0 || _rings.Count > 0 || _flashes.Count > 0 || _liveTrails.Count > 0 || _anyHeat || _pressed.Count > 0
+        || (_visual.ShowPetals && _visual.PetalAmount > 0);
     public bool HasBackgroundImage => _backgroundImage is not null;
     public string? BackgroundLoadError { get; private set; }
     /// <summary>True while the ray-traced keyboard bake is driving the stage instead of the flat vector keys.</summary>
@@ -197,7 +199,7 @@ internal sealed class PianoStage : FrameworkElement
 
     public void ClearTransient()
     {
-        _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false; InvalidateVisual();
+        _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false; InvalidateVisual();
     }
 
     public void Impact(int pitch, double strength = 1)
@@ -207,7 +209,8 @@ internal sealed class PianoStage : FrameworkElement
         var x = KeyCenters[clamped] * ActualWidth;
         var y = ActualHeight - KeyboardHeight - 1;
         var noteColor = AdjustColor(_activeKey[clamped] ? _activeKeyColor[clamped] : NoteColor(clamped, 0));
-        if (_visual.ShowImpactRings && _visual.RingSize > 0 && ActualWidth >= 1) _rings.Add(new Ring { X = x, Y = y, Color = noteColor, Life = .55 });
+        SpawnImpactWave(x, y, noteColor, strength);
+        SpawnImpactFlash(x, y, noteColor, strength);
         if (!_visual.ShowEmbers || _visual.ParticleAmount < 1 || _sparks.Count >= MaxParticles) { InvalidateVisual(); return; }
         var hue = Hue(pitch);
         var amount = Math.Clamp((int)(_visual.ParticleAmount * strength * _visual.ParticleResponse / 55.0), 0, 120);
@@ -236,6 +239,24 @@ internal sealed class PianoStage : FrameworkElement
                 Color = i % 4 == 0 ? Colors.White : Blend(noteColor, ColorFromHue(hue + (_random.NextDouble() - .5) * 28), .2)
             });
         }
+        InvalidateVisual();
+    }
+
+    /// <summary>Impact phase, wave channel: a hollow acoustic ring or a filled shockwave, scaled by hit strength.</summary>
+    private void SpawnImpactWave(double x, double y, Color color, double strength)
+    {
+        if (!_visual.ShowImpactRings || _visual.ImpactWave == "None" || _visual.RingSize <= 0 || ActualWidth < 1) return;
+        if (_rings.Count > 64) _rings.RemoveAt(0);
+        _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .55, Shock = _visual.ImpactWave == "Shockwave", Strength = strength });
+        InvalidateVisual();
+    }
+
+    /// <summary>Impact phase, flash channel: a short white-hot flare at the hit point.</summary>
+    private void SpawnImpactFlash(double x, double y, Color color, double strength)
+    {
+        if (!_visual.ShowImpactFlash || _visual.ImpactFlashIntensity <= 0 || ActualWidth < 1) return;
+        if (_flashes.Count > 32) _flashes.RemoveAt(0);
+        _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .18, Strength = strength });
         InvalidateVisual();
     }
 
@@ -284,6 +305,11 @@ internal sealed class PianoStage : FrameworkElement
         {
             var ring = _rings[i]; ring.Age += dt;
             if (ring.Age >= ring.Life) _rings.RemoveAt(i);
+        }
+        for (var i = _flashes.Count - 1; i >= 0; i--)
+        {
+            var flash = _flashes[i]; flash.Age += dt;
+            if (flash.Age >= flash.Life) _flashes.RemoveAt(i);
         }
         for (var i = _liveTrails.Count - 1; i >= 0; i--)
         {
@@ -369,8 +395,7 @@ internal sealed class PianoStage : FrameworkElement
             }
             if (_visual.HorizonGlow > 0) DrawHorizonGlow(dc, width, keyTop);
             if (_visual.ShowLightBeams && _visual.BeamIntensity > 0) DrawKeyBeams(dc, width, keyTop, lane);
-            // Concert layers sit above the background but below the note roll, so the music stays readable.
-            if (_visual.ShowSpotlights && _visual.SpotlightIntensity > 0) DrawSpotlights(dc, width, keyTop, lane);
+            // The ambient mote layer sits above the background but below the note roll, so the music stays readable.
             if (_visual.ShowPetals && _visual.PetalAmount > 0) DrawPetals(dc, width, keyTop);
         }
         dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, keyTop + 2)));
@@ -379,6 +404,7 @@ internal sealed class PianoStage : FrameworkElement
         dc.Pop();
         if (_visual.ShowFlame && _visual.FlameIntensity > 0) DrawFlames(dc, width, keyTop, lane);
         if (_visual.ShowImpactRings) DrawRings(dc);
+        if (_visual.ShowImpactFlash) DrawImpactFlashes(dc);
         if (_visual.ShowEmbers || _visual.ShowWisps) DrawSparks(dc, width, keyTop);
         if (_visual.ShowHalo) DrawImpactLine(dc, width, keyTop);
         if (!chroma && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
@@ -468,66 +494,6 @@ internal sealed class PianoStage : FrameworkElement
             var x = KeyCenters[pitch] * width;
             dc.DrawRectangle(brush, null, new Rect(x - beamWidth / 2, 0, beamWidth, keyTop));
         }
-    }
-
-    /// <summary>
-    /// Coloured follow-spots sweeping the stage from above — the recital-hall layer of the concert
-    /// themes. Two beams (a third on wide stages) with a soft pool of light where each one lands.
-    /// </summary>
-    private void DrawSpotlights(DrawingContext dc, double width, double keyTop, double lane)
-    {
-        var warm = AdjustColor(ParseColor(_visual.HaloColor, ColorFromHue(266)));
-        var cool = AdjustColor(ParseColor(_visual.PetalColor, Color.FromRgb(255, 179, 207)));
-        DrawSpotlight(dc, width, keyTop, lane, warm, 0, .30, .55);
-        DrawSpotlight(dc, width, keyTop, lane, cool, 2.1, .22, .78);
-        if (width > 1100) DrawSpotlight(dc, width, keyTop, lane, Blend(warm, cool, .5), 4.2, .17, .64);
-    }
-
-    private void DrawSpotlight(DrawingContext dc, double width, double keyTop, double lane, Color color, double phase, double speed, double reach)
-    {
-        var apexX = width * (.5 + Math.Sin(_elapsed * speed + phase) * .34);
-        var hitX = width * (.5 + Math.Sin(_elapsed * speed + phase + .5) * .42);
-        var hitY = keyTop + lane * 1.6;
-        var spread = lane * (4.5 + reach * 9);
-        var cone = new StreamGeometry();
-        using (var ctx = cone.Open())
-        {
-            ctx.BeginFigure(new Point(apexX, -28), true, true);
-            ctx.LineTo(new Point(hitX - spread, hitY), true, false);
-            ctx.LineTo(new Point(hitX + spread, hitY), true, false);
-        }
-        cone.Freeze();
-        dc.DrawGeometry(SpotlightConeBrush(color), null, cone);
-        dc.DrawEllipse(SpotlightPoolBrush(color), null, new Point(hitX, hitY), spread * .8, lane * 1.7);
-    }
-
-    /// <summary>Vertical beam gradient: nearly clear at the fixture, brightest just above the keys.</summary>
-    private Brush SpotlightConeBrush(Color color)
-    {
-        var intensity = _visual.SpotlightIntensity / 100;
-        var bottom = Color.FromArgb(Alpha(130 * intensity), color.R, color.G, color.B);
-        var key = GradientKey(22, bottom);
-        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
-        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
-        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(34 * intensity), color.R, color.G, color.B), 0));
-        gradient.GradientStops.Add(new GradientStop(bottom, .84));
-        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
-        gradient.Freeze();
-        return CacheGradient(key, gradient);
-    }
-
-    /// <summary>Radial pool of light where a spot lands on the stage floor.</summary>
-    private Brush SpotlightPoolBrush(Color color)
-    {
-        var intensity = _visual.SpotlightIntensity / 100;
-        var core = Color.FromArgb(Alpha(64 * intensity), color.R, color.G, color.B);
-        var key = GradientKey(23, core);
-        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
-        var gradient = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
-        gradient.GradientStops.Add(new GradientStop(core, 0));
-        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
-        gradient.Freeze();
-        return CacheGradient(key, gradient);
     }
 
     /// <summary>Blossom petals drifting down the stage: the recital layer of the Sakura theme.</summary>
@@ -932,12 +898,18 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawRings(DrawingContext dc)
     {
+        // Impact phase, wave channel. Both styles share the size slider; brightness follows the
+        // intensity slider and the velocity of the hit (the first smart modulator: velocity mapping).
+        var intensity = _visual.ImpactWaveIntensity / 100;
+        if (intensity <= 0) return;
         foreach (var ring in _rings)
         {
+            if (ring.Shock) { DrawShockwave(dc, ring, intensity); continue; }
             var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
+            var strength = Math.Clamp(.5 + ring.Strength * .5, 0, 1.2);
             var progress = 1.0 - Math.Exp(-4.2 * t);
-            var radius = 5 + progress * (18 + _visual.RingSize * 1.25);
-            var alpha = Alpha(230 * Math.Pow(1 - t, 1.6));
+            var radius = (5 + progress * (18 + _visual.RingSize * 1.25)) * (.7 + .3 * ring.Strength);
+            var alpha = Alpha(230 * Math.Pow(1 - t, 1.6) * intensity * strength);
 
             // Primary acoustic compression wavefront
             var penWidth = Math.Max(0.5, 2.2 * (1 - t));
@@ -958,9 +930,58 @@ internal sealed class PianoStage : FrameworkElement
             // Central impact optical flare during strike initiation
             if (t < .30)
             {
-                var flashAlpha = Alpha(170 * (1 - t / .30));
+                var flashAlpha = Alpha(170 * (1 - t / .30) * intensity * strength);
                 dc.DrawEllipse(Brush(Color.FromArgb(flashAlpha, 255, 255, 255)), null, new Point(ring.X, ring.Y), 4 + radius * .2, 2.5 + radius * .08);
             }
+        }
+    }
+
+    /// <summary>Filled blast wave: a hot core that expands and cools into a thin bright rim.</summary>
+    private void DrawShockwave(DrawingContext dc, Ring ring, double intensity)
+    {
+        var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
+        var strength = Math.Clamp(.5 + ring.Strength * .5, 0, 1.2);
+        var progress = 1.0 - Math.Exp(-4.6 * t);
+        var radius = (6 + progress * (26 + _visual.RingSize * 1.6)) * (.6 + .4 * ring.Strength);
+        var fade = Math.Pow(1 - t, 1.4) * intensity * strength;
+        if (fade <= .01) return;
+        var (r, g, b) = (ring.Color.R, ring.Color.G, ring.Color.B);
+        // Filled body: a bright core cooling toward the rim.
+        var body = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        body.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(150 * fade), 255, 255, 255), 0));
+        body.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(120 * fade), r, g, b), .45));
+        body.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(40 * fade), r, g, b), .8));
+        body.GradientStops.Add(new GradientStop(Color.FromArgb(0, r, g, b), 1));
+        body.Freeze();
+        dc.DrawEllipse(body, null, new Point(ring.X, ring.Y), radius, radius * .34);
+        // Thin bright rim riding the leading edge.
+        var rim = new Pen(Brush(Color.FromArgb(Alpha(235 * fade), 255, 255, 255)), Math.Max(.6, 2.4 * (1 - t)));
+        rim.Freeze();
+        dc.DrawEllipse(null, rim, new Point(ring.X, ring.Y), radius, radius * .34);
+    }
+
+    /// <summary>Impact phase, flash channel: white-hot flares fading within ~180 ms of the hit.</summary>
+    private void DrawImpactFlashes(DrawingContext dc)
+    {
+        var intensity = _visual.ImpactFlashIntensity / 100;
+        if (intensity <= 0) return;
+        foreach (var flash in _flashes)
+        {
+            var t = Math.Clamp(flash.Age / flash.Life, 0, 1);
+            var strength = Math.Clamp(.5 + flash.Strength * .5, 0, 1.2);
+            var fade = (1 - t) * (1 - t) * intensity * strength;
+            if (fade <= .01) continue;
+            var radius = 10 + t * (26 + _visual.RingSize * .8);
+            var (r, g, b) = (flash.Color.R, flash.Color.G, flash.Color.B);
+            var glow = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
+            glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(235 * fade), 255, 255, 255), 0));
+            glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(150 * fade), r, g, b), .4));
+            glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, r, g, b), 1));
+            glow.Freeze();
+            dc.DrawEllipse(glow, null, new Point(flash.X, flash.Y), radius * 1.4, radius * .8);
+            var streak = new Pen(Brush(Color.FromArgb(Alpha(170 * fade), 255, 255, 255)), 1.6);
+            streak.Freeze();
+            dc.DrawLine(streak, new Point(flash.X - radius * 1.8, flash.Y), new Point(flash.X + radius * 1.8, flash.Y));
         }
     }
 
@@ -1477,6 +1498,7 @@ internal sealed class PianoStage : FrameworkElement
     /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
     private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
     private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; }
-    private sealed class Ring { public double X, Y, Age, Life; public Color Color; }
+    private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock; public Color Color; }
+    private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public Color Color; }
     private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; }
 }

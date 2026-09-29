@@ -80,7 +80,8 @@ Phương pháp:
 | Physics time factor | `PhysicsTimeFactor` | `PianoStage.cs:227` (dt nhân hệ số) |
 | Wisp density / rise / height / width / turbulence / glow | `WispAmount…WispGlow` | `PianoStage.cs:239` (spawn gate), `:283-291` (SpawnWisps), `:247` (turbulence), `:663` (glow) |
 | Flame intensity / height / color | `FlameIntensity`, `FlameHeight`, `FlameColorMode` | `PianoStage.cs:1004-1005` |
-| Impact rings · Ring size | `ShowImpactRings`, `RingSize` | `PianoStage.cs:201, :692` |
+| Impact wave (Ring/Shockwave/None) · size · intensity | `ShowImpactRings`, `ImpactWave`, `RingSize`, `ImpactWaveIntensity` | `PianoStage.cs` SpawnImpactWave → DrawRings/DrawShockwave (size and brightness follow hit strength) |
+| Impact flash · intensity | `ShowImpactFlash`, `ImpactFlashIntensity` | `PianoStage.cs` SpawnImpactFlash → DrawImpactFlashes (~180 ms white-hot flare, strength-scaled) |
 
 ## 4. Trang Keyboard (hiện ra, lighting, ray-traced shading)
 
@@ -178,9 +179,9 @@ Phương pháp:
 - **Trang Theme** (`BuildThemePage`) nối thật vào hệ cài đặt: chip giao diện (Sakura Nocturne /
   Concert Noir / Velvet Gold) → `ShellTheme` → `ShellThemeManager.Apply` → hàng chục brush trong
   `Application.Resources` đổi qua `DynamicResource`; `ChromeMotion` (Off/Calm/Full) và
-  `BackdropDensity` nuôi `ChromeBackdrop.Configure`; hai công tắc mới `ShowPetals`/`ShowSpotlights`
-  (kèm số lượng/màu/độ sáng, hàng phụ thuộc `VisibleWhen`) được `PianoStage` vẽ thật bằng
-  `DrawPetals`/`DrawSpotlights`; ba nút "quick look" áp preset Sakura Nocturne / Concert Gold /
+  `BackdropDensity` nuôi `ChromeBackdrop.Configure`; công tắc `ShowPetals`
+  (kèm số lượng/màu, hàng phụ thuộc `VisibleWhen`) được `PianoStage` vẽ thật bằng
+  `DrawPetals` (đèn sân khấu `ShowSpotlights`/`DrawSpotlights` đã xóa ở effects-redesign v1); ba nút "quick look" áp preset Sakura Nocturne / Concert Gold /
   Moonlight Sonata (đều đã có trong `VisualPresets.BuiltIn`).
 - **Mỗi preset có sẵn khai báo giao diện hợp nhất** (`ShellTheme`), nên áp preset đổi cả sân khấu lẫn
   vỏ app; preset của người dùng vẫn giữ nguyên hành vi cũ.
@@ -188,7 +189,22 @@ Phương pháp:
   - `tabs.Items.Count == SettingsPages.Order.Length` (11), tiêu đề tab 0 = Style, tab 1 = Theme,
     tab cuối = Recording, và `IndexOf` trả đúng chỉ số / `-1` cho tên lạ;
   - trang Theme có chip cho từng giao diện, đổi `ShellTheme` → `AccentColor` trong resource đổi theo,
-    `ShowPetals/ShowSpotlights` làm `HasActiveEffects` bật và `DrawPetals` vẽ ra petal thật
-    (`stage.PetalCount` trong khoảng 1–150) cùng geometry thật của spotlight;
+    `ShowPetals` làm `HasActiveEffects` bật và `DrawPetals` vẽ ra petal thật
+    (`stage.PetalCount` trong khoảng 1–150); impact FX (`ImpactWave`/`ShowImpactFlash`) sinh wave/flash
+    vẽ geometry thật và tắt dần theo thời gian;
   - sân khấu chạy trên `FrameClock` dùng chung: không còn field `_timer` 16 ms, `PressNote` phải
     `Acquire` được đồng hồ.
+
+## 11. Đợt effects-redesign v1: xóa đèn sân khấu + Impact FX theo phase
+
+- **Xóa toàn bộ đèn sân khấu**: `ShowSpotlights`/`SpotlightIntensity` (model), `DrawSpotlights`/
+  `DrawSpotlight`/`SpotlightConeBrush`/`SpotlightPoolBrush` (renderer), toggle + slider "Stage
+  illumination" (trang Theme), tooltip Play dialog, mọi preset, test và tài liệu. File JSON cũ còn
+  key này vẫn đọc được (parser bỏ qua key lạ).
+- **Impact phase hoàn thiện theo kênh**: hạt (`ShowEmbers` + hệ sparks), sóng (`ShowImpactRings` +
+  `ImpactWave` Ring/Shockwave/None + `RingSize` + `ImpactWaveIntensity`), chớp (`ShowImpactFlash` +
+  `ImpactFlashIntensity`). Độ lớn/độ sáng theo lực nhấn (modulator velocity đầu tiên).
+- **Bảng tổng hợp**: `Stage/Effects/EffectCatalog.cs` liệt kê toàn bộ 87 effects (4 phase nốt +
+  4 họ ambient + modulators + themes), mỗi effect ghi rõ kênh renderer và trạng thái
+  Available/Planned. Quy tắc: effect Planned không hiện UI cho đến khi có renderer thật.
+- Xem chi tiết kiến trúc và roadmap trong `docs/EFFECTS-REDESIGN.md`.

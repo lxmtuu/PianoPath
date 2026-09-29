@@ -78,8 +78,7 @@ public partial class MainWindow
 
     /// <summary>
     /// The Theme page: the look of the application shell (independent from the piano stage itself),
-    /// how much the chrome animates, and the two concert layers that can be added to the stage —
-    /// blossom petals and sweeping spotlights.
+    /// how much the chrome animates, and the ambient mote layer that can float over the stage.
     /// </summary>
     private void BuildThemePage()
     {
@@ -93,12 +92,10 @@ public partial class MainWindow
             ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
         SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the floating concert dust motes and acoustic waves in the backdrop.");
 
-        var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE LAYERS", "Optional recital layers: floating acoustic motes and soft ambient stage illumination.");
+        var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE", "Optional recital layer: floating acoustic motes drifting through the concert space.");
         Toggle(concert, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
         SliderRow(concert, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
         ColorRow(concert, "Mote color", nameof(PianoVisualSettings.PetalColor), "Colour of the floating ambient particles.").VisibleWhen = () => _visualSettings.ShowPetals;
-        Toggle(concert, "Stage illumination", nameof(PianoVisualSettings.ShowSpotlights), "Soft atmospheric stage illumination across the concert keybed.");
-        SliderRow(concert, "Illumination intensity", nameof(PianoVisualSettings.SpotlightIntensity), 0, 100, "Brightness of the concert illumination.").VisibleWhen = () => _visualSettings.ShowSpotlights;
 
         var looks = Card(ThemeSettingsHost, "QUICK LOOKS", "One click applies a complete concert look: stage preset plus matching interface theme.");
         ButtonRow(looks,
@@ -235,13 +232,20 @@ public partial class MainWindow
         SliderRow(wisps, "Turbulence", nameof(PianoVisualSettings.WispTurbulence), 0, 100, "Sideways waving of the stream.");
         SliderRow(wisps, "Glow", nameof(PianoVisualSettings.WispGlow), 0, 200, "Brightness of the wisps.");
 
-        var flames = Card(ParticleSettingsHost, "FLAMES & RINGS", "Fire at the impact point and shock rings.");
+        var flames = Card(ParticleSettingsHost, "FLAMES", "Fire at the impact point while a key sounds.");
         Toggle(flames, "Enable flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts while a key sounds.");
         SliderRow(flames, "Flame intensity", nameof(PianoVisualSettings.FlameIntensity), 0, 100, "Brightness and size of the fire.");
         SliderRow(flames, "Flame height", nameof(PianoVisualSettings.FlameHeight), 0, 100, "How tall the flames reach.");
         Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Classic warm fire or the color of the note.", ("Warm", "Warm fire"), ("Note", "Note color"));
-        Toggle(flames, "Enable impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding ring on every hit.");
-        SliderRow(flames, "Ring size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the ring.");
+
+        var impact = Card(ParticleSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
+        Toggle(impact, "Enable impact wave", nameof(PianoVisualSettings.ShowImpactRings), "Expanding wave on every hit.");
+        Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring or a filled shockwave blast.",
+            ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading in about 180 ms.");
+        SliderRow(impact, "Flash intensity", nameof(PianoVisualSettings.ImpactFlashIntensity), 0, 100, "Brightness of the hit flash.").VisibleWhen = () => _visualSettings.ShowImpactFlash;
     }
 
     private void BuildKeyboardPage()
