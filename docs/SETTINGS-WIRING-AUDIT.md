@@ -167,3 +167,28 @@ Phương pháp:
 
 **Kết luận: không có chức năng cài đặt nào thiếu logic — mọi mũi tên trong sơ đồ dòng cài đặt
 (10 trang dock + 4 nhóm control tĩnh + Play dialog + menu/footer) đều đã có code liên kết thật.**
+
+## 10. Bổ sung: trang Theme và việc bỏ số tab "magic" (đợt nâng cấp giao diện hoà nhạc)
+
+- **Thứ tự trang giờ nằm một chỗ**: `Ui/SettingsPages.cs` giữ tên trang và mảng `Order`
+  (11 trang, **Theme ở vị trí 1**); mọi chỗ trước đây dùng số nguyên (`= 1 // Notes`, `= 6 // Audio`,
+  `Math.Clamp(tab, 0, 9)`, mảng `pages` trong tìm kiếm, bảng `--settings-tab`) đều gọi
+  `SettingsPages.IndexOf(name)` / `SettingsPageHost(index)`. Thêm trang mới = 1 dòng trong
+  `SettingsPages` + 1 `TabItem` trong XAML.
+- **Trang Theme** (`BuildThemePage`) nối thật vào hệ cài đặt: chip giao diện (Sakura Nocturne /
+  Concert Noir / Velvet Gold) → `ShellTheme` → `ShellThemeManager.Apply` → hàng chục brush trong
+  `Application.Resources` đổi qua `DynamicResource`; `ChromeMotion` (Off/Calm/Full) và
+  `BackdropDensity` nuôi `ChromeBackdrop.Configure`; hai công tắc mới `ShowPetals`/`ShowSpotlights`
+  (kèm số lượng/màu/độ sáng, hàng phụ thuộc `VisibleWhen`) được `PianoStage` vẽ thật bằng
+  `DrawPetals`/`DrawSpotlights`; ba nút "quick look" áp preset Sakura Nocturne / Concert Gold /
+  Moonlight Sonata (đều đã có trong `VisualPresets.BuiltIn`).
+- **Mỗi preset có sẵn khai báo giao diện hợp nhất** (`ShellTheme`), nên áp preset đổi cả sân khấu lẫn
+  vỏ app; preset của người dùng vẫn giữ nguyên hành vi cũ.
+- **Bằng chứng kiểm thử mới** (trong `VerificationSuite`):
+  - `tabs.Items.Count == SettingsPages.Order.Length` (11), tiêu đề tab 0 = Style, tab 1 = Theme,
+    tab cuối = Recording, và `IndexOf` trả đúng chỉ số / `-1` cho tên lạ;
+  - trang Theme có chip cho từng giao diện, đổi `ShellTheme` → `AccentColor` trong resource đổi theo,
+    `ShowPetals/ShowSpotlights` làm `HasActiveEffects` bật và `DrawPetals` vẽ ra petal thật
+    (`stage.PetalCount` trong khoảng 1–150) cùng geometry thật của spotlight;
+  - sân khấu chạy trên `FrameClock` dùng chung: không còn field `_timer` 16 ms, `PressNote` phải
+    `Acquire` được đồng hồ.

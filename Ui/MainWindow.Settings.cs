@@ -32,6 +32,9 @@ public partial class MainWindow
     /// <summary>Every generated switch; a layer such as sparks appears both on the Style page and on its own page.</summary>
     private readonly List<CheckBox> _visualToggleList = [];
     private readonly List<Button> _trackPaletteSwatches = [];
+    /// <summary>Chip host of the Theme page and its caption, filled by <see cref="RefreshThemeChips"/>.</summary>
+    private WrapPanel? themeChipHost;
+    private TextBlock? themeBlurbLabel;
     private readonly HashSet<int> _mutedTracks = [];
     private readonly List<VisualPreset> _presets = [];
     private bool _presetListLoading;
@@ -45,8 +48,11 @@ public partial class MainWindow
     private void BuildVisualSettingsControls()
     {
         _loadingVisualSettings = true;
-        BuildStylePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage();
+        BuildStylePage(); BuildThemePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage();
         _loadingVisualSettings = false;
+        // The theme chips are generated, so they have to be filled once the pages exist; the menu
+        // picker shares the same list of themes.
+        RefreshThemeChips(); RefreshMenuThemeChips();
         LoadPresetList();
         RefreshDependentRows();
         UpdateRecordingInfo();
@@ -68,6 +74,88 @@ public partial class MainWindow
         Toggle(body, "Keyflow watermark", nameof(PianoVisualSettings.ShowWatermark), "Small logo above the keyboard.");
         Toggle(body, "Key counter", nameof(PianoVisualSettings.ShowCounter), "Show how many keys are held.");
         Toggle(body, "FPS & particle HUD", nameof(PianoVisualSettings.ShowFps), "Performance overlay in the top-right corner.");
+    }
+
+    /// <summary>
+    /// The Theme page: the look of the application shell (independent from the piano stage itself),
+    /// how much the chrome animates, and the two concert layers that can be added to the stage —
+    /// blossom petals and sweeping spotlights.
+    /// </summary>
+    private void BuildThemePage()
+    {
+        var shell = Card(ThemeSettingsHost, "INTERFACE THEME", "The chrome around the stage: surfaces, accents and the animated backdrop. Applying a stage preset also switches the theme that belongs to it.");
+        var chips = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
+        themeChipHost = chips;
+        Register(shell, chips, "interface theme shell sakura nocturne concert noir velvet gold backdrop", nameof(PianoVisualSettings.ShellTheme));
+        themeBlurbLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 8) };
+        Register(shell, themeBlurbLabel, "theme description");
+        Choice(shell, "Motion", nameof(PianoVisualSettings.ChromeMotion), "How much the interface moves: the animated backdrop, panel entrances and button response. Off keeps everything still.",
+            ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
+        SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the blossom petals, motes or golden dust in the animated backdrop.");
+
+        var concert = Card(ThemeSettingsHost, "CONCERT STAGE", "Two extra layers that turn the visualizer into a recital: blossom petals drifting down the stage and coloured spotlights sweeping across it.");
+        Toggle(concert, "Blossom petals", nameof(PianoVisualSettings.ShowPetals), "Petals drift across the stage with the wind; the colour below tints them.");
+        SliderRow(concert, "Petal amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "How many petals are in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
+        ColorRow(concert, "Petal color", nameof(PianoVisualSettings.PetalColor), "Colour of the drifting petals.").VisibleWhen = () => _visualSettings.ShowPetals;
+        Toggle(concert, "Concert spotlights", nameof(PianoVisualSettings.ShowSpotlights), "Two coloured cones sweep the stage from above, like follow spots in an auditorium.");
+        SliderRow(concert, "Spotlight intensity", nameof(PianoVisualSettings.SpotlightIntensity), 0, 100, "Brightness of the sweeping spotlight cones.").VisibleWhen = () => _visualSettings.ShowSpotlights;
+
+        var looks = Card(ThemeSettingsHost, "QUICK LOOKS", "One click applies a complete concert look: stage preset plus matching interface theme.");
+        ButtonRow(looks,
+            ("Sakura night", (_, _) => ApplyBuiltInPreset("Sakura Nocturne")),
+            ("Concert gold", (_, _) => ApplyBuiltInPreset("Concert Gold")),
+            ("Moonlight", (_, _) => ApplyBuiltInPreset("Moonlight Sonata")));
+        Note(looks, "Every preset can be edited afterwards; the pages next to this one keep the piano roll, keyboard and camera in sync with the new theme.");
+    }
+
+    /// <summary>Applies a built-in preset by name (used by the Theme page quick looks).</summary>
+    private void ApplyBuiltInPreset(string name)
+    {
+        if (VisualPresets.FindBuiltIn(name) is not { } preset) return;
+        ApplyPreset(preset);
+        LoadPresetList(preset.Name);
+        RefreshMenuStageLook();
+    }
+
+    /// <summary>Rebuilds the theme chips of the Theme page; the active theme is marked.</summary>
+    private void RefreshThemeChips()
+    {
+        if (themeChipHost is null) return;
+        themeChipHost.Children.Clear();
+        foreach (var theme in ShellThemes.All)
+        {
+            var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
+            var chip = new Button
+            {
+                Content = active ? "✦  " + theme.Name : theme.Name,
+                Tag = ThemeOrb(theme),
+                DataContext = theme.Id,
+                Style = (Style)FindResource("ThemeChipStyle"),
+                ToolTip = theme.Blurb,
+                Opacity = active ? 1 : .72
+            };
+            chip.Click += ThemeChip_Click;
+            themeChipHost.Children.Add(chip);
+        }
+        if (themeBlurbLabel is not null) themeBlurbLabel.Text = ShellThemeManager.Current.Blurb;
+    }
+
+    /// <summary>The generated host of a page in tab-strip order, or null for pages built directly in XAML.</summary>
+    private Panel? SettingsPageHost(int index)
+    {
+        if (index < 0 || index >= SettingsPages.Order.Length) return null;
+        return SettingsPages.Order[index] switch
+        {
+            SettingsPages.Style => StyleSettingsHost,
+            SettingsPages.Theme => ThemeSettingsHost,
+            SettingsPages.Notes => NoteSettingsHost,
+            SettingsPages.Particles => ParticleSettingsHost,
+            SettingsPages.Keyboard => KeyboardSettingsHost,
+            SettingsPages.Background => SceneSettingsHost,
+            SettingsPages.Camera => CameraSettingsHost,
+            SettingsPages.Recording => RecordingSettingsHost,
+            _ => null
+        };
     }
 
     private void BuildNotesPage()
@@ -557,6 +645,7 @@ public partial class MainWindow
                 box.Text = value; if (_visualColorButtons.TryGetValue(property, out var swatch)) SetColorSwatch(swatch, value);
             }
             for (var i = 0; i < _trackPaletteSwatches.Count && i < _visualSettings.TrackColors.Count; i++) SetColorSwatch(_trackPaletteSwatches[i], _visualSettings.TrackColors[i]);
+            if (themeChipHost is not null) { RefreshThemeChips(); RefreshMenuThemeChips(); }
             SyncAllPlayDialogControls();
         }
         finally { _loadingVisualSettings = false; }
@@ -609,7 +698,9 @@ public partial class MainWindow
 
     private void ApplyVisualSettings(string status, bool reloadBackground = false)
     {
-        _visualSettings.Clamp(); Stage.SetVisualSettings(_visualSettings, reloadBackground);
+        _visualSettings.Clamp();
+        Stage.SetVisualSettings(_visualSettings, reloadBackground);
+        ApplyChromeTheme();
         if (reloadBackground && Stage.BackgroundLoadError is { } error)
         {
             SettingsSaveLabel.Text = "Background image failed to load";
@@ -646,11 +737,11 @@ public partial class MainWindow
         var query = SettingsSearchBox.Text.Trim();
         if (query.Length == 0) return;
         // Jump to the first page that has a match when the current page shows none.
-        var pages = new Panel?[] { StyleSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, RecordingSettingsHost };
+        var pageCount = SettingsPages.Order.Length;
+        bool HasMatch(int index) { var page = SettingsPageHost(index); return page is not null && _settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible); }
         var currentIndex = SettingsTabs.SelectedIndex;
-        bool HasMatch(Panel? page) => page is not null && _settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible);
-        if (currentIndex >= 0 && currentIndex < pages.Length && HasMatch(pages[currentIndex])) return;
-        for (var i = 0; i < pages.Length; i++) if (HasMatch(pages[i])) { SettingsTabs.SelectedIndex = i; return; }
+        if (currentIndex >= 0 && currentIndex < pageCount && HasMatch(currentIndex)) return;
+        for (var i = 0; i < pageCount; i++) if (HasMatch(i)) { SettingsTabs.SelectedIndex = i; return; }
     }
 
     private void SettingsTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -667,9 +758,8 @@ public partial class MainWindow
 
     private void ResetPage_Click(object sender, RoutedEventArgs e)
     {
-        var pages = new Panel?[] { StyleSettingsHost, NoteSettingsHost, ParticleSettingsHost, KeyboardSettingsHost, SceneSettingsHost, CameraSettingsHost, null, null, null, RecordingSettingsHost };
-        var index = SettingsTabs.SelectedIndex;
-        if (index < 0 || index >= pages.Length || pages[index] is not { } page) { SettingsSaveLabel.Text = "This page has no visual settings to reset"; return; }
+        var page = SettingsPageHost(SettingsTabs.SelectedIndex);
+        if (page is null) { SettingsSaveLabel.Text = "This page has no visual settings to reset"; return; }
         var source = BasePresetSettings();
         foreach (var row in _settingRows)
         {

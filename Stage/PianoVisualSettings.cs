@@ -27,8 +27,23 @@ internal sealed class PianoVisualSettings
     public bool ShowLightBeams { get; set; } = true;
     public bool ShowNoteLabels { get; set; } = false;
     public bool ShowKeyFelt { get; set; } = false;
+    /// <summary>Blossom petals drifting across the stage (the "Your Lie in April" layer).</summary>
+    public bool ShowPetals { get; set; } = false;
+    public double PetalAmount { get; set; } = 55;
+    public string PetalColor { get; set; } = "#FFB3CF";
+    /// <summary>Concert spotlights sweeping the stage from above.</summary>
+    public bool ShowSpotlights { get; set; } = false;
+    public double SpotlightIntensity { get; set; } = 55;
     public bool ShowKeyShadow { get; set; } = true;
     public int BackgroundAppearanceVersion { get; set; }
+
+    // ---- Interface theme (the chrome around the stage) -----------------------------------------------
+    /// <summary>Shell theme id: sakura, noir or velvet. See <see cref="ShellThemes"/>.</summary>
+    public string ShellTheme { get; set; } = ShellThemes.DefaultId;
+    /// <summary>Off, Calm or Full: how much the interface chrome animates.</summary>
+    public string ChromeMotion { get; set; } = "Full";
+    /// <summary>0-200 %: how many particles the animated chrome backdrop draws.</summary>
+    public double BackdropDensity { get; set; } = 100;
 
     // ---- Style / preset -----------------------------------------------------------------------------
     /// <summary>Name of the preset the current values were derived from (informational only).</summary>
@@ -163,6 +178,7 @@ internal sealed class PianoVisualSettings
     public double RecordingFrameRate { get; set; } = 30;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
+    internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
@@ -220,6 +236,8 @@ internal sealed class PianoVisualSettings
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
+        PetalAmount = Math.Clamp(PetalAmount, 0, 150); SpotlightIntensity = Math.Clamp(SpotlightIntensity, 0, 100);
+        BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);
         KeyboardScale = Math.Clamp(KeyboardScale, 60, 140); KeyLighting = Math.Clamp(KeyLighting, 0, 100); KeyGlowRadius = Math.Clamp(KeyGlowRadius, 0, 100);
         KeyOverhang = Math.Clamp(KeyOverhang, 0, 100); KeyPressDepth = Math.Clamp(KeyPressDepth, 0, 100);
         ShaderKeyLight = Math.Clamp(ShaderKeyLight, 0, 200); ShaderShadows = Math.Clamp(ShaderShadows, 0, 100);
@@ -243,6 +261,8 @@ internal sealed class PianoVisualSettings
         if (!KeyLabelModes.Contains(KeyLabels)) KeyLabels = "C";
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
+        if (!ChromeMotions.Contains(ChromeMotion)) ChromeMotion = "Full";
+        if (string.IsNullOrWhiteSpace(ShellTheme)) ShellTheme = ShellThemes.DefaultId;
         TrackColors ??= [];
         var defaults = new List<string> { "#43E6FF", "#FF6FD8", "#FFD166", "#7CFF6B", "#FF7A59", "#8C7BFF", "#5CF2E8", "#FF4D8D" };
         for (var i = 0; i < 8; i++) if (TrackColors.Count <= i) TrackColors.Add(defaults[i]); else if (string.IsNullOrWhiteSpace(TrackColors[i])) TrackColors[i] = defaults[i];

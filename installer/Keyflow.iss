@@ -5,11 +5,11 @@
 ;   2. iscc installer\Keyflow.iss          (or open this file in the Inno Setup Compiler and press F9)
 ;   → installer\Output\Keyflow-Setup-<version>.exe
 ;
-; Pass /DAppVersion=0.3.0 to override the version, /DSourceDir=..\publish\win-arm64 for another build.
+; Pass /DAppVersion=0.4.0 to override the version, /DSourceDir=..\publish\win-arm64 for another build.
 ; Keep the fallback below in sync with <Version> in PianoPath.csproj when bumping the release version.
 
 #ifndef AppVersion
-  #define AppVersion "0.3.0"
+  #define AppVersion "0.4.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\publish\win-x64"

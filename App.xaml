@@ -36,6 +36,26 @@
         <SolidColorBrush x:Key="DangerBrush" Color="#FF4D6D"/>
         <SolidColorBrush x:Key="SuccessBrush" Color="#41E0A8"/>
         <SolidColorBrush x:Key="TrackBrush" Color="#222533"/>
+
+        <!-- ===== Theme tokens published by ShellThemeManager ===================================
+             Defaults keep the XAML valid on its own; at startup - and whenever the look changes -
+             ShellThemeManager writes a fresh brush under each key. Every surface reads them with
+             DynamicResource, so a theme switch restyles the whole interface instantly: no window
+             reload, no template surgery, no flicker. -->
+        <SolidColorBrush x:Key="GlowBrush" Color="#B092FF"/>
+        <SolidColorBrush x:Key="PetalBrush" Color="#FFB3CF"/>
+        <SolidColorBrush x:Key="BackdropTopBrush" Color="#171A25"/>
+        <LinearGradientBrush x:Key="CurtainGradientBrush" StartPoint="0,0" EndPoint="1,0">
+            <GradientStop Color="#8B5CFF" Offset="0"/>
+            <GradientStop Color="#B092FF" Offset=".55"/>
+            <GradientStop Color="#25D0FF" Offset="1"/>
+        </LinearGradientBrush>
+        <!-- Non-themed extras: the veil over the lower shell and the warm wash behind cards. -->
+        <LinearGradientBrush x:Key="ConcertVeilBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#00000000" Offset="0"/>
+            <GradientStop Color="#26000000" Offset=".62"/>
+            <GradientStop Color="#7A000000" Offset="1"/>
+        </LinearGradientBrush>
         <!-- Soft top highlight that gives every raised surface a lit edge, like a bevel in a 3D DCC. -->
         <LinearGradientBrush x:Key="TopSheenBrush" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#1FFFFFFF" Offset="0"/>
@@ -143,6 +163,28 @@
             <RectangleGeometry Rect="3,15.9,18,2" RadiusX="1" RadiusY="1"/>
             <EllipseGeometry Center="11,16.9" RadiusX="2.5" RadiusY="2.5"/>
         </GeometryGroup>
+        <!-- Concert icons: a blossom, a sparkle, an equalizer and a theme wheel. -->
+        <GeometryGroup x:Key="IconPetal">
+            <EllipseGeometry Center="12,6.6" RadiusX="3.2" RadiusY="4"/>
+            <EllipseGeometry Center="12,17.4" RadiusX="3.2" RadiusY="4"/>
+            <EllipseGeometry Center="6.8,12" RadiusX="4" RadiusY="3.2"/>
+            <EllipseGeometry Center="17.2,12" RadiusX="4" RadiusY="3.2"/>
+            <EllipseGeometry Center="12,12" RadiusX="2" RadiusY="2"/>
+        </GeometryGroup>
+        <PathGeometry x:Key="IconSparkle" Figures="M 12,2 L 14,9.6 L 22,12 L 14,14.4 L 12,22 L 10,14.4 L 2,12 L 10,9.6 Z"/>
+        <GeometryGroup x:Key="IconMotion">
+            <RectangleGeometry Rect="3.4,9,2.6,9" RadiusX="1.3" RadiusY="1.3"/>
+            <RectangleGeometry Rect="8.1,5,2.6,13" RadiusX="1.3" RadiusY="1.3"/>
+            <RectangleGeometry Rect="12.8,8.4,2.6,9.6" RadiusX="1.3" RadiusY="1.3"/>
+            <RectangleGeometry Rect="17.5,3.4,2.6,14.6" RadiusX="1.3" RadiusY="1.3"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconTheme">
+            <EllipseGeometry Center="12,12" RadiusX="9" RadiusY="9"/>
+            <EllipseGeometry Center="12,12" RadiusX="3.1" RadiusY="3.1"/>
+            <EllipseGeometry Center="12,3.6" RadiusX="1.7" RadiusY="1.7"/>
+            <EllipseGeometry Center="19.6,15.4" RadiusX="1.7" RadiusY="1.7"/>
+            <EllipseGeometry Center="5.4,16.6" RadiusX="1.7" RadiusY="1.7"/>
+        </GeometryGroup>
         <GeometryGroup x:Key="IconLogo">
             <RectangleGeometry Rect="1.5,4,21,16" RadiusX="3" RadiusY="3"/>
             <RectangleGeometry Rect="6.4,4,2.4,9.4"/>
@@ -215,7 +257,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
                             <Grid>
                                 <Border x:Name="Sheen" CornerRadius="8" Background="{StaticResource TopSheenBrush}" Opacity=".55" IsHitTestVisible="False" VerticalAlignment="Top" Height="11" Margin="1,1,1,0"/>
                                 <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
@@ -223,11 +266,35 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.025" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.025" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
                                 <Setter TargetName="Sheen" Property="Opacity" Value=".9"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="0.975" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="0.975" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter TargetName="Sheen" Property="Opacity" Value="0"/>
@@ -309,11 +376,28 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
                             <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Fill="{TemplateBinding Foreground}" Width="15" Height="15" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.08" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.08" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
@@ -377,7 +461,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
                             <Grid>
                                 <Border x:Name="Sheen" CornerRadius="8" Background="{StaticResource TopSheenBrush}" Opacity=".5" IsHitTestVisible="False" VerticalAlignment="Top" Height="11" Margin="1,1,1,0"/>
                                 <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -388,6 +473,22 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.02" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.02" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
                                 <Setter TargetName="Sheen" Property="Opacity" Value=".85"/>
@@ -414,15 +515,40 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Grid>
+                        <Grid x:Name="Root" RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Grid.RenderTransform>
                             <Ellipse x:Name="Chrome" Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1"/>
                             <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Fill="{TemplateBinding Foreground}" Width="17" Height="17" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"/>
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.06" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.06" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                                 <Setter TargetName="Chrome" Property="Stroke" Value="#8CFFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="0.98" Duration="0:0:0.08"/>
+                                            <DoubleAnimation Storyboard.TargetName="Root" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="0.98" Duration="0:0:0.08"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
                                 <Setter TargetName="Chrome" Property="Stroke" Value="#B3FFFFFF"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
@@ -482,7 +608,8 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" CornerRadius="14" Padding="{TemplateBinding Padding}" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
                             <StackPanel Orientation="Horizontal">
                                 <Ellipse x:Name="Dot" Width="7" Height="7" Fill="#3F3A55" Margin="0,0,7,0" VerticalAlignment="Center"/>
                                 <ContentPresenter VerticalAlignment="Center"/>
@@ -496,6 +623,22 @@
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                             </Trigger>
                             <Trigger Property="IsMouseOver" Value="True">
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.04" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.04" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -921,6 +1064,80 @@
             </Setter>
         </Style>
 
+        <!-- ===== Concert chrome: theme chips, glass cards and captions ===== -->
+        <!-- One chip in a theme picker: a palette sphere (Tag) plus the theme name (Content). -->
+        <Style x:Key="ThemeChipStyle" TargetType="Button">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}"/>
+            <Setter Property="Background" Value="{DynamicResource ControlBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="8,6"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="12" Padding="{TemplateBinding Padding}" RenderTransformOrigin="0.5,0.5">
+                            <Border.RenderTransform><ScaleTransform ScaleX="1" ScaleY="1"/></Border.RenderTransform>
+                            <StackPanel Orientation="Horizontal">
+                                <Border x:Name="Orb" Width="20" Height="20" CornerRadius="10" Background="{TemplateBinding Tag}" BorderBrush="#59FFFFFF" BorderThickness="1" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="Caption" Text="{TemplateBinding Content}" FontSize="11" FontWeight="SemiBold" Foreground="{TemplateBinding Foreground}" VerticalAlignment="Center" Margin="9,0,4,0"/>
+                            </StackPanel>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                <Setter TargetName="Chrome" Property="Background" Value="{DynamicResource ControlHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+                                <Trigger.EnterActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1.03" Duration="0:0:0.16"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1.03" Duration="0:0:0.16"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.EnterActions>
+                                <Trigger.ExitActions>
+                                    <BeginStoryboard>
+                                        <Storyboard>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleX)" To="1" Duration="0:0:0.22"/>
+                                            <DoubleAnimation Storyboard.TargetName="Chrome" Storyboard.TargetProperty="(UIElement.RenderTransform).(ScaleTransform.ScaleY)" To="1" Duration="0:0:0.22"/>
+                                        </Storyboard>
+                                    </BeginStoryboard>
+                                </Trigger.ExitActions>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".4"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Frosted card used by captions, blurbs and the menu quote. -->
+        <Style x:Key="GlassCardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource PanelChromeBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource HairlineBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="16"/>
+            <Setter Property="Padding" Value="16,12"/>
+        </Style>
+        <Style x:Key="MenuQuoteStyle" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{DynamicResource MutedTextBrush}"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="FontStyle" Value="Italic"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="MaxWidth" Value="340"/>
+            <Setter Property="LineHeight" Value="19"/>
+        </Style>
+        <!-- Thin hairline that carries the animated accent sweep under the header and above the footer. -->
+        <Style x:Key="SweepLineStyle" TargetType="Border">
+            <Setter Property="Height" Value="2"/>
+            <Setter Property="CornerRadius" Value="1"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+            <Setter Property="Opacity" Value=".85"/>
+        </Style>
         <!-- ===== Preset list ===== -->
         <Style x:Key="PresetListStyle" TargetType="ListBox">
             <Setter Property="Background" Value="Transparent"/>

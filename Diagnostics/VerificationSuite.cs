@@ -598,7 +598,11 @@ internal static class VerificationSuite
     private static void VerifySettingsDock(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         var tabs = (TabControl)window.FindName("SettingsTabs");
-        Assert(tabs.Items.Count == 10 && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[9]).Header.ToString() == "Recording", "The settings dock should expose ten categorized pages from Style to Recording.");
+        var pageCount = SettingsPages.Order.Length;
+        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == "Theme" && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == "Recording",
+            $"The settings dock should expose all {pageCount} categorized pages from Style to Recording.");
+        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.Recording) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
+            "Settings page names should resolve to their tab-strip index so no code has to keep magic tab numbers.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)),
             "Note style, color mode, keyboard style, background mode and wisps should be editable from the dock.");
@@ -632,6 +636,36 @@ internal static class VerificationSuite
         stage.ReleaseLiveNote(60);
         direction.SelectedValue = originalDirection;
         stage.ClearTransient();
+        // ---- Theme page: shell themes and the concert stage layers -------------------------------
+        var chips = (Panel?)Field(window, "themeChipHost");
+        Assert(chips is not null && chips.Children.Count == ShellThemes.All.Length && chips.Children.OfType<Button>().All(b => b.Tag is Brush),
+            "The Theme page should offer one palette chip per built-in interface theme.");
+        var beforeTheme = visualSettings.ShellTheme;
+        visualSettings.ShellTheme = "velvet";
+        Invoke(window, "ApplyChromeTheme");
+        Assert(ShellThemeManager.Current.Id == "velvet" && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.VelvetGold.Accent,
+            "Choosing an interface theme should publish its accent colour into the application resources.");
+        visualSettings.ShellTheme = beforeTheme;
+        Invoke(window, "ApplyChromeTheme");
+        Assert(ShellThemeManager.Current.Id == ShellThemes.Find(beforeTheme).Id, "Restoring the theme should republish the previous accents.");
+        var petals = toggles[nameof(PianoVisualSettings.ShowPetals)];
+        var spots = toggles[nameof(PianoVisualSettings.ShowSpotlights)];
+        Assert(petals is not null && spots is not null && choices.ContainsKey(nameof(PianoVisualSettings.ChromeMotion)),
+            "The Theme page should expose the blossom layer, the spotlight layer and the motion budget.");
+        var wasPetals = visualSettings.ShowPetals; var wasAmount = visualSettings.PetalAmount; var wasSpots = visualSettings.ShowSpotlights;
+        visualSettings.ShowPetals = true; visualSettings.PetalAmount = 60; visualSettings.ShowSpotlights = true; visualSettings.SpotlightIntensity = 70;
+        stage.SetVisualSettings(visualSettings);
+        Assert(stage.HasActiveEffects, "The blossom and spotlight layers should keep the stage animating even without notes.");
+        var concertVisual = new DrawingVisual();
+        using (var dc = concertVisual.RenderOpen())
+        {
+            Invoke(stage, "DrawPetals", dc, 1280d, 480d);
+            Invoke(stage, "DrawSpotlights", dc, 1280d, 480d, 1280d / 88);
+        }
+        Assert(stage.PetalCount > 0 && stage.PetalCount <= 150, $"The blossom layer should draw a bounded number of petals (drew {stage.PetalCount}).");
+        Assert(concertVisual.Drawing.Bounds.Height > 200 && concertVisual.Drawing.Bounds.Width > 100, "The concert layers should actually paint geometry into the stage.");
+        visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount; visualSettings.ShowSpotlights = wasSpots;
+        stage.SetVisualSettings(visualSettings);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -649,7 +683,7 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: ten pages, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add("PASS settings dock: eleven pages, theme chips and concert layers, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
@@ -704,11 +738,11 @@ internal static class VerificationSuite
         var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
         var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
         Assert(menu is not null && play is not null, "The Embers-style shell should provide a main menu and a pre-flight play dialog.");
-        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
         window.ShowStartupMenu();
-        Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
+        Assert(menu!.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
-        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
+        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
         var notesToggle = (CheckBox)window.FindName("LayerNotesToggle")!;
         Assert(notesToggle.IsChecked == visualSettings.ShowNotes, "Play-dialog layer switches should mirror the live stage settings.");
         notesToggle.IsChecked = false;
@@ -716,7 +750,7 @@ internal static class VerificationSuite
         notesToggle.IsChecked = true;
         Assert(visualSettings.ShowNotes, "Switching the Notes layer back on should restore the stage settings.");
         Invoke(window, "PlayDialogClose_Click", window, new RoutedEventArgs());
-        Assert(play.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
+        Assert(play!.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
     }
 
     private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)
@@ -766,11 +800,11 @@ internal static class VerificationSuite
         SetField(window, "_position", 1.0); Invoke(window, "SetLoopA_Click", window, new RoutedEventArgs());
         SetField(window, "_position", 3.0); Invoke(window, "SetLoopB_Click", window, new RoutedEventArgs());
         Assert(((TextBlock)window.FindName("LoopLabel")).Text == "00:01–00:03", "A/B loop should retain its selected times.");
-        SetField(window, "_position", 3.1); Invoke(window, "Tick"); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
+        SetField(window, "_position", 3.1); Invoke(window, "Tick", .016); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
 
         mode.SelectedIndex = 1;
         foreach (var note in ((IEnumerable<NoteEvent>)Field(window, "_notes")).Where(n => n.Start < .99)) note.Played = true;
-        SetField(window, "_position", 1.2); ((Stopwatch)Field(window, "_clock")).Restart(); Invoke(window, "StartPlayback"); Invoke(window, "Tick");
+        SetField(window, "_position", 1.2); ((Stopwatch)Field(window, "_clock")).Restart(); Invoke(window, "StartPlayback"); Invoke(window, "Tick", .016);
         Assert(Math.Abs((double)Field(window, "_position") - 1.0) < .02, "Wait mode should hold at the next note.");
         Invoke(window, "PressNote", 72, 90);
         Assert(((IEnumerable<NoteEvent>)Field(window, "_notes")).Any(n => n.Pitch == 72 && Math.Abs(n.Start - 1) < .01 && n.Played), "The expected note should score and release wait mode.");
@@ -785,7 +819,15 @@ internal static class VerificationSuite
         Assert(stage.LiveTrailCount == 0 && stage.SparkCount == 0, "Pausing should clear transient note blocks and sparks.");
         window.Width = 1080; window.Height = 700; window.UpdateLayout();
         Assert(stage.ActualWidth > 500 && stage.KeyboardHeight > 100, "Compact window size should keep the keyboard usable.");
-        Results.Add("PASS WPF: idle auto-hide of toolbar and settings, mouse reveal, Escape toggling Stage Design, live AVI frame capture, duration-scaled notes, pedals and MIDI practice controls.");
+        // Animation plumbing: the stage advances on the shared vsync frame clock now, not on a private 16 ms timer.
+        Assert(window.GetType().GetField("_timer", BindingFlags.Instance | BindingFlags.NonPublic) is null
+                && window.GetType().GetField("_stageFrames", BindingFlags.Instance | BindingFlags.NonPublic) is not null && FrameClock.Shared is not null,
+            "Stage animation should run on the shared frame clock instead of a private dispatcher timer.");
+        Invoke(window, "PressNote", 60, 90);
+        Assert(FrameClock.Shared!.IsRunning && (bool)Field(window, "_stageFrames"), "Playing a note should acquire the shared frame clock.");
+        Invoke(window, "ReleaseNote", 60);
+        Invoke(window, "Stop");
+        Results.Add("PASS WPF: idle auto-hide of toolbar and settings, mouse reveal, Escape toggling Stage Design, live AVI frame capture, duration-scaled notes, pedals, MIDI practice controls and the shared frame clock.");
     }
 
     public static void PressPreviewNote(MainWindow window, int pitch) => Invoke(window, "PressNote", pitch, 90);
