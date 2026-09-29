@@ -37,6 +37,7 @@ internal static class VisualPresets
         s.HaloColor = "#C66EFF"; s.NoteGlow = 110; s.NoteEdge = 120; s.NoteEdgeWidth = 62; s.NoteTint = 30; s.NoteHeadGlow = 55;
         s.ShowFlame = true; s.FlameIntensity = 75; s.FlameHeight = 60; s.FlameColorMode = "Warm"; s.ShowWisps = false; s.ShowImpactRings = true;
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
         return s;
     }
 
@@ -49,6 +50,7 @@ internal static class VisualPresets
         s.ParticleLife = .8; s.ParticleSize = 2.6; s.Gravity = 420; s.ShowFlame = true; s.FlameIntensity = 100; s.FlameHeight = 85; s.FlameColorMode = "Warm";
         s.ShowImpactRings = true; s.RingSize = 60; s.KeyboardStyle = "Studio"; s.KeyGlowRadius = 90; s.KeyLighting = 55; s.ShowKeyFelt = true; s.KeyFeltColor = "#FF2E3A";
         s.HorizonGlow = 80; s.BeamIntensity = 55; s.BloomIntensity = 110; s.BloomSize = 90; s.Vignette = 45; s.Saturation = 115;
+        s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 34; s.ShaderKeyLight = 78; s.ShaderGloss = 66; s.ShaderShadows = 88; s.ShaderEmissive = 120; s.ShaderRimLight = 84;
         return s;
     }
 
@@ -59,6 +61,7 @@ internal static class VisualPresets
         s.NoteTint = 88; s.NoteRoundness = 60; s.NoteHeadGlow = 35; s.ShowWisps = true; s.WispAmount = 70; s.WispHeight = 70; s.WispTurbulence = 65; s.WispGlow = 110;
         s.ShowFlame = false; s.ParticleAmount = 10; s.ParticleVelocity = 90; s.Gravity = 60; s.ShowImpactRings = false; s.ShowLightBeams = true; s.BeamIntensity = 70;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 70; s.BloomIntensity = 70; s.Vignette = 35; s.HorizonGlow = 25;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 56; s.ShaderGloss = 88; s.ShaderShadows = 62; s.ShaderEmissive = 70;
         return s;
     }
 
@@ -70,6 +73,7 @@ internal static class VisualPresets
         s.ParticleAmount = 16; s.ParticleVelocity = 70; s.Gravity = 40; s.Drag = 40; s.ParticleLife = 1.4; s.ParticleSize = 1.8; s.ParticleGlow = 60; s.ShowFlame = false;
         s.ShowWisps = false; s.ShowImpactRings = true; s.RingSize = 35; s.KeyboardStyle = "Classic"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 40;
         s.BloomIntensity = 45; s.Vignette = 20; s.HorizonGlow = 20; s.Saturation = 85;
+        s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 62; s.ShaderGloss = 94; s.ShaderShadows = 58; s.ShaderExposure = 112; s.ShaderEmissive = 55;
         return s;
     }
 
@@ -79,6 +83,7 @@ internal static class VisualPresets
         s.NoteStyle = "Glass"; s.ColorMode = "PerHand"; s.LeftHandColor = "#3FA9FF"; s.RightHandColor = "#FF6FD8"; s.HaloColor = "#B58CFF"; s.HandSplitPitch = 60;
         s.NoteGlow = 60; s.NoteEdge = 80; s.NoteEdgeWidth = 30; s.NoteTint = 85; s.ShowNoteLabels = true; s.KeyLabels = "C"; s.ParticleAmount = 12; s.ShowFlame = false;
         s.ShowImpactRings = true; s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.BloomIntensity = 50; s.Vignette = 20;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 44; s.ShaderEmissive = 95;
         return s;
     }
 
@@ -88,6 +93,7 @@ internal static class VisualPresets
         s.NoteStyle = "Solid"; s.ColorMode = "PerTrack"; s.NoteGlow = 20; s.NoteEdge = 40; s.NoteEdgeWidth = 20; s.NoteTint = 100; s.NoteRoundness = 25; s.Notes3D = false;
         s.NoteHeadGlow = 0; s.ShowEmbers = false; s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = false; s.ShowLightBeams = false; s.ShowHalo = true;
         s.HaloColor = "#FFFFFF"; s.KeyboardStyle = "Classic"; s.KeyLighting = 20; s.KeyGlowRadius = 0; s.BloomIntensity = 0; s.Vignette = 0; s.HorizonGlow = 0;
+        s.ShadingQuality = "Fast"; s.ShaderCameraTilt = 30; s.ShaderKeyLight = 104; s.ShaderGloss = 48; s.ShaderEmissive = 45;
         return s;
     }
 
@@ -97,6 +103,7 @@ internal static class VisualPresets
         s.BackgroundMode = "ChromaGreen"; s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Violet"; s.NoteColorStart = "#7B5CFF"; s.NoteColorEnd = "#F05CFF";
         s.ShowHalo = false; s.ShowLightBeams = false; s.HorizonGlow = 0; s.Vignette = 0; s.ShowStars = false; s.BackgroundGradient = false; s.BackgroundGuide = false;
         s.BloomIntensity = 40; s.KeyGlowRadius = 0; s.ShowFlame = true; s.ShowImpactRings = false; s.KeyboardStyle = "Studio";
+        s.ShadingQuality = "Off";
         return s;
     }
 }

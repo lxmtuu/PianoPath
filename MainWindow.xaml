@@ -7,8 +7,7 @@
         Foreground="{StaticResource TextBrush}" FontFamily="Segoe UI" WindowState="Maximized"
         PreviewKeyDown="Window_KeyDown" KeyUp="Window_KeyUp" MouseMove="Window_MouseMove" Deactivated="Window_Deactivated" Closed="Window_Closed">
     <Window.Resources>
-        <DropShadowEffect x:Key="PanelGlow" Color="#8F35E2" BlurRadius="28" ShadowDepth="0" Opacity=".22"/>
-        <DropShadowEffect x:Key="DockShadow" Color="#000000" BlurRadius="34" ShadowDepth="0" Opacity=".55"/>
+        <DropShadowEffect x:Key="DockShadow" Color="#000000" BlurRadius="38" ShadowDepth="0" Opacity=".62"/>
     </Window.Resources>
 
     <Grid>
@@ -19,43 +18,47 @@
         </Grid.RowDefinitions>
 
         <!-- ===================== HEADER ===================== -->
-        <Border x:Name="HeaderChrome" Grid.Row="0" Margin="24,14,24,0" Padding="16,9" Background="{StaticResource PanelBrush}" CornerRadius="16" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource PanelGlow}" Panel.ZIndex="3">
+        <Border x:Name="HeaderChrome" Grid.Row="0" Margin="22,12,22,0" Padding="14,8" Style="{StaticResource PanelChromeStyle}" Panel.ZIndex="3">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,18,0">
-                    <Border Width="40" Height="40" CornerRadius="13" Background="{StaticResource AccentGradientBrush}" BorderBrush="#66FFFFFF" BorderThickness="1">
-                        <TextBlock Text="♫" FontSize="22" Foreground="White" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,16,0">
+                    <Border Width="40" Height="40" CornerRadius="13" Background="{StaticResource AccentGradientBrush}" BorderBrush="#40FFFFFF" BorderThickness="1">
+                        <Path Data="{StaticResource IconLogo}" Fill="White" Width="21" Height="21" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
-                    <StackPanel Margin="11,0,0,0" VerticalAlignment="Center">
-                        <TextBlock Text="KEYFLOW" FontSize="15" FontWeight="Bold"/>
-                        <TextBlock Text="PIANO VFX STUDIO" Style="{StaticResource EyebrowTextStyle}" FontSize="8"/>
+                    <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="KEYFLOW" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                            <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Center">
+                                <TextBlock Text="PRO" FontSize="8" FontWeight="Bold" Foreground="{StaticResource Accent2Brush}"/>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="PIANO VFX STUDIO" Style="{StaticResource EyebrowTextStyle}" FontSize="8" Margin="0,3,0,0"/>
                     </StackPanel>
-                    <Border Width="1" Height="32" Background="{StaticResource PanelBorderBrush}" Margin="18,0,16,0"/>
-                    <StackPanel VerticalAlignment="Center" MaxWidth="360">
-                        <TextBlock x:Name="SongTitle" Text="Live Piano" FontSize="13" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                    <Border Width="1" Height="34" Background="{StaticResource PanelBorderBrush}" Margin="18,0,16,0"/>
+                    <StackPanel VerticalAlignment="Center" MaxWidth="380">
+                        <TextBlock x:Name="SongTitle" Text="Live Piano" FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis"/>
                         <TextBlock x:Name="NowPlayingLabel" Text="LIVE PLAY · PRESS A KEY" Style="{StaticResource EyebrowTextStyle}" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
                     </StackPanel>
                 </StackPanel>
-                <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                    <Border Padding="12,6" CornerRadius="10" Background="{StaticResource ControlBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="STYLE" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                            <TextBlock x:Name="HeaderPresetLabel" Text="Neon Violet" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
-                            <Button Content="Change" Style="{StaticResource GhostButtonStyle}" Padding="8,2" Margin="8,0,0,0" FontSize="10" Click="StyleQuick_Click" ToolTip="Open the style presets"/>
-                        </StackPanel>
-                    </Border>
-                </StackPanel>
+                <Border Grid.Column="1" Padding="12,6" CornerRadius="10" Background="#0E1017" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="LOOK" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                        <TextBlock x:Name="HeaderPresetLabel" Text="Neon Violet" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                        <Button Content="Change" Style="{StaticResource GhostButtonStyle}" Padding="8,2" Margin="8,0,0,0" FontSize="10" Click="StyleQuick_Click" ToolTip="Open the style presets"/>
+                    </StackPanel>
+                </Border>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
-                    <Button Content="♫  OPEN MIDI" Style="{StaticResource AccentButtonStyle}" Click="OpenMidi_Click" Margin="0,0,8,0" Padding="14,8"/>
-                    <Button Content="☰  SETTINGS" Click="Settings_Click" Margin="0,0,14,0" Padding="14,8" ToolTip="Show or hide the settings dock (Escape)"/>
-                    <Border Width="1" Height="32" Background="{StaticResource PanelBorderBrush}" Margin="0,0,10,0"/>
-                    <Button Content="—" Style="{StaticResource MiniButtonStyle}" Width="30" Height="30" Click="Minimize_Click" ToolTip="Minimize"/>
-                    <Button Content="⛶" Style="{StaticResource MiniButtonStyle}" Width="30" Height="30" Click="FullScreen_Click" ToolTip="Toggle full screen (F11)"/>
-                    <Button Content="✕" Style="{StaticResource MiniButtonStyle}" Width="30" Height="30" Click="CloseWindow_Click" ToolTip="Exit Keyflow"/>
+                    <Button Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconHome}" Click="MainMenu_Click" ToolTip="Back to the main menu" Margin="0,0,6,0"/>
+                    <Button Content="OPEN MIDI" Tag="{StaticResource IconFolder}" Style="{StaticResource AccentIconButtonStyle}" Click="OpenMidi_Click" Margin="0,0,8,0" Padding="14,8"/>
+                    <Button Content="SETTINGS" Tag="{StaticResource IconSliders}" Style="{StaticResource IconTextButtonStyle}" Click="Settings_Click" Margin="0,0,12,0" Padding="14,8" ToolTip="Show or hide the settings dock (Escape)"/>
+                    <Border Width="1" Height="30" Background="{StaticResource PanelBorderBrush}" Margin="0,0,8,0"/>
+                    <Button Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconMinimize}" Click="Minimize_Click" ToolTip="Minimize"/>
+                    <Button Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconMaximize}" Click="FullScreen_Click" Margin="2,0" ToolTip="Toggle full screen (F11)"/>
+                    <Button Style="{StaticResource CaptionCloseStyle}" Tag="{StaticResource IconClose}" Click="CloseWindow_Click" Margin="2,0,0,0" ToolTip="Exit Keyflow"/>
                 </StackPanel>
             </Grid>
         </Border>
@@ -65,7 +68,7 @@
             <local:PianoStage x:Name="Stage" PianoKeyChanged="Stage_PianoKeyChanged"/>
 
             <!-- Settings dock: full height, docked to the right, category navigation on the left. -->
-            <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="660" Margin="0,8,0,8" Background="{StaticResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
+            <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="672" Margin="0,8,0,8" Background="{StaticResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -80,20 +83,25 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
-                                <TextBlock Text="SETTINGS" FontSize="13" FontWeight="Bold"/>
-                                <TextBlock x:Name="PresetNameLabel" Text="Preset · Neon Violet" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,2,0,0"/>
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="SETTINGS" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                                    <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{StaticResource AccentSoftBrush}" VerticalAlignment="Center">
+                                        <TextBlock Text="LIVE" FontSize="8" FontWeight="Bold" Foreground="{StaticResource Accent2Brush}"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock x:Name="PresetNameLabel" Text="Preset · Neon Violet" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
                             </StackPanel>
-                            <Grid Grid.Column="1" VerticalAlignment="Center" MaxWidth="260" HorizontalAlignment="Stretch">
-                                <TextBox x:Name="SettingsSearchBox" Height="30" Padding="28,4,8,4" TextChanged="SettingsSearch_TextChanged" ToolTip="Filter the settings on every page"/>
-                                <TextBlock Text="⌕" FontSize="14" Foreground="{StaticResource MutedTextBrush}" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
-                                <TextBlock x:Name="SettingsSearchHint" Text="Search settings" Foreground="{StaticResource DimTextBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="30,0,0,0" IsHitTestVisible="False"/>
+                            <Grid Grid.Column="1" VerticalAlignment="Center" MaxWidth="268" HorizontalAlignment="Stretch">
+                                <TextBox x:Name="SettingsSearchBox" Height="32" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Filter the settings on every page"/>
+                                <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
+                                <TextBlock x:Name="SettingsSearchHint" Text="Search settings" Foreground="{StaticResource DimTextBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="31,0,0,0" IsHitTestVisible="False"/>
                             </Grid>
-                            <Button Grid.Column="2" Content="✕" Style="{StaticResource IconButtonStyle}" Click="Settings_Click" Margin="12,0,0,0" ToolTip="Close (Escape)"/>
+                            <Button Grid.Column="2" Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconClose}" Click="Settings_Click" Margin="12,0,0,0" ToolTip="Close (Escape)"/>
                         </Grid>
                     </Border>
 
                     <TabControl x:Name="SettingsTabs" Grid.Row="1" Style="{StaticResource SettingsTabControlStyle}" ItemContainerStyle="{StaticResource SettingsNavItemStyle}" SelectedIndex="0" SelectionChanged="SettingsTabs_SelectionChanged">
-                        <TabItem Header="Style" Tag="✦">
+                        <TabItem Header="Style" Tag="{StaticResource IconStyle}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRESETS" Style="{StaticResource EyebrowTextStyle}"/>
@@ -112,22 +120,22 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Notes" Tag="▮">
+                        <TabItem Header="Notes" Tag="{StaticResource IconNotes}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="NoteSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Particles" Tag="✧">
+                        <TabItem Header="Particles" Tag="{StaticResource IconParticles}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="ParticleSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Keyboard" Tag="⌨">
+                        <TabItem Header="Keyboard" Tag="{StaticResource IconKeyboard}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="KeyboardSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Background" Tag="◐">
+                        <TabItem Header="Background" Tag="{StaticResource IconBackground}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="SceneSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Camera &amp; FX" Tag="◎">
+                        <TabItem Header="Camera &amp; FX" Tag="{StaticResource IconCamera}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="CameraSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Audio" Tag="♪">
+                        <TabItem Header="Audio" Tag="{StaticResource IconAudio}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="INSTRUMENT" Style="{StaticResource EyebrowTextStyle}"/>
@@ -149,7 +157,7 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="MIDI" Tag="⇄">
+                        <TabItem Header="MIDI" Tag="{StaticResource IconMidi}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="DEVICES" Style="{StaticResource EyebrowTextStyle}"/>
@@ -167,7 +175,7 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Practice" Tag="♩">
+                        <TabItem Header="Practice" Tag="{StaticResource IconPractice}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRACTICE MODE" Style="{StaticResource EyebrowTextStyle}"/>
@@ -190,7 +198,7 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Recording" Tag="●">
+                        <TabItem Header="Recording" Tag="{StaticResource IconRecord}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="VIDEO CAPTURE" Style="{StaticResource EyebrowTextStyle}"/>
@@ -217,56 +225,193 @@
             </Border>
 
             <Grid x:Name="LiveChromeOverlay" Panel.ZIndex="5" IsHitTestVisible="True">
-                <Button x:Name="RecordButton" Content="●  REC" Style="{StaticResource DangerButtonStyle}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="28,20,0,0" Padding="16,10" Click="RecordVideo_Click" ToolTip="Record the live piano visualizer"/>
-                <Button x:Name="LiveSettingsButton" Content="☰  MENU" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,20,28,0" Padding="18,10" Click="Settings_Click" ToolTip="Show visual, audio, MIDI and practice settings (Escape)"/>
+                <Button x:Name="RecordButton" Content="REC" Tag="{StaticResource IconRecord}" Style="{StaticResource DangerIconButtonStyle}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="26,18,0,0" Padding="15,10" Click="RecordVideo_Click" ToolTip="Record the live piano visualizer"/>
+                <Button x:Name="LiveSettingsButton" Content="MENU" Tag="{StaticResource IconMenu}" Style="{StaticResource IconTextButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,26,0" Padding="16,10" Click="Settings_Click" ToolTip="Show visual, audio, MIDI and practice settings (Escape)"/>
             </Grid>
-            <Border x:Name="DeviceStatusBadge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="28,76,0,0" Padding="10,7" CornerRadius="10" Background="#B90C0912" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" IsHitTestVisible="False" Panel.ZIndex="3">
+            <Border x:Name="DeviceStatusBadge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="26,72,0,0" Padding="10,7" CornerRadius="10" Background="#C90A0B11" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" IsHitTestVisible="False" Panel.ZIndex="3">
                 <StackPanel Orientation="Horizontal">
-                    <Ellipse x:Name="DeviceDot" Width="6" Height="6" Fill="#FFB45B" Margin="0,0,8,0"/>
-                    <TextBlock x:Name="DeviceLabel" Text="Computer keyboard ready" Foreground="#C2BACA" FontSize="9"/>
-                    <TextBlock Text="  ·  A0—C8" Foreground="{StaticResource DimTextBrush}" FontSize="9"/>
+                    <Ellipse x:Name="DeviceDot" Width="6" Height="6" Fill="#FFB45B" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DeviceLabel" Text="Computer keyboard ready" Foreground="#B9BFCE" FontSize="9.5" VerticalAlignment="Center"/>
+                    <TextBlock Text="  ·  A0—C8" Foreground="{StaticResource DimTextBrush}" FontSize="9.5" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
         </Grid>
 
         <!-- ===================== FOOTER / TRANSPORT ===================== -->
-        <Border x:Name="FooterChrome" Grid.Row="2" Margin="24,0,24,14" Padding="14,8" Background="{StaticResource PanelBrush}" CornerRadius="16" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource PanelGlow}" Panel.ZIndex="3">
+        <Border x:Name="FooterChrome" Grid.Row="2" Margin="22,0,22,12" Padding="14,8" Style="{StaticResource PanelChromeStyle}" Panel.ZIndex="3">
             <Grid>
-                <Grid.RowDefinitions><RowDefinition Height="46"/><RowDefinition Height="24"/></Grid.RowDefinitions>
+                <Grid.RowDefinitions><RowDefinition Height="46"/><RowDefinition Height="26"/></Grid.RowDefinitions>
                 <Grid Grid.Row="0">
                     <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                     <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Button x:Name="PlayButton" Content="▶" Style="{StaticResource TransportButtonStyle}" Click="Play_Click" IsEnabled="False" ToolTip="Open a MIDI file to start playback (Space)"/>
-                        <Button x:Name="RestartButton" Content="↺" Style="{StaticResource IconButtonStyle}" Click="Restart_Click" Margin="6,0,0,0" IsEnabled="False" ToolTip="Back to the start"/>
-                        <StackPanel VerticalAlignment="Center" Margin="14,0,0,0">
-                            <TextBlock x:Name="TimeLabel" Text="00:00 / 00:00" Foreground="{StaticResource TextBrush}" FontSize="12" FontWeight="SemiBold"/>
-                            <TextBlock x:Name="NoteNameLabel" Text="READY" Foreground="{StaticResource AccentBrush}" FontSize="9" FontWeight="SemiBold" Margin="0,2,0,0"/>
+                        <Button x:Name="PlayButton" Style="{StaticResource TransportPlayStyle}" Tag="{StaticResource IconPlay}" Click="Play_Click" IsEnabled="False" ToolTip="Open a MIDI file to start playback (Space)"/>
+                        <Button x:Name="RestartButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconRestart}" Width="38" Height="38" Click="Restart_Click" Margin="8,0,0,0" IsEnabled="False" ToolTip="Back to the start"/>
+                        <StackPanel VerticalAlignment="Center" Margin="15,0,0,0">
+                            <TextBlock x:Name="TimeLabel" Text="00:00 / 00:00" Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold" FontFamily="Consolas, Segoe UI"/>
+                            <TextBlock x:Name="NoteNameLabel" Text="READY" Foreground="{StaticResource Accent2Brush}" FontSize="9" FontWeight="Bold" Margin="0,3,0,0"/>
                         </StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
-                        <TextBlock Text="PEDALS" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <TextBlock Text="PEDALS" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <ToggleButton x:Name="SoftPedalToggle" Content="SOFT" Height="30" Margin="2,0" Style="{StaticResource PedalToggleStyle}" ToolTip="Left pedal · Una corda · MIDI CC 67" Checked="PedalToggle_Changed" Unchecked="PedalToggle_Changed"/>
                         <ToggleButton x:Name="SostenutoPedalToggle" Content="SOSTENUTO" Height="30" Margin="2,0" Style="{StaticResource PedalToggleStyle}" ToolTip="Middle pedal · Sostenuto · MIDI CC 66" Checked="PedalToggle_Changed" Unchecked="PedalToggle_Changed"/>
                         <ToggleButton x:Name="SustainPedalToggle" Content="SUSTAIN" Height="30" Margin="2,0" Style="{StaticResource PedalToggleStyle}" ToolTip="Right pedal · Damper/Sustain · MIDI CC 64" Checked="PedalToggle_Changed" Unchecked="PedalToggle_Changed"/>
                     </StackPanel>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center" Margin="8,0,2,0">
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="ACCURACY" Style="{StaticResource EyebrowTextStyle}"/>
-                            <TextBlock x:Name="AccuracyLabel" Text="—" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextBrush}"/>
-                        </StackPanel>
-                        <StackPanel Margin="0,0,16,0">
-                            <TextBlock Text="SCORE" Style="{StaticResource EyebrowTextStyle}"/>
-                            <TextBlock x:Name="ScoreLabel" Text="0 hits · 0 missed" Foreground="{StaticResource MutedTextBrush}" FontSize="11"/>
-                        </StackPanel>
-                        <StackPanel>
-                            <TextBlock Text="STREAK" Style="{StaticResource EyebrowTextStyle}"/>
-                            <TextBlock x:Name="StreakLabel" Text="✦ 0 streak" Foreground="{StaticResource SuccessBrush}" FontSize="11"/>
-                        </StackPanel>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Border Style="{StaticResource StatChipStyle}">
+                            <StackPanel>
+                                <TextBlock Text="ACCURACY" Style="{StaticResource EyebrowTextStyle}"/>
+                                <TextBlock x:Name="AccuracyLabel" Text="—" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextBrush}" Margin="0,2,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatChipStyle}">
+                            <StackPanel>
+                                <TextBlock Text="SCORE" Style="{StaticResource EyebrowTextStyle}"/>
+                                <TextBlock x:Name="ScoreLabel" Text="0 hits · 0 missed" Foreground="{StaticResource MutedTextBrush}" FontSize="11" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Border>
+                        <Border Style="{StaticResource StatChipStyle}" Margin="0">
+                            <StackPanel>
+                                <TextBlock Text="STREAK" Style="{StaticResource EyebrowTextStyle}"/>
+                                <TextBlock x:Name="StreakLabel" Text="✦ 0 streak" Foreground="{StaticResource SuccessBrush}" FontSize="11" Margin="0,3,0,0"/>
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </Grid>
-                <Slider x:Name="SeekSlider" Grid.Row="1" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" IsMoveToPointEnabled="True" IsEnabled="False" PreviewMouseLeftButtonDown="SeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="SeekSlider_PreviewMouseLeftButtonUp" ValueChanged="SeekSlider_ValueChanged"/>
-                <ProgressBar x:Name="ProgressBar" Height="2" Maximum="100" Value="0" VerticalAlignment="Bottom" Grid.Row="1" IsHitTestVisible="False" Opacity=".68"/>
+                <Grid Grid.Row="1">
+                    <Slider x:Name="SeekSlider" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" IsMoveToPointEnabled="True" IsEnabled="False" PreviewMouseLeftButtonDown="SeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="SeekSlider_PreviewMouseLeftButtonUp" ValueChanged="SeekSlider_ValueChanged"/>
+                    <ProgressBar x:Name="ProgressBar" Height="2" Maximum="100" Value="0" VerticalAlignment="Bottom" IsHitTestVisible="False" Opacity=".7"/>
+                </Grid>
             </Grid>
         </Border>
+
+        <!-- ===================== PLAY DIALOG (Embers-style pre-flight) ===================== -->
+        <Grid x:Name="PlayDialogOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="28" Background="#A8040509">
+            <Border Width="660" MaxHeight="820" VerticalAlignment="Center" Background="{StaticResource PanelBrush}" CornerRadius="18" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource DockShadow}">
+                <Grid Margin="28,22,28,24">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid>
+                        <TextBlock Text="Play" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                        <Button Style="{StaticResource RoundGlyphButtonStyle}" Tag="{StaticResource IconClose}" HorizontalAlignment="Right" VerticalAlignment="Center" Click="PlayDialogClose_Click" ToolTip="Close"/>
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,14,0,0">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Button x:Name="PlayDialogMidiButton" Content="MIDI File" Tag="{StaticResource IconFolder}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogOpenMidi_Click" Padding="16,9" ToolTip="Choose a Standard MIDI file"/>
+                                <Button Grid.Column="2" Content="Live Play" Style="{StaticResource GhostButtonStyle}" Click="PlayDialogLive_Click" Padding="12,8" FontSize="12" ToolTip="Skip playback and perform live right away"/>
+                            </Grid>
+                            <TextBlock Text="STYLES" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,6"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                                <Border x:Name="LeftStyleCard" CornerRadius="12" BorderThickness="2" Background="#10131B" Margin="0,0,6,0" Padding="14,10" Cursor="Hand" MouseLeftButtonUp="PlayDialogStyleCard_Click" Tag="0" ToolTip="Open the Notes page to design this hand">
+                                    <StackPanel>
+                                        <TextBlock Text="Left Hand" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                                        <TextBlock x:Name="LeftStyleLabel" Text="Neon Violet" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                                <Border Grid.Column="1" x:Name="RightStyleCard" CornerRadius="12" BorderThickness="2" Background="#10131B" Margin="6,0,0,0" Padding="14,10" Cursor="Hand" MouseLeftButtonUp="PlayDialogStyleCard_Click" Tag="1" ToolTip="Open the Notes page to design this hand">
+                                    <StackPanel>
+                                        <TextBlock Text="Right Hand" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                                        <TextBlock x:Name="RightStyleLabel" Text="Neon Violet" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                                    </StackPanel>
+                                </Border>
+                            </Grid>
+                            <TextBlock Text="OPTIONS" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,2"/>
+                            <Grid Margin="0,6,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                                <Path Data="{StaticResource IconNotes}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <TextBlock Grid.Column="1" Text="Speed" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                <TextBlock x:Name="PlaySpeedLabel" Grid.Column="2" Text="550" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <Button Grid.Column="3" Content="↺" Style="{StaticResource MiniButtonStyle}" Click="PlaySpeedReset_Click" ToolTip="Reset fall speed"/>
+                                <Slider Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="PlaySpeedSlider" Minimum="100" Maximum="1000" Value="550" Margin="0,6,0,0" ValueChanged="PlaySpeed_Changed"/>
+                            </Grid>
+                            <StackPanel x:Name="LayerRowsHost" Margin="0,10,0,0">
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Camera" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="5" Click="PlayDialogDeepLink_Click" ToolTip="Parallax, zoom, saturation, bloom"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Background" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerBackgroundToggle" Tag="ShowBackground" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="4" Click="PlayDialogDeepLink_Click" ToolTip="Image, dim, guide lanes, gradient"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Notes" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerNotesToggle" Tag="ShowNotes" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="1" Click="PlayDialogDeepLink_Click" ToolTip="Note style, colors, glow, edge"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Embers" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerEmbersToggle" Tag="ShowEmbers" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="2" Click="PlayDialogDeepLink_Click" ToolTip="Sparks, wisps, particle physics"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Halo" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerHaloToggle" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="2" Click="PlayDialogDeepLink_Click" ToolTip="The burning impact line above the keys"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Flame" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerFlameToggle" Tag="ShowFlame" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="2" Click="PlayDialogDeepLink_Click" ToolTip="Flame tongues rising from the key bed"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Keys" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerKeysToggle" Tag="ShowKeys" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="3" Click="PlayDialogDeepLink_Click" ToolTip="Keyboard style, lighting, overhang, ray-traced shading"/>
+                                </Grid>
+                                <Grid Margin="0,4,0,4">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBlock Text="Extras" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
+                                    <Button Grid.Column="1" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" Click="PlayDialogExtras_Click" ToolTip="Counter and watermark"/>
+                                </Grid>
+                                <StackPanel x:Name="ExtrasSubPanel" Visibility="Collapsed" Margin="18,0,0,0">
+                                    <CheckBox Content="Counter" Tag="ShowCounter" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" Margin="0,3,0,3"/>
+                                    <CheckBox Content="Watermark" Tag="ShowWatermark" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" Margin="0,3,0,3"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <Button Grid.Row="2" Margin="0,18,0,0" Height="58" Style="{StaticResource AccentButtonStyle}" FontSize="19" Click="PlayDialogPlay_Click" ToolTip="Start playback (Space)">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Path Data="{StaticResource IconPlay}" Fill="White" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center"/>
+                            <TextBlock Text="Play" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+        </Grid>
+
+        <!-- ===================== MAIN MENU (Embers-style shell) ===================== -->
+        <Grid x:Name="MainMenuOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="30" Background="#C2040509">
+            <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.3" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="30,24,0,0"/>
+            <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center" Margin="150,0,0,0" Width="368">
+                <StackPanel Orientation="Horizontal" Margin="8,0,0,30">
+                    <Border Width="58" Height="58" CornerRadius="17" Background="{StaticResource AccentGradientBrush}" BorderBrush="#40FFFFFF" BorderThickness="1">
+                        <Path Data="{StaticResource IconLogo}" Fill="White" Width="30" Height="30" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
+                        <TextBlock Text="Keyflow" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                        <TextBlock Text="PIANO VFX STUDIO" Style="{StaticResource EyebrowTextStyle}" FontSize="9" Margin="2,4,0,0"/>
+                    </StackPanel>
+                </StackPanel>
+                <Button Content="Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Choose a MIDI file or play live"/>
+                <Button Content="Design" Style="{StaticResource MenuCardButtonStyle}" Margin="0,10,0,0" Click="MainMenuDesign_Click" ToolTip="Open the stage design dock"/>
+                <StackPanel Margin="10,26,0,0">
+                    <Button Content="Settings" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Audio, MIDI and window settings"/>
+                    <Button Content="About" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
+                    <Button Content="Exit" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

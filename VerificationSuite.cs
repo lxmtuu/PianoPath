@@ -21,7 +21,7 @@ internal static class VerificationSuite
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
-        try { VerifyMidiImport(); VerifyVisualSettings(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+            try { VerifyMidiImport(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -118,10 +118,10 @@ internal static class VerificationSuite
         var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
         Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 2 && migrated.BackgroundImagePath == "C:\\piano.png" && migrated.BackgroundMode == "Image",
             "Legacy settings should switch to the black stage while preserving an optional selected image path and enabling image mode for it.");
-        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5, NoteStyle = "Plasma", ColorMode = "??", KeyboardStyle = "", BackgroundMode = "Blue", TrackColors = ["#FFFFFF"] };
+        var settings = new PianoVisualSettings { NoteFallSpeed = 5000, ParticleAmount = 500, Palette = "not-a-palette", NoteGlow = 126.5, NoteStyle = "Plasma", ColorMode = "??", KeyboardStyle = "", BackgroundMode = "Blue", ShadingQuality = "Ultra", TrackColors = ["#FFFFFF"] };
         settings.Clamp();
-        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum" && settings.NoteStyle == "Neon" && settings.ColorMode == "Gradient" && settings.KeyboardStyle == "Studio" && settings.BackgroundMode == "Solid" && settings.TrackColors.Count == 8 && settings.TrackColors[0] == "#FFFFFF",
-            "Visual settings should clamp unsafe ranges, reject unknown palettes, styles and modes, and pad the track palette.");
+        Assert(settings.NoteFallSpeed == 1000 && settings.ParticleAmount == 120 && settings.Palette == "Spectrum" && settings.NoteStyle == "Neon" && settings.ColorMode == "Gradient" && settings.KeyboardStyle == "Studio" && settings.BackgroundMode == "Solid" && settings.ShadingQuality == "Balanced" && settings.TrackColors.Count == 8 && settings.TrackColors[0] == "#FFFFFF",
+            "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
         VerifyPresets();
@@ -129,6 +129,108 @@ internal static class VerificationSuite
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
         Results.Add("PASS stage settings: black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+    }
+
+    /// <summary>Exercises the ray-traced keyboard: shading maths, the bake cache key and real pixel output.</summary>
+    private static void VerifyShaderPipeline()
+    {
+        // ---- shading maths -------------------------------------------------------------------
+        Assert(ShaderMath.ToLinear(0) == 0 && ShaderMath.ToLinear(255) > .99 && ShaderMath.EncodeSrgb(0, 0) == 0 && ShaderMath.EncodeSrgb(1, 0) == 255,
+            "The sRGB transfer functions should map both ends of the range exactly.");
+        Assert(Math.Abs(ShaderMath.EncodeSrgb(ShaderMath.ToLinear(186), 0) - 186) <= 1, "An 8-bit color should survive the linear/sRGB round trip.");
+        Assert(ShaderMath.AcesTonemap(Vec3.Zero).X == 0 && ShaderMath.AcesTonemap(new Vec3(6, 6, 6)).X < 1 && ShaderMath.AcesTonemap(new Vec3(6, 6, 6)).X > .9,
+            "The ACES filmic curve should compress highlights into the display range instead of clipping to pure white.");
+        Assert(ShaderMath.DistributionGgx(.35, .85) > 0 && ShaderMath.GeometrySmith(.35, .6, .6) > 0
+                && Math.Abs(ShaderMath.FresnelSchlick(1, new Vec3(.5, .5, .5)).X - .5) < 1e-9 && ShaderMath.FresnelSchlick(0, new Vec3(.5, .5, .5)).X == 1,
+            "The GGX distribution, Smith geometry term and Schlick fresnel should stay physical.");
+        Assert(ShaderMath.Hash(11, 23, 5) == ShaderMath.Hash(11, 23, 5) && ShaderMath.Hash(11, 23, 5) != ShaderMath.Hash(11, 24, 5),
+            "Shadow and occlusion jitter must be deterministic so a cached bake does not shimmer between frames.");
+
+        // ---- scene and bake cache key --------------------------------------------------------
+        var look = VisualPresets.NeonViolet();
+        var scene = PianoShaderScene.From(look, 640, 160, "Balanced");
+        Assert(!PianoKeyboardRenderer.IsEnabled("Off") && PianoKeyboardRenderer.IsEnabled("Fast") && PianoKeyboardRenderer.IsEnabled("Balanced") && PianoKeyboardRenderer.IsEnabled("Cinematic"),
+            "Only the Off shading level should bypass the ray-traced keyboard.");
+        var unrelated = look.Clone(); unrelated.ParticleAmount = 99; unrelated.NoteFallSpeed = 800; unrelated.NoteGlow = 10;
+        Assert(PianoShaderScene.From(unrelated, 640, 160, "Balanced").Signature() == scene.Signature(),
+            "Settings the shader does not read must not invalidate the baked keyboard, or every unrelated slider would cost a re-bake.");
+        var related = look.Clone(); related.ShaderShadows = 12;
+        Assert(PianoShaderScene.From(related, 640, 160, "Balanced").Signature() != scene.Signature(),
+            "Changing a shading parameter must produce a new signature so the keyboard re-bakes.");
+
+        // ---- base bake -----------------------------------------------------------------------
+        var baked = PianoKeyboardRenderer.Render(scene, new KeyLightState(), 0, 0, 640, 160, -1);
+        Assert(baked is not null, "The keyboard bake should produce a bitmap.");
+        if (baked is null) return;
+        // Non-nullable copy so the local helper below does not have to re-prove the null state.
+        BitmapSource bake = baked;
+        var stride = bake.PixelWidth * 4;
+        var buffer = new byte[stride * bake.PixelHeight];
+        bake.CopyPixels(buffer, stride, 0);
+        var darkest = 255; var brightest = 0; var opaque = 0;
+        for (var i = 0; i < buffer.Length / 4; i++)
+        {
+            if (buffer[i * 4 + 3] == 255) opaque++;
+            var luma = (buffer[i * 4] + buffer[i * 4 + 1] * 2 + buffer[i * 4 + 2]) / 4;
+            if (luma < darkest) darkest = luma;
+            if (luma > brightest) brightest = luma;
+        }
+        Assert(opaque == buffer.Length / 4, "The base keyboard bake must be fully opaque so it can cover the stage bed.");
+        Assert(brightest - darkest > 60, $"A shaded keyboard must span a real luminance range (darkest={darkest}, brightest={brightest}).");
+
+        double ColumnBand(double fromWorld, double toWorld)
+        {
+            var x0 = (int)(fromWorld / PianoShaderScene.WorldWidth * bake.PixelWidth);
+            var x1 = (int)(toWorld / PianoShaderScene.WorldWidth * bake.PixelWidth);
+            long total = 0; var count = 0;
+            for (var y = bake.PixelHeight / 3; y < bake.PixelHeight * 2 / 3; y++)
+                for (var x = x0; x < x1; x++)
+                {
+                    var offset = y * stride + x * 4;
+                    total += (buffer[offset] + buffer[offset + 1] * 2 + buffer[offset + 2]) / 4; count++;
+                }
+            return count == 0 ? 0 : total / (double)count;
+        }
+        var ebony = ColumnBand(24.75, 25.25); var ivory = ColumnBand(25.45, 25.95);
+        Assert(ivory > 20 && ebony < ivory * .8, $"Ebony keys must shade darker than the ivory beside them (ebony={ebony:0.0}, ivory={ivory:0.0}).");
+
+        // ---- overlay tile for one sounding key ----------------------------------------------
+        var lit = new KeyLightState(); lit.Light(60, Color.FromRgb(255, 40, 40), 1);
+        var viewX = (int)(22.4 / PianoShaderScene.WorldWidth * 640);
+        var viewWidth = (int)(2.2 / PianoShaderScene.WorldWidth * 640) * 2;
+        var renderedTile = PianoKeyboardRenderer.Render(scene, lit, viewX, 0, viewWidth, 160, 60);
+        Assert(renderedTile is not null, "A sounding key should produce an overlay tile.");
+        if (renderedTile is null) return;
+        BitmapSource tile = renderedTile;
+        var tileStride = tile.PixelWidth * 4;
+        var tilePixels = new byte[tileStride * tile.PixelHeight];
+        tile.CopyPixels(tilePixels, tileStride, 0);
+        var transparent = 0; var solid = 0;
+        for (var i = 0; i < tilePixels.Length / 4; i++)
+        {
+            if (tilePixels[i * 4 + 3] == 0) transparent++;
+            else if (tilePixels[i * 4 + 3] == 255) solid++;
+        }
+        Assert(transparent > 0 && solid > 0, $"An overlay tile must cover its own key opaquely and fade out before the neighbouring keys (opaque={solid}, clear={transparent}).");
+
+        var pixelScale = tile.PixelWidth / (double)viewWidth;
+        long warmth = 0; var compared = 0;
+        for (var y = 0; y < tile.PixelHeight; y++)
+        {
+            for (var x = 0; x < tile.PixelWidth; x++)
+            {
+                var offset = y * tileStride + x * 4;
+                if (tilePixels[offset + 3] != 255) continue;
+                var baseX = (int)(viewX + x / pixelScale); var baseY = (int)(y / pixelScale);
+                if (baseX >= bake.PixelWidth || baseY >= bake.PixelHeight) continue;
+                var baseOffset = baseY * stride + baseX * 4;
+                warmth += (tilePixels[offset + 2] - tilePixels[offset]) - (buffer[baseOffset + 2] - buffer[baseOffset]);
+                compared++;
+            }
+        }
+        Assert(compared > 100 && warmth / (double)compared > 10,
+            $"A sounding key must come out warmer in its overlay tile than in the unlit base bake (delta={warmth / (double)Math.Max(1, compared):0.0} over {compared} pixels).");
+        Results.Add("PASS shader pipeline: sRGB/ACES/GGX maths, deterministic jitter, bake cache signature, opaque shaded keyboard bake, ebony-vs-ivory light transport and per-key emissive overlay tiles.");
     }
 
     private static void VerifyAviVideoRecorder()
@@ -355,6 +457,7 @@ internal static class VerificationSuite
         visualSettings.ShowEmbers = false; stage.SetVisualSettings(visualSettings); stage.Impact(60);
         Assert(stage.SparkCount == 0, "Turning off the ember layer should stop new particle bursts.");
         visualSettings.ShowEmbers = wasShowingEmbers; stage.SetVisualSettings(visualSettings);
+        VerifyEmbersShell(window, visualSettings);
         var piano = (PianoAudioEngine)Field(window, "_audio"); var silentLabel = (TextBlock)window.FindName("SoundFontLabel");
         var midi = (MidiDeviceService)Field(window, "_midi"); var inputCombo = (ComboBox)window.FindName("InputDeviceCombo");
         Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
@@ -517,8 +620,56 @@ internal static class VerificationSuite
             "Applying a preset should rewrite the live settings in place so the renderer keeps its reference.");
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: ten pages, style/color-mode controls, per-hand and per-track colors, search filter and preset application.");
+        Results.Add("PASS settings dock: ten pages, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
+    }
+
+    /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
+    private static void ForceStageRender(PianoStage stage)
+    {
+        var width = Math.Max(1, (int)stage.ActualWidth); var height = Math.Max(1, (int)stage.ActualHeight);
+        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(stage);
+    }
+
+    /// <summary>The dock switch must really change what the stage renders, and the bake must be cached.</summary>
+    private static void VerifyShadedStage(PianoStage stage, Dictionary<string, ComboBox> choices)
+    {
+        var shading = choices[nameof(PianoVisualSettings.ShadingQuality)];
+        Assert((string?)shading.SelectedValue == "Balanced", "The default look should start on the Balanced shading engine.");
+        ForceStageRender(stage);
+        Assert(stage.IsShadedKeyboardActive && stage.ShadedBakeCount >= 1,
+            $"The default look should drive the stage with the ray-traced keyboard (bakes={stage.ShadedBakeCount}, last bake={stage.ShadedBakeMilliseconds:0.0} ms).");
+        var bakes = stage.ShadedBakeCount;
+        ForceStageRender(stage); ForceStageRender(stage);
+        Assert(stage.ShadedBakeCount == bakes, "The baked keyboard must be reused between frames; only a settings or size change may re-bake it.");
+        shading.SelectedValue = "Off";
+        ForceStageRender(stage);
+        Assert(!stage.IsShadedKeyboardActive, "Turning the shading engine off must fall back to the flat vector keyboard.");
+        shading.SelectedValue = "Balanced";
+        ForceStageRender(stage);
+        Assert(stage.IsShadedKeyboardActive && stage.ShadedBakeCount > bakes, "Switching the shading engine back on should re-bake and restore the ray-traced keyboard.");
+    }
+
+    private static void VerifyEmbersShell(MainWindow window, PianoVisualSettings visualSettings)
+    {
+        var menu = (FrameworkElement)window.FindName("MainMenuOverlay");
+        var play = (FrameworkElement)window.FindName("PlayDialogOverlay");
+        Assert(menu is not null && play is not null, "The Embers-style shell should provide a main menu and a pre-flight play dialog.");
+        Assert(menu!.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        window.ShowStartupMenu();
+        Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
+        Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
+        var notesToggle = (CheckBox)window.FindName("LayerNotesToggle");
+        Assert(notesToggle.IsChecked == visualSettings.ShowNotes, "Play-dialog layer switches should mirror the live stage settings.");
+        notesToggle.IsChecked = false;
+        Assert(!visualSettings.ShowNotes, "Switching the Notes layer off in the play dialog should update the stage settings.");
+        notesToggle.IsChecked = true;
+        Assert(visualSettings.ShowNotes, "Switching the Notes layer back on should restore the stage settings.");
+        Invoke(window, "PlayDialogClose_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
     }
 
     private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)

@@ -14,6 +14,8 @@ public partial class App : Application
         var window = new MainWindow();
         MainWindow = window;
         var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
+        // Normal launches open on the Embers-style main menu; automated captures go straight to the stage.
+        if (snapshotIndex < 0 && !e.Args.Contains("--show-settings")) window.ShowStartupMenu();
         // Automated captures wait several seconds for the SoundFont; the idle auto-hide must not blank the toolbar or settings meanwhile.
         if (snapshotIndex >= 0 || e.Args.Contains("--show-settings")) window.AutoHideChrome = false;
         if (e.Args.Contains("--show-settings"))

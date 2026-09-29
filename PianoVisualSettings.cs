@@ -115,6 +115,28 @@ internal sealed class PianoVisualSettings
     public double KeyOverhang { get; set; } = 18;
     public double KeyPressDepth { get; set; } = 40;
 
+    // ---- Ray-traced shading -----------------------------------------------------------------------
+    /// <summary>Off (flat vector keys), Fast, Balanced or Cinematic.</summary>
+    public string ShadingQuality { get; set; } = "Balanced";
+    /// <summary>Intensity of the softbox above the keyboard.</summary>
+    public double ShaderKeyLight { get; set; } = 92;
+    /// <summary>How dark the shadows the black keys cast on the white keys are.</summary>
+    public double ShaderShadows { get; set; } = 78;
+    /// <summary>Contact occlusion in the gaps between keys.</summary>
+    public double ShaderAmbientOcclusion { get; set; } = 70;
+    /// <summary>Polish of the ivory and ebony; higher means tighter highlights.</summary>
+    public double ShaderGloss { get; set; } = 72;
+    /// <summary>Accent rim light rising from behind the fallboard.</summary>
+    public double ShaderRimLight { get; set; } = 62;
+    /// <summary>How strongly a sounding key glows and spills its color onto its neighbours.</summary>
+    public double ShaderEmissive { get; set; } = 80;
+    /// <summary>Exposure applied before the filmic tonemapper.</summary>
+    public double ShaderExposure { get; set; } = 105;
+    /// <summary>0 is a flat top-down bed, 100 a low camera with strong perspective.</summary>
+    public double ShaderCameraTilt { get; set; } = 48;
+    /// <summary>ACES filmic curve, the tonemapper Unreal selects by default.</summary>
+    public bool ShaderFilmic { get; set; } = true;
+
     // ---- Background & camera ------------------------------------------------------------------------
     /// <summary>Solid, Image or ChromaGreen (pure green stage for OBS chroma keying).</summary>
     public string BackgroundMode { get; set; } = "Solid";
@@ -142,6 +164,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
+    internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
     internal static readonly string[] PressedKeyColorModes = ["Note", "Fixed"];
     internal static readonly string[] KeyLabelModes = ["None", "C", "All"];
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
@@ -194,6 +217,10 @@ internal sealed class PianoVisualSettings
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
         KeyboardScale = Math.Clamp(KeyboardScale, 60, 140); KeyLighting = Math.Clamp(KeyLighting, 0, 100); KeyGlowRadius = Math.Clamp(KeyGlowRadius, 0, 100);
         KeyOverhang = Math.Clamp(KeyOverhang, 0, 100); KeyPressDepth = Math.Clamp(KeyPressDepth, 0, 100);
+        ShaderKeyLight = Math.Clamp(ShaderKeyLight, 0, 200); ShaderShadows = Math.Clamp(ShaderShadows, 0, 100);
+        ShaderAmbientOcclusion = Math.Clamp(ShaderAmbientOcclusion, 0, 100); ShaderGloss = Math.Clamp(ShaderGloss, 0, 100);
+        ShaderRimLight = Math.Clamp(ShaderRimLight, 0, 150); ShaderEmissive = Math.Clamp(ShaderEmissive, 0, 200);
+        ShaderExposure = Math.Clamp(ShaderExposure, 20, 250); ShaderCameraTilt = Math.Clamp(ShaderCameraTilt, 0, 100);
         HandSplitPitch = Math.Clamp(Math.Round(HandSplitPitch), 21, 108); RainbowSpeed = Math.Clamp(RainbowSpeed, 0, 100);
         CameraParallax = Math.Clamp(CameraParallax, 0, 100); CameraZoom = Math.Clamp(CameraZoom, 65, 150);
         CameraOffset = Math.Clamp(CameraOffset, 0, 100); BackgroundDim = Math.Clamp(BackgroundDim, 0, 100); Saturation = Math.Clamp(Saturation, 0, 200);
@@ -205,6 +232,7 @@ internal sealed class PianoVisualSettings
         if (!NoteStyles.Contains(NoteStyle)) NoteStyle = "Neon";
         if (!FlameColorModes.Contains(FlameColorMode)) FlameColorMode = "Warm";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
+        if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
         if (!PressedKeyColorModes.Contains(PressedKeyColorMode)) PressedKeyColorMode = "Note";
         if (!KeyLabelModes.Contains(KeyLabels)) KeyLabels = "C";
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";

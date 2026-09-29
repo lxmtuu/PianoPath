@@ -17,6 +17,7 @@ launchSettings.json
 
 # Test / runtime artifacts
 TestResults/
+tools/out/
 *.log
 *.avi
 *.zip

@@ -111,13 +111,13 @@ public partial class MainWindow : Window
     {
         if (_playing || SongDuration() <= 0) return;
         if (_position >= SongDuration()) { _position = 0; _outputFinished.Clear(); foreach (var n in _notes) { n.Played = false; n.Missed = false; } SyncPlayhead(); }
-        _clock.Restart(); _playing = true; _processCurrentOnsets = true; _timer.Start(); PlayButton.Content = "Ⅱ"; UpdatePlaybackLabel();
+        _clock.Restart(); _playing = true; _processCurrentOnsets = true; _timer.Start(); PlayButton.Tag = FindResource("IconPause"); UpdatePlaybackLabel();
         UpdateStage();
     }
     private void Stop()
     {
         _timer.Stop(); _clock.Stop(); _playing = false; _processCurrentOnsets = false; _metronomeOffAt = -1;
-        PlayButton.Content = "▶";
+        PlayButton.Tag = FindResource("IconPlay");
         foreach (var note in _outputHeld.ToArray()) SendOutput(note.Pitch, 0, false);
         _outputHeld.Clear(); _audioHeld.Clear(); _audio.AllNotesOff(); ReleaseAllPressed(); Stage.ClearTransient(); UpdateStage(); UpdatePlaybackLabel();
     }
@@ -405,7 +405,7 @@ public partial class MainWindow : Window
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
             _recordTimer.Tick += RecordTimer_Tick; _recordTimer.Start();
-            RecordButton.Content = "■  REC 00:00"; RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
+            RecordButton.Content = "REC 00:00"; RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
             var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
             RecordButton.ToolTip = _videoRecorder.UsesMjpeg ? "Recording MJPEG AVI · click to stop" : $"Recording raw AVI (no MJPEG codec installed) · about {rawSeconds:0} s fit in the 2 GB AVI limit · click to stop";
             SettingsSaveLabel.Text = _videoRecorder.UsesMjpeg ? "Video recording started" : $"Recording raw AVI · about {rawSeconds:0} s fit before the 2 GB limit";
@@ -430,7 +430,7 @@ public partial class MainWindow : Window
                 if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, "The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically."); return; }
             }
             var elapsed = _recordClock.Elapsed;
-            RecordButton.Content = $"■  REC {elapsed.Minutes:00}:{elapsed.Seconds:00}";
+            RecordButton.Content = $"REC {elapsed.Minutes:00}:{elapsed.Seconds:00}";
         }
         catch (Exception ex)
         {
@@ -473,7 +473,7 @@ public partial class MainWindow : Window
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;
         try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) MessageBox.Show(this, ex.Message, "Video recording", MessageBoxButton.OK, MessageBoxImage.Warning); }
-        RecordButton.Content = "●  REC"; RecordButton.ClearValue(BackgroundProperty);
+        RecordButton.Content = "REC"; RecordButton.ClearValue(BackgroundProperty);
         RecordButton.ToolTip = "Record the live piano visualizer";
         if (showMessage && !_closing) MessageBox.Show(this, $"Video saved.\n{path}\n\n{(note is null ? "" : note + "\n\n")}This AVI contains the piano visuals; system audio is not mixed into the recording.", "Recording complete", MessageBoxButton.OK, MessageBoxImage.Information);
     }
