@@ -160,3 +160,15 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
   bảng cho một ngôn ngữ RTL phải đi kèm đợt việc đó, không nên thêm bảng suông.
 * `installer/Keyflow.iss` vẫn dùng một tệp ngôn ngữ Inno; bản dịch installer tiếng Việt là việc riêng
   (xem `docs/ROADMAP.md`).
+
+## 10. Ảnh giao diện: chỉ ảnh do ứng dụng render
+
+`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`, sáu ảnh
+`--lang=en` và một ảnh `--lang=vi` của trang General). Screenshot của người dùng — kể cả ảnh đẹp có
+ảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
+kế tiếp, và ảnh nền trong screenshot thường là artwork của bên thứ ba (nền tối, nốt vàng) không có
+giấy phép đi kèm repo MIT. Muốn thấy tính năng "ảnh nền" trong tài liệu: chạy app với ảnh của cậu,
+hoặc thêm một mục vào `build.yml` để CI tự render — ảnh khi đó tất định và tái tạo được.
+
+`tools/check_sources.py` giữ quy tắc này: mọi `![...]()` trỏ tới `docs/previews/` phải hoặc đã tồn tại,
+hoặc nằm trong danh sách `$shots` của workflow (được phép chậm hơn README đúng một commit).
