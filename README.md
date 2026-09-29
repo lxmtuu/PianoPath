@@ -1,6 +1,6 @@
 # Keyflow · Piano Performance & Concert VFX Studio
 
-Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng.
+Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng.
 
 Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`) và được cập nhật tự động trong `docs/previews/` — không phải ảnh dàn dựng:
 
@@ -8,15 +8,22 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 
 *Sân khấu live: nốt rơi, đường chạm phát sáng, bàn phím ray-traced và transport dưới cùng.*
 
+![Keyflow stage with a chosen background image](docs/previews/background-image.png)
+
+*Cùng sân khấu với một ảnh nền do người dùng chọn: ảnh phủ kín khung (crop giữa, không méo tỉ lệ) và bị*
+*làm tối ở mức mặc định 30/100 nên nốt vẫn đọc được. Ảnh nền ở đây là `docs/samples/stage-backdrop.png` — repo tự sinh bằng*
+*`tools/make_stage_background.py` để ảnh minh hoạ vừa tất định vừa không dính bản quyền của người khác.*
+
 | Bàn phím & phím tắt | Hộp thoại Play |
 | --- | --- |
 | ![Keyboard and shortcuts card](docs/previews/shortcuts.png) | ![Play dialog](docs/previews/play-dialog.png) |
 
-| Menu khởi động | Dock thiết kế (Style) | Dock thiết kế (Theme) |
+| Menu khởi động (thẻ giao diện có cả chọn ngôn ngữ) | Dock thiết kế (Style) | Dock thiết kế (Theme) |
 | --- | --- | --- |
 | ![Keyflow main menu](docs/previews/main-menu.png) | ![Design dock](docs/previews/design-dock.png) | ![Theme page](docs/previews/theme-dock.png) |
 
-> **Ảnh trong README được tạo từ app thật.** Muốn làm mới sau khi sửa giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).
+> **Ảnh trong README do chính ứng dụng render** trong CI (`--snapshot`). Muốn làm mới sau khi sửa
+> giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).
 
 ## Mục lục
 
@@ -24,7 +31,7 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 - [Cài đặt công cụ](#cài-đặt-công-cụ) · [Tải mã nguồn](#tải-mã-nguồn) · [Biên dịch và chạy](#biên-dịch-và-chạy)
 - [Thiết lập lần đầu](#thiết-lập-lần-đầu) · [Bắt đầu sử dụng](#bắt-đầu-sử-dụng)
 - [Bàn phím & thao tác nhanh](#bàn-phím--thao-tác-nhanh)
-- [Chức năng](#chức-năng) · [Bản đồ giao diện](#bản-đồ-giao-diện) · [Giới hạn hiện tại](#giới-hạn-hiện-tại)
+- [Chức năng](#chức-năng) · [Đa ngôn ngữ](#đa-ngôn-ngữ) · [Bản đồ giao diện](#bản-đồ-giao-diện) · [Giới hạn hiện tại](#giới-hạn-hiện-tại)
 - [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện) · [Đóng gói và xuất file .exe](#đóng-gói-và-xuất-file-exe)
 - [Kiểm thử](#kiểm-thử) · [Tài liệu kỹ thuật](#tài-liệu-kỹ-thuật) · [Cấu trúc chính](#cấu-trúc-chính) · [Giấy phép](#giấy-phép)
 
@@ -129,21 +136,27 @@ dotnet run --project .\PianoPath.csproj -c Release       # biên dịch (nếu c
 | Tham số | Tác dụng |
 | --- | --- |
 | `--verify [--verify-log=<file>]` | Chạy bộ kiểm chứng hồi quy rồi thoát (mã thoát `0` = đạt). Xem [Kiểm thử](#kiểm-thử). |
-| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|recording]` | Mở sẵn dock cài đặt ở đúng trang. |
+| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|recording\|general]` | Mở sẵn dock cài đặt ở đúng trang (`general` = trang Ngôn ngữ & ứng dụng). |
 | `--snapshot <file.png> [--compact] [--play-preview] [--menu]` | Chụp màn hình rồi thoát (`--compact` = 1080×700, `--play-preview` = nhấn sẵn một nốt, `--menu` = mở menu khởi động). |
 | `--play-dialog` / `--shortcuts` | Mở sẵn hộp thoại Play / thẻ phím tắt để chụp ảnh (dùng cùng `--snapshot`). |
+| `--lang=<en\|vi>` | Chạy một lần bằng ngôn ngữ chỉ định, **ghi đè** cài đặt đã lưu — dùng để chụp ảnh giao diện tiếng Việt hoặc kiểm bản dịch mà không đụng vào `%LOCALAPPDATA%\Keyflow`. |
+| `--background-image=<file.png>` | Vẽ một ảnh cụ thể phía sau bàn phím **chỉ trong lần chạy này**: không bật cờ "đã sửa", không tự lưu, nên `visual-settings.json` giữ nguyên. CI dùng nó để render ảnh minh hoạ tính năng ảnh nền từ ảnh mẫu `docs/samples/stage-backdrop.png` (sinh bởi `tools/make_stage_background.py`) thay vì ảnh chụp của người nào đó. |
 | `--settings-dir=<thư mục>` | Đọc/ghi cài đặt và preset người dùng ở thư mục khác (mặc định `%LOCALAPPDATA%\Keyflow`) — hữu ích cho bản portable hoặc khi muốn chụp ảnh từ trạng thái mặc định. Chạy `--verify` luôn tự dùng thư mục tạm nên **không bao giờ ghi đè cài đặt/preset thật của bạn**. |
 
-Ví dụ tạo lại đúng ảnh của README:
+Ví dụ tạo lại đúng ảnh của README (tám ảnh — `--lang=en` để caption luôn là tiếng Anh, riêng `language-dock.png` chạy `--lang=vi`):
 
 ```powershell
 $exe = ".\bin\Release\net10.0-windows\PianoPath.exe"
-& $exe --snapshot docs\previews\stage-live.png  --compact --play-preview --settings-dir="$env:TEMP\keyflow-preview"
-& $exe --snapshot docs\previews\main-menu.png   --compact --menu
-& $exe --snapshot docs\previews\design-dock.png --compact --show-settings --settings-tab=style
-& $exe --snapshot docs\previews\theme-dock.png  --compact --show-settings --settings-tab=theme
-& $exe --snapshot docs\previews\play-dialog.png --compact --play-dialog
-& $exe --snapshot docs\previews\shortcuts.png   --compact --shortcuts
+$dir = "$env:TEMP\keyflow-preview"     # thư mục cài đặt tạm: ảnh chụp luôn là trạng thái chạy lần đầu
+Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI dùng một thư mục tạm riêng cho từng ảnh
+& $exe --snapshot docs\previews\stage-live.png       --compact --play-preview    --lang=en --settings-dir="$dir"
+& $exe --snapshot docs\previews\background-image.png --compact --play-preview    --lang=en --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
+& $exe --snapshot docs\previews\main-menu.png         --compact --menu            --lang=en --settings-dir="$dir"
+& $exe --snapshot docs\previews\design-dock.png       --compact --show-settings   --lang=en --settings-dir="$dir" --settings-tab=style
+& $exe --snapshot docs\previews\theme-dock.png        --compact --show-settings   --lang=en --settings-dir="$dir" --settings-tab=theme
+& $exe --snapshot docs\previews\play-dialog.png       --compact --play-dialog     --lang=en --settings-dir="$dir"
+& $exe --snapshot docs\previews\shortcuts.png         --compact --shortcuts       --lang=en --settings-dir="$dir"
+& $exe --snapshot docs\previews\language-dock.png     --compact --show-settings   --lang=vi --settings-dir="$dir" --settings-tab=general
 ```
 
 ### Visual Studio 2026
@@ -212,7 +225,7 @@ Thẻ **F1** trong ứng dụng liệt kê đúng bảng này (ảnh ở đầu 
 | Nốt | 4 kiểu (Solid / Neon outline / Glass / Fire có vân cháy animation), 5 chế độ màu (gradient theo cao độ với 6 palette hoặc màu đầu–cuối tuỳ chỉnh, theo tay với điểm chia đổi được, theo track MIDI với bảng 8 màu, cầu vồng theo cao độ, cầu vồng theo thời gian), độ rộng, bo góc, độ dài tối thiểu, khe hở, đổ bóng 3D, tên nốt in trên thanh, tint, bloom, độ sáng/dày viền, glow cạnh trước, khúc xạ, tốc độ rơi và **hướng di chuyển** (Down: rơi xuống chạm phím rồi chìm dưới đường chạm; Up: sinh ra tại phím theo tiếng nốt và bốc lên khỏi đỉnh sân khấu — tia lửa, lửa, vòng sóng vẫn bung tại phím), falling FX (7 kiểu vệt + pulse + ghost), hold FX (bar/breath/rung/arc điện), release FX (6 kiểu) và smart modulators (velocity/octave/zone/pedal/tempo/audio). |
 | Hạt & lửa | Tia lửa incandescent có physics đầy đủ (gravity, drag, vector field…), wisps plasma bốc lên từ phím đang giữ (mật độ, tốc độ, chiều cao, độ rộng, nhiễu loạn, glow), lửa theo nốt (cường độ, chiều cao, màu ấm hoặc theo nốt, cháy tiếp khi giữ phím rồi tắt dần), vòng sóng va chạm, sóng impact (Ring/Shockwave/Ripple + chớp Flash/Lightning/Plasma theo lực nhấn), 5 kiểu nổ hạt, 5 kiểu morph (xem docs/EFFECTS-REDESIGN.md). |
 | Bàn phím | 88 phím vẽ bằng **shader ray-trace**: BRDF GGX/Smith/Schlick, softbox có penumbra thật, contact occlusion trong khe phím, IBL môi trường, đèn màu hắt từ phím đang kêu, tonemap ACES filmic (Off/Fast/Balanced/Cinematic + key light, bóng, occlusion, gloss, rim, emission, exposure, tilt camera). Kiểu Classic / Studio 3D / Glass, chiều cao, độ dài phím đen, nhãn phím, bóng nắp đàn, dải nỉ đỏ, độ lún khi nhấn. Phím của nốt MIDI đang phát cũng sáng, không chỉ phím người chơi nhấn. Bàn phím bake một lần rồi cache, mỗi phím kêu chỉ vẽ lại một tile nhỏ nên giữ được 60 fps. |
-| Nền | Màu đặc / ảnh (PNG, JPEG, BMP, GIF, TIFF + làm tối) / Green screen; aura gradient, sao, guide lanes, vignette, horizon glow, light beam; màu và đường halo, cùng 4 lớp ambient độc lập (Energy/Nature/Light/Cosmic). |
+| Nền | Màu đặc / ảnh (PNG, JPEG, BMP, GIF, TIFF + làm tối 0–100) / Green screen — thử ngay với ảnh mẫu `docs/samples/stage-backdrop.png` hoặc chạy `--background-image=<file.png>`; aura gradient, sao, guide lanes, vignette, horizon glow, light beam; màu và đường halo, cùng 4 lớp ambient độc lập (Energy/Nature/Light/Cosmic). |
 | Camera & FX | Parallax, zoom, khung hình, saturation, contrast, bloom. |
 | Lớp không khí (tuỳ chọn) | Hạt acoustic lơ lửng trong không gian hoà nhạc (số lượng, màu), bật ở **Theme → Acoustic motes**; 4 lớp ambient độc lập (Energy/Nature/Light/Cosmic) ở trang **Background** — sét, mưa, thiên hà, matrix... Mặc định **tắt** để sân khấu sạch. |
 | Hiệu năng | Mọi animation (nốt rơi, cánh hoa, backdrop, chuyển panel) chạy trên **cùng một đồng hồ vsync** (`FrameClock`) nên không rung, không vẽ thừa khung hình; đồng hồ tự nhả khi sân khấu đứng yên. Mức chuyển động Off/Calm/Full, tôn trọng thiết lập giảm animation của Windows. |
@@ -239,11 +252,37 @@ Thẻ **F1** trong ứng dụng liệt kê đúng bảng này (ảnh ở đầu 
 | Preset thumbnail | Mỗi preset trong danh sách Style có thumbnail mini render thật (nền tối, phím trắng/đen, vạch nốt theo palette). |
 | Menu & hộp thoại | Menu khởi động kiểu hoà nhạc (theme chip, thẻ "stage look", TRY A LOOK xoay vòng preset) và hộp thoại **Play** trước khi diễn: chọn MIDI File / Live Play, hai card Left/Right Hand viền màu tay, thanh Speed, danh sách lớp OPTIONS (Camera, Background, Notes, Embers, Halo, Flame, Keys, Extras) — mỗi toggle ánh xạ 1‑1 vào setting thật của stage, chevron mở đúng trang dock. |
 | Thẻ F1 | Bảng phím tắt trong ứng dụng, chia ba nhóm (Play the stage / Move around / Session & capture). |
+| Đa ngôn ngữ | Hai ngôn ngữ đóng gói: **English** và **Tiếng Việt**, chọn ở trang General hoặc bằng chip ngay trên menu khởi động; đổi là toàn bộ nhãn, hộp thoại, thông báo lỗi và menu ngữ cảnh vẽ lại trong khung hình hiện tại. Không có nhãn tiếng Anh lọt sang tiếng Việt: `tools/check_sources.py` chứng minh hai bảng cùng tập khoá và `--verify` đổi ngôn ngữ thật trên cửa sổ đang mở. |
 | Ghi hình | REC ghi khung hình sân khấu ra AVI (độ phân giải theo cửa sổ/720p/1080p và 15–60 fps, canh theo đồng hồ thật); đường tiếng không được trộn vào tệp. Preset **Green Screen** tô nền xanh lá thuần để key trong OBS. Máy không có codec MJPEG thì ghi RGB không nén và tự dừng khi chạm giới hạn 2 GB của AVI. |
+
+## Đa ngôn ngữ
+
+Giao diện có hai ngôn ngữ đóng gói — **English** và **Tiếng Việt** — và đổi **ngay trong ứng dụng**, không khởi động lại: mọi nhãn, tooltip, hộp thoại, danh sách combo, thẻ phím tắt F1, menu khởi động và cả thông báo lỗi đều vẽ lại trong khung hình hiện tại.
+
+| Ở đâu | Làm gì |
+| --- | --- |
+| Trang **General** (dock → nhóm APP) | Chọn **English**, **Tiếng Việt** hoặc **Theo Windows**. Ô mô tả bên dưới ghi rõ ngôn ngữ nào đang chạy và nó được chọn từ đâu. |
+| **Menu khởi động** | Thẻ *INTERFACE LANGUAGE* với chip chọn nhanh — mở app lần đầu là đổi được ngay, không phải đi tìm trang cài đặt. |
+| Dòng lệnh | `--lang=vi` (hoặc `en`) chạy một lần bằng ngôn ngữ chỉ định, **không** ghi vào `visual-settings.json`. CI dùng cờ này để render ảnh tiếng Việt. |
+| Tìm kiếm trong dock | Một hàng khớp cả từ tiếng Anh lẫn từ đã dịch: gõ `speed` hoặc `tốc độ` đều ra cùng slider *Fall speed*. |
+
+Ảnh chụp trang General khi app chạy tiếng Việt — cũng do CI render, với `--lang=vi`:
+
+![Keyflow General page in Vietnamese](docs/previews/language-dock.png)
+
+*Toàn bộ điều hướng, nhãn, chú thích và nút bấm đều là tiếng Việt; tên preset `Neon Violet` vẫn giữ nguyên vì đó là id đã lưu.*
+
+Ba điều nguyên tắc:
+
+- **Id không đổi, chỉ caption đổi.** Giá trị trong `visual-settings.json`, tên preset, id theme, tên thiết bị Windows và tên tệp luôn là tiếng Anh — bật tiếng Việt không làm hỏng preset hay file đã lưu, và một preset đem sang máy tiếng Anh vẫn đọc được.
+- **Thiếu bản dịch thì in tiếng Anh**, không in ô trống. Khoá lạ không có trong inventory (tên thiết bị, tên tệp người dùng đặt) đi thẳng tới màn hình nguyên văn.
+- **Thêm ngôn ngữ = thêm một tệp bảng.** Sao chép `Localization/Strings.English.cs`, dịch phần giá trị, thêm một dòng vào `Languages.All`; renderer, XAML và `visual-settings.json` không phải sửa gì. `tools/check_sources.py` và `--verify` sẽ chứng minh bảng mới dịch đủ mọi khoá của inventory.
+
+Chi tiết kiến trúc, quy ước dịch và checklist thêm ngôn ngữ: [`docs/LOCALIZATION.md`](docs/LOCALIZATION.md).
 
 ## Bản đồ giao diện
 
-Dock cài đặt có **11 trang, xếp thành ba nhóm theo mục đích** — đây là bố cục duy nhất mà cả code, XAML và bộ kiểm thử cùng đọc (xem `Ui/SettingsPages.cs`):
+Dock cài đặt có **12 trang, xếp thành bốn nhóm theo mục đích** — đây là bố cục duy nhất mà cả code, XAML và bộ kiểm thử cùng đọc (xem `Ui/SettingsPages.cs`):
 
 | Nhóm | Trang | Nội dung |
 | --- | --- | --- |
@@ -258,6 +297,7 @@ Dock cài đặt có **11 trang, xếp thành ba nhóm theo mục đích** — �
 | | MIDI | Thiết bị vào/ra, danh sách track (solo/mute/màu), metronome. |
 | **SESSION** | Practice | Chế độ tập, tempo, vòng lặp A–B. |
 | | Recording | Độ phân giải, fps, thông tin tệp đầu ra. |
+| **APP** | General | **Ngôn ngữ giao diện** (English / Tiếng Việt / theo Windows), theme, mức chuyển động, thư mục cài đặt. |
 
 Phần còn lại của giao diện:
 
@@ -266,7 +306,7 @@ Phần còn lại của giao diện:
 | Header | Logo + brand, bài đang mở, chip **LOOK** (preset hiện tại + nút Change), HOME, OPEN MIDI, SETTINGS, thu nhỏ/toàn màn hình/thoát. |
 | Sân khấu | Nốt, hiệu ứng, bàn phím, badge thiết bị, nút REC, nút MENU. |
 | Footer | Play/Pause, quay lại đầu, thời gian + nốt đang chơi, ba pedal, ACCURACY / SCORE / STREAK, thanh tua + progress. |
-| Dock cài đặt | Cột điều hướng ba nhóm + ô tìm kiếm lọc mọi trang (tự nhảy sang trang có kết quả), mỗi thông số có slider + ô nhập số (chấp nhận đơn vị, dấu phẩy, tên nốt như `C4`) + nút reset, hàng phụ thuộc tự ẩn/hiện, SAVE / RESET PAGE, tự lưu sau 0,65 s. |
+| Dock cài đặt | Cột điều hướng **bốn nhóm** + ô tìm kiếm lọc mọi trang (tự nhảy sang trang có kết quả; khớp cả từ tiếng Anh lẫn từ đã dịch — gõ `speed` hay `tốc độ` đều ra cùng slider), mỗi thông số có slider + ô nhập số (chấp nhận đơn vị, dấu phẩy, tên nốt như `C4`) + nút reset, hàng phụ thuộc tự ẩn/hiện, SAVE / RESET PAGE, tự lưu sau 0,65 s. |
 
 ## Giới hạn hiện tại
 
@@ -284,7 +324,7 @@ Phần còn lại của giao diện:
 
 Ảnh trong README (và trong `docs/previews/`) do ứng dụng render, không phải ảnh dàn dựng.
 
-**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại 6 ảnh bằng chính file `PianoPath.exe` vừa vượt qua `--verify` rồi **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`). Sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Ảnh cũng được upload thành artifact `keyflow-previews` nếu muốn tải rời:
+**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại 8 ảnh bằng chính file `PianoPath.exe` vừa vượt qua `--verify` — bảy ảnh chạy với `--lang=en` để caption luôn là tiếng Anh bất kể ngôn ngữ của runner, riêng ảnh *General* chạy với `--lang=vi` để thấy luôn bản dịch tiếng Việt — rồi **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`). Sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Ảnh cũng được upload thành artifact `keyflow-previews` nếu muốn tải rời:
 
 ```powershell
 gh run list --workflow build.yml --limit 5          # tìm run mới nhất
@@ -408,18 +448,18 @@ dotnet run --project .\PianoPath.csproj -- --verify
 # tùy chọn: --verify-log=C:\duong-dan\ket-qua.log (mặc định %TEMP%\keyflow-verification.log)
 ```
 
-Mã thoát `0` là đạt, `1` là có lỗi; nhật ký ghi từng mục PASS/FAIL. Bộ kiểm thử tạo tệp MIDI, SoundFont SF2 và AVI nhỏ trong thư mục tạm; kiểm tra parser MIDI (đa track, tempo map, lưới phách, tên track, bỏ kênh trống, tệp hỏng), giải mã preset/zone/sample và ngữ nghĩa generator SF2 (instrument ghi đè, preset cộng dồn), loop qua giai đoạn release, giới hạn đa âm, tín hiệu âm thanh và Note Off, sustain/sostenuto/soft, lưu và clamp cấu hình hiệu ứng, preset có sẵn/preset người dùng (lưu, nhập, xuất, xóa, tệp hỏng), **danh mục dock: 11 trang chia 3 nhóm khớp giữa catalogue, XAML và tiêu đề nhóm**, **id giao diện cũ (`sakura`/`noir`/`velvet`) tự chuyển sang id chuẩn khi nạp file lưu**, chip giao diện, lớp hoa anh đào, impact wave/flash, falling/hold/release FX, 4 lớp ambient, smart modulators, 7 combo themes, chế độ màu theo tay/track, hàng phụ thuộc, tìm kiếm, áp preset, **thẻ phím tắt F1 mở/đóng được**, ghi AVI frame, đóng/mở MIDI input thật nếu có, giải mã WinMM `MIM_DATA` tới nốt rơi WPF, MIDI output, tự ẩn/hiện giao diện theo chuột và Esc, độ dài nốt khi giữ phím, chế độ tập, loop, tua, tempo, render WPF và việc sân khấu chạy trên đồng hồ khung hình dùng chung. Chỉ xác nhận được phím đàn vật lý phát sự kiện khi nhấn một phím MIDI thực tế.
+Mã thoát `0` là đạt, `1` là có lỗi; nhật ký ghi từng mục PASS/FAIL. Bộ kiểm thử tạo tệp MIDI, SoundFont SF2 và AVI nhỏ trong thư mục tạm; kiểm tra parser MIDI (đa track, tempo map, lưới phách, tên track, bỏ kênh trống, tệp hỏng), giải mã preset/zone/sample và ngữ nghĩa generator SF2 (instrument ghi đè, preset cộng dồn), loop qua giai đoạn release, giới hạn đa âm, tín hiệu âm thanh và Note Off, sustain/sostenuto/soft, lưu và clamp cấu hình hiệu ứng, preset có sẵn/preset người dùng (lưu, nhập, xuất, xóa, tệp hỏng), **danh mục dock: 12 trang chia 4 nhóm khớp giữa catalogue, XAML và tiêu đề nhóm**, **đổi ngôn ngữ trực tiếp trên cửa sổ đang mở (`VerifyLanguageSwitching`): hai bảng phải cùng tập khoá, nhãn đã dịch phải vẽ lại khi đổi, và ô tìm kiếm dock phải tìm thấy hàng bằng tiếng Việt**, **id giao diện cũ (`sakura`/`noir`/`velvet`) tự chuyển sang id chuẩn khi nạp file lưu**, chip giao diện, lớp hoa anh đào, impact wave/flash, falling/hold/release FX, 4 lớp ambient, smart modulators, 7 combo themes, chế độ màu theo tay/track, hàng phụ thuộc, tìm kiếm, áp preset, **thẻ phím tắt F1 mở/đóng được**, ghi AVI frame, đóng/mở MIDI input thật nếu có, giải mã WinMM `MIM_DATA` tới nốt rơi WPF, MIDI output, tự ẩn/hiện giao diện theo chuột và Esc, độ dài nốt khi giữ phím, chế độ tập, loop, tua, tempo, render WPF và việc sân khấu chạy trên đồng hồ khung hình dùng chung. Chỉ xác nhận được phím đàn vật lý phát sự kiện khi nhấn một phím MIDI thực tế.
 
 Bộ kiểm thử shader có hai mục riêng: `VerifyShaderPipeline` (không cần WPF layout) kiểm tra toán sRGB/ACES/GGX, jitter tất định, **chữ ký cache bake** (slider không liên quan không gây bake lại), bake nền phải opaque và trải sáng thật, cột phím đen phải tối hơn cột ngà, và tile overlay của một phím kêu phải che đúng phím rồi mờ ra; `VerifyShadedStage` bật/tắt `ShadingQuality` trong dock và khẳng định stage thật sự đổi giữa bàn phím vector và bàn phím shader, đồng thời bake được tái sử dụng giữa các khung hình.
 
 ### Kiểm tra tĩnh (chạy được trên mọi máy, kể cả không có .NET SDK)
 
 ```powershell
-python tools/check_sources.py          # cú pháp C#, XML + resource XAML, danh mục dock, theme token, link/ảnh README
+python tools/check_sources.py          # cú pháp C#, XML + resource XAML, danh mục dock, theme token, bảng chuỗi, link/ảnh README
 python tools/shader_preview.py 780 180 0.6   # port Python của shader, xuất ảnh tools/out/ (không commit)
 ```
 
-`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` đều tồn tại**. CI chạy script này trước bước build trên Windows.
+`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` đều tồn tại**, **mọi tham số dòng lệnh mà app đọc đều có trong bảng tham số của README và ngược lại, mọi tham số/đường dẫn workflow `build.yml` truyền cho `PianoPath.exe` đều thật sự tồn tại**, và **ảnh mẫu trong `docs/samples` vẫn khớp với script sinh ra nó**; và **bảng chuỗi**: mọi ngôn ngữ dịch đúng tập khoá của inventory, placeholder và xuống dòng còn nguyên, mọi chuỗi mà mã nguồn in ra (kể cả chuỗi trong XAML có marker, tên trang, theme, preset và thẻ phím tắt) đều là một khoá của inventory. CI chạy script này trước bước build trên Windows.
 
 Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạt), `FAIL` (có lỗi, mã thoát `1`), `SKIP` (điều kiện môi trường không cho phép kiểm tra) và `NOTE` (thông tin môi trường). Bộ kiểm thử tự bỏ qua thay vì báo lỗi khi máy thiếu phần cứng: nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ Git LFS (clone chưa `git lfs pull`, hoặc CI checkout với `lfs: false`) thì các mục piano đi kèm bị `SKIP` và ứng dụng được xác minh ở chế độ im lặng; nếu Windows không mở được thiết bị âm thanh (`waveOut error 2`) hoặc một cổng MIDI output không mở được, engine vẫn nạp SoundFont và chạy im lặng, kết quả ghi `NOTE` chứ không `FAIL`.
 
@@ -429,12 +469,14 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 | --- | --- |
 | `docs/UI-SHADER-REVIEW.md` | Rà soát giao diện và đợt nâng cấp shader đổ bóng kiểu Unreal: mô hình shading, camera, cache bake, cách tự kiểm chứng. |
 | `docs/SETTINGS-WIRING-AUDIT.md` | Bảng đối chiếu **mọi** chức năng cài đặt với đoạn code tiêu thụ nó — chứng minh không có setting nào "chết". |
+| `docs/LOCALIZATION.md` | Kiến trúc đa ngôn ngữ: khoá là văn bản nguồn, một tệp bảng mỗi ngôn ngữ, nhãn sống, quy ước dịch tiếng Việt, cách thêm ngôn ngữ mới và ba lớp kiểm chứng. |
+| `docs/ROADMAP.md` | Hướng cập nhật tiếp theo (P0→P3), khối lượng ước đoán và những việc đã cân nhắc nhưng không làm. |
 | `docs/DOCK-NAVIGATION-AUDIT.md` | Đợt rà soát cách sắp xếp chức năng: vì sao dock chia ba nhóm, danh mục trang là nguồn sự thật duy nhất, thẻ phím tắt F1 và đường ảnh README, cùng các kiểm tra tự động giữ chúng không lệch. |
 
 ## Cấu trúc chính
 
-- `App.xaml`: theme mặc định và toàn bộ control template (button, switch, slider, combo, textbox, scrollbar, tab điều hướng, danh sách preset) — mọi token màu đọc qua `DynamicResource` nên đổi theme tức thì. `App.xaml.cs`: khởi động, các chế độ `--verify` / `--snapshot` / `--show-settings` / `--play-dialog` / `--shortcuts`.
-- `Ui/`: `MainWindow.xaml` (bố cục header / sân khấu + dock / footer transport / menu hoà nhạc / hộp thoại Play / thẻ phím tắt), `MainWindow.xaml.cs` (điều phối playback, chấm điểm, MIDI, ẩn/hiện giao diện và ghi video), `MainWindow.Settings.cs` (sinh các trang cài đặt, tìm kiếm, preset, danh sách track), `MainWindow.Menu.cs` (menu chính + hộp thoại Play + chip theme), `MainWindow.Shortcuts.cs` (thẻ F1), `SettingsPages.cs` (**danh mục 11 trang + 3 nhóm**, attached property in nhãn nhóm), `FrameClock.cs` (đồng hồ khung hình vsync dùng chung), `ChromeMotion.cs` (easing/entrance dùng chung), `ColorPickerWindow.cs`, `TextPromptWindow.cs`.
+- `App.xaml`: theme mặc định và toàn bộ control template (button, switch, slider, combo, textbox, scrollbar, tab điều hướng, danh sách preset) — mọi token màu đọc qua `DynamicResource` nên đổi theme tức thì. `App.xaml.cs`: khởi động, các chế độ `--verify` / `--snapshot` / `--show-settings` / `--play-dialog` / `--shortcuts` / `--lang` / `--background-image`.
+- `Ui/`: `MainWindow.xaml` (bố cục header / sân khấu + dock / footer transport / menu hoà nhạc / hộp thoại Play / thẻ phím tắt), `MainWindow.xaml.cs` (điều phối playback, chấm điểm, MIDI, ẩn/hiện giao diện và ghi video), `MainWindow.Settings.cs` (sinh các trang cài đặt, tìm kiếm, preset, danh sách track), `MainWindow.Menu.cs` (menu chính + hộp thoại Play + chip theme), `MainWindow.Shortcuts.cs` (thẻ F1), `SettingsPages.cs` (**danh mục 12 trang + 4 nhóm**, attached property in nhãn nhóm), `MainWindow.Language.cs` (đổi ngôn ngữ trực tiếp, dựng lại các mặt tự ghép văn bản), `DeviceOption.cs` (tách id thiết bị và caption đã dịch), `FrameClock.cs` (đồng hồ khung hình vsync dùng chung), `ChromeMotion.cs` (easing/entrance dùng chung), `ColorPickerWindow.cs`, `TextPromptWindow.cs`.
 - `Theme/`: `ShellTheme.cs` (ba giao diện + bảng màu + id cũ + `ShellThemeManager`) và `ChromeBackdrop.cs` (backdrop động cho menu và dock).
 - `Stage/`: `PianoVisualSettings.cs` (thông số lưu JSON trong LocalAppData, có migration), `VisualPresets.cs` (preset có sẵn + kho preset người dùng), `PianoStage.cs` (vẽ nền/vignette/beam, nốt theo 4 kiểu và 5 chế độ màu, tia lửa, wisps, lửa, vòng sóng/shockwave/ripple, chớp impact, vệt rơi, hold bar/arc, hiệu ứng nhả, 4 lớp ambient, cánh hoa, bàn phím vector hoặc shader).
 - `Stage/Shading/`: shader đổ bóng kiểu Unreal cho bàn phím — `ShaderMath.cs` (GGX/Smith/Schlick, ACES, sRGB, dither), `PianoShaderScene.cs` (scene + camera + cache key), `PianoKeyboardRenderer.cs` (ray-trace bóng mềm, contact AO, IBL, đèn màu theo nốt, tile overlay).
@@ -442,8 +484,10 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 - `Midi/`: `MidiFileReader.cs` (Standard MIDI File → nốt, tempo map, lưới phách, tên track) và `MidiDeviceService.cs` (thiết bị WinMM).
 - `Video/AviVideoRecorder.cs`: ghi frame AVI bằng Windows Video for Windows.
 - `Diagnostics/VerificationSuite.cs`: bộ kiểm tra hồi quy chạy bằng `--verify`, fixtures tự tạo.
-- `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README, chạy mọi máy) và `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit).
-- `docs/previews/`: ảnh giao diện do ứng dụng render (nguồn cho README).
+- `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README/bảng tham số dòng lệnh, chạy mọi máy), `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit) và `make_stage_background.py` (sinh ảnh nền mẫu `docs/samples/stage-backdrop.png`).
+- `Localization/`: `Localizer.cs` (ngôn ngữ, bảng tra, nhãn sống, marker XAML) và `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + bản dịch; thêm ngôn ngữ = thêm một tệp như vậy).
+- `docs/previews/`: ảnh giao diện do ứng dụng render trong CI (nguồn cho README) — thư mục này do workflow sở hữu, không nên tay nộp ảnh khác vào.
+- `docs/samples/`: ảnh nền mẫu mà repo tự sinh (`tools/make_stage_background.py`), dùng cho ảnh chụp tính năng ảnh nền và để mọi người thử tính năng này mà không cần tìm ảnh trên mạng.
 - `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `installer/Keyflow.iss`: script Inno Setup tạo bộ cài.
 - `.github/workflows/`: `build.yml` (kiểm tra tĩnh, build Release, `--verify`, render ảnh README) và `release.yml` (publish + đính kèm ZIP vào GitHub Release khi đẩy tag `v*`).
 

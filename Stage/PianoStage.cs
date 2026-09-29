@@ -121,7 +121,7 @@ internal sealed class PianoStage : FrameworkElement
             {
                 try
                 {
-                    if (!File.Exists(requestedPath)) throw new FileNotFoundException("The selected background image could not be found.", requestedPath);
+                    if (!File.Exists(requestedPath)) throw new FileNotFoundException(Loc.T("The selected background image could not be found."), requestedPath);
                     using var stream = File.OpenRead(requestedPath);
                     var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.None);
                     var sourceWidth = decoder.Frames[0].PixelWidth;
@@ -2521,8 +2521,9 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawCounter(DrawingContext dc, double width)
     {
         var parts = new List<string>();
-        if (_visual.ShowCounter) parts.Add($"{_pressed.Count:00} KEYS");
-        if (_visual.ShowFps) parts.Add($"{_fps:0} FPS · {_sparks.Count} PARTICLES");
+        // The readouts are stage text, so they follow the interface language like every label does.
+        if (_visual.ShowCounter) parts.Add(Loc.F("{0:00} KEYS", _pressed.Count));
+        if (_visual.ShowFps) parts.Add(Loc.F("{0} FPS · {1} PARTICLES", _fps, _sparks.Count));
         var text = new FormattedText(string.Join("   ", parts), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface("Segoe UI Semibold"), 12, Brush(Color.FromArgb(190, 243, 229, 255)), _pixelsPerDip);
         dc.DrawText(text, new Point(width - text.Width - 30, 28));

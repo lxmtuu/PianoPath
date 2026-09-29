@@ -18,12 +18,24 @@ public partial class App : Application
 
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
-        // Publish the saved shell theme before any window exists, so the very first frame is themed
-        // instead of flashing the XAML defaults and repainting one frame later.
-        ShellThemeManager.Apply(PianoVisualSettingsStore.Load().ShellTheme);
+        // Publish the saved language and shell theme before any window exists, so the very first
+        // frame is already translated and themed instead of flashing the XAML defaults for a frame.
+        // --lang=<en|vi> overrides the stored language for one run only, which is how CI renders the
+        // Vietnamese preview of the General page without touching anybody's settings file.
+        var stored = PianoVisualSettingsStore.Load();
+        var languageOverride = e.Args.FirstOrDefault(argument => argument.StartsWith("--lang=", StringComparison.Ordinal))?["--lang=".Length..];
+        Loc.Apply(string.IsNullOrWhiteSpace(languageOverride) ? stored.Language : languageOverride);
+        ShellThemeManager.Apply(stored.ShellTheme);
 
         var window = new MainWindow();
         MainWindow = window;
+        // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches
+        // the settings file: MainWindow.PreviewBackgroundImage sets the stage directly instead of going
+        // through the row handlers that arm the auto-save timer. CI uses it to render the README preview
+        // of the feature from a generated sample (tools/make_stage_background.py) rather than from
+        // somebody's screenshot, so the image stays reproducible and free of third-party artwork.
+        var backgroundImage = e.Args.FirstOrDefault(argument => argument.StartsWith("--background-image=", StringComparison.Ordinal))?["--background-image=".Length..];
+        if (!string.IsNullOrWhiteSpace(backgroundImage)) window.PreviewBackgroundImage(backgroundImage);
         var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
         // Automated captures: the chrome must not animate or hide while a screenshot is pending, and
         // they may ask for a specific surface with --menu / --show-settings / --play-dialog / --shortcuts.
@@ -54,6 +66,7 @@ public partial class App : Application
                     "midi" => SettingsPages.Midi,
                     "practice" => SettingsPages.Practice,
                     "recording" or "record" => SettingsPages.Recording,
+                    "general" or "language" or "app" => SettingsPages.General,
                     _ => SettingsPages.Style
                 };
                 tabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));

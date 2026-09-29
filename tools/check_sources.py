@@ -9,12 +9,20 @@ checks that do not need a compiler:
     code-behind file for every x:Class;
   * every ``{StaticResource}``/``{DynamicResource}`` reference and every ``FindName``/``FindResource``
     target resolves to something that actually exists;
-  * every event handler named in XAML exists in the C# sources.
+  * every event handler named in XAML exists in the C# sources;
+  * the localization tables: every language translates exactly the keys of the English inventory,
+    placeholders and line breaks survive a translation, and every literal the sources can print is a
+    key of that inventory (see ``docs/LOCALIZATION.md``);
+  * the command line: every switch the app parses is in the README table and vice versa, and every
+    switch and path the preview workflow passes to the executable really exists;
+  * the generated documentation assets: ``docs/samples`` still matches the script that builds it.
 
 Run it from the repository root (``python tools/check_sources.py``); CI runs it before the Windows
-build so a typo is caught in seconds instead of in a full Windows job.
+build so a typo is caught in seconds instead of in a full Windows job. A .NET SDK is not needed.
 """
+import json
 import re
+import struct
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -295,6 +303,271 @@ def scan_theme_tokens():
     return errors
 
 
+# ==================================================================================================
+# Localization: the string tables are the product's surface, so they are checked like source.
+# ==================================================================================================
+
+def _call_args(text: str, open_index: int):
+    """Split the argument list of a call whose ``(`` sits at ``open_index``, honouring nesting."""
+    args, buf, depth, i, n = [], [], 1, open_index + 1, len(text)
+    while i < n:
+        c = text[i]
+        if c == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    break
+                j += 1
+            buf.append(text[i:j + 1])
+            i = j + 1
+            continue
+        if c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+            if depth == 0:
+                args.append("".join(buf).strip())
+                return args
+        elif c == "," and depth == 1:
+            args.append("".join(buf).strip())
+            buf = []
+            i += 1
+            continue
+        buf.append(c)
+        i += 1
+    return args
+
+
+def _code(text: str) -> str:
+    """Blank out comments so a string in prose is never mistaken for a key (positions are kept)."""
+    out, i, n = [], 0, len(text)
+    while i < n:
+        c = text[i]
+        if c == "/" and text[i + 1:i + 2] == "/":
+            j = text.find("\n", i)
+            j = n if j < 0 else j
+            out.append(" " * (j - i))
+            i = j
+        elif c == "/" and text[i + 1:i + 2] == "*":
+            j = text.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append("".join(ch if ch == "\n" else " " for ch in text[i:j]))
+            i = j
+        elif c == '@' and text[i + 1:i + 2] == '"':
+            j = i + 2
+            while j < n:
+                if text[j] == '"':
+                    if text[j + 1:j + 2] == '"':
+                        j += 2
+                        continue
+                    break
+                j += 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif c == '"':
+            j = i + 1
+            while j < n:
+                if text[j] == "\\":
+                    j += 2
+                    continue
+                if text[j] == '"':
+                    break
+                j += 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        elif c == "'":
+            j = i + 1
+            while j < n and text[j] != "'":
+                j += 2 if text[j] == "\\" else 1
+            out.append(text[i:j + 1])
+            i = j + 1
+        else:
+            out.append(c)
+            i += 1
+    return "".join(out)
+
+
+LITERAL = re.compile(r'(?<!\$)"((?:[^"\\]|\\.)*)"')
+
+
+def _literal_only(arg: str):
+    """The string of an argument that is nothing but one literal, else ``None``."""
+    match = re.fullmatch(r'"(?:[^"\\]|\\.)*"', arg.strip())
+    return json.loads(arg.strip()) if match else None
+
+
+def _literals(arg: str):
+    """Every plain (non-interpolated) literal inside an argument, for ``cond ? "a" : "b"``."""
+    return [json.loads(f'"{inner}"') for inner in LITERAL.findall(arg)]
+
+
+def read_table(path: Path):
+    """Parse ``["key"] = "value",`` rows in source order."""
+    rows, order = {}, []
+    if not path.exists():
+        return None, []
+    text = path.read_text(encoding="utf-8")
+    for match in re.finditer(r'^\s{8}\[("(?:[^"\\]|\\.)*")\] = ("(?:[^"\\]|\\.)*"),$', text, re.M):
+        key = json.loads(match.group(1))
+        rows[key] = json.loads(match.group(2))
+        order.append(key)
+    return rows, order
+
+
+def scan_localization(cs_files):
+    """Prove the tables are complete, consistent and in step with the sources.
+
+    Three directions, because each one fails differently: the two tables must hold the same keys (a
+    missing translation is invisible in the language it does not affect), the English table must map
+    every key to itself (it is the inventory, and a reworded key is a lost translation), and every
+    literal the sources can print must be a key of that inventory (a typo prints raw template text
+    and no language can fix it).
+    """
+    errors = []
+    root = ROOT / "Localization"
+    localizer = (root / "Localizer.cs").read_text(encoding="utf-8")
+    registered = re.findall(r'new\("([a-z]{2}(?:-[A-Za-z]{2})?)", "([^"]*)", "([^"]*)", Strings(\w+)\.Table\)', localizer)
+    if not registered:
+        return [f"{root / 'Localizer.cs'}: no language is registered in Languages"], 0, 0
+
+    tables, sheet = {}, {}
+    for code, _english, _native, table in registered:
+        path = root / f"Strings.{table}.cs"
+        rows, order = read_table(path)
+        if rows is None:
+            errors.append(f"Localizer.cs: language '{code}' expects {path.name}, which does not exist")
+            continue
+        if order != sorted(order, key=lambda key: [ord(c) for c in key]):
+            errors.append(f"{path.name}: entries are not in ordinal order; a checklist has to diff cleanly")
+        tables[code] = rows
+        sheet[code] = path.name
+
+    inventory = tables.get("en")
+    if inventory is None:
+        return errors + ["Localizer.cs: English must be registered, its table is the inventory"], 0, 0
+
+    for key, value in inventory.items():
+        if key != value:
+            errors.append(f"Strings.English.cs: '{key}' maps to '{value}'; the inventory maps a key to itself")
+
+    def holes(text):
+        return sorted(re.findall(r"\{\d+(?::[^}]*)?\}", text))
+
+    for code, rows in tables.items():
+        if code == "en":
+            continue
+        missing = sorted(set(inventory) - set(rows), key=lambda key: [ord(c) for c in key])
+        extra = sorted(set(rows) - set(inventory), key=lambda key: [ord(c) for c in key])
+        name = sheet.get(code, f"Strings.{code}.cs")
+        for key in missing[:6]:
+            errors.append(f"{name} does not translate '{key}'")
+        if len(missing) > 6:
+            errors.append(f"{name} is missing {len(missing) - 6} further translations")
+        for key in extra[:6]:
+            errors.append(f"{name} translates '{key}', which is not a key of the inventory")
+        if len(extra) > 6:
+            errors.append(f"{name} carries {len(extra) - 6} further unknown entries")
+        for key, value in rows.items():
+            if key not in inventory:
+                continue
+            if holes(key) != holes(value):
+                errors.append(f"{name}: '{value}' changes the placeholders of '{key}'")
+            elif value and key.count("\n") != value.count("\n"):
+                errors.append(f"{name}: '{value}' drops a line break of '{key}'")
+            elif not value.strip():
+                errors.append(f"{name}: '{key}' is translated to an empty string")
+
+    # Every route a caption takes from a literal in the sources to the screen. A key that reaches the
+    # UI through a variable (the shortcut card, a theme blurb) is followed back to its table instead of
+    # being excused, because that is exactly where a reword slips through.
+    used = {}
+
+    def note(key, origin):
+        if key and key not in used:
+            used[key] = origin
+
+    builders = {"Card": (1, 2), "Toggle": (1, 3), "SliderRow": (1, 5), "ColorRow": (1, 3), "Note": (1,), "Choice": (1, 3)}
+    for path in cs_files:
+        if path.parent.name == "Localization":
+            continue
+        text = _code(path.read_text(encoding="utf-8"))
+        rel = path.relative_to(ROOT)
+        for match in re.finditer(r"\bLoc\.(T|F|Page)\(", text):
+            args = _call_args(text, match.end() - 1)
+            if args:
+                # A key may be chosen by a condition — T(a ? "READY" : "NO AUDIO DEVICE") — and both
+                # branches are keys, so every literal of the first argument is collected.
+                for key in _literals(args[0]):
+                    note(key, f"{rel}: Loc.{match.group(1)}")
+        for match in re.finditer(r"\bLoc\.(Set|Format)\(", text):
+            args = _call_args(text, match.end() - 1)
+            if len(args) > 1:
+                for key in _literals(args[1]):
+                    note(key, f"{rel}: Loc.{match.group(1)}")
+        for name, positions in builders.items():
+            for match in re.finditer(rf"(?<![\w.]){name}\(", text):
+                args = _call_args(text, match.end() - 1)
+                for position in positions:
+                    if position < len(args):
+                        note(_literal_only(args[position]), f"{rel}: {name}")
+                if name == "Choice":
+                    for arg in args[4:]:
+                        for option in re.finditer(r'\(\s*"(?:[^"\\]|\\.)*"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)', arg):
+                            note(json.loads(f'"{option.group(1)}"'), f"{rel}: Choice option")
+        for match in re.finditer(r"(?<![\w.])ButtonRow\(", text):
+            for arg in _call_args(text, match.end() - 1)[1:]:
+                head = re.match(r'\(\s*"((?:[^"\\]|\\.)*)"\s*,', arg.strip())
+                if head:
+                    note(json.loads(f'"{head.group(1)}"'), f"{rel}: ButtonRow")
+        for match in re.finditer(r"(?<![\w.])ApplyVisualSettings\(", text):
+            args = _call_args(text, match.end() - 1)
+            if args:
+                note(_literal_only(args[0]), f"{rel}: status line")
+        if rel.name == "MainWindow.Shortcuts.cs" and "ShortcutGroups =" in text:
+            block = text[text.index("ShortcutGroups ="):]
+            block = block[:block.index("\n    ];")] if "\n    ];" in block else block
+            for match in re.finditer(r'\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*\[', block):
+                note(json.loads(f'"{match.group(1)}"'), f"{rel}: shortcut column")
+            for match in re.finditer(r'\(\s*"(?:[^"\\]|\\.)*"\s*,\s*"((?:[^"\\]|\\.)*)"\s*\)', block):
+                note(json.loads(f'"{match.group(1)}"'), f"{rel}: shortcut row")
+        if rel.name == "SettingsPages.cs":
+            for match in re.finditer(r'internal const string \w+ = "([^"]+)";', text):
+                note(match.group(1), f"{rel}: navigation")
+        if rel.name == "ShellTheme.cs":
+            for match in re.finditer(r'new ShellTheme\(\s*"[^"]*",\s*"((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"', text, re.S):
+                note(json.loads(f'"{match.group(1)}"'), f"{rel}: theme name")
+                note(json.loads(f'"{match.group(2)}"'), f"{rel}: theme blurb")
+        if rel.name == "VisualPresets.cs" and "BuiltIn { get; } =" in text:
+            block = text[text.index("BuiltIn { get; } ="):]
+            block = block[:block.index("\n    ];")] if "\n    ];" in block else block
+            for match in re.finditer(r'new\(("(?:[^"\\]|\\.)*"|\w+),\s*"((?:[^"\\]|\\.)*)"', block):
+                if match.group(1).startswith('"'):
+                    note(json.loads(match.group(1)), f"{rel}: preset name")
+                note(json.loads(f'"{match.group(2)}"'), f"{rel}: preset description")
+
+    markup = ROOT / "Ui" / "MainWindow.xaml"
+    if markup.exists():
+        xaml = markup.read_text(encoding="utf-8")
+        for match in re.finditer(r"<[A-Za-z][\w.]*((?:\s+[\w:]+=\"[^\"]*\")+)[^>]*?/?>", xaml):
+            attrs = match.group(1)
+            if 'local:Loc.Localize="True"' not in attrs:
+                continue
+            for attr in re.finditer(r'(Text|Content|Header|ToolTip|Title)="([^"]*)"', attrs):
+                value = (attr.group(2).replace("&amp;", "&").replace("&lt;", "<")
+                         .replace("&gt;", ">").replace("&quot;", '"'))
+                # A single glyph (the ↺ of the speed reset) is not a sentence and the runtime skips it too.
+                if len(value) > 1 and any(char.isalpha() for char in value):
+                    note(value, f"Ui/MainWindow.xaml: {attr.group(1)}")
+
+    for key, origin in sorted(used.items(), key=lambda item: [ord(c) for c in item[0]]):
+        if key not in inventory:
+            errors.append(f"{origin}: “{key}” is printed by the app but is not a key of Strings.English.cs")
+    return errors, len(used), len(inventory)
+
+
 def readme_slug(heading):
     """GitHub's heading anchor: lower-case, drop punctuation, spaces to dashes."""
     text = heading.strip().lower()
@@ -310,11 +583,20 @@ def scan_readme():
     if not readme.exists():
         return ["README.md is missing"]
     text = readme.read_text(encoding="utf-8")
+    # ``docs/previews`` is rendered by CI and committed back, so a shot the workflow knows about can be
+    # one commit behind the README line that introduces it. Every other image has to exist right now.
+    workflow = ROOT / ".github" / "workflows" / "build.yml"
+    rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow.read_text(encoding="utf-8"))) if workflow.exists() else set()
+    pending = []
     for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text):
         if re.match(r"^(https?:|data:)", target):
             continue
-        if not (ROOT / target).exists():
-            errors.append(f"README.md references the image '{target}', which does not exist")
+        if (ROOT / target).exists():
+            continue
+        if target.replace("\\", "/").startswith("docs/previews/") and Path(target).name in rendered:
+            pending.append(Path(target).name)
+            continue
+        errors.append(f"README.md references the image '{target}', which does not exist")
     headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
     for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
         if anchor not in headings:
@@ -322,11 +604,77 @@ def scan_readme():
     for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
         if any(link.startswith(prefix) for prefix in ("!",)):
             continue
+        if Path(link).name in pending:
+            continue
         if not (ROOT / link).exists() and not link.startswith("http"):
             # A repo-relative link to a file that is not in the checkout (a published binary, a
             # user-preset folder…) is tolerated when it carries no path separator.
             if "/" in link or "\\" in link:
                 errors.append(f"README.md links to '{link}', which does not exist")
+    if pending:
+        print(f"note: README points at {len(pending)} preview(s) CI renders — {', '.join(sorted(pending))} — which this commit does not carry yet")
+    return errors
+
+
+def scan_cli_and_samples():
+    """Command line, workflow and documentation are one product, so they are checked against each other.
+
+    A switch the app parses but nobody documented is invisible to the people who read the README first,
+    and a switch the README promises but the app never parses is a trap. The same goes for the workflow:
+    it passes ``--background-image`` by name, and a typo there would silently render a black stage in the
+    documentation instead of failing, so every flag it uses has to exist and every path it points at has
+    to be in the checkout.
+    """
+    errors = []
+    parsed = set()
+    for name in ("App.xaml.cs", "Diagnostics/VerificationSuite.cs"):
+        parsed |= set(re.findall(r'"(--[a-z][a-z-]*)', (ROOT / name).read_text(encoding="utf-8")))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    table = re.search(r"^### Tham số dòng lệnh$(.*?)^### ", readme, re.M | re.S)
+    if not table:
+        errors.append("README.md lost the '### Tham số dòng lệnh' section that documents every switch")
+    else:
+        documented = set(re.findall(r"--[a-z][a-z-]*", table.group(1)))
+        for flag in sorted(parsed - documented):
+            errors.append(f"the app parses {flag}, but the README CLI table does not document it")
+        for flag in sorted(documented - parsed):
+            errors.append(f"the README CLI table documents {flag}, which no source file parses")
+    workflow = ROOT / ".github" / "workflows" / "build.yml"
+    if not workflow.exists():
+        return errors
+    shots = re.search(r"\$shots = @\((.*?)\n\s*\)\n", workflow.read_text(encoding="utf-8"), re.S)
+    if not shots:
+        return errors + ["build.yml lost the $shots list that renders the README previews"]
+    block = shots.group(1)
+    for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", block)) - parsed):
+        errors.append(f"build.yml passes {flag} to PianoPath.exe, which does not parse it")
+    for path in sorted(set(re.findall(r"((?:docs|Assets)/[A-Za-z0-9_./-]+)", block))):
+        if not (ROOT / path).exists():
+            errors.append(f"build.yml renders a preview from '{path}', which is not in the checkout")
+    return errors
+
+
+def scan_generated_assets():
+    """``docs/samples`` holds pictures the repository builds for itself (``tools/make_*.py``), because the
+    README wants to show the background feature without shipping artwork somebody else owns. A committed
+    asset whose generator disagrees about size or bit depth is either hand-edited or stale, so compare the
+    PNG header with the constants of the script that writes it."""
+    errors = []
+    script = ROOT / "tools" / "make_stage_background.py"
+    target = ROOT / "docs" / "samples" / "stage-backdrop.png"
+    if not script.exists():
+        return [str(script.relative_to(ROOT)) + " is missing; it is the licence and the recipe of the sample backdrop"]
+    if not target.exists():
+        return [str(target.relative_to(ROOT)) + " is missing; regenerate it with `python3 tools/make_stage_background.py`"]
+    width, height = (int(n) for n in re.search(r"^W, H = (\d+), (\d+)", script.read_text(encoding="utf-8"), re.M).groups())
+    head = target.read_bytes()
+    if not head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return [str(target.relative_to(ROOT)) + " is not a PNG"]
+    fields = struct.unpack(">IIBBBBB", head[16:16 + 13])
+    if (fields[0], fields[1], fields[2], fields[3]) != (width, height, 8, 2):
+        errors.append(f"{target.relative_to(ROOT)} is {fields[0]}x{fields[1]} at {fields[2]} bit colour type {fields[3]}, "
+                      f"but tools/make_stage_background.py writes {width}x{height} at 8 bit colour type 2 (RGB) — "
+                      f"regenerate it instead of editing the picture by hand")
     return errors
 
 
@@ -343,8 +691,14 @@ def main():
     errors.extend(scan_icon_glyphs())
     errors.extend(scan_theme_tokens())
     errors.extend(scan_readme())
+    errors.extend(scan_cli_and_samples())
+    errors.extend(scan_generated_assets())
+    localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
+    errors.extend(localization_errors)
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
+    print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
+    print(f"checked the string tables against one another and against the {keys_used} keys the sources print ({keys_inventory} in the inventory)")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

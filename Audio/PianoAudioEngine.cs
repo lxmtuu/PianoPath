@@ -81,8 +81,8 @@ internal sealed class PianoAudioEngine : IDisposable
                 // practice scoring and MIDI keep working and only the speakers stay silent.
                 _device = IntPtr.Zero;
                 OutputError = result == 2
-                    ? "Windows reported no audio output device (waveOut error 2)."
-                    : $"Windows could not open the audio output (waveOut error {result}).";
+                    ? Loc.T("Windows reported no audio output device (waveOut error 2).")
+                    : Loc.F("Windows could not open the audio output (waveOut error {0}).", result);
                 return;
             }
             try
@@ -104,7 +104,7 @@ internal sealed class PianoAudioEngine : IDisposable
             }
             // The device opened but rejected the buffers: release it and keep synthesizing silently
             // instead of failing the whole SoundFont load.
-            catch (Exception ex) { OutputError = $"Windows rejected the audio buffers: {ex.Message}"; CloseDevice(); }
+            catch (Exception ex) { OutputError = Loc.F("Windows rejected the audio buffers: {0}", ex.Message); CloseDevice(); }
         }
 
         private void Pump()
@@ -122,7 +122,7 @@ internal sealed class PianoAudioEngine : IDisposable
                         RenderBuffer(buffer);
                         Check(WaveOutWrite(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "queue audio buffer");
                     }
-                    catch (Exception ex) { OutputError = $"Windows stopped accepting audio buffers: {ex.Message}"; _stopping = true; break; }
+                    catch (Exception ex) { OutputError = Loc.F("Windows stopped accepting audio buffers: {0}", ex.Message); _stopping = true; break; }
                 }
             }
         }
@@ -136,7 +136,7 @@ internal sealed class PianoAudioEngine : IDisposable
 
         private void Check(uint result, string action)
         {
-            if (result != 0) throw new InvalidOperationException($"Could not {action} (waveOut error {result}).");
+            if (result != 0) throw new InvalidOperationException(Loc.F("Could not {0} (waveOut error {1}).", Loc.T(action), result));
         }
 
         public void Dispose()

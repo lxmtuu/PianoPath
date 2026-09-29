@@ -23,7 +23,7 @@ internal sealed class ColorPickerWindow : Window
 
     internal ColorPickerWindow(string initialColor)
     {
-        Title = "Choose a color";
+        Title = Loc.T("Choose a color");
         Width = 390;
         Height = 510;
         ResizeMode = ResizeMode.NoResize;
@@ -38,11 +38,11 @@ internal sealed class ColorPickerWindow : Window
 
         var root = new DockPanel { Margin = new Thickness(20) };
         var footer = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 16, 0, 0) };
-        var cancel = MakeButton("Cancel", false); cancel.Click += (_, _) => DialogResult = false;
-        var apply = MakeButton("Apply color", true); apply.Margin = new Thickness(9, 0, 0, 0); apply.Click += (_, _) => { SelectedHex = ToHex(_current); DialogResult = true; };
+        var cancel = MakeButton(Loc.T("Cancel"), false); cancel.Click += (_, _) => DialogResult = false;
+        var apply = MakeButton(Loc.T("Apply color"), true); apply.Margin = new Thickness(9, 0, 0, 0); apply.Click += (_, _) => { SelectedHex = ToHex(_current); DialogResult = true; };
         footer.Children.Add(cancel); footer.Children.Add(apply); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
 
-        var title = new TextBlock { Text = "COLOR PICKER", FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)), Margin = new Thickness(0, 0, 0, 14) };
+        var title = new TextBlock { Text = Loc.T("COLOR PICKER"), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)), Margin = new Thickness(0, 0, 0, 14) };
         DockPanel.SetDock(title, Dock.Top); root.Children.Add(title);
 
         _field = new ColorField(_hue, saturation, value) { Height = 250, Margin = new Thickness(0, 0, 0, 12) };
@@ -53,7 +53,7 @@ internal sealed class ColorPickerWindow : Window
         var hueHeader = new DockPanel { Margin = new Thickness(0, 1, 0, 4) };
         hueHeader.Children.Add(new TextBlock { Text = "Hue", Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)), FontSize = 10 });
         DockPanel.SetDock(hueHeader.Children[^1], Dock.Left);
-        hueHeader.Children.Add(new TextBlock { Text = "Drag the square for saturation and brightness", Foreground = new SolidColorBrush(Color.FromRgb(113, 105, 126)), FontSize = 9, HorizontalAlignment = HorizontalAlignment.Right });
+        hueHeader.Children.Add(new TextBlock { Text = Loc.T("Drag the square for saturation and brightness"), Foreground = new SolidColorBrush(Color.FromRgb(113, 105, 126)), FontSize = 9, HorizontalAlignment = HorizontalAlignment.Right });
         DockPanel.SetDock(hueHeader, Dock.Top); root.Children.Add(hueHeader);
 
         _hueSlider = new Slider { Minimum = 0, Maximum = 360, Value = _hue, Height = 27, Margin = new Thickness(0, 0, 0, 14), Background = HueBrush() };
@@ -66,7 +66,7 @@ internal sealed class ColorPickerWindow : Window
         };
         DockPanel.SetDock(_hueSlider, Dock.Top); root.Children.Add(_hueSlider);
 
-        var swatchHeader = new TextBlock { Text = "QUICK COLORS", FontSize = 9, Foreground = new SolidColorBrush(Color.FromRgb(156, 146, 168)), Margin = new Thickness(0, 0, 0, 7) };
+        var swatchHeader = new TextBlock { Text = Loc.T("QUICK COLORS"), FontSize = 9, Foreground = new SolidColorBrush(Color.FromRgb(156, 146, 168)), Margin = new Thickness(0, 0, 0, 7) };
         DockPanel.SetDock(swatchHeader, Dock.Top); root.Children.Add(swatchHeader);
         var swatches = new UniformGrid { Columns = 8, Rows = 1, Margin = new Thickness(0, 0, 0, 14) };
         Color[] quickColors = [
@@ -91,7 +91,7 @@ internal sealed class ColorPickerWindow : Window
         _hexInput.LostFocus += (_, _) => ApplyHexInput();
         _hexInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyHexInput(); e.Handled = true; } };
         Grid.SetColumn(_hexInput, 1); colorRow.Children.Add(_hexInput);
-        var rgb = new TextBlock { Text = "RGB / HEX", Foreground = new SolidColorBrush(Color.FromRgb(130, 120, 144)), FontSize = 8, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8, 0, 0, 0) };
+        var rgb = new TextBlock { Text = Loc.T("RGB / HEX"), Foreground = new SolidColorBrush(Color.FromRgb(130, 120, 144)), FontSize = 8, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8, 0, 0, 0) };
         Grid.SetColumn(rgb, 2); colorRow.Children.Add(rgb);
         DockPanel.SetDock(colorRow, Dock.Top); root.Children.Add(colorRow);
 

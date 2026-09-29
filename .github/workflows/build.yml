@@ -70,12 +70,22 @@ jobs:
           $out = 'docs/previews'
           New-Item -ItemType Directory -Force -Path $out | Out-Null
           $shots = @(
-            @{ Name = 'stage-live.png';  Args = @('--play-preview') },
-            @{ Name = 'main-menu.png';   Args = @('--menu') },
-            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style') },
-            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme') },
-            @{ Name = 'play-dialog.png'; Args = @('--play-dialog') },
-            @{ Name = 'shortcuts.png';   Args = @('--shortcuts') }
+            # --lang=en pins the captions: a runner whose Windows display language happens to be
+            # something else must still render the same English README as every other machine.
+            @{ Name = 'stage-live.png';  Args = @('--play-preview', '--lang=en') },
+            # The background page draws a picture of your own behind the keys. The README shows that
+            # feature with the generated sample from docs/samples, never with a visitor's screenshot: the
+            # shot stays deterministic and the repo stays free of artwork somebody else holds the rights to.
+            @{ Name = 'background-image.png'; Args = @('--play-preview', '--lang=en', "--background-image=$(Join-Path $PWD 'docs/samples/stage-backdrop.png')") },
+            @{ Name = 'main-menu.png';   Args = @('--menu', '--lang=en') },
+            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style', '--lang=en') },
+            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme', '--lang=en') },
+            @{ Name = 'play-dialog.png'; Args = @('--play-dialog', '--lang=en') },
+            @{ Name = 'shortcuts.png';   Args = @('--shortcuts', '--lang=en') },
+            # One shot in Vietnamese, on the page that owns the setting: the interface language is a
+            # feature, and the README shows it instead of only describing it. docs/previews is owned by
+            # this step, so the file may be one commit behind the README line pointing at it.
+            @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general', '--lang=vi') }
           )
           $failed = @()
           foreach ($shot in $shots) {
@@ -99,6 +109,9 @@ jobs:
           path: docs/previews/*.png
           if-no-files-found: warn
 
+      # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README
+      # reference a preview that this commit has not rendered yet (see scan_readme).
+      #
       # Publish the screenshots with the change that produced them. The step is skipped for pull
       # requests (the checkout is a merge commit then) and for runs triggered by its own commit, so a
       # refresh can never loop.

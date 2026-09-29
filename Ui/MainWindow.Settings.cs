@@ -16,7 +16,12 @@ public partial class MainWindow
     private sealed class SettingRow
     {
         public required FrameworkElement Element;
-        public required string SearchText;
+        /// <summary>
+        /// English source strings this row answers to. The search box matches a row in any bundled
+        /// language, so a Vietnamese user can type either "tốc độ" or "speed" and find the same
+        /// slider — the keys stay English, the match runs through <see cref="Loc.T"/>.
+        /// </summary>
+        public required string[] SearchKeys;
         public required Panel Page;
         public required Border Card;
         public string? Property;
@@ -28,6 +33,8 @@ public partial class MainWindow
     private readonly Dictionary<string, TextBox> _visualValueBoxes = [];
     private readonly Dictionary<string, (double Min, double Max)> _sliderRanges = [];
     private readonly Dictionary<string, ComboBox> _visualChoices = [];
+    /// <summary>Raw (value, caption) pairs of every picker, so a language switch can rebuild its items without losing the English captions.</summary>
+    private readonly Dictionary<string, (string Value, string Caption)[]> _visualChoiceOptions = [];
     private readonly Dictionary<string, CheckBox> _visualToggles = [];
     /// <summary>Every generated switch; a layer such as sparks appears both on the Style page and on its own page.</summary>
     private readonly List<CheckBox> _visualToggleList = [];
@@ -48,8 +55,12 @@ public partial class MainWindow
     private void BuildVisualSettingsControls()
     {
         _loadingVisualSettings = true;
-        BuildStylePage(); BuildThemePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage();
+        BuildStylePage(); BuildThemePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage(); BuildGeneralPage();
         _loadingVisualSettings = false;
+        // Pickers hold translated captions, so they are repainted from their raw option list whenever
+        // the language changes (the selected values themselves never move).
+        Loc.OnChanged(RefreshChoiceCaptions);
+        Loc.OnChanged(RefreshLanguageChips);
         // The theme chips are generated, so they have to be filled once the pages exist; the menu
         // picker shares the same list of themes.
         RefreshThemeChips(); RefreshMenuThemeChips();
@@ -85,9 +96,9 @@ public partial class MainWindow
         var shell = Card(ThemeSettingsHost, "INTERFACE THEME", "The chrome around the stage: surfaces, accents and the animated acoustic backdrop. Applying a stage preset also switches the theme that belongs to it.");
         var chips = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
         themeChipHost = chips;
-        Register(shell, chips, "interface theme shell concert grand noir obsidian velvet gold backdrop", nameof(PianoVisualSettings.ShellTheme));
+        Register(shell, chips, nameof(PianoVisualSettings.ShellTheme), "interface theme shell concert grand noir obsidian velvet gold backdrop");
         themeBlurbLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 8) };
-        Register(shell, themeBlurbLabel, "theme description");
+        Register(shell, themeBlurbLabel, null, "theme description");
         Choice(shell, "Motion", nameof(PianoVisualSettings.ChromeMotion), "How much the interface moves: animated acoustic backdrop, panel transitions and button response. Off keeps everything still.",
             ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
         SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the floating concert dust motes and acoustic waves in the backdrop.");
@@ -124,17 +135,18 @@ public partial class MainWindow
             var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
             var chip = new Button
             {
-                Content = active ? "✦  " + theme.Name : theme.Name,
                 Tag = ThemeOrb(theme),
                 DataContext = theme.Id,
                 Style = (Style)FindResource("ThemeChipStyle"),
-                ToolTip = theme.Blurb,
                 Opacity = active ? 1 : .72
             };
+            // The chip prints the localised theme name; the id it stores stays English.
+            Loc.Bind(chip, () => Loc.F(active ? "✦  {0}" : "{0}", Loc.T(theme.Name)));
+            Loc.Set(chip, theme.Blurb, FrameworkElement.ToolTipProperty);
             chip.Click += ThemeChip_Click;
             themeChipHost.Children.Add(chip);
         }
-        if (themeBlurbLabel is not null) themeBlurbLabel.Text = ShellThemeManager.Current.Blurb;
+        if (themeBlurbLabel is not null) Loc.Set(themeBlurbLabel, ShellThemeManager.Current.Blurb);
     }
 
     /// <summary>The generated host of a page in tab-strip order, or null for pages built directly in XAML.</summary>
@@ -151,6 +163,7 @@ public partial class MainWindow
             SettingsPages.Background => SceneSettingsHost,
             SettingsPages.Camera => CameraSettingsHost,
             SettingsPages.Recording => RecordingSettingsHost,
+            SettingsPages.General => GeneralSettingsHost,
             _ => null
         };
     }
@@ -402,6 +415,70 @@ public partial class MainWindow
         SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the AVI file.");
     }
 
+    /// <summary>
+    /// The General page: preferences that belong to the application rather than to the look of the
+    /// stage. The language picker is the first entry; anything app-wide (startup behaviour, update
+    /// channel, notation style) belongs here too.
+    /// </summary>
+    private void BuildGeneralPage()
+    {
+        var language = Card(GeneralSettingsHost, "LANGUAGE", "The language of every menu, dock page, dialog and status line. A language applies immediately — playback, the open MIDI file and your settings are untouched.");
+        _languageChipHost = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
+        Register(language, _languageChipHost, null, "language interface english vietnamese tiếng việt");
+        var blurb = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 8) };
+        _languageBlurb = blurb;
+        Register(language, blurb, null, "language follows windows");
+        RefreshLanguageChips();
+        Note(language, "Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another.");
+    }
+
+    /// <summary>
+    /// One language chip: the "follow Windows" row is a table key and translates, while a real language
+    /// prints its own name the way its own speakers write it (<c>Tiếng Việt · English</c>) in every
+    /// interface language — that text is composed, not translated, so it is bound rather than looked up.
+    /// </summary>
+    private Button LanguageChip(string id, string caption)
+    {
+        var chip = new Button { Tag = id, DataContext = id, Style = (Style)FindResource("ThemeChipStyle"), Opacity = IsActiveLanguage(id) ? 1 : .72 };
+        if (id.Length == 0) Loc.Set(chip, caption); else Loc.Bind(chip, () => caption);
+        chip.Click += LanguageChip_Click;
+        return chip;
+    }
+
+    /// <summary>Rebuilds the language chips of the General page and the startup menu.</summary>
+    private void RefreshLanguageChips()
+    {
+        if (_languageChipHost is not null)
+        {
+            _languageChipHost.Children.Clear();
+            foreach (var (id, caption) in LanguageChoices()) _languageChipHost.Children.Add(LanguageChip(id, caption));
+        }
+        if (_languageBlurb is not null)
+            Loc.Bind(_languageBlurb, () => Loc.F("Active language: {0} · selected from {1}", Loc.Current.Display, Loc.StoredId.Length == 0 ? Loc.T("the Windows display language") : Loc.T("this settings page")));
+        RefreshMenuLanguageChips();
+    }
+
+    /// <summary>
+    /// The picker entries: "follow Windows" first, then every bundled language by its native name.
+    /// The id of the automatic entry is empty, which is exactly what the settings file stores.
+    /// </summary>
+    private static IEnumerable<(string Id, string Caption)> LanguageChoices()
+    {
+        yield return ("", "Follow Windows");
+        foreach (var language in Languages.All) yield return (language.Id, language.Display);
+    }
+
+    private static bool IsActiveLanguage(string id) =>
+        id.Length == 0 ? Loc.StoredId.Length == 0 : string.Equals(id, Loc.Current.Id, StringComparison.OrdinalIgnoreCase);
+
+    private void LanguageChip_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: string id }) return;
+        if (IsActiveLanguage(id)) { ChromeMotion.Pulse((UIElement)sender); return; }
+        ChromeMotion.Pulse((UIElement)sender);
+        ApplyLanguage(id);
+    }
+
     // =====================================================================================================
     // Row builders
     // =====================================================================================================
@@ -410,99 +487,139 @@ public partial class MainWindow
     {
         var card = new Border { CornerRadius = new CornerRadius(12), Padding = new Thickness(14, 10, 14, 12), Margin = new Thickness(0, 10, 0, 0), Background = (Brush)FindResource("ControlBrush"), BorderBrush = (Brush)FindResource("ControlBorderBrush"), BorderThickness = new Thickness(1) };
         var body = new StackPanel();
-        body.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("EyebrowTextStyle") });
-        body.Children.Add(new TextBlock { Text = subtitle, Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 6) });
+        var heading = new TextBlock { Style = (Style)FindResource("EyebrowTextStyle") };
+        var caption = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 6) };
+        Loc.Set(heading, title); Loc.Set(caption, subtitle);
+        body.Children.Add(heading);
+        body.Children.Add(caption);
         card.Child = body; page.Children.Add(card); _settingCards.Add(card);
         return body;
     }
 
-    private SettingRow Register(Panel body, FrameworkElement element, string searchText, string? property = null)
+    private SettingRow Register(Panel body, FrameworkElement element, string? property = null, params string[] searchKeys)
     {
         body.Children.Add(element);
         var card = (Border)((FrameworkElement)body).Parent;
         var page = (Panel)card.Parent;
-        var row = new SettingRow { Element = element, SearchText = searchText.ToLowerInvariant(), Page = page, Card = card, Property = property };
+        var row = new SettingRow { Element = element, SearchKeys = searchKeys, Page = page, Card = card, Property = property };
         _settingRows.Add(row);
         return row;
     }
 
+    /// <summary>One line of the generated catalogue: a switch, a slider, a picker or a colour.</summary>
+    /// <remarks>
+    /// Label and tooltip are English source strings handed to <see cref="Loc"/>, which prints the
+    /// active language now and repaints the element after a switch — the dock is never rebuilt for a
+    /// language change, so scroll position, open controls and typed values all survive.
+    /// </remarks>
     private SettingRow Toggle(Panel body, string label, string property, string tooltip)
     {
-        var check = new CheckBox { Content = label, Tag = property, IsChecked = (bool)Prop(property).GetValue(_visualSettings)!, Margin = new Thickness(0, 6, 0, 6), ToolTip = tooltip, HorizontalAlignment = HorizontalAlignment.Stretch };
+        var check = new CheckBox { Tag = property, IsChecked = (bool)Prop(property).GetValue(_visualSettings)!, Margin = new Thickness(0, 6, 0, 6), HorizontalAlignment = HorizontalAlignment.Stretch };
+        Loc.Set(check, label, ContentControl.ContentProperty);
+        Loc.Set(check, tooltip, FrameworkElement.ToolTipProperty);
         check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed;
         _visualToggles[property] = check; _visualToggleList.Add(check);
-        return Register(body, check, label + " " + tooltip, property);
+        return Register(body, check, property, label, tooltip);
     }
 
     private SettingRow SliderRow(Panel body, string label, string property, double minimum, double maximum, string tooltip)
     {
         var prop = Prop(property);
         var current = (double)prop.GetValue(_visualSettings)!;
-        var row = new Grid { Margin = new Thickness(0, 4, 0, 6), ToolTip = tooltip };
+        var row = new Grid { Margin = new Thickness(0, 4, 0, 6) };
+        Loc.Set(row, tooltip, FrameworkElement.ToolTipProperty);
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var text = new TextBlock { Text = label, Style = (Style)FindResource("LabelTextStyle") };
-        var box = new TextBox { Text = FormatSetting(property, current), Tag = property, Width = 74, Height = 24, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, TextAlignment = TextAlignment.Right, ToolTip = "Type a value and press Enter" };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        Loc.Set(text, label);
+        var box = new TextBox { Text = FormatSetting(property, current), Tag = property, Width = 74, Height = 24, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, TextAlignment = TextAlignment.Right };
+        Loc.Set(box, "Type a value and press Enter", FrameworkElement.ToolTipProperty);
         box.LostFocus += VisualValueBox_Commit; box.KeyDown += VisualValueBox_KeyDown;
-        var reset = new Button { Content = "↺", Tag = property, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0), ToolTip = $"Reset to {FormatSetting(property, (double)prop.GetValue(DefaultVisualSettings)!)}" };
+        var reset = new Button { Content = "↺", Tag = property, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0) };
+        var resetValue = FormatSetting(property, (double)prop.GetValue(DefaultVisualSettings)!);
+        Loc.Format(reset, "Reset to {0}", resetValue);
         reset.Click += VisualReset_Click;
         var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = Math.Clamp(current, minimum, maximum), Tag = property, Margin = new Thickness(0, 2, 0, 0) };
         slider.ValueChanged += VisualSlider_ValueChanged;
         Grid.SetColumn(box, 1); Grid.SetColumn(reset, 2); Grid.SetRow(slider, 1); Grid.SetColumnSpan(slider, 3);
         row.Children.Add(text); row.Children.Add(box); row.Children.Add(reset); row.Children.Add(slider);
         _visualSliders[property] = slider; _visualValueBoxes[property] = box; _sliderRanges[property] = (minimum, maximum);
-        return Register(body, row, label + " " + tooltip, property);
+        return Register(body, row, property, label, tooltip);
     }
 
     private SettingRow Choice(Panel body, string label, string property, string tooltip, params (string Value, string Caption)[] options)
     {
-        var row = new Grid { Margin = new Thickness(0, 5, 0, 6), ToolTip = tooltip };
+        var row = new Grid { Margin = new Thickness(0, 5, 0, 6) };
+        Loc.Set(row, tooltip, FrameworkElement.ToolTipProperty);
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new TextBlock { Text = label, Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        Loc.Set(text, label);
         var combo = new ComboBox { Tag = property, Width = 210, Height = 30, DisplayMemberPath = "Caption", SelectedValuePath = "Value" };
-        combo.ItemsSource = options.Select(o => new ChoiceOption(o.Value, o.Caption)).ToList();
+        // The caption is display only; the stored value stays the English identifier, so a saved
+        // preset keeps working after the interface language changes.
+        combo.ItemsSource = options.Select(o => new ChoiceOption(o.Value, Loc.T(o.Caption))).ToList();
         combo.SelectedValue = (string)Prop(property).GetValue(_visualSettings)!;
         combo.SelectionChanged += VisualChoice_Changed;
         Grid.SetColumn(combo, 1); row.Children.Add(text); row.Children.Add(combo);
         _visualChoices[property] = combo;
-        return Register(body, row, label + " " + tooltip + " " + string.Join(' ', options.Select(o => o.Caption)), property);
+        return Register(body, row, property, [label, tooltip, .. options.Select(o => o.Caption)]);
+    }
+
+    /// <summary>Repaints every picker after a language switch, keeping the selected value.</summary>
+    private void RefreshChoiceCaptions()
+    {
+        foreach (var (property, combo) in _visualChoices)
+        {
+            if (combo.ItemsSource is not IEnumerable<ChoiceOption> options) continue;
+            var selected = combo.SelectedValue;
+            var loading = _loadingVisualSettings;
+            _loadingVisualSettings = true;
+            try { combo.ItemsSource = options.Select(o => new ChoiceOption(o.Value, Loc.T(o.Caption))).ToList(); combo.SelectedValue = selected; }
+            finally { _loadingVisualSettings = loading; }
+        }
     }
 
     private SettingRow ColorRow(Panel body, string label, string property, string tooltip)
     {
         var current = (string)Prop(property).GetValue(_visualSettings)!;
-        var row = new Grid { Margin = new Thickness(0, 5, 0, 6), ToolTip = tooltip };
+        var row = new Grid { Margin = new Thickness(0, 5, 0, 6) };
+        Loc.Set(row, tooltip, FrameworkElement.ToolTipProperty);
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new TextBlock { Text = label, Style = (Style)FindResource("LabelTextStyle") };
-        var swatch = new Button { Tag = property, Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), ToolTip = "Open color picker", BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)) };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        Loc.Set(text, label);
+        var swatch = new Button { Tag = property, Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)) };
+        Loc.Set(swatch, "Open color picker", FrameworkElement.ToolTipProperty);
         swatch.Click += VisualColorButton_Click; SetColorSwatch(swatch, current);
         var box = new TextBox { Text = current, Tag = property, Width = 92, Height = 26, FontSize = 10.5, CharacterCasing = CharacterCasing.Upper, MaxLength = 9 };
         box.LostFocus += VisualColor_LostFocus; box.KeyDown += (s, e) => { if (e.Key == Key.Enter) { VisualColor_LostFocus(s, e); e.Handled = true; } };
         Grid.SetColumn(swatch, 1); Grid.SetColumn(box, 2);
         row.Children.Add(text); row.Children.Add(swatch); row.Children.Add(box);
         _visualColorInputs[property] = box; _visualColorButtons[property] = swatch;
-        return Register(body, row, label + " " + tooltip + " color", property);
+        return Register(body, row, property, label, tooltip, "color");
     }
 
     private SettingRow TrackPaletteRow(Panel body)
     {
         var stack = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
-        stack.Children.Add(new TextBlock { Text = "Track colors (tracks 9+ repeat the palette)", Style = (Style)FindResource("LabelTextStyle"), Margin = new Thickness(0, 0, 0, 6) });
+        var caption = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), Margin = new Thickness(0, 0, 0, 6) };
+        Loc.Set(caption, "Track colors (tracks 9+ repeat the palette)");
+        stack.Children.Add(caption);
         var wrap = new WrapPanel();
         _trackPaletteSwatches.Clear();
         for (var i = 0; i < 8; i++)
         {
-            var swatch = new Button { Tag = i, Width = 40, Height = 28, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 6), Content = (i + 1).ToString(), FontSize = 10, Foreground = Brushes.White, ToolTip = $"Color of track {i + 1}" };
+            var swatch = new Button { Tag = i, Width = 40, Height = 28, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 6), Content = (i + 1).ToString(), FontSize = 10, Foreground = Brushes.White };
+            Loc.Format(swatch, "Color of track {0}", i + 1);
             swatch.Click += TrackPaletteButton_Click; SetColorSwatch(swatch, _visualSettings.TrackColors[i]);
             wrap.Children.Add(swatch); _trackPaletteSwatches.Add(swatch);
         }
         stack.Children.Add(wrap);
-        return Register(body, stack, "track colors palette per track", nameof(PianoVisualSettings.TrackColors));
+        return Register(body, stack, nameof(PianoVisualSettings.TrackColors), "track colors palette per track");
     }
 
     private SettingRow ButtonRow(Panel body, params (string Text, RoutedEventHandler Click)[] buttons)
@@ -510,16 +627,36 @@ public partial class MainWindow
         var wrap = new WrapPanel { Margin = new Thickness(0, 6, 0, 4) };
         foreach (var (text, click) in buttons)
         {
-            var button = new Button { Content = text, Margin = new Thickness(0, 0, 8, 4) }; button.Click += click; wrap.Children.Add(button);
+            var button = new Button { Margin = new Thickness(0, 0, 8, 4) };
+            Loc.Set(button, text);
+            button.Click += click; wrap.Children.Add(button);
         }
-        return Register(body, wrap, string.Join(' ', buttons.Select(b => b.Text)));
+        return Register(body, wrap, null, [.. buttons.Select(b => b.Text)]);
     }
 
     private SettingRow Note(Panel body, string text)
-        => Register(body, new TextBlock { Text = text, Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 4, 0, 4) }, text);
+    {
+        var label = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 4, 0, 4) };
+        Loc.Set(label, text);
+        return Register(body, label, null, text);
+    }
 
     private sealed record ChoiceOption(string Value, string Caption);
     private static System.Reflection.PropertyInfo Prop(string property) => typeof(PianoVisualSettings).GetProperty(property) ?? throw new InvalidOperationException($"Unknown visual setting '{property}'.");
+
+    /// <summary>Warning or notice dialog with a localized body and title (dialogs are never snapshotted two ways).</summary>
+    private void ShowMessage(string message, string titleKey, MessageBoxImage icon = MessageBoxImage.Warning)
+    {
+        if (SuppressErrorDialogs || _closing) return;
+        MessageBox.Show(this, message, Loc.T(titleKey), MessageBoxButton.OK, icon);
+    }
+
+    /// <summary>Yes/no confirmation whose texts follow the interface language.</summary>
+    private bool Confirm(string message, string titleKey)
+    {
+        if (SuppressErrorDialogs || _closing) return false;
+        return MessageBox.Show(this, message, Loc.T(titleKey), MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+    }
 
     internal static string FormatSetting(string property, double value) => property switch
     {
@@ -572,8 +709,8 @@ public partial class MainWindow
         }
         finally { _loadingVisualSettings = false; }
         MarkModified(); RefreshDependentRows();
-        var label = check.Content as string ?? check.Tag as string ?? "Setting";
-        ApplyVisualSettings($"{label} {(check.IsChecked == true ? "on" : "off")}");
+        var label = check.Content as string ?? check.Tag as string ?? Loc.T("Setting");
+        ApplyVisualSettings(check.IsChecked == true ? "{0} on" : "{0} off", false, label);
     }
 
     private void VisualSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -623,8 +760,16 @@ public partial class MainWindow
         if (property == nameof(PianoVisualSettings.BackgroundMode) && value == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) ChooseStageBackground(sender, e);
         MarkModified(); RefreshDependentRows(); RebuildTrackList();
         if (property is nameof(PianoVisualSettings.RecordingResolution)) UpdateRecordingInfo();
-        var what = property switch { nameof(PianoVisualSettings.NoteStyle) => "Note style", nameof(PianoVisualSettings.NoteDirection) => "Note direction", nameof(PianoVisualSettings.ColorMode) => "Color mode", nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style", nameof(PianoVisualSettings.BackgroundMode) => "Background mode", _ => "Setting" };
-        ApplyVisualSettings(what + " updated");
+        var what = property switch
+        {
+            nameof(PianoVisualSettings.NoteStyle) => "Note style updated",
+            nameof(PianoVisualSettings.NoteDirection) => "Note direction updated",
+            nameof(PianoVisualSettings.ColorMode) => "Color mode updated",
+            nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style updated",
+            nameof(PianoVisualSettings.BackgroundMode) => "Background mode updated",
+            _ => "Setting updated"
+        };
+        ApplyVisualSettings(what);
     }
 
     private void VisualColorButton_Click(object sender, RoutedEventArgs e)
@@ -671,7 +816,7 @@ public partial class MainWindow
         _visualSettings.TrackColors[index] = selected;
         SetColorSwatch(_trackPaletteSwatches[index], selected);
         RebuildTrackList(); MarkModified();
-        ApplyVisualSettings($"Track {index + 1} color applied");
+        ApplyVisualSettings("Track {0} color applied", false, index + 1);
     }
 
     private void MarkModified()
@@ -686,7 +831,7 @@ public partial class MainWindow
         var query = SettingsSearchBox?.Text.Trim().ToLowerInvariant() ?? "";
         foreach (var row in _settingRows)
         {
-            var visible = (row.VisibleWhen?.Invoke() ?? true) && (query.Length == 0 || row.SearchText.Contains(query, StringComparison.Ordinal));
+            var visible = (row.VisibleWhen?.Invoke() ?? true) && (query.Length == 0 || MatchesSearch(row, query));
             row.Element.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
         foreach (var card in _settingCards)
@@ -695,6 +840,18 @@ public partial class MainWindow
             card.Visibility = anyVisible ? Visibility.Visible : Visibility.Collapsed;
         }
         if (SettingsSearchHint is not null) SettingsSearchHint.Visibility = query.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    /// <summary>
+    /// A row matches when the query appears in the English source string <em>or</em> in its
+    /// translation, so "tốc độ rơi" and "fall speed" both find the same slider.
+    /// </summary>
+    private static bool MatchesSearch(SettingRow row, string query)
+    {
+        foreach (var key in row.SearchKeys)
+            if (key.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || Loc.Known(key) && Loc.T(key).Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+        return false;
     }
 
     /// <summary>Pushes every value of <see cref="_visualSettings"/> back into the generated controls (after presets, resets or imports).</summary>
@@ -764,39 +921,61 @@ public partial class MainWindow
 
     private void UpdatePresetLabels()
     {
-        var name = string.IsNullOrWhiteSpace(_visualSettings.PresetName) ? "Custom" : _visualSettings.PresetName;
-        if (PresetNameLabel is not null) PresetNameLabel.Text = $"Preset · {name}{(_visualSettings.PresetModified ? " · modified" : "")}";
-        if (HeaderPresetLabel is not null) HeaderPresetLabel.Text = _visualSettings.PresetModified ? name + " *" : name;
+        var name = string.IsNullOrWhiteSpace(_visualSettings.PresetName) ? Loc.T("Custom") : VisualPresets.DisplayName(_visualSettings.PresetName);
+        if (PresetNameLabel is not null) Loc.Format(PresetNameLabel, _visualSettings.PresetModified ? "Preset · {0} · modified" : "Preset · {0}", name);
+        if (HeaderPresetLabel is not null) Loc.Format(HeaderPresetLabel, _visualSettings.PresetModified ? "{0} *" : "{0}", name);
     }
 
-    private void ApplyVisualSettings(string status, bool reloadBackground = false)
+    /// <summary>
+    /// Applies the current settings and prints one line of feedback. The message is a template plus
+    /// arguments, so it is re-rendered in the new language if the user switches afterwards.
+    /// </summary>
+    private void ApplyVisualSettings(string statusTemplate, bool reloadBackground = false, params object?[] statusArguments)
     {
         _visualSettings.Clamp();
         Stage.SetVisualSettings(_visualSettings, reloadBackground);
         ApplyChromeTheme();
         if (reloadBackground && Stage.BackgroundLoadError is { } error)
         {
-            SettingsSaveLabel.Text = "Background image failed to load";
-            MessageBox.Show(this, $"Keyflow could not load this image. Choose a PNG, JPEG, BMP, GIF or TIFF file.\n\n{error}", "Background image", MessageBoxButton.OK, MessageBoxImage.Warning);
+            Loc.Set(SettingsSaveLabel, "Background image failed to load");
+            ShowMessage(Loc.F("Keyflow could not load this image. Choose a PNG, JPEG, BMP, GIF or TIFF file.\n\n{0}", error), "Background image", MessageBoxImage.Warning);
         }
-        else SettingsSaveLabel.Text = status;
+        else Loc.Format(SettingsSaveLabel, statusTemplate, statusArguments);
         _settingsSaveTimer.Stop(); _settingsSaveTimer.Start();
     }
 
     private void SaveVisualSettings_Click(object sender, RoutedEventArgs e) => SaveVisualSettings();
     private void SaveVisualSettings()
     {
-        try { PianoVisualSettingsStore.Save(_visualSettings); SettingsSaveLabel.Text = "Saved to this computer"; }
-        catch (Exception ex) { SettingsSaveLabel.Text = "Save failed"; if (!_closing) MessageBox.Show(this, ex.Message, "Stage settings", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        try { PianoVisualSettingsStore.Save(_visualSettings); Loc.Set(SettingsSaveLabel, "Saved to this computer"); }
+        catch (Exception ex) { Loc.Set(SettingsSaveLabel, "Save failed"); if (!_closing) ShowMessage(ex.Message, "Stage settings", MessageBoxImage.Warning); }
     }
 
     private void ChooseStageBackground(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files (*.*)|*.*", Title = "Choose a piano visualizer background", CheckFileExists = true, Multiselect = false };
+        var dialog = new OpenFileDialog { Filter = Loc.T("Image files (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files (*.*)|*.*"), Title = Loc.T("Choose a piano visualizer background"), CheckFileExists = true, Multiselect = false };
         if (dialog.ShowDialog(this) != true) return;
         _visualSettings.BackgroundImagePath = dialog.FileName; _visualSettings.BackgroundMode = "Image"; _visualSettings.ShowBackground = true;
         RefreshSettingControls(); MarkModified();
         ApplyVisualSettings("Background image applied", reloadBackground: true);
+    }
+
+    /// <summary>
+    /// Preview one picture behind the keys for this run only. <c>--background-image=&lt;path&gt;</c> uses it so
+    /// the documented screenshots can show the feature without shipping anyone's artwork. The store is
+    /// deliberately untouched: no auto-save timer and no "modified" flag, because the picture is not a
+    /// setting the user chose. A bad path is likewise not escalated into a dialog - a preview run has
+    /// nobody to click it - the stage just keeps the solid colour and records <c>BackgroundLoadError</c>.
+    /// </summary>
+    public void PreviewBackgroundImage(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        _visualSettings.BackgroundImagePath = Path.GetFullPath(path.Trim());
+        _visualSettings.BackgroundMode = "Image";
+        _visualSettings.ShowBackground = true;
+        _visualSettings.Clamp();
+        RefreshSettingControls();
+        Stage.SetVisualSettings(_visualSettings, reloadBackground: true);
     }
 
     // =====================================================================================================
@@ -822,6 +1001,12 @@ public partial class MainWindow
         // Selector.SelectionChanged bubbles from combo boxes and lists inside the pages; only react to the tab strip itself.
         if (!ReferenceEquals(e.OriginalSource, SettingsTabs)) return;
         _lastPointerActivity = DateTime.UtcNow;
+        // The navigation strip holds twelve rows in a scrollable column, so arriving at a page from
+        // anywhere else — the header chip, a search hit, the General page at the bottom, --settings-tab —
+        // has to bring that row into view. Otherwise the dock shows a page whose own entry is off screen.
+        // One layout pass later, because the item is still being measured when SelectionChanged fires.
+        if (SettingsTabs.SelectedItem is FrameworkElement row)
+            row.Dispatcher.BeginInvoke(new Action(row.BringIntoView), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void StyleQuick_Click(object sender, RoutedEventArgs e) { SettingsTabs.SelectedIndex = 0; OpenSettingsPanel(); }
@@ -832,7 +1017,7 @@ public partial class MainWindow
     private void ResetPage_Click(object sender, RoutedEventArgs e)
     {
         var page = SettingsPageHost(SettingsTabs.SelectedIndex);
-        if (page is null) { SettingsSaveLabel.Text = "This page has no visual settings to reset"; return; }
+        if (page is null) { Loc.Set(SettingsSaveLabel, "This page has no visual settings to reset"); return; }
         var source = BasePresetSettings();
         foreach (var row in _settingRows)
         {
@@ -878,10 +1063,16 @@ public partial class MainWindow
         var strip = new Border { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0), CornerRadius = new CornerRadius(6), ClipToBounds = true };
         strip.Child = new Image { Source = PresetThumbnail(preset), Width = 96, Height = 56, Stretch = Stretch.Fill };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
-        text.Children.Add(new TextBlock { Text = preset.Name, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
-        text.Children.Add(new TextBlock { Text = preset.Description, Style = (Style)FindResource("MutedTextStyle"), FontSize = 9.5, Margin = new Thickness(0, 2, 0, 0) });
+        var name = new TextBlock { FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") };
+        Loc.Bind(name, () => VisualPresets.DisplayName(preset.Name));
+        var description = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), FontSize = 9.5, Margin = new Thickness(0, 2, 0, 0) };
+        Loc.Bind(description, () => preset.BuiltIn ? Loc.T(preset.Description) : preset.Description);
+        text.Children.Add(name);
+        text.Children.Add(description);
         var kind = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(7, 2, 7, 2), VerticalAlignment = VerticalAlignment.Center, Background = (Brush)FindResource(preset.BuiltIn ? "AccentSoftBrush" : "ControlHoverBrush"), Margin = new Thickness(10, 0, 0, 0) };
-        kind.Child = new TextBlock { Text = preset.BuiltIn ? "BUILT-IN" : "USER", FontSize = 8, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("MutedTextBrush") };
+        var kindLabel = new TextBlock { FontSize = 8, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("MutedTextBrush") };
+        Loc.Set(kindLabel, preset.BuiltIn ? "BUILT-IN" : "USER");
+        kind.Child = kindLabel;
         Grid.SetColumn(text, 1); Grid.SetColumn(kind, 2);
         grid.Children.Add(strip); grid.Children.Add(text); grid.Children.Add(kind);
         return grid;
@@ -946,7 +1137,8 @@ public partial class MainWindow
     private void UpdatePresetSelectionUi()
     {
         var preset = SelectedPreset;
-        PresetDescriptionLabel.Text = preset is null ? "Select a preset to preview its description." : preset.Description + (preset.BuiltIn ? "" : $"  ·  {preset.FilePath}");
+        if (preset is null) Loc.Set(PresetDescriptionLabel, "Select a preset to preview its description.");
+        else Loc.Bind(PresetDescriptionLabel, () => (preset.BuiltIn ? Loc.T(preset.Description) : preset.Description) + (preset.BuiltIn ? "" : $"  ·  {preset.FilePath}"));
         DeletePresetButton.IsEnabled = preset is { BuiltIn: false };
         ApplyPresetButton.IsEnabled = preset is not null;
     }
@@ -971,37 +1163,37 @@ public partial class MainWindow
         _visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;
         if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";
         RefreshSettingControls();
-        ApplyVisualSettings($"Preset “{preset.Name}” applied");
+        ApplyVisualSettings("Preset “{0}” applied", false, VisualPresets.DisplayName(preset.Name));
     }
 
     private void SavePresetAs_Click(object sender, RoutedEventArgs e)
     {
         var suggested = _visualSettings.PresetModified || VisualPresets.FindBuiltIn(_visualSettings.PresetName) is not null ? "My " + _visualSettings.PresetName : _visualSettings.PresetName;
-        var prompt = new TextPromptWindow("Save preset", "Name for this look. Existing user presets with the same name are replaced.", suggested) { Owner = this };
+        var prompt = new TextPromptWindow(Loc.T("Save preset"), Loc.T("Name for this look. Existing user presets with the same name are replaced."), suggested) { Owner = this };
         if (prompt.ShowDialog() != true || prompt.Result is not { } name) return;
         try
         {
-            if (VisualPresets.FindBuiltIn(name) is not null) { MessageBox.Show(this, $"“{name}” is a built-in preset. Choose another name.", "Save preset", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+            if (VisualPresets.FindBuiltIn(name) is not null) { ShowMessage(Loc.F("“{0}” is a built-in preset. Choose another name.", name), "Save preset", MessageBoxImage.Information); return; }
             var saved = VisualPresetStore.Default.Save(name, _visualSettings);
             _visualSettings.PresetName = saved.Name; _visualSettings.PresetModified = false;
             LoadPresetList(saved.Name); UpdatePresetLabels();
-            ApplyVisualSettings($"Preset “{saved.Name}” saved");
+            ApplyVisualSettings("Preset “{0}” saved", false, VisualPresets.DisplayName(saved.Name));
         }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Save preset", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { ShowMessage(ex.Message, "Save preset", MessageBoxImage.Warning); }
     }
 
     private void DeletePreset_Click(object sender, RoutedEventArgs e)
     {
         if (SelectedPreset is not { BuiltIn: false } preset) return;
-        if (MessageBox.Show(this, $"Delete the preset “{preset.Name}”?", "Delete preset", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        if (!Confirm(Loc.F("Delete the preset “{0}”?", VisualPresets.DisplayName(preset.Name)), "Delete preset")) return;
         VisualPresetStore.Default.Delete(preset);
         LoadPresetList(VisualPresets.DefaultPresetName);
-        SettingsSaveLabel.Text = $"Preset “{preset.Name}” deleted";
+        Loc.Format(SettingsSaveLabel, "Preset “{0}” deleted", VisualPresets.DisplayName(preset.Name));
     }
 
     private void ImportPreset_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = "Keyflow preset (*.json)|*.json|All files (*.*)|*.*", Title = "Import a Keyflow preset" };
+        var dialog = new OpenFileDialog { Filter = Loc.T("Keyflow preset (*.json)|*.json|All files (*.*)|*.*"), Title = Loc.T("Import a Keyflow preset") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
@@ -1010,15 +1202,15 @@ public partial class MainWindow
             LoadPresetList(saved.Name);
             ApplyPreset(saved);
         }
-        catch (Exception ex) { MessageBox.Show(this, $"This file is not a valid Keyflow preset.\n{ex.Message}", "Import preset", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { ShowMessage(Loc.F("This file is not a valid Keyflow preset.\n{0}", ex.Message), "Import preset", MessageBoxImage.Warning); }
     }
 
     private void ExportPreset_Click(object sender, RoutedEventArgs e)
     {
         var dialog = new SaveFileDialog { Filter = "Keyflow preset (*.json)|*.json", DefaultExt = ".json", AddExtension = true, FileName = VisualPresetStore.SanitizeName(_visualSettings.PresetName) + ".json", Title = "Export the current look" };
         if (dialog.ShowDialog(this) != true) return;
-        try { VisualPresetStore.Export(_visualSettings, dialog.FileName); SettingsSaveLabel.Text = "Preset exported"; }
-        catch (Exception ex) { MessageBox.Show(this, ex.Message, "Export preset", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        try { VisualPresetStore.Export(_visualSettings, dialog.FileName); Loc.Set(SettingsSaveLabel, "Preset exported"); }
+        catch (Exception ex) { ShowMessage(ex.Message, "Export preset", MessageBoxImage.Warning); }
     }
 
     private void ResetVisualSettings_Click(object sender, RoutedEventArgs e)
@@ -1039,7 +1231,9 @@ public partial class MainWindow
         var tracks = _allNotes.Select(n => n.Track).Distinct().Order().ToList();
         if (tracks.Count == 0)
         {
-            TrackListHost.Children.Add(new TextBlock { Text = "Open a MIDI file to see its tracks here.", Style = (Style)FindResource("MutedTextStyle") });
+            var empty = new TextBlock { Style = (Style)FindResource("MutedTextStyle") };
+            Loc.Set(empty, "Open a MIDI file to see its tracks here.");
+            TrackListHost.Children.Add(empty);
             return;
         }
         foreach (var track in tracks)
@@ -1047,11 +1241,15 @@ public partial class MainWindow
             var row = new Grid { Margin = new Thickness(0, 0, 0, 6) };
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var paletteIndex = ((track % 8) + 8) % 8;
-            var swatch = new Button { Tag = paletteIndex, Width = 26, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0, 0, 10, 0), ToolTip = _visualSettings.ColorMode == "PerTrack" ? "Change the color of this track" : "Track color (used by the “Per MIDI track” color mode)" };
+            var swatch = new Button { Tag = paletteIndex, Width = 26, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0, 0, 10, 0) };
+            Loc.Set(swatch, _visualSettings.ColorMode == "PerTrack" ? "Change the color of this track" : "Track color (used by the “Per MIDI track” color mode)", FrameworkElement.ToolTipProperty);
             SetColorSwatch(swatch, _visualSettings.TrackColors[paletteIndex]); swatch.Click += TrackPaletteButton_Click;
             var count = _allNotes.Count(n => n.Track == track);
-            var name = _trackNames.TryGetValue(track, out var trackName) ? $"Track {track + 1} · {trackName}" : $"Track {track + 1}";
-            var check = new CheckBox { Content = $"{name}   ({count} notes)", Tag = track, IsChecked = !_mutedTracks.Contains(track), ToolTip = "Audible and visible when on; muted tracks are hidden from the stage and the score.", HorizontalAlignment = HorizontalAlignment.Stretch };
+            var label = Loc.F("Track {0}", track + 1);
+            var name = _trackNames.TryGetValue(track, out var trackName) ? $"{label} · {trackName}" : label;
+            var check = new CheckBox { Tag = track, IsChecked = !_mutedTracks.Contains(track), HorizontalAlignment = HorizontalAlignment.Stretch };
+            Loc.Format(check, "{0}   ({1} notes)", name, count);
+            Loc.Set(check, "Audible and visible when on; muted tracks are hidden from the stage and the score.", FrameworkElement.ToolTipProperty);
             check.Checked += TrackMute_Changed; check.Unchecked += TrackMute_Changed;
             Grid.SetColumn(check, 1);
             row.Children.Add(swatch); row.Children.Add(check);
@@ -1070,7 +1268,7 @@ public partial class MainWindow
     {
         if (RecordingInfoLabel is null) return;
         var (width, height) = RecordingSize();
-        RecordingInfoLabel.Text = $"Next recording: {width} × {height} @ {_visualSettings.RecordingFrameRate:0} fps · AVI (MJPEG when a codec is installed, raw BGR otherwise) · audio is not captured.";
+        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · AVI (MJPEG when a codec is installed, raw BGR otherwise) · audio is not captured.", width, height, _visualSettings.RecordingFrameRate);
     }
 
     private (int Width, int Height) RecordingSize()

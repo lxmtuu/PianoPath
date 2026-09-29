@@ -68,12 +68,12 @@ internal static class MidiReader
     public static MidiSong ReadSong(string path)
     {
         using var stream = File.OpenRead(path); using var reader = new BinaryReader(stream);
-        if (!ChunkId(reader).Equals("MThd", StringComparison.Ordinal)) throw new InvalidDataException("Missing MIDI header.");
+        if (!ChunkId(reader).Equals("MThd", StringComparison.Ordinal)) throw new InvalidDataException(Loc.T("Missing MIDI header."));
         var headerLength = Read32(reader);
-        if (headerLength < 6 || headerLength > 1024) throw new InvalidDataException("The MIDI header has an invalid length.");
+        if (headerLength < 6 || headerLength > 1024) throw new InvalidDataException(Loc.T("The MIDI header has an invalid length."));
         var format = Read16(reader); var tracks = Read16(reader); var division = Read16(reader);
-        if (format == 2) throw new InvalidDataException("MIDI format 2 sequences are not supported yet.");
-        if (division == 0 || (division & 0x8000) != 0) throw new InvalidDataException("Unsupported MIDI time division (SMPTE timing is not supported).");
+        if (format == 2) throw new InvalidDataException(Loc.T("MIDI format 2 sequences are not supported yet."));
+        if (division == 0 || (division & 0x8000) != 0) throw new InvalidDataException(Loc.T("Unsupported MIDI time division (SMPTE timing is not supported)."));
         if (headerLength > 6) reader.ReadBytes(headerLength - 6);
 
         var raw = new List<(long start, long end, int pitch, int velocity, int track)>();
@@ -84,20 +84,20 @@ internal static class MidiReader
         while (track < tracks && stream.Position + 8 <= stream.Length)
         {
             var id = ChunkId(reader); var chunkLength = Read32(reader);
-            if (chunkLength < 0) throw new InvalidDataException("Invalid MIDI track chunk.");
+            if (chunkLength < 0) throw new InvalidDataException(Loc.T("Invalid MIDI track chunk."));
             var end = Math.Min(stream.Length, stream.Position + chunkLength);
             if (!id.Equals("MTrk", StringComparison.Ordinal)) { stream.Position = end; continue; }
             long tick = 0; var running = 0; var active = new Dictionary<(int channel, int pitch), Queue<(long tick, int velocity)>>();
             while (stream.Position < end)
             {
                 tick += ReadVar(reader); var status = reader.ReadByte();
-                if (status < 0x80) { stream.Position--; if (running == 0) throw new InvalidDataException("Invalid MIDI running status."); status = (byte)running; }
+                if (status < 0x80) { stream.Position--; if (running == 0) throw new InvalidDataException(Loc.T("Invalid MIDI running status.")); status = (byte)running; }
                 else if (status < 0xF0) running = status;
                 else running = 0;
                 if (status == 0xFF)
                 {
                     var type = reader.ReadByte(); var length = ReadVar(reader);
-                    if (length < 0 || stream.Position + length > end) throw new InvalidDataException("A MIDI meta event extends past its track.");
+                    if (length < 0 || stream.Position + length > end) throw new InvalidDataException(Loc.T("A MIDI meta event extends past its track."));
                     if (type == 0x51 && length == 3) { var b = reader.ReadBytes(3); var micros = (b[0] << 16) | (b[1] << 8) | b[2]; if (micros > 0) tempos[tick] = micros; }
                     else if (type == 0x58 && length >= 2 && !timeSignatureFound)
                     {
@@ -111,7 +111,7 @@ internal static class MidiReader
                     else stream.Position += length;
                     continue;
                 }
-                if (status is 0xF0 or 0xF7) { var length = ReadVar(reader); if (length < 0 || stream.Position + length > end) throw new InvalidDataException("A MIDI system exclusive event extends past its track."); stream.Position += length; continue; }
+                if (status is 0xF0 or 0xF7) { var length = ReadVar(reader); if (length < 0 || stream.Position + length > end) throw new InvalidDataException(Loc.T("A MIDI system exclusive event extends past its track.")); stream.Position += length; continue; }
                 if (status >= 0xF0) { stream.Position += status switch { 0xF1 or 0xF3 => 1, 0xF2 => 2, _ => 0 }; continue; }
                 var kind = status & 0xF0; var channel = status & 15; int pitch = reader.ReadByte(); int velocity = kind is 0xC0 or 0xD0 ? 0 : reader.ReadByte();
                 if (channel == PercussionChannel) continue; // General MIDI drums are not piano notes.
@@ -153,7 +153,7 @@ internal static class MidiReader
     private static string ChunkId(BinaryReader reader)
     {
         var bytes = reader.ReadBytes(4);
-        if (bytes.Length < 4) throw new InvalidDataException("The MIDI file is truncated.");
+        if (bytes.Length < 4) throw new InvalidDataException(Loc.T("The MIDI file is truncated."));
         return Encoding.ASCII.GetString(bytes);
     }
     private static long ReadVar(BinaryReader reader)
@@ -162,7 +162,7 @@ internal static class MidiReader
         do
         {
             current = reader.ReadByte(); value = (value << 7) | (uint)(current & 127);
-            if (++bytes > 4) throw new InvalidDataException("Invalid MIDI variable-length quantity.");
+            if (++bytes > 4) throw new InvalidDataException(Loc.T("Invalid MIDI variable-length quantity."));
         } while ((current & 128) != 0);
         return value;
     }

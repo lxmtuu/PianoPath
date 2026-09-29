@@ -71,6 +71,11 @@ public partial class MainWindow : Window
         InitializeComponent();
         _visualSettings = PianoVisualSettingsStore.Load();
         BuildVisualSettingsControls();
+        // The XAML literals are the translation keys (see Ui/MainWindow.xaml), so the window marks
+        // its own tree and paints it once; every later switch repaints through the same registry.
+        Loc.LocalizeTree(this);
+        Loc.Refresh();
+        SettingsTabs.Loaded += (_, _) => RefreshSectionHeaders();
         Stage.SetVisualSettings(_visualSettings);
         _chromeTimer.Tick += (_, _) => CheckChromeIdle();
         _settingsSaveTimer.Tick += (_, _) => { _settingsSaveTimer.Stop(); SaveVisualSettings(); };
@@ -81,7 +86,7 @@ public partial class MainWindow : Window
         {
             if (on)
             {
-                DeviceLabel.Text = $"MIDI IN · {NoteLabel(pitch)}";
+                Loc.Format(DeviceLabel, "MIDI IN · {0}", NoteLabel(pitch));
                 DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(75, 244, 187));
                 PressNote(pitch, velocity);
             }
@@ -104,7 +109,7 @@ public partial class MainWindow : Window
         {
             // The checkout skipped Git LFS. Report the fix instead of a confusing "not an SF2 file" parse error.
             UpdateSoundFontUi();
-            SoundFontHint.Text = "ConcertGrand.sf2 is a Git LFS pointer · run 'git lfs install' then 'git lfs pull', or load another .sf2";
+            Loc.Set(SoundFontHint, "ConcertGrand.sf2 is a Git LFS pointer · run 'git lfs install' then 'git lfs pull', or load another .sf2");
             return;
         }
         await LoadSoundFontAsync(bundled, builtIn: true);
@@ -257,20 +262,22 @@ public partial class MainWindow : Window
 
     private void OpenMidi_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = "MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*" };
+        var dialog = new OpenFileDialog { Filter = Loc.T("MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
-            Stop(); var song = MidiReader.ReadSong(dialog.FileName); if (song.Notes.Count == 0) throw new InvalidDataException("No notes were found in this MIDI file.");
+            Stop(); var song = MidiReader.ReadSong(dialog.FileName); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
             _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
-            SongTitle.Text = Path.GetFileNameWithoutExtension(dialog.FileName); _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
+            _songLabel = Path.GetFileNameWithoutExtension(dialog.FileName);
+            Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
+            _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
         }
-        catch (Exception ex) { MessageBox.Show(this, $"Could not read this MIDI file.\n{ex.Message}", "MIDI import", MessageBoxButton.OK, MessageBoxImage.Warning); }
+        catch (Exception ex) { ShowMessage(Loc.F("Could not read this MIDI file.\n{0}", ex.Message), "MIDI import"); }
     }
 
     private async void LoadSoundFont_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = "SoundFont 2 files (*.sf2)|*.sf2|All files (*.*)|*.*", Title = "Choose a piano SoundFont" };
+        var dialog = new OpenFileDialog { Filter = Loc.T("SoundFont 2 files (*.sf2)|*.sf2|All files (*.*)|*.*"), Title = Loc.T("Choose a piano SoundFont") };
         if (dialog.ShowDialog(this) != true) return;
         await LoadSoundFontAsync(dialog.FileName, builtIn: false);
     }
@@ -278,7 +285,9 @@ public partial class MainWindow : Window
     private async Task LoadSoundFontAsync(string path, bool builtIn)
     {
         if (_closing) return;
-        SoundFontButton.IsEnabled = false; SoundFontLabel.Text = "LOADING SOUNDFONT…"; SoundFontHint.Text = "Large sample banks may take a few seconds";
+        SoundFontButton.IsEnabled = false;
+        Loc.Set(SoundFontLabel, "LOADING SOUNDFONT…");
+        Loc.Set(SoundFontHint, "Large sample banks may take a few seconds");
         try
         {
             await Task.Run(() => _audio.LoadSoundFont(path));
@@ -298,8 +307,8 @@ public partial class MainWindow : Window
         catch (Exception ex)
         {
             if (_closing) return;
-            SoundFontLabel.Text = _audio.HasSoundFont ? "PREVIOUS SOUNDFONT STILL ACTIVE" : "NO SOUNDFONT · SILENT";
-            SoundFontHint.Text = ex.Message; ShowError($"Could not load this SoundFont.\n{ex.Message}", "SoundFont");
+            Loc.Set(SoundFontLabel, _audio.HasSoundFont ? "PREVIOUS SOUNDFONT STILL ACTIVE" : "NO SOUNDFONT · SILENT");
+            Loc.Bind(SoundFontHint, () => ex.Message); ShowError(Loc.F("Could not load this SoundFont.\n{0}", ex.Message), "SoundFont");
         }
         finally { if (!_closing) SoundFontButton.IsEnabled = true; }
     }
@@ -308,32 +317,35 @@ public partial class MainWindow : Window
     {
         if (_suppressPreset || PresetCombo.SelectedIndex < 0 || PresetCombo.SelectedIndex >= _audio.Presets.Count) return;
         var preset = _audio.Presets[PresetCombo.SelectedIndex]; _audio.SelectPreset(preset.Bank, preset.Program);
-        SoundFontHint.Text = $"Instrument · {preset.Name}";
+        Loc.Format(SoundFontHint, "Instrument · {0}", preset.Name);
     }
     private void UnloadSoundFont_Click(object sender, RoutedEventArgs e) { _audio.UnloadSoundFont(); _isBuiltInSoundFont = false; _suppressPreset = true; PresetCombo.ItemsSource = null; PresetCombo.SelectedIndex = -1; _suppressPreset = false; UpdateSoundFontUi(); }
     /// <summary>Shows a warning dialog, or only records it when dialogs are suppressed (verification runs, snapshots).</summary>
-    private void ShowError(string message, string title, MessageBoxImage icon = MessageBoxImage.Warning)
-    {
-        if (SuppressErrorDialogs || _closing) return;
-        MessageBox.Show(this, message, title, MessageBoxButton.OK, icon);
-    }
+    private void ShowError(string message, string titleKey, MessageBoxImage icon = MessageBoxImage.Warning) =>
+        ShowMessage(message, titleKey, icon);
 
     private void UpdateSoundFontUi()
     {
         var loaded = _audio.HasSoundFont;
         // A loaded SoundFont without a usable playback device still drives the stage and scoring, but must not claim to be audible.
         var audible = loaded && _audio.HasAudioOutput;
-        SoundFontLabel.Text = loaded
-            ? (_isBuiltInSoundFont ? $"BUILT-IN YAMAHA GRAND · {(audible ? "READY" : "NO AUDIO DEVICE")}" : $"SOUNDFONT {(audible ? "READY" : "LOADED · NO AUDIO DEVICE")} · {_audio.LoadedName}")
-            : "NO SOUNDFONT · SILENT";
+        if (loaded)
+        {
+            if (_isBuiltInSoundFont) Loc.Format(SoundFontLabel, "BUILT-IN YAMAHA GRAND · {0}", Loc.T(audible ? "READY" : "NO AUDIO DEVICE"));
+            else Loc.Format(SoundFontLabel, "SOUNDFONT {0} · {1}", Loc.T(audible ? "READY" : "LOADED · NO AUDIO DEVICE"), _audio.LoadedName);
+        }
+        else Loc.Set(SoundFontLabel, "NO SOUNDFONT · SILENT");
         SoundFontLabel.Foreground = audible ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
-        SoundFontHint.Text = loaded
-            ? (_audio.PlaybackError is { } playbackError ? $"No audio output · {playbackError}" : $"{(_isBuiltInSoundFont ? "Yamaha grand" : _audio.LoadedName)} · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}")
-            : "Load a .sf2 SoundFont to enable piano audio";
+        if (loaded)
+        {
+            if (_audio.PlaybackError is { } playbackError) Loc.Format(SoundFontHint, "No audio output · {0}", playbackError);
+            else Loc.Format(SoundFontHint, "{0} · Hall reverb {1}", _isBuiltInSoundFont ? Loc.T("Yamaha grand") : _audio.LoadedName, Loc.T(_audio.ReverbEnabled ? "ON" : "OFF"));
+        }
+        else Loc.Set(SoundFontHint, "Load a .sf2 SoundFont to enable piano audio");
         if (!loaded && PresetCombo.Items.Count == 0)
         {
             _suppressPreset = true;
-            PresetCombo.ItemsSource = new[] { "NO PRESET · LOAD .SF2" };
+            PresetCombo.ItemsSource = new[] { Loc.T("NO PRESET · LOAD .SF2") };
             PresetCombo.SelectedIndex = 0;
             _suppressPreset = false;
         }
@@ -361,9 +373,9 @@ public partial class MainWindow : Window
 
     private void UpdatePlaybackLabel()
     {
-        if (_playing) NowPlayingLabel.Text = _audio.HasSoundFont ? "PLAYING · NOTES FALLING" : "PLAYING · SILENT WITHOUT SOUNDFONT";
-        else if (_notes.Count == 0) NowPlayingLabel.Text = _audio.HasSoundFont ? "LIVE PLAY · SOUNDFONT READY" : "LIVE PLAY · PRESS A KEY";
-        else NowPlayingLabel.Text = _audio.HasSoundFont ? "MIDI LOADED · READY TO PLAY" : "MIDI LOADED · SILENT UNTIL SF2";
+        if (_playing) Loc.Set(NowPlayingLabel, _audio.HasSoundFont ? "PLAYING · NOTES FALLING" : "PLAYING · SILENT WITHOUT SOUNDFONT");
+        else if (_notes.Count == 0) Loc.Set(NowPlayingLabel, _audio.HasSoundFont ? "LIVE PLAY · SOUNDFONT READY" : "LIVE PLAY · PRESS A KEY");
+        else Loc.Set(NowPlayingLabel, _audio.HasSoundFont ? "MIDI LOADED · READY TO PLAY" : "MIDI LOADED · SILENT UNTIL SF2");
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -545,7 +557,7 @@ public partial class MainWindow : Window
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
-        var dialog = new SaveFileDialog { Filter = "AVI video (*.avi)|*.avi", DefaultExt = ".avi", AddExtension = true, FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}.avi", Title = "Record piano visualizer" };
+        var dialog = new SaveFileDialog { Filter = Loc.T("AVI video (*.avi)|*.avi"), DefaultExt = ".avi", AddExtension = true, FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}.avi", Title = Loc.T("Record piano visualizer") };
         if (dialog.ShowDialog(this) != true) return;
         try
         {
@@ -555,15 +567,17 @@ public partial class MainWindow : Window
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
             _recordTimer.Tick += RecordTimer_Tick; _recordTimer.Start();
-            RecordButton.Content = "REC 00:00"; RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
+            Loc.Set(RecordButton, "REC 00:00"); RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
             var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
-            RecordButton.ToolTip = _videoRecorder.UsesMjpeg ? "Recording MJPEG AVI · click to stop" : $"Recording raw AVI (no MJPEG codec installed) · about {rawSeconds:0} s fit in the 2 GB AVI limit · click to stop";
-            SettingsSaveLabel.Text = _videoRecorder.UsesMjpeg ? "Video recording started" : $"Recording raw AVI · about {rawSeconds:0} s fit before the 2 GB limit";
+            if (_videoRecorder.UsesMjpeg) Loc.Set(RecordButton, "Recording MJPEG AVI · click to stop", FrameworkElement.ToolTipProperty);
+            else Loc.Format(RecordButton, "Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop", FrameworkElement.ToolTipProperty, rawSeconds);
+            if (_videoRecorder.UsesMjpeg) Loc.Set(SettingsSaveLabel, "Video recording started");
+            else Loc.Format(SettingsSaveLabel, "Recording raw AVI · about {0:0} s fit before the 2 GB limit", rawSeconds);
         }
         catch (Exception ex)
         {
             StopVideoRecording(showMessage: false);
-            MessageBox.Show(this, ex.Message, "Video recording", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowMessage(ex.Message, "Video recording");
         }
     }
 
@@ -577,15 +591,15 @@ public partial class MainWindow : Window
             if (due > 0)
             {
                 _videoRecorder.WriteBgrFrame(CaptureStageBgr(_videoRecorder.Width, _videoRecorder.Height), Math.Min(due, _videoRecorder.FrameRate * 2));
-                if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, "The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically."); return; }
+                if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, Loc.T("The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically.")); return; }
             }
             var elapsed = _recordClock.Elapsed;
-            RecordButton.Content = $"REC {elapsed.Minutes:00}:{elapsed.Seconds:00}";
+            Loc.Format(RecordButton, "REC {0:00}:{1:00}", elapsed.Minutes, elapsed.Seconds);
         }
         catch (Exception ex)
         {
             StopVideoRecording(showMessage: false);
-            MessageBox.Show(this, ex.Message, "Video recording stopped", MessageBoxButton.OK, MessageBoxImage.Warning);
+            ShowMessage(ex.Message, "Video recording stopped");
         }
     }
 
@@ -622,10 +636,11 @@ public partial class MainWindow : Window
         var recorder = _videoRecorder; _videoRecorder = null;
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;
-        try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) MessageBox.Show(this, ex.Message, "Video recording", MessageBoxButton.OK, MessageBoxImage.Warning); }
-        RecordButton.Content = "REC"; RecordButton.ClearValue(BackgroundProperty);
-        RecordButton.ToolTip = "Record the live piano visualizer";
-        if (showMessage && !_closing) MessageBox.Show(this, $"Video saved.\n{path}\n\n{(note is null ? "" : note + "\n\n")}This AVI contains the piano visuals; system audio is not mixed into the recording.", "Recording complete", MessageBoxButton.OK, MessageBoxImage.Information);
+        try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) ShowMessage(ex.Message, "Video recording"); }
+        Loc.Set(RecordButton, "REC"); RecordButton.ClearValue(BackgroundProperty);
+        Loc.Set(RecordButton, "Record the live piano visualizer", FrameworkElement.ToolTipProperty);
+        if (showMessage && !_closing)
+            ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, note is null ? "" : note + "\n\n"), "Recording complete", MessageBoxImage.Information);
     }
     internal static int MapComputerKey(Key key) { var index = Array.IndexOf(ComputerKeys, key); return index < 0 ? -1 : 48 + ComputerMap[index]; }
     private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }
@@ -652,7 +667,7 @@ public partial class MainWindow : Window
             {
                 target.Played = true; var delta = Math.Abs(target.Start - _position);
                 if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); } else { _misses++; _streak = 0; }
-                target.Timing = Math.Max(0, 100 - delta * 180); NoteNameLabel.Text = delta < .11 ? "PERFECT" : delta < .28 ? "GREAT" : "KEEP GOING";
+                target.Timing = Math.Max(0, 100 - delta * 180); Loc.Set(NoteNameLabel, delta < .11 ? "PERFECT" : delta < .28 ? "GREAT" : "KEEP GOING");
                 if (ModeCombo.SelectedIndex == 1) _clock.Restart();
             }
             else { _misses++; _streak = 0; NoteNameLabel.Text = NoteLabel(pitch); }
@@ -706,7 +721,7 @@ public partial class MainWindow : Window
         catch
         {
             _midi.CloseOutputDevice(); _suppressDevices = true; OutputDeviceCombo.SelectedIndex = 0; _suppressDevices = false;
-            DeviceLabel.Text = "MIDI output disconnected"; DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 180, 91));
+            Loc.Set(DeviceLabel, "MIDI output disconnected"); DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 180, 91));
         }
     }
     private void SendOutput(int pitch, int velocity, bool on)
@@ -716,7 +731,7 @@ public partial class MainWindow : Window
         catch
         {
             _midi.CloseOutputDevice(); _suppressDevices = true; OutputDeviceCombo.SelectedIndex = 0; _suppressDevices = false;
-            DeviceLabel.Text = "MIDI output disconnected"; DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 180, 91));
+            Loc.Set(DeviceLabel, "MIDI output disconnected"); DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 180, 91));
         }
     }
 
@@ -729,11 +744,14 @@ public partial class MainWindow : Window
         var accuracy = _hits + _misses == 0 ? 0 : 100.0 * _hits / (_hits + _misses);
         var accuracyText = _hits + _misses == 0 ? "—" : $"{accuracy:0}%";
         if (accuracyText != _accuracyText) { _accuracyText = accuracyText; AccuracyLabel.Text = accuracyText; ProgressBar.Value = accuracy; }
-        var scoreText = $"{_hits} hits · {_misses} missed";
+        var scoreText = Loc.F("{0} hits · {1} missed", _hits, _misses);
         if (scoreText != _scoreText) { _scoreText = scoreText; ScoreLabel.Text = scoreText; }
-        var streakText = $"✦ {_streak} streak · best {_bestStreak}";
+        var streakText = Loc.F("✦ {0} streak · best {1}", _streak, _bestStreak);
         if (streakText != _streakText) { _streakText = streakText; StreakLabel.Text = streakText; }
     }
+    /// <summary>English key of the song title: the MIDI file name, or "Live Piano" before one is open.</summary>
+    private string _songLabel = "Live Piano";
+
     private string _timeText = "";
 
     private void UpdateTime()
@@ -769,27 +787,36 @@ public partial class MainWindow : Window
     private void SetLoopB_Click(object sender, RoutedEventArgs e)
     {
         _loopB = _position;
-        if (_loopA < 0 || _loopB <= _loopA) { _loopA = -1; _loopB = -1; MessageBox.Show(this, "Set A first, then set B at a later point in the song.", "Practice loop", MessageBoxButton.OK, MessageBoxImage.Information); }
+        if (_loopA < 0 || _loopB <= _loopA) { _loopA = -1; _loopB = -1; ShowMessage(Loc.T("Set A first, then set B at a later point in the song."), "Practice loop", MessageBoxImage.Information); }
         UpdateLoopLabel();
     }
     private void ClearLoop_Click(object sender, RoutedEventArgs e) { _loopA = _loopB = -1; UpdateLoopLabel(); }
-    private void UpdateLoopLabel() => LoopLabel.Text = _loopA >= 0 && _loopB > _loopA ? $"{Fmt(_loopA)}–{Fmt(_loopB)}" : "No loop";
+    private void UpdateLoopLabel()
+    {
+        if (_loopA >= 0 && _loopB > _loopA) Loc.Format(LoopLabel, "{0}–{1}", Fmt(_loopA), Fmt(_loopB));
+        else Loc.Set(LoopLabel, "No loop");
+    }
 
     private void RefreshDevices_Click(object sender, RoutedEventArgs e) => RefreshDevices();
     private void RefreshDevices()
     {
-        var previousInput = InputDeviceCombo.SelectedItem as string;
-        var previousOutput = OutputDeviceCombo.SelectedItem as string;
+        var previousInput = (InputDeviceCombo.SelectedItem as DeviceOption)?.Id;
+        var previousOutput = (OutputDeviceCombo.SelectedItem as DeviceOption)?.Id;
         var inputs = MidiDeviceService.Inputs;
         var outputs = MidiDeviceService.Outputs;
-        var inputItems = new[] { "Computer keyboard only" }.Concat(inputs).ToList();
-        var outputItems = new[] { "No MIDI output" }.Concat(outputs).ToList();
-        var inputIndex = previousInput is null ? -1 : inputItems.IndexOf(previousInput);
+        // The pickers show a translated caption but keep the English identity, so a refresh never
+        // loses the user's choice and a switch of language never changes what a device is called on
+        // the wire (real device names come from Windows and are never translated).
+        var inputItems = new List<DeviceOption> { DeviceOption.Placeholder("Computer keyboard only") };
+        inputItems.AddRange(inputs.Select(name => new DeviceOption(name, name)));
+        var outputItems = new List<DeviceOption> { DeviceOption.Placeholder("No MIDI output") };
+        outputItems.AddRange(outputs.Select(name => new DeviceOption(name, name)));
+        var inputIndex = previousInput is null ? -1 : inputItems.FindIndex(item => item.Id == previousInput);
         // Without a deliberate user choice (startup, or a refresh after plugging a keyboard in) connect
         // the first available input. An explicit selection - including "Computer keyboard only" -
         // survives refreshes; a selected device that vanished falls back to auto-connect.
         if (!_inputChoiceByUser || inputIndex < 0) inputIndex = inputItems.Count > 1 ? 1 : 0;
-        var outputIndex = previousOutput is null ? 0 : Math.Max(0, outputItems.IndexOf(previousOutput));
+        var outputIndex = previousOutput is null ? 0 : Math.Max(0, outputItems.FindIndex(item => item.Id == previousOutput));
         _suppressDevices = true;
         try
         {
@@ -812,12 +839,13 @@ public partial class MainWindow : Window
         try
         {
             _midi.OpenInput(InputDeviceCombo.SelectedIndex - 1); var connected = InputDeviceCombo.SelectedIndex > 0 && _midi.InputOpen;
-            DeviceLabel.Text = connected ? $"Listening · {InputDeviceCombo.SelectedItem}" : "Computer keyboard ready";
+            if (connected) Loc.Format(DeviceLabel, "Listening · {0}", DeviceOption.Name(InputDeviceCombo));
+            else Loc.Set(DeviceLabel, "Computer keyboard ready");
             DeviceDot.Fill = new SolidColorBrush(connected ? Color.FromRgb(75, 244, 187) : Color.FromRgb(255, 180, 91));
         }
         catch (Exception ex)
         {
-            DeviceLabel.Text = "MIDI input unavailable · retry"; DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 91, 113));
+            Loc.Set(DeviceLabel, "MIDI input unavailable · retry"); DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(255, 91, 113));
             if (showErrors) ShowError(ex.Message, "MIDI input");
         }
     }
@@ -844,10 +872,19 @@ public partial class MainWindow : Window
             ShowError(ex.Message, "MIDI output");
         }
     }
-    private void PopulateTracks()
+    /// <param name="preserve">True when only the language changed: keep the selected track and the mute set.</param>
+    private void PopulateTracks(bool preserve = false)
     {
-        _suppressTracks = true; TrackCombo.Items.Clear(); TrackCombo.Items.Add("All notes");
-        foreach (var track in _allNotes.Select(n => n.Track).Distinct().Order()) TrackCombo.Items.Add(_trackNames.TryGetValue(track, out var name) ? $"Track {track + 1} · {name}" : $"Track {track + 1}");
+        var previous = TrackCombo.SelectedIndex;
+        _suppressTracks = true; TrackCombo.Items.Clear(); TrackCombo.Items.Add(Loc.T("All notes"));
+        foreach (var track in _allNotes.Select(n => n.Track).Distinct().Order())
+            TrackCombo.Items.Add(_trackNames.TryGetValue(track, out var name) ? Loc.F("Track {0} · {1}", track + 1, name) : Loc.F("Track {0}", track + 1));
+        if (preserve && previous >= 0 && previous < TrackCombo.Items.Count)
+        {
+            TrackCombo.SelectedIndex = previous; _suppressTracks = false;
+            RebuildTrackList();
+            return;
+        }
         TrackCombo.SelectedIndex = 0; _activeTrack = -1; _suppressTracks = false;
         _mutedTracks.Clear(); RebuildTrackList();
     }
