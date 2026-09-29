@@ -445,7 +445,7 @@ publish\win-x64\
 ```
 
 - **Sending a ZIP**: compress the whole folder (`.\publish.ps1 -Zip` or `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). The recipient unzips it and runs `PianoPath.exe`; never separate the `.exe` from the `Assets\` folder.
-- **The `.exe` installer (optional)**: install [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish the self-contained build and run `iscc .\installer\Keyflow.iss` (or open the file in the Inno Setup Compiler and press F9). The result is `installer\Output\Keyflow-Setup-<version>.exe`, which creates Start Menu/Desktop shortcuts and an uninstall entry. Override the version with `iscc /DAppVersion=0.4.0 .\installer\Keyflow.iss`. The installer ships English and Vietnamese wizard text.
+- **The `.exe` installer (optional)**: install [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish the self-contained build and run `iscc .\installer\Keyflow.iss` (or open the file in the Inno Setup Compiler and press F9). The result is `installer\Output\Keyflow-Setup-<version>.exe`, which creates Start Menu/Desktop shortcuts and an uninstall entry. Override the version with `iscc /DAppVersion=0.4.0 .\installer\Keyflow.iss`. The installer ships English and Vietnamese wizard text: it picks the language from Windows, and the Vietnamese wording is a *partial* file (`installer\Languages\Vietnamese.isl`) that overrides the messages this wizard actually shows while the rest falls back to `Default.isl`. Run `pwsh tools/build_installer.ps1` instead of calling `iscc` by hand when you want CI to check the translation — add `-Stub` if you have not published yet; the script fails the moment ISCC warns about anything but the expected "this message stays English" notice of a partial translation.
 - **Version number**: edit `<Version>` in `PianoPath.csproj` before publishing; the script and the installer read that value.
 - **SmartScreen**: the file is not code-signed, so Windows shows "Windows protected your PC" on first launch; choose *More info → Run anyway*. Removing the warning needs a code-signing certificate, for example: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
 - **Antivirus** sometimes scans a single-file self-contained build slowly on first launch; that is normal for .NET packages that unpack themselves.
@@ -468,8 +468,8 @@ Two workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | Static checks (`tools/check_sources.py`) → Release build → `--verify` (**a FAIL turns the build red**) → render the 8 README images, upload the `keyflow-previews` artifact and commit the new pictures into the branch being built (skipped for pull requests). |
-| `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish both kinds, smoke-test the published build, upload both ZIPs as artifacts and (for a tag) attach them to the GitHub Release with generated notes. |
+| `build.yml` | push to `main`/`arena/**`, every pull request | Static checks (`tools/check_sources.py`) → Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 8 README images, upload the `keyflow-previews` artifact and commit the new pictures into the branch being built (skipped for pull requests). |
+| `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish both kinds, smoke-test the published build, compile the `.exe` installer from that same publish folder, upload both ZIPs plus the installer as artifacts and (for a tag) attach them to the GitHub Release with generated notes. |
 
 ```powershell
 git tag v0.4.0
@@ -533,8 +533,9 @@ between the vector keyboard and the shader keyboard while the bake is reused acr
 ### Static checks (run anywhere, even without the .NET SDK)
 
 ```powershell
-python tools/check_sources.py          # C# syntax, XML + XAML resources, dock catalogue, theme tokens, string tables, README links/images
+python tools/check_sources.py          # C# syntax, XML + XAML resources, dock catalogue, theme tokens, string tables, README links/images, installer translation
 python tools/shader_preview.py 780 180 0.6   # Python port of the shader, writes pictures to tools/out/ (not committed)
+pwsh tools/build_installer.ps1 -Stub   # compile installer\Keyflow.iss against a stub publish folder (needs Inno Setup)
 ```
 
 `check_sources.py` verifies: bracket/quote balance of every C# file; XML validity and every
@@ -546,7 +547,11 @@ in `README.md` and `README.en.md` exists, every table-of-contents anchor resolve
 to the other**, **every
 command-line switch the app reads is documented in both README command-line tables and vice versa,
 and every switch/path `build.yml` passes to `PianoPath.exe` really exists**, **the sample picture in
-`docs/samples` still matches the script that generates it**, and **the string tables**: every language
+`docs/samples` still matches the script that generates it**, **the installer: every message in
+`installer\Languages\Vietnamese.isl` exists in Inno Setup's own `Default.isl` (in the right
+`[Messages]`/`[CustomMessages]` section), keeps every placeholder, is stored with a UTF-8 BOM, and the
+`[Languages]`/`[LangOptions]` declaration is the shape the compiler insists on**, and **the string
+tables**: every language
 translates exactly the keys of the inventory, placeholders and line breaks survive, and every literal
 the sources can print (including marked XAML strings, page names, themes, presets and the shortcut
 card) is a key of the inventory. CI runs this script before the Windows build.
@@ -581,11 +586,11 @@ the result is a `NOTE`, not a `FAIL`.
 - `Midi/`: `MidiFileReader.cs` (Standard MIDI File → notes, tempo map, beat grid, track names) and `MidiDeviceService.cs` (WinMM devices).
 - `Video/AviVideoRecorder.cs`: AVI frame writing through Windows Video for Windows.
 - `Diagnostics/VerificationSuite.cs`: the regression suite run by `--verify`, with self-made fixtures.
-- `tools/`: `check_sources.py` (static checks for syntax/XAML/dock catalogue/theme tokens/README/command line, runs anywhere), `shader_preview.py` (Python port of the shader for previewing, writes to `tools/out/`, not committed) and `make_stage_background.py` (generates the sample backdrop `docs/samples/stage-backdrop.png`).
+- `tools/`: `check_sources.py` (static checks for syntax/XAML/dock catalogue/theme tokens/README/command line, runs anywhere), `shader_preview.py` (Python port of the shader for previewing, writes to `tools/out/`, not committed) and `make_stage_background.py` (generates the sample backdrop `docs/samples/stage-backdrop.png`), `inno_messages.py` (generates the list of valid Inno Setup message names, `installer/Languages/messages.txt`) and `build_installer.ps1` (compiles the installer; both workflows call it).
 - `Localization/`: `Localizer.cs` (languages, table lookup, live labels, XAML markers) and `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + translation; adding a language means adding one such file).
 - `docs/previews/`: the interface pictures rendered by the application in CI (the source for the README) — the workflow owns this folder, so do not hand-commit other images into it.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
-- `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `installer/Keyflow.iss`: the Inno Setup script that builds the installer.
+- `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
 - `.github/workflows/`: `build.yml` (static checks, Release build, `--verify`, README image rendering) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).
 
 ## Licence

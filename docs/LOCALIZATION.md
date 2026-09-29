@@ -166,6 +166,16 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
   trong `tools/check_sources.py` quét **cả hai** (ảnh, anchor, liên kết nội bộ) và bắt buộc mỗi bản
   phải trỏ sang bản kia; `scan_cli_and_samples` kiểm bảng tham số dòng lệnh của từng bản, nên bản
   tiếng Anh không thể thiếu một switch mà bản tiếng Việt đã có.
+* **Bộ cài (`installer/`)** là mặt thứ ba có chữ hiển thị, và nó không đi qua `Loc`: Inno Setup đọc
+  `installer/Languages/Vietnamese.isl` (UTF-8 **có BOM** để trình biên dịch biết ngay là Unicode),
+  liệt kê **sau** `compiler:Default.isl` trong `MessagesFile` nên tệp chỉ *ghi đè* 108 câu mà trình
+  cài đặt thật sự hiện — phần còn lại theo tiếng Anh của `Default.isl`. Ba thứ dễ sai đều bị chặn:
+  tên câu không tồn tại (Inno Setup chỉ **cảnh báo** rồi bỏ dòng, tức là âm thầm hiện tiếng Anh),
+  câu đặt nhầm `[Messages]`/`[CustomMessages]`, và placeholder bị rơi mất. `tools/inno_messages.py`
+  sinh `installer/Languages/messages.txt` (tên hợp lệ + placeholder, lấy từ `Default.isl` của ba mốc
+  Inno 6.3.3/6.7.3/7.1.0), `scan_installer` trong `tools/check_sources.py` đối chiếu bản dịch với tệp
+  đó, và `tools/build_installer.ps1` (chạy trong cả hai workflow) biến mọi cảnh báo khác của ISCC
+  thành lỗi build. Quy ước dịch vẫn theo §5 (`Huỷ`, `tệp`, `thư mục`, `shortcut`, `Start Menu`).
 * RTL (Ả Rập, Do Thái, Ba Tư) cần thêm `FlowDirection`, đảo `Margin`/`Grid` cột và đường rơi của nốt;
   bảng cho một ngôn ngữ RTL phải đi kèm đợt việc đó, không nên thêm bảng suông.
 * `installer/Keyflow.iss` vẫn dùng một tệp ngôn ngữ Inno; bản dịch installer tiếng Việt là việc riêng

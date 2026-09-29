@@ -33,10 +33,12 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 
 ### 3.1 Việc đang mở trong P0
 
-* **Bản dịch bộ cài** (`installer/Keyflow.iss`): hiện chỉ có một ngôn ngữ Inno. Bước tiếp theo:
-  `installer\Languages\Vietnamese.isl` dạng **tệp một phần** (liệt kê sau `compiler:Default.isl`),
-  `LanguageID: $041e`, và một bước ISCC trong `build.yml` chạy trên thư mục `publish\win-x64` giả để
-  câu lệnh cùng mọi tên message được kiểm mỗi lần push — thay vì đợi tới lúc release mới biết sai.
+* **Bộ cài đã có tiếng Việt, nhưng là bản dịch *một phần* — có chủ đích.** `installer/Languages/Vietnamese.isl`
+  ghi đè 108 câu mà wizard thật sự hiện (trang welcome/license/thư mục/việc làm thêm/Start Menu/ready/
+  tiến trình/kết thúc, các hộp thoại lỗi, trình gỡ cài đặt); ~162 câu còn lại của Inno Setup (các trang
+  bộ cài này không dùng, chuỗi shell-extension, trang đĩa/component…) vẫn là tiếng Anh và trình biên dịch
+  in ra một cảnh báo `… has not been defined for the "vietnamese" language` cho mỗi câu — đó là hành vi
+  đã biết của tệp một phần, không phải lỗi. `tools/build_installer.ps1` chỉ tha đúng loại cảnh báo đó.
 * **Trợ năng bước 2**: font scale (case test `--compact` 1080×700) và thứ tự tiêu điểm (tab order)
   theo từng trang dock chưa được assert.
 
@@ -61,6 +63,8 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 ```powershell
 python tools/check_sources.py          # tĩnh, mọi máy, phải in "no bracket, quote, XML ... problems found"
 dotnet run --project PianoPath.csproj -c Release -- --verify --verify-log=verify.log
+python tools/inno_messages.py          # chỉ khi Inno Setup lên bản mới: xem lại danh sách tên câu hợp lệ
+pwsh tools/build_installer.ps1 -Stub   # cần Inno Setup; biên dịch installer\Keyflow.iss như CI vẫn làm
 ```
 
 `--verify` trả mã thoát 0/1, ghi log ra `%TEMP%\keyflow-verification.log` (hoặc `--verify-log=`), và

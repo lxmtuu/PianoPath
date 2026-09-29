@@ -403,7 +403,7 @@ publish\win-x64\
 ```
 
 - **Gửi dạng ZIP**: nén cả thư mục (`.\publish.ps1 -Zip` hoặc `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). Người nhận giải nén rồi chạy `PianoPath.exe`; không được tách `.exe` khỏi thư mục `Assets\`.
-- **Bộ cài `.exe` (tuỳ chọn)**: cài [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish bản self-contained rồi chạy `iscc .\installer\Keyflow.iss` (hoặc mở file trong Inno Setup Compiler và nhấn F9). Kết quả: `installer\Output\Keyflow-Setup-<phiên bản>.exe` tạo shortcut Start Menu/Desktop và mục gỡ cài đặt. Đổi phiên bản bằng `iscc /DAppVersion=0.4.0 .\installer\Keyflow.iss`.
+- **Bộ cài `.exe` (tuỳ chọn)**: cài [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish bản self-contained rồi chạy `iscc .\installer\Keyflow.iss` (hoặc mở file trong Inno Setup Compiler và nhấn F9). Kết quả: `installer\Output\Keyflow-Setup-<phiên bản>.exe` tạo shortcut Start Menu/Desktop và mục gỡ cài đặt. Đổi phiên bản bằng `iscc /DAppVersion=0.4.0 .\installer\Keyflow.iss`. Bộ cài **tự chọn ngôn ngữ theo Windows** và có cả tiếng Anh lẫn tiếng Việt: bản tiếng Việt là một tệp *một phần* ở `installer\Languages\Vietnamese.isl` (chỉ ghi đè những câu trình cài đặt thật sự hiện, phần còn lại theo `Default.isl`). Chạy `pwsh tools/build_installer.ps1` thay cho lệnh `iscc` tay khi muốn CI kiểm hộ — thêm `-Stub` nếu chưa publish; script dừng ngay khi ISCC cảnh báo bất cứ điều gì ngoài thông báo "câu này còn dùng bản tiếng Anh" của bản dịch một phần.
 - **Đổi số phiên bản**: sửa `<Version>` trong `PianoPath.csproj` trước khi publish; script và bộ cài đọc giá trị này.
 - **SmartScreen**: file chưa ký số nên Windows hiện "Windows protected your PC" ở lần chạy đầu; chọn *More info → Run anyway*. Muốn bỏ cảnh báo cần chứng chỉ ký mã, ví dụ: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
 - **Phần mềm diệt virus** đôi khi quét lâu file single-file self-contained ở lần chạy đầu; đây là hành vi bình thường với các gói .NET tự giải nén.
@@ -425,8 +425,8 @@ Hai workflow trong `.github/workflows/`:
 
 | Workflow | Kích hoạt | Nội dung |
 | --- | --- | --- |
-| `build.yml` | push lên `main`/`arena/**`, mọi pull request | Kiểm tra tĩnh (`tools/check_sources.py`) → build Release → chạy `--verify` (**FAIL là đỏ build**) → render 6 ảnh README, upload artifact `keyflow-previews` và commit ảnh mới vào nhánh đang build (bỏ qua với pull request). |
-| `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish cả hai kiểu, smoke test bản vừa publish, tải hai file ZIP lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. |
+| `build.yml` | push lên `main`/`arena/**`, mọi pull request | Kiểm tra tĩnh (`tools/check_sources.py`) → build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render 8 ảnh README, upload artifact `keyflow-previews` và commit ảnh mới vào nhánh đang build (bỏ qua với pull request). |
+| `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish cả hai kiểu, smoke test bản vừa publish, biên dịch bộ cài `.exe` từ chính thư mục vừa publish, tải hai file ZIP + bộ cài lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. |
 
 ```powershell
 git tag v0.4.0
@@ -463,11 +463,12 @@ Bộ kiểm thử shader có hai mục riêng: `VerifyShaderPipeline` (không c�
 ### Kiểm tra tĩnh (chạy được trên mọi máy, kể cả không có .NET SDK)
 
 ```powershell
-python tools/check_sources.py          # cú pháp C#, XML + resource XAML, danh mục dock, theme token, bảng chuỗi, link/ảnh README
+python tools/check_sources.py          # cú pháp C#, XML + resource XAML, danh mục dock, theme token, bảng chuỗi, link/ảnh README, bản dịch bộ cài
 python tools/shader_preview.py 780 180 0.6   # port Python của shader, xuất ảnh tools/out/ (không commit)
+pwsh tools/build_installer.ps1 -Stub   # biên dịch installer\Keyflow.iss trên thư mục publish giả (cần Inno Setup)
 ```
 
-`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` lẫn `README.en.md` đều tồn tại, mỗi bản phải trỏ sang bản kia**, **mọi tham số dòng lệnh mà app đọc đều có trong bảng tham số của cả hai README và ngược lại, mọi tham số/đường dẫn workflow `build.yml` truyền cho `PianoPath.exe` đều thật sự tồn tại**, và **ảnh mẫu trong `docs/samples` vẫn khớp với script sinh ra nó**; và **bảng chuỗi**: mọi ngôn ngữ dịch đúng tập khoá của inventory, placeholder và xuống dòng còn nguyên, mọi chuỗi mà mã nguồn in ra (kể cả chuỗi trong XAML có marker, tên trang, theme, preset và thẻ phím tắt) đều là một khoá của inventory. CI chạy script này trước bước build trên Windows.
+`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` lẫn `README.en.md` đều tồn tại, mỗi bản phải trỏ sang bản kia**, **mọi tham số dòng lệnh mà app đọc đều có trong bảng tham số của cả hai README và ngược lại, mọi tham số/đường dẫn workflow `build.yml` truyền cho `PianoPath.exe` đều thật sự tồn tại**, **bộ cài: mọi câu trong `installer\Languages\Vietnamese.isl` đều có thật trong `Default.isl` của Inno Setup (và đúng phân đoạn `[Messages]`/`[CustomMessages]`), placeholder không rơi mất, tệp có BOM, `[Languages]`/`[LangOptions]` khai báo đúng dạng mà trình biên dịch đòi**, và **ảnh mẫu trong `docs/samples` vẫn khớp với script sinh ra nó**; và **bảng chuỗi**: mọi ngôn ngữ dịch đúng tập khoá của inventory, placeholder và xuống dòng còn nguyên, mọi chuỗi mà mã nguồn in ra (kể cả chuỗi trong XAML có marker, tên trang, theme, preset và thẻ phím tắt) đều là một khoá của inventory. CI chạy script này trước bước build trên Windows.
 
 Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạt), `FAIL` (có lỗi, mã thoát `1`), `SKIP` (điều kiện môi trường không cho phép kiểm tra) và `NOTE` (thông tin môi trường). Bộ kiểm thử tự bỏ qua thay vì báo lỗi khi máy thiếu phần cứng: nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ Git LFS (clone chưa `git lfs pull`, hoặc CI checkout với `lfs: false`) thì các mục piano đi kèm bị `SKIP` và ứng dụng được xác minh ở chế độ im lặng; nếu Windows không mở được thiết bị âm thanh (`waveOut error 2`) hoặc một cổng MIDI output không mở được, engine vẫn nạp SoundFont và chạy im lặng, kết quả ghi `NOTE` chứ không `FAIL`.
 
@@ -493,11 +494,11 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 - `Midi/`: `MidiFileReader.cs` (Standard MIDI File → nốt, tempo map, lưới phách, tên track) và `MidiDeviceService.cs` (thiết bị WinMM).
 - `Video/AviVideoRecorder.cs`: ghi frame AVI bằng Windows Video for Windows.
 - `Diagnostics/VerificationSuite.cs`: bộ kiểm tra hồi quy chạy bằng `--verify`, fixtures tự tạo.
-- `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README/bảng tham số dòng lệnh, chạy mọi máy), `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit) và `make_stage_background.py` (sinh ảnh nền mẫu `docs/samples/stage-backdrop.png`).
+- `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README/bảng tham số dòng lệnh, chạy mọi máy), `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit) và `make_stage_background.py` (sinh ảnh nền mẫu `docs/samples/stage-backdrop.png`), `inno_messages.py` (sinh danh sách tên câu hợp lệ của Inno Setup — `installer/Languages/messages.txt`) và `build_installer.ps1` (biên dịch bộ cài, dùng chung cho cả hai workflow).
 - `Localization/`: `Localizer.cs` (ngôn ngữ, bảng tra, nhãn sống, marker XAML) và `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + bản dịch; thêm ngôn ngữ = thêm một tệp như vậy).
 - `docs/previews/`: ảnh giao diện do ứng dụng render trong CI (nguồn cho README) — thư mục này do workflow sở hữu, không nên tay nộp ảnh khác vào.
 - `docs/samples/`: ảnh nền mẫu mà repo tự sinh (`tools/make_stage_background.py`), dùng cho ảnh chụp tính năng ảnh nền và để mọi người thử tính năng này mà không cần tìm ảnh trên mạng.
-- `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `installer/Keyflow.iss`: script Inno Setup tạo bộ cài.
+- `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `installer/Keyflow.iss`: script Inno Setup tạo bộ cài; `installer/Languages/`: bản dịch tiếng Việt dạng tệp một phần (`Vietnamese.isl`) cùng danh sách tên câu hợp lệ (`messages.txt`).
 - `.github/workflows/`: `build.yml` (kiểm tra tĩnh, build Release, `--verify`, render ảnh README) và `release.yml` (publish + đính kèm ZIP vào GitHub Release khi đẩy tag `v*`).
 
 ## Giấy phép

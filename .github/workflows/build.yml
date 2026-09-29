@@ -59,6 +59,15 @@ jobs:
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
 
+      # The wizard is part of the product, so it is compiled on every push instead of only when a
+      # release is cut: this is the only place the real ISCC runs, and tools/build_installer.ps1
+      # refuses to let the compiler ignore a name or a placeholder the translation got wrong.
+      # -Stub writes placeholder files into publish\win-x64 so the job never needs the 113 MiB
+      # SoundFont, which the compiler only checks for existence anyway.
+      - name: Build the installer
+        shell: pwsh
+        run: pwsh tools/build_installer.ps1 -Stub -OutputDir (Join-Path $env:RUNNER_TEMP 'keyflow-installer')
+
       # The README shows the real application, so the screenshots are rendered by the same executable
       # that just passed the verification suite instead of being hand-made artwork that drifts out of
       # date. Refresh the committed copies with:

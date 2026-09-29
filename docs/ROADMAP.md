@@ -15,15 +15,15 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 
 ## 1. P0 — đóng những gì đang mở (ngắn hạn, rủi ro thấp)
 
-> **Trạng thái 2026‑09:** các mục 1, 2, 4, 5, 6, 7 đã xong và **đã có lớp kiểm chứng** (`tools/check_sources.py`
-> và/hoặc `--verify`); riêng mục 3 (bản dịch bộ cài) còn lại — xem ghi chú trong dòng của nó.
-> Mục nào xong thì dòng tương ứng ở bảng dưới được ghi lại kèm bằng chứng kiểm chứng.
+> **Trạng thái 2026‑09:** cả bảy mục P0 đã xong và **mỗi mục có lớp kiểm chứng riêng** (`tools/check_sources.py`,
+> `--verify`, hoặc cả hai). Mục nào xong thì dòng tương ứng ở bảng dưới được ghi lại kèm bằng chứng.
+> Việc còn mở nằm ở P1 (§2) và ở bước 2 của mục accessibility.
 
 | # | Việc | Ghi chú kỹ thuật | Cách kiểm chứng | Trạng thái |
 |---|---|---|---|---|
 | 1 | ~~**Hoàn tất đa ngôn ngữ**~~ — đã xong: chip phím tắt F1 (nhãn mô tả) đã qua `Loc`, `UnknownKeys` giờ là lỗi trong `--verify` | Xem `docs/LOCALIZATION.md` §9; `VisualPreset` đã tách "tên đã lưu" và nhãn hiển thị qua `DisplayName` | `tools/check_sources.py` + `--verify` | ✅ xong |
 | 2 | ~~**Song ngữ cho tài liệu**~~ — đã xong: `README.md` (tiếng Việt) + `README.en.md` (tiếng Anh), hai bản trỏ nhau | `README.md` giữ tiếng Việt; thêm `README.en.md` dịch 1‑1, mỗi ảnh dùng lại từ `docs/previews/`. `scan_readme` trong checker quét **cả hai** tệp | `python tools/check_sources.py` | ✅ xong |
-| 3 | **Ngôn ngữ cho bộ cài** — bước tiếp theo: thêm `installer\Languages\Vietnamese.isl` (tệp **một phần**, liệt kê sau `compiler:Default.isl` để ghi đè vài chục câu hiển thị nhiều nhất) + `LanguageID: $041e`, rồi thêm bước ISCC vào `build.yml` (chạy trên stub `publish\win-x64` để câu lệnh và mọi tên message được máy kiểm mỗi lần push, thay vì đợi tới lúc release) | Build `release.yml` thêm bước ISCC để ảnh installer cũng được kiểm | ⏳ còn |
+| 3 | ~~**Ngôn ngữ cho bộ cài**~~ — đã xong: `installer\Languages\Vietnamese.isl` là bản dịch **một phần** (108 câu, liệt kê sau `compiler:Default.isl`) + `vietnamese.LanguageName/LanguageID=$041e/LanguageCodePage` trong `Keyflow.iss`; `build.yml` biên dịch bộ cài trên stub `publish\win-x64` mỗi lần push, `release.yml` biên dịch từ chính thư mục đã publish và đính kèm bộ cài vào release | `tools/check_sources.py` (`scan_installer`: tên câu, phân đoạn, placeholder, BOM, `[Languages]`/`[LangOptions]`) + `tools/inno_messages.py` sinh danh sách tên hợp lệ + `tools/build_installer.ps1` biến mọi cảnh báo lạ của ISCC thành lỗi | ✅ xong |
 | 4 | **Accessibility** — bước 1 đã xong: `AutomationProperties.Name` cho nút chỉ có glyph, tên dịch được cho mọi hàng sinh tự động, `KeyboardNavigation.TabNavigation="Cycle"` trong dock, palette `SystemColors` khi Windows bật high contrast. Còn lại: font scale (`--compact` 1080×700) và thứ tự tiêu điểm theo bàn phím (tab order) từng trang | `VerifyAccessibility` trong `--verify` + luật `scan_accessible_names` trong checker: nút chỉ có glyph phải có ToolTip hoặc tên | ✅ xong (bước 1) |
 | 5 | ~~**Undo / redo cho bàn thiết kế**~~ — đã xong: stack 32 ảnh JSON, `Ctrl+Z`/`Ctrl+Shift+Z`/`Ctrl+Y`, commit khi điều khiển đứng yên nên một lần kéo là một bước, khôi phục qua `CopyFrom` + `RefreshSettingControls` | `VerifySettingsHistory` trong `--verify`: 3 thay đổi → 3 undo → JSON bằng nhau, control chạy theo, kéo liên tục là một bước | ✅ xong |
 | 6 | ~~**Hồ sơ cài đặt**~~ — đã xong: `Keyflow.profile.json` (`Profile/SettingsProfile.cs`) gom cài đặt sân khấu + `Language` + `ShellTheme`; nhập/xuất ở trang General, kéo‑thả `.json`/`.mid`/ảnh vào cửa sổ | `VerifySettingsProfile` trong `--verify`: round‑trip tệp, từ chối JSON lạ, ngôn ngữ không có trong build → `en` | ✅ xong |
