@@ -560,6 +560,7 @@ internal static class VerificationSuite
                         VerifySongControls(window, stage, mode, tracks);
                         // Last, because it opens a song of its own: the live-play checks above expect a pristine transport.
                         VerifySongLibrary(window);
+                        VerifyPracticeTempo(window);
                         completed();
                     }
                     catch (Exception ex) { failed(ex); }
@@ -1131,6 +1132,64 @@ internal static class VerificationSuite
         SongLibrary.Clear(); window.RefreshRecentSongs();
         hand.Value = hadHand; speed.Value = hadSpeed; tempo.Value = hadTempo;
         Results.Add("PASS song library: isolated recent-songs index, newest-first twelve-song cap with per-path dedupe, damaged file tolerated, forgotten and vanished files dropped, and reopening a row restores hand split, fall speed and tempo through the controls.");
+    }
+
+    /// <summary>
+    /// The slow-down curve of the practice session: off by default, a run of misses past the threshold
+    /// steps the tempo down five percent, four correct notes in a row step it back up two percent, and
+    /// the recovery never goes past the normal speed. The last part drives a real key press, so the
+    /// wiring from scoring to the tempo control is covered too, not just the arithmetic.
+    /// </summary>
+    private static void VerifyPracticeTempo(MainWindow window)
+    {
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+        var tempo = (Slider)window.FindName("TempoSlider");
+        var toggle = (CheckBox)window.FindName("AutoPracticeTempoCheck");
+        var threshold = (Slider)window.FindName("AutoPracticeMissSlider");
+        Assert(!settings.PracticeAutoTempo && settings.PracticeMissThreshold == 3 && toggle.IsChecked == false && !threshold.IsEnabled,
+            "Auto practice tempo should start off, with the threshold slider disabled, so ordinary playback is never touched.");
+        var hadTempo = tempo.Value;
+        tempo.Value = 100;
+
+        for (var index = 0; index < 10; index++) Invoke(window, "RecordPracticeNote", false);
+        Assert(Math.Abs(tempo.Value - 100) < .01 && window.PracticeMissRun == 0,
+            "With auto practice tempo off, misses must not touch the playback tempo.");
+
+        toggle.IsChecked = true; threshold.Value = 2; tempo.Value = 100;
+        Assert(settings.PracticeAutoTempo && threshold.IsEnabled, "Turning the switch on should store the flag and enable the threshold slider.");
+        Invoke(window, "RecordPracticeNote", false); Invoke(window, "RecordPracticeNote", false);
+        Assert(Math.Abs(tempo.Value - 100) < .01, "Two misses with a threshold of two must not slow the song down yet.");
+        Invoke(window, "RecordPracticeNote", false);
+        Assert(Math.Abs(tempo.Value - 95) < .01, "The miss past the threshold should drop the playback tempo by five percent.");
+        for (var index = 0; index < 20; index++) Invoke(window, "RecordPracticeNote", false);
+        Assert(Math.Abs(tempo.Value - 50) < .01, "Auto practice tempo must stop at the slow floor instead of dropping below it.");
+
+        Invoke(window, "RecordPracticeNote", true);
+        Assert(Math.Abs(tempo.Value - 50) < .01 && window.PracticeHitRun == 1, "One correct note only starts the recovery run; it must not move the tempo.");
+        for (var index = 0; index < 3; index++) Invoke(window, "RecordPracticeNote", true);
+        Assert(Math.Abs(tempo.Value - 52) < .01, "Four correct notes in a row should give two percent back.");
+        for (var index = 0; index < 4 * 30; index++) Invoke(window, "RecordPracticeNote", true);
+        Assert(Math.Abs(tempo.Value - 100) < .01, "Correct playing should bring the tempo back to normal and stop there.");
+
+        Invoke(window, "RecordPracticeNote", true); Invoke(window, "RecordPracticeNote", false);
+        Assert(window.PracticeHitRun == 0 && window.PracticeMissRun == 1, "A miss should clear the correct-note run, and the other way round.");
+        Invoke(window, "ResetPracticeTempoRuns");
+        Assert(window.PracticeMissRun == 0 && window.PracticeHitRun == 0, "Restarting the score should forget both practice runs.");
+
+        // The wiring: key presses while a song plays must reach the same curve.
+        threshold.Value = 1; tempo.Value = 100;
+        SetField(window, "_playing", true);
+        Invoke(window, "PressNote", 30, 90); Invoke(window, "ReleaseNote", 30);
+        Assert(Math.Abs(tempo.Value - 100) < .01 && window.PracticeMissRun == 1, "The first missed key with a threshold of one must not slow the song down yet.");
+        Invoke(window, "PressNote", 31, 90); Invoke(window, "ReleaseNote", 31);
+        Assert(Math.Abs(tempo.Value - 95) < .01, "A second missed key must slow the playing song down by one step.");
+        Invoke(window, "PressNote", 60, 90); Invoke(window, "ReleaseNote", 60);
+        Assert(Math.Abs(tempo.Value - 95) < .01 && window.PracticeHitRun == 1, "A correct key during playback must start the recovery run without moving the tempo.");
+        Invoke(window, "Stop"); SetField(window, "_playing", false);
+
+        toggle.IsChecked = false; threshold.Value = 3; tempo.Value = hadTempo; Invoke(window, "ResetPracticeTempoRuns");
+        Assert(!settings.PracticeAutoTempo && settings.PracticeMissThreshold == 3, "The practice tempo switches should keep their stored values when the check restores them.");
+        Results.Add("PASS practice tempo: off by default, five-percent slow-down past the threshold with a floor, two-percent recovery after four correct notes with a ceiling, run bookkeeping and the real missed-key path.");
     }
 
     private static void VerifySettingsProfile(MainWindow window)

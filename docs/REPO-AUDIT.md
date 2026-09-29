@@ -29,6 +29,7 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 | **Tìm kiếm trong dock**: từ đồng nghĩa theo setting (`SearchSynonyms`), khớp theo token (giao), tên setting là lưới an toàn cuối, phần khớp được tô accent bằng `Run` | `VerifySettingsDock` + `VerifyLanguageSwitching` |
 | **Tài liệu song ngữ**: `README.en.md` bản dịch 1‑1, hai bản trỏ nhau, `scan_readme` quét cả hai, bảng tham số dòng lệnh kiểm riêng từng bản | `tools/check_sources.py` |
 | **Thẻ F1** thêm dòng `Ctrl+Z / Ctrl+Shift+Z` và câu mô tả đi qua `Loc` (thêm khoá vào cả hai bảng) | `scan_readme`/checker + `--verify` (`UnknownKeys` là lỗi) |
+| **Tempo luyện tập tự động** (P1#5): công tắc + ngưỡng ở trang Practice (`PracticeAutoTempo`, `PracticeMissThreshold` 1–6, mặc định 3); sai liên tiếp quá ngưỡng thì mỗi bước giảm 5% (sàn 50%), đúng liên tiếp 4 nốt thì tăng 2% và dừng ở 100%; mỗi bước đi qua `TempoSlider` nên nhãn tempo và đường phát theo đúng nhịp thường; `ResetScore` xoá cả hai chuỗi đếm | `VerifyPracticeTempo` |
 | **Thư viện bài** (lát cắt v0.5 của P1#3): hộp thoại Play có mục **RECENT** đọc `library.json` trong thư mục cài đặt (mới nhất trước, tối đa 12 bài, khoá theo đường dẫn, `×` để quên); mỗi dòng lưu số nốt, số track, tempo, điểm chia tay, tốc độ rơi, tempo phát và preset, mở lại là khôi phục qua chính các slider (đi qua đúng đường của người dùng nên vào cả lịch sử undo); tệp hỏng đọc thành rỗng, bài mất khỏi đĩa tự bị loại | `VerifySongLibrary` |
 
 ## 3. Hạn chế còn lại (có chủ đích hoặc chưa làm)

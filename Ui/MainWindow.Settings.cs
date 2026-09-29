@@ -1034,6 +1034,13 @@ public partial class MainWindow
             }
             for (var i = 0; i < _trackPaletteSwatches.Count && i < _visualSettings.TrackColors.Count; i++) SetColorSwatch(_trackPaletteSwatches[i], _visualSettings.TrackColors[i]);
             if (themeChipHost is not null) { RefreshThemeChips(); RefreshMenuThemeChips(); }
+            if (AutoPracticeTempoCheck is not null)
+            {
+                AutoPracticeTempoCheck.IsChecked = _visualSettings.PracticeAutoTempo;
+                AutoPracticeMissSlider.IsEnabled = _visualSettings.PracticeAutoTempo;
+                AutoPracticeMissSlider.Value = Math.Clamp(_visualSettings.PracticeMissThreshold, AutoPracticeMissSlider.Minimum, AutoPracticeMissSlider.Maximum);
+                if (AutoPracticeMissLabel is not null) AutoPracticeMissLabel.Text = ((int)Math.Round(AutoPracticeMissSlider.Value)).ToString();
+            }
             SyncAllPlayDialogControls();
         }
         finally { _loadingVisualSettings = false; }

@@ -326,7 +326,7 @@ code, the XAML and the verification suite all read from the same place (see `Ui/
 | | Camera & FX | Parallax, zoom, framing, saturation, contrast, bloom. |
 | **SOUND & INPUT** | Audio | Load a SoundFont, pick the instrument preset, hall reverb. |
 | | MIDI | Input/output devices, track list (solo/mute/colour), metronome. |
-| | Practice | Practice modes, tempo, A–B loop. |
+| | Practice | Practice modes, tempo, A–B loop, and the **auto practice tempo**: a run of misses past the threshold steps the song down five percent at a time, four correct notes in a row give two percent back and never past one hundred. |
 | **SESSION** | Recording | Resolution, fps, output-file information. |
 | **APP** | General | **Interface language** (English / Tiếng Việt / follow Windows), theme, motion level, settings folder. |
 
@@ -515,7 +515,10 @@ must find a row by its Vietnamese caption**, **old theme ids (`sakura`/`noir`/`v
 the canonical id when a saved file is loaded**, theme chips, the petal layer, impact wave/flash,
 falling/hold/release FX, the 4 ambient layers, the smart modulators, the 7 theme combinations, per
 hand/track colour modes, dependent rows, search, applying presets, **the F1 shortcuts card opening and
-closing**, **the song library (`VerifySongLibrary`): the index lives in the settings folder of the run,
+closing**, **the auto practice tempo (`VerifyPracticeTempo`): off by default, a run of misses past the
+threshold steps the song down five percent at a time to a floor of fifty, four correct notes in a row
+give two percent back up to one hundred, and a real missed key while the song plays reaches the same
+curve**, **the song library (`VerifySongLibrary`): the index lives in the settings folder of the run,
 keeps the newest twelve songs first (the Play dialog shows the first five rows), reopening a song
 restores hand split, fall speed and tempo through the very sliders and rewrites exactly one row for it,
 a damaged file reads as empty, and forgotten or vanished files are dropped**, **accessibility (`VerifyAccessibility`): every glyph-only control has a translatable

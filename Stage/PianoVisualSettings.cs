@@ -73,6 +73,12 @@ internal sealed class PianoVisualSettings
     public double HandSplitPitch { get; set; } = 60;
     public double RainbowSpeed { get; set; } = 30;
 
+    // ---- Practice session ---------------------------------------------------------------------------
+    /// <summary>Slows the song down after a run of misses and speeds it back up as the run goes well.</summary>
+    public bool PracticeAutoTempo { get; set; }
+    /// <summary>Misses in a row that trigger one slow-down step while <see cref="PracticeAutoTempo"/> is on.</summary>
+    public int PracticeMissThreshold { get; set; } = 3;
+
     // ---- Note shape ---------------------------------------------------------------------------------
     /// <summary>Solid, Neon (hollow glowing outline), Glass or Fire (burning texture).</summary>
     public string NoteStyle { get; set; } = "Neon";
@@ -375,6 +381,7 @@ internal sealed class PianoVisualSettings
         ShaderRimLight = Math.Clamp(ShaderRimLight, 0, 150); ShaderEmissive = Math.Clamp(ShaderEmissive, 0, 200);
         ShaderExposure = Math.Clamp(ShaderExposure, 20, 250); ShaderCameraTilt = Math.Clamp(ShaderCameraTilt, 0, 100);
         HandSplitPitch = Math.Clamp(Math.Round(HandSplitPitch), 21, 108); RainbowSpeed = Math.Clamp(RainbowSpeed, 0, 100);
+        PracticeMissThreshold = Math.Clamp(PracticeMissThreshold, 1, 6);
         CameraParallax = Math.Clamp(CameraParallax, 0, 100); CameraZoom = Math.Clamp(CameraZoom, 65, 150);
         CameraOffset = Math.Clamp(CameraOffset, 0, 100); BackgroundDim = Math.Clamp(BackgroundDim, 0, 100); Saturation = Math.Clamp(Saturation, 0, 200);
         Contrast = Math.Clamp(Contrast, 0, 200); BloomIntensity = Math.Clamp(BloomIntensity, 0, 150); BloomSize = Math.Clamp(BloomSize, 0, 150);

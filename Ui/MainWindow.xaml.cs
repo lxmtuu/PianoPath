@@ -215,7 +215,7 @@ public partial class MainWindow : Window
             while (_missScanIndex < _notes.Count && _notes[_missScanIndex].Start < missLimit)
             {
                 var note = _notes[_missScanIndex++];
-                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; }
+                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; RecordPracticeNote(false); }
             }
             TickMetronome(previous, forceOnset);
         }
@@ -685,11 +685,11 @@ public partial class MainWindow : Window
             if (target != null)
             {
                 target.Played = true; var delta = Math.Abs(target.Start - _position);
-                if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); } else { _misses++; _streak = 0; }
+                if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); RecordPracticeNote(true); } else { _misses++; _streak = 0; RecordPracticeNote(false); }
                 target.Timing = Math.Max(0, 100 - delta * 180); Loc.Set(NoteNameLabel, delta < .11 ? "PERFECT" : delta < .28 ? "GREAT" : "KEEP GOING");
                 if (ModeCombo.SelectedIndex == 1) _clock.Restart();
             }
-            else { _misses++; _streak = 0; NoteNameLabel.Text = NoteLabel(pitch); }
+            else { _misses++; _streak = 0; RecordPracticeNote(false); NoteNameLabel.Text = NoteLabel(pitch); }
         }
         else NoteNameLabel.Text = NoteLabel(pitch);
         UpdateStats(); UpdateStage();
@@ -926,7 +926,7 @@ public partial class MainWindow : Window
     }
     private void ResetScore()
     {
-        _hits = _misses = _streak = _bestStreak = 0;
+        _hits = _misses = _streak = _bestStreak = 0; ResetPracticeTempoRuns();
         foreach (var note in _allNotes) { note.Played = false; note.Missed = false; note.Timing = 0; }
         // Notes already behind the playhead are skipped, not counted as misses, so seeking or changing filters never zeroes the accuracy.
         SyncPlayhead();
