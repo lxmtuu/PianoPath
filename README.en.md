@@ -203,14 +203,14 @@ dotnet build .\PianoPath.csproj -c Release
 2. **SoundFont**: the bundled Yamaha grand loads automatically at startup (it takes a few seconds; the label on the Audio page tells you when it is ready). To use another piano, open **SETTINGS → Audio → LOAD SOUNDFONT** and pick a `.sf2`; choose a preset (bank/program) in the list below it. **HALL REVERB** toggles the room reverb.
 3. **MIDI piano**: plug the instrument in before starting the app and Keyflow connects to the first input by itself. Plugged in later? Open **SETTINGS → MIDI → Refresh devices**. The badge above the keyboard switches to `MIDI IN · C4` when a Note On arrives. The same page holds the MIDI output (to play through an external synth), the metronome and the track list.
 4. **Look**: pick a preset in **SETTINGS → Style** (default *Neon Violet*), pick the concert interface in **SETTINGS → Theme** (Concert Grand / Concert Noir / Velvet Gold — Concert Grand is the default), then fine-tune on the Notes / Particles / Keyboard / Background / Camera & FX pages. Every change applies live and saves itself.
-5. **Where settings live**: `%LOCALAPPDATA%\Keyflow\visual-settings.json` (current settings) and `%LOCALAPPDATA%\Keyflow\presets\*.json` (user presets); move them with `--settings-dir=<folder>`. Delete `visual-settings.json` or press **RESET TO DEFAULT** in the dock to go back to the defaults; copy the `presets` folder to carry presets to another machine (or use IMPORT/EXPORT). Old theme ids (`sakura`, `noir`, `velvet`) are migrated to the current ids when an old file is loaded.
+5. **Where settings live**: `%LOCALAPPDATA%\Keyflow\visual-settings.json` (current settings), `%LOCALAPPDATA%\Keyflow\library.json` (the recent songs and the values they were played at) and `%LOCALAPPDATA%\Keyflow\presets\*.json` (user presets); move them with `--settings-dir=<folder>`. Delete `visual-settings.json` or press **RESET TO DEFAULT** in the dock to go back to the defaults; copy the `presets` folder to carry presets to another machine (or use IMPORT/EXPORT). Old theme ids (`sakura`, `noir`, `velvet`) are migrated to the current ids when an old file is loaded.
 6. **Recording**: the **Recording** page chooses resolution/fps; press **REC** in the corner of the stage, pick where the AVI goes, then press it again to stop. Install an MJPEG codec (for example the K-Lite pack) if you want smaller files — it is optional.
 
 ## Getting started
 
 1. The app opens on the **concert menu** (Perform & Play / Stage Design Studio / Audio & MIDI Hardware Setup / Keyboard & Shortcuts / About / Exit). The **HOME** button on the header returns to it at any time.
 2. **Live Play**: press a key on the piano, the computer keyboard or a MIDI instrument to show just the notes you play. The Yamaha grand SoundFont loads automatically when the app opens, so computer keys, the on-screen piano and MIDI all sound immediately. The **HALL** button toggles the concert-hall reverb.
-3. Choose **OPEN MIDI** to load a `.mid` or `.midi` file. Pressing keys does not start the score; press Play or Space to run the MIDI notes under the playhead.
+3. Choose **OPEN MIDI** to load a `.mid` or `.midi` file. Pressing keys does not start the score; press Play or Space to run the MIDI notes under the playhead. The **Perform & Play** dialog keeps a **RECENT** list of the songs you opened, with their note and track counts, tempo and last preset; click a row to open the song again at its stored hand split, fall speed and tempo, or the **×** to forget it.
 4. While the score runs the notes travel down and touch the glowing line just above the keys. Play along on the keyboard and get hit/miss feedback.
 5. If a MIDI piano was plugged in when the app started, Keyflow connects to the first input it finds. If you plug it in later, open **SETTINGS → MIDI → Refresh devices** and the app selects and connects the new instrument. The blue badge above the keyboard becomes `MIDI IN · C4` when a Note On arrives. In the settings dock (the **SETTINGS** button or `Esc`) you can choose other input/output devices, the practice mode, tempo, tracks, the metronome and the loop points.
 
@@ -343,7 +343,7 @@ The rest of the interface:
 
 - The default SoundFont is FreePats' YDP Grand Piano, built from a Yamaha Disklavier Pro multisample. See `Assets/ATTRIBUTION.txt` for the authors, source and CC BY 3.0 licence. The SF2 file is about 113 MiB.
 - The built-in audio engine reads uncompressed SoundFont 2 (`.sf2`). `.sf3` is not supported; some advanced SF2 parts such as modulators, instrument filters and the reverb/chorus effects are not fully reproduced. The sound can therefore differ from dedicated SoundFont synthesizers, depending on the file.
-- MIDI format 2, SMPTE time division, MusicXML, sheet music, song-library management and practice-history storage do not exist yet.
+- MIDI format 2, SMPTE time division, MusicXML, sheet music and practice-history storage do not exist yet. The song library is at the **recent songs + per-song metadata** stage (`library.json` in the settings folder); watching a `.mid` folder, search and tags do not exist yet.
 - The hand split uses one fixed point (C4 = MIDI 60 by default, adjustable under Notes → Hand split point, shared by per-hand colouring and the one-hand practice modes); the app does not infer a split from the music.
 - A physical MIDI input needs an instrument/device that Windows recognises. Without one, use the computer keyboard or the on-screen piano.
 - The Windows-only build uses WinMM.
@@ -515,7 +515,10 @@ must find a row by its Vietnamese caption**, **old theme ids (`sakura`/`noir`/`v
 the canonical id when a saved file is loaded**, theme chips, the petal layer, impact wave/flash,
 falling/hold/release FX, the 4 ambient layers, the smart modulators, the 7 theme combinations, per
 hand/track colour modes, dependent rows, search, applying presets, **the F1 shortcuts card opening and
-closing**, **accessibility (`VerifyAccessibility`): every glyph-only control has a translatable
+closing**, **the song library (`VerifySongLibrary`): the index lives in the settings folder of the run,
+keeps the newest twelve songs first (the Play dialog shows the first five rows), reopening a song
+restores hand split, fall speed and tempo through the very sliders and rewrites exactly one row for it,
+a damaged file reads as empty, and forgotten or vanished files are dropped**, **accessibility (`VerifyAccessibility`): every glyph-only control has a translatable
 name, Tab stays inside the dock, and the high-contrast palette follows `SystemColors` — repainting as
 soon as Windows reports the switch — without overwriting the chosen theme**, **the dock at the compact size (`VerifyDockAccessibility`): on all 12
 pages at 1080×700 every row stays inside the scroll column and every control inside its own card,
@@ -586,6 +589,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `Stage/Shading/`: the Unreal-style keyboard shading — `ShaderMath.cs` (GGX/Smith/Schlick, ACES, sRGB, dither), `PianoShaderScene.cs` (scene + camera + cache key), `PianoKeyboardRenderer.cs` (soft ray-traced shadow, contact AO, IBL, coloured per-note light, overlay tiles).
 - `Audio/`: `PianoAudioEngine.cs` (`waveOut` PCM output, playback thread and hall reverb) and `SoundFontSynthesizer.cs` (reads `.sf2` sample zones to the SF2 specification).
 - `Midi/`: `MidiFileReader.cs` (Standard MIDI File → notes, tempo map, beat grid, track names) and `MidiDeviceService.cs` (WinMM devices).
+- `Library/SongLibrary.cs`: the recent-songs index (`library.json` in the settings folder) — newest first, at most twelve, keyed by path; `Ui/MainWindow.Library.cs` builds the Play dialog's RECENT list and restores the stored values through the sliders.
 - `Video/AviVideoRecorder.cs`: AVI frame writing through Windows Video for Windows.
 - `Diagnostics/VerificationSuite.cs`: the regression suite run by `--verify`, with self-made fixtures.
 - `tools/`: `check_sources.py` (static checks for syntax/XAML/dock catalogue/theme tokens/README/command line, runs anywhere), `shader_preview.py` (Python port of the shader for previewing, writes to `tools/out/`, not committed) and `make_stage_background.py` (generates the sample backdrop `docs/samples/stage-backdrop.png`), `inno_messages.py` (generates the list of valid Inno Setup message names, `installer/Languages/messages.txt`) and `build_installer.ps1` (compiles the installer; both workflows call it).

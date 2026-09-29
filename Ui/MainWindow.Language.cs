@@ -55,6 +55,7 @@ public partial class MainWindow
         RefreshDeviceCaptions();
 
         LoadPresetList();
+        RefreshRecentSongs();
         RefreshSettingControls();
         UpdateSoundFontUi();
         UpdatePlaybackLabel();

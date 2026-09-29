@@ -470,6 +470,7 @@ internal static class VerificationSuite
         VerifyDockAccessibility(window);
         VerifySettingsHistory(window);
         VerifySettingsProfile(window);
+        VerifySongLibrary(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1054,6 +1055,83 @@ internal static class VerificationSuite
     /// profile is rejected, and an id this build does not ship falls back to English / the default look
     /// instead of half-applying.
     /// </summary>
+    /// <summary>
+    /// The recent-songs library: the index lives in the folder of this run (never the user's own), keeps
+    /// the newest twelve songs first, replaces an entry that is opened again instead of adding a second
+    /// row, and treats a damaged file as "no songs". Reopening a row has to put the stored hand split,
+    /// fall speed and tempo back on the very sliders the user would move, so the renderer, the settings
+    /// file and the undo history all follow their ordinary paths.
+    /// </summary>
+    private static void VerifySongLibrary(MainWindow window)
+    {
+        var directory = PianoVisualSettingsStore.SettingsDirectory;
+        Assert(SongLibrary.FilePath.StartsWith(directory, StringComparison.OrdinalIgnoreCase),
+            $"The song library must live in the settings folder of this run, not in the user's own (using {SongLibrary.FilePath}).");
+        var host = (StackPanel)window.FindName("RecentSongHost");
+        var empty = (TextBlock)window.FindName("RecentSongsEmpty");
+        SongLibrary.Clear();
+        window.RefreshRecentSongs();
+        Assert(SongLibrary.Entries.Count == 0 && host.Children.Count == 0 && empty.Visibility == Visibility.Visible,
+            "A cleared song library should show its empty-state sentence and no rows.");
+
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-library-song.mid");
+        File.WriteAllBytes(path, CreateFormatOneMidi());
+        if (SongLibrary.Find(path) is { } stale) SongLibrary.Forget(stale.Path);
+        SongLibrary.Remember(path, "Library Song", 3, 2, 1.25, 120, 55, 700, 90, "Two Hands");
+        var found = SongLibrary.Find(path);
+        Assert(File.Exists(SongLibrary.FilePath) && found is { Notes: 3, Tracks: 2, BeatsPerMinute: 120, HandSplitPitch: 55, FallSpeed: 700, TempoPercent: 90, Preset: "Two Hands" },
+            "A remembered song should keep the note, track and tempo facts read from the file plus the values it was played at.");
+
+        for (var index = 0; index < SongLibrary.Capacity + 3; index++)
+            SongLibrary.Remember(Path.Combine(Path.GetTempPath(), $"keyflow-library-{index}.mid"), $"Song {index}", 1, 1, 1, 100, 60, 500, 100, "");
+        Assert(SongLibrary.Entries.Count == SongLibrary.Capacity && SongLibrary.Entries[0].Title == $"Song {SongLibrary.Capacity + 2}" && SongLibrary.Entries[^1].Title == "Song 3",
+            "The library should keep the newest twelve songs, newest first.");
+        SongLibrary.Remember(path, "Library Song", 3, 2, 1.25, 120, 55, 700, 90, "Two Hands");
+        Assert(SongLibrary.Entries.Count == SongLibrary.Capacity && Path.GetFullPath(SongLibrary.Entries[0].Path) == Path.GetFullPath(path),
+            "Opening a song that is already remembered should move its row to the front instead of adding a second one.");
+
+        File.WriteAllText(SongLibrary.FilePath, "{ this is not the library");
+        SongLibrary.Reload();
+        Assert(SongLibrary.Entries.Count == 0, "A damaged library file should read as empty instead of failing a song or the app.");
+
+        SongLibrary.Clear();
+        SongLibrary.Remember(path, "Library Song", 3, 2, 1.25, 120, 55, 700, 90, "Two Hands");
+        var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        var hand = sliders[nameof(PianoVisualSettings.HandSplitPitch)]; var speed = sliders[nameof(PianoVisualSettings.NoteFallSpeed)];
+        var tempo = (Slider)window.FindName("TempoSlider");
+        var hadHand = hand.Value; var hadSpeed = speed.Value; var hadTempo = tempo.Value;
+        hand.Value = 72; speed.Value = 300; tempo.Value = 130;
+        window.OpenSongFromLibrary(SongLibrary.Find(path)!);
+        Assert(Math.Abs(hand.Value - 55) < .01 && Math.Abs(speed.Value - 700) < .01 && Math.Abs(tempo.Value - 90) < .01,
+            "Reopening a remembered song should put its stored hand split, fall speed and tempo back on the controls.");
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+        Assert(Math.Abs(settings.HandSplitPitch - 55) < .01 && Math.Abs(settings.NoteFallSpeed - 700) < .01,
+            "The values restored from the library should reach the visual settings the renderer reads.");
+        Assert(SongLibrary.Entries.Count == 1 && SongLibrary.Entries[0] is { HandSplitPitch: 55, FallSpeed: 700, TempoPercent: 90 },
+            "Reopening a song should keep exactly one row for it and remember the values it was played at again.");
+        window.RefreshRecentSongs();
+        Assert(host.Children.Count == 1 && empty.Visibility == Visibility.Collapsed,
+            "The Play dialog should list the songs that were opened and hide its empty-state sentence.");
+
+        for (var index = 0; index < MainWindow.RecentSongRows + 1; index++)
+            SongLibrary.Remember(Path.Combine(Path.GetTempPath(), $"keyflow-library-row-{index}.mid"), $"Row {index}", 1, 1, 1, 100, 60, 500, 100, "");
+        window.RefreshRecentSongs();
+        Assert(host.Children.Count == MainWindow.RecentSongRows && SongLibrary.Entries.Count == MainWindow.RecentSongRows + 2,
+            "The Play dialog should show the newest few songs while the library file keeps the full recent list.");
+
+        SongLibrary.Forget(path);
+        Assert(SongLibrary.Find(path) is null && SongLibrary.Entries.Count == MainWindow.RecentSongRows + 1,
+            "Forgetting a song should drop its row from the list and from the file.");
+        var missing = SongLibrary.Remember(Path.Combine(Path.GetTempPath(), "keyflow-library-missing.mid"), "Missing", 1, 1, 1, 100, 60, 500, 100, "");
+        window.OpenSongFromLibrary(missing);
+        Assert(SongLibrary.Find(missing.Path) is null,
+            "A remembered file that is no longer on disk should be forgotten instead of being offered again.");
+
+        SongLibrary.Clear(); window.RefreshRecentSongs();
+        hand.Value = hadHand; speed.Value = hadSpeed; tempo.Value = hadTempo;
+        Results.Add("PASS song library: isolated recent-songs index, newest-first twelve-song cap with per-path dedupe, damaged file tolerated, forgotten and vanished files dropped, and reopening a row restores hand split, fall speed and tempo through the controls.");
+    }
+
     private static void VerifySettingsProfile(MainWindow window)
     {
         var settings = (PianoVisualSettings)Field(window, "_visualSettings");

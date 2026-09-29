@@ -196,6 +196,7 @@ public partial class MainWindow
             PlayDialogThemeOrb.Background = new SolidColorBrush(ShellThemeManager.Current.Accent);
         RefreshThemeChips();
         SyncPlayInlineControls();
+        RefreshRecentSongs();
         PlayDialogOverlay.Visibility = Visibility.Visible;
         ChromeMotion.FadeIn(PlayDialogOverlay, 200);
         ChromeMotion.PopIn(PlayDialogCard);

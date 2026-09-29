@@ -29,6 +29,7 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 | **Tìm kiếm trong dock**: từ đồng nghĩa theo setting (`SearchSynonyms`), khớp theo token (giao), tên setting là lưới an toàn cuối, phần khớp được tô accent bằng `Run` | `VerifySettingsDock` + `VerifyLanguageSwitching` |
 | **Tài liệu song ngữ**: `README.en.md` bản dịch 1‑1, hai bản trỏ nhau, `scan_readme` quét cả hai, bảng tham số dòng lệnh kiểm riêng từng bản | `tools/check_sources.py` |
 | **Thẻ F1** thêm dòng `Ctrl+Z / Ctrl+Shift+Z` và câu mô tả đi qua `Loc` (thêm khoá vào cả hai bảng) | `scan_readme`/checker + `--verify` (`UnknownKeys` là lỗi) |
+| **Thư viện bài** (lát cắt v0.5 của P1#3): hộp thoại Play có mục **RECENT** đọc `library.json` trong thư mục cài đặt (mới nhất trước, tối đa 12 bài, khoá theo đường dẫn, `×` để quên); mỗi dòng lưu số nốt, số track, tempo, điểm chia tay, tốc độ rơi, tempo phát và preset, mở lại là khôi phục qua chính các slider (đi qua đúng đường của người dùng nên vào cả lịch sử undo); tệp hỏng đọc thành rỗng, bài mất khỏi đĩa tự bị loại | `VerifySongLibrary` |
 
 ## 3. Hạn chế còn lại (có chủ đích hoặc chưa làm)
 
@@ -47,7 +48,7 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 ### 3.2 Giới hạn kỹ thuật của sản phẩm (giữ nguyên, đã ghi ở README)
 
 * SoundFont chỉ đọc SF2 **không nén** (không `.sf3`), một phần modulator/filter/FX của đặc tả chưa có.
-* Chưa có MusicXML/khuông nhạc, thư viện bài, lịch sử luyện tập; điểm chia tay cố định C4 = 60.
+* Chưa có MusicXML/khuông nhạc và lịch sử luyện tập; thư viện bài mới ở mức recent + metadata (chưa theo dõi thư mục, tìm kiếm, tag); điểm chia tay cố định C4 = 60.
 * REC ghi **AVI phần hình** (MJPEG hoặc RGB không nén, trần 2 GB), chưa ghép tiếng, chưa có MP4/alpha.
 * Chỉ Windows (WPF + WinMM), cần thiết bị MIDI mà Windows nhìn thấy.
 * Chưa có webcam/3D phối cảnh; âm thanh chưa có convolution reverb, sympathetic resonance.

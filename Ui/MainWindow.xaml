@@ -312,6 +312,11 @@
                                 <Button x:Name="PlayDialogMidiButton" Content="MIDI File" Tag="{StaticResource IconFolder}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogOpenMidi_Click" Padding="16,9" ToolTip="Choose a Standard MIDI file" local:Loc.Localize="True"/>
                                 <Button Grid.Column="2" Content="Live Play" Style="{StaticResource GhostButtonStyle}" Click="PlayDialogLive_Click" Padding="12,8" FontSize="12" ToolTip="Skip playback and perform live right away" local:Loc.Localize="True"/>
                             </Grid>
+                            <StackPanel x:Name="RecentSongsPanel" Margin="0,16,0,0">
+                                <TextBlock Text="RECENT" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="RecentSongsEmpty" Text="Songs you open are remembered here, with the values they were last played at." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}"/>
+                                <StackPanel x:Name="RecentSongHost"/>
+                            </StackPanel>
                             <TextBlock Text="STYLES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,6"/>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
