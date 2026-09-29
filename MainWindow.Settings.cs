@@ -6,6 +6,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace PianoPath;
 
@@ -172,6 +173,23 @@ public partial class MainWindow
         SliderRow(light, "Light intensity", nameof(PianoVisualSettings.KeyLighting), 0, 100, "Brightness of the glow around lit keys.");
         SliderRow(light, "Glow radius", nameof(PianoVisualSettings.KeyGlowRadius), 0, 100, "How far the light bleeds over the keyboard.");
         SliderRow(light, "Press depth", nameof(PianoVisualSettings.KeyPressDepth), 0, 100, "How much a key sinks when pressed.");
+
+        var shader = Card(KeyboardSettingsHost, "RAY-TRACED SHADING",
+            "Every pixel of the keyboard is shaded with a real light transport model: a GGX specular lobe, a softbox with true penumbra shadows, contact occlusion in the gaps, colored lights from every sounding key and an ACES filmic tonemapper.");
+        var shadingOn = () => _visualSettings.ShadingQuality != "Off";
+        Choice(shader, "Shading engine", nameof(PianoVisualSettings.ShadingQuality),
+            "Off draws the flat vector keys. Fast, Balanced and Cinematic trade bake time for shadow and occlusion samples.",
+            ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"));
+        SliderRow(shader, "Camera tilt", nameof(PianoVisualSettings.ShaderCameraTilt), 0, 100, "Low camera exaggerates the perspective and lengthens the black key shadows; high camera flattens the bed.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Key light", nameof(PianoVisualSettings.ShaderKeyLight), 0, 200, "Intensity of the softbox above the keyboard.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Shadow strength", nameof(PianoVisualSettings.ShaderShadows), 0, 100, "How dark the shadows are; also widens the penumbra.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Contact occlusion", nameof(PianoVisualSettings.ShaderAmbientOcclusion), 0, 100, "Ambient light lost in the gaps between keys and under the fallboard.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Gloss", nameof(PianoVisualSettings.ShaderGloss), 0, 100, "Polish of the ivory and ebony; higher means tighter highlights.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Rim light", nameof(PianoVisualSettings.ShaderRimLight), 0, 150, "Accent light rising from behind the fallboard, tinted by the hit-line color.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Key emission", nameof(PianoVisualSettings.ShaderEmissive), 0, 200, "How strongly a sounding key glows and lights the bed around it.").VisibleWhen = shadingOn;
+        SliderRow(shader, "Exposure", nameof(PianoVisualSettings.ShaderExposure), 20, 250, "Applied before the filmic tonemapper.").VisibleWhen = shadingOn;
+        Toggle(shader, "ACES filmic tonemapper", nameof(PianoVisualSettings.ShaderFilmic), "Unreal's default filmic curve; off clips highlights linearly instead.").VisibleWhen = shadingOn;
+        Note(shader, "The keyboard is baked once and cached, then only the sounding keys are re-shaded, so the shader stays inside the frame budget. Green-screen recording always uses the flat keys.").VisibleWhen = shadingOn;
     }
 
     private void BuildBackgroundPage()
@@ -641,13 +659,8 @@ public partial class MainWindow
     {
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var strip = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
-        foreach (var hex in PresetSwatches(preset.Settings))
-        {
-            var swatch = new Border { Width = 10, Height = 26, CornerRadius = new CornerRadius(3), Margin = new Thickness(0, 0, 2, 0) };
-            try { swatch.Background = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex)!); } catch { swatch.Background = Brushes.Gray; }
-            strip.Children.Add(swatch);
-        }
+        var strip = new Border { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0), CornerRadius = new CornerRadius(6), ClipToBounds = true };
+        strip.Child = new Image { Source = PresetThumbnail(preset), Width = 96, Height = 56, Stretch = Stretch.Fill };
         var text = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         text.Children.Add(new TextBlock { Text = preset.Name, FontSize = 11.5, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
         text.Children.Add(new TextBlock { Text = preset.Description, Style = (Style)FindResource("MutedTextStyle"), FontSize = 9.5, Margin = new Thickness(0, 2, 0, 0) });
@@ -665,6 +678,52 @@ public partial class MainWindow
         "RainbowPitch" or "RainbowTime" => ["#FF4D4D", "#FFD166", "#4FE3B0", "#4DA3FF", "#B46BFF"],
         _ => [s.NoteColorStart, s.NoteColorEnd, s.HaloColor]
     };
+
+    private readonly Dictionary<string, ImageSource> _presetThumbs = [];
+
+    /// <summary>Embers-style miniature: a tiny keyboard with the preset's note palette falling onto it.</summary>
+    private ImageSource PresetThumbnail(VisualPreset preset)
+    {
+        var s = preset.Settings;
+        var key = $"{preset.Name}|{s.ColorMode}|{s.NoteColorStart}|{s.NoteColorEnd}|{s.HaloColor}|{s.NoteStyle}";
+        if (_presetThumbs.TryGetValue(key, out var cached)) return cached;
+        var w = 96; var h = 56;
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(9, 10, 15)), null, new Rect(0, 0, w, h));
+            var swatches = PresetSwatches(s).Select(TryColor).ToList();
+            if (swatches.Count == 0) swatches.Add(Color.FromRgb(148, 148, 148));
+            var halo = swatches[^1];
+            dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(170, halo.R, halo.G, halo.B)), null, new Rect(0, h * .55 - 2, w, 2));
+            const int whites = 12; var ww = (double)w / whites; var keyTop = h * .55;
+            for (var i = 0; i < whites; i++)
+                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(224, 226, 233)), null, new Rect(i * ww + .5, keyTop, ww - 1, h - keyTop - 1));
+            for (var i = 0; i < whites - 1; i++)
+            {
+                var step = i % 7; if (step == 2 || step == 6) continue;
+                dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(22, 24, 32)), null, new Rect((i + 1) * ww - ww * .17, keyTop, ww * .34, (h - keyTop) * .62));
+            }
+            double[] xs = [1.15, 3.1, 5.35, 7.2, 9.05, 10.55];
+            double[] tops = [.08, .22, .12, .32, .18, .04];
+            for (var i = 0; i < xs.Length; i++)
+            {
+                var c = swatches[i % swatches.Count];
+                dc.DrawRectangle(new SolidColorBrush(c), null, new Rect(xs[i] * ww + 1, tops[i] * h, ww - 2, keyTop - tops[i] * h - 3));
+            }
+        }
+        var bmp = new RenderTargetBitmap(w * 2, h * 2, 192, 192, PixelFormats.Pbgra32);
+        bmp.Render(visual);
+        bmp.Freeze();
+        _presetThumbs[key] = bmp;
+        return bmp;
+    }
+
+    private static Color TryColor(string hex)
+    {
+        try { return (Color)ColorConverter.ConvertFromString(hex)!; }
+        catch { return Color.FromRgb(148, 148, 148); }
+    }
 
     private VisualPreset? SelectedPreset => (PresetList.SelectedItem as ListBoxItem)?.Tag as VisualPreset;
 

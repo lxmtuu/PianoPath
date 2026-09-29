@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Input;
@@ -39,6 +40,21 @@ internal sealed class PianoStage : FrameworkElement
     private readonly Color[] _activeKeyColor = new Color[128];
     private readonly double[] _keyHeat = new double[128];
     private readonly double[] _wispBudget = new double[128];
+    // ---- Ray-traced keyboard cache ----------------------------------------------------------------
+    /// <summary>Empty light state used for the cached "all keys up" bake.</summary>
+    private static readonly KeyLightState NoLights = new();
+    /// <summary>Keys sounding right now; each one becomes an emissive surface plus a colored area light.</summary>
+    private readonly KeyLightState _keyLights = new();
+    /// <summary>Scratch light state reused for each overlay tile bake.</summary>
+    private readonly KeyLightState _tileLights = new();
+    private readonly Dictionary<long, ShadedKeyTile> _shadedTiles = [];
+    /// <summary>Most recent tile per pitch, reused when a frame runs out of its shading budget.</summary>
+    private readonly Dictionary<int, ShadedKeyTile> _lastTile = [];
+    private int _tileBudget;
+    private BitmapSource? _shadedBase;
+    private string _shadedSignature = "";
+    private double _shadedMilliseconds;
+    private int _shadedBakes;
     private PianoVisualSettings _visual = new();
     private BitmapSource? _backgroundImage;
     private Brush? _vignetteBrush;
@@ -60,6 +76,12 @@ internal sealed class PianoStage : FrameworkElement
     public bool HasActiveEffects => _sparks.Count > 0 || _rings.Count > 0 || _liveTrails.Count > 0 || _anyHeat || _pressed.Count > 0;
     public bool HasBackgroundImage => _backgroundImage is not null;
     public string? BackgroundLoadError { get; private set; }
+    /// <summary>True while the ray-traced keyboard bake is driving the stage instead of the flat vector keys.</summary>
+    public bool IsShadedKeyboardActive { get; private set; }
+    /// <summary>Milliseconds the most recent keyboard bake took; surfaced by the verification suite.</summary>
+    public double ShadedBakeMilliseconds => _shadedMilliseconds;
+    /// <summary>How many times the keyboard had to be re-shaded; a slider that does not affect the shader must not raise it.</summary>
+    public int ShadedBakeCount => _shadedBakes;
     public double FirstLiveTrailY => _liveTrails.Count == 0 ? -1 : _liveTrails[0].Age * _visual.NoteFallSpeed;
     public double LiveTrailHeightFor(int pitch)
     {
@@ -491,7 +513,14 @@ internal sealed class PianoStage : FrameworkElement
             }
             default:
             {
-                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(205 * opacity * tint), cr, cg, cb)), null, r, radius, radius);
+                if (_visual.Notes3D)
+                {
+                    // Vertical bevel: lit top edge, saturated middle, shadowed bottom, like a bar with thickness.
+                    dc.PushOpacity(Math.Clamp(opacity * tint, 0, 1));
+                    dc.DrawRoundedRectangle(NoteBodyBrush(color), null, r, radius, radius);
+                    dc.Pop();
+                }
+                else dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(205 * opacity * tint), cr, cg, cb)), null, r, radius, radius);
                 if (_visual.NoteEdge > 0)
                 {
                     var rim = new Pen(Brush(Color.FromArgb(Alpha(235 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B)), edgeWidth); rim.Freeze();
@@ -507,9 +536,13 @@ internal sealed class PianoStage : FrameworkElement
         }
         if (_visual.Notes3D && r.Height > 20 && style is "Solid" or "Glass")
         {
-            var inner = new Rect(r.X + 3, r.Y + 4, Math.Max(2, r.Width - 6), Math.Max(3, r.Height - 8));
-            dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha((style == "Glass" ? 55 : 95) * opacity), 10, 7, 18)), null, inner, Math.Min(radius, inner.Width / 2), Math.Min(radius, inner.Width / 2));
-            dc.DrawLine(new Pen(Brush(Color.FromArgb(Alpha(165 * opacity), 255, 250, 255)), 1), new Point(r.X + 4, r.Y + 5), new Point(r.X + 4, r.Bottom - 5));
+            // The solid style already carries its bevel gradient, so only glass needs the extra inner shade.
+            if (style == "Glass")
+            {
+                var inner = new Rect(r.X + 3, r.Y + 4, Math.Max(2, r.Width - 6), Math.Max(3, r.Height - 8));
+                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(55 * opacity), 10, 7, 18)), null, inner, Math.Min(radius, inner.Width / 2), Math.Min(radius, inner.Width / 2));
+            }
+            dc.DrawLine(new Pen(Brush(Color.FromArgb(Alpha((style == "Glass" ? 165 : 90) * opacity), 255, 250, 255)), 1), new Point(r.X + 4, r.Y + 5), new Point(r.X + 4, r.Bottom - 5));
         }
         if (_visual.NoteHeadGlow > 0 && r.Height > 6)
         {
@@ -526,6 +559,21 @@ internal sealed class PianoStage : FrameworkElement
             var textColor = style == "Neon" ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
         }
+    }
+
+    /// <summary>Vertical bevel for solid note bars: a lit top edge, the saturated core and a shadowed bottom.</summary>
+    private Brush NoteBodyBrush(Color color)
+    {
+        var key = GradientKey(7, Color.FromArgb(255, color.R, color.G, color.B));
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        var top = Blend(color, Colors.White, .34);
+        var bottom = Blend(color, Color.FromRgb(6, 4, 12), .46);
+        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(top.R, top.G, top.B), 0));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(color.R, color.G, color.B), .55));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(bottom.R, bottom.G, bottom.B), 1));
+        gradient.Freeze();
+        return CacheGradient(key, gradient);
     }
 
     private Brush GlassBrush(Color color, double strength)
@@ -712,6 +760,14 @@ internal sealed class PianoStage : FrameworkElement
         }
         var glowPen = new Pen(Brush(Color.FromArgb((byte)(30 + _visual.KeyLighting * .95), halo.R, halo.G, halo.B)), 5 + _visual.BloomSize / 10); glowPen.Freeze();
         dc.DrawLine(glowPen, new Point(0, top + 1), new Point(width, top + 1));
+        if (TryDrawShadedKeyboard(dc, width, height - top, top))
+        {
+            // The bake already carries its own shadows, occlusion and press animation, so only the
+            // engraved note names and the felt strip are drawn on top of it.
+            DrawKeyLabels(dc, whites, whiteWidth, height, Color.FromRgb(58, 60, 82));
+            if (_visual.ShowKeyFelt) DrawFelt(dc, width, top);
+            return;
+        }
         if (_visual.ShowKeyShadow)
         {
             var shadowKey = GradientKey(5, Colors.Black);
@@ -723,7 +779,6 @@ internal sealed class PianoStage : FrameworkElement
         }
         var whiteBrush = glass ? KeyWhiteGlass : studio ? KeyWhiteStudio : KeyWhite;
         var whiteEdge = new Pen(Brush(glass ? Color.FromArgb(120, 210, 220, 255) : Color.FromArgb(170, 68, 72, 94)), glass ? .8 : .7); whiteEdge.Freeze();
-        var labelSize = Math.Clamp(whiteWidth * .48, 7, 11);
         for (var i = 0; i < whites.Length; i++)
         {
             var pitch = whites[i]; var rect = new Rect(i * whiteWidth, top + 5, whiteWidth - 1, height - top - 5);
@@ -740,9 +795,8 @@ internal sealed class PianoStage : FrameworkElement
                 dc.DrawRoundedRectangle(whiteBrush, whiteEdge, rect, studio ? 2 : 1.4, studio ? 2 : 1.4);
                 if (studio) dc.DrawRectangle(Brush(Color.FromArgb(60, 0, 0, 0)), null, new Rect(rect.X, rect.Bottom - 6, rect.Width, 6));
             }
-            var showLabel = _visual.KeyLabels == "All" ? whiteWidth >= 13 : _visual.KeyLabels == "C" && pitch % 12 == 0;
-            if (showLabel) DrawLabel(dc, _visual.KeyLabels == "All" ? NoteLabel(pitch).TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-') + (pitch % 12 == 0 ? (pitch / 12 - 1).ToString() : "") : NoteLabel(pitch),
-                new Point(rect.X + rect.Width / 2, height - 14), labelSize, active ? Colors.White : glass ? Color.FromRgb(200, 205, 225) : Color.FromRgb(77, 79, 102), pitch % 12 == 0);
+            DrawKeyLabel(dc, pitch, rect.X + rect.Width / 2, whiteWidth, height, active && _visual.AnimateKeys,
+                glass ? Color.FromRgb(200, 205, 225) : Color.FromRgb(77, 79, 102));
         }
         var blackBrush = glass ? KeyBlackGlass : studio ? KeyBlackStudio : KeyBlack;
         var blackEdge = new Pen(Brush(Color.FromArgb(200, 72, 66, 96)), .75); blackEdge.Freeze();
@@ -765,16 +819,121 @@ internal sealed class PianoStage : FrameworkElement
                 if (studio) dc.DrawLine(new Pen(Brush(Color.FromArgb(70, 255, 255, 255)), 1), new Point(rect.X + 2, rect.Y + 1.5), new Point(rect.Right - 2, rect.Y + 1.5));
             }
         }
-        if (_visual.ShowKeyFelt)
+        if (_visual.ShowKeyFelt) DrawFelt(dc, width, top);
+    }
+
+    private void DrawFelt(DrawingContext dc, double width, double top)
+    {
+        var felt = AdjustColor(ParseColor(_visual.KeyFeltColor, Color.FromRgb(196, 28, 74)));
+        dc.DrawRectangle(Brush(Color.FromArgb(120, felt.R, felt.G, felt.B)), null, new Rect(0, top - 1, width, 7));
+        dc.DrawRectangle(Brush(felt), null, new Rect(0, top + 1, width, 3));
+    }
+
+    /// <summary>Note names engraved on the white keys; shared by the flat and the ray-traced keyboard.</summary>
+    private void DrawKeyLabels(DrawingContext dc, int[] whites, double whiteWidth, double height, Color idleColor)
+    {
+        for (var i = 0; i < whites.Length; i++)
         {
-            var felt = AdjustColor(ParseColor(_visual.KeyFeltColor, Color.FromRgb(196, 28, 74)));
-            dc.DrawRectangle(Brush(Color.FromArgb(120, felt.R, felt.G, felt.B)), null, new Rect(0, top - 1, width, 7));
-            dc.DrawRectangle(Brush(felt), null, new Rect(0, top + 1, width, 3));
+            var pitch = whites[i];
+            DrawKeyLabel(dc, pitch, i * whiteWidth + (whiteWidth - 1) / 2, whiteWidth, height, _activeKey[pitch] && _visual.AnimateKeys, idleColor);
         }
     }
 
-    private Brush KeyLightBrush(Color color, Color lit)
+    private void DrawKeyLabel(DrawingContext dc, int pitch, double centerX, double whiteWidth, double height, bool active, Color idleColor)
     {
+        if (_visual.KeyLabels != "All" && !(_visual.KeyLabels == "C" && pitch % 12 == 0)) return;
+        if (_visual.KeyLabels == "All" && whiteWidth < 13) return;
+        var size = Math.Clamp(whiteWidth * .48, 7, 11);
+        var text = _visual.KeyLabels == "All"
+            ? NoteLabel(pitch).TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-') + (pitch % 12 == 0 ? (pitch / 12 - 1).ToString() : "")
+            : NoteLabel(pitch);
+        DrawLabel(dc, text, new Point(centerX, height - 14), size, active ? Colors.White : idleColor, pitch % 12 == 0);
+    }
+
+    /// <summary>
+    /// Draws the ray-traced keyboard: one cached bake of the whole bed, plus a small overlay tile per
+    /// sounding key so a key press never re-shades all 88 keys. Returns false when the shader is switched
+    /// off or fails, and the caller then draws the flat vector keyboard instead.
+    /// </summary>
+    private bool TryDrawShadedKeyboard(DrawingContext dc, double width, double bandHeight, double top)
+    {
+        if (_visual.BackgroundMode == "ChromaGreen" || !PianoKeyboardRenderer.IsEnabled(_visual.ShadingQuality) || width < 80 || bandHeight < 28)
+        {
+            IsShadedKeyboardActive = false; return false;
+        }
+        try
+        {
+            var dpi = Math.Max(1, _pixelsPerDip);
+            var bandWidth = Math.Max(2, (int)Math.Ceiling(width * dpi));
+            var bandPixels = Math.Max(2, (int)Math.Ceiling(bandHeight * dpi));
+            var scene = PianoShaderScene.From(_visual, bandWidth, bandPixels, _visual.ShadingQuality);
+            var signature = scene.Signature();
+            if (_shadedBase is null || signature != _shadedSignature || _shadedBase.PixelWidth != bandWidth || _shadedBase.PixelHeight != bandPixels)
+            {
+                var clock = Stopwatch.StartNew();
+                var bake = PianoKeyboardRenderer.Render(scene, NoLights, 0, 0, bandWidth, bandPixels, -1);
+                _shadedMilliseconds = clock.Elapsed.TotalMilliseconds;
+                _shadedBakes++;
+                if (bake is null) { IsShadedKeyboardActive = false; return false; }
+                _shadedBase = bake; _shadedSignature = signature; _shadedTiles.Clear(); _lastTile.Clear();
+            }
+            dc.DrawImage(_shadedBase, new Rect(0, top, width, bandHeight));
+            DrawShadedLitKeys(dc, scene, width, bandHeight, top);
+            IsShadedKeyboardActive = true;
+            return true;
+        }
+        catch (Exception)
+        {
+            // A memory or imaging failure must never take the stage down; the vector keyboard takes over.
+            _shadedBase = null; _shadedTiles.Clear(); _lastTile.Clear(); _shadedSignature = ""; IsShadedKeyboardActive = false;
+            return false;
+        }
+    }
+
+    private void DrawShadedLitKeys(DrawingContext dc, PianoShaderScene scene, double width, double bandHeight, double top)
+    {
+        _keyLights.Clear();
+        if (!_visual.AnimateKeys) return;
+        for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
+        {
+            if (!_activeKey[pitch]) continue;
+            _keyLights.Light(pitch, KeyColor(pitch), .55 + Math.Clamp(_keyHeat[pitch], 0, 1) * .45);
+        }
+        if (_keyLights.Pitches.Count == 0) return;
+        // A fast rainbow passage can ask for a brand new tile every frame; the budget caps the work per
+        // frame and the per-pitch fallback keeps those keys lit with their previous color instead of flickering.
+        _tileBudget = 6;
+        var bleed = Math.Max(2, (int)Math.Ceiling(2.5 / PianoShaderScene.WorldWidth * scene.BandWidth));
+        foreach (var pitch in _keyLights.Pitches)
+        {
+            var color = KeyColor(pitch);
+            var cacheKey = ((long)pitch << 20) | (uint)ColorBucket(color);
+            if (_shadedTiles.TryGetValue(cacheKey, out var cached)) { dc.DrawImage(cached.Bitmap, cached.Where); continue; }
+            if (_tileBudget <= 0)
+            {
+                if (_lastTile.TryGetValue(pitch, out var previous)) dc.DrawImage(previous.Bitmap, previous.Where);
+                continue;
+            }
+            _tileBudget--;
+            if (_shadedTiles.Count > 192) { _shadedTiles.Clear(); _lastTile.Clear(); }
+            var center = PianoShaderScene.KeyCenterX[pitch] / PianoShaderScene.WorldWidth * scene.BandWidth;
+            var x0 = Math.Clamp((int)Math.Floor(center - bleed), 0, scene.BandWidth - 1);
+            var tileWidth = Math.Min(bleed * 2, scene.BandWidth - x0);
+            _tileLights.Clear(); _tileLights.Light(pitch, color, 1);
+            var bitmap = PianoKeyboardRenderer.Render(scene, _tileLights, x0, 0, tileWidth, scene.BandHeight, pitch);
+            if (bitmap is null) continue;
+            var tile = new ShadedKeyTile(bitmap, new Rect(x0 / (double)scene.BandWidth * width, top, tileWidth / (double)scene.BandWidth * width, bandHeight));
+            _shadedTiles[cacheKey] = tile;
+            if (_lastTile.Count > 128) _lastTile.Clear();
+            _lastTile[pitch] = tile;
+            dc.DrawImage(tile.Bitmap, tile.Where);
+        }
+    }
+
+    /// <summary>Quantizes a note color to 4 bits per channel so the tile cache survives smoothly animated colors.</summary>
+    private static int ColorBucket(Color color) => (color.R >> 4) << 8 | (color.G >> 4) << 4 | (color.B >> 4);
+
+    private Brush KeyLightBrush(Color color, Color lit)    {
         var key = GradientKey(6, Color.FromArgb(255, color.R, color.G, color.B));
         if (_gradientCache.TryGetValue(key, out var cached)) return cached;
         var gradient = new LinearGradientBrush(Color.FromRgb(lit.R, lit.G, lit.B), Color.FromRgb(color.R, color.G, color.B), 90); gradient.Freeze();
@@ -927,6 +1086,8 @@ internal sealed class PianoStage : FrameworkElement
     private static Brush Freeze(Brush brush) { if (brush.CanFreeze) brush.Freeze(); return brush; }
     private static Rect Inflate(Rect r, double amount) => new(r.X - amount, r.Y - amount, Math.Max(1, r.Width + amount * 2), Math.Max(1, r.Height + amount * 2));
     private sealed record Star(double X, double Y, double Size, byte Alpha, double Speed, double Phase);
+    /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
+    private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
     private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase; public bool Wisp; public Color Color; }
     private sealed class Ring { public double X, Y, Age, Life; public Color Color; }
     private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; }

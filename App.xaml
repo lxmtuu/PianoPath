@@ -3,29 +3,154 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:local="clr-namespace:PianoPath">
     <Application.Resources>
-        <!-- ===== Palette ===== -->
-        <Color x:Key="AccentColor">#B46BFF</Color>
-        <Color x:Key="AccentColor2">#FF5FD2</Color>
-        <SolidColorBrush x:Key="AccentBrush" Color="#B46BFF"/>
-        <SolidColorBrush x:Key="AccentSoftBrush" Color="#33B46BFF"/>
+        <!-- ===== Palette ====================================================================
+             Neutral, near-black surfaces with one violet→cyan accent: the same recipe the current
+             generation of MIDI visualizers (Keysight, Piano VFX, Embers) uses, so the neon stage
+             stays the brightest thing on screen instead of competing with the chrome. -->
+        <Color x:Key="AccentColor">#8B5CFF</Color>
+        <Color x:Key="AccentColor2">#25D0FF</Color>
+        <SolidColorBrush x:Key="AccentBrush" Color="#8B5CFF"/>
+        <SolidColorBrush x:Key="Accent2Brush" Color="#25D0FF"/>
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#2E8B5CFF"/>
         <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#8E4BFF" Offset="0"/>
-            <GradientStop Color="#E255D6" Offset="1"/>
+            <GradientStop Color="#7C4DFF" Offset="0"/>
+            <GradientStop Color="#B05CFF" Offset=".55"/>
+            <GradientStop Color="#37C8FF" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="WindowBrush" Color="#0B0A12"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#F2100E19"/>
-        <SolidColorBrush x:Key="PanelAltBrush" Color="#161422"/>
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#2A2540"/>
-        <SolidColorBrush x:Key="ControlBrush" Color="#1D1A2C"/>
-        <SolidColorBrush x:Key="ControlHoverBrush" Color="#2A2540"/>
-        <SolidColorBrush x:Key="ControlBorderBrush" Color="#37324F"/>
-        <SolidColorBrush x:Key="PopupBrush" Color="#F9161322"/>
-        <SolidColorBrush x:Key="TextBrush" Color="#F1EAFB"/>
-        <SolidColorBrush x:Key="MutedTextBrush" Color="#9B92B4"/>
-        <SolidColorBrush x:Key="DimTextBrush" Color="#6A627F"/>
+        <SolidColorBrush x:Key="WindowBrush" Color="#07070C"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#F00F1017"/>
+        <LinearGradientBrush x:Key="PanelChromeBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F6171A25" Offset="0"/>
+            <GradientStop Color="#EE0D0E15" Offset="1"/>
+        </LinearGradientBrush>
+        <SolidColorBrush x:Key="PanelAltBrush" Color="#0D0E15"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#232633"/>
+        <SolidColorBrush x:Key="HairlineBrush" Color="#16FFFFFF"/>
+        <SolidColorBrush x:Key="ControlBrush" Color="#15171F"/>
+        <SolidColorBrush x:Key="ControlHoverBrush" Color="#1E2230"/>
+        <SolidColorBrush x:Key="ControlBorderBrush" Color="#2B2F3E"/>
+        <SolidColorBrush x:Key="PopupBrush" Color="#FA101219"/>
+        <SolidColorBrush x:Key="TextBrush" Color="#F2F3F8"/>
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#9BA1B4"/>
+        <SolidColorBrush x:Key="DimTextBrush" Color="#666C80"/>
         <SolidColorBrush x:Key="DangerBrush" Color="#FF4D6D"/>
-        <SolidColorBrush x:Key="SuccessBrush" Color="#4FE3B0"/>
-        <SolidColorBrush x:Key="TrackBrush" Color="#2B2740"/>
+        <SolidColorBrush x:Key="SuccessBrush" Color="#41E0A8"/>
+        <SolidColorBrush x:Key="TrackBrush" Color="#222533"/>
+        <!-- Soft top highlight that gives every raised surface a lit edge, like a bevel in a 3D DCC. -->
+        <LinearGradientBrush x:Key="TopSheenBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#1FFFFFFF" Offset="0"/>
+            <GradientStop Color="#00FFFFFF" Offset="1"/>
+        </LinearGradientBrush>
+        <LinearGradientBrush x:Key="StageScrimBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#C4050509" Offset="0"/>
+            <GradientStop Color="#00050509" Offset="1"/>
+        </LinearGradientBrush>
+        <DropShadowEffect x:Key="SoftShadow" Color="#000000" BlurRadius="26" ShadowDepth="6" Direction="270" Opacity=".55"/>
+
+        <!-- ===== Icons ======================================================================
+             Plain geometry (no icon font, no external asset) so the chrome renders identically on
+             every Windows install. -->
+        <GeometryGroup x:Key="IconStyle">
+            <RectangleGeometry Rect="3,13,3.4,7" RadiusX="1" RadiusY="1"/>
+            <RectangleGeometry Rect="8.4,8,3.4,12" RadiusX="1" RadiusY="1"/>
+            <RectangleGeometry Rect="13.8,4,3.4,16" RadiusX="1" RadiusY="1"/>
+            <EllipseGeometry Center="20.4,7" RadiusX="1.7" RadiusY="1.7"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconNotes">
+            <RectangleGeometry Rect="4,4,4,16" RadiusX="1.4" RadiusY="1.4"/>
+            <RectangleGeometry Rect="10,9,4,11" RadiusX="1.4" RadiusY="1.4"/>
+            <RectangleGeometry Rect="16,6,4,14" RadiusX="1.4" RadiusY="1.4"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconParticles">
+            <EllipseGeometry Center="7,7" RadiusX="3" RadiusY="3"/>
+            <EllipseGeometry Center="16,10" RadiusX="2" RadiusY="2"/>
+            <EllipseGeometry Center="9,17" RadiusX="2.4" RadiusY="2.4"/>
+            <EllipseGeometry Center="18,18" RadiusX="1.4" RadiusY="1.4"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconKeyboard" FillRule="EvenOdd">
+            <RectangleGeometry Rect="2,6,20,13" RadiusX="2" RadiusY="2"/>
+            <RectangleGeometry Rect="6,6,2.2,7.4"/>
+            <RectangleGeometry Rect="11,6,2.2,7.4"/>
+            <RectangleGeometry Rect="16,6,2.2,7.4"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconBackground" FillRule="EvenOdd">
+            <RectangleGeometry Rect="2.5,4.5,19,15" RadiusX="2" RadiusY="2"/>
+            <EllipseGeometry Center="8.5,10" RadiusX="2.2" RadiusY="2.2"/>
+            <RectangleGeometry Rect="5,15.5,6,3"/>
+            <RectangleGeometry Rect="12,13.5,7,5"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconCamera" FillRule="EvenOdd">
+            <RectangleGeometry Rect="2,7,20,12" RadiusX="2.4" RadiusY="2.4"/>
+            <EllipseGeometry Center="12,13" RadiusX="4" RadiusY="4"/>
+            <RectangleGeometry Rect="8,4,8,3" RadiusX="1" RadiusY="1"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconAudio">
+            <RectangleGeometry Rect="3,9,4,6" RadiusX="1" RadiusY="1"/>
+            <RectangleGeometry Rect="7,6,4,12" RadiusX="1" RadiusY="1"/>
+            <EllipseGeometry Center="16,12" RadiusX="2" RadiusY="4.4"/>
+            <EllipseGeometry Center="20,12" RadiusX="1.6" RadiusY="6.4"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconMidi" FillRule="EvenOdd">
+            <RectangleGeometry Rect="3,8,7,8" RadiusX="1.6" RadiusY="1.6"/>
+            <RectangleGeometry Rect="14,8,7,8" RadiusX="1.6" RadiusY="1.6"/>
+            <RectangleGeometry Rect="9.4,11,5.2,2"/>
+            <EllipseGeometry Center="6.5,12" RadiusX="1.1" RadiusY="1.1"/>
+            <EllipseGeometry Center="17.5,12" RadiusX="1.1" RadiusY="1.1"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconPractice" FillRule="EvenOdd">
+            <EllipseGeometry Center="12,12" RadiusX="8.6" RadiusY="8.6"/>
+            <EllipseGeometry Center="12,12" RadiusX="4.4" RadiusY="4.4"/>
+            <EllipseGeometry Center="12,12" RadiusX="1.4" RadiusY="1.4"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconRecord">
+            <EllipseGeometry Center="12,12" RadiusX="7.4" RadiusY="7.4"/>
+        </GeometryGroup>
+        <PathGeometry x:Key="IconPlay" Figures="M 7,4.4 L 19.6,12 L 7,19.6 Z"/>
+        <GeometryGroup x:Key="IconPause">
+            <RectangleGeometry Rect="6.6,4.6,4,14.8" RadiusX="1.2" RadiusY="1.2"/>
+            <RectangleGeometry Rect="13.4,4.6,4,14.8" RadiusX="1.2" RadiusY="1.2"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconRestart">
+            <RectangleGeometry Rect="4.6,4.6,2.4,14.8" RadiusX="1" RadiusY="1"/>
+            <PathGeometry Figures="M 20,4.8 L 9.6,12 L 20,19.2 Z"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconMenu">
+            <RectangleGeometry Rect="3,5.6,18,2.4" RadiusX="1.2" RadiusY="1.2"/>
+            <RectangleGeometry Rect="3,10.8,18,2.4" RadiusX="1.2" RadiusY="1.2"/>
+            <RectangleGeometry Rect="3,16,18,2.4" RadiusX="1.2" RadiusY="1.2"/>
+        </GeometryGroup>
+        <PathGeometry x:Key="IconFolder" Figures="M 2.6,6.4 L 9.2,6.4 L 11.4,8.8 L 21.4,8.8 L 21.4,18.6 L 2.6,18.6 Z"/>
+        <PathGeometry x:Key="IconClose" Figures="M 5.6,5.6 L 18.4,18.4 M 18.4,5.6 L 5.6,18.4"/>
+        <PathGeometry x:Key="IconMinimize" Figures="M 5.4,12 L 18.6,12"/>
+        <PathGeometry x:Key="IconMaximize" Figures="M 5.4,5.4 L 18.6,5.4 L 18.6,18.6 L 5.4,18.6 Z"/>
+        <GeometryGroup x:Key="IconSearch">
+            <EllipseGeometry Center="10.4,10.4" RadiusX="5.6" RadiusY="5.6"/>
+            <RectangleGeometry Rect="14.4,13.6,6,2" RadiusX="1" RadiusY="1"/>
+        </GeometryGroup>
+        <PathGeometry x:Key="IconChevronDown" Figures="M 5,8.6 L 12,15.4 L 19,8.6 L 17.2,6.8 L 12,11.9 L 6.8,6.8 Z"/>
+        <GeometryGroup x:Key="IconHome">
+            <PathGeometry Figures="M 12,3.6 L 21,11 L 18.6,11 L 18.6,20 L 13.6,20 L 13.6,14.4 L 10.4,14.4 L 10.4,20 L 5.4,20 L 5.4,11 L 3,11 Z"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconInfo">
+            <EllipseGeometry Center="12,5.4" RadiusX="1.9" RadiusY="1.9"/>
+            <RectangleGeometry Rect="10.4,9.2,3.2,10.4" RadiusX="1.4" RadiusY="1.4"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconSliders" FillRule="EvenOdd">
+            <RectangleGeometry Rect="3,6.1,18,2" RadiusX="1" RadiusY="1"/>
+            <EllipseGeometry Center="8.6,7.1" RadiusX="2.5" RadiusY="2.5"/>
+            <RectangleGeometry Rect="3,11,18,2" RadiusX="1" RadiusY="1"/>
+            <EllipseGeometry Center="15.4,12" RadiusX="2.5" RadiusY="2.5"/>
+            <RectangleGeometry Rect="3,15.9,18,2" RadiusX="1" RadiusY="1"/>
+            <EllipseGeometry Center="11,16.9" RadiusX="2.5" RadiusY="2.5"/>
+        </GeometryGroup>
+        <GeometryGroup x:Key="IconLogo">
+            <RectangleGeometry Rect="1.5,4,21,16" RadiusX="3" RadiusY="3"/>
+            <RectangleGeometry Rect="6.4,4,2.4,9.4"/>
+            <RectangleGeometry Rect="11.8,4,2.4,9.4"/>
+            <RectangleGeometry Rect="17.2,4,2.4,9.4"/>
+            <EllipseGeometry Center="12,17" RadiusX="1.5" RadiusY="1.5"/>
+        </GeometryGroup>
+
 
         <!-- ===== Text ===== -->
         <Style x:Key="SectionTitleStyle" TargetType="TextBlock">
@@ -90,19 +215,25 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="Button">
-                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
+                            <Grid>
+                                <Border x:Name="Sheen" CornerRadius="8" Background="{StaticResource TopSheenBrush}" Opacity=".55" IsHitTestVisible="False" VerticalAlignment="Top" Height="11" Margin="1,1,1,0"/>
+                                <ContentPresenter Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                            </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
+                                <Setter TargetName="Sheen" Property="Opacity" Value=".9"/>
                             </Trigger>
                             <Trigger Property="IsPressed" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Sheen" Property="Opacity" Value="0"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False">
-                                <Setter Property="Opacity" Value=".45"/>
+                                <Setter Property="Opacity" Value=".38"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -118,6 +249,21 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+        </Style>
+        <Style x:Key="MenuPrimaryButtonStyle" TargetType="Button" BasedOn="{StaticResource AccentButtonStyle}">
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+        <Style x:Key="MenuCardButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Height" Value="54"/>
+            <Setter Property="FontSize" Value="17"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+        <Style x:Key="MenuLinkButtonStyle" TargetType="Button" BasedOn="{StaticResource GhostButtonStyle}">
+            <Setter Property="HorizontalAlignment" Value="Left"/>
+            <Setter Property="FontSize" Value="12.5"/>
+            <Setter Property="Padding" Value="10,7"/>
         </Style>
         <Style x:Key="IconButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
             <Setter Property="Width" Value="34"/>
@@ -147,6 +293,181 @@
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="BorderBrush" Value="Transparent"/>
             <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+        </Style>
+
+        <!-- Icon buttons: the glyph comes from Tag so one style serves the whole chrome. -->
+        <Style x:Key="GlyphButtonStyle" TargetType="Button">
+            <Setter Property="Width" Value="34"/>
+            <Setter Property="Height" Value="34"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Foreground" Value="{StaticResource MutedTextBrush}"/>
+            <Setter Property="Background" Value="{StaticResource ControlBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="SnapsToDevicePixels" Value="True"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10">
+                            <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Fill="{TemplateBinding Foreground}" Width="15" Height="15" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".38"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Window caption controls: flat, no border, red on close. -->
+        <Style x:Key="CaptionButtonStyle" TargetType="Button" BasedOn="{StaticResource GlyphButtonStyle}">
+            <Setter Property="Width" Value="32"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderBrush" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="8">
+                            <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.6" Width="12" Height="12" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#22FFFFFF"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".35"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="CaptionCloseStyle" TargetType="Button" BasedOn="{StaticResource CaptionButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="8">
+                            <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.6" Width="12" Height="12" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="#E8113B"/>
+                                <Setter Property="Foreground" Value="White"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <!-- Labelled button with a leading icon. -->
+        <Style x:Key="IconTextButtonStyle" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9">
+                            <Grid>
+                                <Border x:Name="Sheen" CornerRadius="8" Background="{StaticResource TopSheenBrush}" Opacity=".5" IsHitTestVisible="False" VerticalAlignment="Top" Height="11" Margin="1,1,1,0"/>
+                                <StackPanel Orientation="Horizontal" Margin="{TemplateBinding Padding}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Fill="{TemplateBinding Foreground}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                    <ContentPresenter VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="BorderBrush" Value="{StaticResource AccentBrush}"/>
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
+                                <Setter TargetName="Sheen" Property="Opacity" Value=".85"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                <Setter TargetName="Sheen" Property="Opacity" Value="0"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".38"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="AccentIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconTextButtonStyle}">
+            <Setter Property="Background" Value="{StaticResource AccentGradientBrush}"/>
+            <Setter Property="BorderBrush" Value="#4DFFFFFF"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <!-- Round transport button; the play/pause glyph is swapped through Tag. -->
+        <Style x:Key="RoundGlyphButtonStyle" TargetType="Button" BasedOn="{StaticResource GlyphButtonStyle}">
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Grid>
+                            <Ellipse x:Name="Chrome" Fill="{TemplateBinding Background}" Stroke="{TemplateBinding BorderBrush}" StrokeThickness="1"/>
+                            <Path x:Name="Glyph" Data="{TemplateBinding Tag}" Fill="{TemplateBinding Foreground}" Width="17" Height="17" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="2,0,0,0"/>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Stroke" Value="#8CFFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="Chrome" Property="Stroke" Value="#B3FFFFFF"/>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value=".38"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <Style x:Key="TransportPlayStyle" TargetType="Button" BasedOn="{StaticResource RoundGlyphButtonStyle}">
+            <Setter Property="Width" Value="46"/>
+            <Setter Property="Height" Value="46"/>
+            <Setter Property="Background" Value="{StaticResource AccentGradientBrush}"/>
+            <Setter Property="BorderBrush" Value="#59FFFFFF"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style x:Key="DangerIconButtonStyle" TargetType="Button" BasedOn="{StaticResource IconTextButtonStyle}">
+            <Setter Property="Background" Value="#33131F"/>
+            <Setter Property="BorderBrush" Value="#7C2A44"/>
+            <Setter Property="Foreground" Value="#FFB3C4"/>
+        </Style>
+
+        <!-- Search field with room for the leading magnifier. -->
+        <Style x:Key="SearchBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Padding" Value="28,4,8,4"/>
+        </Style>
+
+        <!-- Raised chrome panel: layered surface, hairline top edge and a soft drop shadow. -->
+        <Style x:Key="PanelChromeStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource PanelChromeBrush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PanelBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Effect" Value="{StaticResource SoftShadow}"/>
+        </Style>
+        <!-- Read-out chip used by the transport bar for accuracy, score and streak. -->
+        <Style x:Key="StatChipStyle" TargetType="Border">
+            <Setter Property="Background" Value="#0E1017"/>
+            <Setter Property="BorderBrush" Value="{StaticResource ControlBorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="9"/>
+            <Setter Property="Padding" Value="11,5"/>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="VerticalAlignment" Value="Center"/>
         </Style>
 
         <!-- ===== Toggle buttons (pedals, pills) ===== -->
@@ -543,26 +864,28 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="8" Margin="6,2" Padding="10,8">
+                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="9" Margin="8,2" Padding="11,9">
                             <Grid>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="22"/>
+                                    <ColumnDefinition Width="24"/>
                                     <ColumnDefinition Width="*"/>
                                 </Grid.ColumnDefinitions>
-                                <TextBlock x:Name="Icon" Text="{TemplateBinding Tag}" FontSize="13" VerticalAlignment="Center" Foreground="{StaticResource DimTextBrush}"/>
+                                <Path x:Name="Icon" Data="{TemplateBinding Tag}" Fill="{StaticResource DimTextBrush}" Width="15" Height="15" Stretch="Uniform" VerticalAlignment="Center"/>
                                 <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                                <Border x:Name="Marker" Width="3" Height="16" CornerRadius="2" Background="{StaticResource AccentBrush}" HorizontalAlignment="Left" Margin="-10,0,0,0" Visibility="Collapsed"/>
+                                <Border x:Name="Marker" Width="3" Height="18" CornerRadius="2" Background="{StaticResource AccentGradientBrush}" HorizontalAlignment="Left" Margin="-11,0,0,0" Visibility="Collapsed"/>
                             </Grid>
                         </Border>
                         <ControlTemplate.Triggers>
-                            <Trigger Property="IsSelected" Value="True">
-                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
-                                <Setter TargetName="Icon" Property="Foreground" Value="{StaticResource TextBrush}"/>
-                                <Setter TargetName="Marker" Property="Visibility" Value="Visible"/>
-                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
-                            </Trigger>
+                            <!-- Hover first, selection second: in WPF the later trigger wins, so a selected page keeps its accent. -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
+                                <Setter TargetName="Icon" Property="Fill" Value="{StaticResource MutedTextBrush}"/>
+                            </Trigger>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource AccentSoftBrush}"/>
+                                <Setter TargetName="Icon" Property="Fill" Value="{StaticResource Accent2Brush}"/>
+                                <Setter TargetName="Marker" Property="Visibility" Value="Visible"/>
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -578,12 +901,15 @@
                     <ControlTemplate TargetType="TabControl">
                         <Grid>
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="150"/>
+                                <ColumnDefinition Width="164"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
                             <Border Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,1,0">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                    <TabPanel IsItemsHost="True" Margin="0,8"/>
+                                    <StackPanel Margin="0,10,0,14">
+                                        <TextBlock Text="STAGE DESIGN" Style="{StaticResource EyebrowTextStyle}" Margin="20,4,0,10"/>
+                                        <TabPanel IsItemsHost="True"/>
+                                    </StackPanel>
                                 </ScrollViewer>
                             </Border>
                             <Border Grid.Column="1" Background="Transparent">
