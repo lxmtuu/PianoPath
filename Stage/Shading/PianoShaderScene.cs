@@ -149,8 +149,10 @@ internal sealed class PianoShaderScene
             CameraDistance = 9.4 + tilt * 6.6,
             BedFraction = .1 + tilt * .13,
             RenderScale = quality switch { "Fast" => .55, "Cinematic" => 1, _ => .78 },
-            ShadowSamples = quality switch { "Fast" => 2, "Cinematic" => 5, _ => 3 },
-            OcclusionSamples = quality switch { "Fast" => 1, "Cinematic" => 3, _ => 2 },
+            // The reference captures show clean key tops: enough shadow/AO samples that the soft penumbra
+            // and contact occlusion converge instead of reading as grain.
+            ShadowSamples = quality switch { "Fast" => 4, "Cinematic" => 12, _ => 8 },
+            OcclusionSamples = quality switch { "Fast" => 2, "Cinematic" => 6, _ => 4 },
             WhiteRoughness = .62 - Math.Clamp(settings.ShaderGloss / 100, 0, 1) * .5,
             BlackRoughness = .42 - Math.Clamp(settings.ShaderGloss / 100, 0, 1) * .36,
             KeyLightIntensity = settings.ShaderKeyLight / 100 * 3.4,
