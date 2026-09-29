@@ -58,7 +58,9 @@ internal sealed class PianoStage : FrameworkElement
     private readonly Dictionary<int, ShadedKeyTile> _lastTile = [];
     private int _tileBudget;
     private BitmapSource? _shadedBase;
-    private string _shadedSignature = "";
+    /// <summary>Fingerprint of the scene the current <see cref="_shadedBase"/> was baked from; equality avoids both a rebake and the per-frame signature string.</summary>
+    private PianoShaderScene.SceneKey _shadedSceneKey;
+    private bool _hasShadedSceneKey;
     private double _shadedMilliseconds;
     private int _shadedBakes;
     private PianoVisualSettings _visual = new();
@@ -69,7 +71,7 @@ internal sealed class PianoStage : FrameworkElement
     private double _pointerX = .5, _pointerY = .5;
     private IReadOnlyList<NoteEvent> _notes = [];
     private IReadOnlySet<int> _pressed = new HashSet<int>();
-    private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip = 1, _fps;
+    private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip, _fps;
     private int _releaseScanIndex;
     private double _releaseScanPos;
     private double _beatPulse, _energyLevel;
@@ -594,7 +596,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         base.OnRender(dc);
         var width = ActualWidth; var height = ActualHeight; if (width < 1 || height < 1) return;
-        _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip;
+        if (_pixelsPerDip <= 0) _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip; // read once; OnDpiChanged keeps it current
         var keyHeight = KeyboardHeight; var keyTop = height - keyHeight; var lane = width / KeyCount;
         var chroma = _visual.BackgroundMode == "ChromaGreen";
         var scale = _visual.CameraZoom / 100;
@@ -652,6 +654,14 @@ internal sealed class PianoStage : FrameworkElement
         dc.Pop(); dc.Pop();
     }
 
+    /// <summary>Keeps the cached DPI current so per-frame text and shader scaling stay crisp after a display change.</summary>
+    protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
+    {
+        _pixelsPerDip = newDpi.PixelsPerDip;
+        base.OnDpiChanged(oldDpi, newDpi);
+        InvalidateVisual();
+    }
+
     private void DrawStars(DrawingContext dc, double width, double height)
     {
         // The star field is cleared on resize; rebuilding it here every frame made the stars flicker like noise.
@@ -675,26 +685,14 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawLanes(DrawingContext dc, double width, double height, double lane)
     {
         // Guide lines sit on the centre of every key so they line up with the falling notes. Only
-        // three pens are ever needed, so they are frozen once instead of built 88 times per frame.
+        // three pens are ever needed, so they are cached once instead of built 88 times per frame.
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var alpha = pitch % 12 == 0 ? 23 : pitch % 12 is 2 or 4 or 7 or 9 or 11 ? 10 : 5;
             var color = Color.FromArgb((byte)alpha, 186, 141, 255);
             var x = KeyCenters[pitch] * width;
-            dc.DrawLine(LanePen(color, pitch % 12 == 0 ? 1 : .6), new Point(x, 0), new Point(x, height));
+            dc.DrawLine(Pen(color, pitch % 12 == 0 ? 1 : .6), new Point(x, 0), new Point(x, height));
         }
-    }
-
-    private readonly Dictionary<(uint Color, int Thickness), Pen> _lanePens = [];
-
-    private Pen LanePen(Color color, double thickness)
-    {
-        var key = (PackColor(color), (int)Math.Round(thickness * 100));
-        if (_lanePens.TryGetValue(key, out var pen)) return pen;
-        pen = new Pen(Brush(color), thickness);
-        pen.Freeze();
-        _lanePens[key] = pen;
-        return pen;
     }
 
     private void DrawHorizonGlow(DrawingContext dc, double width, double keyTop)
@@ -853,10 +851,10 @@ internal sealed class PianoStage : FrameworkElement
                 // stroke, matching the reference look of a glowing capsule outline.
                 dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(50 * opacity * tint), cr, cg, cb)), null, r, radius, radius);
                 dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(120 * opacity), 4, 3, 10)), null, Inflate(r, -Math.Min(3, r.Width / 4)), radius, radius);
-                var soft = new Pen(Brush(Color.FromArgb(Alpha(150 * opacity * glow), cr, cg, cb)), edgeWidth * 3 + 2); soft.Freeze();
+                var soft = Pen(Color.FromArgb(Alpha(150 * opacity * glow), cr, cg, cb), edgeWidth * 3 + 2);
                 dc.DrawRoundedRectangle(null, soft, Inflate(r, -.7), radius, radius);
                 var hot = Blend(color, Colors.White, .78);
-                var core = new Pen(Brush(Color.FromArgb(Alpha(255 * opacity * Math.Min(1, _visual.NoteEdge / 100)), hot.R, hot.G, hot.B)), edgeWidth + 1); core.Freeze();
+                var core = Pen(Color.FromArgb(Alpha(255 * opacity * Math.Min(1, _visual.NoteEdge / 100)), hot.R, hot.G, hot.B), edgeWidth + 1);
                 dc.DrawRoundedRectangle(null, core, Inflate(r, -.7), radius, radius);
                 break;
             }
@@ -880,7 +878,7 @@ internal sealed class PianoStage : FrameworkElement
                     dc.Pop();
                 }
                 else dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(245 * opacity * tint), hot.R, hot.G, hot.B)), null, r, radius, radius);
-                var rim = new Pen(Brush(Color.FromArgb(Alpha(230 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B)), edgeWidth); rim.Freeze();
+                var rim = Pen(Color.FromArgb(Alpha(230 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B), edgeWidth);
                 dc.DrawRoundedRectangle(null, rim, Inflate(r, -.7), radius, radius);
                 break;
             }
@@ -889,7 +887,7 @@ internal sealed class PianoStage : FrameworkElement
                 dc.DrawRoundedRectangle(GlassBrush(color, opacity * tint), null, r, radius, radius);
                 if (_visual.NoteEdge > 0)
                 {
-                    var rim = new Pen(Brush(Color.FromArgb(Alpha(200 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B)), edgeWidth * .7 + .2); rim.Freeze();
+                    var rim = Pen(Color.FromArgb(Alpha(200 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B), edgeWidth * .7 + .2);
                     dc.DrawRoundedRectangle(null, rim, Inflate(r, -.6), radius, radius);
                 }
                 if (r.Height > 14)
@@ -915,7 +913,7 @@ internal sealed class PianoStage : FrameworkElement
                 else dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(205 * opacity * tint), cr, cg, cb)), null, r, radius, radius);
                 if (_visual.NoteEdge > 0)
                 {
-                    var rim = new Pen(Brush(Color.FromArgb(Alpha(235 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B)), edgeWidth); rim.Freeze();
+                    var rim = Pen(Color.FromArgb(Alpha(235 * opacity * Math.Min(1, _visual.NoteEdge / 100)), bright.R, bright.G, bright.B), edgeWidth);
                     dc.DrawRoundedRectangle(null, rim, Inflate(r, -.7), radius, radius);
                 }
                 break;
@@ -924,7 +922,7 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.NoteRefraction > 0 && r.Width > 6)
         {
             var fringe = Alpha((style == "Neon" ? 90 : 170) * opacity * _visual.NoteRefraction / 100);
-            dc.DrawLine(new Pen(Brush(Color.FromArgb(fringe, 255, 255, 255)), 1), new Point(r.X + 2, r.Y + 3), new Point(r.X + 2, r.Bottom - 3));
+            dc.DrawLine(Pen(Color.FromArgb(fringe, 255, 255, 255), 1), new Point(r.X + 2, r.Y + 3), new Point(r.X + 2, r.Bottom - 3));
         }
         if (_visual.Notes3D && r.Height > 20 && style is "Solid" or "Glass")
         {
@@ -934,7 +932,7 @@ internal sealed class PianoStage : FrameworkElement
                 var inner = new Rect(r.X + 3, r.Y + 4, Math.Max(2, r.Width - 6), Math.Max(3, r.Height - 8));
                 dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(55 * opacity), 10, 7, 18)), null, inner, Math.Min(radius, inner.Width / 2), Math.Min(radius, inner.Width / 2));
             }
-            dc.DrawLine(new Pen(Brush(Color.FromArgb(Alpha((style == "Glass" ? 165 : 90) * opacity), 255, 250, 255)), 1), new Point(r.X + 4, r.Y + 5), new Point(r.X + 4, r.Bottom - 5));
+            dc.DrawLine(Pen(Color.FromArgb(Alpha((style == "Glass" ? 165 : 90) * opacity), 255, 250, 255), 1), new Point(r.X + 4, r.Y + 5), new Point(r.X + 4, r.Bottom - 5));
         }
         if (_visual.NoteHeadGlow > 0 && r.Height > 6)
         {
@@ -948,7 +946,7 @@ internal sealed class PianoStage : FrameworkElement
         }
         if (_visual.ShowNoteLabels && r.Width >= 11 && r.Height >= 15)
         {
-            var label = r.Width >= 20 ? NoteLabel(pitch) : NoteLabel(pitch).TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-');
+            var label = r.Width >= 20 ? NoteLabel(pitch) : ShortNoteLabel(pitch);
             var luminance = .2126 * cr + .7152 * cg + .0722 * cb;
             var textColor = style == "Neon" ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
@@ -1266,8 +1264,7 @@ internal sealed class PianoStage : FrameworkElement
 
             // Primary acoustic compression wavefront
             var penWidth = Math.Max(0.5, 2.2 * (1 - t));
-            var primaryPen = new Pen(Brush(Color.FromArgb(alpha, ring.Color.R, ring.Color.G, ring.Color.B)), penWidth);
-            primaryPen.Freeze();
+            var primaryPen = Pen(Color.FromArgb(alpha, ring.Color.R, ring.Color.G, ring.Color.B), penWidth);
             dc.DrawEllipse(null, primaryPen, new Point(ring.X, ring.Y), radius, radius * .32);
 
             // Secondary harmonic resonance wave
@@ -1275,8 +1272,7 @@ internal sealed class PianoStage : FrameworkElement
             {
                 var harmonicRadius = radius * 0.68;
                 var harmonicAlpha = (byte)(alpha * 0.45);
-                var harmonicPen = new Pen(Brush(Color.FromArgb(harmonicAlpha, ring.Color.R, ring.Color.G, ring.Color.B)), penWidth * 0.7);
-                harmonicPen.Freeze();
+                var harmonicPen = Pen(Color.FromArgb(harmonicAlpha, ring.Color.R, ring.Color.G, ring.Color.B), penWidth * 0.7);
                 dc.DrawEllipse(null, harmonicPen, new Point(ring.X, ring.Y), harmonicRadius, harmonicRadius * .32);
             }
 
@@ -1308,8 +1304,7 @@ internal sealed class PianoStage : FrameworkElement
         body.Freeze();
         dc.DrawEllipse(body, null, new Point(ring.X, ring.Y), radius, radius * .34);
         // Thin bright rim riding the leading edge.
-        var rim = new Pen(Brush(Color.FromArgb(Alpha(235 * fade), 255, 255, 255)), Math.Max(.6, 2.4 * (1 - t)));
-        rim.Freeze();
+        var rim = Pen(Color.FromArgb(Alpha(235 * fade), 255, 255, 255), Math.Max(.6, 2.4 * (1 - t)));
         dc.DrawEllipse(null, rim, new Point(ring.X, ring.Y), radius, radius * .34);
     }
 
@@ -1336,8 +1331,7 @@ internal sealed class PianoStage : FrameworkElement
             glow.Freeze();
             dc.DrawEllipse(glow, null, new Point(flash.X, flash.Y), radius * 1.4, radius * .8);
             // Short incandescent dashes flicking upward off the dome instead of one hard horizontal streak.
-            var streak = new Pen(Brush(Color.FromArgb(Alpha(150 * fade), 255, 255, 255)), 1.2);
-            streak.Freeze();
+            var streak = Pen(Color.FromArgb(Alpha(150 * fade), 255, 255, 255), 1.2);
             for (var s = 0; s < 6; s++)
             {
                 var ox = (SeededRandom(s * 57 + (int)flash.X) - .5) * radius * 1.5;
@@ -1402,7 +1396,7 @@ internal sealed class PianoStage : FrameworkElement
         }
         shard.Freeze();
         dc.DrawGeometry(Brush(Color.FromArgb(alpha, p.Color.R, p.Color.G, p.Color.B)), null, shard);
-        var glint = new Pen(Brush(Color.FromArgb(alpha, 255, 255, 255)), 1); glint.Freeze();
+        var glint = Pen(Color.FromArgb(alpha, 255, 255, 255), 1);
         dc.DrawLine(glint, new Point(-len / 2, 0), new Point(len / 2, 0));
         dc.Pop(); dc.Pop();
     }
@@ -1416,9 +1410,9 @@ internal sealed class PianoStage : FrameworkElement
         var fade = (1 - t) * intensity * strength;
         if (fade <= .01) return;
         var (r, g, b) = (ring.Color.R, ring.Color.G, ring.Color.B);
-        var pen = new Pen(Brush(Color.FromArgb(Alpha(235 * fade), r, g, b)), Math.Max(.6, 2.6 * (1 - t) + .6)); pen.Freeze();
+        var pen = Pen(Color.FromArgb(Alpha(235 * fade), r, g, b), Math.Max(.6, 2.6 * (1 - t) + .6));
         dc.DrawEllipse(null, pen, new Point(ring.X, ring.Y), radius, radius * .34);
-        var suck = new Pen(Brush(Color.FromArgb(Alpha(150 * fade), 255, 255, 255)), 1.2); suck.Freeze();
+        var suck = Pen(Color.FromArgb(Alpha(150 * fade), 255, 255, 255), 1.2);
         dc.DrawEllipse(null, suck, new Point(ring.X, ring.Y), radius * .55, radius * .2);
     }
 
@@ -1446,8 +1440,8 @@ internal sealed class PianoStage : FrameworkElement
         var bolt = new PathGeometry();
         bolt.Figures.Add(new PathFigure(points[0], points.Skip(1).Select(p => new LineSegment(p, true)), false));
         bolt.Freeze();
-        var glowPen = new Pen(Brush(Color.FromArgb(Alpha(120 * fade), 140, 180, 255)), 5); glowPen.Freeze();
-        var corePen = new Pen(Brush(Color.FromArgb(Alpha(255 * fade), 235, 244, 255)), 1.8); corePen.Freeze();
+        var glowPen = Pen(Color.FromArgb(Alpha(120 * fade), 140, 180, 255), 5);
+        var corePen = Pen(Color.FromArgb(Alpha(255 * fade), 235, 244, 255), 1.8);
         dc.DrawGeometry(null, glowPen, bolt);
         dc.DrawGeometry(null, corePen, bolt);
     }
@@ -1479,7 +1473,7 @@ internal sealed class PianoStage : FrameworkElement
             var arc = new PathGeometry();
             arc.Figures.Add(new PathFigure(start, [new LineSegment(mid, true), new LineSegment(end, true)], false));
             arc.Freeze();
-            var pen = new Pen(Brush(Color.FromArgb(Alpha(200 * fade), 190, 220, 255)), 1.4); pen.Freeze();
+            var pen = Pen(Color.FromArgb(Alpha(200 * fade), 190, 220, 255), 1.4);
             dc.DrawGeometry(null, pen, arc);
         }
     }
@@ -1505,7 +1499,7 @@ internal sealed class PianoStage : FrameworkElement
             }
         }
         star.Freeze();
-        var edge = new Pen(Brush(Color.FromArgb(Alpha(255 * fade), 255, 255, 255)), 1.6); edge.Freeze();
+        var edge = Pen(Color.FromArgb(Alpha(255 * fade), 255, 255, 255), 1.6);
         dc.DrawGeometry(Brush(Color.FromArgb(Alpha(200 * fade), r, g, b)), edge, star);
     }
 
@@ -1548,7 +1542,7 @@ internal sealed class PianoStage : FrameworkElement
                     dc.DrawEllipse(Brush(Color.FromArgb(a, c.R, c.G, c.B)), null, new Point(x, y), s, s);
                     if (s > 2)
                     {
-                        var pen = new Pen(Brush(Color.FromArgb((byte)(a * .7), c.R, c.G, c.B)), 1); pen.Freeze();
+                        var pen = Pen(Color.FromArgb((byte)(a * .7), c.R, c.G, c.B), 1);
                         dc.DrawLine(pen, new Point(x - s * 2, y), new Point(x + s * 2, y));
                         dc.DrawLine(pen, new Point(x, y - s * 2), new Point(x, y + s * 2));
                     }
@@ -1565,7 +1559,7 @@ internal sealed class PianoStage : FrameworkElement
                     var y0 = rising ? trailRect.Y + scroll * length * .5 : trailRect.Bottom - scroll * length * .5;
                     var len = length * (.35 + .3 * SeededRandom(pitch + i * 11));
                     var y1 = rising ? y0 + len : y0 - len;
-                    var pen = new Pen(Brush(Color.FromArgb(Alpha(190 * strength), 255, 255, 255)), 1.4); pen.Freeze();
+                    var pen = Pen(Color.FromArgb(Alpha(190 * strength), 255, 255, 255), 1.4);
                     dc.DrawLine(pen, new Point(x, y0), new Point(x, y1));
                 }
                 break;
@@ -1590,8 +1584,8 @@ internal sealed class PianoStage : FrameworkElement
                 var ribbon = new PathGeometry();
                 ribbon.Figures.Add(new PathFigure(pts[0], pts.Skip(1).Select(p => new LineSegment(p, true)), false));
                 ribbon.Freeze();
-                var band = new Pen(Brush(Color.FromArgb(Alpha(150 * strength), cr, cg, cb)), Math.Max(2, r.Width * .5)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }; band.Freeze();
-                var coreLine = new Pen(Brush(Color.FromArgb(Alpha(200 * strength), 255, 255, 255)), 1.2); coreLine.Freeze();
+                var band = Pen(Color.FromArgb(Alpha(150 * strength), cr, cg, cb), Math.Max(2, r.Width * .5), roundCaps: true);
+                var coreLine = Pen(Color.FromArgb(Alpha(200 * strength), 255, 255, 255), 1.2);
                 dc.DrawGeometry(null, band, ribbon);
                 dc.DrawGeometry(null, coreLine, ribbon);
                 break;
@@ -1651,9 +1645,9 @@ internal sealed class PianoStage : FrameworkElement
     {
         var strength = _visual.HoldBarIntensity / 100 * opacity;
         if (strength <= .01) return;
-        var rim = new Pen(Brush(Color.FromArgb(Alpha(255 * strength), 255, 255, 255)), 2); rim.Freeze();
+        var rim = Pen(Color.FromArgb(Alpha(255 * strength), 255, 255, 255), 2);
         dc.DrawRoundedRectangle(null, rim, Inflate(r, 1.5), 5, 5);
-        var halo = new Pen(Brush(Color.FromArgb(Alpha(120 * strength), color.R, color.G, color.B)), 5); halo.Freeze();
+        var halo = Pen(Color.FromArgb(Alpha(120 * strength), color.R, color.G, color.B), 5);
         dc.DrawRoundedRectangle(null, halo, Inflate(r, 3.5), 7, 7);
     }
 
@@ -1685,8 +1679,8 @@ internal sealed class PianoStage : FrameworkElement
         var arc = new PathGeometry();
         arc.Figures.Add(new PathFigure(pts[0], pts.Skip(1).Select(p => new LineSegment(p, true)), false));
         arc.Freeze();
-        var glow = new Pen(Brush(Color.FromArgb(Alpha(130 * strength), 130, 180, 255)), 4); glow.Freeze();
-        var corePen = new Pen(Brush(Color.FromArgb(Alpha(255 * strength), 230, 242, 255)), 1.5); corePen.Freeze();
+        var glow = Pen(Color.FromArgb(Alpha(130 * strength), 130, 180, 255), 4);
+        var corePen = Pen(Color.FromArgb(Alpha(255 * strength), 230, 242, 255), 1.5);
         dc.DrawGeometry(null, glow, arc);
         dc.DrawGeometry(null, corePen, arc);
     }
@@ -1705,7 +1699,7 @@ internal sealed class PianoStage : FrameworkElement
             var fade = Math.Pow(1 - f, 1.8) * intensity * strength * (1 - i * .25);
             if (fade <= .01) continue;
             var rr = radius * (1 - i * .22);
-            var pen = new Pen(Brush(Color.FromArgb(Alpha(215 * fade), 170, 215, 255)), Math.Max(.6, 2 * (1 - f) + .4)); pen.Freeze();
+            var pen = Pen(Color.FromArgb(Alpha(215 * fade), 170, 215, 255), Math.Max(.6, 2 * (1 - f) + .4));
             dc.DrawEllipse(null, pen, new Point(ring.X, ring.Y), rr, rr * .3);
         }
     }
@@ -1742,8 +1736,8 @@ internal sealed class PianoStage : FrameworkElement
                     var x0 = width * (.15 + .7 * (i + .5) / beams) + sweep * width * .18;
                     var x1 = width * (.5 + Math.Sin(_elapsed * speed * .7 + i * 1.3) * .4);
                     var c = ColorFromHue(i * 360.0 / beams + _elapsed * 20);
-                    var glow = new Pen(Brush(Color.FromArgb(Alpha(90 * amount), c.R, c.G, c.B)), 6); glow.Freeze();
-                    var core = new Pen(Brush(Color.FromArgb(Alpha(220 * amount), 255, 255, 255)), 1.6); core.Freeze();
+                    var glow = Pen(Color.FromArgb(Alpha(90 * amount), c.R, c.G, c.B), 6);
+                    var core = Pen(Color.FromArgb(Alpha(220 * amount), 255, 255, 255), 1.6);
                     dc.DrawLine(glow, new Point(x0, -10), new Point(x1, height));
                     dc.DrawLine(core, new Point(x0, -10), new Point(x1, height));
                 }
@@ -1755,7 +1749,7 @@ internal sealed class PianoStage : FrameworkElement
                     fired++;
                     var x = KeyCenters[pitch] * width;
                     var c = KeyColor(pitch);
-                    var beam = new Pen(Brush(Color.FromArgb(Alpha(200 * amount), c.R, c.G, c.B)), 2.5); beam.Freeze();
+                    var beam = Pen(Color.FromArgb(Alpha(200 * amount), c.R, c.G, c.B), 2.5);
                     dc.DrawLine(beam, new Point(x, height), new Point(x + Math.Sin(_elapsed * 9 + pitch) * 8, height * .15));
                 }
                 break;
@@ -1790,7 +1784,7 @@ internal sealed class PianoStage : FrameworkElement
                     if (f < .35)
                     {
                         var y = height + 10 - (height + 10 - topY) * f / .35;
-                        var trail = new Pen(Brush(Color.FromArgb(Alpha(200 * amount), 255, 220, 150)), 2); trail.Freeze();
+                        var trail = Pen(Color.FromArgb(Alpha(200 * amount), 255, 220, 150), 2);
                         dc.DrawLine(trail, new Point(x, y), new Point(x, y + 26));
                         dc.DrawEllipse(Brush(Color.FromArgb(Alpha(255 * amount), 255, 255, 255)), null, new Point(x, y), 2.5, 2.5);
                     }
@@ -1828,7 +1822,7 @@ internal sealed class PianoStage : FrameworkElement
             case "Rain":
             {
                 var count = (int)(40 + amount * 160);
-                var pen = new Pen(Brush(Color.FromArgb(Alpha(150 * amount), 150, 190, 235)), 1.2); pen.Freeze();
+                var pen = Pen(Color.FromArgb(Alpha(150 * amount), 150, 190, 235), 1.2);
                 for (var i = 0; i < count; i++)
                 {
                     var fall = (SeededRandom(i * 3 + 7) + _elapsed * speed * (.5 + SeededRandom(i * 5 + 1) * .5)) % 1;
@@ -1981,7 +1975,7 @@ internal sealed class PianoStage : FrameworkElement
                 {
                     var a = _elapsed * speed * .5 + i * Math.PI * 2 / rays;
                     var c = ColorFromHue(i * 360.0 / rays);
-                    var beam = new Pen(Brush(Color.FromArgb(Alpha(170 * amount), c.R, c.G, c.B)), 3); beam.Freeze();
+                    var beam = Pen(Color.FromArgb(Alpha(170 * amount), c.R, c.G, c.B), 3);
                     dc.DrawLine(beam, new Point(cx, cy), new Point(cx + Math.Cos(a) * width, cy + Math.Sin(a) * width));
                 }
                 dc.DrawEllipse(Brush(Color.FromArgb(Alpha(220 * amount), tint.R, tint.G, tint.B)), null, new Point(cx, cy), 12, 12);
@@ -2051,11 +2045,11 @@ internal sealed class PianoStage : FrameworkElement
                 {
                     var rr = r * (1.5 + i * .55 + Math.Sin(_elapsed * speed * 2 + i) * .06);
                     var c = i == 0 ? Color.FromRgb(255, 200, 130) : i == 1 ? Color.FromRgb(255, 140, 90) : Color.FromRgb(170, 90, 220);
-                    var ring = new Pen(Brush(Color.FromArgb(Alpha((170 - i * 45) * amount), c.R, c.G, c.B)), 7 - i * 1.8); ring.Freeze();
+                    var ring = Pen(Color.FromArgb(Alpha((170 - i * 45) * amount), c.R, c.G, c.B), 7 - i * 1.8);
                     dc.DrawEllipse(null, ring, new Point(cx, cy), rr, rr * .38);
                 }
                 dc.DrawEllipse(Brush(Colors.Black), null, new Point(cx, cy), r, r * .62);
-                var rim = new Pen(Brush(Color.FromArgb(Alpha(255 * amount), 255, 240, 220)), 1.6); rim.Freeze();
+                var rim = Pen(Color.FromArgb(Alpha(255 * amount), 255, 240, 220), 1.6);
                 dc.DrawEllipse(null, rim, new Point(cx, cy), r, r * .62);
                 for (var i = 0; i < 24; i++)
                 {
@@ -2104,7 +2098,7 @@ internal sealed class PianoStage : FrameworkElement
                     var rr = (30 + i * 34) * (.7 + amount * .5);
                     var rot = _elapsed * speed * (.3 + i * .17) * (i % 2 == 0 ? 1 : -1) + i;
                     var c = ColorFromHue(i * 360.0 / shapes + _elapsed * 10);
-                    var pen = new Pen(Brush(Color.FromArgb(Alpha(200 * amount), c.R, c.G, c.B)), 1.8); pen.Freeze();
+                    var pen = Pen(Color.FromArgb(Alpha(200 * amount), c.R, c.G, c.B), 1.8);
                     var fig = new PathFigure();
                     for (var s = 0; s <= sides; s++)
                     {
@@ -2275,7 +2269,7 @@ internal sealed class PianoStage : FrameworkElement
                 dc.DrawEllipse(glowBrush, null, new Point(x, top + 2), radiusX, radiusY);
             }
         }
-        var pedalGlow = PedalBoost(); var glowPen = new Pen(Brush(Color.FromArgb((byte)Math.Clamp((30 + _visual.KeyLighting * .95) * pedalGlow, 0, 255), halo.R, halo.G, halo.B)), (5 + _visual.BloomSize / 10) * pedalGlow); glowPen.Freeze();
+        var pedalGlow = PedalBoost(); var glowPen = Pen(Color.FromArgb((byte)Math.Clamp((30 + _visual.KeyLighting * .95) * pedalGlow, 0, 255), halo.R, halo.G, halo.B), (5 + _visual.BloomSize / 10) * pedalGlow);
         dc.DrawLine(glowPen, new Point(0, top + 1), new Point(width, top + 1));
         if (TryDrawShadedKeyboard(dc, width, height - top, top))
         {
@@ -2295,7 +2289,7 @@ internal sealed class PianoStage : FrameworkElement
             dc.DrawRectangle(shadow, null, new Rect(0, top + 4, width, Math.Min(18, (height - top) * .16)));
         }
         var whiteBrush = glass ? KeyWhiteGlass : studio ? KeyWhiteStudio : KeyWhite;
-        var whiteEdge = new Pen(Brush(glass ? Color.FromArgb(120, 210, 220, 255) : Color.FromArgb(170, 68, 72, 94)), glass ? .8 : .7); whiteEdge.Freeze();
+        var whiteEdge = Pen(glass ? Color.FromArgb(120, 210, 220, 255) : Color.FromArgb(170, 68, 72, 94), glass ? .8 : .7);
         for (var i = 0; i < whites.Length; i++)
         {
             var pitch = whites[i]; var rect = new Rect(i * whiteWidth, top + 5, whiteWidth - 1, height - top - 5);
@@ -2305,7 +2299,7 @@ internal sealed class PianoStage : FrameworkElement
                 var color = KeyColor(pitch); var lit = Blend(color, Colors.White, .32);
                 var pressed = new Rect(rect.X, rect.Y + press, rect.Width, rect.Height - press);
                 dc.DrawRoundedRectangle(Brush(Color.FromArgb((byte)(60 + _visual.KeyLighting * 1.4), color.R, color.G, color.B)), null, Inflate(new Rect(rect.X - 4, top - 1, rect.Width + 8, rect.Height + 6), 2), 7, 7);
-                dc.DrawRoundedRectangle(KeyLightBrush(color, lit), new Pen(Brush(Color.FromArgb(255, lit.R, lit.G, lit.B)), 1), pressed, 3, 3);
+                dc.DrawRoundedRectangle(KeyLightBrush(color, lit), Pen(Color.FromArgb(255, lit.R, lit.G, lit.B), 1), pressed, 3, 3);
             }
             else
             {
@@ -2316,7 +2310,7 @@ internal sealed class PianoStage : FrameworkElement
                 glass ? Color.FromRgb(200, 205, 225) : Color.FromRgb(77, 79, 102));
         }
         var blackBrush = glass ? KeyBlackGlass : studio ? KeyBlackStudio : KeyBlack;
-        var blackEdge = new Pen(Brush(Color.FromArgb(200, 72, 66, 96)), .75); blackEdge.Freeze();
+        var blackEdge = Pen(Color.FromArgb(200, 72, 66, 96), .75);
         var blackWidth = whiteWidth * .52;
         var blackHeight = (height - top) * (.61 + _visual.KeyOverhang / 100 * .18);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
@@ -2330,12 +2324,12 @@ internal sealed class PianoStage : FrameworkElement
                 var color = KeyColor(pitch); var lit = Blend(color, Colors.White, .15);
                 var pressed = new Rect(rect.X, rect.Y + press * .6, rect.Width, rect.Height - press * .6);
                 dc.DrawRoundedRectangle(Brush(Color.FromArgb((byte)(110 + _visual.KeyLighting * .9), color.R, color.G, color.B)), null, Inflate(rect, 5), 7, 7);
-                dc.DrawRoundedRectangle(Brush(lit), new Pen(Brush(Colors.White), 1), pressed, 5, 5);
+                dc.DrawRoundedRectangle(Brush(lit), Pen(Colors.White, 1), pressed, 5, 5);
             }
             else
             {
                 dc.DrawRoundedRectangle(blackBrush, blackEdge, rect, 3, 3);
-                if (studio) dc.DrawLine(new Pen(Brush(Color.FromArgb(70, 255, 255, 255)), 1), new Point(rect.X + 2, rect.Y + 1.5), new Point(rect.Right - 2, rect.Y + 1.5));
+                if (studio) dc.DrawLine(Pen(Color.FromArgb(70, 255, 255, 255), 1), new Point(rect.X + 2, rect.Y + 1.5), new Point(rect.Right - 2, rect.Y + 1.5));
             }
         }
         if (_visual.ShowKeyFelt) DrawFelt(dc, width, top);
@@ -2363,9 +2357,7 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.KeyLabels != "All" && !(_visual.KeyLabels == "C" && pitch % 12 == 0)) return;
         if (_visual.KeyLabels == "All" && whiteWidth < 13) return;
         var size = Math.Clamp(whiteWidth * .48, 7, 11);
-        var text = _visual.KeyLabels == "All"
-            ? NoteLabel(pitch).TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-') + (pitch % 12 == 0 ? (pitch / 12 - 1).ToString() : "")
-            : NoteLabel(pitch);
+        var text = _visual.KeyLabels == "All" ? AllKeyLabels[ClampPitch(pitch)] : NoteLabel(pitch);
         DrawLabel(dc, text, new Point(centerX, height - 14), size, active ? Colors.White : idleColor, pitch % 12 == 0);
     }
 
@@ -2386,20 +2378,22 @@ internal sealed class PianoStage : FrameworkElement
             var bandWidth = Math.Max(2, (int)Math.Ceiling(width * dpi));
             var bandPixels = Math.Max(2, (int)Math.Ceiling(bandHeight * dpi));
             var scene = PianoShaderScene.From(_visual, bandWidth, bandPixels, _visual.ShadingQuality);
-            var signature = scene.Signature();
+            // The struct key mirrors every field of Signature(), so equality here is exactly
+            // "the cached bake is still valid" — without building the signature string per frame.
+            var sceneKey = PianoShaderScene.SceneKey.Capture(scene);
             // Render bakes at the quality's internal render scale, so the cached bitmap must be
             // compared against the scaled resolution, not the full band size.
             var bakeScale = Math.Clamp(scene.RenderScale, .25, 1);
             var bakedWidth = Math.Max(1, (int)Math.Ceiling(bandWidth * bakeScale));
             var bakedHeight = Math.Max(1, (int)Math.Ceiling(bandPixels * bakeScale));
-            if (_shadedBase is null || signature != _shadedSignature || _shadedBase.PixelWidth != bakedWidth || _shadedBase.PixelHeight != bakedHeight)
+            if (_shadedBase is null || !_hasShadedSceneKey || !sceneKey.Equals(_shadedSceneKey) || _shadedBase.PixelWidth != bakedWidth || _shadedBase.PixelHeight != bakedHeight)
             {
                 var clock = Stopwatch.StartNew();
                 var bake = PianoKeyboardRenderer.Render(scene, NoLights, 0, 0, bandWidth, bandPixels, -1);
                 _shadedMilliseconds = clock.Elapsed.TotalMilliseconds;
                 _shadedBakes++;
                 if (bake is null) { IsShadedKeyboardActive = false; return false; }
-                _shadedBase = bake; _shadedSignature = signature; _shadedTiles.Clear(); _lastTile.Clear();
+                _shadedBase = bake; _shadedSceneKey = sceneKey; _hasShadedSceneKey = true; _shadedTiles.Clear(); _lastTile.Clear();
             }
             dc.DrawImage(_shadedBase, new Rect(0, top, width, bandHeight));
             DrawShadedLitKeys(dc, scene, width, bandHeight, top);
@@ -2409,7 +2403,7 @@ internal sealed class PianoStage : FrameworkElement
         catch (Exception)
         {
             // A memory or imaging failure must never take the stage down; the vector keyboard takes over.
-            _shadedBase = null; _shadedTiles.Clear(); _lastTile.Clear(); _shadedSignature = ""; IsShadedKeyboardActive = false;
+            _shadedBase = null; _shadedTiles.Clear(); _lastTile.Clear(); _hasShadedSceneKey = false; IsShadedKeyboardActive = false;
             return false;
         }
     }
@@ -2521,8 +2515,7 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawWatermark(DrawingContext dc, double width, double height)
     {
-        var text = new FormattedText("KEYFLOW", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
-            new Typeface("Segoe UI Semibold"), 11, Brush(Color.FromArgb(110, 232, 224, 250)), _pixelsPerDip);
+        var text = Label("KEYFLOW", 11, Color.FromArgb(110, 232, 224, 250), bold: true);
         dc.DrawText(text, new Point(width / 2 - text.Width / 2, height - KeyboardHeight - text.Height - 18));
     }
 
@@ -2538,7 +2531,7 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawLabel(DrawingContext dc, string text, Point center, double size, Color color, bool bold)
     {
-        var formatted = new FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, new Typeface(bold ? "Segoe UI Semibold" : "Segoe UI"), size, Brush(color), _pixelsPerDip);
+        var formatted = Label(text, size, color, bold);
         dc.DrawText(formatted, new Point(center.X - formatted.Width / 2, center.Y - formatted.Height / 2));
     }
 
@@ -2649,7 +2642,31 @@ internal sealed class PianoStage : FrameworkElement
         return bitmap;
     }
 
-    private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }
+    /// <summary>Per-pitch label tables; building them once keeps the per-frame label paths allocation-free.</summary>
+    private static readonly string[] NoteLabels = BuildNoteLabels();
+    private static readonly string[] ShortNoteLabels = BuildNoteLabels(shortName: true);
+    private static readonly string[] AllKeyLabels = BuildAllKeyLabels();
+    private static string[] BuildNoteLabels(bool shortName = false)
+    {
+        string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"];
+        var result = new string[128];
+        for (var pitch = 0; pitch < result.Length; pitch++)
+        {
+            var label = $"{names[pitch % 12]}{pitch / 12 - 1}";
+            result[pitch] = shortName ? label.TrimEnd('0', '1', '2', '3', '4', '5', '6', '7', '8', '9', '-') : label;
+        }
+        return result;
+    }
+    private static string[] BuildAllKeyLabels()
+    {
+        var result = new string[128];
+        for (var pitch = 0; pitch < result.Length; pitch++)
+            result[pitch] = ShortNoteLabels[pitch] + (pitch % 12 == 0 ? (pitch / 12 - 1).ToString() : "");
+        return result;
+    }
+    private static string NoteLabel(int pitch) => NoteLabels[ClampPitch(pitch)];
+    private static string ShortNoteLabel(int pitch) => ShortNoteLabels[ClampPitch(pitch)];
+    private static int ClampPitch(int pitch) => pitch < 0 ? 0 : pitch > 127 ? 127 : pitch;
     private static double Hue(int pitch) => 188 + (pitch - FirstPitch) / 87.0 * 112;
     private static Color ColorFromHue(double hue)
     {
@@ -2666,6 +2683,49 @@ internal sealed class PianoStage : FrameworkElement
         if (_brushCache.TryGetValue(key, out var brush)) return brush;
         if (_brushCache.Count > 12000) _brushCache.Clear();
         brush = new SolidColorBrush(color); brush.Freeze(); _brushCache[key] = brush; return brush;
+    }
+    private readonly Dictionary<(uint Color, int Thickness, bool RoundCaps), Pen> _penCache = [];
+    /// <summary>
+    /// Frozen pens cached by ARGB value, thickness (quantized to 1/100 px, far below a visible difference)
+    /// and round caps. Every draw path above used to allocate one or two pens per note and per particle
+    /// per frame; with the cache a dense frame allocates nothing and renders identically.
+    /// </summary>
+    private Pen Pen(Color color, double thickness, bool roundCaps = false)
+    {
+        var key = (PackColor(color), (int)Math.Round(thickness * 100), roundCaps);
+        if (_penCache.TryGetValue(key, out var pen)) return pen;
+        if (_penCache.Count > 8192) _penCache.Clear();
+        pen = new Pen(Brush(color), thickness);
+        if (roundCaps) { pen.StartLineCap = PenLineCap.Round; pen.EndLineCap = PenLineCap.Round; }
+        pen.Freeze();
+        _penCache[key] = pen;
+        return pen;
+    }
+    private static readonly Typeface LabelTypeface = new("Segoe UI");
+    private static readonly Typeface LabelBoldTypeface = new("Segoe UI Semibold");
+    private readonly Dictionary<(string Text, double Size, uint Color, bool Bold, int Dpi), FormattedText> _labelCache = [];
+    /// <summary>Text shaping is expensive; note and key labels repeat every frame, so their <see cref="FormattedText"/> is memoized verbatim.</summary>
+    private FormattedText Label(string text, double size, Color color, bool bold)
+    {
+        var key = (text, size, PackColor(color), bold, (int)Math.Round(_pixelsPerDip * 100));
+        if (_labelCache.TryGetValue(key, out var formatted)) return formatted;
+        if (_labelCache.Count > 1024) _labelCache.Clear();
+        formatted = new FormattedText(text, System.Globalization.CultureInfo.CurrentCulture, FlowDirection.LeftToRight, bold ? LabelBoldTypeface : LabelTypeface, size, Brush(color), _pixelsPerDip);
+        _labelCache[key] = formatted;
+        return formatted;
+    }
+    private static readonly Dictionary<string, Color> ParsedColors = [];
+    /// <summary><see cref="ColorConverter.ConvertFromString"/> re-parses the same handful of hex strings for every note on every frame; the result is memoized instead.</summary>
+    private static Color ParseColor(string value, Color fallback)
+    {
+        if (value is null) return fallback;
+        if (ParsedColors.TryGetValue(value, out var cached)) return cached;
+        Color parsed;
+        try { parsed = (Color)ColorConverter.ConvertFromString(value)!; }
+        catch { parsed = fallback; }
+        if (ParsedColors.Count > 512) ParsedColors.Clear();
+        ParsedColors[value] = parsed;
+        return parsed;
     }
     private static Brush Freeze(Brush brush) { if (brush.CanFreeze) brush.Freeze(); return brush; }
     private static Rect Inflate(Rect r, double amount) => new(r.X - amount, r.Y - amount, Math.Max(1, r.Width + amount * 2), Math.Max(1, r.Height + amount * 2));

@@ -210,6 +210,31 @@ internal sealed class PianoShaderScene
         ShadowSamples, OcclusionSamples, WhiteKeyColor.ToString(), BlackKeyColor.ToString(),
         KeyLightColor.ToString(), FillColor.ToString(), RimColor.ToString(), SkyColor.ToString(), GroundColor.ToString());
 
+    /// <summary>
+    /// Allocation-free fingerprint of exactly the fields <see cref="Signature"/> covers. Two scenes with
+    /// equal keys bake identical images, so the per-frame cache check compares this struct instead of
+    /// building a signature string (30 number formats plus concatenation) on every rendered frame.
+    /// </summary>
+    internal readonly record struct SceneKey(
+        int BandWidth, int BandHeight, double RenderScale, double CameraHeight, double CameraDistance, double BedFraction,
+        double WhiteDepth, double BlackDepth, double PressDepth, double WhiteRoughness, double BlackRoughness, double Specular,
+        double KeyLightIntensity, double ShadowStrength, double Occlusion, double RimIntensity, double AmbientIntensity,
+        double EmissiveIntensity, double Exposure, double Saturation, double Contrast, bool Filmic, double LightSize,
+        int ShadowSamples, int OcclusionSamples, uint WhiteKeyColor, uint BlackKeyColor, uint KeyLightColor, uint FillColor,
+        uint RimColor, uint SkyColor, uint GroundColor)
+    {
+        /// <summary>Captures the fingerprint of a built scene; doubles round exactly like the "0.###" fields of <see cref="Signature"/>.</summary>
+        internal static SceneKey Capture(PianoShaderScene scene) => new(
+            scene.BandWidth, scene.BandHeight, Q(scene.RenderScale), Q(scene.CameraHeight), Q(scene.CameraDistance), Q(scene.BedFraction),
+            Q(scene.WhiteDepth), Q(scene.BlackDepth), Q(scene.PressDepth), Q(scene.WhiteRoughness), Q(scene.BlackRoughness), Q(scene.Specular),
+            Q(scene.KeyLightIntensity), Q(scene.ShadowStrength), Q(scene.Occlusion), Q(scene.RimIntensity), Q(scene.AmbientIntensity),
+            Q(scene.EmissiveIntensity), Q(scene.Exposure), Q(scene.Saturation), Q(scene.Contrast), scene.Filmic, Q(scene.LightSize),
+            scene.ShadowSamples, scene.OcclusionSamples, scene.WhiteKeyColor.PackedValue, scene.BlackKeyColor.PackedValue, scene.KeyLightColor.PackedValue,
+            scene.FillColor.PackedValue, scene.RimColor.PackedValue, scene.SkyColor.PackedValue, scene.GroundColor.PackedValue);
+
+        private static double Q(double value) => Math.Round(value, 3, MidpointRounding.AwayFromZero);
+    }
+
     private static int[] BuildWhitesBelow()
     {
         var result = new int[128]; var count = 0;

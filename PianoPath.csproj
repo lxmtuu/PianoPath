@@ -8,7 +8,8 @@
     <UseWPF>true</UseWPF>
     <RootNamespace>PianoPath</RootNamespace>
     <Product>Keyflow · Piano VFX Studio</Product>
-    <Authors>lxmtuu</Authors>
+    <Authors>Yami, Neyu</Authors>
+    <Copyright>© 2026 Yami · Neyu. Contributor: Jin.</Copyright>
     <Description>Piano practice and visualizer for Windows: MIDI playback, SoundFont synthesis and a concert-themed piano-roll stage.</Description>
     <Version>0.4.0</Version>
   </PropertyGroup>
