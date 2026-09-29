@@ -684,23 +684,28 @@ internal static class VerificationSuite
         Invoke(window, "ApplyChromeTheme");
         Assert(ShellThemeManager.Current.Id == ShellThemes.Find(beforeTheme).Id, "Restoring the theme should republish the previous accents.");
         var petals = toggles[nameof(PianoVisualSettings.ShowPetals)];
-        var spots = toggles[nameof(PianoVisualSettings.ShowSpotlights)];
-        Assert(petals is not null && spots is not null && choices.ContainsKey(nameof(PianoVisualSettings.ChromeMotion)),
-            "The Theme page should expose the blossom layer, the spotlight layer and the motion budget.");
-        var wasPetals = visualSettings.ShowPetals; var wasAmount = visualSettings.PetalAmount; var wasSpots = visualSettings.ShowSpotlights;
-        visualSettings.ShowPetals = true; visualSettings.PetalAmount = 60; visualSettings.ShowSpotlights = true; visualSettings.SpotlightIntensity = 70;
+        Assert(petals is not null && choices.ContainsKey(nameof(PianoVisualSettings.ChromeMotion)),
+            "The Theme page should expose the ambient mote layer and the motion budget.");
+        var wasPetals = visualSettings.ShowPetals; var wasAmount = visualSettings.PetalAmount;
+        visualSettings.ShowPetals = true; visualSettings.PetalAmount = 60;
         stage.SetVisualSettings(visualSettings);
-        Assert(stage.HasActiveEffects, "The blossom and spotlight layers should keep the stage animating even without notes.");
+        Assert(stage.HasActiveEffects, "The ambient mote layer should keep the stage animating even without notes.");
         var concertVisual = new DrawingVisual();
         using (var dc = concertVisual.RenderOpen())
         {
             Invoke(stage, "DrawPetals", dc, 1280d, 480d);
-            Invoke(stage, "DrawSpotlights", dc, 1280d, 480d, 1280d / 88);
         }
-        Assert(stage.PetalCount > 0 && stage.PetalCount <= 150, $"The blossom layer should draw a bounded number of petals (drew {stage.PetalCount}).");
-        Assert(concertVisual.Drawing.Bounds.Height > 200 && concertVisual.Drawing.Bounds.Width > 100, "The concert layers should actually paint geometry into the stage.");
-        visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount; visualSettings.ShowSpotlights = wasSpots;
+        Assert(stage.PetalCount > 0 && stage.PetalCount <= 150, $"The mote layer should draw a bounded number of petals (drew {stage.PetalCount}).");
+        Assert(concertVisual.Drawing.Bounds.Height > 200 && concertVisual.Drawing.Bounds.Width > 100, "The ambient layer should actually paint geometry into the stage.");
+        visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount;
         stage.SetVisualSettings(visualSettings);
+        VerifyImpactFx(window, stage, visualSettings, choices);
+        VerifyFallingFx(window, stage, visualSettings, choices);
+        VerifyHoldFx(window, stage, visualSettings);
+        VerifyReleaseFx(window, stage, visualSettings, choices);
+        VerifyAmbientFx(window, stage, visualSettings, choices);
+        VerifySmartFx(window, stage, visualSettings);
+        VerifyThemes();
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -718,7 +723,306 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: eleven pages grouped into three navigation sections, theme chips and concert layers, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add("PASS settings dock: eleven pages grouped into three navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
+    }
+
+    /// <summary>
+    /// Impact phase FX (effects-redesign v1): the Particles page exposes the wave style choice and
+    /// the flash switch; hits spawn waves/flashes that paint real geometry and fade over time.
+    /// </summary>
+    private static void VerifyImpactFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactWave)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowImpactFlash)),
+            "The Particles page should expose the impact wave style and the impact flash switch.");
+        Assert(EffectCatalog.Impact.All.Count(e => e.Status == EffectStatus.Available) >= 6,
+            "The impact catalogue should list the implemented burst, ring, shockwave, flash and key-glow effects.");
+        var wasWave = visualSettings.ImpactWave; var wasRings = visualSettings.ShowImpactRings;
+        var wasWaveIntensity = visualSettings.ImpactWaveIntensity;
+        var wasFlash = visualSettings.ShowImpactFlash; var wasFlashIntensity = visualSettings.ImpactFlashIntensity;
+        visualSettings.ShowImpactRings = true; visualSettings.ImpactWave = "Shockwave"; visualSettings.ImpactWaveIntensity = 90;
+        visualSettings.ShowImpactFlash = true; visualSettings.ImpactFlashIntensity = 80;
+        stage.SetVisualSettings(visualSettings);
+        stage.Impact(60, 1);
+        Assert(stage.RingCount > 0, "A shockwave impact should spawn a wave.");
+        Assert(stage.FlashCount > 0, "An impact with flash enabled should spawn a flash.");
+        Assert(stage.HasActiveEffects, "Fresh impact waves and flashes should keep the stage animating.");
+        var impactVisual = new DrawingVisual();
+        using (var dc = impactVisual.RenderOpen())
+        {
+            Invoke(stage, "DrawRings", dc);
+            Invoke(stage, "DrawImpactFlashes", dc);
+        }
+        Assert(impactVisual.Drawing is not null && impactVisual.Drawing.Bounds.Width > 10 && impactVisual.Drawing.Bounds.Height > 4,
+            "Impact waves and flashes should actually paint geometry into the stage.");
+        for (var i = 0; i < 40; i++) stage.Advance(.05); // 2 s of physics in frame-size steps (Advance clamps each step to 50 ms).
+        Assert(stage.RingCount == 0 && stage.FlashCount == 0, "Impact waves (.55 s) and flashes (.18 s) should fade out over time.");
+        visualSettings.ImpactWave = wasWave; visualSettings.ShowImpactRings = wasRings;
+        visualSettings.ImpactWaveIntensity = wasWaveIntensity;
+        visualSettings.ShowImpactFlash = wasFlash; visualSettings.ImpactFlashIntensity = wasFlashIntensity;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Falling phase FX (effects-redesign v2): trails/pulse/ghosts on the Notes page; burst styles,
+    /// morphs and flash styles on the Particles page. Hits spawn styled particles that paint geometry.
+    /// </summary>
+    private static void VerifyFallingFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.FallingTrail)) && toggles.ContainsKey(nameof(PianoVisualSettings.FallingPulse)) && toggles.ContainsKey(nameof(PianoVisualSettings.FallingGhost)),
+            "The Notes page should expose the falling trail choice, the pulse switch and the ghost switch.");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
+            "The Particles page should expose the burst style, the note morph and the flash style.");
+        Assert(EffectCatalog.Falling.All.All(e => e.Status == EffectStatus.Available),
+            "The whole falling catalogue should be implemented in v2.");
+        Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
+            "The whole impact catalogue should be implemented in v2.");
+        var wasTrail = visualSettings.FallingTrail; var wasTrailIntensity = visualSettings.FallingTrailIntensity;
+        var wasPulse = visualSettings.FallingPulse; var wasGhost = visualSettings.FallingGhost;
+        var wasBurst = visualSettings.ImpactBurst; var wasMorph = visualSettings.ImpactMorph;
+        var wasFlash = visualSettings.ShowImpactFlash; var wasFlashStyle = visualSettings.ImpactFlashStyle;
+        var wasLife = visualSettings.ParticleLife;
+        visualSettings.FallingTrail = "Sparkles"; visualSettings.FallingTrailIntensity = 80;
+        visualSettings.FallingPulse = true; visualSettings.FallingGhost = true;
+        visualSettings.ImpactBurst = "Confetti"; visualSettings.ImpactMorph = "Shatter"; visualSettings.ParticleLife = .3;
+        visualSettings.ShowImpactFlash = true; visualSettings.ImpactFlashStyle = "Lightning";
+        stage.SetVisualSettings(visualSettings);
+        var noteVisual = new DrawingVisual();
+        using (var dc = noteVisual.RenderOpen())
+        {
+            Invoke(stage, "DrawConfiguredNote", dc, new System.Windows.Rect(100, 100, 40, 120), System.Windows.Media.Color.FromRgb(120, 80, 255), 1d, false, 60, false, false);
+        }
+        Assert(noteVisual.Drawing is not null && noteVisual.Drawing.Bounds.Width > 40 && noteVisual.Drawing.Bounds.Height > 120,
+            "A falling note with trail, pulse and ghosts should paint beyond its own body.");
+        stage.Impact(60, 1);
+        Assert(stage.SparkCount > 0, "A confetti impact with shatter morph should spawn particles.");
+        Assert(stage.FlashCount > 0, "A lightning impact should spawn a flash.");
+        var bolts = new DrawingVisual();
+        using (var dc = bolts.RenderOpen()) { Invoke(stage, "DrawImpactFlashes", dc); }
+        Assert(bolts.Drawing is not null && bolts.Drawing.Bounds.Height > 60, "The lightning bolt should strike down from above the key.");
+        for (var i = 0; i < 60; i++) stage.Advance(.05);
+        Assert(stage.SparkCount == 0 && stage.FlashCount == 0, "Burst particles and flashes should fade out over time.");
+        visualSettings.FallingTrail = wasTrail; visualSettings.FallingTrailIntensity = wasTrailIntensity;
+        visualSettings.FallingPulse = wasPulse; visualSettings.FallingGhost = wasGhost;
+        visualSettings.ImpactBurst = wasBurst; visualSettings.ImpactMorph = wasMorph;
+        visualSettings.ShowImpactFlash = wasFlash; visualSettings.ImpactFlashStyle = wasFlashStyle;
+        visualSettings.ParticleLife = wasLife;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Hold phase FX (effects-redesign v3): the Notes page exposes the hold bar, breathing glow,
+    /// vibration, color cycle and electric arc; sounding notes and chained keys paint real geometry.
+    /// </summary>
+    private static void VerifyHoldFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.HoldBar)) && toggles.ContainsKey(nameof(PianoVisualSettings.HoldBreath))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.HoldVibration)) && toggles.ContainsKey(nameof(PianoVisualSettings.HoldColorCycle))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.HoldElectricArc)),
+            "The Notes page should expose the hold bar, breathing, vibration, color cycle and arc switches.");
+        Assert(EffectCatalog.Hold.All.All(e => e.Status == EffectStatus.Available),
+            "The whole hold catalogue should be implemented in v3.");
+        var wasBar = visualSettings.HoldBar; var wasBreath = visualSettings.HoldBreath;
+        var wasVibration = visualSettings.HoldVibration; var wasCycle = visualSettings.HoldColorCycle;
+        var wasArc = visualSettings.HoldElectricArc;
+        visualSettings.HoldBar = true; visualSettings.HoldBreath = true; visualSettings.HoldVibration = true;
+        visualSettings.HoldColorCycle = true; visualSettings.HoldElectricArc = true; visualSettings.HoldArcIntensity = 80;
+        stage.SetVisualSettings(visualSettings);
+        var sounding = new DrawingVisual();
+        using (var dc = sounding.RenderOpen())
+        {
+            Invoke(stage, "DrawConfiguredNote", dc, new System.Windows.Rect(100, 100, 40, 120), System.Windows.Media.Color.FromRgb(120, 80, 255), 1d, true, 60, false, false);
+        }
+        Assert(sounding.Drawing is not null && sounding.Drawing.Bounds.Width > 44,
+            "A sounding note with hold FX should paint its highlight beyond the bar.");
+        stage.SetState([], 0, false, new HashSet<int> { 60, 64 });
+        var arcs = new DrawingVisual();
+        using (var dc = arcs.RenderOpen()) { Invoke(stage, "DrawElectricArcs", dc, 1280d, 480d); }
+        Assert(arcs.Drawing is not null && arcs.Drawing.Bounds.Width > 10 && arcs.Drawing.Bounds.Height > 4,
+            "Two held keys should be chained by a visible electric arc.");
+        visualSettings.HoldBar = wasBar; visualSettings.HoldBreath = wasBreath;
+        visualSettings.HoldVibration = wasVibration; visualSettings.HoldColorCycle = wasCycle;
+        visualSettings.HoldElectricArc = wasArc;
+        stage.SetVisualSettings(visualSettings);
+        stage.SetState([], 0, false, new HashSet<int>());
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Release phase FX (effects-redesign v4): live releases and song note-ends emit the release
+    /// effect; seeks never burst stale releases.
+    /// </summary>
+    private static void VerifyReleaseFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ReleaseEffect)),
+            "The Notes page should expose the release effect choice.");
+        Assert(EffectCatalog.Release.All.All(e => e.Status == EffectStatus.Available),
+            "The whole release catalogue should be implemented in v4.");
+        var wasEffect = visualSettings.ReleaseEffect; var wasIntensity = visualSettings.ReleaseIntensity;
+        visualSettings.ReleaseEffect = "Echo Rings"; visualSettings.ReleaseIntensity = 80;
+        stage.SetVisualSettings(visualSettings);
+        stage.AddLiveNote(60); stage.ReleaseLiveNote(60);
+        Assert(stage.RingCount > 0, "Releasing a live note should emit echo rings.");
+        var song = new List<NoteEvent> { new() { Pitch = 64, Start = 0, Duration = .1, Track = 0 } };
+        stage.SetState(song, .05, true, new HashSet<int>());
+        stage.Advance(.05);
+        var beforeEnd = stage.RingCount;
+        stage.SetState(song, .15, true, new HashSet<int>());
+        stage.Advance(.05);
+        Assert(stage.RingCount > beforeEnd, "A song note-end passing the playhead should emit echo rings.");
+        stage.SetState(song, 0, true, new HashSet<int>()); // seek back: no stale burst
+        stage.Advance(.05);
+        var afterSeek = stage.RingCount;
+        stage.SetState(song, .04, true, new HashSet<int>());
+        stage.Advance(.05);
+        Assert(stage.RingCount == afterSeek, "Seeking backwards should not burst stale releases.");
+        for (var i = 0; i < 40; i++) stage.Advance(.05);
+        Assert(stage.RingCount == 0, "Echo rings should fade out over time.");
+        visualSettings.ReleaseEffect = wasEffect; visualSettings.ReleaseIntensity = wasIntensity;
+        stage.SetVisualSettings(visualSettings);
+        stage.SetState([], 0, false, new HashSet<int>());
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Ambient layers (effects-redesign v5): the Background page exposes the four layer choices;
+    /// each layer paints stage-wide geometry, and the Ripple wave style draws water rings.
+    /// </summary>
+    private static void VerifyAmbientFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.AmbientEnergy)) && choices.ContainsKey(nameof(PianoVisualSettings.AmbientNature))
+            && choices.ContainsKey(nameof(PianoVisualSettings.AmbientLight)) && choices.ContainsKey(nameof(PianoVisualSettings.AmbientCosmic)),
+            "The Background page should expose the four ambient layer choices.");
+        Assert(EffectCatalog.AmbientEnergy.All.All(e => e.Status == EffectStatus.Available)
+            && EffectCatalog.AmbientNature.All.All(e => e.Status == EffectStatus.Available)
+            && EffectCatalog.AmbientLight.All.All(e => e.Status == EffectStatus.Available)
+            && EffectCatalog.AmbientCosmic.All.All(e => e.Status == EffectStatus.Available),
+            "All four ambient catalogues should be implemented in v5.");
+        var wasEnergy = visualSettings.AmbientEnergy; var wasNature = visualSettings.AmbientNature;
+        var wasLight = visualSettings.AmbientLight; var wasCosmic = visualSettings.AmbientCosmic;
+        var wasWave = visualSettings.ImpactWave;
+        visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientNature = "Snow";
+        visualSettings.AmbientLight = "Prism"; visualSettings.AmbientCosmic = "Galaxy";
+        visualSettings.ImpactWave = "Ripple";
+        stage.SetVisualSettings(visualSettings);
+        Assert(stage.HasActiveEffects, "Enabled ambient layers should keep the stage animating.");
+        foreach (var pass in new[] { "DrawAmbientEnergy", "DrawAmbientNature", "DrawAmbientLight", "DrawAmbientCosmic" })
+        {
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) { Invoke(stage, pass, dc, 1280d, 480d); }
+            Assert(visual.Drawing is not null && visual.Drawing.Bounds.Width > 100 && visual.Drawing.Bounds.Height > 100,
+                $"The {pass} layer should paint stage-wide geometry.");
+        }
+        stage.Impact(60, 1);
+        Assert(stage.RingCount > 0, "A ripple impact should spawn a wave.");
+        var ripples = new DrawingVisual();
+        using (var dc = ripples.RenderOpen()) { Invoke(stage, "DrawRings", dc); }
+        Assert(ripples.Drawing is not null && ripples.Drawing.Bounds.Width > 10, "Water ripples should paint geometry.");
+        for (var i = 0; i < 40; i++) stage.Advance(.05);
+        Assert(stage.RingCount == 0, "Ripple waves should fade out over time.");
+        visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientNature = wasNature;
+        visualSettings.AmbientLight = wasLight; visualSettings.AmbientCosmic = wasCosmic;
+        visualSettings.ImpactWave = wasWave;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Smart modulators (effects-redesign v6): octave/velocity/zone recolor notes, pedal/beat/onset
+    /// boosts run through the halo renderer, and velocity scales the burst amount.
+    /// </summary>
+    private static void VerifySmartFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.VelocityColor)) && toggles.ContainsKey(nameof(PianoVisualSettings.OctaveColor))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.ZoneSplit)) && toggles.ContainsKey(nameof(PianoVisualSettings.PedalGlow))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.TempoSync)) && toggles.ContainsKey(nameof(PianoVisualSettings.AudioReactive)),
+            "The Notes page should expose the velocity, octave, zone, pedal, tempo and audio modulators.");
+        Assert(EffectCatalog.Smart.All.All(e => e.Status == EffectStatus.Available),
+            "The whole smart catalogue should be implemented in v6.");
+        var wasColorMode = visualSettings.ColorMode; var wasStart = visualSettings.NoteColorStart; var wasEnd = visualSettings.NoteColorEnd;
+        var wasOctave = visualSettings.OctaveColor; var wasBlend = visualSettings.OctaveColorBlend;
+        visualSettings.ColorMode = "Gradient"; visualSettings.Palette = "Custom";
+        visualSettings.NoteColorStart = "#808080"; visualSettings.NoteColorEnd = "#808080";
+        visualSettings.OctaveColor = true; visualSettings.OctaveColorBlend = 100;
+        stage.SetVisualSettings(visualSettings);
+        var low = stage.NoteColor(36, 0); var high = stage.NoteColor(72, 0);
+        Assert(low != high, "With a flat base color, different octaves should resolve to different colors.");
+        visualSettings.ColorMode = wasColorMode; visualSettings.NoteColorStart = wasStart; visualSettings.NoteColorEnd = wasEnd;
+        visualSettings.OctaveColor = wasOctave; visualSettings.OctaveColorBlend = wasBlend;
+        var wasAmount = visualSettings.ParticleAmount; var wasResponse = visualSettings.ParticleResponse;
+        var wasBurst = visualSettings.ImpactBurst; var wasZone = visualSettings.ZoneSplit;
+        visualSettings.ParticleAmount = 40; visualSettings.ParticleResponse = 55; visualSettings.ImpactBurst = "Embers";
+        visualSettings.ZoneSplit = true; visualSettings.ZoneSplitPitch = 60;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+        stage.Impact(40, .2);
+        var softSparks = stage.SparkCount;
+        stage.ClearTransient();
+        stage.Impact(40, 1);
+        Assert(stage.SparkCount > softSparks, "A harder hit should burst more particles than a soft one.");
+        var bassKinds = SparkKinds(stage);
+        Assert(bassKinds.Count > 0 && bassKinds.All(k => k == 0), "Bass-zone hits should erupt ember bursts.");
+        stage.ClearTransient();
+        stage.Impact(80, 1);
+        var trebleKinds = SparkKinds(stage);
+        Assert(trebleKinds.Count > 0 && trebleKinds.All(k => k == 1), "Treble-zone hits should splash droplet bursts.");
+        visualSettings.VelocityColor = true; visualSettings.TempoSync = true; visualSettings.AudioReactive = true;
+        visualSettings.PedalGlow = true; stage.SetSustainPedal(true); stage.PulseBeat(1);
+        stage.Impact(60, 1);
+        var halo = new DrawingVisual();
+        using (var dc = halo.RenderOpen()) { Invoke(stage, "DrawImpactLine", dc, 1280d, 480d); }
+        Assert(halo.Drawing is not null && halo.Drawing.Bounds.Width > 100, "The boosted halo line should paint across the stage.");
+        stage.SetSustainPedal(false);
+        for (var i = 0; i < 40; i++) stage.Advance(.05);
+        visualSettings.ParticleAmount = wasAmount; visualSettings.ParticleResponse = wasResponse;
+        visualSettings.ImpactBurst = wasBurst; visualSettings.ZoneSplit = wasZone;
+        visualSettings.VelocityColor = false; visualSettings.TempoSync = false; visualSettings.AudioReactive = false;
+        visualSettings.PedalGlow = false;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>Reads the Kind of every live spark; the zone modulator is asserted through it.</summary>
+    private static List<int> SparkKinds(PianoStage stage)
+    {
+        var sparks = (System.Collections.IList)Field(stage, "_sparks");
+        return sparks.Cast<object>().Select(s => (int)s.GetType().GetField("Kind")!.GetValue(s)!).ToList();
+    }
+
+    /// <summary>
+    /// Combo themes (effects-redesign v7): every theme resolves to a built-in preset graph whose
+    /// falling/impact/hold/release/ambient/modulator combination matches the theme.
+    /// </summary>
+    private static void VerifyThemes()
+    {
+        Assert(EffectCatalog.Themes.All.All(e => e.Status == EffectStatus.Available),
+            "The whole theme catalogue should be implemented in v7.");
+        var fire = VisualPresets.FindBuiltIn("Inferno")!.Settings;
+        var ice = VisualPresets.FindBuiltIn("Ice Crystal")!.Settings;
+        var galaxy = VisualPresets.FindBuiltIn("Galaxy Voyage")!.Settings;
+        var sakura = VisualPresets.FindBuiltIn("Sakura Nocturne")!.Settings;
+        var electric = VisualPresets.FindBuiltIn("Electric Storm")!.Settings;
+        var ocean = VisualPresets.FindBuiltIn("Ocean Depths")!.Settings;
+        var retro = VisualPresets.FindBuiltIn("Retro Arcade")!.Settings;
+        Assert(fire.ImpactBurst == "Embers" && fire.ImpactWave == "Shockwave" && fire.AmbientEnergy == "Fireworks",
+            "The Fire theme (Inferno) should graph embers + shockwave + fireworks.");
+        Assert(ice.ImpactBurst == "Splash" && ice.ImpactWave == "Ripple" && ice.AmbientNature == "Snow",
+            "The Ice theme (Ice Crystal) should graph splash + ripple + snow.");
+        Assert(galaxy.AmbientCosmic == "Galaxy" && galaxy.ImpactFlashStyle == "Plasma" && galaxy.FallingTrail == "Rainbow",
+            "The Galaxy theme should graph rainbow trails + plasma + galaxy.");
+        Assert(sakura.ShowPetals && sakura.ImpactBurst == "Confetti" && sakura.ReleaseEffect == "Float Up",
+            "The Sakura theme should graph petals + petal confetti + floating goodbyes.");
+        Assert(electric.ImpactFlashStyle == "Lightning" && electric.HoldElectricArc && electric.AmbientEnergy == "Lightning Storm",
+            "The Electric theme should graph lightning + arcs + storm.");
+        Assert(ocean.ImpactBurst == "Splash" && ocean.ImpactWave == "Ripple" && ocean.AmbientNature == "Rain",
+            "The Ocean theme should graph splash + ripple + rain.");
+        Assert(retro.ImpactBurst == "Confetti" && retro.ImpactMorph == "Bounce" && retro.ReleaseEffect == "Snap Back" && retro.NoteRoundness == 0,
+            "The Retro theme should graph square pixels + confetti + bounce + snap.");
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>

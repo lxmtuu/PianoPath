@@ -187,7 +187,7 @@ public partial class MainWindow : Window
                 if (note.Start <= onsetFrom || !_outputFinished.Add(note) || note.Played) continue;
                 _audio.NoteOn(note.Pitch, note.Velocity); _audioHeld.Add(note);
                 SendOutput(note.Pitch, note.Velocity, true); _outputHeld.Add(note);
-                Stage.Impact(note.Pitch, .82);
+                Stage.Impact(note.Pitch, note.Velocity / 127.0); // real per-note velocity drives size, brightness and color modulators
             }
             // Notes are sorted by start, so the miss scan only ever advances instead of re-reading the whole song every frame.
             var missLimit = _position - .38;
@@ -221,14 +221,15 @@ public partial class MainWindow : Window
     private void TickMetronome(double previous, bool forceOnset)
     {
         if (_metronomeOffAt >= 0 && _position >= _metronomeOffAt) { _audio.NoteOff(MetronomePitch); _metronomeOffAt = -1; }
-        if (MetronomeCheck.IsChecked != true || !_audio.HasSoundFont || _beatTimes.Count == 0) return;
+        if (_beatTimes.Count == 0) return;
         var click = false; var downbeat = false;
         while (_nextBeat < _beatTimes.Count && _beatTimes[_nextBeat] <= _position)
         {
             if (_beatTimes[_nextBeat] > previous || forceOnset) { click = true; downbeat = _beatsPerBar > 0 && _nextBeat % _beatsPerBar == 0; }
             _nextBeat++;
         }
-        if (click) { _audio.NoteOn(MetronomePitch, downbeat ? 84 : 62); _metronomeOffAt = _position + .08; }
+        if (click) Stage.PulseBeat(downbeat ? 1 : .6); // Tempo Sync follows the MIDI tempo map even when the click is muted.
+        if (click && MetronomeCheck.IsChecked == true && _audio.HasSoundFont) { _audio.NoteOn(MetronomePitch, downbeat ? 84 : 62); _metronomeOffAt = _position + .08; }
     }
     private void TempoSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
@@ -621,7 +622,7 @@ public partial class MainWindow : Window
     {
         if (!_pressed.Add(pitch)) return;
         StartStageFrames();
-        Stage.AddLiveNote(pitch); Stage.Impact(pitch, .75); _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
+        var hit = velocity / 127.0; Stage.AddLiveNote(pitch, hit); Stage.Impact(pitch, hit); _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
         if (_playing)
         {
             var target = _notes.Where(n => !n.Played && !n.Missed && n.Pitch == pitch && Math.Abs(n.Start - _position) <= .8).OrderBy(n => Math.Abs(n.Start - _position)).FirstOrDefault();
@@ -660,6 +661,7 @@ public partial class MainWindow : Window
     {
         var changed = down ? _pedalsDown.Add(pedal) : _pedalsDown.Remove(pedal);
         if (!changed) return;
+        Stage.SetSustainPedal(_pedalsDown.Contains(PianoPedal.Sustain));
         var controller = MidiDeviceService.ControllerFor(pedal);
         _audio.ControlChange(controller, down ? 127 : 0);
         _updatingPedals = true;

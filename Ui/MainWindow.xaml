@@ -340,7 +340,7 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Theme" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <Border Grid.Column="1" x:Name="PlayDialogThemeOrb" Width="14" Height="14" CornerRadius="7" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Theme" Click="PlayDialogExpand_Click" ToolTip="Interface theme, motion, blossoms and spotlights"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Theme" Click="PlayDialogExpand_Click" ToolTip="Interface theme, motion and ambient motes"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>

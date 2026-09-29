@@ -159,14 +159,14 @@ giữ nguyên stage + dock hiện có làm phần "Design" chi tiết:
   main menu và sau lưng dock cài đặt.
 - **Đồng hồ khung hình dùng chung** (`Ui/FrameClock.cs`): `CompositionTarget.Rendering` là nguồn duy
   nhất cho mọi animation; đếm yêu cầu (`Acquire`/`Release`) nên khi sân khấu đứng yên thì WPF không
-  phải vẽ thêm khung nào. Sân khấu (nốt rơi, tia lửa, petal, spotlight) và backdrop chạy cùng nhịp
+  phải vẽ thêm khung nào. Sân khấu (nốt rơi, tia lửa, petal) và backdrop chạy cùng nhịp
   vsync, hết hiện tượng lệch nhịp giữa hai `DispatcherTimer` khác chu kỳ.
 - **Chuyển động giao diện** (`Ui/ChromeMotion.cs`): fade/slide/pop/cascade/pulse dùng chung một bộ
   easing, tôn trọng `SystemParameters.ClientAreaAnimation`; `--snapshot`/`--show-settings` gọi
   `DisableChromeMotion()` để ảnh chụp luôn tất định.
-- **Hai lớp sân khấu mới**: `DrawPetals` (petal bay theo hàm của thời gian, không tích luỹ sai số;
-  số lượng = `PetalAmount` × tỉ lệ bề rộng, trần 150) và `DrawSpotlights` (2–3 cột sáng quét qua
-  sân khấu, có pool sáng dưới phím, brush cache theo `GradientKey`).
+- **Lớp sân khấu mới**: `DrawPetals` (petal bay theo hàm của thời gian, không tích luỹ sai số;
+  số lượng = `PetalAmount` × tỉ lệ bề rộng, trần 150). Lớp đèn quét `DrawSpotlights` đã xóa trong
+  đợt effects-redesign v1 (xem `docs/EFFECTS-REDESIGN.md`).
 - **Hiệu năng**: bỏ `DispatcherTimer` 16 ms của sân khấu, nhãn thống kê/thanh thời gian chỉ cập nhật
-  khi giá trị đổi, pen lưới guide và mọi brush/petal/spotlight được cache; `HasActiveEffects` bao gồm
-  cả hai lớp mới nên chỉ chạy khung hình khi thật sự có gì chuyển động.
+  khi giá trị đổi, pen lưới guide và mọi brush/petal được cache; `HasActiveEffects` bao gồm
+  cả lớp petal và impact wave/flash nên chỉ chạy khung hình khi thật sự có gì chuyển động.

@@ -22,6 +22,10 @@ internal static class VisualPresets
         new("Sakura Nocturne", "Warm rose-gold notes on indigo obsidian: crystal glass keyboard, gentle embers and refined nocturne bloom.", true, SakuraNocturne()),
         new("Concert Gold", "Amber notes on burgundy velvet: warm key light, acoustic resonance and candlelit bloom, like an evening recital in a grand hall.", true, ConcertGold()),
         new("Moonlight Sonata", "Silver-blue glass notes with acoustic resonance, deep star field, rising wisps and a midnight blue vignette.", true, MoonlightSonata()),
+        new("Galaxy Voyage", "Meteors with rainbow trails, supernova shockwaves, plasma flashes and a breathing nebula.", true, GalaxyVoyage()),
+        new("Electric Storm", "Lightning strikes, arcing keys, speed-line trails and a stormy sky.", true, ElectricStorm()),
+        new("Ocean Depths", "Glass drops, water ripples and splashes, floating goodbyes in the rain.", true, OceanDepths()),
+        new("Retro Arcade", "Square pixel blocks, confetti bursts, bouncing hits and game-style snaps.", true, RetroArcade()),
     ];
 
     internal static VisualPreset? FindBuiltIn(string name) => BuiltIn.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -42,7 +46,7 @@ internal static class VisualPresets
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
         s.ShellTheme = ShellThemes.ConcertGrandId;
-        s.ShowPetals = false; s.ShowSpotlights = false;
+        s.ShowPetals = false;
         return s;
     }
 
@@ -57,6 +61,14 @@ internal static class VisualPresets
         s.HorizonGlow = 80; s.BeamIntensity = 55; s.BloomIntensity = 110; s.BloomSize = 90; s.Vignette = 45; s.Saturation = 115;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 34; s.ShaderKeyLight = 78; s.ShaderGloss = 66; s.ShaderShadows = 88; s.ShaderEmissive = 120; s.ShaderRimLight = 84;
         s.ShellTheme = ShellThemes.VelvetGoldId;
+        // Fire theme graph: glow trails → ember burst + shockwave → flame pillar + hold bar → smoke, under fireworks.
+        s.FallingTrail = "Glow"; s.FallingTrailIntensity = 70; s.FallingTrailLength = 55;
+        s.ImpactBurst = "Embers"; s.ImpactWave = "Shockwave"; s.ImpactWaveIntensity = 120;
+        s.ShowImpactFlash = true; s.ImpactFlashStyle = "Flash"; s.ImpactFlashIntensity = 80;
+        s.ImpactMorph = "Bounce"; s.ImpactMorphIntensity = 70; s.HoldBar = true; s.HoldBarIntensity = 70;
+        s.ReleaseEffect = "Smoke"; s.ReleaseIntensity = 60;
+        s.AmbientEnergy = "Fireworks"; s.AmbientEnergyAmount = 45; s.AmbientEnergySpeed = 50;
+        s.VelocityColor = true; s.VelocityColorAmount = 60;
         return s;
     }
 
@@ -82,6 +94,12 @@ internal static class VisualPresets
         s.BloomIntensity = 45; s.Vignette = 20; s.HorizonGlow = 20; s.Saturation = 85;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 62; s.ShaderGloss = 94; s.ShaderShadows = 58; s.ShaderExposure = 112; s.ShaderEmissive = 55;
         s.ShellTheme = ShellThemes.ConcertNoirId;
+        // Ice theme graph: sparkle trails → splash + ripple + absorb → shimmering hold → dissolving frost, in the snow.
+        s.FallingTrail = "Sparkles"; s.FallingTrailIntensity = 65; s.FallingTrailLength = 50;
+        s.ImpactBurst = "Splash"; s.ImpactWave = "Ripple"; s.ImpactWaveIntensity = 100;
+        s.ImpactMorph = "Absorb"; s.ImpactMorphIntensity = 70; s.HoldVibration = true; s.HoldVibrationAmount = 25;
+        s.ReleaseEffect = "Dissolve"; s.ReleaseIntensity = 60;
+        s.AmbientNature = "Snow"; s.AmbientNatureAmount = 55; s.AmbientNatureSpeed = 45;
         return s;
     }
 
@@ -126,9 +144,14 @@ internal static class VisualPresets
         s.ShellTheme = ShellThemes.ConcertGrandId;
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#FF8FB8"; s.NoteColorEnd = "#FFD98A";
         s.HaloColor = "#FFC2D8"; s.HaloIntensity = 92; s.NoteGlow = 105; s.NoteEdge = 110; s.NoteEdgeWidth = 55; s.NoteTint = 42; s.NoteHeadGlow = 48; s.NoteRoundness = 55;
-        s.ShowPetals = false; s.PetalAmount = 50; s.PetalColor = "#E5C06E";
-        s.ShowSpotlights = false; s.SpotlightIntensity = 50;
+        s.ShowPetals = true; s.PetalAmount = 50; s.PetalColor = "#FFB3CF";
         s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = true; s.RingSize = 45;
+        // Sakura theme graph: ribbon trails → petal confetti + soft flash → breathing bloom → petals floating off.
+        s.FallingTrail = "Ribbon"; s.FallingTrailIntensity = 60; s.FallingTrailLength = 50;
+        s.ImpactBurst = "Confetti"; s.ParticleAmount = 26;
+        s.ShowImpactFlash = true; s.ImpactFlashStyle = "Flash"; s.ImpactFlashIntensity = 50;
+        s.HoldBreath = true; s.HoldBreathRate = 35; s.ReleaseEffect = "Float Up"; s.ReleaseIntensity = 60;
+        s.AmbientNature = "Butterflies"; s.AmbientNatureAmount = 35; s.AmbientNatureSpeed = 40;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60; s.BloomIntensity = 72; s.BloomSize = 70; s.Vignette = 32; s.HorizonGlow = 42; s.StarDensity = 85;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 50; s.ShaderGloss = 80; s.ShaderShadows = 74; s.ShaderEmissive = 92; s.Saturation = 106;
         return s;
@@ -141,7 +164,7 @@ internal static class VisualPresets
         s.ShellTheme = ShellThemes.VelvetGoldId;
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#F3C05E"; s.NoteColorEnd = "#FFF0B8";
         s.HaloColor = "#FFD98A"; s.HaloIntensity = 100; s.NoteGlow = 115; s.NoteEdge = 100; s.NoteEdgeWidth = 45; s.NoteTint = 55; s.NoteHeadGlow = 52; s.NoteRoundness = 40;
-        s.ShowSpotlights = false; s.SpotlightIntensity = 60; s.ShowPetals = false;
+        s.ShowPetals = false;
         s.ShowFlame = true; s.FlameIntensity = 72; s.FlameHeight = 55; s.FlameColorMode = "Warm";
         s.ShowLightBeams = false; s.BeamIntensity = 45; s.ShowImpactRings = true; s.RingSize = 50;
         s.KeyboardStyle = "Studio"; s.ShowKeyFelt = true; s.KeyFeltColor = "#B0703C"; s.KeyLighting = 70; s.KeyGlowRadius = 70; s.PressedKeyColorMode = "Note";
@@ -157,12 +180,89 @@ internal static class VisualPresets
         s.ShellTheme = ShellThemes.ConcertNoirId;
         s.NoteStyle = "Glass"; s.ColorMode = "Gradient"; s.Palette = "Ocean"; s.NoteColorStart = "#8FA9FF"; s.NoteColorEnd = "#DCE6FF";
         s.HaloColor = "#B9C8FF"; s.HaloIntensity = 80; s.NoteGlow = 68; s.NoteEdge = 92; s.NoteEdgeWidth = 38; s.NoteTint = 76; s.NoteRefraction = 55; s.NoteRoundness = 42; s.Notes3D = true; s.NoteHeadGlow = 34;
-        s.ShowSpotlights = false; s.SpotlightIntensity = 40; s.ShowPetals = false;
+        s.ShowPetals = false;
         s.ShowWisps = true; s.WispAmount = 45; s.WispHeight = 62; s.WispGlow = 90; s.ShowFlame = false;
         s.ShowImpactRings = true; s.RingSize = 40;
         s.KeyboardStyle = "Glass"; s.KeyGlowRadius = 45; s.PressedKeyColorMode = "Note";
         s.BloomIntensity = 55; s.BloomSize = 60; s.Vignette = 40; s.HorizonGlow = 30; s.StarDensity = 70; s.BackgroundDim = 25; s.Saturation = 85;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 58; s.ShaderGloss = 90; s.ShaderShadows = 60; s.ShaderExposure = 105; s.ShaderEmissive = 60; s.ShaderRimLight = 40;
+        return s;
+    }
+
+    /// <summary>Meteors → supernova + plasma → nebula glow → stardust.</summary>
+    internal static PianoVisualSettings GalaxyVoyage()
+    {
+        var s = Base("Galaxy Voyage");
+        s.ShellTheme = ShellThemes.ConcertNoirId;
+        s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#6E7BFF"; s.NoteColorEnd = "#FF7BE0";
+        s.HaloColor = "#9D8CFF"; s.HaloIntensity = 100; s.NoteGlow = 120; s.NoteEdge = 115; s.NoteEdgeWidth = 58; s.NoteTint = 34; s.NoteHeadGlow = 55; s.NoteRoundness = 60;
+        s.FallingTrail = "Rainbow"; s.FallingTrailIntensity = 65; s.FallingTrailLength = 60;
+        s.ImpactBurst = "Fireworks"; s.ParticleAmount = 34; s.ShowImpactRings = true; s.ImpactWave = "Shockwave"; s.RingSize = 62; s.ImpactWaveIntensity = 115;
+        s.ShowImpactFlash = true; s.ImpactFlashStyle = "Plasma"; s.ImpactFlashIntensity = 75;
+        s.HoldBreath = true; s.HoldBreathRate = 30; s.ReleaseEffect = "Dissolve"; s.ReleaseIntensity = 60;
+        s.ShowStars = true; s.StarDensity = 90; s.AmbientCosmic = "Galaxy"; s.AmbientCosmicAmount = 65; s.AmbientCosmicSpeed = 40;
+        s.ShowFlame = false; s.ShowWisps = false;
+        s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60;
+        s.BloomIntensity = 95; s.Vignette = 38; s.HorizonGlow = 40; s.Saturation = 112;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 52; s.ShaderGloss = 84; s.ShaderShadows = 70; s.ShaderEmissive = 95;
+        return s;
+    }
+
+    /// <summary>Sparks → lightning strike + shockwave → electric arcs → fading sparks.</summary>
+    internal static PianoVisualSettings ElectricStorm()
+    {
+        var s = Base("Electric Storm");
+        s.ShellTheme = ShellThemes.ConcertNoirId;
+        s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#59D8FF"; s.NoteColorEnd = "#EAFBFF";
+        s.HaloColor = "#8FE3FF"; s.HaloIntensity = 110; s.NoteGlow = 115; s.NoteEdge = 125; s.NoteEdgeWidth = 50; s.NoteTint = 30; s.NoteHeadGlow = 60; s.NoteRoundness = 45;
+        s.FallingTrail = "Speed Lines"; s.FallingTrailIntensity = 70; s.FallingTrailLength = 55;
+        s.ImpactBurst = "Embers"; s.ParticleAmount = 30; s.ParticleVelocity = 220; s.ShowImpactRings = true; s.ImpactWave = "Shockwave"; s.RingSize = 55; s.ImpactWaveIntensity = 110;
+        s.ShowImpactFlash = true; s.ImpactFlashStyle = "Lightning"; s.ImpactFlashIntensity = 85;
+        s.HoldElectricArc = true; s.HoldArcIntensity = 80; s.ReleaseEffect = "Snap Back"; s.ReleaseIntensity = 70;
+        s.AmbientEnergy = "Lightning Storm"; s.AmbientEnergyAmount = 55; s.AmbientEnergySpeed = 60;
+        s.VelocityColor = true; s.VelocityColorAmount = 55; s.TempoSync = true; s.TempoSyncAmount = 45;
+        s.ShowFlame = false; s.ShowWisps = false;
+        s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 75; s.KeyLighting = 55;
+        s.BloomIntensity = 90; s.Vignette = 42; s.HorizonGlow = 35; s.Saturation = 108;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 46; s.ShaderGloss = 78; s.ShaderShadows = 76; s.ShaderEmissive = 100;
+        return s;
+    }
+
+    /// <summary>Water drops → ripples + splash → water column → dissolving foam.</summary>
+    internal static PianoVisualSettings OceanDepths()
+    {
+        var s = Base("Ocean Depths");
+        s.ShellTheme = ShellThemes.ConcertNoirId;
+        s.NoteStyle = "Glass"; s.ColorMode = "Gradient"; s.Palette = "Ocean"; s.HaloColor = "#6FD8FF";
+        s.NoteGlow = 75; s.NoteEdge = 95; s.NoteEdgeWidth = 40; s.NoteTint = 72; s.NoteRefraction = 60; s.NoteRoundness = 50; s.NoteHeadGlow = 45;
+        s.FallingTrail = "Glow"; s.FallingTrailIntensity = 60; s.FallingTrailLength = 55;
+        s.ImpactBurst = "Splash"; s.ParticleAmount = 30; s.ShowImpactRings = true; s.ImpactWave = "Ripple"; s.RingSize = 60; s.ImpactWaveIntensity = 105;
+        s.ReleaseEffect = "Float Up"; s.ReleaseIntensity = 65;
+        s.ShowLightBeams = true; s.BeamIntensity = 60;
+        s.AmbientNature = "Rain"; s.AmbientNatureAmount = 50; s.AmbientNatureSpeed = 55;
+        s.ShowFlame = false; s.ShowWisps = false;
+        s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55;
+        s.BloomIntensity = 65; s.Vignette = 34; s.HorizonGlow = 45; s.Saturation = 95;
+        s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 54; s.ShaderGloss = 88; s.ShaderShadows = 64; s.ShaderEmissive = 75;
+        return s;
+    }
+
+    /// <summary>Pixel blocks → 8-bit burst → blinking → game-style snap.</summary>
+    internal static PianoVisualSettings RetroArcade()
+    {
+        var s = Base("Retro Arcade");
+        s.ShellTheme = ShellThemes.ConcertGrandId;
+        s.NoteStyle = "Solid"; s.Notes3D = false; s.ColorMode = "RainbowPitch"; s.HaloColor = "#7DFF6A";
+        s.HaloIntensity = 90; s.NoteGlow = 45; s.NoteEdge = 100; s.NoteEdgeWidth = 30; s.NoteTint = 100; s.NoteRoundness = 0; s.NoteHeadGlow = 0;
+        s.FallingGhost = true; s.FallingGhostAmount = 35; s.FallingPulse = true; s.FallingPulseRate = 70;
+        s.ImpactBurst = "Confetti"; s.ParticleAmount = 30; s.ShowImpactRings = true; s.ImpactWave = "Ring"; s.RingSize = 45;
+        s.ImpactMorph = "Bounce"; s.ImpactMorphIntensity = 75;
+        s.ReleaseEffect = "Snap Back"; s.ReleaseIntensity = 80;
+        s.AmbientCosmic = "Geometric"; s.AmbientCosmicAmount = 45; s.AmbientCosmicSpeed = 55;
+        s.ShowFlame = false; s.ShowWisps = false; s.ShowLightBeams = false;
+        s.KeyboardStyle = "Classic"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 40;
+        s.BloomIntensity = 45; s.Vignette = 25; s.HorizonGlow = 20; s.Saturation = 130;
+        s.ShadingQuality = "Fast";
         return s;
     }
 }

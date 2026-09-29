@@ -78,8 +78,7 @@ public partial class MainWindow
 
     /// <summary>
     /// The Theme page: the look of the application shell (independent from the piano stage itself),
-    /// how much the chrome animates, and the two concert layers that can be added to the stage —
-    /// blossom petals and sweeping spotlights.
+    /// how much the chrome animates, and the ambient mote layer that can float over the stage.
     /// </summary>
     private void BuildThemePage()
     {
@@ -93,12 +92,10 @@ public partial class MainWindow
             ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
         SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the floating concert dust motes and acoustic waves in the backdrop.");
 
-        var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE LAYERS", "Optional recital layers: floating acoustic motes and soft ambient stage illumination.");
+        var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE", "Optional recital layer: floating acoustic motes drifting through the concert space.");
         Toggle(concert, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
         SliderRow(concert, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
         ColorRow(concert, "Mote color", nameof(PianoVisualSettings.PetalColor), "Colour of the floating ambient particles.").VisibleWhen = () => _visualSettings.ShowPetals;
-        Toggle(concert, "Stage illumination", nameof(PianoVisualSettings.ShowSpotlights), "Soft atmospheric stage illumination across the concert keybed.");
-        SliderRow(concert, "Illumination intensity", nameof(PianoVisualSettings.SpotlightIntensity), 0, 100, "Brightness of the concert illumination.").VisibleWhen = () => _visualSettings.ShowSpotlights;
 
         var looks = Card(ThemeSettingsHost, "QUICK LOOKS", "One click applies a complete concert look: stage preset plus matching interface theme.");
         ButtonRow(looks,
@@ -198,6 +195,48 @@ public partial class MainWindow
         Choice(motion, "Direction", nameof(PianoVisualSettings.NoteDirection), "Down: notes fall onto the keys and sink below the hit line. Up: notes are born at the keys on onset and rise out of the top of the stage.",
             ("Down", "Fall down"), ("Up", "Rise up"));
         Note(motion, "Only a physically held key extends its visual note. Pedals sustain the audio without stretching the bar after key release.");
+
+        var falling = Card(NoteSettingsHost, "FALLING FX", "Trails, echoes and pulsing while notes travel.");
+        Choice(falling, "Trail", nameof(PianoVisualSettings.FallingTrail), "Light dragging behind every falling note.",
+            ("None", "None"), ("Glow", "Glow"), ("Sparkles", "Sparkles"), ("Speed Lines", "Speed lines"), ("Blur", "Motion blur"), ("Ribbon", "Ribbon"), ("Rainbow", "Rainbow"), ("Stream", "Particle stream"));
+        SliderRow(falling, "Trail intensity", nameof(PianoVisualSettings.FallingTrailIntensity), 0, 100, "Brightness of the trail.").VisibleWhen = () => _visualSettings.FallingTrail != "None";
+        SliderRow(falling, "Trail length", nameof(PianoVisualSettings.FallingTrailLength), 0, 100, "How far the trail reaches behind the note.").VisibleWhen = () => _visualSettings.FallingTrail != "None";
+        Toggle(falling, "Pulsing", nameof(PianoVisualSettings.FallingPulse), "Notes breathe bright and dim while falling.");
+        SliderRow(falling, "Pulse rate", nameof(PianoVisualSettings.FallingPulseRate), 0, 100, "How fast the notes pulse.").VisibleWhen = () => _visualSettings.FallingPulse;
+        Toggle(falling, "Ghost echoes", nameof(PianoVisualSettings.FallingGhost), "Faint echo copies lead each note.");
+        SliderRow(falling, "Ghost amount", nameof(PianoVisualSettings.FallingGhostAmount), 0, 100, "Visibility and number of the echoes.").VisibleWhen = () => _visualSettings.FallingGhost;
+
+        var hold = Card(NoteSettingsHost, "HOLD FX", "What sounding notes and held keys do while the key stays down.");
+        Toggle(hold, "Hold bar highlight", nameof(PianoVisualSettings.HoldBar), "The sounding bar burns brighter with a hot outline.");
+        SliderRow(hold, "Hold bar intensity", nameof(PianoVisualSettings.HoldBarIntensity), 0, 100, "Strength of the highlight.").VisibleWhen = () => _visualSettings.HoldBar;
+        Toggle(hold, "Breathing glow", nameof(PianoVisualSettings.HoldBreath), "Held keys and notes breathe bright and dim.");
+        SliderRow(hold, "Breath rate", nameof(PianoVisualSettings.HoldBreathRate), 0, 100, "How fast the glow breathes.").VisibleWhen = () => _visualSettings.HoldBreath;
+        Toggle(hold, "Vibration", nameof(PianoVisualSettings.HoldVibration), "Held notes tremble subtly.");
+        SliderRow(hold, "Vibration amount", nameof(PianoVisualSettings.HoldVibrationAmount), 0, 100, "Strength of the tremble.").VisibleWhen = () => _visualSettings.HoldVibration;
+        Toggle(hold, "Color cycle", nameof(PianoVisualSettings.HoldColorCycle), "Held notes keep shifting hue.");
+        SliderRow(hold, "Cycle speed", nameof(PianoVisualSettings.HoldColorCycleSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.HoldColorCycle;
+        Toggle(hold, "Electric arc", nameof(PianoVisualSettings.HoldElectricArc), "Crackling arcs chain simultaneously held keys.");
+        SliderRow(hold, "Arc intensity", nameof(PianoVisualSettings.HoldArcIntensity), 0, 100, "Brightness of the arcs.").VisibleWhen = () => _visualSettings.HoldElectricArc;
+
+        var release = Card(NoteSettingsHost, "RELEASE FX", "What happens at the key when a note ends.");
+        Choice(release, "Release effect", nameof(PianoVisualSettings.ReleaseEffect), "The farewell of every note: fade, float, dissolve, smoke, snap or echo.",
+            ("Fade", "Fade out"), ("Float Up", "Float up"), ("Dissolve", "Dissolve"), ("Smoke", "Smoke puff"), ("Snap Back", "Snap back"), ("Echo Rings", "Echo rings"));
+        SliderRow(release, "Release intensity", nameof(PianoVisualSettings.ReleaseIntensity), 0, 100, "Strength of the release effect.").VisibleWhen = () => _visualSettings.ReleaseEffect != "Fade";
+
+        var smart = Card(NoteSettingsHost, "SMART MODULATORS", "Music data that scales the effects above: they never draw anything themselves.");
+        Toggle(smart, "Velocity color", nameof(PianoVisualSettings.VelocityColor), "Soft hits cool blue, hard hits hot red.");
+        SliderRow(smart, "Velocity color amount", nameof(PianoVisualSettings.VelocityColorAmount), 0, 100, "How strongly velocity recolors notes and bursts.").VisibleWhen = () => _visualSettings.VelocityColor;
+        Toggle(smart, "Octave color", nameof(PianoVisualSettings.OctaveColor), "Each octave owns a slice of the rainbow.");
+        SliderRow(smart, "Octave blend", nameof(PianoVisualSettings.OctaveColorBlend), 0, 100, "How strongly the octave hue takes over.").VisibleWhen = () => _visualSettings.OctaveColor;
+        Toggle(smart, "Zone split", nameof(PianoVisualSettings.ZoneSplit), "Bass zone erupts fire, treble zone splashes ice.");
+        SliderRow(smart, "Split point", nameof(PianoVisualSettings.ZoneSplitPitch), 21, 108, "MIDI note where the treble zone begins (C4 = 60).").VisibleWhen = () => _visualSettings.ZoneSplit;
+        SliderRow(smart, "Zone amount", nameof(PianoVisualSettings.ZoneSplitAmount), 0, 100, "Strength of the zone tint.").VisibleWhen = () => _visualSettings.ZoneSplit;
+        Toggle(smart, "Pedal glow", nameof(PianoVisualSettings.PedalGlow), "Keys glow brighter while the sustain pedal is down.");
+        SliderRow(smart, "Pedal glow intensity", nameof(PianoVisualSettings.PedalGlowIntensity), 0, 100, "How much the pedal brightens the keys.").VisibleWhen = () => _visualSettings.PedalGlow;
+        Toggle(smart, "Tempo sync", nameof(PianoVisualSettings.TempoSync), "Glow pulses on every beat of the MIDI tempo map.");
+        SliderRow(smart, "Tempo sync amount", nameof(PianoVisualSettings.TempoSyncAmount), 0, 100, "Strength of the beat pulse.").VisibleWhen = () => _visualSettings.TempoSync;
+        Toggle(smart, "Audio reactive", nameof(PianoVisualSettings.AudioReactive), "Glow follows the musical energy of note onsets.");
+        SliderRow(smart, "Audio reactive amount", nameof(PianoVisualSettings.AudioReactiveAmount), 0, 100, "How strongly onsets pump the glow.").VisibleWhen = () => _visualSettings.AudioReactive;
     }
 
     private void BuildParticlesPage()
@@ -212,6 +251,8 @@ public partial class MainWindow
         SliderRow(sparks, "Emitter size", nameof(PianoVisualSettings.EmitterSize), 0, 100, "Width of the spawn area on the key.");
         SliderRow(sparks, "Spiral", nameof(PianoVisualSettings.Spiral), 0, 100, "Twists the burst direction over time.");
         SliderRow(sparks, "Speed", nameof(PianoVisualSettings.ParticleSpeed), 0, 300, "Overall speed multiplier.");
+        Choice(sparks, "Burst style", nameof(PianoVisualSettings.ImpactBurst), "Look of the particle explosion: embers, water splash, fireworks, confetti or dust.",
+            ("Embers", "Embers"), ("Splash", "Splash"), ("Fireworks", "Fireworks"), ("Confetti", "Confetti"), ("Dust", "Dust"));
 
         var physics = Card(ParticleSettingsHost, "SPARKS · PHYSICS", "Lifetime, size and forces.");
         SliderRow(physics, "Lifetime", nameof(PianoVisualSettings.ParticleLife), .05, 3, "Seconds a spark stays alive.");
@@ -235,13 +276,25 @@ public partial class MainWindow
         SliderRow(wisps, "Turbulence", nameof(PianoVisualSettings.WispTurbulence), 0, 100, "Sideways waving of the stream.");
         SliderRow(wisps, "Glow", nameof(PianoVisualSettings.WispGlow), 0, 200, "Brightness of the wisps.");
 
-        var flames = Card(ParticleSettingsHost, "FLAMES & RINGS", "Fire at the impact point and shock rings.");
+        var flames = Card(ParticleSettingsHost, "FLAMES", "Fire at the impact point while a key sounds.");
         Toggle(flames, "Enable flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts while a key sounds.");
         SliderRow(flames, "Flame intensity", nameof(PianoVisualSettings.FlameIntensity), 0, 100, "Brightness and size of the fire.");
         SliderRow(flames, "Flame height", nameof(PianoVisualSettings.FlameHeight), 0, 100, "How tall the flames reach.");
         Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Classic warm fire or the color of the note.", ("Warm", "Warm fire"), ("Note", "Note color"));
-        Toggle(flames, "Enable impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding ring on every hit.");
-        SliderRow(flames, "Ring size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the ring.");
+
+        var impact = Card(ParticleSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
+        Toggle(impact, "Enable impact wave", nameof(PianoVisualSettings.ShowImpactRings), "Expanding wave on every hit.");
+        Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring, a filled shockwave blast or flat water ripples.",
+            ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("Ripple", "Ripple"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
+            ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactMorph != "None";
+        Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading in about 180 ms.");
+        Choice(impact, "Flash style", nameof(PianoVisualSettings.ImpactFlashStyle), "A white-hot flare, a lightning strike or a plasma ball.",
+            ("Flash", "Flash"), ("Lightning", "Lightning"), ("Plasma", "Plasma")).VisibleWhen = () => _visualSettings.ShowImpactFlash;
+        SliderRow(impact, "Flash intensity", nameof(PianoVisualSettings.ImpactFlashIntensity), 0, 100, "Brightness of the hit flash.").VisibleWhen = () => _visualSettings.ShowImpactFlash;
     }
 
     private void BuildKeyboardPage()
@@ -302,6 +355,25 @@ public partial class MainWindow
         SliderRow(atmosphere, "Vignette", nameof(PianoVisualSettings.Vignette), 0, 100, "Darkens the corners for a cinematic frame.");
         SliderRow(atmosphere, "Horizon glow", nameof(PianoVisualSettings.HorizonGlow), 0, 100, "Colored glow rising from the keyboard line.");
         SliderRow(atmosphere, "Light beam intensity", nameof(PianoVisualSettings.BeamIntensity), 0, 100, "Brightness of the columns above sounding keys.");
+
+        var ambient = Card(SceneSettingsHost, "AMBIENT LAYERS", "Four independent stage-wide layers behind the notes.");
+        Choice(ambient, "Energy layer", nameof(PianoVisualSettings.AmbientEnergy), "Lightning storms, lasers, confetti rain or fireworks.",
+            ("None", "None"), ("Lightning Storm", "Lightning storm"), ("Laser Beams", "Laser beams"), ("Confetti Rain", "Confetti rain"), ("Fireworks", "Fireworks"));
+        SliderRow(ambient, "Energy amount", nameof(PianoVisualSettings.AmbientEnergyAmount), 0, 100, "How much fills the sky.").VisibleWhen = () => _visualSettings.AmbientEnergy != "None";
+        SliderRow(ambient, "Energy speed", nameof(PianoVisualSettings.AmbientEnergySpeed), 0, 100, "How fast it moves.").VisibleWhen = () => _visualSettings.AmbientEnergy != "None";
+        Choice(ambient, "Nature layer", nameof(PianoVisualSettings.AmbientNature), "Rain, snow, smoke, leaves, butterflies, dust or aurora.",
+            ("None", "None"), ("Rain", "Rain"), ("Snow", "Snow"), ("Smoke", "Smoke"), ("Leaves", "Leaves"), ("Butterflies", "Butterflies"), ("Dust", "Dust"), ("Aurora", "Aurora"));
+        SliderRow(ambient, "Nature amount", nameof(PianoVisualSettings.AmbientNatureAmount), 0, 100, "How much fills the air.").VisibleWhen = () => _visualSettings.AmbientNature != "None";
+        SliderRow(ambient, "Nature speed", nameof(PianoVisualSettings.AmbientNatureSpeed), 0, 100, "How fast it drifts.").VisibleWhen = () => _visualSettings.AmbientNature != "None";
+        Choice(ambient, "Light layer", nameof(PianoVisualSettings.AmbientLight), "Gradient waves, a crystal prism or color splashes.",
+            ("None", "None"), ("Gradient Wave", "Gradient wave"), ("Prism", "Prism"), ("Color Splash", "Color splash"));
+        SliderRow(ambient, "Light amount", nameof(PianoVisualSettings.AmbientLightAmount), 0, 100, "How strong the light is.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
+        SliderRow(ambient, "Light speed", nameof(PianoVisualSettings.AmbientLightSpeed), 0, 100, "How fast it shifts.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
+        ColorRow(ambient, "Light tint", nameof(PianoVisualSettings.AmbientLightColor), "Tint of the light layer.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
+        Choice(ambient, "Cosmic layer", nameof(PianoVisualSettings.AmbientCosmic), "Galaxy, black hole, matrix rain, geometric shapes or fractals.",
+            ("None", "None"), ("Galaxy", "Galaxy"), ("Black Hole", "Black hole"), ("Matrix Rain", "Matrix rain"), ("Geometric", "Geometric shapes"), ("Fractal", "Fractal"));
+        SliderRow(ambient, "Cosmic amount", nameof(PianoVisualSettings.AmbientCosmicAmount), 0, 100, "How dense the cosmos is.").VisibleWhen = () => _visualSettings.AmbientCosmic != "None";
+        SliderRow(ambient, "Cosmic speed", nameof(PianoVisualSettings.AmbientCosmicSpeed), 0, 100, "How fast it turns.").VisibleWhen = () => _visualSettings.AmbientCosmic != "None";
 
         var halo = Card(SceneSettingsHost, "HIT LINE", "The line where notes meet the keys.");
         Toggle(halo, "Show halo line", nameof(PianoVisualSettings.ShowHalo), "Glowing line across the stage at key height.");

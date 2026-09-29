@@ -31,9 +31,6 @@ internal sealed class PianoVisualSettings
     public bool ShowPetals { get; set; } = false;
     public double PetalAmount { get; set; } = 55;
     public string PetalColor { get; set; } = "#FFB3CF";
-    /// <summary>Concert spotlights sweeping the stage from above.</summary>
-    public bool ShowSpotlights { get; set; } = false;
-    public double SpotlightIntensity { get; set; } = 55;
     public bool ShowKeyShadow { get; set; } = true;
     public int BackgroundAppearanceVersion { get; set; }
 
@@ -85,6 +82,21 @@ internal sealed class PianoVisualSettings
     public double NoteFallSpeed { get; set; } = 550;
     /// <summary>Down: notes fall onto the keys and sink below the hit line. Up: notes rise from the keys toward the top of the stage.</summary>
     public string NoteDirection { get; set; } = "Down";
+    // ---- Falling phase FX (while the note travels) ------------------------------------------------
+    /// <summary>Trail behind falling notes: None, Glow, Sparkles, Speed Lines, Blur, Ribbon, Rainbow or Stream.</summary>
+    public string FallingTrail { get; set; } = "None";
+    /// <summary>Brightness of the falling trail (0-100 %).</summary>
+    public double FallingTrailIntensity { get; set; } = 70;
+    /// <summary>How far the trail reaches behind the note (0-100 % of its height).</summary>
+    public double FallingTrailLength { get; set; } = 55;
+    /// <summary>Notes breathe bright/dim while falling.</summary>
+    public bool FallingPulse { get; set; } = false;
+    /// <summary>Speed of the falling pulse (0-100).</summary>
+    public double FallingPulseRate { get; set; } = 40;
+    /// <summary>Faint echo copies lead each falling note.</summary>
+    public bool FallingGhost { get; set; } = false;
+    /// <summary>Visibility and number of the echo copies (0-100).</summary>
+    public double FallingGhostAmount { get; set; } = 40;
 
     // ---- Particles: sparks --------------------------------------------------------------------------
     public double EmitterSize { get; set; } = 24;
@@ -119,6 +131,88 @@ internal sealed class PianoVisualSettings
     /// <summary>Warm (classic fire) or Note (flame takes the note color).</summary>
     public string FlameColorMode { get; set; } = "Warm";
     public double RingSize { get; set; } = 50;
+    // ---- Impact phase FX (hit moment): wave channel + flash channel ---------------------------------
+    // The full catalogue lives in Stage/Effects/EffectCatalog.cs; these are the v1 implemented channels.
+    /// <summary>Impact wave style: None, Ring (hollow acoustic ring) or Shockwave (filled blast wave).</summary>
+    public string ImpactWave { get; set; } = "Ring";
+    /// <summary>Brightness of the impact wave (0-150 %).</summary>
+    public double ImpactWaveIntensity { get; set; } = 100;
+    /// <summary>White-hot flare at the hit point, fading in about 180 ms.</summary>
+    public bool ShowImpactFlash { get; set; } = false;
+    /// <summary>Brightness of the impact flash (0-100 %).</summary>
+    public double ImpactFlashIntensity { get; set; } = 70;
+    /// <summary>Burst style: Embers, Splash, Fireworks, Confetti or Dust.</summary>
+    public string ImpactBurst { get; set; } = "Embers";
+    /// <summary>What the note becomes on impact: None, Shatter, Melt, Absorb, Bounce or Morph.</summary>
+    public string ImpactMorph { get; set; } = "None";
+    /// <summary>Strength of the impact morph (0-100 %).</summary>
+    public double ImpactMorphIntensity { get; set; } = 70;
+    /// <summary>Flash style: Flash, Lightning or Plasma.</summary>
+    public string ImpactFlashStyle { get; set; } = "Flash";
+    // ---- Hold phase FX (while the key is held) ----------------------------------------------------
+    /// <summary>The sounding bar burns brighter with a hot outline while held.</summary>
+    public bool HoldBar { get; set; } = false;
+    /// <summary>Strength of the hold-bar highlight (0-100 %).</summary>
+    public double HoldBarIntensity { get; set; } = 60;
+    /// <summary>Held keys and notes rhythmically breathe bright/dim.</summary>
+    public bool HoldBreath { get; set; } = false;
+    /// <summary>Speed of the breathing (0-100).</summary>
+    public double HoldBreathRate { get; set; } = 35;
+    /// <summary>Held notes tremble subtly.</summary>
+    public bool HoldVibration { get; set; } = false;
+    /// <summary>Strength of the vibration (0-100).</summary>
+    public double HoldVibrationAmount { get; set; } = 40;
+    /// <summary>Held notes cycle hue continuously.</summary>
+    public bool HoldColorCycle { get; set; } = false;
+    /// <summary>Speed of the color cycling (0-100).</summary>
+    public double HoldColorCycleSpeed { get; set; } = 45;
+    /// <summary>Electric arcs chain simultaneously held keys.</summary>
+    public bool HoldElectricArc { get; set; } = false;
+    /// <summary>Brightness of the electric arcs (0-100 %).</summary>
+    public double HoldArcIntensity { get; set; } = 70;
+    // ---- Release phase FX (when the note ends) ----------------------------------------------------
+    /// <summary>What happens at the key when a note ends: Fade, Float Up, Dissolve, Smoke, Snap Back or Echo Rings.</summary>
+    public string ReleaseEffect { get; set; } = "Fade";
+    /// <summary>Strength of the release effect (0-100 %).</summary>
+    public double ReleaseIntensity { get; set; } = 70;
+    // ---- Ambient layers (stage-wide, behind the notes) ------------------------------------------------
+    /// <summary>Particle &amp; Energy layer: None, Lightning Storm, Laser Beams, Confetti Rain or Fireworks.</summary>
+    public string AmbientEnergy { get; set; } = "None";
+    public double AmbientEnergyAmount { get; set; } = 60;
+    public double AmbientEnergySpeed { get; set; } = 50;
+    /// <summary>Nature layer: None, Rain, Snow, Smoke, Leaves, Butterflies, Dust or Aurora.</summary>
+    public string AmbientNature { get; set; } = "None";
+    public double AmbientNatureAmount { get; set; } = 60;
+    public double AmbientNatureSpeed { get; set; } = 50;
+    /// <summary>Light &amp; Color layer: None, Gradient Wave, Prism or Color Splash.</summary>
+    public string AmbientLight { get; set; } = "None";
+    public double AmbientLightAmount { get; set; } = 60;
+    public double AmbientLightSpeed { get; set; } = 50;
+    public string AmbientLightColor { get; set; } = "#7B5CFF";
+    /// <summary>Cosmic layer: None, Galaxy, Black Hole, Matrix Rain, Geometric or Fractal.</summary>
+    public string AmbientCosmic { get; set; } = "None";
+    public double AmbientCosmicAmount { get; set; } = 60;
+    public double AmbientCosmicSpeed { get; set; } = 50;
+    // ---- Smart modulators (scale parameters, never draw) ------------------------------------------------
+    /// <summary>Velocity colors notes and bursts: soft hits cool blue, hard hits hot red.</summary>
+    public bool VelocityColor { get; set; } = false;
+    public double VelocityColorAmount { get; set; } = 70;
+    /// <summary>Each octave owns a slice of the rainbow.</summary>
+    public bool OctaveColor { get; set; } = false;
+    public double OctaveColorBlend { get; set; } = 70;
+    /// <summary>Keys glow brighter while the sustain pedal is down.</summary>
+    public bool PedalGlow { get; set; } = false;
+    public double PedalGlowIntensity { get; set; } = 60;
+    /// <summary>Glow pulses on every beat of the MIDI tempo map.</summary>
+    public bool TempoSync { get; set; } = false;
+    public double TempoSyncAmount { get; set; } = 60;
+    /// <summary>Glow follows the musical energy envelope (note onsets).</summary>
+    public bool AudioReactive { get; set; } = false;
+    public double AudioReactiveAmount { get; set; } = 60;
+    /// <summary>Bass zone erupts fire, treble zone splashes ice.</summary>
+    public bool ZoneSplit { get; set; } = false;
+    public double ZoneSplitPitch { get; set; } = 60;
+    public double ZoneSplitAmount { get; set; } = 70;
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -183,6 +277,16 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
+    internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave", "Ripple"];
+    internal static readonly string[] AmbientEnergies = ["None", "Lightning Storm", "Laser Beams", "Confetti Rain", "Fireworks"];
+    internal static readonly string[] AmbientNatures = ["None", "Rain", "Snow", "Smoke", "Leaves", "Butterflies", "Dust", "Aurora"];
+    internal static readonly string[] AmbientLights = ["None", "Gradient Wave", "Prism", "Color Splash"];
+    internal static readonly string[] AmbientCosmics = ["None", "Galaxy", "Black Hole", "Matrix Rain", "Geometric", "Fractal"];
+    internal static readonly string[] FallingTrails = ["None", "Glow", "Sparkles", "Speed Lines", "Blur", "Ribbon", "Rainbow", "Stream"];
+    internal static readonly string[] ImpactBursts = ["Embers", "Splash", "Fireworks", "Confetti", "Dust"];
+    internal static readonly string[] ImpactMorphs = ["None", "Shatter", "Melt", "Absorb", "Bounce", "Morph"];
+    internal static readonly string[] ImpactFlashStyles = ["Flash", "Lightning", "Plasma"];
+    internal static readonly string[] ReleaseEffects = ["Fade", "Float Up", "Dissolve", "Smoke", "Snap Back", "Echo Rings"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
     internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
     internal static readonly string[] PressedKeyColorModes = ["Note", "Fixed"];
@@ -235,8 +339,24 @@ internal sealed class PianoVisualSettings
         WispAmount = Math.Clamp(WispAmount, 0, 150); WispSpeed = Math.Clamp(WispSpeed, 20, 600); WispHeight = Math.Clamp(WispHeight, 5, 100);
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
+        ImpactWaveIntensity = Math.Clamp(ImpactWaveIntensity, 0, 150); ImpactFlashIntensity = Math.Clamp(ImpactFlashIntensity, 0, 100);
+        FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
+        FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
+        ImpactMorphIntensity = Math.Clamp(ImpactMorphIntensity, 0, 100);
+        HoldBarIntensity = Math.Clamp(HoldBarIntensity, 0, 100); HoldBreathRate = Math.Clamp(HoldBreathRate, 0, 100);
+        HoldVibrationAmount = Math.Clamp(HoldVibrationAmount, 0, 100); HoldColorCycleSpeed = Math.Clamp(HoldColorCycleSpeed, 0, 100);
+        HoldArcIntensity = Math.Clamp(HoldArcIntensity, 0, 100);
+        ReleaseIntensity = Math.Clamp(ReleaseIntensity, 0, 100);
+        AmbientEnergyAmount = Math.Clamp(AmbientEnergyAmount, 0, 100); AmbientEnergySpeed = Math.Clamp(AmbientEnergySpeed, 0, 100);
+        AmbientNatureAmount = Math.Clamp(AmbientNatureAmount, 0, 100); AmbientNatureSpeed = Math.Clamp(AmbientNatureSpeed, 0, 100);
+        AmbientLightAmount = Math.Clamp(AmbientLightAmount, 0, 100); AmbientLightSpeed = Math.Clamp(AmbientLightSpeed, 0, 100);
+        AmbientCosmicAmount = Math.Clamp(AmbientCosmicAmount, 0, 100); AmbientCosmicSpeed = Math.Clamp(AmbientCosmicSpeed, 0, 100);
+        VelocityColorAmount = Math.Clamp(VelocityColorAmount, 0, 100); OctaveColorBlend = Math.Clamp(OctaveColorBlend, 0, 100);
+        PedalGlowIntensity = Math.Clamp(PedalGlowIntensity, 0, 100); TempoSyncAmount = Math.Clamp(TempoSyncAmount, 0, 100);
+        AudioReactiveAmount = Math.Clamp(AudioReactiveAmount, 0, 100);
+        ZoneSplitPitch = Math.Clamp(ZoneSplitPitch, 21, 108); ZoneSplitAmount = Math.Clamp(ZoneSplitAmount, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
-        PetalAmount = Math.Clamp(PetalAmount, 0, 150); SpotlightIntensity = Math.Clamp(SpotlightIntensity, 0, 100);
+        PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);
         KeyboardScale = Math.Clamp(KeyboardScale, 60, 140); KeyLighting = Math.Clamp(KeyLighting, 0, 100); KeyGlowRadius = Math.Clamp(KeyGlowRadius, 0, 100);
         KeyOverhang = Math.Clamp(KeyOverhang, 0, 100); KeyPressDepth = Math.Clamp(KeyPressDepth, 0, 100);
@@ -255,6 +375,16 @@ internal sealed class PianoVisualSettings
         if (!NoteStyles.Contains(NoteStyle)) NoteStyle = "Neon";
         if (!NoteDirections.Contains(NoteDirection)) NoteDirection = "Down";
         if (!FlameColorModes.Contains(FlameColorMode)) FlameColorMode = "Warm";
+        if (!ImpactWaves.Contains(ImpactWave)) ImpactWave = "Ring";
+        if (!FallingTrails.Contains(FallingTrail)) FallingTrail = "None";
+        if (!ImpactBursts.Contains(ImpactBurst)) ImpactBurst = "Embers";
+        if (!ImpactMorphs.Contains(ImpactMorph)) ImpactMorph = "None";
+        if (!ImpactFlashStyles.Contains(ImpactFlashStyle)) ImpactFlashStyle = "Flash";
+        if (!ReleaseEffects.Contains(ReleaseEffect)) ReleaseEffect = "Fade";
+        if (!AmbientEnergies.Contains(AmbientEnergy)) AmbientEnergy = "None";
+        if (!AmbientNatures.Contains(AmbientNature)) AmbientNature = "None";
+        if (!AmbientLights.Contains(AmbientLight)) AmbientLight = "None";
+        if (!AmbientCosmics.Contains(AmbientCosmic)) AmbientCosmic = "None";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
         if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
         if (!PressedKeyColorModes.Contains(PressedKeyColorMode)) PressedKeyColorMode = "Note";
