@@ -120,6 +120,14 @@
                                         <Button Content="EXPORT…" Click="ExportPreset_Click" Margin="0,0,8,8" ToolTip="Save the current look as a .json file" local:Loc.Localize="True"/>
                                         <Button Content="RESET TO DEFAULT" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Click="ResetVisualSettings_Click" Margin="0,0,8,8"/>
                                     </WrapPanel>
+                                    <TextBlock Text="SHARE CODE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,14,0,4"/>
+                                    <TextBlock Text="Send the current look to somebody as text: copy it from the box, or paste a code you received and press APPLY CODE." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
+                                    <TextBox x:Name="ShareCodeBox" AutomationProperties.Name="Look share code" local:Loc.Localize="True" FontSize="10.5" TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="74" VerticalScrollBarVisibility="Auto"/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="COPY CODE" local:Loc.Localize="True" Click="CopyShareCode_Click" Margin="0,0,8,8" ToolTip="Put the current look in the box and on the clipboard"/>
+                                        <Button Content="APPLY CODE" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="ApplyShareCode_Click" Margin="0,0,8,8" ToolTip="Apply the code that is in the box"/>
+                                    </WrapPanel>
+                                    <TextBlock x:Name="ShareCodeStatusLabel" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,10"/>
                                     <StackPanel x:Name="StyleSettingsHost"/>
                                 </StackPanel>
                             </ScrollViewer>

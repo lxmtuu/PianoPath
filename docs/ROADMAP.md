@@ -49,7 +49,7 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 | **Âm thanh** | `.sf3` (sample nén), modulators + instrument generator đầy đủ, convolution reverb (IR do người dùng nạp), release/abort samples + **sympathetic resonance** (dây cùng bậc rung khi pedal sustain), `damper`/`sostenuto` ảnh hưởng thật tới tail, micro‑tuning (Just, Werckmeister, thang do người dùng đặt), `keyoff` velocity |
 | **Kết xuất** | Đường GPU (Direct3D11) cho keyboard + particles, giữ software shader làm fallback và làm ảnh CI tất định; depth of field; bloom HDR thực; motion blur từ velocity buffer; particle compute; camera keyframe (dolly/crane theo khuông nhạc) |
 | **Hiệu ứng** | Hoàn thành các mục `EffectStatus.Planned` trong `Stage/Effects/EffectCatalog.cs` theo đúng phase; beat‑synced combo (xung theo lưới phách); audio‑reactive **bằng FFT thật** trên PCM của engine (hiện mới chỉ dựa trên biên độ); mỗi hiệu ứng một "shape" riêng (`falling.glow-trail` và `falling.ribbon-twist` đang chia sẻ hình) |
-| **Preset** | Thumbnail render sẵn trong file preset; import/export qua một chuỗi base64 (dễ gửi trong chat); kho preset cộng đồng = một folder `presets/` trong repo với JSON đã được `--verify` kiểm (mọi key tồn tại, mọi giá trị trong khoảng); user shell theme (bảng màu tự tạo, lưu `theme.json`) |
+| **Preset** | ✅ **import/export qua một chuỗi base64** (`Stage/VisualPresetShare.cs`: gzip + base64url sau tiền tố `KEYFLOW-LOOK-1:`, bỏ đường dẫn ảnh nền, giới hạn kích thước, `Clamp()` khi giải mã; nút COPY CODE / APPLY CODE ở trang Style). *Còn lại*: thumbnail render sẵn trong file preset, kho preset cộng đồng `presets/` trong repo, user shell theme |
 
 ## 4. P3 — kỹ thuật và phát hành
 

@@ -317,7 +317,7 @@ code, the XAML and the verification suite all read from the same place (see `Ui/
 
 | Group | Page | Contents |
 | --- | --- | --- |
-| **STAGE DESIGN** | Style | Built-in/user presets + 12 quick switches for every stage layer. |
+| **STAGE DESIGN** | Style | Built-in/user presets + 12 quick switches for every stage layer + the **share code** (COPY CODE / APPLY CODE): the whole look as one line of text you can paste into a chat. |
 | | Theme | Three concert interfaces, motion level, backdrop density, acoustic motes, three "quick look" buttons. |
 | | Notes | Colour (gradient/hand/track/rainbow), shape, glow, fall direction and speed, hold FX, smart modulators. |
 | | Particles | Spark emitter + physics, plasma wisps, flames, rings, impact waves/flashes, falling trails + ghosts, release effects. |
@@ -517,7 +517,7 @@ must find a row by its Vietnamese caption**, **old theme ids (`sakura`/`noir`/`v
 the canonical id when a saved file is loaded**, theme chips, the petal layer, impact wave/flash,
 falling/hold/release FX, the 4 ambient layers, the smart modulators, the 7 theme combinations, per
 hand/track colour modes, dependent rows, search, applying presets, **the F1 shortcuts card opening and
-closing**, **the practice history (`VerifyPracticeHistory`): one JSON line per run in the run folder's
+closing**, **look share codes (`VerifyPresetShareCodes` + `VerifyPresetSharing`): gzip + base64url text behind a version prefix, an exact round trip that **drops the sender's background image path** (a look that used an image falls back to its colour), a code a chat client wrapped still reads, and empty, foreign, other-version, oversized or damaged codes refused with the reason printed in the dock without touching the current settings**, **the practice history (`VerifyPracticeHistory`): one JSON line per run in the run folder's
 `history/practice.jsonl`, newest first and capped, a damaged line skipped, the best take per song, a
 UTF-8 BOM HTML report with the runs and a per-song summary, and a real take recorded exactly once when
 the transport stops**, **hand-split inference (`VerifyHandSplitInference` + `VerifyHandSplitInferenceOnSong`): clustering by sounding time with a middle-C tie-break, one-hand songs and stray short notes overlapping hands and gaps under five semitones leaving the chosen split alone, and the switch writing the inferred value through the dock slider into the song's remembered entry (`SplitInferred`), which is reused instead of measured again**, **the auto practice tempo (`VerifyPracticeTempo`): off by default, a run of misses past the
@@ -598,6 +598,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `Audio/`: `PianoAudioEngine.cs` (`waveOut` PCM output, playback thread and hall reverb) and `SoundFontSynthesizer.cs` (reads `.sf2` sample zones to the SF2 specification).
 - `Midi/`: `MidiFileReader.cs` (Standard MIDI File → notes, tempo map, beat grid, track names) and `MidiDeviceService.cs` (WinMM devices).
 - `Midi/HandSplit.cs`: hand-split inference for a song (two clusters by sounding time, middle C in a wide gap, one-hand songs left alone).
+- `Stage/VisualPresetShare.cs`: the look share code (gzip + base64url, no background image path, hard size limits) and `Ui/MainWindow.Sharing.cs` (the COPY CODE / APPLY CODE buttons on the Style page).
 - `Practice/PracticeHistory.cs`: the practice history (one JSON line per run, newest first, the best take per song, the HTML report) and `Ui/MainWindow.History.cs` (the dock's **History** page).
 - `Library/SongLibrary.cs`: the recent-songs index (`library.json` in the settings folder) — newest first, at most twelve, keyed by path; `Ui/MainWindow.Library.cs` builds the Play dialog's RECENT list and restores the stored values through the sliders.
 - `Video/AviVideoRecorder.cs`: AVI frame writing through Windows Video for Windows.

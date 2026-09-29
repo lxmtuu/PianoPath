@@ -22,7 +22,7 @@ internal static class VerificationSuite
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
-            try { VerifyMidiImport(); VerifyHandSplitInference(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+            try { VerifyMidiImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -151,6 +151,53 @@ internal static class VerificationSuite
         var justEnough = Notes([.. Enumerable.Range(50, 6).Select(pitch => (pitch, 1.0)), .. Enumerable.Range(61, 6).Select(pitch => (pitch, 1.0))]);
         Assert(HandSplit.Infer(justEnough, 54) == HandSplit.MiddleC, "Five empty semitones between the hands are enough to read as a hand separation.");
         Results.Add("PASS hand split: two-hand clustering with middle-C tie-break, one-hand and stray-note protection, weighting by sounding time and a deterministic answer.");
+    }
+
+    /// <summary>
+    /// Share codes are pure data, so they are checked without a window: a look survives the round trip,
+    /// the code carries the version prefix and no local image path, a wrapped code pasted back from a chat
+    /// still reads, and every way a code can be wrong is refused with a reason instead of throwing.
+    /// </summary>
+    private static void VerifyPresetShareCodes()
+    {
+        var look = VisualPresets.FindBuiltIn("Ice Crystal")!.Settings.Clone();
+        look.NoteGlow = 123; look.HandSplitPitch = 55; look.BackgroundImagePath = @"C:\pictures\mine.png"; look.BackgroundMode = "Image";
+        var code = VisualPresetShare.Encode(look);
+        Assert(code.StartsWith(VisualPresetShare.Prefix, StringComparison.Ordinal) && code.Length > 80 && !code.Contains('+') && !code.Contains('/') && !code.Contains('\n'),
+            "A share code should start with the version prefix and be one line of URL-safe text.");
+
+        Assert(VisualPresetShare.TryDecode(code, out var decoded, out var reason) && reason.Length == 0, "A code that was just produced must decode.");
+        Assert(decoded.NoteGlow == 123 && decoded.HandSplitPitch == 55 && decoded.NoteStyle == look.NoteStyle && decoded.PresetName == look.PresetName,
+            "A decoded look should carry every setting of the original, so the two machines render the same stage.");
+        Assert(decoded.BackgroundImagePath == "" && decoded.BackgroundMode == "Solid",
+            "A share code must not carry a local image path; a look that used an image falls back to its solid background.");
+
+        var wrapped = VisualPresetShare.Prefix + "\n  " + code[VisualPresetShare.Prefix.Length..] + "\n";
+        Assert(VisualPresetShare.TryDecode(wrapped, out var unwrapped, out _) && unwrapped.NoteGlow == 123,
+            "A code pasted back from a chat window, wrapped and indented, should still read.");
+
+        Assert(!VisualPresetShare.TryDecode("", out _, out var empty) && empty == "The code is empty."
+                && !VisualPresetShare.TryDecode(null, out _, out var missing) && missing == "The code is empty.",
+            "An empty code should be refused with the reason for it.");
+        Assert(!VisualPresetShare.TryDecode("hello there", out _, out var foreign) && foreign == "This does not look like a Keyflow look code."
+                && !VisualPresetShare.TryDecode("KEYFLOW-LOOK-2:AAAA", out _, out var other) && other == "The code was made by a different version of Keyflow.",
+            "Text that is not a Keyflow look, and a code from another format version, should be refused with different reasons.");
+        Assert(!VisualPresetShare.TryDecode(VisualPresetShare.Prefix + "not base64!!", out _, out var damaged) && damaged == "The code is damaged: its text is not base64."
+                && !VisualPresetShare.TryDecode(VisualPresetShare.Prefix + "AAAA", out _, out var undecodable) && undecodable == "The code is damaged: its payload cannot be decompressed.",
+            "A damaged code should be refused and say whether the text or the payload was the problem.");
+        var junk = Convert.ToBase64String(Encoding.UTF8.GetBytes("this is not gzipped json")).TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        Assert(!VisualPresetShare.TryDecode(VisualPresetShare.Prefix + junk, out _, out var payload) && payload == "The code is damaged: its payload cannot be decompressed.",
+            "Base64 that is not a gzipped look should be refused as a damaged payload.");
+        var tooLong = VisualPresetShare.Prefix + new string('A', VisualPresetShare.MaxCodeLength);
+        Assert(!VisualPresetShare.TryDecode(tooLong, out _, out var oversize) && oversize == "The code is longer than a Keyflow look code can be.",
+            "A code beyond the size limit should be refused before anything is decoded.");
+
+        // A hand-edited payload is clamped like a settings file, so no code can reach an impossible state.
+        var crazy = VisualPresets.NeonViolet(); crazy.NoteFallSpeed = 900_000; crazy.ParticleAmount = 900; crazy.Palette = "not-a-palette";
+        Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(crazy), out var clamped, out _)
+                && clamped.NoteFallSpeed == 1000 && clamped.ParticleAmount == 120 && clamped.Palette == "Spectrum",
+            "A look whose values are out of range should arrive clamped, exactly like a loaded settings file.");
+        Results.Add("PASS look share codes: version-prefixed URL-safe text, exact round trip without the local image path, wrapped codes tolerated, and empty, foreign, oversized and damaged codes refused with a reason.");
     }
 
     private static void VerifyVisualSettings()
@@ -511,6 +558,7 @@ internal static class VerificationSuite
         VerifyDockAccessibility(window);
         VerifySettingsHistory(window);
         VerifySettingsProfile(window);
+        VerifyPresetSharing(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1372,6 +1420,49 @@ internal static class VerificationSuite
         Assert(PracticeHistory.Runs.Count == 0 && host.Children.Count == 0 && empty.Visibility == Visibility.Visible && PracticeHistory.BestFor(hadPath) is null,
             "Clearing the history should leave no runs behind for the next check.");
         Results.Add("PASS practice history: isolated history file with one line per run, newest-first cap, damaged line tolerated, best take per song, UTF-8 HTML report with the per-song summary, and the stop-the-transport recording path.");
+    }
+
+    /// <summary>
+    /// The share box as the user meets it: COPY fills the box with the current look and applying that code
+    /// elsewhere restores it, applying a code that a friend sent carries their settings across, and a code
+    /// that is not a Keyflow look is refused with the reason printed in the dock instead of a dialog.
+    /// </summary>
+    private static void VerifyPresetSharing(MainWindow window)
+    {
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+        var box = (TextBox)window.FindName("ShareCodeBox");
+        var status = (TextBlock)window.FindName("ShareCodeStatusLabel");
+        Assert(box is not null && status is not null, "The Style page should carry the share box and its status line.");
+        var hadGlow = settings.NoteGlow; var hadStyle = settings.NoteStyle; var hadName = settings.PresetName;
+
+        var code = window.RefreshShareCode();
+        Assert(box.Text == code && code.StartsWith(VisualPresetShare.Prefix, StringComparison.Ordinal),
+            "Copying a look should put its code in the box, ready to select.");
+
+        // A different look, then the code that was taken before it: applying the code must bring it back.
+        settings.NoteGlow = 7; settings.NoteStyle = "Fire"; settings.PresetName = "Tuned by hand";
+        Invoke(window, "RefreshSettingControls");
+        Assert(window.ApplyShareCode(code) && Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
+            "Applying a code should carry the look it was taken from into the stage settings.");
+        Assert(box.Text != code && status.Text.Contains(hadName, StringComparison.Ordinal),
+            "After applying, the box should hold the code of what is now on screen and the status line should confirm it.");
+
+        // What another person's code does, end to end.
+        var friend = VisualPresets.FindBuiltIn("Inferno")!.Settings.Clone();
+        friend.NoteGlow = 44; friend.NoteFallSpeed = 321;
+        Assert(window.ApplyShareCode(VisualPresetShare.Encode(friend)) && settings.NoteStyle == "Fire"
+                && Math.Abs(settings.NoteGlow - 44) < .01 && Math.Abs(settings.NoteFallSpeed - 321) < .01,
+            "A code received from somebody else should apply their look to this window.");
+
+        var before = settings.ToJson();
+        Assert(!window.ApplyShareCode("not a code at all") && settings.ToJson() == before,
+            "A code that is not a Keyflow look must be refused without touching the current settings.");
+        Assert(status.Text.Contains(Loc.T("This does not look like a Keyflow look code."), StringComparison.Ordinal),
+            "A refused code should print why it was refused in the dock.");
+
+        settings.NoteGlow = hadGlow; settings.NoteStyle = hadStyle; settings.PresetName = hadName; settings.PresetModified = false;
+        Invoke(window, "RefreshSettingControls");
+        Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
     }
 
     private static void VerifySettingsProfile(MainWindow window)
