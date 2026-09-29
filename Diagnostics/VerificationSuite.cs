@@ -470,7 +470,6 @@ internal static class VerificationSuite
         VerifyDockAccessibility(window);
         VerifySettingsHistory(window);
         VerifySettingsProfile(window);
-        VerifySongLibrary(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -559,6 +558,8 @@ internal static class VerificationSuite
                     {
                         Assert((double)Field(window, "_position") > songStart, "Explicit Play should advance the song playhead in real time.");
                         VerifySongControls(window, stage, mode, tracks);
+                        // Last, because it opens a song of its own: the live-play checks above expect a pristine transport.
+                        VerifySongLibrary(window);
                         completed();
                     }
                     catch (Exception ex) { failed(ex); }
