@@ -1110,7 +1110,6 @@ internal sealed class PianoStage : FrameworkElement
     }
 
     private static Color Blend(Color a, Color b, double t) => Color.FromRgb((byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
-    private static Color ParseColor(string value, Color fallback) { try { return (Color)ColorConverter.ConvertFromString(value)!; } catch { return fallback; } }
     private static byte Alpha(double value) => (byte)Math.Clamp(value, 0, 255);
 
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)

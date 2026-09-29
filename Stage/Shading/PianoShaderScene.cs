@@ -224,15 +224,19 @@ internal sealed class PianoShaderScene
         uint RimColor, uint SkyColor, uint GroundColor)
     {
         /// <summary>Captures the fingerprint of a built scene; doubles round exactly like the "0.###" fields of <see cref="Signature"/>.</summary>
+        /// <remarks><see cref="System.Windows.Media.Color"/> exposes no packed representation, so the five colors are folded by hand.</remarks>
         internal static SceneKey Capture(PianoShaderScene scene) => new(
             scene.BandWidth, scene.BandHeight, Q(scene.RenderScale), Q(scene.CameraHeight), Q(scene.CameraDistance), Q(scene.BedFraction),
             Q(scene.WhiteDepth), Q(scene.BlackDepth), Q(scene.PressDepth), Q(scene.WhiteRoughness), Q(scene.BlackRoughness), Q(scene.Specular),
             Q(scene.KeyLightIntensity), Q(scene.ShadowStrength), Q(scene.Occlusion), Q(scene.RimIntensity), Q(scene.AmbientIntensity),
             Q(scene.EmissiveIntensity), Q(scene.Exposure), Q(scene.Saturation), Q(scene.Contrast), scene.Filmic, Q(scene.LightSize),
-            scene.ShadowSamples, scene.OcclusionSamples, scene.WhiteKeyColor.PackedValue, scene.BlackKeyColor.PackedValue, scene.KeyLightColor.PackedValue,
-            scene.FillColor.PackedValue, scene.RimColor.PackedValue, scene.SkyColor.PackedValue, scene.GroundColor.PackedValue);
+            scene.ShadowSamples, scene.OcclusionSamples, Pack(scene.WhiteKeyColor), Pack(scene.BlackKeyColor), Pack(scene.KeyLightColor),
+            Pack(scene.FillColor), Pack(scene.RimColor), Pack(scene.SkyColor), Pack(scene.GroundColor));
 
         private static double Q(double value) => Math.Round(value, 3, MidpointRounding.AwayFromZero);
+
+        /// <summary>Folds a color into one uint, the same packing the stage's brush cache uses.</summary>
+        private static uint Pack(System.Windows.Media.Color color) => (uint)color.A << 24 | (uint)color.R << 16 | (uint)color.G << 8 | color.B;
     }
 
     private static int[] BuildWhitesBelow()
