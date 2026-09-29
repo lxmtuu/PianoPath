@@ -281,16 +281,16 @@ Phần còn lại của giao diện:
 
 ## Tạo lại ảnh giao diện
 
-Ảnh trong README (và trong `docs/previews/`) do ứng dụng render, không phải ảnh dàn dựng. Hai cách làm mới:
+Ảnh trong README (và trong `docs/previews/`) do ứng dụng render, không phải ảnh dàn dựng.
 
-**Cách 1 — lấy từ CI (khuyến nghị, không cần Windows):** workflow `build.yml` render 6 ảnh ở mỗi lần build và đóng gói thành artifact `keyflow-previews`:
+**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại 6 ảnh bằng chính file `PianoPath.exe` vừa vượt qua `--verify` rồi **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`). Sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Ảnh cũng được upload thành artifact `keyflow-previews` nếu muốn tải rời:
 
 ```powershell
 gh run list --workflow build.yml --limit 5          # tìm run mới nhất
 gh run download <run-id> -n keyflow-previews -D docs/previews
 ```
 
-**Cách 2 — render tại máy:** chạy các lệnh `--snapshot` ở mục [Tham số dòng lệnh](#tham-số-dòng-lệnh). Ảnh chụp tự tắt chuyển động giao diện để kết quả tất định giữa các máy.
+**Thủ công — render tại máy:** chạy các lệnh `--snapshot` ở mục [Tham số dòng lệnh](#tham-số-dòng-lệnh). Ảnh chụp tự tắt chuyển động giao diện để kết quả tất định giữa các máy.
 
 `tools/check_sources.py` sẽ báo lỗi nếu README trỏ tới một ảnh không tồn tại, nên ảnh và tài liệu không thể lệch nhau im lặng.
 
@@ -376,7 +376,7 @@ Hai workflow trong `.github/workflows/`:
 
 | Workflow | Kích hoạt | Nội dung |
 | --- | --- | --- |
-| `build.yml` | push lên `main`/`arena/**`, mọi pull request | Kiểm tra tĩnh (`tools/check_sources.py`) → build Release → chạy `--verify` (**FAIL là đỏ build**) → render 6 ảnh README và upload artifact `keyflow-previews`. |
+| `build.yml` | push lên `main`/`arena/**`, mọi pull request | Kiểm tra tĩnh (`tools/check_sources.py`) → build Release → chạy `--verify` (**FAIL là đỏ build**) → render 6 ảnh README, upload artifact `keyflow-previews` và commit ảnh mới vào nhánh đang build (bỏ qua với pull request). |
 | `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish cả hai kiểu, smoke test bản vừa publish, tải hai file ZIP lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. |
 
 ```powershell
@@ -428,7 +428,7 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 | --- | --- |
 | `docs/UI-SHADER-REVIEW.md` | Rà soát giao diện và đợt nâng cấp shader đổ bóng kiểu Unreal: mô hình shading, camera, cache bake, cách tự kiểm chứng. |
 | `docs/SETTINGS-WIRING-AUDIT.md` | Bảng đối chiếu **mọi** chức năng cài đặt với đoạn code tiêu thụ nó — chứng minh không có setting nào "chết". |
-| `docs/DOCK-NAVIGATION-AUDIT.md` | Đợt tái cấu trúc điều hướng dock: vì sao chia ba nhóm, danh mục trang là nguồn sự thật duy nhất, và các kiểm tra tự động giữ nó không lệch. |
+| `docs/DOCK-NAVIGATION-AUDIT.md` | Đợt rà soát cách sắp xếp chức năng: vì sao dock chia ba nhóm, danh mục trang là nguồn sự thật duy nhất, thẻ phím tắt F1 và đường ảnh README, cùng các kiểm tra tự động giữ chúng không lệch. |
 
 ## Cấu trúc chính
 

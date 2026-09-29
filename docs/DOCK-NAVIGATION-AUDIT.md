@@ -77,7 +77,11 @@ internal static readonly string[] Order = [.. Sections.SelectMany(section => sec
 | `docs/previews/shortcuts.png` | `--snapshot … --compact --shortcuts` |
 
 Để ảnh tất định, chế độ chụp tự tắt chuyển động giao diện (`DisableChromeMotion`) và tắt tự ẩn
-(`AutoHideChrome = false`), đồng thời có watchdog bảo đảm luôn ghi ra file. Cập nhật ảnh đã commit:
+(`AutoHideChrome = false`), đồng thời có watchdog bảo đảm luôn ghi ra file.
+
+Sau khi render, CI **commit thẳng ảnh mới vào nhánh vừa build** (`Refresh the README previews from
+CI [skip ci]`, bỏ qua với pull request và với chính commit đó nên không thể lặp), đồng thời upload
+artifact `keyflow-previews`. Muốn lấy ảnh rời hoặc render tại máy:
 
 ```powershell
 gh run download <run-id> -n keyflow-previews -D docs/previews
