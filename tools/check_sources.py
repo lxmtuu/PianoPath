@@ -262,6 +262,23 @@ def scan_settings_navigation():
     return errors
 
 
+def scan_icon_glyphs():
+    """Every control template draws its icon with ``Data="{TemplateBinding Tag}"``. The icon set mixes
+    filled shapes (``IconPlay``, ``IconFolder``) with open outlines (``IconClose``, ``IconMinimize``),
+    so a template that paints with ``Fill`` only renders the outline icons as nothing at all — the play
+    dialog lost its close glyph exactly that way. Both properties must be bound."""
+    errors = []
+    app_xaml = (ROOT / "App.xaml").read_text(encoding="utf-8")
+    for match in re.finditer(r'<Path[^>]*Data="\{TemplateBinding Tag\}"[^>]*/>', app_xaml):
+        glyph = match.group(0)
+        line = app_xaml[: match.start()].count("\n") + 1
+        missing = [name for name in ("Fill", "Stroke") if f"{name}=" not in glyph]
+        if missing:
+            errors.append(f"App.xaml:{line}: an icon glyph paints with {' and '.join('no ' + name for name in missing)}; "
+                          "bind both Fill and Stroke so filled and outline icons both render")
+    return errors
+
+
 def scan_theme_tokens():
     """``ShellThemeManager`` writes every theme token into ``Application.Resources`` at runtime. Each
     one needs a matching default in ``App.xaml``, otherwise the very first frame (before the theme is
@@ -323,10 +340,11 @@ def main():
     errors.extend(xaml_errors)
     errors.extend(scan_xaml_bindings(cs_files, xaml_files, names, keys))
     errors.extend(scan_settings_navigation())
+    errors.extend(scan_icon_glyphs())
     errors.extend(scan_theme_tokens())
     errors.extend(scan_readme())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
-    print("checked the dock navigation catalogue against the XAML tab strip, the theme tokens against App.xaml and every README link")
+    print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:
