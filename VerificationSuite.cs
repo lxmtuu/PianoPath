@@ -656,7 +656,9 @@ internal static class VerificationSuite
         Assert(stage.ShadedBakeCount == bakes, "The baked keyboard must be reused between frames; only a settings or size change may re-bake it.");
         shading.SelectedValue = "Off";
         ForceStageRender(stage);
-        Assert(!stage.IsShadedKeyboardActive, "Turning the shading engine off must fall back to the flat vector keyboard.");
+        var liveVisual = (PianoVisualSettings)Field(stage, "_visual");
+        Assert(!stage.IsShadedKeyboardActive,
+            $"Turning the shading engine off must fall back to the flat vector keyboard (quality={liveVisual.ShadingQuality}, selected={shading.SelectedValue}, items={shading.Items.Count}).");
         shading.SelectedValue = "Balanced";
         ForceStageRender(stage);
         Assert(stage.IsShadedKeyboardActive && stage.ShadedBakeCount > bakes, "Switching the shading engine back on should re-bake and restore the ray-traced keyboard.");
