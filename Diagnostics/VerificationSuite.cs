@@ -607,8 +607,12 @@ internal static class VerificationSuite
         // must match that order, and the header printed above a page must be the header of the section
         // that owns it — so a page can never sit under a caption the code does not know about.
         var headers = tabs.Items.Cast<TabItem>().Select(item => item.Header.ToString()).ToArray();
-        Assert(headers.SequenceEqual(SettingsPages.Order) && SettingsPages.Order.SequenceEqual(SettingsPages.Sections.SelectMany(section => section.Pages)),
-            "The dock should list exactly the pages of the settings catalogue, in catalogue order.");
+        // A header may decorate the page name (Camera → "Camera & FX") but must start with it, which
+        // is the same tolerance tools/check_sources.py applies to the markup.
+        var pagesMatch = headers.Length == SettingsPages.Order.Length
+            && headers.Select((header, index) => header == SettingsPages.Order[index] || header.StartsWith(SettingsPages.Order[index] + " ", StringComparison.Ordinal)).All(match => match);
+        Assert(pagesMatch && SettingsPages.Order.SequenceEqual(SettingsPages.Sections.SelectMany(section => section.Pages)),
+            $"The dock should list exactly the pages of the settings catalogue, in catalogue order (found {string.Join(", ", headers)}).");
         foreach (var section in SettingsPages.Sections)
         {
             var first = SettingsPages.IndexOf(section.Pages[0]);
