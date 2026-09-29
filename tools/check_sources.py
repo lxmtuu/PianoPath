@@ -287,6 +287,26 @@ def scan_icon_glyphs():
     return errors
 
 
+def scan_accessible_names():
+    """A button whose caption is a glyph or a single letter is anonymous to a screen reader. The WPF
+    layer mirrors the tooltip into ``AutomationProperties.Name`` at load time (see ``Loc.Track``), so
+    the static rule is: every glyph-only button carries a tooltip or an explicit accessible name. A new
+    icon button without either would ship a control that assistive technology cannot announce."""
+    errors = []
+    xaml = (ROOT / "Ui" / "MainWindow.xaml").read_text(encoding="utf-8")
+    for match in re.finditer(r"<Button\b[^>]*>", xaml):
+        tag = match.group(0)
+        line = xaml[: match.start()].count("\n") + 1
+        content = re.search(r'Content="([^"]*)"', tag)
+        text = content.group(1).replace("&amp;", "&") if content else ""
+        named = re.search(r'(ToolTip|AutomationProperties\.Name)="[^"]+"', tag) is not None
+        if content is None or len([char for char in text if char.isalpha()]) < 2:
+            if not named:
+                errors.append(f"Ui/MainWindow.xaml:{line}: a button shows “{text or 'an icon'}”, which is not a caption; "
+                              "add a ToolTip (the screen reader reads it) or AutomationProperties.Name")
+    return errors
+
+
 def scan_theme_tokens():
     """``ShellThemeManager`` writes every theme token into ``Application.Resources`` at runtime. Each
     one needs a matching default in ``App.xaml``, otherwise the very first frame (before the theme is
@@ -557,11 +577,13 @@ def scan_localization(cs_files):
     markup = ROOT / "Ui" / "MainWindow.xaml"
     if markup.exists():
         xaml = markup.read_text(encoding="utf-8")
-        for match in re.finditer(r"<[A-Za-z][\w.]*((?:\s+[\w:]+=\"[^\"]*\")+)[^>]*?/?>", xaml):
+        # Attribute names may carry a dot (AutomationProperties.Name, local:Loc.Localize), so the
+        # qualified-name pattern has to allow one or the whole tag falls out of the match.
+        for match in re.finditer(r"<[A-Za-z][\w.]*((?:\s+[\w:.]+=\"[^\"]*\")+)[^>]*?/?>", xaml):
             attrs = match.group(1)
             if 'local:Loc.Localize="True"' not in attrs:
                 continue
-            for attr in re.finditer(r'(Text|Content|Header|ToolTip|Title)="([^"]*)"', attrs):
+            for attr in re.finditer(r'(Text|Content|Header|ToolTip|Title|AutomationProperties\.Name)="([^"]*)"', attrs):
                 value = (attr.group(2).replace("&amp;", "&").replace("&lt;", "<")
                          .replace("&gt;", ">").replace("&quot;", '"'))
                 # A single glyph (the ↺ of the speed reset) is not a sentence and the runtime skips it too.
@@ -714,6 +736,7 @@ def main():
     errors.extend(scan_xaml_bindings(cs_files, xaml_files, names, keys))
     errors.extend(scan_settings_navigation())
     errors.extend(scan_icon_glyphs())
+    errors.extend(scan_accessible_names())
     errors.extend(scan_theme_tokens())
     errors.extend(scan_readme())
     errors.extend(scan_cli_and_samples())

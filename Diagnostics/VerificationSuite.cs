@@ -3,6 +3,7 @@ using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -465,6 +466,9 @@ internal static class VerificationSuite
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
         VerifySettingsDock(window, stage, visualSettings);
         VerifyLanguageSwitching(window);
+        VerifyAccessibility(window);
+        VerifySettingsHistory(window);
+        VerifySettingsProfile(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -714,6 +718,19 @@ internal static class VerificationSuite
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
         Assert(rows.Count > 40 && rows.Count(r => r.Visibility == Visibility.Visible) < rows.Count / 2, "Searching should hide the rows that do not match.");
+        // The search answers to the words people actually type: the label, the synonyms of the setting
+        // and the setting's own name, in any order and in either language (see SearchSynonyms).
+        var speedRow = RowElement(nameof(PianoVisualSettings.NoteFallSpeed));
+        search.Text = "tempo";
+        Assert(speedRow.Visibility == Visibility.Visible, "The dock search should find the fall-speed slider by the synonym “tempo”, not only by its label.");
+        search.Text = "speed fall";
+        Assert(speedRow.Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.NoteFallSpeed)).Visibility == Visibility.Visible,
+            "Several words should match in any order, whichever row they belong to.");
+        search.Text = "tempo wisp";
+        Assert(speedRow.Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.ShowWisps)).Visibility == Visibility.Visible,
+            "A query mixing words of two different rows should keep both rows on screen.");
+        search.Text = "zzz-nothing-matches";
+        Assert(rows.All(r => r.Visibility == Visibility.Collapsed), "A query that matches nothing should hide every row.");
         search.Text = "";
         Assert(rows.Count(r => r.Visibility == Visibility.Visible) > rows.Count / 2, "Clearing the search should restore the rows.");
         var presetList = (ListBox)window.FindName("PresetList");
@@ -759,11 +776,18 @@ internal static class VerificationSuite
         Assert(firstHeader() == Loc.T("Style"), "A window that is already open must repaint its labels when the language changes.");
         // The row of the "Falling notes" switch is found by its translated caption, not only by English.
         var search = (TextBox)window.FindName("SettingsSearchBox");
-        search.Text = vietnameseCaption;
         var rows = (System.Collections.IList)Field(window, "_settingRows");
-        var row = rows.Cast<object>().First(candidate => (string?)candidate.GetType().GetField("Property")!.GetValue(candidate) == nameof(PianoVisualSettings.ShowNotes));
-        Assert(((FrameworkElement)row.GetType().GetField("Element")!.GetValue(row)!).Visibility == Visibility.Visible,
+        FrameworkElement RowElement(string property) => rows.Cast<object>()
+            .Where(candidate => (string?)candidate.GetType().GetField("Property")!.GetValue(candidate) == property)
+            .Select(candidate => (FrameworkElement)candidate.GetType().GetField("Element")!.GetValue(candidate)!).First();
+        search.Text = vietnameseCaption;
+        Assert(RowElement(nameof(PianoVisualSettings.ShowNotes)).Visibility == Visibility.Visible,
             "The settings search should match a row by its translated caption as well as by the English one.");
+        // Vietnamese words that are not part of any English caption still reach the row, because every
+        // phrase of a row is matched in both languages: "tốc độ" finds the "Fall speed" slider.
+        search.Text = "tốc độ";
+        Assert(RowElement(nameof(PianoVisualSettings.NoteFallSpeed)).Visibility == Visibility.Visible,
+            "The dock search should answer to words of the active language as well as to English ones.");
         search.Text = "";
         Assert(Loc.UntranslatedKeys.Count == 0,
             $"Every string the interface printed while in Vietnamese should have a translation ({Loc.UntranslatedKeys.FirstOrDefault() ?? "-"}).");
@@ -780,6 +804,170 @@ internal static class VerificationSuite
         Loc.Apply("");
         Results.Add($"PASS localization: {Languages.All.Length} languages cover all {StringsEnglish.Table.Count} keys, a live switch repaints the open dock in both directions and the settings search answers to either language.");
     }
+
+    /// <summary>
+    /// Accessibility: a control that only shows a glyph has no accessible name of its own, so it takes
+    /// one from the sentence it already carries (the dock builders name their rows, and
+    /// <see cref="Loc.Track"/> mirrors a translated tooltip into <c>AutomationProperties.Name</c> for the
+    /// marked controls). The check walks the window the way a screen reader does, then exercises the
+    /// high-contrast branch of the theme manager, which a CI runner never actually turns on.
+    /// </summary>
+    private static void VerifyAccessibility(MainWindow window)
+    {
+        var controls = new List<FrameworkElement>();
+        var seen = new HashSet<DependencyObject>();
+        void Walk(DependencyObject node)
+        {
+            if (!seen.Add(node)) return;
+            // Template parts (the thumb of a slider, the button of a combo box) carry their own peer;
+            // only the controls the application builds itself are checked here.
+            if (node is FrameworkElement { TemplatedParent: null } element) controls.Add(element);
+            foreach (var child in LogicalTreeHelper.GetChildren(node)) if (child is DependencyObject logical) Walk(logical);
+            for (var index = 0; index < VisualTreeHelper.GetChildrenCount(node); index++) Walk(VisualTreeHelper.GetChild(node, index));
+        }
+        Walk(window);
+        static string VisibleLabel(FrameworkElement element) => element switch
+        {
+            ContentControl { Content: string text } => text,
+            TextBlock { Text: string text } => text,
+            _ => ""
+        };
+        static bool Readable(FrameworkElement element) =>
+            VisibleLabel(element).Count(char.IsLetter) >= 2 || !string.IsNullOrWhiteSpace(AutomationProperties.GetName(element));
+        var interactive = controls.Where(element => element is ButtonBase or TextBox or Slider or ComboBox or ListBox).ToList();
+        var unnamed = interactive.Where(element => !Readable(element))
+            .Select(element => element.GetType().Name + (string.IsNullOrEmpty(element.Name) ? "" : $" ({element.Name})"))
+            .ToList();
+        Assert(unnamed.Count == 0,
+            $"{unnamed.Count} interactive control(s) have no accessible name: {string.Join(", ", unnamed.Take(6))}.");
+
+        // The glyphs that used to be anonymous: the loop buttons show "A" / "B" / "×" and the tooltip a
+        // screen reader hears is the localized sentence, not the letter.
+        FrameworkElement? ByContent(string content) => controls.FirstOrDefault(element => element is ContentControl { Content: string text } && text == content);
+        var loopA = ByContent("A"); var loopB = ByContent("B"); var clearLoop = ByContent("×");
+        Assert(loopA is not null && loopB is not null && clearLoop is not null,
+            "The transport should expose the A / B / × loop buttons that this check names.");
+        Assert(AutomationProperties.GetName(loopA!) == Loc.T("Set the loop start at the playhead")
+                && AutomationProperties.GetName(loopB!) == Loc.T("Set the loop end at the playhead")
+                && AutomationProperties.GetName(clearLoop!) == Loc.T("Clear the loop"),
+            "The loop glyph buttons should take their screen-reader name from their localized tooltip.");
+        // The generated rows are named after their own caption, so the whole design dock is usable with
+        // a screen reader, and the names follow the interface language like every other label.
+        var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        Assert(AutomationProperties.GetName(sliders[nameof(PianoVisualSettings.NoteFallSpeed)]) == Loc.T("Fall speed"),
+            "A generated slider should be named after its row label, in the active language.");
+        var combos = (Dictionary<string, ComboBox>)Field(window, "_visualChoices");
+        Assert(AutomationProperties.GetName(combos[nameof(PianoVisualSettings.NoteStyle)]) == Loc.T("Note style"),
+            "A generated picker should be named after its row label, in the active language.");
+
+        var dock = (Border)window.FindName("SettingsPanel");
+        Assert(KeyboardNavigation.GetTabNavigation(dock) == KeyboardNavigationMode.Cycle,
+            "The settings dock should keep Tab inside its own page instead of losing focus to the stage.");
+
+        // High contrast: the published colours follow SystemColors while the user's chosen theme stays
+        // the stored one, so turning the system setting off republishes it without touching the settings.
+        var chosen = ShellThemeManager.Current.Id;
+        try
+        {
+            ShellThemeManager.ForceHighContrast = true;
+            ShellThemeManager.Apply(chosen);
+            var windowBrush = Application.Current.Resources["WindowBrush"] as SolidColorBrush;
+            Assert(ShellThemeManager.IsHighContrast
+                    && (Color)Application.Current.Resources["AccentColor"] == SystemColors.HighlightColor
+                    && windowBrush is not null && windowBrush.Color == SystemColors.WindowColor,
+                "With high contrast on, the chrome must be painted from the Windows system colours.");
+            Assert(ShellThemeManager.Current.Id == ShellThemes.Find(chosen).Id,
+                "High contrast must not overwrite the theme the user chose.");
+        }
+        finally { ShellThemeManager.ForceHighContrast = false; ShellThemeManager.Apply(chosen); }
+        Assert(!ShellThemeManager.IsHighContrast && ShellThemeManager.Current.Id == ShellThemes.Find(chosen).Id
+                && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.Find(chosen).Accent,
+            "Turning high contrast off should republish the chosen concert theme.");
+        Results.Add("PASS accessibility: every interactive control carries a readable, localized name (glyph buttons through their tooltip, generated rows through their caption), the dock keeps Tab inside its page, and the high-contrast palette follows the Windows system colours without changing the chosen theme.");
+    }
+
+    /// <summary>
+    /// Undo / redo: the dock keeps the last 32 states of <see cref="PianoVisualSettings"/> as JSON. A
+    /// change is committed when the controls settle (the settings-save timer), which is what makes a
+    /// slow slider drag one step; an undo moves the controls as well as the stored values, so stepping
+    /// back is indistinguishable from the user having set the values again.
+    /// </summary>
+    private static void VerifySettingsHistory(MainWindow window)
+    {
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+        var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        var glow = sliders[nameof(PianoVisualSettings.NoteGlow)];
+        var width = sliders[nameof(PianoVisualSettings.NoteWidth)];
+        var fall = sliders[nameof(PianoVisualSettings.NoteFallSpeed)];
+        var (wasGlow, wasWidth, wasFall) = (glow.Value, width.Value, fall.Value);
+        // Start from a clean slate: the earlier checks changed settings on purpose, and this one is
+        // about the history itself, so it takes the current state as the only starting point.
+        Invoke(window, "StartHistory");
+        var before = settings.ToJson();
+        glow.Value = Math.Clamp(wasGlow + 21, glow.Minimum, glow.Maximum); Commit(window);
+        width.Value = Math.Clamp(wasWidth - 11, width.Minimum, width.Maximum); Commit(window);
+        fall.Value = Math.Clamp(wasFall + 37, fall.Minimum, fall.Maximum); Commit(window);
+        var changed = settings.ToJson();
+        Assert(changed != before, "Moving three sliders should change the settings JSON.");
+        for (var step = 0; step < 3; step++) Invoke(window, "UndoVisualSettings");
+        Assert(settings.ToJson() == before, "Three undo steps should bring the settings JSON back to the starting state.");
+        Assert(Math.Abs(glow.Value - wasGlow) < .001 && Math.Abs(width.Value - wasWidth) < .001 && Math.Abs(fall.Value - wasFall) < .001,
+            "An undo should move the dock controls back, not only the stored values.");
+        for (var step = 0; step < 3; step++) Invoke(window, "RedoVisualSettings");
+        Assert(settings.ToJson() == changed, "Three redo steps should replay the three changes exactly.");
+        for (var step = 0; step < 3; step++) Invoke(window, "UndoVisualSettings");
+        Assert(settings.ToJson() == before, "A replayed change should be undoable like any other.");
+        Invoke(window, "UndoVisualSettings");
+        Assert(settings.ToJson() == before, "Undoing past the oldest state should leave the settings alone instead of corrupting them.");
+        // Three rapid moves of one slider never settle: the history has to treat them as a single step.
+        var glideFrom = settings.ToJson(); var glide = glow.Value;
+        glow.Value = Math.Clamp(glide + 5, glow.Minimum, glow.Maximum);
+        glow.Value = Math.Clamp(glide + 10, glow.Minimum, glow.Maximum);
+        glow.Value = Math.Clamp(glide + 15, glow.Minimum, glow.Maximum);
+        Invoke(window, "UndoVisualSettings");
+        Assert(settings.ToJson() == glideFrom, "A slider drag that never settled should undo as one step.");
+        Results.Add("PASS design history: settled changes undo and redo as exact JSON states, the controls follow, a drag is one step, and stepping past the oldest state is harmless.");
+    }
+
+    /// <summary>
+    /// The settings profile: one JSON file carrying the stage settings, the interface language and the
+    /// shell theme through the same methods the Import / Export buttons call. A file that is not a
+    /// profile is rejected, and an id this build does not ship falls back to English / the default look
+    /// instead of half-applying.
+    /// </summary>
+    private static void VerifySettingsProfile(MainWindow window)
+    {
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+        var import = window.GetType().GetMethod("ImportProfile", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        bool Import(string path) => (bool)import.Invoke(window, [path])!;
+        var folder = Path.Combine(Path.GetTempPath(), "keyflow-verify-profile");
+        Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "roundtrip.json");
+        var original = settings.ToJson();
+        var originalLanguage = Languages.Find(settings.Language).Id;
+        var originalTheme = ShellThemeManager.Current.Id;
+        var probe = settings.Clone();
+        probe.NoteGlow = 141; probe.Language = "vi-VN"; probe.ShellTheme = ShellThemes.ConcertNoirId;
+        File.WriteAllText(path, SettingsProfile.Capture(probe, ShellThemes.ConcertNoirId).ToJson());
+        var reread = SettingsProfile.FromJson(File.ReadAllText(path));
+        Assert(reread is not null && reread.Visual.NoteGlow == 141 && reread.Language == "vi-VN" && reread.ShellTheme == ShellThemes.ConcertNoirId,
+            "A profile should carry the stage settings, the language and the shell theme through the file.");
+        Assert(SettingsProfile.FromJson("{\"kind\":\"something-else\"}") is null && SettingsProfile.FromJson("not json at all") is null,
+            "A JSON file that is not a Keyflow profile must be rejected instead of half-applied.");
+        Assert(Import(path), "A profile this build wrote should import through the same path the button calls.");
+        Assert(settings.NoteGlow == 141 && ShellThemeManager.Current.Id == ShellThemes.ConcertNoirId && Loc.Current.Id == "vi",
+            "Importing a profile should paint the live window: stage settings, shell theme and interface language.");
+        File.WriteAllText(path, new SettingsProfile(settings.Clone(), "xx-XX", ShellThemes.VelvetGoldId).ToJson());
+        Assert(Import(path) && Loc.Current.Id == "en",
+            "A language id this build does not ship should fall back to English rather than to a half-translated window.");
+        File.WriteAllText(path, new SettingsProfile(PianoVisualSettings.FromJson(original), originalLanguage, originalTheme).ToJson());
+        Assert(Import(path) && settings.NoteGlow == PianoVisualSettings.FromJson(original).NoteGlow && ShellThemeManager.Current.Id == originalTheme,
+            "Importing the state the check started from should put the window back exactly as it was.");
+        Directory.Delete(folder, true);
+        Results.Add("PASS settings profile: the file round-trips the stage settings, the theme and the language, rejects foreign JSON, and falls back to English for an unknown language.");
+    }
+
+    private static void Commit(MainWindow window) => Invoke(window, "CommitHistory");
 
     /// <summary>
     /// Impact phase FX (effects-redesign v1): the Particles page exposes the wave style choice and

@@ -15,15 +15,19 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 
 ## 1. P0 — đóng những gì đang mở (ngắn hạn, rủi ro thấp)
 
-| # | Việc | Ghi chú kỹ thuật | Cách kiểm chứng |
-|---|---|---|---|
-| 1 | **Hoàn tất đa ngôn ngữ** — chip phím tắt F1 qua `Loc.T` (năm nhãn mô tả, không phải phím thật), `--verify` chặn thêm `UnknownKeys` thành lỗi thay vì `NOTE` | Xem `docs/LOCALIZATION.md` §9; `VisualPreset` đã tách "tên đã lưu" và nhãn hiển thị qua `DisplayName` | `tools/check_sources.py` + `--verify` |
-| 2 | **Song ngữ cho tài liệu** | `README.md` giữ tiếng Việt; thêm `README.en.md` dịch 1‑1, mỗi ảnh dùng lại từ `docs/previews/`. `scan_readme` trong checker quét **cả hai** tệp | `python tools/check_sources.py` |
-| 3 | **Ngôn ngữ cho bộ cài** | `installer/Keyflow.iss` khai một tệp `.isl`; thêm `installer\Languages\Vietnamese.isl` rồi chọn ngôn ngữ theo `Language` đã lưu hoặc theo Windows | Build `release.yml` thêm bước ISCC để ảnh installer cũng được kiểm |
-| 4 | **Accessibility** | `AutomationProperties.Name` cho mọi nút chỉ có glyph (⟳, A/B, các nút icon), `KeyboardNavigation.TabNavigation` trong dock, font scale không vỡ layout (`--compact` 1080×700 là một case test), màu theo `SystemParameters.HighContrast` qua `ShellThemeManager` | Thêm `VerifyAccessibility` vào `--verify`: mỗi control có `AutomationProperties.Name` hoặc text, và không token màu nào bị thiếu khi bật high contrast |
-| 5 | **Undo / redo cho bàn thiết kế** | `PianoVisualSettings.Clone()` đã có; giữ stack 32 ảnh JSON (`ToJson`), `Ctrl+Z` / `Ctrl+Shift+Z`, chạy qua đúng `ApplyVisualSettings` | `--verify`: đổi 3 setting → undo 3 lần → JSON trước/sau bằng nhau |
-| 6 | **Hồ sơ cài đặt** (import/export một tệp) | `Keyflow.profile.json` gom `visual-settings.json` + preset đang dùng + `Language` + `ShellTheme`; cho phép kéo‑thả tệp vào cửa sổ | `--verify`: round‑trip tệp hồ sơ, kể cả khi `Language` là ngôn ngữ chưa có trong build → rơi về `en` |
-| 7 | **Tìm kiếm thông minh hơn trong dock** | `SettingRow.SearchKeys` đã có; thêm bảng từ đồng nghĩa (mỗi key một dòng `"speed tempo"`), tokenize theo dấu cách, highlight phần khớp bằng `Run` | `--verify`: query `tempo` ra slider *Fall speed*, query `nốt rơi` (tiếng Việt) ra cùng hàng |
+> **Trạng thái 2026‑09:** các mục 1, 2, 4, 5, 6, 7 đã xong và **đã có lớp kiểm chứng** (`tools/check_sources.py`
+> và/hoặc `--verify`); riêng mục 3 (bản dịch bộ cài) còn lại — xem ghi chú trong dòng của nó.
+> Mục nào xong thì dòng tương ứng ở bảng dưới được ghi lại kèm bằng chứng kiểm chứng.
+
+| # | Việc | Ghi chú kỹ thuật | Cách kiểm chứng | Trạng thái |
+|---|---|---|---|---|
+| 1 | ~~**Hoàn tất đa ngôn ngữ**~~ — đã xong: chip phím tắt F1 (nhãn mô tả) đã qua `Loc`, `UnknownKeys` giờ là lỗi trong `--verify` | Xem `docs/LOCALIZATION.md` §9; `VisualPreset` đã tách "tên đã lưu" và nhãn hiển thị qua `DisplayName` | `tools/check_sources.py` + `--verify` | ✅ xong |
+| 2 | ~~**Song ngữ cho tài liệu**~~ — đã xong: `README.md` (tiếng Việt) + `README.en.md` (tiếng Anh), hai bản trỏ nhau | `README.md` giữ tiếng Việt; thêm `README.en.md` dịch 1‑1, mỗi ảnh dùng lại từ `docs/previews/`. `scan_readme` trong checker quét **cả hai** tệp | `python tools/check_sources.py` | ✅ xong |
+| 3 | **Ngôn ngữ cho bộ cài** — bước tiếp theo: thêm `installer\Languages\Vietnamese.isl` (tệp **một phần**, liệt kê sau `compiler:Default.isl` để ghi đè vài chục câu hiển thị nhiều nhất) + `LanguageID: $041e`, rồi thêm bước ISCC vào `build.yml` (chạy trên stub `publish\win-x64` để câu lệnh và mọi tên message được máy kiểm mỗi lần push, thay vì đợi tới lúc release) | Build `release.yml` thêm bước ISCC để ảnh installer cũng được kiểm | ⏳ còn |
+| 4 | **Accessibility** — bước 1 đã xong: `AutomationProperties.Name` cho nút chỉ có glyph, tên dịch được cho mọi hàng sinh tự động, `KeyboardNavigation.TabNavigation="Cycle"` trong dock, palette `SystemColors` khi Windows bật high contrast. Còn lại: font scale (`--compact` 1080×700) và thứ tự tiêu điểm theo bàn phím (tab order) từng trang | `VerifyAccessibility` trong `--verify` + luật `scan_accessible_names` trong checker: nút chỉ có glyph phải có ToolTip hoặc tên | ✅ xong (bước 1) |
+| 5 | ~~**Undo / redo cho bàn thiết kế**~~ — đã xong: stack 32 ảnh JSON, `Ctrl+Z`/`Ctrl+Shift+Z`/`Ctrl+Y`, commit khi điều khiển đứng yên nên một lần kéo là một bước, khôi phục qua `CopyFrom` + `RefreshSettingControls` | `VerifySettingsHistory` trong `--verify`: 3 thay đổi → 3 undo → JSON bằng nhau, control chạy theo, kéo liên tục là một bước | ✅ xong |
+| 6 | ~~**Hồ sơ cài đặt**~~ — đã xong: `Keyflow.profile.json` (`Profile/SettingsProfile.cs`) gom cài đặt sân khấu + `Language` + `ShellTheme`; nhập/xuất ở trang General, kéo‑thả `.json`/`.mid`/ảnh vào cửa sổ | `VerifySettingsProfile` trong `--verify`: round‑trip tệp, từ chối JSON lạ, ngôn ngữ không có trong build → `en` | ✅ xong |
+| 7 | ~~**Tìm kiếm thông minh hơn trong dock**~~ — đã xong: `SearchSynonyms` theo từng setting, khớp theo token (giao), tên setting là lưới an toàn, phần khớp được tô accent bằng `Run` | `--verify`: `tempo` ra *Fall speed*, `tốc độ` (tiếng Việt) ra cùng hàng, query rỗng trả lại nhãn thường | ✅ xong |
 
 ## 2. P1 — giá trị thật cho người làm video và người luyện đàn
 

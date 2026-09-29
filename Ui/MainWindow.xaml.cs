@@ -78,8 +78,11 @@ public partial class MainWindow : Window
         SettingsTabs.Loaded += (_, _) => RefreshSectionHeaders();
         Stage.SetVisualSettings(_visualSettings);
         _chromeTimer.Tick += (_, _) => CheckChromeIdle();
-        _settingsSaveTimer.Tick += (_, _) => { _settingsSaveTimer.Stop(); SaveVisualSettings(); };
+        // The same idle tick that writes the settings file closes the undo step in progress: one
+        // settled change (or one slider drag) is one history point.
+        _settingsSaveTimer.Tick += (_, _) => { _settingsSaveTimer.Stop(); CommitHistory(); SaveVisualSettings(); };
         _uiReady = true;
+        StartHistory();
         _notes = _allNotes;
         FrameClock.Shared.Tick += OnFrame;
         _midi.NoteChanged += (pitch, velocity, on) => Dispatcher.BeginInvoke(() =>
@@ -264,11 +267,17 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFileDialog { Filter = Loc.T("MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*") };
         if (dialog.ShowDialog(this) != true) return;
+        OpenMidiFile(dialog.FileName);
+    }
+
+    /// <summary>Loads a Standard MIDI file — from the open dialog, the Play dialog or a drop on the window.</summary>
+    internal void OpenMidiFile(string path)
+    {
         try
         {
-            Stop(); var song = MidiReader.ReadSong(dialog.FileName); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
+            Stop(); var song = MidiReader.ReadSong(path); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
             _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
-            _songLabel = Path.GetFileNameWithoutExtension(dialog.FileName);
+            _songLabel = Path.GetFileNameWithoutExtension(path);
             Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
             _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
         }
@@ -382,6 +391,13 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.F11) { ToggleFullScreen(); e.Handled = true; return; }
         if (e.Key == Key.F1) { ToggleShortcuts(); e.Handled = true; return; }
+        // Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) walk the design dock's history. A text box keeps its own
+        // undo, so the shortcut only takes over when the focus is not in one.
+        if (e.Key is Key.Z or Key.Y && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.FocusedElement is not TextBox)
+        {
+            if (e.Key == Key.Y || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) RedoVisualSettings(); else UndoVisualSettings();
+            e.Handled = true; return;
+        }
         if (e.Key == Key.Escape)
         {
             // Escape closes the help card first, then clears an active settings search, then toggles

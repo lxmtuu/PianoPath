@@ -1,8 +1,11 @@
 using Microsoft.Win32;
 using System.Globalization;
 using System.IO;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Windows;
+using System.Windows.Documents;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -26,6 +29,18 @@ public partial class MainWindow
         public required Border Card;
         public string? Property;
         public Func<bool>? VisibleWhen;
+        /// <summary>
+        /// The label element this row paints its caption into, so the search can highlight the word it
+        /// matched (see <see cref="SetCaption"/>). Rows without a caption (a button row) leave it null.
+        /// </summary>
+        public (DependencyObject Target, DependencyProperty Property, string Key)? Caption;
+
+        /// <summary>Notes which label element holds the row caption; returns the row so builders can chain.</summary>
+        public SettingRow WithCaption(DependencyObject target, DependencyProperty property, string key)
+        {
+            Caption = (target, property, key);
+            return this;
+        }
     }
 
     private readonly List<SettingRow> _settingRows = [];
@@ -47,6 +62,67 @@ public partial class MainWindow
     private bool _presetListLoading;
     private static readonly Regex NoteNamePattern = new(@"^\s*([A-Ga-g])\s*([#♯bB]?)\s*(-?\d)\s*$", RegexOptions.Compiled);
     private static readonly PianoVisualSettings DefaultVisualSettings = VisualPresets.NeonViolet();
+
+    /// <summary>
+    /// Extra words a row answers to besides its own captions. The search box runs over these, the row's
+    /// search keys and the name of the setting itself, so people find a slider by the word they already
+    /// know ("tempo" for the fall speed, "brightness" for a glow amount, "fps" for the recorder) without
+    /// anyone renaming a label or inventing a fake row. A query may mix several words in any order, and
+    /// translated captions match too, through <see cref="Loc"/> — see <see cref="MatchesSearch"/>.
+    /// </summary>
+    private static readonly Dictionary<string, string> SearchSynonyms = new(StringComparer.Ordinal)
+    {
+        [nameof(PianoVisualSettings.NoteFallSpeed)] = "tempo speed velocity scroll fast slow fps",
+        [nameof(PianoVisualSettings.NoteGlow)] = "brightness halo shine luminance",
+        [nameof(PianoVisualSettings.NoteTint)] = "opacity alpha transparency",
+        [nameof(PianoVisualSettings.NoteWidth)] = "thickness bar lane size",
+        [nameof(PianoVisualSettings.NoteRoundness)] = "corner radius curvature",
+        [nameof(PianoVisualSettings.NoteEdge)] = "outline stroke border brightness",
+        [nameof(PianoVisualSettings.NoteEdgeWidth)] = "outline stroke thickness",
+        [nameof(PianoVisualSettings.NoteMinLength)] = "short duration staccato",
+        [nameof(PianoVisualSettings.NoteRefraction)] = "highlight sheen gloss",
+        [nameof(PianoVisualSettings.HandSplitPitch)] = "split middle c hand division",
+        [nameof(PianoVisualSettings.ZoneSplitPitch)] = "split zone bass treble",
+        [nameof(PianoVisualSettings.RecordingFrameRate)] = "fps frames rate video",
+        [nameof(PianoVisualSettings.RecordingResolution)] = "size 720p 1080p window video",
+        [nameof(PianoVisualSettings.BackgroundDim)] = "darken dim opacity",
+        [nameof(PianoVisualSettings.ParticleAmount)] = "count quantity density sparks",
+        [nameof(PianoVisualSettings.ParticleLife)] = "duration seconds",
+        [nameof(PianoVisualSettings.ParticleGlow)] = "brightness laser",
+        [nameof(PianoVisualSettings.Gravity)] = "falling weight force",
+        [nameof(PianoVisualSettings.Drag)] = "friction air resistance",
+        [nameof(PianoVisualSettings.KeyLighting)] = "light brightness led",
+        [nameof(PianoVisualSettings.KeyPressDepth)] = "travel sink press",
+        [nameof(PianoVisualSettings.ShadingQuality)] = "shader render raytrace quality",
+        [nameof(PianoVisualSettings.CameraZoom)] = "scale framing size",
+        [nameof(PianoVisualSettings.CameraParallax)] = "shake drift motion 3d",
+        [nameof(PianoVisualSettings.BloomIntensity)] = "glow shine",
+        [nameof(PianoVisualSettings.BloomSize)] = "glow spread radius",
+        [nameof(PianoVisualSettings.Contrast)] = "grading curve",
+        [nameof(PianoVisualSettings.Saturation)] = "vibrance colour color grading",
+        [nameof(PianoVisualSettings.Vignette)] = "dark corners edge",
+        [nameof(PianoVisualSettings.HaloIntensity)] = "hit line brightness",
+        [nameof(PianoVisualSettings.TempoSync)] = "beat metronome pulse",
+        [nameof(PianoVisualSettings.PedalGlow)] = "sustain damper glow",
+        [nameof(PianoVisualSettings.VelocityColor)] = "dynamics velocity colour",
+        [nameof(PianoVisualSettings.ShowPetals)] = "dust motes ambient floating",
+        [nameof(PianoVisualSettings.ShowEmbers)] = "sparks fire particles",
+        [nameof(PianoVisualSettings.ShowWisps)] = "plasma smoke trails",
+        [nameof(PianoVisualSettings.ShowFlame)] = "fire burning",
+        [nameof(PianoVisualSettings.ShowImpactRings)] = "wave ring shockwave bounce",
+        [nameof(PianoVisualSettings.ShowLightBeams)] = "beams columns rays light",
+        [nameof(PianoVisualSettings.ShowHalo)] = "hit line glowing",
+        [nameof(PianoVisualSettings.ShowKeys)] = "keyboard piano keys",
+        [nameof(PianoVisualSettings.ShowBackground)] = "backdrop scene image",
+        [nameof(PianoVisualSettings.ShowWatermark)] = "logo keyflow brand",
+        [nameof(PianoVisualSettings.ShowCounter)] = "count keys held hud",
+        [nameof(PianoVisualSettings.ShowFps)] = "performance overlay stats",
+        [nameof(PianoVisualSettings.ShowNoteLabels)] = "names letters on bars",
+        [nameof(PianoVisualSettings.Language)] = "language english vietnamese follow windows",
+        [nameof(PianoVisualSettings.ShellTheme)] = "theme shell colour palette skin",
+        [nameof(PianoVisualSettings.ChromeMotion)] = "animation transitions easing",
+        [nameof(PianoVisualSettings.BackdropDensity)] = "motes dust density backdrop",
+    };
 
     // =====================================================================================================
     // Page construction
@@ -430,6 +506,10 @@ public partial class MainWindow
         Register(language, blurb, null, "language follows windows");
         RefreshLanguageChips();
         Note(language, "Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another.");
+
+        var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
+        ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click), ("IMPORT PROFILE…", ImportProfile_Click));
+        Note(profile, "A profile is plain JSON: dropping one on the window applies it, a dropped MIDI file opens the song and a dropped image becomes the stage background.");
     }
 
     /// <summary>
@@ -517,9 +597,10 @@ public partial class MainWindow
         var check = new CheckBox { Tag = property, IsChecked = (bool)Prop(property).GetValue(_visualSettings)!, Margin = new Thickness(0, 6, 0, 6), HorizontalAlignment = HorizontalAlignment.Stretch };
         Loc.Set(check, label, ContentControl.ContentProperty);
         Loc.Set(check, tooltip, FrameworkElement.ToolTipProperty);
+        Loc.Set(check, label, AutomationProperties.NameProperty);
         check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed;
         _visualToggles[property] = check; _visualToggleList.Add(check);
-        return Register(body, check, property, label, tooltip);
+        return Register(body, check, property, label, tooltip).WithCaption(check, ContentControl.ContentProperty, label);
     }
 
     private SettingRow SliderRow(Panel body, string label, string property, double minimum, double maximum, string tooltip)
@@ -536,17 +617,19 @@ public partial class MainWindow
         Loc.Set(text, label);
         var box = new TextBox { Text = FormatSetting(property, current), Tag = property, Width = 74, Height = 24, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, TextAlignment = TextAlignment.Right };
         Loc.Set(box, "Type a value and press Enter", FrameworkElement.ToolTipProperty);
+        Loc.Set(box, label, AutomationProperties.NameProperty);
         box.LostFocus += VisualValueBox_Commit; box.KeyDown += VisualValueBox_KeyDown;
         var reset = new Button { Content = "↺", Tag = property, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0) };
         var resetValue = FormatSetting(property, (double)prop.GetValue(DefaultVisualSettings)!);
         Loc.Format(reset, "Reset to {0}", resetValue);
         reset.Click += VisualReset_Click;
         var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = Math.Clamp(current, minimum, maximum), Tag = property, Margin = new Thickness(0, 2, 0, 0) };
+        Loc.Set(slider, label, AutomationProperties.NameProperty);
         slider.ValueChanged += VisualSlider_ValueChanged;
         Grid.SetColumn(box, 1); Grid.SetColumn(reset, 2); Grid.SetRow(slider, 1); Grid.SetColumnSpan(slider, 3);
         row.Children.Add(text); row.Children.Add(box); row.Children.Add(reset); row.Children.Add(slider);
         _visualSliders[property] = slider; _visualValueBoxes[property] = box; _sliderRanges[property] = (minimum, maximum);
-        return Register(body, row, property, label, tooltip);
+        return Register(body, row, property, label, tooltip).WithCaption(text, TextBlock.TextProperty, label);
     }
 
     private SettingRow Choice(Panel body, string label, string property, string tooltip, params (string Value, string Caption)[] options)
@@ -558,6 +641,7 @@ public partial class MainWindow
         var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
         Loc.Set(text, label);
         var combo = new ComboBox { Tag = property, Width = 210, Height = 30, DisplayMemberPath = "Caption", SelectedValuePath = "Value" };
+        Loc.Set(combo, label, AutomationProperties.NameProperty);
         // The caption is display only; the stored value stays the English identifier, so a saved
         // preset keeps working after the interface language changes.
         combo.ItemsSource = options.Select(o => new ChoiceOption(o.Value, Loc.T(o.Caption))).ToList();
@@ -565,7 +649,7 @@ public partial class MainWindow
         combo.SelectionChanged += VisualChoice_Changed;
         Grid.SetColumn(combo, 1); row.Children.Add(text); row.Children.Add(combo);
         _visualChoices[property] = combo;
-        return Register(body, row, property, [label, tooltip, .. options.Select(o => o.Caption)]);
+        return Register(body, row, property, [label, tooltip, .. options.Select(o => o.Caption)]).WithCaption(text, TextBlock.TextProperty, label);
     }
 
     /// <summary>Repaints every picker after a language switch, keeping the selected value.</summary>
@@ -594,13 +678,15 @@ public partial class MainWindow
         Loc.Set(text, label);
         var swatch = new Button { Tag = property, Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)) };
         Loc.Set(swatch, "Open color picker", FrameworkElement.ToolTipProperty);
+        Loc.Set(swatch, label, AutomationProperties.NameProperty);
         swatch.Click += VisualColorButton_Click; SetColorSwatch(swatch, current);
         var box = new TextBox { Text = current, Tag = property, Width = 92, Height = 26, FontSize = 10.5, CharacterCasing = CharacterCasing.Upper, MaxLength = 9 };
+        Loc.Set(box, label, AutomationProperties.NameProperty);
         box.LostFocus += VisualColor_LostFocus; box.KeyDown += (s, e) => { if (e.Key == Key.Enter) { VisualColor_LostFocus(s, e); e.Handled = true; } };
         Grid.SetColumn(swatch, 1); Grid.SetColumn(box, 2);
         row.Children.Add(text); row.Children.Add(swatch); row.Children.Add(box);
         _visualColorInputs[property] = box; _visualColorButtons[property] = swatch;
-        return Register(body, row, property, label, tooltip, "color");
+        return Register(body, row, property, label, tooltip, "color").WithCaption(text, TextBlock.TextProperty, label);
     }
 
     private SettingRow TrackPaletteRow(Panel body)
@@ -614,7 +700,10 @@ public partial class MainWindow
         for (var i = 0; i < 8; i++)
         {
             var swatch = new Button { Tag = i, Width = 40, Height = 28, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 6), Content = (i + 1).ToString(), FontSize = 10, Foreground = Brushes.White };
-            Loc.Format(swatch, "Color of track {0}", i + 1);
+            // The number stays the visible content; the sentence is the tooltip and the screen-reader
+            // name (the older two-argument Format replaced the digit with the whole sentence).
+            Loc.Format(swatch, "Color of track {0}", FrameworkElement.ToolTipProperty, i + 1);
+            Loc.Format(swatch, "Color of track {0}", AutomationProperties.NameProperty, i + 1);
             swatch.Click += TrackPaletteButton_Click; SetColorSwatch(swatch, _visualSettings.TrackColors[i]);
             wrap.Children.Add(swatch); _trackPaletteSwatches.Add(swatch);
         }
@@ -708,7 +797,7 @@ public partial class MainWindow
             SyncPlayDialogToggle(property, value);
         }
         finally { _loadingVisualSettings = false; }
-        MarkModified(); RefreshDependentRows();
+        MarkModified(property); RefreshDependentRows();
         var label = check.Content as string ?? check.Tag as string ?? Loc.T("Setting");
         ApplyVisualSettings(check.IsChecked == true ? "{0} on" : "{0} off", false, label);
     }
@@ -718,7 +807,7 @@ public partial class MainWindow
         if (!_uiReady || _loadingVisualSettings || sender is not Slider slider || slider.Tag is not string property) return;
         Prop(property).SetValue(_visualSettings, slider.Value);
         if (_visualValueBoxes.TryGetValue(property, out var box) && !box.IsKeyboardFocused) box.Text = FormatSetting(property, slider.Value);
-        MarkModified();
+        MarkModified(property);
         if (property is nameof(PianoVisualSettings.RecordingFrameRate)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.HandSplitPitch) && ModeCombo.SelectedIndex is 2 or 3) { ApplyTrackFilter(); UpdateSongUi(); }
         if (property is nameof(PianoVisualSettings.NoteFallSpeed) && PlaySpeedSlider is not null)
@@ -758,7 +847,7 @@ public partial class MainWindow
         if (_loadingVisualSettings || sender is not ComboBox { Tag: string property, SelectedValue: string value }) return;
         Prop(property).SetValue(_visualSettings, value);
         if (property == nameof(PianoVisualSettings.BackgroundMode) && value == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) ChooseStageBackground(sender, e);
-        MarkModified(); RefreshDependentRows(); RebuildTrackList();
+        MarkModified(property); RefreshDependentRows(); RebuildTrackList();
         if (property is nameof(PianoVisualSettings.RecordingResolution)) UpdateRecordingInfo();
         var what = property switch
         {
@@ -804,7 +893,7 @@ public partial class MainWindow
             _visualSettings.Palette = "Custom";
             if (_visualChoices.TryGetValue(nameof(PianoVisualSettings.Palette), out var palette)) { _loadingVisualSettings = true; palette.SelectedValue = "Custom"; _loadingVisualSettings = false; }
         }
-        MarkModified();
+        MarkModified(property);
         ApplyVisualSettings(property == nameof(PianoVisualSettings.HaloColor) ? "Halo color applied" : "Color applied");
     }
 
@@ -815,24 +904,30 @@ public partial class MainWindow
         if (picker.ShowDialog() != true || picker.SelectedHex is not { } selected) return;
         _visualSettings.TrackColors[index] = selected;
         SetColorSwatch(_trackPaletteSwatches[index], selected);
-        RebuildTrackList(); MarkModified();
+        RebuildTrackList(); MarkModified(nameof(PianoVisualSettings.TrackColors));
         ApplyVisualSettings("Track {0} color applied", false, index + 1);
     }
 
-    private void MarkModified()
+    private void MarkModified(string? property = null)
     {
         if (_loadingVisualSettings) return;
         _visualSettings.PresetModified = true;
         UpdatePresetLabels();
+        RecordHistory(property);
     }
 
     private void RefreshDependentRows()
     {
-        var query = SettingsSearchBox?.Text.Trim().ToLowerInvariant() ?? "";
+        var text = SettingsSearchBox?.Text.Trim() ?? "";
+        var query = text.ToLowerInvariant();
         foreach (var row in _settingRows)
         {
             var visible = (row.VisibleWhen?.Invoke() ?? true) && (query.Length == 0 || MatchesSearch(row, query));
             row.Element.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            // Repaint the caption: the word the query matched is shown in the accent colour, and the
+            // plain localized label comes back when the search box is emptied. Loc.T inside SetCaption
+            // keeps the caption in step with the interface language.
+            if (row.Caption is { } caption) SetCaption(caption, visible && text.Length > 0 ? FirstTokenIn(Loc.T(caption.Key), text) : null);
         }
         foreach (var card in _settingCards)
         {
@@ -843,15 +938,79 @@ public partial class MainWindow
     }
 
     /// <summary>
-    /// A row matches when the query appears in the English source string <em>or</em> in its
-    /// translation, so "tốc độ rơi" and "fall speed" both find the same slider.
+    /// A row matches when every word of the query is found in one of the phrases it answers to — its
+    /// search keys (in English or in the active translation), the synonyms of its setting and the name
+    /// of the setting itself. Words may be typed in any order and with either language's vocabulary:
+    /// "speed fall" and "tốc độ rơi" both find the same slider.
     /// </summary>
     private static bool MatchesSearch(SettingRow row, string query)
     {
-        foreach (var key in row.SearchKeys)
-            if (key.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || Loc.Known(key) && Loc.T(key).Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
-        return false;
+        var tokens = SplitQuery(query);
+        if (tokens.Length == 0) return true;
+        var phrases = SearchPhrases(row).ToList();
+        foreach (var token in tokens)
+        {
+            var found = false;
+            foreach (var phrase in phrases)
+            {
+                if (phrase.Contains(token, StringComparison.OrdinalIgnoreCase)
+                    || Loc.Known(phrase) && Loc.T(phrase).Contains(token, StringComparison.OrdinalIgnoreCase))
+                {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return false;
+        }
+        return true;
+    }
+
+    /// <summary>The first query word that actually appears in the caption, or null when the row matched on a synonym or on its setting name.</summary>
+    private static string? FirstTokenIn(string caption, string query)
+    {
+        foreach (var token in SplitQuery(query))
+            if (token.Length > 0 && caption.Contains(token, StringComparison.CurrentCultureIgnoreCase)) return token;
+        return null;
+    }
+
+    /// <summary>
+    /// Repaints one row caption: the plain localized string, or the same string with the matched part in
+    /// the accent colour. A language switch repaints the plain label through <see cref="Loc"/>, and the
+    /// next keystroke in the search box brings the highlight straight back.
+    /// </summary>
+    private void SetCaption((DependencyObject Target, DependencyProperty Property, string Key) caption, string? match)
+    {
+        var text = Loc.T(caption.Key);
+        var index = match is null ? -1 : text.IndexOf(match, StringComparison.CurrentCultureIgnoreCase);
+        if (index < 0)
+        {
+            // The plain label. A TextBlock is repainted through its inline collection so that a label
+            // which *was* highlighted always comes back plain (writing the same Text value again would
+            // not raise a change notification and the highlighted runs would stay on screen).
+            if (caption.Target is TextBlock plain) { plain.Inlines.Clear(); plain.Inlines.Add(new Run(text)); }
+            else caption.Target.SetValue(caption.Property, text);
+            return;
+        }
+        var accent = (Brush)FindResource("Accent2Brush");
+        var piece = new TextBlock { TextWrapping = TextWrapping.Wrap };
+        if (index > 0) piece.Inlines.Add(new Run(text[..index]));
+        piece.Inlines.Add(new Run(text.Substring(index, match!.Length)) { Foreground = accent, FontWeight = FontWeights.SemiBold });
+        if (index + match.Length < text.Length) piece.Inlines.Add(new Run(text[(index + match.Length)..]));
+        if (caption.Target is TextBlock block) { block.Inlines.Clear(); foreach (var inline in piece.Inlines.ToList()) block.Inlines.Add(inline); }
+        else caption.Target.SetValue(caption.Property, piece);
+    }
+
+    private static string[] SplitQuery(string query) => query.Split([' ', '\t', ','], StringSplitOptions.RemoveEmptyEntries);
+
+    /// <summary>Everything a row answers to: its search keys, the synonyms of its setting and its property name.</summary>
+    private static IEnumerable<string> SearchPhrases(SettingRow row)
+    {
+        foreach (var key in row.SearchKeys) yield return key;
+        if (row.Property is not { } property) yield break;
+        if (SearchSynonyms.TryGetValue(property, out var synonyms)) yield return synonyms;
+        // The property name itself is the last safety net: "NoteFallSpeed" answers to "fall" and "speed"
+        // even before anybody writes a synonym for a newly added row.
+        yield return property;
     }
 
     /// <summary>Pushes every value of <see cref="_visualSettings"/> back into the generated controls (after presets, resets or imports).</summary>
@@ -956,7 +1115,7 @@ public partial class MainWindow
         var dialog = new OpenFileDialog { Filter = Loc.T("Image files (*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff)|*.png;*.jpg;*.jpeg;*.bmp;*.gif;*.tif;*.tiff|All files (*.*)|*.*"), Title = Loc.T("Choose a piano visualizer background"), CheckFileExists = true, Multiselect = false };
         if (dialog.ShowDialog(this) != true) return;
         _visualSettings.BackgroundImagePath = dialog.FileName; _visualSettings.BackgroundMode = "Image"; _visualSettings.ShowBackground = true;
-        RefreshSettingControls(); MarkModified();
+        RefreshSettingControls(); MarkModified(nameof(PianoVisualSettings.BackgroundImagePath));
         ApplyVisualSettings("Background image applied", reloadBackground: true);
     }
 
@@ -1159,6 +1318,7 @@ public partial class MainWindow
 
     private void ApplyPreset(VisualPreset preset)
     {
+        CommitHistory();
         _visualSettings.CopyFrom(preset.Settings, keepBackgroundImage: true);
         _visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;
         if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";
@@ -1242,7 +1402,10 @@ public partial class MainWindow
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             var paletteIndex = ((track % 8) + 8) % 8;
             var swatch = new Button { Tag = paletteIndex, Width = 26, Height = 22, Padding = new Thickness(0), Margin = new Thickness(0, 0, 10, 0) };
+            // Both calls repeat the condition on purpose: tools/check_sources.py reads the literals of
+            // the argument, and a variable holding the key would hide them from that check.
             Loc.Set(swatch, _visualSettings.ColorMode == "PerTrack" ? "Change the color of this track" : "Track color (used by the “Per MIDI track” color mode)", FrameworkElement.ToolTipProperty);
+            Loc.Set(swatch, _visualSettings.ColorMode == "PerTrack" ? "Change the color of this track" : "Track color (used by the “Per MIDI track” color mode)", AutomationProperties.NameProperty);
             SetColorSwatch(swatch, _visualSettings.TrackColors[paletteIndex]); swatch.Click += TrackPaletteButton_Click;
             var count = _allNotes.Count(n => n.Track == track);
             var label = Loc.F("Track {0}", track + 1);
@@ -1282,5 +1445,212 @@ public partial class MainWindow
         var width = Math.Max(640, Math.Min(1920, (int)Stage.ActualWidth)) & ~1;
         var height = Math.Max(360, (int)(width * (double.IsFinite(ratio) && ratio > 0 ? ratio : 9.0 / 16))) & ~1;
         return (width, height);
+    }
+
+    // =====================================================================================================
+    // History: undo / redo over everything the dock can change
+    // =====================================================================================================
+
+    /// <summary>How many distinct states the history keeps. A continuous drag counts as one state.</summary>
+    private const int HistoryDepth = 32;
+    private readonly List<string> _undoHistory = [];
+    private readonly List<string> _redoHistory = [];
+    /// <summary>JSON of the last committed state: what the next undo returns to.</summary>
+    private string _historyBaseline = "";
+    /// <summary>True while a change has happened whose starting state is not on the undo stack yet.</summary>
+    private bool _historyPending;
+    private bool _restoringHistory;
+
+    /// <summary>
+    /// Records that the settings changed. The state <em>before</em> the change is not known here — the
+    /// handlers mutate first — so the history point is committed by <see cref="CommitHistory"/>, which
+    /// the settings-save timer calls once the user stops moving things. That single hook is what makes
+    /// a slow slider drag one undo step instead of two hundred, without special-casing any control.
+    /// </summary>
+    private void RecordHistory(string? property)
+    {
+        if (_loadingVisualSettings || _restoringHistory) return;
+        _historyPending = true;
+    }
+
+    /// <summary>
+    /// Commits the change in progress: the state it started from enters the undo stack and the current
+    /// state becomes the new baseline. Called when the controls settle (the save timer), and before
+    /// undo, redo, preset changes and profile exports so those never see a half-committed history.
+    /// </summary>
+    private void CommitHistory()
+    {
+        if (_restoringHistory || !_historyPending) return;
+        if (_historyBaseline.Length == 0) _historyBaseline = _visualSettings.ToJson();
+        var current = _visualSettings.ToJson();
+        _historyPending = false;
+        if (current == _historyBaseline) return;
+        if (_historyBaseline.Length > 0)
+        {
+            _undoHistory.Add(_historyBaseline);
+            while (_undoHistory.Count > HistoryDepth) _undoHistory.RemoveAt(0);
+            _redoHistory.Clear();
+        }
+        _historyBaseline = current;
+    }
+
+    /// <summary>Ctrl+Z: restores the state before the change in progress (a settled drag is one change).</summary>
+    private void UndoVisualSettings()
+    {
+        if (_restoringHistory) return;
+        CommitHistory();
+        if (_undoHistory.Count == 0) { Loc.Set(SettingsSaveLabel, "Nothing to undo"); return; }
+        var json = _undoHistory[^1];
+        _undoHistory.RemoveAt(_undoHistory.Count - 1);
+        _redoHistory.Add(_visualSettings.ToJson());
+        while (_redoHistory.Count > HistoryDepth) _redoHistory.RemoveAt(0);
+        RestoreHistory(json, "Undo");
+    }
+
+    /// <summary>Ctrl+Shift+Z (or Ctrl+Y): replays a change that was undone.</summary>
+    private void RedoVisualSettings()
+    {
+        if (_restoringHistory) return;
+        CommitHistory();
+        if (_redoHistory.Count == 0) { Loc.Set(SettingsSaveLabel, "Nothing to redo"); return; }
+        var json = _redoHistory[^1];
+        _redoHistory.RemoveAt(_redoHistory.Count - 1);
+        _undoHistory.Add(_visualSettings.ToJson());
+        while (_undoHistory.Count > HistoryDepth) _undoHistory.RemoveAt(0);
+        RestoreHistory(json, "Redo");
+    }
+
+    /// <summary>
+    /// Swaps a snapshot into the live settings: every control, the stage, the chrome and the settings
+    /// file follow, so stepping back looks exactly like the user having set the values again. The
+    /// interface language is not part of a snapshot (see <see cref="PianoVisualSettings.CopyFrom"/>).
+    /// </summary>
+    private void RestoreHistory(string json, string statusKey)
+    {
+        _restoringHistory = true;
+        try
+        {
+            _visualSettings.CopyFrom(PianoVisualSettings.FromJson(json), keepBackgroundImage: false);
+            RefreshSettingControls();
+            _historyBaseline = _visualSettings.ToJson(); _historyPending = false;
+        }
+        finally { _restoringHistory = false; }
+        ApplyVisualSettings(statusKey, reloadBackground: true);
+    }
+
+    /// <summary>
+    /// Drops the history and takes the current settings as the starting point. Called once the window
+    /// has loaded its settings, and again after a profile replaces them: a fresh setup is a fresh start,
+    /// not an undo step away from whatever the previous file held.
+    /// </summary>
+    private void StartHistory()
+    {
+        _historyBaseline = _visualSettings.ToJson();
+        _historyPending = false;
+        _undoHistory.Clear();
+        _redoHistory.Clear();
+    }
+
+    // =====================================================================================================
+    // Settings profile: one file carrying the stage settings, the interface language and the shell theme
+    // =====================================================================================================
+
+    /// <summary>Writes the whole setup to <paramref name="path"/>; returns false and reports when the file cannot be written.</summary>
+    internal bool ExportProfile(string path)
+    {
+        try
+        {
+            File.WriteAllText(path, SettingsProfile.Capture(_visualSettings, ShellThemeManager.Current.Id).ToJson(), Encoding.UTF8);
+            Loc.Format(SettingsSaveLabel, "Profile “{0}” saved", Path.GetFileName(path));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            Loc.Set(SettingsSaveLabel, "Could not write the profile");
+            if (!_closing) ShowMessage(ex.Message, "Settings profile", MessageBoxImage.Warning);
+            return false;
+        }
+    }
+
+    /// <summary>Reads a profile from <paramref name="path"/> and applies it; returns false when the file is not a Keyflow profile.</summary>
+    internal bool ImportProfile(string path)
+    {
+        SettingsProfile? profile = null;
+        try { profile = SettingsProfile.FromJson(File.ReadAllText(path)); }
+        catch (IOException) { }
+        catch (UnauthorizedAccessException) { }
+        if (profile is null) { Loc.Set(SettingsSaveLabel, "This file is not a Keyflow profile"); return false; }
+        ApplyProfile(profile, Path.GetFileName(path));
+        return true;
+    }
+
+    /// <summary>
+    /// Applies a profile: the shell theme first (the chrome should already wear the profile's palette
+    /// when the settings repaint the stage), then the stage settings, then the language. A language id
+    /// that no bundled table answers to falls back to English rather than to a half-translated window.
+    /// </summary>
+    private void ApplyProfile(SettingsProfile profile, string fileName)
+    {
+        CommitHistory();
+        _visualSettings.ShellTheme = ShellThemeManager.Apply(profile.ShellTheme).Id;
+        _visualSettings.CopyFrom(profile.Visual, keepBackgroundImage: false);
+        RefreshSettingControls();
+        ApplyLanguage(Languages.Find(profile.Language).Id);
+        StartHistory();
+        ApplyVisualSettings("Profile “{0}” applied", true, fileName);
+    }
+
+    private void ExportProfile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new SaveFileDialog
+        {
+            FileName = SettingsProfile.SuggestedName,
+            Filter = Loc.T("Keyflow profile (*.json)|*.json|All files (*.*)|*.*"),
+            Title = Loc.T("Save the current setup as a profile"),
+        };
+        if (dialog.ShowDialog(this) == true) ExportProfile(dialog.FileName);
+    }
+
+    private void ImportProfile_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = Loc.T("Keyflow profile (*.json)|*.json|All files (*.*)|*.*"),
+            Title = Loc.T("Open a Keyflow profile"),
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(this) == true) ImportProfile(dialog.FileName);
+    }
+
+    /// <summary>
+    /// Files dropped on the window: a Keyflow profile replaces the whole setup, a MIDI file opens as a
+    /// song, and an image becomes the stage background. One gesture instead of a dialog plus a page hunt.
+    /// </summary>
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        e.Effects = e.Data.GetData(DataFormats.FileDrop) is string[] { Length: 1 } ? DragDropEffects.Copy : DragDropEffects.None;
+        e.Handled = true;
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is not string[] { Length: 1 } files) return;
+        var path = files[0];
+        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) ImportProfile(path);
+        else if (path.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".midi", StringComparison.OrdinalIgnoreCase)) OpenMidiFile(path);
+        else ApplyDroppedBackground(path);
+        e.Handled = true;
+    }
+
+    /// <summary>A dropped image becomes the stage background, through the same state the background row writes.</summary>
+    private void ApplyDroppedBackground(string path)
+    {
+        _visualSettings.BackgroundImagePath = path;
+        _visualSettings.BackgroundMode = "Image";
+        _visualSettings.ShowBackground = true;
+        RefreshSettingControls();
+        MarkModified(nameof(PianoVisualSettings.BackgroundImagePath));
+        ApplyVisualSettings("Background image applied", reloadBackground: true);
     }
 }

@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -388,6 +389,7 @@ public partial class MainWindow
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         var value = new TextBlock { Text = FormatSetting(spec.Property, current), Style = (Style)FindResource("MutedTextStyle"), HorizontalAlignment = HorizontalAlignment.Right };
         var slider = new Slider { Minimum = min, Maximum = max, Value = Math.Clamp(current, min, max), Tag = spec.Property };
+        Loc.Set(slider, spec.Label, AutomationProperties.NameProperty);
         slider.ValueChanged += PlayInlineSlider_Changed;
         Grid.SetColumn(value, 1); Grid.SetRow(slider, 1); Grid.SetColumnSpan(slider, 2);
         var label = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
@@ -405,6 +407,7 @@ public partial class MainWindow
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         var dock = _visualChoices[spec.Property];
         var combo = new ComboBox { Tag = spec.Property, Width = 180, Height = 28, DisplayMemberPath = dock.DisplayMemberPath, SelectedValuePath = dock.SelectedValuePath, ItemsSource = dock.ItemsSource, SelectedValue = dock.SelectedValue };
+        Loc.Set(combo, spec.Label, AutomationProperties.NameProperty);
         combo.SelectionChanged += PlayInlineChoice_Changed;
         Grid.SetColumn(combo, 1);
         var label = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), VerticalAlignment = VerticalAlignment.Center };

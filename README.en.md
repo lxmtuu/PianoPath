@@ -233,6 +233,7 @@ never have to open the documentation:
 | Move around | `F11` | Toggle full screen. |
 | Move around | `F1` | Open or close the shortcuts card. |
 | Move around | `Esc` | Open or close the settings dock (if you are typing in the search box, `Esc` clears the search first; if the shortcuts card is open, it closes that first). |
+| Move around | `Ctrl+Z` / `Ctrl+Shift+Z` | Undo / redo a change in the design dock. The dock keeps the last **32 states**; one slider drag (or one burst of tweaks) counts as a **single** step, and `Ctrl+Z` never steals the undo of the box you are typing in. |
 | Move around | Leave the pointer still for ~2.8 s | The whole interface (header, transport, Menu, REC and the dock if it is open) hides, leaving only the piano, the background and the running notes. Move the mouse to bring back exactly what was hidden. The chrome never hides while you drag a slider, open a drop-down, use the colour picker, read the shortcuts card or type in the settings panel. |
 | Session & capture | **A**, **B**, **×** (timeline bar) | Set or clear the A–B loop at the playhead. |
 | Session & capture | Drag the timeline | Seek in the score; skipped notes are not counted as misses. |
@@ -275,6 +276,9 @@ never have to open the documentation:
 | Preset thumbnails | Every preset in the Style list has a real rendered miniature (dark background, white/black keys, note bars in the preset palette). |
 | Menu & dialogs | A concert-style startup menu (theme chips, a "stage look" card, TRY A LOOK to cycle presets) and a **Play** dialog before you perform: MIDI File / Live Play, two Left/Right Hand cards outlined in the hand colour, the Speed bar and the OPTIONS layer list (Camera, Background, Notes, Embers, Halo, Flame, Keys, Extras) — each toggle maps 1:1 onto a real stage setting and its chevron opens the matching dock page. |
 | F1 card | The in-app shortcut table, split into three groups (Play the stage / Move around / Session & capture). |
+| Undo / redo | Every change in the dock enters a 32-step history: `Ctrl+Z` steps back, `Ctrl+Shift+Z` (or `Ctrl+Y`) steps forward. A snapshot is the JSON of `PianoVisualSettings`, so it goes through the same `CopyFrom`/`Clamp` as setting the values by hand; applying a preset or importing a profile is a marker too. |
+| Settings profile | **IMPORT/EXPORT PROFILE…** on the General page packs three things into one `Keyflow.profile.json`: the stage settings, the interface language and the shell theme. Drop a profile on the window to apply it, drop a `.mid`/`.midi` file to open the song, drop an image to set the stage background. A language this build does not ship falls back to English instead of leaving the UI half-translated. |
+| Accessibility | Every glyph-only button (the **A**/**B**/**×** loop buttons, ↺, the window buttons, the Play dialog chevrons) carries an **accessible name for screen readers**, taken from its already-translated tooltip, so it follows the interface language; the generated dock rows (sliders, number boxes, pickers, colour swatches) are named after their own row label too. **Tab** keeps focus inside the dock (`KeyboardNavigation.TabNavigation="Cycle"`), and when Windows turns on **high contrast** the chrome is painted from the system colours (`SystemColors`) while the theme you chose stays as it is in the settings file. |
 | Languages | Two bundled languages: **English** and **Tiếng Việt**, chosen on the General page or with a chip on the startup menu; switching repaints every label, dialog, error message and menu inside the current frame. No English label leaks into Vietnamese: `tools/check_sources.py` proves the two tables hold the same keys and `--verify` switches language on an open window. |
 | Recording | REC writes stage frames to AVI (window/720p/1080p resolution, 15–60 fps, paced by a real clock); the audio path is not mixed into the file. The **Green Screen** preset paints a pure green background for keying in OBS. On a machine without an MJPEG codec the frames are uncompressed RGB and recording stops by itself at the AVI 2 GB limit. |
 
@@ -289,7 +293,7 @@ startup menu and even error messages repaint within the current frame.
 | **General** page (dock → APP group) | Choose **English**, **Tiếng Việt** or **Follow Windows**. The line underneath says which language is active and where it came from. |
 | **Startup menu** | An *INTERFACE LANGUAGE* card with quick chips — the first time you open the app you can switch immediately instead of hunting for the settings page. |
 | Command line | `--lang=vi` (or `en`) runs once in that language **without** writing to `visual-settings.json`. CI uses this switch to render the Vietnamese pictures. |
-| Dock search | A row matches English *and* translated words: typing `speed` or `tốc độ` finds the same *Fall speed* slider. |
+| Dock search | A row matches English *and* translated words: typing `speed` or `tốc độ` finds the same *Fall speed* slider. Beyond its captions, every row also answers to **synonyms** (`tempo` → *Fall speed*, `fps` → *Frame rate*, `brighter` → the brightness sliders) and to the **name of the setting** (`NoteFallSpeed` → `fall`+`speed`), so you do not have to remember the exact wording. Several words are an **AND**: `speed fall` narrows to that one row. The matched part is **painted in the accent colour** inside the caption, and the search box jumps to the first page with a hit. |
 
 The General page while the app runs in Vietnamese — also rendered by CI, with `--lang=vi`:
 
@@ -511,7 +515,9 @@ must find a row by its Vietnamese caption**, **old theme ids (`sakura`/`noir`/`v
 the canonical id when a saved file is loaded**, theme chips, the petal layer, impact wave/flash,
 falling/hold/release FX, the 4 ambient layers, the smart modulators, the 7 theme combinations, per
 hand/track colour modes, dependent rows, search, applying presets, **the F1 shortcuts card opening and
-closing**, AVI frame recording, opening/closing a real MIDI input if one exists, decoding WinMM
+closing**, **accessibility (`VerifyAccessibility`): every glyph-only control has a translatable
+name, Tab stays inside the dock, and the high-contrast palette follows `SystemColors` without
+overwriting the chosen theme**, AVI frame recording, opening/closing a real MIDI input if one exists, decoding WinMM
 `MIM_DATA` into a falling WPF note, MIDI output, chrome auto-hide/show with the mouse and Escape, note
 length while a key is held, practice modes, loop, seek, tempo, WPF rendering and the stage running on
 the shared frame clock. Only a physical MIDI key actually firing events must be confirmed with a real
