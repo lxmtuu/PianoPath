@@ -34,7 +34,7 @@ internal static class VisualPresets
     {
         var s = Base(DefaultPresetName);
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Violet"; s.NoteColorStart = "#7B5CFF"; s.NoteColorEnd = "#F05CFF";
-        s.HaloColor = "#C66EFF"; s.NoteGlow = 110; s.NoteEdge = 120; s.NoteEdgeWidth = 62; s.NoteTint = 30; s.NoteHeadGlow = 55;
+        s.HaloColor = "#C66EFF"; s.HaloIntensity = 95; s.NoteGlow = 110; s.NoteEdge = 120; s.NoteEdgeWidth = 62; s.NoteTint = 30; s.NoteHeadGlow = 55;
         s.ShowFlame = true; s.FlameIntensity = 75; s.FlameHeight = 60; s.FlameColorMode = "Warm"; s.ShowWisps = false; s.ShowImpactRings = true;
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
@@ -45,7 +45,7 @@ internal static class VisualPresets
     {
         var s = Base("Inferno");
         s.NoteStyle = "Fire"; s.ColorMode = "Gradient"; s.Palette = "Fire"; s.NoteColorStart = "#FF3B12"; s.NoteColorEnd = "#FFB02E";
-        s.HaloColor = "#FF4A1C"; s.PressedKeyColor = "#FF3A1A"; s.PressedKeyColorMode = "Fixed"; s.NoteTexture = 75; s.NoteGlow = 130; s.NoteEdge = 110;
+        s.HaloColor = "#FF4A1C"; s.HaloIntensity = 135; s.PressedKeyColor = "#FF3A1A"; s.PressedKeyColorMode = "Fixed"; s.NoteTexture = 75; s.NoteGlow = 130; s.NoteEdge = 110;
         s.NoteEdgeWidth = 40; s.NoteTint = 95; s.NoteHeadGlow = 70; s.NoteRoundness = 45; s.ParticleAmount = 48; s.ParticleVelocity = 260; s.ParticleSpread = 85;
         s.ParticleLife = .8; s.ParticleSize = 2.6; s.Gravity = 420; s.ShowFlame = true; s.FlameIntensity = 100; s.FlameHeight = 85; s.FlameColorMode = "Warm";
         s.ShowImpactRings = true; s.RingSize = 60; s.KeyboardStyle = "Studio"; s.KeyGlowRadius = 90; s.KeyLighting = 55; s.ShowKeyFelt = true; s.KeyFeltColor = "#FF2E3A";
@@ -92,7 +92,7 @@ internal static class VisualPresets
         var s = Base("Classic Roll");
         s.NoteStyle = "Solid"; s.ColorMode = "PerTrack"; s.NoteGlow = 20; s.NoteEdge = 40; s.NoteEdgeWidth = 20; s.NoteTint = 100; s.NoteRoundness = 25; s.Notes3D = false;
         s.NoteHeadGlow = 0; s.ShowEmbers = false; s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = false; s.ShowLightBeams = false; s.ShowHalo = true;
-        s.HaloColor = "#FFFFFF"; s.KeyboardStyle = "Classic"; s.KeyLighting = 20; s.KeyGlowRadius = 0; s.BloomIntensity = 0; s.Vignette = 0; s.HorizonGlow = 0;
+        s.HaloColor = "#FFFFFF"; s.HaloIntensity = 45; s.KeyboardStyle = "Classic"; s.KeyLighting = 20; s.KeyGlowRadius = 0; s.BloomIntensity = 0; s.Vignette = 0; s.HorizonGlow = 0;
         s.ShadingQuality = "Fast"; s.ShaderCameraTilt = 30; s.ShaderKeyLight = 104; s.ShaderGloss = 48; s.ShaderEmissive = 45;
         return s;
     }
@@ -161,6 +161,8 @@ internal sealed class VisualPresetStore(string directory)
     {
         var copy = settings.Clone();
         copy.BackgroundImagePath = "";
+        var dir = Path.GetDirectoryName(path);
+        if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
         File.WriteAllText(path, copy.ToJson());
     }
 

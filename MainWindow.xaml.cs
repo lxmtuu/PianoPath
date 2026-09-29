@@ -280,8 +280,8 @@ public partial class MainWindow : Window
             : "NO SOUNDFONT · SILENT";
         SoundFontLabel.Foreground = audible ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
         SoundFontHint.Text = loaded
-            ? (_audio.PlaybackError is { } playbackError ? $"No audio output · {playbackError}" : $"Yamaha grand · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}")
-            : "The built-in grand piano is loading";
+            ? (_audio.PlaybackError is { } playbackError ? $"No audio output · {playbackError}" : $"{(_isBuiltInSoundFont ? "Yamaha grand" : _audio.LoadedName)} · Hall reverb {(_audio.ReverbEnabled ? "ON" : "OFF")}")
+            : "Load a .sf2 SoundFont to enable piano audio";
         if (!loaded && PresetCombo.Items.Count == 0)
         {
             _suppressPreset = true;
@@ -345,6 +345,7 @@ public partial class MainWindow : Window
         if (_lastPointerPoint is { } last && Math.Abs(last.X - point.X) < .5 && Math.Abs(last.Y - point.Y) < .5) return;
         _lastPointerPoint = point;
         _lastPointerActivity = DateTime.UtcNow;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible) return;
         if (_settingsHiddenByIdle) { _settingsHiddenByIdle = false; SettingsPanel.Visibility = Visibility.Visible; }
         SetChromeVisible(true, showRecordButton: true);
         if (Stage is not null) Stage.SetPointerPosition(e.GetPosition(Stage));
@@ -352,6 +353,7 @@ public partial class MainWindow : Window
     private void CheckChromeIdle()
     {
         if (_closing || !AutoHideChrome) return;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible) return;
         // Keep everything on screen while a color picker is open or the user is dragging a slider / browsing a drop-down.
         if (OwnedWindows.Count > 0 || Mouse.Captured is not null) return;
         if (DateTime.UtcNow - _lastPointerActivity >= ChromeIdleDelay) HideChromeForIdle();

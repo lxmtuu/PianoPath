@@ -23,12 +23,27 @@ SCALE = float(sys.argv[3]) if len(sys.argv) > 3 else 0.5
 WHITE_KEYS = 52
 WORLD_WIDTH = 52.0
 WHITE_GAP = 0.028
-BLACK_WIDTH = 0.58
+BLACK_WIDTH = 0.52
 LIT_REACH = 4.2
 
 
 def is_black(pitch):
     return pitch % 12 in (1, 3, 6, 8, 10)
+
+
+def black_key_offset(pitch):
+    m = pitch % 12
+    if m == 1:
+        return -0.08
+    if m == 3:
+        return 0.08
+    if m == 6:
+        return -0.10
+    if m == 8:
+        return 0.00
+    if m == 10:
+        return 0.10
+    return 0.0
 
 
 WHITES_BELOW = []
@@ -42,7 +57,7 @@ BLACK_AT_BOUNDARY = [0] * (WHITE_KEYS + 1)
 for _p in range(21, 109):
     if is_black(_p):
         BLACK_AT_BOUNDARY[WHITES_BELOW[_p]] = _p
-KEY_CENTER_X = [(WHITES_BELOW[p] + (0 if is_black(p) else 0.5)) * (WORLD_WIDTH / WHITE_KEYS) for p in range(128)]
+KEY_CENTER_X = [(WHITES_BELOW[p] + (black_key_offset(p) if is_black(p) else 0.5)) * (WORLD_WIDTH / WHITE_KEYS) for p in range(128)]
 
 
 # ---- scene (mirrors PianoShaderScene.From with the Neon Violet preset defaults) -----------------
@@ -53,10 +68,10 @@ class Scene:
     CameraHeight = 4.6 + 0.48 * 7.4
     CameraDistance = 9.4 + 0.48 * 6.6
     BedFraction = 0.1 + 0.48 * 0.13
-    WhiteDepth = 5.2 + 0.18 * 1.6
-    BlackDepth = 3.1 + 0.18 * 1.1
+    WhiteDepth = 6.0
+    BlackDepth = 3.9
     WhiteLip = 0.45
-    BlackHeight = 0.5
+    BlackHeight = 0.52
     BedDepth = 2.6
     BedDrop = 0.08
     KeyBedDepth = 0.9
@@ -197,7 +212,8 @@ def evaluate(albedo, roughness, f0, n, v, l):
     voh = max(dot(v, h), 0.0)
     k = d_ggx(roughness, noh) * g_smith(roughness, nov, nol) / (4 * nov * nol + 1e-4)
     f = fresnel(voh, f0)[0]
-    return tuple(albedo[i] / math.pi + f * k for i in range(3))
+    kd = 1.0 - f
+    return tuple(albedo[i] * kd / math.pi + f * k for i in range(3))
 
 
 EPS = 1e-4
@@ -289,7 +305,8 @@ class Renderer:
             if pitch <= 0:
                 continue
             sink = s.PressDepth if pitch in self.down else 0.0
-            if intersect_box(o, to_light, b - BLACK_WIDTH * 0.5, b + BLACK_WIDTH * 0.5,
+            bc = KEY_CENTER_X[pitch]
+            if intersect_box(o, to_light, bc - BLACK_WIDTH * 0.5, bc + BLACK_WIDTH * 0.5,
                              -sink, s.BlackHeight - sink, 0, s.BlackDepth, SHADOW_REACH):
                 return True
         bd = s.WhiteDepth + s.BedDepth
@@ -316,7 +333,8 @@ class Renderer:
                 if pitch <= 0:
                     continue
                 sink = s.PressDepth if pitch in self.down else 0.0
-                if intersect_box(o, d, b - BLACK_WIDTH * 0.5, b + BLACK_WIDTH * 0.5,
+                bc = KEY_CENTER_X[pitch]
+                if intersect_box(o, d, bc - BLACK_WIDTH * 0.5, bc + BLACK_WIDTH * 0.5,
                                  -sink, s.BlackHeight - sink, 0, s.BlackDepth, 0.85):
                     found = True
                     break
@@ -347,18 +365,21 @@ class Renderer:
                 best, material, pitch, top = hit, 0, wp, hit[1]
                 bx0, bx1, bd0, bd1 = wx0, wx1, 0.0, s.WhiteDepth
 
-        frac = world_x - floor_x
-        boundary = int(floor_x) if frac < BLACK_WIDTH * 0.5 else (int(floor_x) + 1 if frac > 1 - BLACK_WIDTH * 0.5 else -1)
-        if 0 <= boundary <= WHITE_KEYS:
-            bp = BLACK_AT_BOUNDARY[boundary]
+        b0 = int(max(0, min(WHITE_KEYS, floor_x)))
+        b1 = int(max(0, min(WHITE_KEYS, floor_x + 1)))
+        for b in range(b0, b1 + 1):
+            bp = BLACK_AT_BOUNDARY[b]
             if bp > 0:
-                bsink = s.PressDepth if bp in self.down else 0.0
-                hit = intersect_slabs(oy, od, dy, dd, -bsink, s.BlackHeight - bsink, 0, s.BlackDepth)
-                if hit and hit[0] < (best[0] if best else 1e18):
-                    best, material, pitch, top = hit, 1, bp, hit[1]
-                    bx0 = boundary - BLACK_WIDTH * 0.5
-                    bx1 = boundary + BLACK_WIDTH * 0.5
-                    bd0, bd1 = 0.0, s.BlackDepth
+                bc = KEY_CENTER_X[bp]
+                b_x0 = bc - BLACK_WIDTH * 0.5
+                b_x1 = bc + BLACK_WIDTH * 0.5
+                if b_x0 <= world_x <= b_x1:
+                    bsink = s.PressDepth if bp in self.down else 0.0
+                    hit = intersect_slabs(oy, od, dy, dd, -bsink, s.BlackHeight - bsink, 0, s.BlackDepth)
+                    if hit and hit[0] < (best[0] if best else 1e18):
+                        best, material, pitch, top = hit, 1, bp, hit[1]
+                        bx0, bx1 = b_x0, b_x1
+                        bd0, bd1 = 0.0, s.BlackDepth
 
         if material < 0:
             hit = intersect_slabs(oy, od, dy, dd, -1.4, -s.KeyBedDepth, -0.3, s.WhiteDepth)
@@ -383,6 +404,16 @@ class Renderer:
         t = best[0]
         p = (world_x, oy + dy * t, od + dd * t)
         n = (0.0, 1.0, 0.0) if top else (0.0, 0.0, -1.0)
+        if material in (0, 1) and top:
+            bevel = 0.045 if material == 1 else 0.038
+            ex = min(p[0] - bx0, bx1 - p[0])
+            if ex < bevel:
+                sign = -1.0 if p[0] < (bx0 + bx1) * 0.5 else 1.0
+                fac = 1.0 - ex / bevel
+                n = norm((n[0] + sign * fac * 0.36, n[1], n[2]))
+            if p[2] < bevel:
+                fac = 1.0 - p[2] / bevel
+                n = norm((n[0], n[1], n[2] - fac * 0.44))
         v = norm((0.0, -dy, -dd))
         if material == 0:
             albedo, rough = self.white, s.WhiteRoughness
@@ -426,6 +457,18 @@ class Renderer:
             f = rd ** 1.6
             for c in range(3):
                 rad[c] += b[c] * self.rim[c] * f
+
+        if s.RimIntensity > 0:
+            to_halo = (0.0, 0.4 - p[1], s.WhiteDepth - p[2])
+            hdist = math.sqrt(to_halo[0] ** 2 + to_halo[1] ** 2 + to_halo[2] ** 2)
+            if hdist > 1e-4:
+                hdir = (to_halo[0] / hdist, to_halo[1] / hdist, to_halo[2] / hdist)
+                hndl = max(0.0, dot(n, hdir))
+                if hndl > 0:
+                    hatten = 1.0 / (1.0 + hdist * hdist * 0.12)
+                    hb = evaluate(albedo, rough, self.f0, n, v, hdir)
+                    for c in range(3):
+                        rad[c] += hb[c] * self.rim[c] * (hndl * hatten * 1.25)
 
         occ = self.occlusion(p, n, ax, ay)
         sky_f = max(0.0, min(1.0, n[1] * 0.5 + 0.5))

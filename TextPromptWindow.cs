@@ -18,11 +18,27 @@ internal sealed class TextPromptWindow : Window
         Background = new SolidColorBrush(Color.FromRgb(18, 16, 24)); Foreground = Brushes.White; FontFamily = new FontFamily("Segoe UI");
         var root = new StackPanel { Margin = new Thickness(18, 16, 18, 16) };
         root.Children.Add(new TextBlock { Text = prompt, FontSize = 11.5, Foreground = new SolidColorBrush(Color.FromRgb(200, 190, 215)), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
-        _input = new TextBox { Text = initialValue, FontSize = 12, MaxLength = 40, Height = 32 };
+        _input = new TextBox
+        {
+            Text = initialValue, FontSize = 12, MaxLength = 40, Height = 32,
+            VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(8, 0, 8, 0),
+            Background = new SolidColorBrush(Color.FromRgb(29, 25, 36)), Foreground = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(79, 65, 97))
+        };
         root.Children.Add(_input);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
-        var ok = new Button { Content = "OK", Width = 84, Height = 30, IsDefault = true, Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", Width = 84, Height = 30, IsCancel = true };
+        var ok = new Button
+        {
+            Content = "OK", Width = 84, Height = 30, IsDefault = true, Margin = new Thickness(0, 0, 8, 0),
+            Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(125, 61, 174)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(184, 119, 229)), BorderThickness = new Thickness(1)
+        };
+        var cancel = new Button
+        {
+            Content = "Cancel", Width = 84, Height = 30, IsCancel = true,
+            Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(43, 38, 51)),
+            BorderBrush = new SolidColorBrush(Color.FromRgb(80, 71, 91)), BorderThickness = new Thickness(1)
+        };
         ok.Click += (_, _) => Accept();
         buttons.Children.Add(ok); buttons.Children.Add(cancel); root.Children.Add(buttons);
         Content = root;

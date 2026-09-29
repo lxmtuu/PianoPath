@@ -352,10 +352,13 @@
                                     <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="2" Click="PlayDialogDeepLink_Click" ToolTip="Sparks, wisps, particle physics"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
-                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Halo" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <CheckBox Grid.Column="1" x:Name="LayerHaloToggle" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="2" Click="PlayDialogDeepLink_Click" ToolTip="The burning impact line above the keys"/>
+                                    <Button Grid.Column="1" x:Name="PlayDialogHaloColorButton" Width="22" Height="22" Margin="0,0,8,0" Style="{StaticResource MiniButtonStyle}" Padding="0" Click="PlayDialogHaloColor_Click" ToolTip="Choose halo glow color">
+                                        <Border x:Name="PlayDialogHaloColorDot" Width="14" Height="14" CornerRadius="7" Background="#C66EFF"/>
+                                    </Button>
+                                    <CheckBox Grid.Column="2" x:Name="LayerHaloToggle" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <Button Grid.Column="3" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="4" Click="PlayDialogDeepLink_Click" ToolTip="The burning impact line above the keys"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -392,7 +395,14 @@
         </Grid>
 
         <!-- ===================== MAIN MENU (Embers-style shell) ===================== -->
-        <Grid x:Name="MainMenuOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="30" Background="#C2040509">
+        <Grid x:Name="MainMenuOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="30">
+            <Grid.Background>
+                <RadialGradientBrush Center="0.35,0.45" GradientOrigin="0.35,0.45" RadiusX="0.95" RadiusY="0.95">
+                    <GradientStop Color="#181328" Offset="0"/>
+                    <GradientStop Color="#0B0D15" Offset="0.55"/>
+                    <GradientStop Color="#05060A" Offset="1"/>
+                </RadialGradientBrush>
+            </Grid.Background>
             <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.3" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="30,24,0,0"/>
             <StackPanel HorizontalAlignment="Left" VerticalAlignment="Center" Margin="150,0,0,0" Width="368">
                 <StackPanel Orientation="Horizontal" Margin="8,0,0,30">

@@ -14,6 +14,7 @@ public partial class MainWindow
 {
     internal void ShowStartupMenu()
     {
+        SetChromeVisible(false);
         MainMenuOverlay.Visibility = Visibility.Visible;
         MainMenuVersionLabel.Text = $"Keyflow {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.3"}";
     }
@@ -23,6 +24,8 @@ public partial class MainWindow
     private void MainMenu_Click(object sender, RoutedEventArgs e)
     {
         Stop();
+        PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        CloseSettingsPanel();
         ShowStartupMenu();
     }
 
@@ -35,12 +38,14 @@ public partial class MainWindow
     private void MainMenuDesign_Click(object sender, RoutedEventArgs e)
     {
         HideStartupMenu();
+        SetChromeVisible(true);
         OpenSettingsPanel();
     }
 
     private void MainMenuSettings_Click(object sender, RoutedEventArgs e)
     {
         HideStartupMenu();
+        SetChromeVisible(true);
         OpenSettingsPanel();
         SettingsTabs.SelectedIndex = 6; // Audio
     }
@@ -80,8 +85,11 @@ public partial class MainWindow
         var right = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.RightHandColor : _visualSettings.NoteColorEnd);
         LeftStyleCard.BorderBrush = new SolidColorBrush(left);
         RightStyleCard.BorderBrush = new SolidColorBrush(right);
-        LeftStyleLabel.Text = _visualSettings.PresetName;
-        RightStyleLabel.Text = _visualSettings.PresetName;
+        var presetDisplay = _visualSettings.PresetModified ? _visualSettings.PresetName + " *" : _visualSettings.PresetName;
+        LeftStyleLabel.Text = presetDisplay;
+        RightStyleLabel.Text = presetDisplay;
+        if (PlayDialogHaloColorDot is not null)
+            PlayDialogHaloColorDot.Background = new SolidColorBrush(SafeColor(_visualSettings.HaloColor));
         PlayDialogOverlay.Visibility = Visibility.Visible;
     }
 
@@ -91,7 +99,11 @@ public partial class MainWindow
         catch { return Color.FromRgb(139, 92, 246); }
     }
 
-    private void PlayDialogClose_Click(object sender, RoutedEventArgs e) => PlayDialogOverlay.Visibility = Visibility.Collapsed;
+    private void PlayDialogClose_Click(object sender, RoutedEventArgs e)
+    {
+        PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        SetChromeVisible(true);
+    }
 
     private void PlayDialogOpenMidi_Click(object sender, RoutedEventArgs e)
     {
@@ -103,14 +115,33 @@ public partial class MainWindow
     private void PlayDialogLive_Click(object sender, RoutedEventArgs e)
     {
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        SetChromeVisible(true);
+        _lastPointerActivity = DateTime.UtcNow;
         Stop();
     }
 
     private void PlayDialogPlay_Click(object sender, RoutedEventArgs e)
     {
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        SetChromeVisible(true);
+        _lastPointerActivity = DateTime.UtcNow;
         if (SongDuration() > 0) StartPlayback();
         else OpenMidi_Click(sender, e);
+    }
+
+    private void PlayDialogHaloColor_Click(object sender, RoutedEventArgs e)
+    {
+        var picker = new ColorPickerWindow(_visualSettings.HaloColor) { Owner = this };
+        if (picker.ShowDialog() != true || picker.SelectedHex is not { } hex) return;
+        _visualSettings.HaloColor = hex;
+        if (PlayDialogHaloColorDot is not null)
+            PlayDialogHaloColorDot.Background = new SolidColorBrush(SafeColor(hex));
+        if (_visualColorInputs.TryGetValue(nameof(PianoVisualSettings.HaloColor), out var input))
+            input.Text = hex;
+        if (_visualColorButtons.TryGetValue(nameof(PianoVisualSettings.HaloColor), out var button))
+            SetColorSwatch(button, hex);
+        MarkModified();
+        ApplyVisualSettings("Halo color applied");
     }
 
     private void PlayDialogStyleCard_Click(object sender, MouseButtonEventArgs e)

@@ -186,6 +186,7 @@ internal sealed class ColorPickerWindow : Window
             MouseLeftButtonDown += (_, e) => { _dragging = true; CaptureMouse(); UpdateFromPoint(e.GetPosition(this)); e.Handled = true; };
             MouseMove += (_, e) => { if (_dragging && e.LeftButton == MouseButtonState.Pressed) UpdateFromPoint(e.GetPosition(this)); };
             MouseLeftButtonUp += (_, e) => { if (!_dragging) return; UpdateFromPoint(e.GetPosition(this)); _dragging = false; ReleaseMouseCapture(); e.Handled = true; };
+            LostMouseCapture += (_, _) => _dragging = false;
         }
 
         internal void SetHue(double hue) { _hue = hue; InvalidateVisual(); }

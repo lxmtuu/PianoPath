@@ -137,6 +137,38 @@ def scan_xaml(paths):
     return errors, keys
 
 
+def scan_xaml_bindings(cs_files, xaml_files):
+    errors = []
+    xaml_names = set()
+    for path in xaml_files:
+        text = path.read_text(encoding="utf-8")
+        xaml_names.update(re.findall(r"(?:x:)?Name=\"([^\"]+)\"", text))
+
+    for path in cs_files:
+        text = path.read_text(encoding="utf-8")
+        for name in re.findall(r"FindName\(\"([^\"]+)\"\)", text):
+            if name not in xaml_names:
+                errors.append(f"{path}: FindName(\"{name}\") target does not exist in any XAML file")
+
+    cs_all_text = "\n".join(p.read_text(encoding="utf-8") for p in cs_files)
+    events = [
+        "Click", "Checked", "Unchecked", "SelectionChanged", "ValueChanged",
+        "KeyDown", "KeyUp", "MouseMove", "PreviewKeyDown",
+        "PreviewMouseLeftButtonDown", "PreviewMouseLeftButtonUp", "MouseDoubleClick",
+        "TextChanged", "LostFocus", "Deactivated", "Closed", "PianoKeyChanged",
+        "MouseLeftButtonUp"
+    ]
+    for path in xaml_files:
+        text = path.read_text(encoding="utf-8")
+        for ev in events:
+            for m in re.finditer(rf"\b{ev}=\"([^\"]+)\"", text):
+                handler = m.group(1)
+                if not re.search(rf"\b{handler}\b", cs_all_text):
+                    errors.append(f"{path}: Event handler \"{handler}\" not found in C# sources")
+
+    return errors
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -145,13 +177,15 @@ def main():
     xaml_files = sorted(p for p in ROOT.glob("**/*.xaml") if "obj" not in p.parts)
     xaml_errors, keys = scan_xaml(xaml_files)
     errors.extend(xaml_errors)
+    binding_errors = scan_xaml_bindings(cs_files, xaml_files)
+    errors.extend(binding_errors)
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:
             print("  " + e)
         return 1
-    print("no bracket, quote, XML or resource-reference problems found")
+    print("no bracket, quote, XML, resource-reference, or binding problems found")
     return 0
 
 

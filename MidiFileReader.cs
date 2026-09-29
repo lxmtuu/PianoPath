@@ -93,6 +93,7 @@ internal static class MidiReader
                 tick += ReadVar(reader); var status = reader.ReadByte();
                 if (status < 0x80) { stream.Position--; if (running == 0) throw new InvalidDataException("Invalid MIDI running status."); status = (byte)running; }
                 else if (status < 0xF0) running = status;
+                else running = 0;
                 if (status == 0xFF)
                 {
                     var type = reader.ReadByte(); var length = ReadVar(reader);
