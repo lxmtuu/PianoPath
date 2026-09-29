@@ -868,7 +868,12 @@ internal sealed class PianoStage : FrameworkElement
             var bandPixels = Math.Max(2, (int)Math.Ceiling(bandHeight * dpi));
             var scene = PianoShaderScene.From(_visual, bandWidth, bandPixels, _visual.ShadingQuality);
             var signature = scene.Signature();
-            if (_shadedBase is null || signature != _shadedSignature || _shadedBase.PixelWidth != bandWidth || _shadedBase.PixelHeight != bandPixels)
+            // Render bakes at the quality's internal render scale, so the cached bitmap must be
+            // compared against the scaled resolution, not the full band size.
+            var bakeScale = Math.Clamp(scene.RenderScale, .25, 1);
+            var bakedWidth = Math.Max(1, (int)Math.Ceiling(bandWidth * bakeScale));
+            var bakedHeight = Math.Max(1, (int)Math.Ceiling(bandPixels * bakeScale));
+            if (_shadedBase is null || signature != _shadedSignature || _shadedBase.PixelWidth != bakedWidth || _shadedBase.PixelHeight != bakedHeight)
             {
                 var clock = Stopwatch.StartNew();
                 var bake = PianoKeyboardRenderer.Render(scene, NoLights, 0, 0, bandWidth, bandPixels, -1);
