@@ -203,7 +203,7 @@ dotnet build .\PianoPath.csproj -c Release
 2. **SoundFont**: the bundled Yamaha grand loads automatically at startup (it takes a few seconds; the label on the Audio page tells you when it is ready). To use another piano, open **SETTINGS → Audio → LOAD SOUNDFONT** and pick a `.sf2`; choose a preset (bank/program) in the list below it. **HALL REVERB** toggles the room reverb.
 3. **MIDI piano**: plug the instrument in before starting the app and Keyflow connects to the first input by itself. Plugged in later? Open **SETTINGS → MIDI → Refresh devices**. The badge above the keyboard switches to `MIDI IN · C4` when a Note On arrives. The same page holds the MIDI output (to play through an external synth), the metronome and the track list.
 4. **Look**: pick a preset in **SETTINGS → Style** (default *Neon Violet*), pick the concert interface in **SETTINGS → Theme** (Concert Grand / Concert Noir / Velvet Gold — Concert Grand is the default), then fine-tune on the Notes / Particles / Keyboard / Background / Camera & FX pages. Every change applies live and saves itself.
-5. **Where settings live**: `%LOCALAPPDATA%\Keyflow\visual-settings.json` (current settings), `%LOCALAPPDATA%\Keyflow\library.json` (the recent songs and the values they were played at) and `%LOCALAPPDATA%\Keyflow\presets\*.json` (user presets); move them with `--settings-dir=<folder>`. Delete `visual-settings.json` or press **RESET TO DEFAULT** in the dock to go back to the defaults; copy the `presets` folder to carry presets to another machine (or use IMPORT/EXPORT). Old theme ids (`sakura`, `noir`, `velvet`) are migrated to the current ids when an old file is loaded.
+5. **Where settings live**: `%LOCALAPPDATA%\Keyflow\visual-settings.json` (current settings), `%LOCALAPPDATA%\Keyflow\library.json` (the recent songs and the values they were played at), `%LOCALAPPDATA%\Keyflow\history\practice.jsonl` (the practice history) and `%LOCALAPPDATA%\Keyflow\presets\*.json` (user presets); move them with `--settings-dir=<folder>`. Delete `visual-settings.json` or press **RESET TO DEFAULT** in the dock to go back to the defaults; copy the `presets` folder to carry presets to another machine (or use IMPORT/EXPORT). Old theme ids (`sakura`, `noir`, `velvet`) are migrated to the current ids when an old file is loaded.
 6. **Recording**: the **Recording** page chooses resolution/fps; press **REC** in the corner of the stage, pick where the AVI goes, then press it again to stop. Install an MJPEG codec (for example the K-Lite pack) if you want smaller files — it is optional.
 
 ## Getting started
@@ -312,7 +312,7 @@ Architecture, translation conventions and the new-language checklist: [`docs/LOC
 
 ## Interface map
 
-The settings dock has **12 pages arranged in four purpose-driven groups** — the only layout that the
+The settings dock has **13 pages arranged in four purpose-driven groups** — the only layout that the
 code, the XAML and the verification suite all read from the same place (see `Ui/SettingsPages.cs`):
 
 | Group | Page | Contents |
@@ -327,6 +327,7 @@ code, the XAML and the verification suite all read from the same place (see `Ui/
 | **SOUND & INPUT** | Audio | Load a SoundFont, pick the instrument preset, hall reverb. |
 | | MIDI | Input/output devices, track list (solo/mute/colour), metronome. |
 | | Practice | Practice modes, tempo, A–B loop, and the **auto practice tempo**: a run of misses past the threshold steps the song down five percent at a time, four correct notes in a row give two percent back and never past one hundred. |
+| | History | **Practice history**: every run of the open song (when, accuracy, hits/missed, longest streak), the best take of that song, **EXPORT HTML** for the report and **CLEAR HISTORY** to wipe it. |
 | **SESSION** | Recording | Resolution, fps, output-file information. |
 | **APP** | General | **Interface language** (English / Tiếng Việt / follow Windows), theme, motion level, settings folder. |
 
@@ -344,7 +345,7 @@ The rest of the interface:
 - The default SoundFont is FreePats' YDP Grand Piano, built from a Yamaha Disklavier Pro multisample. See `Assets/ATTRIBUTION.txt` for the authors, source and CC BY 3.0 licence. The SF2 file is about 113 MiB.
 - The built-in audio engine reads uncompressed SoundFont 2 (`.sf2`). `.sf3` is not supported; some advanced SF2 parts such as modulators, instrument filters and the reverb/chorus effects are not fully reproduced. The sound can therefore differ from dedicated SoundFont synthesizers, depending on the file.
 - The hand split point defaults to C4 = MIDI 60 (Notes → Hand split point) and is shared by the per-hand colours and the one-hand practice modes. With **Infer hand split from the song** on, opening a MIDI file picks the split from how its notes are spread over the keyboard (two clusters weighted by sounding time, accepted only when at least five empty semitones separate the hands and each carries ten percent of the sounding time, then settled at middle C inside the gap) and **remembers it for that song**, so reopening never changes it; a one-hand song keeps the split you chose.
-- MIDI format 2, SMPTE time division, MusicXML, sheet music and practice-history storage do not exist yet. The song library is at the **recent songs + per-song metadata** stage (`library.json` in the settings folder); watching a `.mid` folder, search and tags do not exist yet.
+- MIDI format 2, SMPTE time division, MusicXML and sheet music do not exist yet; the **practice history** records each run (when, accuracy, hits/missed, longest streak) and exports HTML, but there is no side-by-side "ghost" replay and no per-day chart yet. The song library is at the **recent songs + per-song metadata** stage (`library.json` in the settings folder); watching a `.mid` folder, search and tags do not exist yet.
 - The hand split uses one fixed point (C4 = MIDI 60 by default, adjustable under Notes → Hand split point, shared by per-hand colouring and the one-hand practice modes); the app does not infer a split from the music.
 - A physical MIDI input needs an instrument/device that Windows recognises. Without one, use the computer keyboard or the on-screen piano.
 - The Windows-only build uses WinMM.
@@ -509,14 +510,17 @@ tracks, tempo map, beat grid, track names, drum channel skipped, broken files), 
 decoding and SF2 generator semantics (instrument overrides, preset accumulation), looping through the
 release stage, polyphony limits, audio signal and Note Off, sustain/sostenuto/soft, saving and
 clamping effect settings, built-in and user presets (save, import, export, delete, broken file), **the
-dock catalogue: 12 pages in 4 groups matching between the catalogue, the XAML and the group
+dock catalogue: 13 pages in 4 groups matching between the catalogue, the XAML and the group
 captions**, **live language switching on an open window (`VerifyLanguageSwitching`): the two tables
 must hold the same keys, translated labels must repaint when the language changes, and the dock search
 must find a row by its Vietnamese caption**, **old theme ids (`sakura`/`noir`/`velvet`) migrating to
 the canonical id when a saved file is loaded**, theme chips, the petal layer, impact wave/flash,
 falling/hold/release FX, the 4 ambient layers, the smart modulators, the 7 theme combinations, per
 hand/track colour modes, dependent rows, search, applying presets, **the F1 shortcuts card opening and
-closing**, **hand-split inference (`VerifyHandSplitInference` + `VerifyHandSplitInferenceOnSong`): clustering by sounding time with a middle-C tie-break, one-hand songs and stray short notes overlapping hands and gaps under five semitones leaving the chosen split alone, and the switch writing the inferred value through the dock slider into the song's remembered entry (`SplitInferred`), which is reused instead of measured again**, **the auto practice tempo (`VerifyPracticeTempo`): off by default, a run of misses past the
+closing**, **the practice history (`VerifyPracticeHistory`): one JSON line per run in the run folder's
+`history/practice.jsonl`, newest first and capped, a damaged line skipped, the best take per song, a
+UTF-8 BOM HTML report with the runs and a per-song summary, and a real take recorded exactly once when
+the transport stops**, **hand-split inference (`VerifyHandSplitInference` + `VerifyHandSplitInferenceOnSong`): clustering by sounding time with a middle-C tie-break, one-hand songs and stray short notes overlapping hands and gaps under five semitones leaving the chosen split alone, and the switch writing the inferred value through the dock slider into the song's remembered entry (`SplitInferred`), which is reused instead of measured again**, **the auto practice tempo (`VerifyPracticeTempo`): off by default, a run of misses past the
 threshold steps the song down five percent at a time to a floor of fifty, four correct notes in a row
 give two percent back up to one hundred, and a real missed key while the song plays reaches the same
 curve**, **the song library (`VerifySongLibrary`): the index lives in the settings folder of the run,
@@ -524,7 +528,7 @@ keeps the newest twelve songs first (the Play dialog shows the first five rows),
 restores hand split, fall speed and tempo through the very sliders and rewrites exactly one row for it,
 a damaged file reads as empty, and forgotten or vanished files are dropped**, **accessibility (`VerifyAccessibility`): every glyph-only control has a translatable
 name, Tab stays inside the dock, and the high-contrast palette follows `SystemColors` — repainting as
-soon as Windows reports the switch — without overwriting the chosen theme**, **the dock at the compact size (`VerifyDockAccessibility`): on all 12
+soon as Windows reports the switch — without overwriting the chosen theme**, **the dock at the compact size (`VerifyDockAccessibility`): on all 13
 pages at 1080×700 every row stays inside the scroll column and every control inside its own card,
 and Tab walks a page in the order its rows are printed**, AVI frame recording, opening/closing a real MIDI input if one exists, decoding WinMM
 `MIM_DATA` into a falling WPF note, MIDI output, chrome auto-hide/show with the mouse and Escape, note
@@ -587,13 +591,14 @@ the result is a `NOTE`, not a `FAIL`.
 ## Repository layout
 
 - `App.xaml`: default theme and every control template (button, switch, slider, combo, textbox, scrollbar, navigation tab, preset list) — all colours read through `DynamicResource`, so a theme swap is instant. `App.xaml.cs`: startup and the `--verify` / `--snapshot` / `--show-settings` / `--play-dialog` / `--shortcuts` / `--lang` / `--background-image` modes.
-- `Ui/`: `MainWindow.xaml` (header / stage + dock / transport footer / concert menu / Play dialog / shortcuts card), `MainWindow.xaml.cs` (playback, scoring, MIDI, chrome hiding and video recording), `MainWindow.Settings.cs` (generated settings pages, search, presets, track list), `MainWindow.Menu.cs` (main menu + Play dialog + theme chips), `MainWindow.Shortcuts.cs` (the F1 card), `SettingsPages.cs` (**the 12-page / 4-group catalogue**, attached property printing the group label), `MainWindow.Language.cs` (live language switching, rebuilding the surfaces whose text is composed), `DeviceOption.cs` (device id separated from the translated caption), `FrameClock.cs` (the shared vsync frame clock), `ChromeMotion.cs` (shared easing/entrance), `ColorPickerWindow.cs`, `TextPromptWindow.cs`.
+- `Ui/`: `MainWindow.xaml` (header / stage + dock / transport footer / concert menu / Play dialog / shortcuts card), `MainWindow.xaml.cs` (playback, scoring, MIDI, chrome hiding and video recording), `MainWindow.Settings.cs` (generated settings pages, search, presets, track list), `MainWindow.Menu.cs` (main menu + Play dialog + theme chips), `MainWindow.Shortcuts.cs` (the F1 card), `SettingsPages.cs` (**the 13-page / 4-group catalogue**, attached property printing the group label), `MainWindow.Language.cs` (live language switching, rebuilding the surfaces whose text is composed), `DeviceOption.cs` (device id separated from the translated caption), `FrameClock.cs` (the shared vsync frame clock), `ChromeMotion.cs` (shared easing/entrance), `ColorPickerWindow.cs`, `TextPromptWindow.cs`.
 - `Theme/`: `ShellTheme.cs` (the three interfaces + palettes + legacy ids + `ShellThemeManager`) and `ChromeBackdrop.cs` (the animated backdrop for the menu and the dock).
 - `Stage/`: `PianoVisualSettings.cs` (the JSON settings stored in LocalAppData, with migrations), `VisualPresets.cs` (built-in presets + the user preset store), `PianoStage.cs` (background/vignette/beams, notes in 4 styles and 5 colour modes, sparks, wisps, flames, rings/shockwaves/ripples, impact flashes, falling trails, hold bar/arc, release effects, 4 ambient layers, petals, vector or shader keyboard).
 - `Stage/Shading/`: the Unreal-style keyboard shading — `ShaderMath.cs` (GGX/Smith/Schlick, ACES, sRGB, dither), `PianoShaderScene.cs` (scene + camera + cache key), `PianoKeyboardRenderer.cs` (soft ray-traced shadow, contact AO, IBL, coloured per-note light, overlay tiles).
 - `Audio/`: `PianoAudioEngine.cs` (`waveOut` PCM output, playback thread and hall reverb) and `SoundFontSynthesizer.cs` (reads `.sf2` sample zones to the SF2 specification).
 - `Midi/`: `MidiFileReader.cs` (Standard MIDI File → notes, tempo map, beat grid, track names) and `MidiDeviceService.cs` (WinMM devices).
 - `Midi/HandSplit.cs`: hand-split inference for a song (two clusters by sounding time, middle C in a wide gap, one-hand songs left alone).
+- `Practice/PracticeHistory.cs`: the practice history (one JSON line per run, newest first, the best take per song, the HTML report) and `Ui/MainWindow.History.cs` (the dock's **History** page).
 - `Library/SongLibrary.cs`: the recent-songs index (`library.json` in the settings folder) — newest first, at most twelve, keyed by path; `Ui/MainWindow.Library.cs` builds the Play dialog's RECENT list and restores the stored values through the sliders.
 - `Video/AviVideoRecorder.cs`: AVI frame writing through Windows Video for Windows.
 - `Diagnostics/VerificationSuite.cs`: the regression suite run by `--verify`, with self-made fixtures.

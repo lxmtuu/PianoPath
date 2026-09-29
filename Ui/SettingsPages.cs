@@ -35,6 +35,7 @@ internal static class SettingsPages
     internal const string Audio = "Audio";
     internal const string Midi = "MIDI";
     internal const string Practice = "Practice";
+    internal const string History = "History";
     internal const string Recording = "Recording";
     internal const string General = "General";
 
@@ -46,14 +47,14 @@ internal static class SettingsPages
 
     /// <summary>
     /// The navigation groups, in display order: what the stage looks like, what it sounds like, what
-    /// the current practice session does, and how the application itself behaves. Grouping the twelve
-    /// pages by intent is what keeps the dock readable as it grows.
+    /// the current practice session does, and how the application itself behaves. Grouping the pages by
+    /// intent is what keeps the dock readable as it grows.
     /// </summary>
     internal static readonly SettingsSection[] Sections =
     [
         new(DesignSection, [Style, Theme, Notes, Particles, Keyboard, Background, Camera]),
         new(SoundSection, [Audio, Midi]),
-        new(SessionSection, [Practice, Recording]),
+        new(SessionSection, [Practice, History, Recording]),
         new(AppSection, [General]),
     ];
 

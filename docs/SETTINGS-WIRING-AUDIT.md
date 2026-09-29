@@ -1,5 +1,5 @@
 # Kiểm tra liên kết logic của mọi chức năng cài đặt
-> **Cập nhật sau tài liệu này:** thêm trang **General** (ngôn ngữ giao diện) nên danh mục là **12 trang / 4 nhóm**; bảng đối chiếu setting ↔ code bên dưới vẫn đúng từng dòng vì trang mới không thêm thông số sân khấu nào.
+> **Cập nhật sau tài liệu này:** thêm trang **General** (ngôn ngữ giao diện) và trang **History** (lịch sử luyện tập) nên danh mục là **13 trang / 4 nhóm**; bảng đối chiếu setting ↔ code bên dưới vẫn đúng từng dòng vì hai trang mới không thêm thông số sân khấu nào.
 
 
 Kết quả rà soát toàn bộ repo: **mọi chức năng cài đặt (UI) đều đã được liên kết với logic thật** —

@@ -603,6 +603,7 @@ internal static class VerificationSuite
                         VerifySongLibrary(window);
                         VerifyHandSplitInferenceOnSong(window);
                         VerifyPracticeTempo(window);
+                        VerifyPracticeHistory(window);
                         completed();
                     }
                     catch (Exception ex) { failed(ex); }
@@ -790,7 +791,7 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: twelve pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add("PASS settings dock: thirteen pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
     }
 
     /// <summary>
@@ -1288,6 +1289,86 @@ internal static class VerificationSuite
         toggle.IsChecked = false; threshold.Value = 3; tempo.Value = hadTempo; Invoke(window, "ResetPracticeTempoRuns");
         Assert(!settings.PracticeAutoTempo && settings.PracticeMissThreshold == 3, "The practice tempo switches should keep their stored values when the check restores them.");
         Results.Add("PASS practice tempo: off by default, five-percent slow-down past the threshold with a floor, two-percent recovery after four correct notes with a ceiling, run bookkeeping and the real missed-key path.");
+    }
+
+    /// <summary>
+    /// The practice history: one JSON line per finished run under the settings folder, newest first and
+    /// capped, a damaged line skipped instead of failing the file, the best take per song, the exported
+    /// HTML report with the runs and the per-song summary, and the app path — a take that graded
+    /// something is recorded when the transport stops, exactly once.
+    /// </summary>
+    private static void VerifyPracticeHistory(MainWindow window)
+    {
+        var host = (StackPanel)window.FindName("PracticeHistoryHost");
+        var empty = (TextBlock)window.FindName("HistoryEmptyLabel");
+        var summary = (TextBlock)window.FindName("HistorySummaryLabel");
+        Assert(PracticeHistory.FilePath.StartsWith(PianoVisualSettingsStore.SettingsDirectory, StringComparison.OrdinalIgnoreCase)
+                && PracticeHistory.FilePath.Contains("history", StringComparison.OrdinalIgnoreCase),
+            $"The practice history must live under the settings folder of this run (using {PracticeHistory.FilePath}).");
+
+        PracticeHistory.Clear(); Invoke(window, "RefreshPracticeHistory");
+        Assert(PracticeHistory.Runs.Count == 0 && host.Children.Count == 0 && empty.Visibility == Visibility.Visible && summary.Text.Length == 0,
+            "A cleared practice history should print the empty state and no rows.");
+
+        PracticeHistory.Record("Alpha", @"C:\songs\alpha.mid", 90, 10, 12);
+        PracticeHistory.Record("Beta", @"C:\songs\beta.mid", 50, 50, 4);
+        PracticeHistory.Record("Alpha", @"C:\songs\alpha.mid", 95, 5, 20);
+        var runs = PracticeHistory.Runs;
+        Assert(runs.Count == 3 && runs[0].Song == "Alpha" && Math.Abs(runs[0].Accuracy - 95) < .01 && runs[^1].Song == "Beta",
+            "Recorded runs should be listed newest first, with their accuracy derived from the hits and misses.");
+        Assert(File.ReadAllLines(PracticeHistory.FilePath).Length == 3, "Every run should append exactly one line to the history file.");
+        PracticeHistory.Reload();
+        Assert(PracticeHistory.Runs.Count == 3 && PracticeHistory.Runs[0].Song == "Alpha" && PracticeHistory.Runs[0].BestStreak == 20,
+            "The history should read back from its file in the same order, with every field intact.");
+        Assert(PracticeHistory.BestFor(@"C:\songs\alpha.mid") is { Hits: 95, BestStreak: 20 } && PracticeHistory.BestFor(@"C:\songs\new.mid") is null && PracticeHistory.BestFor("") is null,
+            "The best take of a song should be the one with the highest accuracy, and a song never played has none.");
+
+        var report = Path.Combine(Path.GetTempPath(), "keyflow-practice-history.html");
+        PracticeHistory.ExportReport(report);
+        var html = File.ReadAllText(report);
+        Assert(File.ReadAllBytes(report).Take(3).SequenceEqual(new byte[] { 0xEF, 0xBB, 0xBF }),
+            "The exported report should carry a UTF-8 BOM so Vietnamese titles open correctly.");
+        Assert(html.Contains("<!DOCTYPE html>") && html.Contains(Loc.T("Keyflow practice history")) && html.Contains(Loc.T("Best per song"))
+                && html.Contains("Alpha") && html.Contains("95") && html.Contains(Loc.T("Best streak")),
+            "The exported report should hold the runs table and the per-song summary in the active language.");
+
+        for (var index = 0; index < PracticeHistory.Capacity + 3; index++)
+            PracticeHistory.Record($"Take {index}", "", 1, 1, 1);
+        Assert(PracticeHistory.Runs.Count == PracticeHistory.Capacity && PracticeHistory.Runs[0].Song == $"Take {PracticeHistory.Capacity + 2}",
+            "The history should keep the newest runs and stop growing at its cap.");
+        File.AppendAllText(PracticeHistory.FilePath, "{ half a line" + Environment.NewLine);
+        PracticeHistory.Reload();
+        Assert(PracticeHistory.Runs.Count == PracticeHistory.Capacity && PracticeHistory.Summary().Count > 1,
+            "A damaged line should be skipped while the rest of the history file still reads.");
+
+        PracticeHistory.Clear();
+        for (var index = 0; index < MainWindow.HistoryRows + 3; index++) PracticeHistory.Record($"Row {index}", "", 8, 2, 4);
+        Invoke(window, "RefreshPracticeHistory");
+        Assert(host.Children.Count == MainWindow.HistoryRows && empty.Visibility == Visibility.Collapsed && summary.Text.Length > 0,
+            "The dock page should print the newest runs, hide the empty state and summarise how many were recorded.");
+
+        // The app path: a take that graded something is written when the transport stops, and only once.
+        PracticeHistory.Clear();
+        var song = MainWindow.CreateDemoSong();
+        var hadLabel = (string)Field(window, "_songLabel"); var hadPath = (string)Field(window, "_songPath");
+        SetField(window, "_allNotes", song); SetField(window, "_notes", song);
+        SetField(window, "_songLabel", "Demo Run"); SetField(window, "_songPath", "");
+        SetField(window, "_hits", 7); SetField(window, "_misses", 3); SetField(window, "_bestStreak", 5);
+        SetField(window, "_playing", true);
+        Invoke(window, "Stop");
+        Assert(PracticeHistory.Runs.Count == 1 && PracticeHistory.Runs[0] is { Song: "Demo Run", Hits: 7, Misses: 3, BestStreak: 5 },
+            "Stopping a take that graded notes should record its song, hits, misses and best streak.");
+        Invoke(window, "Stop");
+        Assert(PracticeHistory.Runs.Count == 1, "Stopping an already stopped transport must not record the same take twice.");
+        SetField(window, "_hits", 0); SetField(window, "_misses", 0); SetField(window, "_playing", true);
+        Invoke(window, "Stop");
+        Assert(PracticeHistory.Runs.Count == 1, "A take that graded nothing must not be recorded.");
+
+        PracticeHistory.Clear(); Invoke(window, "RefreshPracticeHistory");
+        SetField(window, "_songLabel", hadLabel); SetField(window, "_songPath", hadPath);
+        Assert(PracticeHistory.Runs.Count == 0 && host.Children.Count == 0 && empty.Visibility == Visibility.Visible && PracticeHistory.BestFor(hadPath) is null,
+            "Clearing the history should leave no runs behind for the next check.");
+        Results.Add("PASS practice history: isolated history file with one line per run, newest-first cap, damaged line tolerated, best take per song, UTF-8 HTML report with the per-song summary, and the stop-the-transport recording path.");
     }
 
     private static void VerifySettingsProfile(MainWindow window)

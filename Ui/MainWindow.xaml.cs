@@ -96,7 +96,7 @@ public partial class MainWindow : Window
             else ReleaseNote(pitch);
         });
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() => SetPedalState(pedal, down));
-        PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
+        PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
         ApplyChromeTheme();
         StartChromeSweeps();
         SetChromeVisible(true); _chromeTimer.Start();
@@ -133,6 +133,7 @@ public partial class MainWindow : Window
     }
     private void Stop()
     {
+        RecordPracticeRunIfScored(); // a take that graded something is written before the transport resets
         StopStageFrames(); _playing = false; _processCurrentOnsets = false; _metronomeOffAt = -1;
         PlayButton.Tag = FindResource("IconPlay");
         foreach (var note in _outputHeld.ToArray()) SendOutput(note.Pitch, 0, false);
@@ -277,7 +278,7 @@ public partial class MainWindow : Window
         {
             Stop(); var song = MidiReader.ReadSong(path); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
             _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
-            _songLabel = Path.GetFileNameWithoutExtension(path);
+            _songLabel = Path.GetFileNameWithoutExtension(path); _songPath = path;
             Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
             _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
             // The recent list is written only after the file really parsed, so the Play dialog never
@@ -771,6 +772,8 @@ public partial class MainWindow : Window
     }
     /// <summary>English key of the song title: the MIDI file name, or "Live Piano" before one is open.</summary>
     private string _songLabel = "Live Piano";
+    /// <summary>Full path of the open MIDI file, or empty for the built-in demo song; the history keys its best take on it.</summary>
+    private string _songPath = "";
 
     private string _timeText = "";
 
