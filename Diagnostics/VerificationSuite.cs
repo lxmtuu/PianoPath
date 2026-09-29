@@ -1268,7 +1268,9 @@ internal static class VerificationSuite
         Invoke(window, "ResetPracticeTempoRuns");
         Assert(window.PracticeMissRun == 0 && window.PracticeHitRun == 0, "Restarting the score should forget both practice runs.");
 
-        // The wiring: key presses while a song plays must reach the same curve.
+        // The wiring: key presses while a song plays must reach the same curve. The fixture song is loaded
+        // first, so this check knows which pitches are misses and which one is a hit, whatever ran before.
+        window.OpenMidiFile(Path.Combine(Path.GetTempPath(), "keyflow-fixture.mid"));
         threshold.Value = 1; tempo.Value = 100;
         SetField(window, "_playing", true);
         Invoke(window, "PressNote", 30, 90); Invoke(window, "ReleaseNote", 30);
