@@ -295,11 +295,27 @@ internal sealed class PianoVisualSettings
     }
 }
 
+/// <summary>
+/// Where the current look and the user presets are read from and written to.
+///
+/// The default is <c>%LOCALAPPDATA%\Keyflow</c>. Automated runs redirect the folder: a verification
+/// run must never overwrite the look the user saved, and a screenshot must show a pristine first-run
+/// state no matter what ran before it in the same session.
+/// </summary>
 internal static class PianoVisualSettingsStore
 {
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
-    internal static string SettingsDirectory => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Keyflow");
-    internal static string SettingsPath => Path.Combine(SettingsDirectory, "visual-settings.json");
+    private static string _directory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Keyflow");
+
+    internal static string SettingsDirectory => _directory;
+    internal static string SettingsPath => Path.Combine(_directory, "visual-settings.json");
+
+    /// <summary>Points settings and user presets at another folder (see <c>--settings-dir</c>).</summary>
+    internal static void UseDirectory(string path)
+    {
+        _directory = Path.GetFullPath(path);
+        VisualPresetStore.InvalidateDefault();
+    }
 
     internal static PianoVisualSettings Load()
     {

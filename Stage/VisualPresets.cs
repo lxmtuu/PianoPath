@@ -172,7 +172,12 @@ internal sealed class VisualPresetStore(string directory)
 {
     internal string Directory { get; } = directory;
 
-    internal static VisualPresetStore Default { get; } = new(Path.Combine(PianoVisualSettingsStore.SettingsDirectory, "presets"));
+    private static VisualPresetStore? _default;
+
+    /// <summary>The store inside the current settings folder; rebuilt when that folder is redirected.</summary>
+    internal static VisualPresetStore Default => _default ??= new(Path.Combine(PianoVisualSettingsStore.SettingsDirectory, "presets"));
+
+    internal static void InvalidateDefault() => _default = null;
 
     internal IReadOnlyList<VisualPreset> LoadUserPresets()
     {

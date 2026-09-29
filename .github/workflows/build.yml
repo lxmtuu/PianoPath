@@ -80,7 +80,12 @@ jobs:
           $failed = @()
           foreach ($shot in $shots) {
             $target = Join-Path $out $shot.Name
-            $proc = Start-Process -FilePath $exe -ArgumentList (@('--snapshot', $target, '--compact') + $shot.Args) -PassThru -Wait
+            # A private settings folder per shot: the README must show a pristine first run, never the
+            # leftovers of the verification suite that ran before it in this job.
+            $settings = Join-Path $env:TEMP "keyflow-preview-$([IO.Path]::GetFileNameWithoutExtension($shot.Name))"
+            Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
+            $args = @('--snapshot', $target, '--compact', "--settings-dir=$settings") + $shot.Args
+            $proc = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
             if (Test-Path $target) { "rendered $($shot.Name) ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
             else { $failed += "$($shot.Name) (exit $($proc.ExitCode))" }
           }

@@ -113,6 +113,13 @@ internal static class VerificationSuite
 
     private static void VerifyVisualSettings()
     {
+        // Automated runs must not write to the folder that holds the user's own look and presets.
+        var realDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Keyflow");
+        Assert(!string.Equals(Path.GetFullPath(PianoVisualSettingsStore.SettingsDirectory), Path.GetFullPath(realDirectory), StringComparison.OrdinalIgnoreCase)
+                && PianoVisualSettingsStore.SettingsDirectory.StartsWith(Path.GetTempPath(), StringComparison.OrdinalIgnoreCase)
+                && PianoVisualSettingsStore.SettingsPath.StartsWith(PianoVisualSettingsStore.SettingsDirectory, StringComparison.OrdinalIgnoreCase)
+                && VisualPresetStore.Default.Directory.StartsWith(PianoVisualSettingsStore.SettingsDirectory, StringComparison.OrdinalIgnoreCase),
+            $"A verification run must keep its fixtures out of the user's settings folder (using {PianoVisualSettingsStore.SettingsDirectory}).");
         var defaults = new PianoVisualSettings();
         Assert(!defaults.BackgroundGradient && !defaults.BackgroundGuide && !defaults.ShowStars && defaults.BackgroundImagePath == "", "A fresh visual profile should open on a black stage with no image or decorative background layers.");
         var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
@@ -128,7 +135,7 @@ internal static class VerificationSuite
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
-        Results.Add("PASS stage settings: black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+        Results.Add("PASS stage settings: automated runs isolated from the user settings folder, black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
     }
 
     /// <summary>Exercises the ray-traced keyboard: shading maths, the bake cache key and real pixel output.</summary>

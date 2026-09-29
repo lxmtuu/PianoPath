@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Threading;
 using System.Diagnostics;
+using System.IO;
 
 namespace PianoPath;
 
@@ -9,6 +10,12 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+        // Where the look lives. --settings-dir points it anywhere (portable setup, CI); a verification
+        // run gets a private folder so it can never overwrite the settings or presets the user saved.
+        var settingsDirectory = e.Args.FirstOrDefault(argument => argument.StartsWith("--settings-dir=", StringComparison.Ordinal))?["--settings-dir=".Length..];
+        if (!string.IsNullOrWhiteSpace(settingsDirectory)) PianoVisualSettingsStore.UseDirectory(settingsDirectory);
+        else if (e.Args.Contains("--verify")) PianoVisualSettingsStore.UseDirectory(Path.Combine(Path.GetTempPath(), "keyflow-verify-settings"));
+
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
         // Publish the saved shell theme before any window exists, so the very first frame is themed
