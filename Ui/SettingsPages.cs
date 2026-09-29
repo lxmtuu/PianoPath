@@ -36,22 +36,25 @@ internal static class SettingsPages
     internal const string Midi = "MIDI";
     internal const string Practice = "Practice";
     internal const string Recording = "Recording";
+    internal const string General = "General";
 
     /// <summary>Caption of the first group; also the fallback section for an unlabelled page.</summary>
     internal const string DesignSection = "STAGE DESIGN";
     internal const string SoundSection = "SOUND & INPUT";
     internal const string SessionSection = "SESSION";
+    internal const string AppSection = "APP";
 
     /// <summary>
-    /// The navigation groups, in display order: what the stage looks like, what it sounds like and
-    /// what the current practice session does. Grouping the eleven pages by intent is what keeps the
-    /// dock readable as it grows.
+    /// The navigation groups, in display order: what the stage looks like, what it sounds like, what
+    /// the current practice session does, and how the application itself behaves. Grouping the twelve
+    /// pages by intent is what keeps the dock readable as it grows.
     /// </summary>
     internal static readonly SettingsSection[] Sections =
     [
         new(DesignSection, [Style, Theme, Notes, Particles, Keyboard, Background, Camera]),
         new(SoundSection, [Audio, Midi]),
         new(SessionSection, [Practice, Recording]),
+        new(AppSection, [General]),
     ];
 
     /// <summary>Tab-strip order; the index in this array is the <c>SettingsTabs.SelectedIndex</c>.</summary>

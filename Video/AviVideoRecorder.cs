@@ -25,7 +25,7 @@ internal sealed class AviVideoRecorder : IDisposable
 
     public AviVideoRecorder(string path, int width, int height, int frameRate = 20)
     {
-        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException("Video recording currently requires Windows.");
+        if (!OperatingSystem.IsWindows()) throw new PlatformNotSupportedException(Loc.T("Video recording currently requires Windows."));
         if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
         if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
         if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
@@ -70,7 +70,7 @@ internal sealed class AviVideoRecorder : IDisposable
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         var expected = _stride * _height;
-        if (pixels.Length != expected) throw new ArgumentException($"Expected a {_width}×{_height} BGR frame ({expected} bytes).", nameof(pixels));
+        if (pixels.Length != expected) throw new ArgumentException(Loc.F("Expected a {0}×{1} BGR frame ({2} bytes).", _width, _height, expected), nameof(pixels));
         if (repeat < 1) return;
         var pinned = GCHandle.Alloc(pixels, GCHandleType.Pinned);
         try
@@ -82,7 +82,7 @@ internal sealed class AviVideoRecorder : IDisposable
                 var flags = UsesMjpeg && _frameIndex % FrameRate != 0 ? 0u : AviIfKeyFrame;
                 var result = AVIStreamWrite(_writeStream, _frameIndex, 1, pinned.AddrOfPinnedObject(), pixels.Length, flags, out var written, out var bytes);
                 Check(result, "Could not write a video frame");
-                if (written != 1) throw new IOException("The AVI writer did not accept the video frame.");
+                if (written != 1) throw new IOException(Loc.T("The AVI writer did not accept the video frame."));
                 _frameIndex++; BytesWritten += bytes > 0 ? bytes : pixels.Length;
             }
         }
@@ -91,7 +91,7 @@ internal sealed class AviVideoRecorder : IDisposable
 
     public static int BgrStride(int width) => ((width * 3 + 3) / 4) * 4;
     private static uint FourCc(string value) => (uint)value[0] | ((uint)value[1] << 8) | ((uint)value[2] << 16) | ((uint)value[3] << 24);
-    private static void Check(int result, string message) { if (result != 0) throw new IOException($"{message} (AVI error 0x{result:X8})."); }
+    private static void Check(int result, string message) { if (result != 0) throw new IOException(Loc.F("{0} (AVI error 0x{1:X8}).", Loc.T(message), result)); }
 
     public void Dispose()
     {

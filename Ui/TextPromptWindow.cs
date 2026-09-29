@@ -29,13 +29,13 @@ internal sealed class TextPromptWindow : Window
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 14, 0, 0) };
         var ok = new Button
         {
-            Content = "OK", Width = 84, Height = 30, IsDefault = true, Margin = new Thickness(0, 0, 8, 0),
+            Content = Loc.T("OK"), Width = 84, Height = 30, IsDefault = true, Margin = new Thickness(0, 0, 8, 0),
             Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(125, 61, 174)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(184, 119, 229)), BorderThickness = new Thickness(1)
         };
         var cancel = new Button
         {
-            Content = "Cancel", Width = 84, Height = 30, IsCancel = true,
+            Content = Loc.T("Cancel"), Width = 84, Height = 30, IsCancel = true,
             Foreground = Brushes.White, Background = new SolidColorBrush(Color.FromRgb(43, 38, 51)),
             BorderBrush = new SolidColorBrush(Color.FromRgb(80, 71, 91)), BorderThickness = new Thickness(1)
         };

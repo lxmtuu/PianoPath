@@ -30,6 +30,14 @@ internal static class VisualPresets
 
     internal static VisualPreset? FindBuiltIn(string name) => BuiltIn.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>
+    /// The caption to print for a preset name. A built-in name is translated when the language has an
+    /// entry for it; a name the user typed is returned untouched, because it is their own text.
+    /// The <em>stored</em> name is always the English one — see <see cref="VisualPreset.Name"/>.
+    /// </summary>
+    internal static string DisplayName(string name) =>
+        BuiltIn.Any(preset => string.Equals(preset.Name, name, StringComparison.OrdinalIgnoreCase)) ? Loc.T(name) : name;
+
     private static PianoVisualSettings Base(string name)
     {
         var s = new PianoVisualSettings { PresetName = name };
@@ -296,7 +304,7 @@ internal sealed class VisualPresetStore(string directory)
                     var settings = PianoVisualSettings.FromJson(File.ReadAllText(file));
                     var name = Path.GetFileNameWithoutExtension(file);
                     settings.PresetName = name;
-                    presets.Add(new VisualPreset(name, "User preset · " + Path.GetFileName(file), false, settings, file));
+                    presets.Add(new VisualPreset(name, Loc.F("User preset · {0}", Path.GetFileName(file)), false, settings, file));
                 }
                 catch { /* a corrupt file should not hide the remaining presets */ }
             }
@@ -316,7 +324,7 @@ internal sealed class VisualPresetStore(string directory)
         var temp = path + ".tmp";
         File.WriteAllText(temp, copy.ToJson());
         File.Move(temp, path, true);
-        return new VisualPreset(safe, "User preset · " + safe + ".json", false, copy, path);
+        return new VisualPreset(safe, Loc.F("User preset · {0}", safe + ".json"), false, copy, path);
     }
 
     internal bool Delete(VisualPreset preset)
@@ -339,7 +347,7 @@ internal sealed class VisualPresetStore(string directory)
         var settings = PianoVisualSettings.FromJson(File.ReadAllText(path));
         var name = SanitizeName(string.IsNullOrWhiteSpace(settings.PresetName) || settings.PresetName == "Custom" ? Path.GetFileNameWithoutExtension(path) : settings.PresetName);
         settings.PresetName = name;
-        return new VisualPreset(name, "Imported · " + Path.GetFileName(path), false, settings);
+        return new VisualPreset(name, Loc.F("Imported · {0}", Path.GetFileName(path)), false, settings);
     }
 
     internal static string SanitizeName(string name)

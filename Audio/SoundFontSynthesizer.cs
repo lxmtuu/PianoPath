@@ -110,14 +110,14 @@ internal static class SoundFontReader
     {
         var file = File.ReadAllBytes(path);
         var span = file.AsSpan();
-        if (span.Length < 12 || Ascii(span[..4]) != "RIFF" || Ascii(span.Slice(8, 4)) != "sfbk") throw new InvalidDataException("This is not an uncompressed SoundFont 2 (.sf2) file.");
+        if (span.Length < 12 || Ascii(span[..4]) != "RIFF" || Ascii(span.Slice(8, 4)) != "sfbk") throw new InvalidDataException(Loc.T("This is not an uncompressed SoundFont 2 (.sf2) file."));
         var riffEnd = Math.Min(span.Length, checked((int)U32(span, 4) + 8));
-        if (riffEnd < 12) throw new InvalidDataException("The SoundFont header is truncated.");
+        if (riffEnd < 12) throw new InvalidDataException(Loc.T("The SoundFont header is truncated."));
         var root = Children(span, 12, riffEnd);
         var info = List(span, root, "INFO"); var sdta = List(span, root, "sdta"); var pdta = List(span, root, "pdta");
         var name = ReadInfoString(span, Children(span, info.Offset, info.Offset + info.Length), "INAM");
         var sampleChunk = Find(Children(span, sdta.Offset, sdta.Offset + sdta.Length), "smpl");
-        if (sampleChunk.Length < 96 || sampleChunk.Length % 2 != 0) throw new InvalidDataException("The SoundFont has no usable 16-bit sample data.");
+        if (sampleChunk.Length < 96 || sampleChunk.Length % 2 != 0) throw new InvalidDataException(Loc.T("The SoundFont has no usable 16-bit sample data."));
         var sampleCount = sampleChunk.Length / 2;
 
         var pdtaChunks = Children(span, pdta.Offset, pdta.Offset + pdta.Length);
@@ -194,7 +194,7 @@ internal static class SoundFontReader
             }
             if (regions.Count > 0) presets.Add(new SoundFontPreset(header.Bank, header.Program, header.Name, regions));
         }
-        if (presets.Count == 0) throw new InvalidDataException("The SoundFont contains no usable preset/sample zones.");
+        if (presets.Count == 0) throw new InvalidDataException(Loc.T("The SoundFont contains no usable preset/sample zones."));
         return new SoundFontData { Name = string.IsNullOrWhiteSpace(name) ? Path.GetFileNameWithoutExtension(path) : name, FileData = file, SampleDataOffset = sampleChunk.Offset, SampleCount = sampleCount, Presets = presets };
     }
 
@@ -240,12 +240,12 @@ internal static class SoundFontReader
     }
     private static List<GeneratorSet> ReadZones(IReadOnlyList<Bag> bags, IReadOnlyList<GeneratorSet> generators, int first, int afterLast)
     {
-        if (first < 0 || afterLast < first || afterLast >= bags.Count) throw new InvalidDataException("SoundFont zone table contains an invalid bag index.");
+        if (first < 0 || afterLast < first || afterLast >= bags.Count) throw new InvalidDataException(Loc.T("SoundFont zone table contains an invalid bag index."));
         var result = new List<GeneratorSet>();
         for (var i = first; i < afterLast; i++)
         {
             var start = bags[i].Generator; var end = bags[i + 1].Generator;
-            if (start < 0 || end < start || end > generators.Count) throw new InvalidDataException("SoundFont generator table contains an invalid zone.");
+            if (start < 0 || end < start || end > generators.Count) throw new InvalidDataException(Loc.T("SoundFont generator table contains an invalid zone."));
             var zone = new GeneratorSet(); for (var g = start; g < end; g++) zone.Override(generators[g]); result.Add(zone);
         }
         return result;
@@ -256,25 +256,25 @@ internal static class SoundFontReader
         while (p + 8 <= end)
         {
             var id = Ascii(file.Slice(p, 4)); var size = checked((int)U32(file, p + 4)); var data = p + 8;
-            if (size < 0 || data + size > end) throw new InvalidDataException($"SoundFont chunk '{id}' extends past the file boundary.");
+            if (size < 0 || data + size > end) throw new InvalidDataException(Loc.F("SoundFont chunk '{0}' extends past the file boundary.", id));
             if (id == "LIST")
             {
-                if (size < 4) throw new InvalidDataException("A SoundFont LIST chunk is missing its type.");
+                if (size < 4) throw new InvalidDataException(Loc.T("A SoundFont LIST chunk is missing its type."));
                 var listType = Ascii(file.Slice(data, 4)); chunks[listType] = new Chunk(data + 4, size - 4);
             }
             else chunks[id] = new Chunk(data, size);
             p = data + size + (size & 1);
         }
-        if (p != end) throw new InvalidDataException("SoundFont chunk alignment is invalid.");
+        if (p != end) throw new InvalidDataException(Loc.T("SoundFont chunk alignment is invalid."));
         return chunks;
     }
     private static Chunk List(ReadOnlySpan<byte> file, IReadOnlyDictionary<string, Chunk> chunks, string id)
     {
-        if (!chunks.TryGetValue(id, out var chunk)) throw new InvalidDataException($"SoundFont is missing the {id} list.");
+        if (!chunks.TryGetValue(id, out var chunk)) throw new InvalidDataException(Loc.F("SoundFont is missing the {0} list.", id));
         _ = Children(file, chunk.Offset, chunk.Offset + chunk.Length); return chunk;
     }
-    private static Chunk Find(IReadOnlyDictionary<string, Chunk> chunks, string id) => chunks.TryGetValue(id, out var chunk) ? chunk : throw new InvalidDataException($"SoundFont is missing the '{id}' chunk.");
-    private static void RequireStride(Chunk chunk, int size, string name) { if (chunk.Length < size * 2 || chunk.Length % size != 0) throw new InvalidDataException($"SoundFont {name} table has an invalid size."); }
+    private static Chunk Find(IReadOnlyDictionary<string, Chunk> chunks, string id) => chunks.TryGetValue(id, out var chunk) ? chunk : throw new InvalidDataException(Loc.F("SoundFont is missing the '{0}' chunk.", id));
+    private static void RequireStride(Chunk chunk, int size, string name) { if (chunk.Length < size * 2 || chunk.Length % size != 0) throw new InvalidDataException(Loc.F("SoundFont {0} table has an invalid size.", name)); }
     private static string Ascii(ReadOnlySpan<byte> bytes) => Encoding.ASCII.GetString(bytes);
     private static string ReadName(ReadOnlySpan<byte> bytes) => Encoding.ASCII.GetString(bytes).TrimEnd('\0', ' ');
     private static ushort U16(ReadOnlySpan<byte> b, int o) => BinaryPrimitives.ReadUInt16LittleEndian(b.Slice(o, 2));

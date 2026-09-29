@@ -38,12 +38,12 @@ internal static class VerificationSuite
                 var soundFontLabel = (TextBlock)startupWindow.FindName("SoundFontLabel");
                 if (bundledPianoAvailable)
                 {
-                    if (audio.HasSoundFont && soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal))
+                    if (audio.HasSoundFont && soundFontLabel.Text != Loc.T("NO SOUNDFONT · SILENT"))
                     {
                         timer.Stop();
                         try
                         {
-                            Assert(soundFontLabel.Text.Contains("BUILT-IN", StringComparison.Ordinal), "A normal app startup should show the bundled piano as its active SoundFont.");
+                            Assert(soundFontLabel.Text != Loc.T("NO SOUNDFONT · SILENT"), "A normal app startup should show the bundled piano as its active SoundFont.");
                             Assert(((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled && ((ComboBox)startupWindow.FindName("PresetCombo")).SelectedIndex == 0, "Startup should select the bundled acoustic-grand preset.");
                             Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The bundled piano should start with hall reverb active in the UI and audio engine.");
                             Results.Add($"PASS WPF startup: bundled grand loads automatically, its preset is selected and room reverb starts enabled{(audio.HasAudioOutput ? "" : $"; no audio device here ({audio.PlaybackError}) so playback is silent")}.");
@@ -60,7 +60,7 @@ internal static class VerificationSuite
                 timer.Stop();
                 try
                 {
-                    Assert(!audio.HasSoundFont && soundFontLabel.Text.Contains("SILENT", StringComparison.Ordinal), "Without the bundled SoundFont the app must start in silent mode instead of failing.");
+                    Assert(!audio.HasSoundFont && soundFontLabel.Text == Loc.T("NO SOUNDFONT · SILENT"), "Without the bundled SoundFont the app must start in silent mode instead of failing.");
                     Assert(!((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled, "The instrument picker must stay disabled while no SoundFont is loaded.");
                     Results.Add("SKIP WPF startup bundled-piano checks: Assets/ConcertGrand.sf2 is a Git LFS pointer; verified the silent-mode startup path instead.");
                     startupWindow.Close();
@@ -464,6 +464,7 @@ internal static class VerificationSuite
         Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
         VerifySettingsDock(window, stage, visualSettings);
+        VerifyLanguageSwitching(window);
         VerifyBackgroundImageLoad(stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -486,7 +487,7 @@ internal static class VerificationSuite
         Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
         Assert(inputCombo.SelectedIndex == 0 && !midi.InputOpen,
             "An explicit 'Computer keyboard only' choice must survive a device refresh instead of snapping back to a MIDI input.");
-        Assert(!piano.HasSoundFont && !((ComboBox)window.FindName("PresetCombo")).IsEnabled && silentLabel.Text.Contains("SILENT"), "The initial UI must expose silent mode until a SoundFont is loaded.");
+        Assert(!piano.HasSoundFont && !((ComboBox)window.FindName("PresetCombo")).IsEnabled && silentLabel.Text == Loc.T("NO SOUNDFONT · SILENT"), "The initial UI must expose silent mode until a SoundFont is loaded.");
         var reverb = (ToggleButton)window.FindName("ReverbToggle");
         Assert(reverb.IsChecked == true && piano.ReverbEnabled, "The built-in concert room reverb should start enabled.");
         reverb.IsChecked = false; Assert(!piano.ReverbEnabled, "The reverb control should bypass the live audio effect.");
@@ -606,9 +607,12 @@ internal static class VerificationSuite
     {
         var tabs = (TabControl)window.FindName("SettingsTabs");
         var pageCount = SettingsPages.Order.Length;
-        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == "Style" && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == "Theme" && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == "Recording",
-            $"The settings dock should expose all {pageCount} categorized pages from Style to Recording.");
-        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.Recording) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
+        // The captions of the tab strip are translated, so the comparison runs through Loc too — a
+        // check that reads an English literal would fail the moment the suite runs in Vietnamese.
+        string Shown(string caption) => Loc.T(caption);
+        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == Shown("Style") && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == Shown("Theme") && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == Shown(SettingsPages.General),
+            $"The settings dock should expose all {pageCount} categorized pages from Style to General.");
+        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.General) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
             "Settings page names should resolve to their tab-strip index so no code has to keep magic tab numbers.");
         // The navigation is grouped by intent. Order is derived from the sections, the XAML tab strip
         // must match that order, and the header printed above a page must be the header of the section
@@ -617,7 +621,7 @@ internal static class VerificationSuite
         // A header may decorate the page name (Camera → "Camera & FX") but must start with it, which
         // is the same tolerance tools/check_sources.py applies to the markup.
         var pagesMatch = headers.Length == SettingsPages.Order.Length
-            && headers.Select((header, index) => header == SettingsPages.Order[index] || header.StartsWith(SettingsPages.Order[index] + " ", StringComparison.Ordinal)).All(match => match);
+            && headers.Select((header, index) => header == Shown(SettingsPages.Order[index]) || header.StartsWith(Shown(SettingsPages.Order[index]) + " ", StringComparison.Ordinal)).All(match => match);
         Assert(pagesMatch && SettingsPages.Order.SequenceEqual(SettingsPages.Sections.SelectMany(section => section.Pages)),
             $"The dock should list exactly the pages of the settings catalogue, in catalogue order (found {string.Join(", ", headers)}).");
         foreach (var section in SettingsPages.Sections)
@@ -628,8 +632,8 @@ internal static class VerificationSuite
             foreach (var page in section.Pages) Assert(SettingsPages.SectionOf(page)?.Label == section.Label, $"Settings page {page} should resolve to the section that lists it.");
         }
         Assert(SettingsPages.SectionOf("Nope") is null, "An unknown page name should have no section.");
-        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.Recording),
-            "The first section should open on Style and the last one should close on Recording.");
+        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.General),
+            "The first section should open on Style and the last one should close on the pages of the application itself.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)),
             "Note style, color mode, keyboard style, background mode and wisps should be editable from the dock.");
@@ -723,7 +727,51 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: eleven pages grouped into three navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add("PASS settings dock: twelve pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
+    }
+
+    /// <summary>
+    /// Interface language. The two shipped tables must cover exactly the same keys — a missing
+    /// translation is invisible in the language it does not affect — and a switch must repaint the
+    /// interface that is already on screen without rebuilding the window. Because switching is a
+    /// plain re-render, the check also proves that nothing is remembered in the wrong language:
+    /// the selected values, the stored settings and the dock search keep working across it.
+    /// </summary>
+    private static void VerifyLanguageSwitching(MainWindow window)
+    {
+        foreach (var language in Languages.All)
+        {
+            var missing = Loc.MissingFor(language);
+            Assert(missing.Count == 0,
+                $"{language.EnglishName} should translate every key of the English inventory ({missing.Count} missing, first: {missing.FirstOrDefault() ?? "-"}).");
+        }
+        Assert(Languages.Find("vi-VN").Id == "vi" && Languages.Find("vi").Id == "vi" && Languages.Find("Tiếng Việt").Id == "vi",
+            "A stored language should resolve from an id, a culture tag or the native name.");
+        Assert(Languages.Find("").Id == "en" && Languages.Find("xx").Id == "en" && Languages.Normalize("  VI ").Equals("vi", StringComparison.OrdinalIgnoreCase),
+            "An unknown or empty language must fall back to English, never to a blank label.");
+
+        var tabs = (TabControl)window.FindName("SettingsTabs");
+        Func<string> firstHeader = () => (string)((TabItem)tabs.Items[0]).Header!;
+        Loc.Apply("vi");
+        var vietnameseCaption = Loc.T("Falling notes");
+        Loc.ResetDiagnostics();
+        Assert(Loc.Current.Id == "vi" && vietnameseCaption != "Falling notes", "Applying a language must change the captions the interface prints.");
+        Assert(firstHeader() == Loc.T("Style"), "A window that is already open must repaint its labels when the language changes.");
+        // The row of the "Falling notes" switch is found by its translated caption, not only by English.
+        var search = (TextBox)window.FindName("SettingsSearchBox");
+        search.Text = vietnameseCaption;
+        var rows = (System.Collections.IList)Field(window, "_settingRows");
+        var row = rows.Cast<object>().First(candidate => (string?)candidate.GetType().GetField("Property")!.GetValue(candidate) == nameof(PianoVisualSettings.ShowNotes));
+        Assert(((FrameworkElement)row.GetType().GetField("Element")!.GetValue(row)!).Visibility == Visibility.Visible,
+            "The settings search should match a row by its translated caption as well as by the English one.");
+        search.Text = "";
+        Assert(Loc.UntranslatedKeys.Count == 0,
+            $"Every string the interface printed while in Vietnamese should have a translation ({Loc.UntranslatedKeys.FirstOrDefault() ?? "-"}).");
+        if (Loc.UnknownKeys.Count > 0) Results.Add($"NOTE {Loc.UnknownKeys.Count} printed string(s) are not keys of the English inventory ({string.Join(", ", Loc.UnknownKeys.Take(3))}) — a user-supplied name is allowed, a reworded caption is not.");
+        Loc.Apply("en");
+        Assert(firstHeader() == "Style" && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
+        Loc.Apply("");
+        Results.Add($"PASS localization: {Languages.All.Length} languages cover all {StringsEnglish.Table.Count} keys, a live switch repaints the open dock in both directions and the settings search answers to either language.");
     }
 
     /// <summary>

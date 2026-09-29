@@ -18,9 +18,14 @@ public partial class App : Application
 
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
-        // Publish the saved shell theme before any window exists, so the very first frame is themed
-        // instead of flashing the XAML defaults and repainting one frame later.
-        ShellThemeManager.Apply(PianoVisualSettingsStore.Load().ShellTheme);
+        // Publish the saved language and shell theme before any window exists, so the very first
+        // frame is already translated and themed instead of flashing the XAML defaults for a frame.
+        // --lang=<en|vi> overrides the stored language for one run only, which is how CI renders the
+        // Vietnamese preview of the General page without touching anybody's settings file.
+        var stored = PianoVisualSettingsStore.Load();
+        var languageOverride = e.Args.FirstOrDefault(argument => argument.StartsWith("--lang=", StringComparison.Ordinal))?["--lang=".Length..];
+        Loc.Apply(string.IsNullOrWhiteSpace(languageOverride) ? stored.Language : languageOverride);
+        ShellThemeManager.Apply(stored.ShellTheme);
 
         var window = new MainWindow();
         MainWindow = window;
@@ -54,6 +59,7 @@ public partial class App : Application
                     "midi" => SettingsPages.Midi,
                     "practice" => SettingsPages.Practice,
                     "recording" or "record" => SettingsPages.Recording,
+                    "general" or "language" or "app" => SettingsPages.General,
                     _ => SettingsPages.Style
                 };
                 tabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));

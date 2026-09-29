@@ -34,6 +34,14 @@ internal sealed class PianoVisualSettings
     public bool ShowKeyShadow { get; set; } = true;
     public int BackgroundAppearanceVersion { get; set; }
 
+    // ---- Interface language --------------------------------------------------------------------------
+    /// <summary>
+    /// Interface language id (<c>en</c>, <c>vi</c>), or empty to follow the Windows display language.
+    /// The language is an application preference, not part of a look: <see cref="CopyFrom"/> never
+    /// copies it, so applying a preset cannot translate the interface behind the user's back.
+    /// </summary>
+    public string Language { get; set; } = "";
+
     // ---- Interface theme (the chrome around the stage) -----------------------------------------------
     /// <summary>Interface theme id: concert-grand, concert-noir or velvet-gold. See <see cref="ShellThemes"/>.</summary>
     public string ShellTheme { get; set; } = ShellThemes.DefaultId;
@@ -316,6 +324,8 @@ internal sealed class PianoVisualSettings
         foreach (var property in typeof(PianoVisualSettings).GetProperties())
         {
             if (!property.CanWrite || !property.CanRead) continue;
+            // The interface language belongs to the person, not to the look being applied.
+            if (property.Name == nameof(Language)) continue;
             var value = property.GetValue(source);
             property.SetValue(this, value is List<string> list ? new List<string>(list) : value);
         }
@@ -418,6 +428,10 @@ internal sealed class PianoVisualSettings
             if (!string.IsNullOrWhiteSpace(BackgroundImagePath)) BackgroundMode = "Image";
             BackgroundAppearanceVersion = 2;
         }
+        // The interface language is stored as an id; empty keeps "follow Windows", and an id this
+        // build does not know (a file from a future release) falls back to English rather than
+        // leaving every label on screen untranslated.
+        if (!string.IsNullOrWhiteSpace(Language)) Language = Languages.Normalize(Language);
         // Interface themes are stored by id; older releases used the retro ids sakura / noir / velvet
         // and the retired "Sakura Nocturne" name. Resolve them once on load so the picker, the header
         // and the JSON on disk all agree on one id, and an unknown value falls back to the default.

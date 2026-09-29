@@ -23,31 +23,31 @@ internal sealed class MidiDeviceService : IDisposable
         CloseInput();
         if (index < 0) return;
         var inputCount = midiInGetNumDevs();
-        if ((uint)index >= inputCount) throw new InvalidOperationException("The selected MIDI input is no longer available. Refresh the MIDI device list and select it again.");
+        if ((uint)index >= inputCount) throw new InvalidOperationException(Loc.T("The selected MIDI input is no longer available. Refresh the MIDI device list and select it again."));
         _callback = OnMidiInput;
         var result = midiInOpen(out _input, (uint)index, _callback, UIntPtr.Zero, CallbackFunction);
-        if (result != 0) { _input = IntPtr.Zero; _callback = null; throw new InvalidOperationException($"Windows MIDI input could not be opened (code {result})."); }
+        if (result != 0) { _input = IntPtr.Zero; _callback = null; throw new InvalidOperationException(Loc.F("Windows MIDI input could not be opened (code {0}).", result)); }
         result = midiInStart(_input);
-        if (result != 0) { CloseInput(); throw new InvalidOperationException($"Windows MIDI input could not start (code {result})."); }
+        if (result != 0) { CloseInput(); throw new InvalidOperationException(Loc.F("Windows MIDI input could not start (code {0}).", result)); }
     }
     public void OpenOutput(int index)
     {
         CloseOutput();
         if (index < 0 || index >= midiOutGetNumDevs()) return;
         var result = midiOutOpen(out _output, (uint)index, IntPtr.Zero, UIntPtr.Zero, 0);
-        if (result != 0) { _output = IntPtr.Zero; throw new InvalidOperationException($"Windows MIDI output could not be opened (code {result})."); }
+        if (result != 0) { _output = IntPtr.Zero; throw new InvalidOperationException(Loc.F("Windows MIDI output could not be opened (code {0}).", result)); }
     }
     public void SendNote(int pitch, int velocity, bool on, int channel = 0)
     {
         if (_output == IntPtr.Zero) return;
         var result = midiOutShortMsg(_output, PackNoteMessage(pitch, velocity, on, channel));
-        if (result != 0) throw new InvalidOperationException($"Windows MIDI output rejected a note message (code {result}).");
+        if (result != 0) throw new InvalidOperationException(Loc.F("Windows MIDI output rejected a note message (code {0}).", result));
     }
     public void SendController(int controller, int value, int channel = 0)
     {
         if (_output == IntPtr.Zero) return;
         var result = midiOutShortMsg(_output, PackControllerMessage(controller, value, channel));
-        if (result != 0) throw new InvalidOperationException($"Windows MIDI output rejected a controller message (code {result}).");
+        if (result != 0) throw new InvalidOperationException(Loc.F("Windows MIDI output rejected a controller message (code {0}).", result));
     }
     public void CloseOutputDevice() => CloseOutput();
     internal static uint PackNoteMessage(int pitch, int velocity, bool on, int channel = 0) =>
@@ -80,7 +80,7 @@ internal sealed class MidiDeviceService : IDisposable
     {
         var caps = new MidiCaps();
         var result = input ? midiInGetDevCaps((UIntPtr)id, ref caps, (uint)Marshal.SizeOf<MidiCaps>()) : midiOutGetDevCaps((UIntPtr)id, ref caps, (uint)Marshal.SizeOf<MidiCaps>());
-        return result == 0 && !string.IsNullOrWhiteSpace(caps.Name) ? caps.Name : $"MIDI device {id + 1}";
+        return result == 0 && !string.IsNullOrWhiteSpace(caps.Name) ? caps.Name : Loc.F("MIDI device {0}", id + 1);
     }
     private void CloseInput() { if (_input != IntPtr.Zero) { midiInStop(_input); midiInReset(_input); midiInClose(_input); _input = IntPtr.Zero; } _callback = null; }
     private void CloseOutput() { if (_output != IntPtr.Zero) { midiOutReset(_output); midiOutClose(_output); _output = IntPtr.Zero; } }

@@ -18,7 +18,8 @@ public partial class MainWindow
     internal void ShowStartupMenu()
     {
         SetChromeVisible(false);
-        MainMenuVersionLabel.Text = $"Keyflow {System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.4"}";
+        Loc.Format(MainMenuVersionLabel, "Keyflow {0} · Concert Grand Edition",
+            System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.4");
         RefreshMenuThemeChips();
         RefreshMenuStageLook();
         MainMenuOverlay.Visibility = Visibility.Visible;
@@ -60,12 +61,9 @@ public partial class MainWindow
         SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Audio);
     }
 
-    private void MainMenuAbout_Click(object sender, RoutedEventArgs e)
-    {
-        MessageBox.Show(this,
-            "Keyflow · Piano Performance & Concert VFX Studio\n\nA professional real-time MIDI piano visualizer: ray-traced keyboard shading, thermal sparks & embers, acoustic resonance waves, flames, and a full concert stage designer.\n\nInterface themes: Concert Grand (Steinway ebony & champagne gold), Concert Noir (obsidian slate with silvery platinum) and Velvet Gold (mahogany velvet & burnished brass).\n\nThemes and stage effects are driven by the shared vsync clock for fluid 60+ FPS motion.\nSoundFont: Bundled Yamaha Disklavier Grand Piano (88 Keys).\nShading model: Cook-Torrance GGX + ACES filmic tone mapping.\n\n© 2026 Yami · Neyu · Keyflow — released under the MIT license.\nContributor: Jin",
-            "About Keyflow Concert Grand", MessageBoxButton.OK, MessageBoxImage.Information);
-    }
+    private void MainMenuAbout_Click(object sender, RoutedEventArgs e) => ShowMessage(
+        Loc.T("Keyflow · Piano Performance & Concert VFX Studio\n\nA professional real-time MIDI piano visualizer: ray-traced keyboard shading, thermal sparks & embers, acoustic resonance waves, flames, and a full concert stage designer.\n\nInterface themes: Concert Grand (Steinway ebony & champagne gold), Concert Noir (obsidian slate with silvery platinum) and Velvet Gold (mahogany velvet & burnished brass).\n\nThemes and stage effects are driven by the shared vsync clock for fluid 60+ FPS motion.\nSoundFont: Bundled Yamaha Disklavier Grand Piano (88 Keys).\nShading model: Cook-Torrance GGX + ACES filmic tone mapping.\nKeyflow 0.4.0 · shipped languages: English and Tiếng Việt.\n\n© 2026 Yami · Neyu · Keyflow — released under the MIT license.\nContributor: Jin"),
+        "About Keyflow Concert Grand", MessageBoxImage.Information);
 
     private void MainMenuExit_Click(object sender, RoutedEventArgs e) => Close();
 
@@ -84,18 +82,18 @@ public partial class MainWindow
             var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
             var chip = new Button
             {
-                Content = active ? "✦  " + theme.Name : theme.Name,
                 Tag = ThemeOrb(theme),
                 DataContext = theme.Id,
                 Style = (Style)FindResource("ThemeChipStyle"),
-                ToolTip = theme.Blurb,
                 Opacity = active ? 1 : .72
             };
+            Loc.Bind(chip, () => Loc.F(active ? "✦  {0}" : "{0}", Loc.T(theme.Name)));
+            Loc.Set(chip, theme.Blurb, FrameworkElement.ToolTipProperty);
             chip.Click += ThemeChip_Click;
             MenuThemeHost.Children.Add(chip);
             _menuThemeChips.Add(chip);
         }
-        if (MenuThemeBlurb is not null) MenuThemeBlurb.Text = ShellThemeManager.Current.Blurb;
+        if (MenuThemeBlurb is not null) Loc.Set(MenuThemeBlurb, ShellThemeManager.Current.Blurb);
     }
 
     /// <summary>A small palette sphere for a theme chip: the accent turning into its companion colour.</summary>
@@ -124,7 +122,7 @@ public partial class MainWindow
         MarkModified();
         // ApplyVisualSettings already publishes the theme, so the chip click rebuilds every surface
         // (menu, dock and play dialog) through one path.
-        ApplyVisualSettings($"Interface theme · {theme.Name}");
+        ApplyVisualSettings("Interface theme · {0}", false, Loc.T(theme.Name));
         RefreshMenuThemeChips();
         RefreshPlayThemeChips();
         ChromeMotion.Pulse((UIElement)sender);
@@ -136,9 +134,11 @@ public partial class MainWindow
         if (MenuPresetLabel is null) return;
         var preset = VisualPresets.FindBuiltIn(_visualSettings.PresetName);
         var name = string.IsNullOrWhiteSpace(_visualSettings.PresetName) ? "Custom" : _visualSettings.PresetName;
-        MenuPresetLabel.Text = preset is null
-            ? $"“{name}” — your own look{(_visualSettings.PresetModified ? ", edited since it was applied" : "")}."
-            : $"“{name}” — {preset.Description}";
+        // A closure (rather than a template plus arguments) because the description and the
+        // "edited" suffix are themselves translated text that has to follow a language switch.
+        Loc.Bind(MenuPresetLabel, () => preset is null
+            ? Loc.F("“{0}” — your own look{1}.", VisualPresets.DisplayName(name), _visualSettings.PresetModified ? Loc.T(", edited since it was applied") : "")
+            : Loc.F("“{0}” — {1}", VisualPresets.DisplayName(name), Loc.T(preset.Description)));
     }
 
     /// <summary>Cycles the built-in stage presets, the quickest way to feel the difference.</summary>
@@ -153,7 +153,7 @@ public partial class MainWindow
         LoadPresetList(next.Name);
         RefreshMenuStageLook();
         RefreshMenuThemeChips();
-        SettingsSaveLabel.Text = $"Preset “{next.Name}” applied";
+        Loc.Format(SettingsSaveLabel, "Preset “{0}” applied", VisualPresets.DisplayName(next.Name));
     }
 
     // =====================================================================================
@@ -183,9 +183,12 @@ public partial class MainWindow
         var right = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.RightHandColor : _visualSettings.NoteColorEnd);
         LeftStyleCard.BorderBrush = new SolidColorBrush(left);
         RightStyleCard.BorderBrush = new SolidColorBrush(right);
-        var presetDisplay = _visualSettings.PresetModified ? _visualSettings.PresetName + " *" : _visualSettings.PresetName;
-        LeftStyleLabel.Text = presetDisplay;
-        RightStyleLabel.Text = presetDisplay;
+        // The preset name is translated and the "edited" marker appended, both inside the renderer, so
+        // the two hand cards follow a language switch instead of keeping the text of the old one.
+        string PresetCaption() => VisualPresets.DisplayName(_visualSettings.PresetName)
+            + (_visualSettings.PresetModified ? " *" : "");
+        Loc.Bind(LeftStyleLabel, PresetCaption);
+        Loc.Bind(RightStyleLabel, PresetCaption);
         if (PlayDialogHaloColorDot is not null)
             PlayDialogHaloColorDot.Background = new SolidColorBrush(SafeColor(_visualSettings.HaloColor));
         if (PlayDialogThemeOrb is not null)
@@ -211,9 +214,8 @@ public partial class MainWindow
 
     private void PlayDialogOpenMidi_Click(object sender, RoutedEventArgs e)
     {
-        var before = SongTitle.Text;
         OpenMidi_Click(sender, e);
-        if (SongTitle.Text != before) PlayDialogMidiButton.Content = SongTitle.Text;
+        Loc.Bind(PlayDialogMidiButton, () => _songLabel);
     }
 
     private void PlayDialogLive_Click(object sender, RoutedEventArgs e)
@@ -279,7 +281,7 @@ public partial class MainWindow
             finally { _loadingVisualSettings = false; }
         }
         MarkModified();
-        ApplyVisualSettings($"Fall speed {(int)_visualSettings.NoteFallSpeed}");
+        ApplyVisualSettings("Fall speed {0}", false, (int)_visualSettings.NoteFallSpeed);
     }
 
     private void PlaySpeedReset_Click(object sender, RoutedEventArgs e) => PlaySpeedSlider.Value = DefaultVisualSettings.NoteFallSpeed;
@@ -368,7 +370,8 @@ public partial class MainWindow
             foreach (var slider in section.Sliders) panel.Children.Add(BuildInlineSlider(slider));
             foreach (var toggle in section.Toggles) panel.Children.Add(BuildInlineToggle(toggle));
         }
-        var more = new Button { Content = "More settings…", DataContext = dockPage, Style = (Style)FindResource("MiniButtonStyle"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+        var more = new Button { DataContext = dockPage, Style = (Style)FindResource("MiniButtonStyle"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+        Loc.Set(more, "More settings…");
         more.Click += PlayDialogDeepLink_Click;
         panel.Children.Add(more);
         return panel;
@@ -387,7 +390,9 @@ public partial class MainWindow
         var slider = new Slider { Minimum = min, Maximum = max, Value = Math.Clamp(current, min, max), Tag = spec.Property };
         slider.ValueChanged += PlayInlineSlider_Changed;
         Grid.SetColumn(value, 1); Grid.SetRow(slider, 1); Grid.SetColumnSpan(slider, 2);
-        grid.Children.Add(new TextBlock { Text = spec.Label, Style = (Style)FindResource("LabelTextStyle") });
+        var label = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        Loc.Set(label, spec.Label);
+        grid.Children.Add(label);
         grid.Children.Add(value); grid.Children.Add(slider);
         _playInlineSliders.Add((slider, value));
         return grid;
@@ -402,7 +407,9 @@ public partial class MainWindow
         var combo = new ComboBox { Tag = spec.Property, Width = 180, Height = 28, DisplayMemberPath = dock.DisplayMemberPath, SelectedValuePath = dock.SelectedValuePath, ItemsSource = dock.ItemsSource, SelectedValue = dock.SelectedValue };
         combo.SelectionChanged += PlayInlineChoice_Changed;
         Grid.SetColumn(combo, 1);
-        grid.Children.Add(new TextBlock { Text = spec.Label, Style = (Style)FindResource("LabelTextStyle"), VerticalAlignment = VerticalAlignment.Center });
+        var label = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), VerticalAlignment = VerticalAlignment.Center };
+        Loc.Set(label, spec.Label);
+        grid.Children.Add(label);
         grid.Children.Add(combo);
         _playInlineChoices.Add(combo);
         return grid;
@@ -411,7 +418,8 @@ public partial class MainWindow
     /// <summary>Inline switches join the shared toggle list, so <see cref="VisualToggle_Changed"/> keeps them and the dock in step.</summary>
     private CheckBox BuildInlineToggle(InlineControl spec)
     {
-        var check = new CheckBox { Content = spec.Label, Tag = spec.Property, IsChecked = (bool)Prop(spec.Property).GetValue(_visualSettings)!, Margin = new Thickness(0, 4, 0, 4) };
+        var check = new CheckBox { Tag = spec.Property, IsChecked = (bool)Prop(spec.Property).GetValue(_visualSettings)!, Margin = new Thickness(0, 4, 0, 4) };
+        Loc.Set(check, spec.Label, ContentControl.ContentProperty);
         check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed;
         _visualToggleList.Add(check);
         return check;
@@ -462,13 +470,13 @@ public partial class MainWindow
             var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
             var chip = new Button
             {
-                Content = active ? "✦  " + theme.Name : theme.Name,
                 Tag = ThemeOrb(theme),
                 DataContext = theme.Id,
                 Style = (Style)FindResource("ThemeChipStyle"),
-                ToolTip = theme.Blurb,
                 Opacity = active ? 1 : .72
             };
+            Loc.Bind(chip, () => Loc.F(active ? "✦  {0}" : "{0}", Loc.T(theme.Name)));
+            Loc.Set(chip, theme.Blurb, FrameworkElement.ToolTipProperty);
             chip.Click += ThemeChip_Click;
             _playThemeChips.Children.Add(chip);
         }

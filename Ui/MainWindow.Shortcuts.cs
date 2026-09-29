@@ -79,7 +79,9 @@ public partial class MainWindow
         foreach (var (title, rows) in ShortcutGroups)
         {
             var column = new StackPanel { Margin = new Thickness(0, 0, 18, 0) };
-            column.Children.Add(new TextBlock { Text = title, Style = (Style)FindResource("EyebrowTextStyle"), Margin = new Thickness(0, 0, 0, 10) });
+            var heading = new TextBlock { Style = (Style)FindResource("EyebrowTextStyle"), Margin = new Thickness(0, 0, 0, 10) };
+            Loc.Set(heading, title);
+            column.Children.Add(heading);
             foreach (var (keys, text) in rows)
             {
                 var grid = new Grid { Margin = new Thickness(0, 0, 0, 12) };
@@ -106,11 +108,11 @@ public partial class MainWindow
                 };
                 var description = new TextBlock
                 {
-                    Text = text,
                     Style = (Style)FindResource("MutedTextStyle"),
                     TextWrapping = TextWrapping.Wrap,
                     Margin = new Thickness(0, 2, 0, 0)
                 };
+                Loc.Set(description, text);
                 Grid.SetColumn(description, 1);
                 grid.Children.Add(chip);
                 grid.Children.Add(description);
@@ -118,6 +120,15 @@ public partial class MainWindow
             }
             ShortcutGrid.Children.Add(column);
         }
+    }
+
+    /// <summary>Re-generates the card in the new language; the key chips themselves never change.</summary>
+    private void RefreshShortcutCard()
+    {
+        if (!_shortcutCardBuilt) return;
+        ShortcutGrid.Children.Clear();
+        _shortcutCardBuilt = false;
+        BuildShortcutCard();
     }
 
     private void MainMenuShortcuts_Click(object sender, RoutedEventArgs e)
