@@ -645,9 +645,6 @@ internal static class VerificationSuite
         var frame = new DispatcherFrame();
         Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Render, () => frame.Continue = false);
         Dispatcher.PushFrame(frame);
-        var width = Math.Max(1, (int)stage.ActualWidth); var height = Math.Max(1, (int)stage.ActualHeight);
-        var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(stage);
     }
 
     /// <summary>The dock switch must really change what the stage renders, and the bake must be cached.</summary>
