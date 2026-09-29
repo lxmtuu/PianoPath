@@ -53,18 +53,29 @@ public partial class App : Application
         if (snapshotIndex >= 0 && snapshotIndex + 1 < e.Args.Length)
         {
             if (e.Args.Contains("--compact")) { window.WindowState = WindowState.Normal; window.Width = 1080; window.Height = 700; }
-            window.ContentRendered += (_, _) =>
+            var target = e.Args[snapshotIndex + 1];
+            var captured = false; var previewPressed = false; var loadedWait = Stopwatch.StartNew();
+            void PressPreview()
             {
+                if (previewPressed) return;
+                previewPressed = true;
                 if (e.Args.Contains("--play-preview")) VerificationSuite.PressPreviewNote(window, 60);
-                var loadedWait = Stopwatch.StartNew();
-                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
-                timer.Tick += (_, _) =>
-                {
-                    if (!window.HasSoundFont && loadedWait.Elapsed < TimeSpan.FromSeconds(8)) return;
-                    timer.Stop(); VerificationSuite.Capture(window, e.Args[snapshotIndex + 1]); Shutdown(0);
-                };
-                timer.Start();
-            };
+            }
+            // The SoundFont scan and the first render both settle over a few seconds; the timer waits
+            // for the instrument (bounded, so a silent CI runner still gets its screenshot) and the
+            // watchdog guarantees a file even in a session that never raises ContentRendered.
+            var settle = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+            void TryCapture()
+            {
+                if (captured || (!window.HasSoundFont && loadedWait.Elapsed < TimeSpan.FromSeconds(8))) return;
+                captured = true; settle.Stop();
+                VerificationSuite.Capture(window, target); Shutdown(0);
+            }
+            settle.Tick += (_, _) => TryCapture();
+            window.ContentRendered += (_, _) => { PressPreview(); loadedWait.Restart(); settle.Start(); };
+            var watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
+            watchdog.Tick += (_, _) => { watchdog.Stop(); if (captured) return; PressPreview(); TryCapture(); if (!captured) { captured = true; VerificationSuite.Capture(window, target); Shutdown(0); } };
+            watchdog.Start();
         }
         window.Show();
     }
