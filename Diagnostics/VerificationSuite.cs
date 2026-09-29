@@ -738,11 +738,11 @@ internal static class VerificationSuite
         var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
         var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
         Assert(menu is not null && play is not null, "The Embers-style shell should provide a main menu and a pre-flight play dialog.");
-        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
         window.ShowStartupMenu();
-        Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
+        Assert(menu!.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
-        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
+        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
         var notesToggle = (CheckBox)window.FindName("LayerNotesToggle")!;
         Assert(notesToggle.IsChecked == visualSettings.ShowNotes, "Play-dialog layer switches should mirror the live stage settings.");
         notesToggle.IsChecked = false;
@@ -750,7 +750,7 @@ internal static class VerificationSuite
         notesToggle.IsChecked = true;
         Assert(visualSettings.ShowNotes, "Switching the Notes layer back on should restore the stage settings.");
         Invoke(window, "PlayDialogClose_Click", window, new RoutedEventArgs());
-        Assert(play.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
+        Assert(play!.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
     }
 
     private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)
@@ -800,11 +800,11 @@ internal static class VerificationSuite
         SetField(window, "_position", 1.0); Invoke(window, "SetLoopA_Click", window, new RoutedEventArgs());
         SetField(window, "_position", 3.0); Invoke(window, "SetLoopB_Click", window, new RoutedEventArgs());
         Assert(((TextBlock)window.FindName("LoopLabel")).Text == "00:01–00:03", "A/B loop should retain its selected times.");
-        SetField(window, "_position", 3.1); Invoke(window, "Tick"); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
+        SetField(window, "_position", 3.1); Invoke(window, "Tick", .016); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
 
         mode.SelectedIndex = 1;
         foreach (var note in ((IEnumerable<NoteEvent>)Field(window, "_notes")).Where(n => n.Start < .99)) note.Played = true;
-        SetField(window, "_position", 1.2); ((Stopwatch)Field(window, "_clock")).Restart(); Invoke(window, "StartPlayback"); Invoke(window, "Tick");
+        SetField(window, "_position", 1.2); ((Stopwatch)Field(window, "_clock")).Restart(); Invoke(window, "StartPlayback"); Invoke(window, "Tick", .016);
         Assert(Math.Abs((double)Field(window, "_position") - 1.0) < .02, "Wait mode should hold at the next note.");
         Invoke(window, "PressNote", 72, 90);
         Assert(((IEnumerable<NoteEvent>)Field(window, "_notes")).Any(n => n.Pitch == 72 && Math.Abs(n.Start - 1) < .01 && n.Played), "The expected note should score and release wait mode.");
@@ -824,7 +824,7 @@ internal static class VerificationSuite
                 && window.GetType().GetField("_stageFrames", BindingFlags.Instance | BindingFlags.NonPublic) is not null && FrameClock.Shared is not null,
             "Stage animation should run on the shared frame clock instead of a private dispatcher timer.");
         Invoke(window, "PressNote", 60, 90);
-        Assert(FrameClock.Shared.IsRunning && (bool)Field(window, "_stageFrames"), "Playing a note should acquire the shared frame clock.");
+        Assert(FrameClock.Shared!.IsRunning && (bool)Field(window, "_stageFrames"), "Playing a note should acquire the shared frame clock.");
         Invoke(window, "ReleaseNote", 60);
         Invoke(window, "Stop");
         Results.Add("PASS WPF: idle auto-hide of toolbar and settings, mouse reveal, Escape toggling Stage Design, live AVI frame capture, duration-scaled notes, pedals, MIDI practice controls and the shared frame clock.");
