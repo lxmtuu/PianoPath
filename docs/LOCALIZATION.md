@@ -150,8 +150,10 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 * Chip phím tắt trong thẻ F1 in nguyên văn — chấp nhận được với `F1`/`Space`, nhưng
   `Click the keys`, `MIDI keyboard`, `Pointer idle`, `Drag the timeline`, `Practice modes` là nhãn mô
   tả, nên về sau cho chúng qua `Loc.T` rồi thêm năm khoá vào inventory.
-* Tên preset mặc định `"My preset"` (`VisualPresets.SanitizeName`) hiện là **tên tệp**, dịch nó sẽ đổi
-  luôn tên tệp; cần tách "tên lưu" và "nhãn hiển thị" trong `VisualPreset` rồi mới dịch.
+* `VisualPresets.SanitizeName` trả `"My preset"` làm **tên tệp** khi người dùng lưu mà không đặt tên;
+  nhãn hiển thị của nó thì đã dịch (`Preset của tôi`) vì `DisplayName` đi qua bảng. Hệ quả phụ: một preset
+  do người dùng tự đặt tên trùng hẳn một khoá của bảng (ví dụ `Custom`) sẽ bị dịch khi in — vô hại nhưng
+  nên giới hạn `DisplayName` cho đúng các preset có sẵn (hiện đã làm vậy).
 * Mô tả preset *do người dùng lưu* là một chuỗi ghép (`User preset · x.json`); nó đã theo ngôn ngữ
   lúc dựng danh sách, nhưng một preset tự đặt tên tiếng Việt thì không nên bị `T()` chạm vào.
 * RTL (Ả Rập, Do Thái, Ba Tư) cần thêm `FlowDirection`, đảo `Margin`/`Grid` cột và đường rơi của nốt;

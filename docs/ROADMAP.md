@@ -17,7 +17,7 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 
 | # | Việc | Ghi chú kỹ thuật | Cách kiểm chứng |
 |---|---|---|---|
-| 1 | **Hoàn tất đa ngôn ngữ** — chip phím tắt F1 qua `Loc.T`, tách "tên đã lưu" và "nhãn hiển thị" trong `VisualPreset`, thêm 5 key mô tả vào inventory | Xem `docs/LOCALIZATION.md` §9; `SanitizeName` đang trả về tên tệp nên không được dịch | `tools/check_sources.py` + `--verify` |
+| 1 | **Hoàn tất đa ngôn ngữ** — chip phím tắt F1 qua `Loc.T` (năm nhãn mô tả, không phải phím thật), `--verify` chặn thêm `UnknownKeys` thành lỗi thay vì `NOTE` | Xem `docs/LOCALIZATION.md` §9; `VisualPreset` đã tách "tên đã lưu" và nhãn hiển thị qua `DisplayName` | `tools/check_sources.py` + `--verify` |
 | 2 | **Song ngữ cho tài liệu** | `README.md` giữ tiếng Việt; thêm `README.en.md` dịch 1‑1, mỗi ảnh dùng lại từ `docs/previews/`. `scan_readme` trong checker quét **cả hai** tệp | `python tools/check_sources.py` |
 | 3 | **Ngôn ngữ cho bộ cài** | `installer/Keyflow.iss` khai một tệp `.isl`; thêm `installer\Languages\Vietnamese.isl` rồi chọn ngôn ngữ theo `Language` đã lưu hoặc theo Windows | Build `release.yml` thêm bước ISCC để ảnh installer cũng được kiểm |
 | 4 | **Accessibility** | `AutomationProperties.Name` cho mọi nút chỉ có glyph (⟳, A/B, các nút icon), `KeyboardNavigation.TabNavigation` trong dock, font scale không vỡ layout (`--compact` 1080×700 là một case test), màu theo `SystemParameters.HighContrast` qua `ShellThemeManager` | Thêm `VerifyAccessibility` vào `--verify`: mỗi control có `AutomationProperties.Name` hoặc text, và không token màu nào bị thiếu khi bật high contrast |
