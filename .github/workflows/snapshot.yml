@@ -1,11 +1,14 @@
 name: shell-snapshots
 
-# Temporary helper: renders the concert shell on a real Windows runner so the README
-# screenshots can be refreshed from a build of the current sources.
+# Temporary helper: renders the concert shell on a real Windows runner, commits the
+# PNGs back to the branch (tagged [skip ci]) and keeps the logs as annotations.
 on:
   push:
     branches: ["arena/**"]
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   snapshots:
@@ -14,6 +17,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           lfs: false
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - uses: actions/setup-dotnet@v4
         with:
@@ -38,6 +43,7 @@ jobs:
             $so = Join-Path $out "$name.stdout.txt"; $se = Join-Path $out "$name.stderr.txt"
             $p = Start-Process -FilePath $exe -ArgumentList (@('--snapshot', $png) + $extra) -PassThru -Wait -RedirectStandardOutput $so -RedirectStandardError $se
             "--- $name exit=$($p.ExitCode) png=$(Test-Path $png)"
+            if (Test-Path $png) { "::notice title=keyflow snapshot::$name $((Get-Item $png).Length) bytes" }
             if (Test-Path $se) { Get-Content $se | Select-Object -First 40 }
             if (Test-Path $so) { Get-Content $so | Select-Object -First 40 }
           }
@@ -46,10 +52,18 @@ jobs:
           Shot 'settings-preview.png' @('--show-settings', '--settings-tab=theme')
           Get-ChildItem $out -Recurse | Select-Object FullName, Length
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: keyflow-snapshots
-          path: |
-            ${{ runner.temp }}/snapshots/*.png
-            ${{ runner.temp }}/snapshots/*.txt
-          if-no-files-found: warn
+      - name: Publish snapshots to the branch
+        shell: pwsh
+        run: |
+          $out = Join-Path $env:RUNNER_TEMP 'snapshots'
+          foreach ($name in 'menu-preview.png', 'preview.png', 'settings-preview.png') {
+            $png = Join-Path $out $name
+            if (-not (Test-Path $png)) { "::warning title=keyflow snapshot::missing $name"; continue }
+            Copy-Item $png (Join-Path $env:GITHUB_WORKSPACE $name) -Force
+          }
+          git config user.name 'keyflow-snapshots'
+          git config user.email 'actions@github.com'
+          git add -- '*.png'
+          if (-not (git status --porcelain)) { "::notice title=keyflow snapshot::screenshots unchanged"; exit 0 }
+          git commit -m 'Add rendered shell screenshots [skip ci]'
+          git push origin "HEAD:${{ github.ref_name }}"
