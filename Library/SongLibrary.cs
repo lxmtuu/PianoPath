@@ -18,6 +18,8 @@ namespace PianoPath;
 /// <param name="FallSpeed">Fall speed in force when the song was last opened.</param>
 /// <param name="TempoPercent">Playback tempo in force when the song was last opened.</param>
 /// <param name="Preset">Name of the look that was selected then; metadata for the library list.</param>
+/// <param name="SplitInferred">True when <paramref name="HandSplitPitch"/> was inferred from the song; such a
+/// value is reused as it is the next time the song opens instead of being guessed again.</param>
 /// <param name="OpenedUtc">When it was last opened; the list is kept newest first.</param>
 internal sealed record SongEntry(
     string Path,
@@ -30,6 +32,7 @@ internal sealed record SongEntry(
     double FallSpeed,
     double TempoPercent,
     string Preset,
+    bool SplitInferred,
     DateTime OpenedUtc);
 
 /// <summary>On-disk shape of the library file: a schema version plus the entries, newest first.</summary>
@@ -66,11 +69,11 @@ internal static class SongLibrary
 
     /// <summary>Remembers a song that just opened and returns the entry that was written.</summary>
     internal static SongEntry Remember(string path, string title, int notes, int tracks, double seconds, double beatsPerMinute,
-        double handSplitPitch, double fallSpeed, double tempoPercent, string preset)
+        double handSplitPitch, double fallSpeed, double tempoPercent, string preset, bool splitInferred = false)
     {
         EnsureLoaded();
         var full = Path.GetFullPath(path);
-        var entry = new SongEntry(full, title, notes, tracks, seconds, beatsPerMinute, handSplitPitch, fallSpeed, tempoPercent, preset, DateTime.UtcNow);
+        var entry = new SongEntry(full, title, notes, tracks, seconds, beatsPerMinute, handSplitPitch, fallSpeed, tempoPercent, preset, splitInferred, DateTime.UtcNow);
         Songs.RemoveAll(song => string.Equals(song.Path, full, StringComparison.OrdinalIgnoreCase));
         Songs.Insert(0, entry);
         if (Songs.Count > Capacity) Songs.RemoveRange(Capacity, Songs.Count - Capacity);

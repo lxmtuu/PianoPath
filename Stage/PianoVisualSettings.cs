@@ -75,6 +75,8 @@ internal sealed class PianoVisualSettings
 
     // ---- Practice session ---------------------------------------------------------------------------
     /// <summary>Slows the song down after a run of misses and speeds it back up as the run goes well.</summary>
+    /// <summary>Chooses the hand split point from the notes of each song when it opens.</summary>
+    public bool InferHandSplit { get; set; }
     public bool PracticeAutoTempo { get; set; }
     /// <summary>Misses in a row that trigger one slow-down step while <see cref="PracticeAutoTempo"/> is on.</summary>
     public int PracticeMissThreshold { get; set; } = 3;

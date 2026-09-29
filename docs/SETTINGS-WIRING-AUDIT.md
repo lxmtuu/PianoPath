@@ -122,6 +122,7 @@ Phương pháp:
 | Track solo (TrackCombo) + mute/đổi màu từng track | `MainWindow.xaml.cs:678-684` (ApplyTrackFilter) + `MainWindow.Settings.cs` RebuildTrackList/TrackMute_Changed |
 | Metronome | `MainWindow.xaml.cs:187-197` (TickMetronome theo tempo map + time signature; bật khi có SoundFont, điểm click phát bằng chính SoundFont pitch 77) |
 | Practice mode (4 chế độ) | `MainWindow.xaml.cs:203` (ModeCombo) → `:175` (Wait for my note giữ playhead), `:695-697` (solo tay phải/trái dùng chung Hand split) |
+| Infer hand split from the song | `Ui/MainWindow.Library.cs` (`ApplyInferredHandSplit` → `HandSplit.Infer`) → slider **Hand split point** (nên màu theo tay và chế độ tập từng tay dùng ngay), ghi vào `library.json` kèm `SplitInferred` |
 | Auto practice tempo | `MainWindow.Practice.cs` (`AutoPracticeTempo_Changed` → `PracticeAutoTempo`) → `RecordPracticeNote` ở ba điểm chấm điểm (`MainWindow.xaml.cs`), bước qua `TempoSlider` |
 | Misses before slowing down (1–6) | `MainWindow.Practice.cs` (`AutoPracticeMiss_Changed` → `PracticeMissThreshold`, `Clamp()` trong `Stage/PianoVisualSettings.cs`) → ngưỡng của `RecordPracticeNote` |
 | Playback tempo 50–150% | `MainWindow.xaml.cs:199-201` → `:165` (`_position += elapsed * _tempo`) |

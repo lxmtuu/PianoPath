@@ -257,6 +257,7 @@ public partial class MainWindow
         ColorRow(color, "Left hand", nameof(PianoVisualSettings.LeftHandColor), "Notes below the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
         ColorRow(color, "Right hand", nameof(PianoVisualSettings.RightHandColor), "Notes at or above the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
         SliderRow(color, "Hand split point", nameof(PianoVisualSettings.HandSplitPitch), 21, 108, "MIDI note where the right hand begins (C4 = 60). Type a note name such as C4 or F#3.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
+        Toggle(color, "Infer hand split from the song", nameof(PianoVisualSettings.InferHandSplit), "When a MIDI file opens, take the split point from how its notes are spread over the keyboard and remember it for that song.");
         TrackPaletteRow(color).VisibleWhen = () => _visualSettings.ColorMode == "PerTrack";
         SliderRow(color, "Rainbow speed", nameof(PianoVisualSettings.RainbowSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.ColorMode == "RainbowTime";
 

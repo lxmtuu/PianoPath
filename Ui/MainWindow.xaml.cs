@@ -281,7 +281,8 @@ public partial class MainWindow : Window
             Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
             _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
             // The recent list is written only after the file really parsed, so the Play dialog never
-            // offers a song that failed to open.
+            // offers a song that failed to open; the split point follows before the entry remembers it.
+            ApplyInferredHandSplit(path, song);
             RememberSong(path, song);
         }
         catch (Exception ex) { ShowMessage(Loc.F("Could not read this MIDI file.\n{0}", ex.Message), "MIDI import"); }

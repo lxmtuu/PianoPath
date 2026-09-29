@@ -19,6 +19,9 @@ public partial class MainWindow
     /// <summary>Rows the Play dialog shows; the file keeps more for the library list.</summary>
     internal const int RecentSongRows = 5;
 
+    /// <summary>The split point of the song on the stage came from <see cref="HandSplit"/> rather than from the user.</summary>
+    private bool _splitInferred;
+
     /// <summary>Rebuilds the list: when the dialog opens, after a language switch and after every change.</summary>
     internal void RefreshRecentSongs()
     {
@@ -124,8 +127,29 @@ public partial class MainWindow
             _visualSettings.HandSplitPitch,
             _visualSettings.NoteFallSpeed,
             TempoSlider?.Value ?? 100,
-            SelectedPreset?.Name ?? "");
+            SelectedPreset?.Name ?? "",
+            _splitInferred);
         RefreshRecentSongs();
+    }
+
+    /// <summary>
+    /// Picks the hand split point of a freshly opened song when the setting is on: a value already
+    /// remembered for this file wins, so the split stays what it was the last time, and only a song the
+    /// library has never seen is measured again. The result is written through the dock slider, so the
+    /// colour mode, the practice modes and the settings file follow their ordinary paths.
+    /// </summary>
+    private void ApplyInferredHandSplit(string path, MidiSong song)
+    {
+        _splitInferred = false;
+        if (!_visualSettings.InferHandSplit) return;
+        var remembered = SongLibrary.Find(path);
+        var split = remembered is { SplitInferred: true }
+            ? remembered.HandSplitPitch
+            : HandSplit.Infer(song.Notes, _visualSettings.HandSplitPitch);
+        _splitInferred = true;
+        if (_visualSliders.TryGetValue(nameof(PianoVisualSettings.HandSplitPitch), out var slider))
+            slider.Value = Math.Clamp(split, slider.Minimum, slider.Maximum);
+        else _visualSettings.HandSplitPitch = Math.Clamp(split, 21, 108);
     }
 
     /// <summary>Average tempo of the metronome grid; 0 when the file carries fewer than two beats.</summary>

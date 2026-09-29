@@ -22,7 +22,7 @@ internal static class VerificationSuite
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
-            try { VerifyMidiImport(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+            try { VerifyMidiImport(); VerifyHandSplitInference(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -110,6 +110,45 @@ internal static class VerificationSuite
         try { MidiReader.Read(path); } catch (InvalidDataException) { rejected = true; }
         Assert(rejected, "Invalid MIDI headers should be rejected cleanly.");
         Results.Add("PASS MIDI: multi-track import, tempo map, beat grid, track names, percussion skip, timing, velocity and malformed input.");
+    }
+
+    /// <summary>
+    /// Hand-split inference is pure arithmetic over the notes, so it is checked without a window: the
+    /// two-hand case splits inside the gap (and prefers middle C inside a wide gap), a one-hand song
+    /// keeps the split the user chose, a stray short note cannot define a hand, and the answer does not
+    /// depend on call order.
+    /// </summary>
+    private static void VerifyHandSplitInference()
+    {
+        static List<NoteEvent> Notes(IEnumerable<(int Pitch, double Duration)> entries) =>
+            entries.Select(entry => new NoteEvent { Pitch = entry.Pitch, Duration = entry.Duration }).ToList();
+        var twoHands = Notes([.. Enumerable.Range(36, 13).Select(pitch => (pitch, .5)), .. Enumerable.Range(67, 18).Select(pitch => (pitch, .5))]);
+        var split = HandSplit.Infer(twoHands, 55);
+        Assert(split == HandSplit.MiddleC, $"A song with a wide gap between the hands should split at middle C, not at {split}.");
+        Assert(HandSplit.Infer(twoHands, 55) == split, "The inferred split must not depend on how often it is computed.");
+
+        // A tight, unmistakable two-hand arrangement: the split lands in the gap between 50 and 70.
+        var separated = Notes([.. Enumerable.Range(40, 11).Select(pitch => (pitch, 1.0)), .. Enumerable.Range(70, 11).Select(pitch => (pitch, 1.0))]);
+        var separatedSplit = HandSplit.Infer(separated, 60);
+        Assert(separatedSplit == HandSplit.MiddleC, $"A wide gap between the hands should split at middle C, not at {separatedSplit}.");
+
+        var oneHand = Notes(Enumerable.Range(72, 8).Select(pitch => (pitch, .5)));
+        Assert(HandSplit.Infer(oneHand, 55) == 55, "A song that lives in one hand should keep the split point the user chose.");
+        Assert(HandSplit.Infer([], 55) == 55 && HandSplit.Infer([], 500) == 108 && HandSplit.Infer([], 5) == 21,
+            "An empty song should keep the chosen split, clamped to the playable range.");
+
+        // One short note far below a long one-hand passage must not create a left hand out of nothing.
+        var stray = Notes([.. Enumerable.Range(60, 5).Select(pitch => (pitch, 1.0)), (30, .04)]);
+        Assert(HandSplit.Infer(stray, 62) == 62, "A stray short note must not move the split point.");
+        // Weighting: a slow bass line of long notes counts as much as a fast melody of short ones.
+        var weighted = Notes([.. Enumerable.Range(45, 4).Select(pitch => (pitch, 2.0)), .. Enumerable.Range(76, 16).Select(pitch => (pitch, .25))]);
+        Assert(HandSplit.Infer(weighted, 55) == HandSplit.MiddleC, "A slow bass under a fast melody should still split at middle C.");
+        // Hands that overlap through a smooth run of notes cannot be told apart from a single line.
+        var overlapping = Notes(Enumerable.Range(48, 20).Select(pitch => (pitch, .5)));
+        Assert(HandSplit.Infer(overlapping, 58) == 58, "A song whose hands overlap through a smooth run should keep the chosen split.");
+        var narrowGap = Notes([.. Enumerable.Range(50, 6).Select(pitch => (pitch, 1.0)), .. Enumerable.Range(57, 6).Select(pitch => (pitch, 1.0))]);
+        Assert(HandSplit.Infer(narrowGap, 54) == 54, "A gap narrower than a fourth should not be read as a hand separation.");
+        Results.Add("PASS hand split: two-hand clustering with middle-C tie-break, one-hand and stray-note protection, weighting by sounding time and a deterministic answer.");
     }
 
     private static void VerifyVisualSettings()
@@ -560,6 +599,7 @@ internal static class VerificationSuite
                         VerifySongControls(window, stage, mode, tracks);
                         // Last, because it opens a song of its own: the live-play checks above expect a pristine transport.
                         VerifySongLibrary(window);
+                        VerifyHandSplitInferenceOnSong(window);
                         VerifyPracticeTempo(window);
                         completed();
                     }
@@ -1140,6 +1180,56 @@ internal static class VerificationSuite
     /// the recovery never goes past the normal speed. The last part drives a real key press, so the
     /// wiring from scoring to the tempo control is covered too, not just the arithmetic.
     /// </summary>
+    /// <summary>
+    /// The inference as the user meets it: with the switch on, opening a MIDI file moves the hand split
+    /// point to the value measured from that song and the recent list remembers it as inferred; opening
+    /// the same file again reuses the remembered value instead of guessing a second time; with the
+    /// switch off nothing is touched.
+    /// </summary>
+    private static void VerifyHandSplitInferenceOnSong(MainWindow window)
+    {
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+        var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        var split = sliders[nameof(PianoVisualSettings.HandSplitPitch)];
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        var toggle = toggles[nameof(PianoVisualSettings.InferHandSplit)];
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-split-song.mid");
+        File.WriteAllBytes(path, CreateTwoHandMidi());
+        var expected = HandSplit.Infer(MidiReader.ReadSong(path).Notes, 60);
+        var hadSplit = split.Value; var hadInference = settings.InferHandSplit;
+        SongLibrary.Forget(path);
+
+        try
+        {
+            toggle.IsChecked = false; split.Value = 60; window.OpenMidiFile(path);
+            Assert(Math.Abs(split.Value - 60) < .01 && SongLibrary.Find(path) is { SplitInferred: false, HandSplitPitch: 60 },
+                "With the switch off, opening a song must keep the hand split the user chose and remember the song as not inferred.");
+
+            toggle.IsChecked = true; split.Value = 45; window.OpenMidiFile(path);
+            var entry = SongLibrary.Find(path);
+            Assert(settings.InferHandSplit && Math.Abs(split.Value - expected) < .01 && Math.Abs(settings.HandSplitPitch - expected) < .01,
+                $"With the switch on, opening a song must move the hand split to the inferred value ({expected}), not leave it at {split.Value}.");
+            Assert(entry is { SplitInferred: true } && Math.Abs(entry.HandSplitPitch - expected) < .01,
+                "The recent list should remember the inferred split as inferred, together with the song.");
+
+            // A remembered inference wins over a fresh measurement, which is what keeps a song's split stable.
+            SongLibrary.Remember(path, "Split Song", 6, 2, 1, 100, 45, 550, 100, "", splitInferred: true);
+            split.Value = 60; window.OpenMidiFile(path);
+            Assert(Math.Abs(split.Value - 45) < .01 && SongLibrary.Find(path) is { SplitInferred: true, HandSplitPitch: 45 },
+                "Reopening a song whose split was inferred before must reuse the remembered value instead of measuring a new one.");
+
+            toggle.IsChecked = false; split.Value = 55; window.OpenMidiFile(path);
+            Assert(Math.Abs(split.Value - 55) < .01 && SongLibrary.Find(path) is { SplitInferred: false },
+                "Turning the switch off must stop the inference, and the song stops being remembered as inferred.");
+        }
+        finally
+        {
+            SongLibrary.Forget(path);
+            toggle.IsChecked = hadInference; split.Value = hadSplit; window.RefreshRecentSongs();
+        }
+        Results.Add("PASS hand split in the app: the switch applies the inferred value to the dock slider and the settings file, the recent list keeps it as inferred, a remembered inference is reused and the switch off leaves the chosen split alone.");
+    }
+
     private static void VerifyPracticeTempo(MainWindow window)
     {
         var settings = (PianoVisualSettings)Field(window, "_visualSettings");
@@ -1773,6 +1863,37 @@ internal static class VerificationSuite
         var skipped = Results.Count(line => line.StartsWith("SKIP ", StringComparison.Ordinal));
         Results.Add(failure is null ? $"Verification passed: {_assertions} assertions, {skipped} skipped check group(s)." : "Verification failed.");
         File.WriteAllLines(path, Results); app.Shutdown(failure is null ? 0 : 1);
+    }
+
+    /// <summary>Track 0: low C/G/C octaves held under the melody. Track 1: a high C-major line.</summary>
+    private static byte[] CreateTwoHandMidi()
+    {
+        var bass = BassTrack(); var melody = MelodyTrack();
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, 1); Write16(w, 2); Write16(w, 480);
+        WriteTrack(w, bass); WriteTrack(w, melody); return s.ToArray();
+    }
+    private static byte[] BassTrack()
+    {
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        foreach (var pitch in new[] { 36, 43, 48, 36, 43, 48 })
+        {
+            w.Write((byte)0); w.Write((byte)0x90); w.Write((byte)pitch); w.Write((byte)90);
+            w.Write((byte)0x83); w.Write((byte)0x60); w.Write((byte)0x80); w.Write((byte)pitch); w.Write((byte)0);
+        }
+        w.Write((byte)0); w.Write((byte)0xFF); w.Write((byte)0x2F); w.Write((byte)0);
+        return s.ToArray();
+    }
+    private static byte[] MelodyTrack()
+    {
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        foreach (var pitch in new[] { 72, 76, 79, 76, 72, 79 })
+        {
+            w.Write((byte)0); w.Write((byte)0x90); w.Write((byte)pitch); w.Write((byte)100);
+            w.Write((byte)0x83); w.Write((byte)0x60); w.Write((byte)0x80); w.Write((byte)pitch); w.Write((byte)0);
+        }
+        w.Write((byte)0); w.Write((byte)0xFF); w.Write((byte)0x2F); w.Write((byte)0);
+        return s.ToArray();
     }
 
     private static byte[] CreateFormatOneMidi()
