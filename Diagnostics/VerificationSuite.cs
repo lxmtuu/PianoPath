@@ -723,12 +723,12 @@ internal static class VerificationSuite
         var speedRow = RowElement(nameof(PianoVisualSettings.NoteFallSpeed));
         search.Text = "tempo";
         Assert(speedRow.Visibility == Visibility.Visible, "The dock search should find the fall-speed slider by the synonym “tempo”, not only by its label.");
-        search.Text = "speed fall";
-        Assert(speedRow.Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.NoteFallSpeed)).Visibility == Visibility.Visible,
-            "Several words should match in any order, whichever row they belong to.");
-        search.Text = "tempo wisp";
-        Assert(speedRow.Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.ShowWisps)).Visibility == Visibility.Visible,
-            "A query mixing words of two different rows should keep both rows on screen.");
+        // Several words are an AND, and each of them may sit in the caption or in the synonyms of the
+        // same row: "fall" comes from the label, "tempo" from the synonym table, and a row that only
+        // matches one of the two steps aside.
+        search.Text = "fall tempo";
+        Assert(speedRow.Visibility == Visibility.Visible && RowElement(nameof(PianoVisualSettings.ShowWisps)).Visibility == Visibility.Collapsed,
+            "Several words should narrow the dock to the row that answers to all of them, in any order.");
         search.Text = "zzz-nothing-matches";
         Assert(rows.All(r => r.Visibility == Visibility.Collapsed), "A query that matches nothing should hide every row.");
         search.Text = "";
@@ -823,6 +823,9 @@ internal static class VerificationSuite
             // only the controls the application builds itself are checked here.
             if (node is FrameworkElement { TemplatedParent: null } element) controls.Add(element);
             foreach (var child in LogicalTreeHelper.GetChildren(node)) if (child is DependencyObject logical) Walk(logical);
+            // A logical child can be content rather than a visual (a Run inside a TextBlock caption, for
+            // instance, which the search highlight adds), and VisualTreeHelper throws on those.
+            if (node is not Visual and not System.Windows.Media.Media3D.Visual3D) return;
             for (var index = 0; index < VisualTreeHelper.GetChildrenCount(node); index++) Walk(VisualTreeHelper.GetChild(node, index));
         }
         Walk(window);
@@ -963,7 +966,7 @@ internal static class VerificationSuite
         File.WriteAllText(path, new SettingsProfile(PianoVisualSettings.FromJson(original), originalLanguage, originalTheme).ToJson());
         Assert(Import(path) && settings.NoteGlow == PianoVisualSettings.FromJson(original).NoteGlow && ShellThemeManager.Current.Id == originalTheme,
             "Importing the state the check started from should put the window back exactly as it was.");
-        Directory.Delete(folder, true);
+        try { Directory.Delete(folder, true); } catch (IOException) { }
         Results.Add("PASS settings profile: the file round-trips the stage settings, the theme and the language, rejects foreign JSON, and falls back to English for an unknown language.");
     }
 
