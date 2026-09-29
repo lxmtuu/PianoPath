@@ -439,7 +439,8 @@
         <Grid x:Name="MainMenuOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="30">
             <local:ChromeBackdrop x:Name="MenuBackdrop"/>
             <Border Background="{StaticResource ConcertVeilBrush}"/>
-            <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.4 · Concert Grand Edition" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,26"/>
+            <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.4 · Concert Grand Edition" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,42"/>
+            <TextBlock x:Name="MainMenuCopyrightLabel" Text="© 2026 Yami · Neyu — Contributor: Jin" Style="{StaticResource EyebrowTextStyle}" FontSize="9.5" Opacity=".85" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,26"/>
             <Grid HorizontalAlignment="Left" VerticalAlignment="Center" Margin="96,0,40,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>

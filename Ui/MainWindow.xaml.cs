@@ -35,6 +35,8 @@ public partial class MainWindow : Window
     private List<NoteEvent> _allNotes = [];
     private List<NoteEvent> _notes = [];
     private readonly HashSet<int> _pressed = [];
+    /// <summary>Scratch buffer for the per-frame held-note sweeps; reused so playback allocates nothing.</summary>
+    private readonly List<NoteEvent> _finishedNotes = [];
     private readonly HashSet<NoteEvent> _outputHeld = [];
     private readonly HashSet<NoteEvent> _audioHeld = [];
     private readonly HashSet<NoteEvent> _outputFinished = [];
@@ -176,8 +178,19 @@ public partial class MainWindow : Window
                 if (next != null && _position >= next.Start) { _position = next.Start; if (previous > _position) forceOnset = true; _clock.Restart(); }
             }
             // Release song notes whose end has passed before starting new ones, so a repeated pitch is not cut off by the previous note's Note Off.
-            if (_audioHeld.Count > 0) foreach (var note in _audioHeld.Where(n => n.End <= _position).ToArray()) { _audioHeld.Remove(note); _audio.NoteOff(note.Pitch); }
-            if (_outputHeld.Count > 0) foreach (var note in _outputHeld.Where(n => n.End <= _position).ToArray()) { _outputHeld.Remove(note); SendOutput(note.Pitch, 0, false); }
+            // Both sweeps run every frame, so they collect into a reused scratch list instead of allocating LINQ arrays 60 times a second.
+            if (_audioHeld.Count > 0)
+            {
+                _finishedNotes.Clear();
+                foreach (var note in _audioHeld) if (note.End <= _position) _finishedNotes.Add(note);
+                foreach (var note in _finishedNotes) { _audioHeld.Remove(note); _audio.NoteOff(note.Pitch); }
+            }
+            if (_outputHeld.Count > 0)
+            {
+                _finishedNotes.Clear();
+                foreach (var note in _outputHeld) if (note.End <= _position) _finishedNotes.Add(note);
+                foreach (var note in _finishedNotes) { _outputHeld.Remove(note); SendOutput(note.Pitch, 0, false); }
+            }
             // Onsets in (onsetFrom, position]; after a jump the window also covers notes within 25 ms of the new playhead.
             var onsetFrom = forceOnset ? Math.Min(previous, _position - .025) : previous;
             for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, onsetFrom); i < _notes.Count; i++)
@@ -625,7 +638,16 @@ public partial class MainWindow : Window
         var hit = velocity / 127.0; Stage.AddLiveNote(pitch, hit); Stage.Impact(pitch, hit); _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
         if (_playing)
         {
-            var target = _notes.Where(n => !n.Played && !n.Missed && n.Pitch == pitch && Math.Abs(n.Start - _position) <= .8).OrderBy(n => Math.Abs(n.Start - _position)).FirstOrDefault();
+            // Same result as the previous LINQ Where/OrderBy/First chain, without allocating per keypress.
+            NoteEvent? target = null; var bestDelta = .8;
+            foreach (var note in _notes)
+            {
+                if (note.Played || note.Missed || note.Pitch != pitch) continue;
+                var delta = Math.Abs(note.Start - _position);
+                if (delta > bestDelta) continue;
+                if (target is not null && delta >= bestDelta) continue;
+                target = note; bestDelta = delta;
+            }
             if (target != null)
             {
                 target.Played = true; var delta = Math.Abs(target.Start - _position);

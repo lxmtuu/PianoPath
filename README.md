@@ -450,3 +450,5 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 ## Giấy phép
 
 Mã nguồn phát hành theo giấy phép MIT (xem `LICENSE`). SoundFont đi kèm thuộc FreePats, giấy phép CC BY 3.0 (xem `Assets/ATTRIBUTION.txt`).
+
+Bản quyền thuộc về tác giả **Yami** và **Neyu**; **Jin** là người đóng góp cho dự án.

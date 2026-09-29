@@ -22,6 +22,7 @@ AppVersion={#AppVersion}
 AppVerName=Keyflow {#AppVersion}
 AppPublisher=lxmtuu
 AppPublisherURL=https://github.com/lxmtuu/PianoPath
+AppCopyright=© 2026 Yami · Neyu — Contributor: Jin
 DefaultDirName={autopf}\Keyflow
 DefaultGroupName=Keyflow
 UninstallDisplayIcon={app}\PianoPath.exe
