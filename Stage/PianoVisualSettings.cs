@@ -170,6 +170,11 @@ internal sealed class PianoVisualSettings
     public bool HoldElectricArc { get; set; } = false;
     /// <summary>Brightness of the electric arcs (0-100 %).</summary>
     public double HoldArcIntensity { get; set; } = 70;
+    // ---- Release phase FX (when the note ends) ----------------------------------------------------
+    /// <summary>What happens at the key when a note ends: Fade, Float Up, Dissolve, Smoke, Snap Back or Echo Rings.</summary>
+    public string ReleaseEffect { get; set; } = "Fade";
+    /// <summary>Strength of the release effect (0-100 %).</summary>
+    public double ReleaseIntensity { get; set; } = 70;
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -239,6 +244,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] ImpactBursts = ["Embers", "Splash", "Fireworks", "Confetti", "Dust"];
     internal static readonly string[] ImpactMorphs = ["None", "Shatter", "Melt", "Absorb", "Bounce", "Morph"];
     internal static readonly string[] ImpactFlashStyles = ["Flash", "Lightning", "Plasma"];
+    internal static readonly string[] ReleaseEffects = ["Fade", "Float Up", "Dissolve", "Smoke", "Snap Back", "Echo Rings"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
     internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
     internal static readonly string[] PressedKeyColorModes = ["Note", "Fixed"];
@@ -298,6 +304,7 @@ internal sealed class PianoVisualSettings
         HoldBarIntensity = Math.Clamp(HoldBarIntensity, 0, 100); HoldBreathRate = Math.Clamp(HoldBreathRate, 0, 100);
         HoldVibrationAmount = Math.Clamp(HoldVibrationAmount, 0, 100); HoldColorCycleSpeed = Math.Clamp(HoldColorCycleSpeed, 0, 100);
         HoldArcIntensity = Math.Clamp(HoldArcIntensity, 0, 100);
+        ReleaseIntensity = Math.Clamp(ReleaseIntensity, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);
@@ -323,6 +330,7 @@ internal sealed class PianoVisualSettings
         if (!ImpactBursts.Contains(ImpactBurst)) ImpactBurst = "Embers";
         if (!ImpactMorphs.Contains(ImpactMorph)) ImpactMorph = "None";
         if (!ImpactFlashStyles.Contains(ImpactFlashStyle)) ImpactFlashStyle = "Flash";
+        if (!ReleaseEffects.Contains(ReleaseEffect)) ReleaseEffect = "Fade";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
         if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
         if (!PressedKeyColorModes.Contains(PressedKeyColorMode)) PressedKeyColorMode = "Note";

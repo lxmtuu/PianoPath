@@ -217,6 +217,11 @@ public partial class MainWindow
         SliderRow(hold, "Cycle speed", nameof(PianoVisualSettings.HoldColorCycleSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.HoldColorCycle;
         Toggle(hold, "Electric arc", nameof(PianoVisualSettings.HoldElectricArc), "Crackling arcs chain simultaneously held keys.");
         SliderRow(hold, "Arc intensity", nameof(PianoVisualSettings.HoldArcIntensity), 0, 100, "Brightness of the arcs.").VisibleWhen = () => _visualSettings.HoldElectricArc;
+
+        var release = Card(NoteSettingsHost, "RELEASE FX", "What happens at the key when a note ends.");
+        Choice(release, "Release effect", nameof(PianoVisualSettings.ReleaseEffect), "The farewell of every note: fade, float, dissolve, smoke, snap or echo.",
+            ("Fade", "Fade out"), ("Float Up", "Float up"), ("Dissolve", "Dissolve"), ("Smoke", "Smoke puff"), ("Snap Back", "Snap back"), ("Echo Rings", "Echo rings"));
+        SliderRow(release, "Release intensity", nameof(PianoVisualSettings.ReleaseIntensity), 0, 100, "Strength of the release effect.").VisibleWhen = () => _visualSettings.ReleaseEffect != "Fade";
     }
 
     private void BuildParticlesPage()

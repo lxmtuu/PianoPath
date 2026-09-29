@@ -667,6 +667,7 @@ internal static class VerificationSuite
         VerifyImpactFx(window, stage, visualSettings, choices);
         VerifyFallingFx(window, stage, visualSettings, choices);
         VerifyHoldFx(window, stage, visualSettings);
+        VerifyReleaseFx(window, stage, visualSettings, choices);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -808,6 +809,42 @@ internal static class VerificationSuite
         visualSettings.HoldBar = wasBar; visualSettings.HoldBreath = wasBreath;
         visualSettings.HoldVibration = wasVibration; visualSettings.HoldColorCycle = wasCycle;
         visualSettings.HoldElectricArc = wasArc;
+        stage.SetVisualSettings(visualSettings);
+        stage.SetState([], 0, false, new HashSet<int>());
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Release phase FX (effects-redesign v4): live releases and song note-ends emit the release
+    /// effect; seeks never burst stale releases.
+    /// </summary>
+    private static void VerifyReleaseFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ReleaseEffect)),
+            "The Notes page should expose the release effect choice.");
+        Assert(EffectCatalog.Release.All.All(e => e.Status == EffectStatus.Available),
+            "The whole release catalogue should be implemented in v4.");
+        var wasEffect = visualSettings.ReleaseEffect; var wasIntensity = visualSettings.ReleaseIntensity;
+        visualSettings.ReleaseEffect = "Echo Rings"; visualSettings.ReleaseIntensity = 80;
+        stage.SetVisualSettings(visualSettings);
+        stage.AddLiveNote(60); stage.ReleaseLiveNote(60);
+        Assert(stage.RingCount > 0, "Releasing a live note should emit echo rings.");
+        var song = new List<NoteEvent> { new() { Pitch = 64, Start = 0, Duration = .1, Track = 0 } };
+        stage.SetState(song, .05, true, new HashSet<int>());
+        stage.Advance(.05);
+        var beforeEnd = stage.RingCount;
+        stage.SetState(song, .15, true, new HashSet<int>());
+        stage.Advance(.05);
+        Assert(stage.RingCount > beforeEnd, "A song note-end passing the playhead should emit echo rings.");
+        stage.SetState(song, 0, true, new HashSet<int>()); // seek back: no stale burst
+        stage.Advance(.05);
+        var afterSeek = stage.RingCount;
+        stage.SetState(song, .04, true, new HashSet<int>());
+        stage.Advance(.05);
+        Assert(stage.RingCount == afterSeek, "Seeking backwards should not burst stale releases.");
+        for (var i = 0; i < 40; i++) stage.Advance(.05);
+        Assert(stage.RingCount == 0, "Echo rings should fade out over time.");
+        visualSettings.ReleaseEffect = wasEffect; visualSettings.ReleaseIntensity = wasIntensity;
         stage.SetVisualSettings(visualSettings);
         stage.SetState([], 0, false, new HashSet<int>());
         stage.ClearTransient();

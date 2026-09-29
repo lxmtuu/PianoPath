@@ -70,6 +70,8 @@ internal sealed class PianoStage : FrameworkElement
     private IReadOnlyList<NoteEvent> _notes = [];
     private IReadOnlySet<int> _pressed = new HashSet<int>();
     private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip = 1, _fps;
+    private int _releaseScanIndex;
+    private double _releaseScanPos;
     private bool _playing, _anyHeat;
     private bool _mouseDown;
     private int _mousePitch = -1;
@@ -194,6 +196,7 @@ internal sealed class PianoStage : FrameworkElement
         if (trail is null) return;
         trail.KeyDown = false;
         trail.Released = true;
+        SpawnReleaseFx(trail.Pitch);
         InvalidateVisual();
     }
 
@@ -362,6 +365,105 @@ internal sealed class PianoStage : FrameworkElement
         InvalidateVisual();
     }
 
+    /// <summary>Release phase: what happens at the key when a note ends (live release or song note-end).</summary>
+    private void SpawnReleaseFx(int pitch)
+    {
+        var effect = _visual.ReleaseEffect;
+        if (effect == "Fade" || ActualWidth < 1) return;
+        var strength = _visual.ReleaseIntensity / 100;
+        if (strength <= 0) return;
+        var clamped = Math.Clamp(pitch, FirstPitch, FirstPitch + KeyCount - 1);
+        var x = KeyCenters[clamped] * ActualWidth;
+        var y = ActualHeight - KeyboardHeight - 1;
+        var color = AdjustColor(_activeKey[clamped] ? _activeKeyColor[clamped] : NoteColor(clamped, 0));
+        switch (effect)
+        {
+            case "Float Up": // The note's last breath drifts upward.
+            {
+                var count = Math.Clamp((int)(6 * strength) + 2, 0, 10);
+                for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
+                    _sparks.Add(new Spark
+                    {
+                        Kind = 1, X = x + (_random.NextDouble() - .5) * 18, Y = y - 4,
+                        Vx = (_random.NextDouble() - .5) * 24, Vy = -(50 + _random.NextDouble() * 90),
+                        Life = .7 + _random.NextDouble() * .5, Age = 0, Mass = .5, Phase = _random.NextDouble() * Math.PI * 2,
+                        Size = 1.4 + _random.NextDouble() * 1.6, Grav = -.25, Color = color
+                    });
+                break;
+            }
+            case "Dissolve": // The note crumbles into tiny fading dots.
+            {
+                var count = Math.Clamp((int)(10 * strength) + 3, 0, 16);
+                for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
+                {
+                    var angle = _random.NextDouble() * Math.PI * 2;
+                    var speed = 20 + _random.NextDouble() * 70;
+                    _sparks.Add(new Spark
+                    {
+                        Kind = 1, X = x + (_random.NextDouble() - .5) * 26, Y = y - 6,
+                        Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed - 20,
+                        Life = .4 + _random.NextDouble() * .35, Age = 0, Mass = 1, Phase = _random.NextDouble() * Math.PI * 2,
+                        Size = .9 + _random.NextDouble() * 1.1, Grav = .3, DragK = 2, Color = color
+                    });
+                }
+                break;
+            }
+            case "Smoke": // A small gray puff.
+            {
+                var count = Math.Clamp((int)(4 * strength) + 2, 0, 8);
+                for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
+                    _sparks.Add(new Spark
+                    {
+                        Kind = 3, X = x + (_random.NextDouble() - .5) * 20, Y = y - 6,
+                        Vx = (_random.NextDouble() - .5) * 20, Vy = -(30 + _random.NextDouble() * 50),
+                        Life = .8 + _random.NextDouble() * .6, Age = 0, Mass = 1, Phase = _random.NextDouble() * Math.PI * 2,
+                        Size = 2 + _random.NextDouble() * 2, Grav = -.1, DragK = 2, Color = Blend(Color.FromRgb(150, 145, 140), color, .2)
+                    });
+                break;
+            }
+            case "Snap Back": // The note snaps back into the key.
+                if (_rings.Count <= 64) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .25, Implode = true, Strength = strength });
+                break;
+            case "Echo Rings": // Two soft rings echo the ending.
+                if (_rings.Count <= 63)
+                {
+                    _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .5, Strength = .8 * strength });
+                    _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .5, Strength = .4 * strength });
+                }
+                break;
+        }
+        InvalidateVisual();
+    }
+
+    /// <summary>Release phase: song notes whose End just passed the playhead emit the release effect.</summary>
+    private void ScanReleaseFx()
+    {
+        if (!_playing || _visual.ReleaseEffect == "Fade" || _notes.Count == 0 || _visual.ReleaseIntensity <= 0)
+        {
+            _releaseScanPos = _position;
+            return;
+        }
+        if (_position < _releaseScanPos - .001) // seek/loop backwards: skip the backlog instead of bursting stale releases
+        {
+            _releaseScanPos = _position;
+            _releaseScanIndex = NoteTimeline.FirstIndexAtOrAfter(_notes, _position);
+            return;
+        }
+        var firstUnended = -1; var budget = 24; // cap releases per frame so dense chords cannot flood the lists
+        for (var j = _releaseScanIndex; j < _notes.Count; j++)
+        {
+            var note = _notes[j];
+            if (note.Start > _position) break;
+            if (note.End > _releaseScanPos && note.End <= _position)
+            {
+                if (budget > 0) { SpawnReleaseFx(note.Pitch); budget--; }
+            }
+            else if (note.End > _position && firstUnended < 0) firstUnended = j;
+        }
+        _releaseScanIndex = firstUnended >= 0 ? firstUnended : NoteTimeline.FirstIndexAtOrAfter(_notes, _position);
+        _releaseScanPos = _position;
+    }
+
     public void Advance(double seconds)
     {
         var dt = Math.Clamp(seconds, 0, .05) * _visual.PhysicsTimeFactor / 100; _elapsed += dt;
@@ -434,6 +536,7 @@ internal sealed class PianoStage : FrameworkElement
                 if (trail.Released && tailY > hitY + 32) _liveTrails.RemoveAt(i);
             }
         }
+        ScanReleaseFx();
         InvalidateVisual();
     }
 

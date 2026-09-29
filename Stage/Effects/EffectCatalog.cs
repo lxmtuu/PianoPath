@@ -109,18 +109,18 @@ internal static class EffectCatalog
     }
 
     // =============================================================================================
-    // Phase 4 · Release — after the key is let go
+    // Phase 4 · Release — after the key is let go (v4: all IMPLEMENTED)
     // =============================================================================================
     internal static class Release
     {
         internal static readonly IReadOnlyList<EffectDefinition> All =
         [
             new("release.fade-out", "Fade Out", "Mờ dần", "Note fades away smoothly.", EffectStatus.Available, "release"),
-            new("release.float-up", "Float Up", "Bay lên", "Bright motes float skyward, then vanish.", EffectStatus.Planned, "release"),
-            new("release.dissolve", "Dissolve", "Tan thành hạt", "Note disintegrates into pixels/particles.", EffectStatus.Planned, "release"),
-            new("release.smoke-puff", "Smoke Puff", "Puff khói", "One small smoke puff drifts up.", EffectStatus.Planned, "release"),
-            new("release.snap-back", "Snap Back", "Co rút", "Note snaps shut quickly, then disappears.", EffectStatus.Planned, "release"),
-            new("release.echo-rings", "Echo Rings", "Vòng sóng dội", "A few small rings spread out, then die.", EffectStatus.Planned, "release"),
+            new("release.float-up", "Float Up", "Bay lên", "Bright motes float skyward, then vanish.", EffectStatus.Available, "release"),
+            new("release.dissolve", "Dissolve", "Tan thành hạt", "Note disintegrates into pixels/particles.", EffectStatus.Available, "release"),
+            new("release.smoke-puff", "Smoke Puff", "Puff khói", "One small smoke puff drifts up.", EffectStatus.Available, "release"),
+            new("release.snap-back", "Snap Back", "Co rút", "Note snaps shut quickly, then disappears.", EffectStatus.Available, "release"),
+            new("release.echo-rings", "Echo Rings", "Vòng sóng dội", "A few small rings spread out, then die.", EffectStatus.Available, "release"),
         ];
     }
 

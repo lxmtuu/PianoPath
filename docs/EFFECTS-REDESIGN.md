@@ -146,11 +146,11 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Effect | Tiếng Việt | Kênh | Trạng thái |
 |---|---|---|---|
 | Fade Out | Mờ dần | release | ✅ trails |
-| Float Up | Bay lên | release | 🔜 phase 4 |
-| Dissolve | Tan thành hạt | release | 🔜 phase 4 |
-| Smoke Puff | Puff khói | release | 🔜 phase 4 |
-| Snap Back | Co rút | release | 🔜 phase 4 |
-| Echo Rings | Vòng sóng dội | release | 🔜 phase 4 |
+| Float Up | Bay lên | release | ✅ v4 |
+| Dissolve | Tan thành hạt | release | ✅ v4 |
+| Smoke Puff | Puff khói | release | ✅ v4 |
+| Snap Back | Co rút | release | ✅ v4 |
+| Echo Rings | Vòng sóng dội | release | ✅ v4 |
 
 ### 3.5 Ambient — Particle & Energy (9)
 
@@ -252,6 +252,7 @@ Không đập bỏ: engine hiện có khớp hoàn toàn vào các kênh mới, 
 | (mới v3) `HoldBreath` + Rate | `hold.glow` | Phím + nốt "thở" (chỉ scale bán kính/glow, không phá cache brush) |
 | (mới v3) `HoldVibration` / `HoldColorCycle` | `hold.glow` | Rung nhẹ + xoay màu nốt đang giữ |
 | (mới v3) `HoldElectricArc` + Intensity | `hold.link` | Tia điện nối tối đa 6 cặp phím giữ |
+| (mới v4) `ReleaseEffect` + Intensity | `release` | Fade/Float Up/Dissolve/Smoke/Snap Back/Echo Rings cho live + MIDI note-end |
 | `ParticleResponse` / strength | `mod.velocity` | Mở rộng sang wave/flash (size + brightness theo lực nhấn) |
 
 File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ qua key lạ).
@@ -302,13 +303,21 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
   nối các phím giữ bằng tia sét động (tối đa 6 cặp, không cần particle list mới).
 - **UI**: card HOLD FX (trang Notes). **Kiểm thử**: `VerifyHoldFx`.
 
+### 5.4 Phase 4 (v4) — Release
+
+- **Settings**: `ReleaseEffect` 6 kiểu + Intensity, mặc định Fade (không đổi look cũ).
+- **Renderer**: `ReleaseLiveNote` phát hiệu ứng tại phím; `ScanReleaseFx` trong `Advance`
+  bắt MIDI note-end vừa qua playhead (con trỏ đơn điệu + chặn seek ngược để không bung
+  release cũ; trần 24 release/frame). Tái dùng sparks/rings sẵn có, không list mới.
+- **UI**: card RELEASE FX (trang Notes). **Kiểm thử**: `VerifyReleaseFx`.
+
 ## 6. Roadmap các phase tiếp theo
 
 | Phase | Scope | Settings mới (dự kiến) | Renderer |
 |---|---|---|---|
 | ✅ **2 · Falling** | Glow Trail, Sparkle Tail, Speed Lines, Pulsing, Motion Blur (+ impact.morph còn lại: Shatter, Melt…) | `FallingTrail` (Choice) + Intensity/Length; `FallingPulse` + rate | Vệt sau nốt trong `DrawConfiguredNote`; morph khi impact |
 | ✅ **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
-| **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
+| ✅ **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
 | **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
 | **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |
 | **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
