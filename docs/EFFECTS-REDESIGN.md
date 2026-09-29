@@ -160,25 +160,25 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Fire / Flames | Ngọn lửa | hold.column | ✅ |
 | Explosion / Burst | Vụ nổ hạt | impact.burst | ✅ |
 | Sparkles / Stars | Tia sáng lấp lánh | ambient.light | ✅ star field |
-| Lightning / Electric | Tia sét | ambient.particles | 🔜 phase 5 |
-| Laser Beams | Tia laser | hold.column | 🔜 phase 5 |
+| Lightning / Electric | Tia sét | ambient.particles | ✅ v5 |
+| Laser Beams | Tia laser | hold.column | ✅ v5 |
 | Plasma | Quả cầu plasma | impact.flash | ✅ v2 (flash style) |
-| Confetti | Giấy màu | ambient.particles | 🔜 phase 5 |
-| Firework | Pháo hoa | ambient.particles | 🔜 phase 5 |
+| Confetti | Giấy màu | ambient.particles | ✅ v5 |
+| Firework | Pháo hoa | ambient.particles | ✅ v5 |
 
 ### 3.6 Ambient — Nature & Elements (9)
 
 | Effect | Tiếng Việt | Kênh | Trạng thái |
 |---|---|---|---|
 | Petals / Cherry Blossom | Cánh hoa anh đào | ambient.nature | ✅ motes |
-| Water Ripple | Gợn sóng nước | impact.wave | 🔜 wave style |
-| Rain / Droplets | Mưa | ambient.nature | 🔜 phase 5 |
-| Snow / Ice | Tuyết / Băng | ambient.nature | 🔜 phase 5 |
-| Smoke / Fog | Khói / Sương | ambient.nature | 🔜 phase 5 |
-| Wind / Leaves | Lá bay | ambient.nature | 🔜 phase 5 |
-| Butterflies | Đàn bướm | impact.burst | 🔜 phase 5 |
-| Aurora | Cực quang | ambient.light | 🔜 phase 5 |
-| Dust Cloud | Mây bụi | ambient.nature | 🔜 phase 5 |
+| Water Ripple | Gợn sóng nước | impact.wave | ✅ v5 |
+| Rain / Droplets | Mưa | ambient.nature | ✅ v5 |
+| Snow / Ice | Tuyết / Băng | ambient.nature | ✅ v5 |
+| Smoke / Fog | Khói / Sương | ambient.nature | ✅ v5 |
+| Wind / Leaves | Lá bay | ambient.nature | ✅ v5 |
+| Butterflies | Đàn bướm | impact.burst | ✅ v5 |
+| Aurora | Cực quang | ambient.light | ✅ v5 |
+| Dust Cloud | Mây bụi | ambient.nature | ✅ v5 |
 
 ### 3.7 Ambient — Light & Color (7)
 
@@ -187,20 +187,20 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Glow / Neon | Neon phát sáng | falling.body | ✅ |
 | Bloom | Hào quang | ambient.light | ✅ |
 | Flash | Chớp trắng | impact.flash | ✅ |
-| Color Splash / Paint | Bắn màu sơn | impact.burst | 🔜 phase 5 |
+| Color Splash / Paint | Bắn màu sơn | impact.burst | ✅ v5 |
 | Rainbow Trail | Dải cầu vồng | falling.trail | ✅ v2 (trail style) |
-| Gradient Wave | Sóng gradient | ambient.light | 🔜 phase 5 |
-| Prism / Crystal | Lăng kính | ambient.light | 🔜 phase 5 |
+| Gradient Wave | Sóng gradient | ambient.light | ✅ v5 |
+| Prism / Crystal | Lăng kính | ambient.light | ✅ v5 |
 
 ### 3.8 Ambient — Cosmic & Abstract (6)
 
 | Effect | Tiếng Việt | Kênh | Trạng thái |
 |---|---|---|---|
-| Galaxy / Nebula | Tinh vân | ambient.cosmic | 🔜 phase 5 |
-| Black Hole | Hố đen | ambient.cosmic | 🔜 phase 5 |
-| Matrix Rain | Mưa ký tự | ambient.cosmic | 🔜 phase 5 |
-| Geometric Shapes | Hình khối | ambient.cosmic | 🔜 phase 5 |
-| Fractal | Hoa văn fractal | ambient.cosmic | 🔜 phase 5 |
+| Galaxy / Nebula | Tinh vân | ambient.cosmic | ✅ v5 |
+| Black Hole | Hố đen | ambient.cosmic | ✅ v5 |
+| Matrix Rain | Mưa ký tự | ambient.cosmic | ✅ v5 |
+| Geometric Shapes | Hình khối | ambient.cosmic | ✅ v5 |
+| Fractal | Hoa văn fractal | ambient.cosmic | ✅ v5 |
 | Ribbon / Trail | Dải lụa | falling.trail | ✅ v2 (trail style) |
 
 ### 3.9 Smart modulators (9) — chỉ nhân tham số, không vẽ
@@ -253,6 +253,11 @@ Không đập bỏ: engine hiện có khớp hoàn toàn vào các kênh mới, 
 | (mới v3) `HoldVibration` / `HoldColorCycle` | `hold.glow` | Rung nhẹ + xoay màu nốt đang giữ |
 | (mới v3) `HoldElectricArc` + Intensity | `hold.link` | Tia điện nối tối đa 6 cặp phím giữ |
 | (mới v4) `ReleaseEffect` + Intensity | `release` | Fade/Float Up/Dissolve/Smoke/Snap Back/Echo Rings cho live + MIDI note-end |
+| (mới v5) `AmbientEnergy` + Amount/Speed | `ambient.particles` | Storm/Lasers/Confetti Rain/Fireworks (procedural, không particle list) |
+| (mới v5) `AmbientNature` + Amount/Speed | `ambient.nature` | Rain/Snow/Smoke/Leaves/Butterflies/Dust/Aurora |
+| (mới v5) `AmbientLight` + Amount/Speed/Color | `ambient.light` | Gradient Wave/Prism/Color Splash |
+| (mới v5) `AmbientCosmic` + Amount/Speed | `ambient.cosmic` | Galaxy/Black Hole/Matrix/Geometric/Fractal |
+| (mới v5) `ImpactWave` += Ripple | `impact.wave` | Gợn sóng nước từ điểm chạm |
 | `ParticleResponse` / strength | `mod.velocity` | Mở rộng sang wave/flash (size + brightness theo lực nhấn) |
 
 File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ qua key lạ).
@@ -311,6 +316,16 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
   release cũ; trần 24 release/frame). Tái dùng sparks/rings sẵn có, không list mới.
 - **UI**: card RELEASE FX (trang Notes). **Kiểm thử**: `VerifyReleaseFx`.
 
+### 5.5 Phase 5 (v5) — Ambient
+
+- **Settings**: 4 khe độc lập `AmbientEnergy`/`AmbientNature`/`AmbientLight`/`AmbientCosmic`
+  (mỗi khe Choice + Amount + Speed; Light thêm Color), mặc định None. `ImpactWaves` thêm Ripple.
+- **Renderer**: 4 pass procedural sau background, trước notes — dùng `SeededRandom` + `_elapsed`
+  nên không cần list mới, không tốn bộ nhớ; `DrawLightning` tách lõi `DrawBolt` dùng chung
+  với bão sét. `HasActiveEffects` bao cả 4 khe.
+- **UI**: card AMBIENT LAYERS (trang Background); Wave style thêm Ripple.
+- **Kiểm thử**: `VerifyAmbientFx` (4 pass vẽ geometry toàn sân khấu + ripple spawn/decay).
+
 ## 6. Roadmap các phase tiếp theo
 
 | Phase | Scope | Settings mới (dự kiến) | Renderer |
@@ -318,7 +333,7 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 | ✅ **2 · Falling** | Glow Trail, Sparkle Tail, Speed Lines, Pulsing, Motion Blur (+ impact.morph còn lại: Shatter, Melt…) | `FallingTrail` (Choice) + Intensity/Length; `FallingPulse` + rate | Vệt sau nốt trong `DrawConfiguredNote`; morph khi impact |
 | ✅ **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
 | ✅ **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
-| **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
+| ✅ **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
 | **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |
 | **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
 

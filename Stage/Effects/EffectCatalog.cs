@@ -135,11 +135,11 @@ internal static class EffectCatalog
             new("ambient.fire", "Fire / Flames", "Ngọn lửa", "Flames licking up from struck keys.", EffectStatus.Available, "hold.column"),
             new("ambient.explosion", "Explosion / Burst", "Vụ nổ hạt", "Heavy particle burst on high-velocity hits.", EffectStatus.Available, "impact.burst"),
             new("ambient.sparkles", "Sparkles / Stars", "Tia sáng lấp lánh", "Twinkling starfield behind the notes.", EffectStatus.Available, "ambient.light"),
-            new("ambient.lightning", "Lightning / Electric", "Tia sét", "Electric arcs running along the keys.", EffectStatus.Planned, "ambient.particles"),
-            new("ambient.laser", "Laser Beams", "Tia laser", "Laser beams firing out of struck keys.", EffectStatus.Planned, "hold.column"),
+            new("ambient.lightning", "Lightning / Electric", "Tia sét", "Electric arcs running along the keys.", EffectStatus.Available, "ambient.particles"),
+            new("ambient.laser", "Laser Beams", "Tia laser", "Laser beams sweeping the stage plus bolts firing out of struck keys.", EffectStatus.Available, "ambient.particles"),
             new("ambient.plasma", "Plasma", "Quả cầu plasma", "Plasma energy orb blooming over the key.", EffectStatus.Available, "impact.flash"),
-            new("ambient.confetti", "Confetti", "Giấy màu", "Celebration confetti raining over the stage.", EffectStatus.Planned, "ambient.particles"),
-            new("ambient.firework", "Firework", "Pháo hoa", "Fireworks blooming above the keyboard.", EffectStatus.Planned, "ambient.particles"),
+            new("ambient.confetti", "Confetti", "Giấy màu", "Celebration confetti raining over the stage.", EffectStatus.Available, "ambient.particles"),
+            new("ambient.firework", "Firework", "Pháo hoa", "Fireworks blooming above the keyboard.", EffectStatus.Available, "ambient.particles"),
         ];
     }
 
@@ -151,14 +151,14 @@ internal static class EffectCatalog
         internal static readonly IReadOnlyList<EffectDefinition> All =
         [
             new("ambient.petals", "Petals / Cherry Blossom", "Cánh hoa anh đào", "Blossom petals drifting across the stage.", EffectStatus.Available, "ambient.nature"),
-            new("ambient.ripple", "Water Ripple", "Gợn sóng nước", "Water ripples spreading from each hit.", EffectStatus.Planned, "impact.wave"),
-            new("ambient.rain", "Rain / Droplets", "Mưa", "Raindrops falling in time with the notes.", EffectStatus.Planned, "ambient.nature"),
-            new("ambient.snow", "Snow / Ice", "Tuyết / Băng", "Snowflakes falling; frost crusting the keys.", EffectStatus.Planned, "ambient.nature"),
-            new("ambient.smoke", "Smoke / Fog", "Khói / Sương", "Smoke and fog curling upward.", EffectStatus.Planned, "ambient.nature"),
-            new("ambient.leaves", "Wind / Leaves", "Lá bay", "Leaves tumbling along the wind.", EffectStatus.Planned, "ambient.nature"),
-            new("ambient.butterflies", "Butterflies", "Đàn bướm", "Butterflies fluttering out of struck keys.", EffectStatus.Planned, "impact.burst"),
-            new("ambient.aurora", "Aurora / Northern Lights", "Cực quang", "Aurora ribbons waving behind the stage.", EffectStatus.Planned, "ambient.light"),
-            new("ambient.dust", "Dust Cloud", "Mây bụi", "Fine dust mist hanging in the air.", EffectStatus.Planned, "ambient.nature"),
+            new("ambient.ripple", "Water Ripple", "Gợn sóng nước", "Water ripples spreading from each hit.", EffectStatus.Available, "impact.wave"),
+            new("ambient.rain", "Rain / Droplets", "Mưa", "Raindrops falling in time with the notes.", EffectStatus.Available, "ambient.nature"),
+            new("ambient.snow", "Snow / Ice", "Tuyết / Băng", "Snowflakes falling; frost crusting the keys.", EffectStatus.Available, "ambient.nature"),
+            new("ambient.smoke", "Smoke / Fog", "Khói / Sương", "Smoke and fog curling upward.", EffectStatus.Available, "ambient.nature"),
+            new("ambient.leaves", "Wind / Leaves", "Lá bay", "Leaves tumbling along the wind.", EffectStatus.Available, "ambient.nature"),
+            new("ambient.butterflies", "Butterflies", "Đàn bướm", "Butterflies wandering across the stage.", EffectStatus.Available, "ambient.nature"),
+            new("ambient.aurora", "Aurora / Northern Lights", "Cực quang", "Aurora ribbons waving behind the stage.", EffectStatus.Available, "ambient.nature"),
+            new("ambient.dust", "Dust Cloud", "Mây bụi", "Fine dust mist hanging in the air.", EffectStatus.Available, "ambient.nature"),
         ];
     }
 
@@ -172,10 +172,10 @@ internal static class EffectCatalog
             new("ambient.glow", "Glow / Neon", "Neon phát sáng", "Neon light radiating from notes and keys.", EffectStatus.Available, "falling.body"),
             new("ambient.bloom", "Bloom", "Hào quang", "Global halo blooming around bright objects.", EffectStatus.Available, "ambient.light"),
             new("ambient.flash", "Flash", "Chớp trắng", "White flash washing the whole key.", EffectStatus.Available, "impact.flash"),
-            new("ambient.splash", "Color Splash / Paint", "Bắn màu sơn", "Paint splashes thrown across the screen.", EffectStatus.Planned, "impact.burst"),
+            new("ambient.splash", "Color Splash / Paint", "Bắn màu sơn", "Paint splashes blooming and fading across the stage.", EffectStatus.Available, "ambient.light"),
             new("ambient.rainbow-trail", "Rainbow Trail", "Dải cầu vồng", "Long rainbow ribbon trailing the melody.", EffectStatus.Available, "falling.trail"),
-            new("ambient.gradient-wave", "Gradient Wave", "Sóng gradient", "Gradient color wave sweeping sideways.", EffectStatus.Planned, "ambient.light"),
-            new("ambient.prism", "Prism / Crystal", "Lăng kính", "Light dispersing through a crystal prism.", EffectStatus.Planned, "ambient.light"),
+            new("ambient.gradient-wave", "Gradient Wave", "Sóng gradient", "Gradient color wave sweeping sideways.", EffectStatus.Available, "ambient.light"),
+            new("ambient.prism", "Prism / Crystal", "Lăng kính", "Light dispersing through a crystal prism.", EffectStatus.Available, "ambient.light"),
         ];
     }
 
@@ -186,11 +186,11 @@ internal static class EffectCatalog
     {
         internal static readonly IReadOnlyList<EffectDefinition> All =
         [
-            new("ambient.galaxy", "Galaxy / Nebula", "Tinh vân", "Deep-space nebula breathing behind the stage.", EffectStatus.Planned, "ambient.cosmic"),
-            new("ambient.black-hole", "Black Hole", "Hố đen", "Spiral vortex sucking light toward its core.", EffectStatus.Planned, "ambient.cosmic"),
-            new("ambient.matrix", "Matrix Rain", "Mưa ký tự", "Glyph rain falling Matrix-style.", EffectStatus.Planned, "ambient.cosmic"),
-            new("ambient.geometry", "Geometric Shapes", "Hình khối", "Rotating geometric solids drifting by.", EffectStatus.Planned, "ambient.cosmic"),
-            new("ambient.fractal", "Fractal", "Hoa văn fractal", "Fractal pattern blooming outward.", EffectStatus.Planned, "ambient.cosmic"),
+            new("ambient.galaxy", "Galaxy / Nebula", "Tinh vân", "Deep-space nebula breathing behind the stage.", EffectStatus.Available, "ambient.cosmic"),
+            new("ambient.black-hole", "Black Hole", "Hố đen", "Spiral vortex sucking light toward its core.", EffectStatus.Available, "ambient.cosmic"),
+            new("ambient.matrix", "Matrix Rain", "Mưa ký tự", "Glyph rain falling Matrix-style.", EffectStatus.Available, "ambient.cosmic"),
+            new("ambient.geometry", "Geometric Shapes", "Hình khối", "Rotating geometric solids drifting by.", EffectStatus.Available, "ambient.cosmic"),
+            new("ambient.fractal", "Fractal", "Hoa văn fractal", "Fractal pattern blooming outward.", EffectStatus.Available, "ambient.cosmic"),
             new("ambient.ribbon", "Ribbon / Trail", "Dải lụa", "Soft silk ribbon trailing the notes.", EffectStatus.Available, "falling.trail"),
         ];
     }

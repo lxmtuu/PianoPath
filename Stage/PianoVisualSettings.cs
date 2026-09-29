@@ -175,6 +175,24 @@ internal sealed class PianoVisualSettings
     public string ReleaseEffect { get; set; } = "Fade";
     /// <summary>Strength of the release effect (0-100 %).</summary>
     public double ReleaseIntensity { get; set; } = 70;
+    // ---- Ambient layers (stage-wide, behind the notes) ------------------------------------------------
+    /// <summary>Particle &amp; Energy layer: None, Lightning Storm, Laser Beams, Confetti Rain or Fireworks.</summary>
+    public string AmbientEnergy { get; set; } = "None";
+    public double AmbientEnergyAmount { get; set; } = 60;
+    public double AmbientEnergySpeed { get; set; } = 50;
+    /// <summary>Nature layer: None, Rain, Snow, Smoke, Leaves, Butterflies, Dust or Aurora.</summary>
+    public string AmbientNature { get; set; } = "None";
+    public double AmbientNatureAmount { get; set; } = 60;
+    public double AmbientNatureSpeed { get; set; } = 50;
+    /// <summary>Light &amp; Color layer: None, Gradient Wave, Prism or Color Splash.</summary>
+    public string AmbientLight { get; set; } = "None";
+    public double AmbientLightAmount { get; set; } = 60;
+    public double AmbientLightSpeed { get; set; } = 50;
+    public string AmbientLightColor { get; set; } = "#7B5CFF";
+    /// <summary>Cosmic layer: None, Galaxy, Black Hole, Matrix Rain, Geometric or Fractal.</summary>
+    public string AmbientCosmic { get; set; } = "None";
+    public double AmbientCosmicAmount { get; set; } = 60;
+    public double AmbientCosmicSpeed { get; set; } = 50;
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -239,7 +257,11 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
-    internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave"];
+    internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave", "Ripple"];
+    internal static readonly string[] AmbientEnergies = ["None", "Lightning Storm", "Laser Beams", "Confetti Rain", "Fireworks"];
+    internal static readonly string[] AmbientNatures = ["None", "Rain", "Snow", "Smoke", "Leaves", "Butterflies", "Dust", "Aurora"];
+    internal static readonly string[] AmbientLights = ["None", "Gradient Wave", "Prism", "Color Splash"];
+    internal static readonly string[] AmbientCosmics = ["None", "Galaxy", "Black Hole", "Matrix Rain", "Geometric", "Fractal"];
     internal static readonly string[] FallingTrails = ["None", "Glow", "Sparkles", "Speed Lines", "Blur", "Ribbon", "Rainbow", "Stream"];
     internal static readonly string[] ImpactBursts = ["Embers", "Splash", "Fireworks", "Confetti", "Dust"];
     internal static readonly string[] ImpactMorphs = ["None", "Shatter", "Melt", "Absorb", "Bounce", "Morph"];
@@ -305,6 +327,10 @@ internal sealed class PianoVisualSettings
         HoldVibrationAmount = Math.Clamp(HoldVibrationAmount, 0, 100); HoldColorCycleSpeed = Math.Clamp(HoldColorCycleSpeed, 0, 100);
         HoldArcIntensity = Math.Clamp(HoldArcIntensity, 0, 100);
         ReleaseIntensity = Math.Clamp(ReleaseIntensity, 0, 100);
+        AmbientEnergyAmount = Math.Clamp(AmbientEnergyAmount, 0, 100); AmbientEnergySpeed = Math.Clamp(AmbientEnergySpeed, 0, 100);
+        AmbientNatureAmount = Math.Clamp(AmbientNatureAmount, 0, 100); AmbientNatureSpeed = Math.Clamp(AmbientNatureSpeed, 0, 100);
+        AmbientLightAmount = Math.Clamp(AmbientLightAmount, 0, 100); AmbientLightSpeed = Math.Clamp(AmbientLightSpeed, 0, 100);
+        AmbientCosmicAmount = Math.Clamp(AmbientCosmicAmount, 0, 100); AmbientCosmicSpeed = Math.Clamp(AmbientCosmicSpeed, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);
@@ -331,6 +357,10 @@ internal sealed class PianoVisualSettings
         if (!ImpactMorphs.Contains(ImpactMorph)) ImpactMorph = "None";
         if (!ImpactFlashStyles.Contains(ImpactFlashStyle)) ImpactFlashStyle = "Flash";
         if (!ReleaseEffects.Contains(ReleaseEffect)) ReleaseEffect = "Fade";
+        if (!AmbientEnergies.Contains(AmbientEnergy)) AmbientEnergy = "None";
+        if (!AmbientNatures.Contains(AmbientNature)) AmbientNature = "None";
+        if (!AmbientLights.Contains(AmbientLight)) AmbientLight = "None";
+        if (!AmbientCosmics.Contains(AmbientCosmic)) AmbientCosmic = "None";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
         if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
         if (!PressedKeyColorModes.Contains(PressedKeyColorMode)) PressedKeyColorMode = "Note";

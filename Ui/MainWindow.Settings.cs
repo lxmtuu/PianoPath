@@ -269,8 +269,8 @@ public partial class MainWindow
 
         var impact = Card(ParticleSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
         Toggle(impact, "Enable impact wave", nameof(PianoVisualSettings.ShowImpactRings), "Expanding wave on every hit.");
-        Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring or a filled shockwave blast.",
-            ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring, a filled shockwave blast or flat water ripples.",
+            ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("Ripple", "Ripple"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
         SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
         SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
         Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
@@ -340,6 +340,25 @@ public partial class MainWindow
         SliderRow(atmosphere, "Vignette", nameof(PianoVisualSettings.Vignette), 0, 100, "Darkens the corners for a cinematic frame.");
         SliderRow(atmosphere, "Horizon glow", nameof(PianoVisualSettings.HorizonGlow), 0, 100, "Colored glow rising from the keyboard line.");
         SliderRow(atmosphere, "Light beam intensity", nameof(PianoVisualSettings.BeamIntensity), 0, 100, "Brightness of the columns above sounding keys.");
+
+        var ambient = Card(SceneSettingsHost, "AMBIENT LAYERS", "Four independent stage-wide layers behind the notes.");
+        Choice(ambient, "Energy layer", nameof(PianoVisualSettings.AmbientEnergy), "Lightning storms, lasers, confetti rain or fireworks.",
+            ("None", "None"), ("Lightning Storm", "Lightning storm"), ("Laser Beams", "Laser beams"), ("Confetti Rain", "Confetti rain"), ("Fireworks", "Fireworks"));
+        SliderRow(ambient, "Energy amount", nameof(PianoVisualSettings.AmbientEnergyAmount), 0, 100, "How much fills the sky.").VisibleWhen = () => _visualSettings.AmbientEnergy != "None";
+        SliderRow(ambient, "Energy speed", nameof(PianoVisualSettings.AmbientEnergySpeed), 0, 100, "How fast it moves.").VisibleWhen = () => _visualSettings.AmbientEnergy != "None";
+        Choice(ambient, "Nature layer", nameof(PianoVisualSettings.AmbientNature), "Rain, snow, smoke, leaves, butterflies, dust or aurora.",
+            ("None", "None"), ("Rain", "Rain"), ("Snow", "Snow"), ("Smoke", "Smoke"), ("Leaves", "Leaves"), ("Butterflies", "Butterflies"), ("Dust", "Dust"), ("Aurora", "Aurora"));
+        SliderRow(ambient, "Nature amount", nameof(PianoVisualSettings.AmbientNatureAmount), 0, 100, "How much fills the air.").VisibleWhen = () => _visualSettings.AmbientNature != "None";
+        SliderRow(ambient, "Nature speed", nameof(PianoVisualSettings.AmbientNatureSpeed), 0, 100, "How fast it drifts.").VisibleWhen = () => _visualSettings.AmbientNature != "None";
+        Choice(ambient, "Light layer", nameof(PianoVisualSettings.AmbientLight), "Gradient waves, a crystal prism or color splashes.",
+            ("None", "None"), ("Gradient Wave", "Gradient wave"), ("Prism", "Prism"), ("Color Splash", "Color splash"));
+        SliderRow(ambient, "Light amount", nameof(PianoVisualSettings.AmbientLightAmount), 0, 100, "How strong the light is.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
+        SliderRow(ambient, "Light speed", nameof(PianoVisualSettings.AmbientLightSpeed), 0, 100, "How fast it shifts.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
+        ColorRow(ambient, "Light tint", nameof(PianoVisualSettings.AmbientLightColor), "Tint of the light layer.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
+        Choice(ambient, "Cosmic layer", nameof(PianoVisualSettings.AmbientCosmic), "Galaxy, black hole, matrix rain, geometric shapes or fractals.",
+            ("None", "None"), ("Galaxy", "Galaxy"), ("Black Hole", "Black hole"), ("Matrix Rain", "Matrix rain"), ("Geometric", "Geometric shapes"), ("Fractal", "Fractal"));
+        SliderRow(ambient, "Cosmic amount", nameof(PianoVisualSettings.AmbientCosmicAmount), 0, 100, "How dense the cosmos is.").VisibleWhen = () => _visualSettings.AmbientCosmic != "None";
+        SliderRow(ambient, "Cosmic speed", nameof(PianoVisualSettings.AmbientCosmicSpeed), 0, 100, "How fast it turns.").VisibleWhen = () => _visualSettings.AmbientCosmic != "None";
 
         var halo = Card(SceneSettingsHost, "HIT LINE", "The line where notes meet the keys.");
         Toggle(halo, "Show halo line", nameof(PianoVisualSettings.ShowHalo), "Glowing line across the stage at key height.");

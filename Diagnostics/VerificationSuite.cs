@@ -668,6 +668,7 @@ internal static class VerificationSuite
         VerifyFallingFx(window, stage, visualSettings, choices);
         VerifyHoldFx(window, stage, visualSettings);
         VerifyReleaseFx(window, stage, visualSettings, choices);
+        VerifyAmbientFx(window, stage, visualSettings, choices);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -847,6 +848,49 @@ internal static class VerificationSuite
         visualSettings.ReleaseEffect = wasEffect; visualSettings.ReleaseIntensity = wasIntensity;
         stage.SetVisualSettings(visualSettings);
         stage.SetState([], 0, false, new HashSet<int>());
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Ambient layers (effects-redesign v5): the Background page exposes the four layer choices;
+    /// each layer paints stage-wide geometry, and the Ripple wave style draws water rings.
+    /// </summary>
+    private static void VerifyAmbientFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.AmbientEnergy)) && choices.ContainsKey(nameof(PianoVisualSettings.AmbientNature))
+            && choices.ContainsKey(nameof(PianoVisualSettings.AmbientLight)) && choices.ContainsKey(nameof(PianoVisualSettings.AmbientCosmic)),
+            "The Background page should expose the four ambient layer choices.");
+        Assert(EffectCatalog.AmbientEnergy.All.All(e => e.Status == EffectStatus.Available)
+            && EffectCatalog.AmbientNature.All.All(e => e.Status == EffectStatus.Available)
+            && EffectCatalog.AmbientLight.All.All(e => e.Status == EffectStatus.Available)
+            && EffectCatalog.AmbientCosmic.All.All(e => e.Status == EffectStatus.Available),
+            "All four ambient catalogues should be implemented in v5.");
+        var wasEnergy = visualSettings.AmbientEnergy; var wasNature = visualSettings.AmbientNature;
+        var wasLight = visualSettings.AmbientLight; var wasCosmic = visualSettings.AmbientCosmic;
+        var wasWave = visualSettings.ImpactWave;
+        visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientNature = "Snow";
+        visualSettings.AmbientLight = "Prism"; visualSettings.AmbientCosmic = "Galaxy";
+        visualSettings.ImpactWave = "Ripple";
+        stage.SetVisualSettings(visualSettings);
+        Assert(stage.HasActiveEffects, "Enabled ambient layers should keep the stage animating.");
+        foreach (var pass in new[] { "DrawAmbientEnergy", "DrawAmbientNature", "DrawAmbientLight", "DrawAmbientCosmic" })
+        {
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) { Invoke(stage, pass, dc, 1280d, 480d); }
+            Assert(visual.Drawing is not null && visual.Drawing.Bounds.Width > 100 && visual.Drawing.Bounds.Height > 100,
+                $"The {pass} layer should paint stage-wide geometry.");
+        }
+        stage.Impact(60, 1);
+        Assert(stage.RingCount > 0, "A ripple impact should spawn a wave.");
+        var ripples = new DrawingVisual();
+        using (var dc = ripples.RenderOpen()) { Invoke(stage, "DrawRings", dc); }
+        Assert(ripples.Drawing is not null && ripples.Drawing.Bounds.Width > 10, "Water ripples should paint geometry.");
+        for (var i = 0; i < 40; i++) stage.Advance(.05);
+        Assert(stage.RingCount == 0, "Ripple waves should fade out over time.");
+        visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientNature = wasNature;
+        visualSettings.AmbientLight = wasLight; visualSettings.AmbientCosmic = wasCosmic;
+        visualSettings.ImpactWave = wasWave;
+        stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
     }
 
