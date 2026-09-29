@@ -652,32 +652,35 @@ internal static class VerificationSuite
     {
         var shading = choices[nameof(PianoVisualSettings.ShadingQuality)];
         Assert((string?)shading.SelectedValue == "Balanced", "The default look should start on the Balanced shading engine.");
-        // The live window can resize while maximizing, which legitimately re-bakes; the bake
-        // accounting is therefore asserted on a detached stage with a fixed arranged size.
+        // Drive the shaded-keyboard pass directly with an explicit DrawingContext so the bake
+        // accounting does not depend on WPF render scheduling or window resize churn.
         var off = new PianoStage();
         var settings = (PianoVisualSettings)Field(stage, "_visual");
         off.SetVisualSettings(settings);
-        off.Measure(new Size(900, 500)); off.Arrange(new Rect(0, 0, 900, 500));
-        RenderDetachedStage(off);
+        Assert(ShadeOnce(off), "The default look should drive the stage with the ray-traced keyboard.");
         Assert(off.IsShadedKeyboardActive && off.ShadedBakeCount >= 1,
             $"The default look should drive the stage with the ray-traced keyboard (bakes={off.ShadedBakeCount}, last bake={off.ShadedBakeMilliseconds:0.0} ms).");
         var bakes = off.ShadedBakeCount;
-        RenderDetachedStage(off); RenderDetachedStage(off);
+        ShadeOnce(off); ShadeOnce(off);
         Assert(off.ShadedBakeCount == bakes, "The baked keyboard must be reused between frames; only a settings or size change may re-bake it.");
-        settings.ShadingQuality = "Off"; off.SetVisualSettings(settings); RenderDetachedStage(off);
-        Assert(!off.IsShadedKeyboardActive, "Turning the shading engine off must fall back to the flat vector keyboard.");
-        settings.ShadingQuality = "Balanced"; off.SetVisualSettings(settings); RenderDetachedStage(off);
-        Assert(off.IsShadedKeyboardActive, "Switching the shading engine back on should restore the ray-traced keyboard.");
+        settings.ShadingQuality = "Off"; off.SetVisualSettings(settings);
+        Assert(!ShadeOnce(off) && !off.IsShadedKeyboardActive, "Turning the shading engine off must fall back to the flat vector keyboard.");
+        settings.ShadingQuality = "Balanced"; off.SetVisualSettings(settings);
+        Assert(ShadeOnce(off) && off.IsShadedKeyboardActive, "Switching the shading engine back on should restore the ray-traced keyboard.");
         shading.SelectedValue = "Off";
         Assert(settings.ShadingQuality == "Off", "The dock shading switch should drive the live renderer settings.");
         shading.SelectedValue = "Balanced";
     }
 
-    private static void RenderDetachedStage(PianoStage stage)
+    private static bool ShadeOnce(PianoStage stage)
     {
-        var bitmap = new RenderTargetBitmap(Math.Max(1, (int)stage.ActualWidth), Math.Max(1, (int)stage.ActualHeight), 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(stage);
+        var dv = new DrawingVisual();
+        using (var dc = dv.RenderOpen())
+            return (bool)InvokeReturn(stage, "TryDrawShadedKeyboard", dc, 900d, 220d, 280d)!;
     }
+
+    private static object? InvokeReturn(object target, string name, params object[] args) =>
+        target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
 
     private static void VerifyEmbersShell(MainWindow window, PianoVisualSettings visualSettings)
     {
