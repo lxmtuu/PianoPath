@@ -638,9 +638,13 @@ internal static class VerificationSuite
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
     private static void ForceStageRender(PianoStage stage)
     {
-        // A live visual reuses its cached drawing, so RenderTargetBitmap.Render alone would not
-        // re-run OnRender. Invalidate first to force a fresh OnRender pass we can then assert on.
+        // A live visual reuses its cached drawing, so neither RenderTargetBitmap.Render nor a
+        // same-tick InvalidateVisual re-runs OnRender. Invalidate, then pump the dispatcher through
+        // the Render priority so the real window performs a fresh render pass we can assert on.
         stage.InvalidateVisual();
+        var frame = new DispatcherFrame();
+        Dispatcher.CurrentDispatcher.BeginInvoke(DispatcherPriority.Render, () => frame.Continue = false);
+        Dispatcher.PushFrame(frame);
         var width = Math.Max(1, (int)stage.ActualWidth); var height = Math.Max(1, (int)stage.ActualHeight);
         var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
         bitmap.Render(stage);
