@@ -82,6 +82,21 @@ internal sealed class PianoVisualSettings
     public double NoteFallSpeed { get; set; } = 550;
     /// <summary>Down: notes fall onto the keys and sink below the hit line. Up: notes rise from the keys toward the top of the stage.</summary>
     public string NoteDirection { get; set; } = "Down";
+    // ---- Falling phase FX (while the note travels) ------------------------------------------------
+    /// <summary>Trail behind falling notes: None, Glow, Sparkles, Speed Lines, Blur, Ribbon, Rainbow or Stream.</summary>
+    public string FallingTrail { get; set; } = "None";
+    /// <summary>Brightness of the falling trail (0-100 %).</summary>
+    public double FallingTrailIntensity { get; set; } = 70;
+    /// <summary>How far the trail reaches behind the note (0-100 % of its height).</summary>
+    public double FallingTrailLength { get; set; } = 55;
+    /// <summary>Notes breathe bright/dim while falling.</summary>
+    public bool FallingPulse { get; set; } = false;
+    /// <summary>Speed of the falling pulse (0-100).</summary>
+    public double FallingPulseRate { get; set; } = 40;
+    /// <summary>Faint echo copies lead each falling note.</summary>
+    public bool FallingGhost { get; set; } = false;
+    /// <summary>Visibility and number of the echo copies (0-100).</summary>
+    public double FallingGhostAmount { get; set; } = 40;
 
     // ---- Particles: sparks --------------------------------------------------------------------------
     public double EmitterSize { get; set; } = 24;
@@ -126,6 +141,14 @@ internal sealed class PianoVisualSettings
     public bool ShowImpactFlash { get; set; } = false;
     /// <summary>Brightness of the impact flash (0-100 %).</summary>
     public double ImpactFlashIntensity { get; set; } = 70;
+    /// <summary>Burst style: Embers, Splash, Fireworks, Confetti or Dust.</summary>
+    public string ImpactBurst { get; set; } = "Embers";
+    /// <summary>What the note becomes on impact: None, Shatter, Melt, Absorb, Bounce or Morph.</summary>
+    public string ImpactMorph { get; set; } = "None";
+    /// <summary>Strength of the impact morph (0-100 %).</summary>
+    public double ImpactMorphIntensity { get; set; } = 70;
+    /// <summary>Flash style: Flash, Lightning or Plasma.</summary>
+    public string ImpactFlashStyle { get; set; } = "Flash";
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -191,6 +214,10 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
     internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave"];
+    internal static readonly string[] FallingTrails = ["None", "Glow", "Sparkles", "Speed Lines", "Blur", "Ribbon", "Rainbow", "Stream"];
+    internal static readonly string[] ImpactBursts = ["Embers", "Splash", "Fireworks", "Confetti", "Dust"];
+    internal static readonly string[] ImpactMorphs = ["None", "Shatter", "Melt", "Absorb", "Bounce", "Morph"];
+    internal static readonly string[] ImpactFlashStyles = ["Flash", "Lightning", "Plasma"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
     internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
     internal static readonly string[] PressedKeyColorModes = ["Note", "Fixed"];
@@ -244,6 +271,9 @@ internal sealed class PianoVisualSettings
         WispWidth = Math.Clamp(WispWidth, 0, 100); WispTurbulence = Math.Clamp(WispTurbulence, 0, 100); WispGlow = Math.Clamp(WispGlow, 0, 200);
         FlameIntensity = Math.Clamp(FlameIntensity, 0, 100); FlameHeight = Math.Clamp(FlameHeight, 0, 100); RingSize = Math.Clamp(RingSize, 0, 100);
         ImpactWaveIntensity = Math.Clamp(ImpactWaveIntensity, 0, 150); ImpactFlashIntensity = Math.Clamp(ImpactFlashIntensity, 0, 100);
+        FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
+        FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
+        ImpactMorphIntensity = Math.Clamp(ImpactMorphIntensity, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);
@@ -265,6 +295,10 @@ internal sealed class PianoVisualSettings
         if (!NoteDirections.Contains(NoteDirection)) NoteDirection = "Down";
         if (!FlameColorModes.Contains(FlameColorMode)) FlameColorMode = "Warm";
         if (!ImpactWaves.Contains(ImpactWave)) ImpactWave = "Ring";
+        if (!FallingTrails.Contains(FallingTrail)) FallingTrail = "None";
+        if (!ImpactBursts.Contains(ImpactBurst)) ImpactBurst = "Embers";
+        if (!ImpactMorphs.Contains(ImpactMorph)) ImpactMorph = "None";
+        if (!ImpactFlashStyles.Contains(ImpactFlashStyle)) ImpactFlashStyle = "Flash";
         if (!KeyboardStyles.Contains(KeyboardStyle)) KeyboardStyle = "Studio";
         if (!ShadingQualities.Contains(ShadingQuality)) ShadingQuality = "Balanced";
         if (!PressedKeyColorModes.Contains(PressedKeyColorMode)) PressedKeyColorMode = "Note";

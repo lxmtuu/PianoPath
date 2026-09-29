@@ -195,6 +195,16 @@ public partial class MainWindow
         Choice(motion, "Direction", nameof(PianoVisualSettings.NoteDirection), "Down: notes fall onto the keys and sink below the hit line. Up: notes are born at the keys on onset and rise out of the top of the stage.",
             ("Down", "Fall down"), ("Up", "Rise up"));
         Note(motion, "Only a physically held key extends its visual note. Pedals sustain the audio without stretching the bar after key release.");
+
+        var falling = Card(NoteSettingsHost, "FALLING FX", "Trails, echoes and pulsing while notes travel.");
+        Choice(falling, "Trail", nameof(PianoVisualSettings.FallingTrail), "Light dragging behind every falling note.",
+            ("None", "None"), ("Glow", "Glow"), ("Sparkles", "Sparkles"), ("Speed Lines", "Speed lines"), ("Blur", "Motion blur"), ("Ribbon", "Ribbon"), ("Rainbow", "Rainbow"), ("Stream", "Particle stream"));
+        SliderRow(falling, "Trail intensity", nameof(PianoVisualSettings.FallingTrailIntensity), 0, 100, "Brightness of the trail.").VisibleWhen = () => _visualSettings.FallingTrail != "None";
+        SliderRow(falling, "Trail length", nameof(PianoVisualSettings.FallingTrailLength), 0, 100, "How far the trail reaches behind the note.").VisibleWhen = () => _visualSettings.FallingTrail != "None";
+        Toggle(falling, "Pulsing", nameof(PianoVisualSettings.FallingPulse), "Notes breathe bright and dim while falling.");
+        SliderRow(falling, "Pulse rate", nameof(PianoVisualSettings.FallingPulseRate), 0, 100, "How fast the notes pulse.").VisibleWhen = () => _visualSettings.FallingPulse;
+        Toggle(falling, "Ghost echoes", nameof(PianoVisualSettings.FallingGhost), "Faint echo copies lead each note.");
+        SliderRow(falling, "Ghost amount", nameof(PianoVisualSettings.FallingGhostAmount), 0, 100, "Visibility and number of the echoes.").VisibleWhen = () => _visualSettings.FallingGhost;
     }
 
     private void BuildParticlesPage()
@@ -209,6 +219,8 @@ public partial class MainWindow
         SliderRow(sparks, "Emitter size", nameof(PianoVisualSettings.EmitterSize), 0, 100, "Width of the spawn area on the key.");
         SliderRow(sparks, "Spiral", nameof(PianoVisualSettings.Spiral), 0, 100, "Twists the burst direction over time.");
         SliderRow(sparks, "Speed", nameof(PianoVisualSettings.ParticleSpeed), 0, 300, "Overall speed multiplier.");
+        Choice(sparks, "Burst style", nameof(PianoVisualSettings.ImpactBurst), "Look of the particle explosion: embers, water splash, fireworks, confetti or dust.",
+            ("Embers", "Embers"), ("Splash", "Splash"), ("Fireworks", "Fireworks"), ("Confetti", "Confetti"), ("Dust", "Dust"));
 
         var physics = Card(ParticleSettingsHost, "SPARKS · PHYSICS", "Lifetime, size and forces.");
         SliderRow(physics, "Lifetime", nameof(PianoVisualSettings.ParticleLife), .05, 3, "Seconds a spark stays alive.");
@@ -244,7 +256,12 @@ public partial class MainWindow
             ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
         SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
         SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
+            ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactMorph != "None";
         Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading in about 180 ms.");
+        Choice(impact, "Flash style", nameof(PianoVisualSettings.ImpactFlashStyle), "A white-hot flare, a lightning strike or a plasma ball.",
+            ("Flash", "Flash"), ("Lightning", "Lightning"), ("Plasma", "Plasma")).VisibleWhen = () => _visualSettings.ShowImpactFlash;
         SliderRow(impact, "Flash intensity", nameof(PianoVisualSettings.ImpactFlashIntensity), 0, 100, "Brightness of the hit flash.").VisibleWhen = () => _visualSettings.ShowImpactFlash;
     }
 

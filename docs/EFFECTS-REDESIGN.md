@@ -96,16 +96,16 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 
 | Effect | Tiếng Việt | Kênh | Trạng thái |
 |---|---|---|---|
-| Glow Trail | Vệt sáng mờ | falling.trail | 🔜 phase 2 |
-| Motion Blur | Mờ chuyển động | falling.body | 🔜 phase 2 |
-| Sparkle Tail | Đuôi tia sáng | falling.trail | 🔜 phase 2 |
+| Glow Trail | Vệt sáng mờ | falling.trail | ✅ v2 |
+| Motion Blur | Mờ chuyển động | falling.body | ✅ v2 |
+| Sparkle Tail | Đuôi tia sáng | falling.trail | ✅ v2 |
 | Color Gradient | Chuyển sắc đầu–đuôi | falling.body | ✅ có sẵn |
-| Pulsing | Nhấp nháy | falling.body | 🔜 phase 2 |
-| Ribbon Twist | Dải lụa xoắn | falling.body | 🔜 phase 2 |
-| Particle Stream | Dòng hạt | falling.trail | 🔜 phase 2 |
-| Ghost Notes | Bóng ma | falling.trail | 🔜 phase 2 |
-| Speed Lines | Vệt tốc độ | falling.trail | 🔜 phase 2 |
-| Rainbow Shift | Cầu vồng trượt | falling.body | 🔜 phase 2 |
+| Pulsing | Nhấp nháy | falling.body | ✅ v2 |
+| Ribbon Twist | Dải lụa xoắn | falling.body | ✅ v2 |
+| Particle Stream | Dòng hạt | falling.trail | ✅ v2 |
+| Ghost Notes | Bóng ma | falling.trail | ✅ v2 |
+| Speed Lines | Vệt tốc độ | falling.trail | ✅ v2 |
+| Rainbow Shift | Cầu vồng trượt | falling.body | ✅ v2 |
 
 ### 3.2 Impact — nốt chạm phím (16) · ✅ v1 HOÀN THIỆN kênh burst/wave/flash
 
@@ -117,16 +117,16 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Shockwave | Sóng xung kích | impact.wave | ✅ `ImpactWave=Shockwave` (mới) |
 | Flash | Chớp sáng | impact.flash | ✅ `ShowImpactFlash` (mới) |
 | Key Press Glow | Phím rực sáng | hold.glow | ✅ KeyLighting |
-| Splash | Bắn tung tóe | impact.burst | 🔜 burst style |
-| Firework | Pháo hoa mini | impact.burst | 🔜 burst style |
-| Confetti Pop | Giấy màu | impact.burst | 🔜 burst style |
-| Dust Cloud | Đám bụi | impact.burst | 🔜 burst style |
-| Shatter / Break | Vỡ kính | impact.morph | 🔜 phase 2 |
-| Bounce | Nảy lên | impact.morph | 🔜 phase 2 |
-| Absorb | Phím hút nốt | impact.morph | 🔜 phase 2 |
-| Melt | Tan chảy | impact.morph | 🔜 phase 2 |
-| Lightning Strike | Sét đánh | impact.flash | 🔜 phase 2 |
-| Note Morph | Biến hình | impact.morph | 🔜 phase 2 |
+| Splash | Bắn tung tóe | impact.burst | ✅ v2 |
+| Firework | Pháo hoa mini | impact.burst | ✅ v2 |
+| Confetti Pop | Giấy màu | impact.burst | ✅ v2 |
+| Dust Cloud | Đám bụi | impact.burst | ✅ v2 |
+| Shatter / Break | Vỡ kính | impact.morph | ✅ v2 |
+| Bounce | Nảy lên | impact.morph | ✅ v2 |
+| Absorb | Phím hút nốt | impact.morph | ✅ v2 |
+| Melt | Tan chảy | impact.morph | ✅ v2 |
+| Lightning Strike | Sét đánh | impact.flash | ✅ v2 |
+| Note Morph | Biến hình | impact.morph | ✅ v2 |
 
 ### 3.3 Hold — giữ nốt (8)
 
@@ -162,7 +162,7 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Sparkles / Stars | Tia sáng lấp lánh | ambient.light | ✅ star field |
 | Lightning / Electric | Tia sét | ambient.particles | 🔜 phase 5 |
 | Laser Beams | Tia laser | hold.column | 🔜 phase 5 |
-| Plasma | Quả cầu plasma | impact.flash | 🔜 phase 5 |
+| Plasma | Quả cầu plasma | impact.flash | ✅ v2 (flash style) |
 | Confetti | Giấy màu | ambient.particles | 🔜 phase 5 |
 | Firework | Pháo hoa | ambient.particles | 🔜 phase 5 |
 
@@ -188,7 +188,7 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Bloom | Hào quang | ambient.light | ✅ |
 | Flash | Chớp trắng | impact.flash | ✅ |
 | Color Splash / Paint | Bắn màu sơn | impact.burst | 🔜 phase 5 |
-| Rainbow Trail | Dải cầu vồng | falling.trail | 🔜 phase 5 |
+| Rainbow Trail | Dải cầu vồng | falling.trail | ✅ v2 (trail style) |
 | Gradient Wave | Sóng gradient | ambient.light | 🔜 phase 5 |
 | Prism / Crystal | Lăng kính | ambient.light | 🔜 phase 5 |
 
@@ -201,7 +201,7 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Matrix Rain | Mưa ký tự | ambient.cosmic | 🔜 phase 5 |
 | Geometric Shapes | Hình khối | ambient.cosmic | 🔜 phase 5 |
 | Fractal | Hoa văn fractal | ambient.cosmic | 🔜 phase 5 |
-| Ribbon / Trail | Dải lụa | falling.trail | 🔜 phase 5 |
+| Ribbon / Trail | Dải lụa | falling.trail | ✅ v2 (trail style) |
 
 ### 3.9 Smart modulators (9) — chỉ nhân tham số, không vẽ
 
@@ -243,11 +243,18 @@ Không đập bỏ: engine hiện có khớp hoàn toàn vào các kênh mới, 
 | `ShowLightBeams` | `hold.column` | = Energy Column |
 | Stars / Petals-motes | `ambient.light` / `ambient.nature` | Giữ nguyên |
 | `ShowSpotlights` / `SpotlightIntensity` | — | **ĐÃ XÓA** toàn bộ (model, renderer, UI, preset, test, docs) |
+| (mới v2) `FallingTrail` + Intensity/Length | `falling.trail` | 7 kiểu vệt: Glow/Sparkles/Speed Lines/Blur/Ribbon/Rainbow/Stream |
+| (mới v2) `FallingPulse` / `FallingGhost` | `falling.body` / `falling.trail` | Pulsing + Ghost Notes cho nốt đang bay |
+| (mới v2) `ImpactBurst` | `impact.burst` | Embers/Splash/Fireworks/Confetti/Dust |
+| (mới v2) `ImpactMorph` | `impact.morph` | Shatter/Melt/Absorb/Bounce/Star Morph |
+| (mới v2) `ImpactFlashStyle` | `impact.flash` | Flash/Lightning/Plasma |
 | `ParticleResponse` / strength | `mod.velocity` | Mở rộng sang wave/flash (size + brightness theo lực nhấn) |
 
 File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ qua key lạ).
 
-## 5. Phase 1 (v1) — Impact: những gì đã hoàn thiện
+## 5. Các phase đã hoàn thiện
+
+### 5.1 Phase 1 (v1) — Impact
 
 - **Settings** (`PianoVisualSettings`): `ImpactWave` (None/Ring/Shockwave),
   `ImpactWaveIntensity` (0–150), `ShowImpactFlash`, `ImpactFlashIntensity` (0–100);
@@ -265,11 +272,27 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
   Available, hit sinh wave+flash, vẽ geometry thật, tắt dần đúng hạn.
 - **Docs**: README + `SETTINGS-WIRING-AUDIT.md` (mục 11) + `UI-SHADER-REVIEW.md`.
 
+### 5.2 Phase 2 (v2) — Falling + Impact còn lại
+
+- **Falling**: `FallingTrail` 7 kiểu (Glow/Sparkles/Speed Lines/Blur/Ribbon/Rainbow/Stream)
+  + Intensity/Length; `FallingPulse` + Rate (nhấp nháy khi bay); `FallingGhost` + Amount
+  (bóng ma dẫn đường); Rainbow cũng xoay màu thân nốt (Rainbow Shift).
+- **Burst**: `ImpactBurst` 5 kiểu — Embers (giữ nguyên physics cũ), Splash (giọt nước),
+  Fireworks (vỏ pháo hoa rực rỡ), Confetti (giấy màu tung bay), Dust (mây bụi) — mỗi kiểu
+  có trọng lực/ma sát riêng (`Spark.Grav`/`DragK`) và cách vẽ riêng.
+- **Morph**: `ImpactMorph` 5 kiểu + Intensity — Shatter (mảnh kính), Melt (giọt sáp),
+  Absorb (vòng sóng co vào phím), Bounce (tia nảy + vòng kick), Morph (sao 5 cánh).
+- **Flash**: `ImpactFlashStyle` — Flash (cũ), Lightning (sét đánh từ đỉnh sân khấu),
+  Plasma (quả cầu năng lượng + tia lửa).
+- **UI**: card FALLING FX (trang Notes); Burst style (SPARKS · EMITTER); Note morph +
+  Flash style (card IMPACT). **Kiểm thử**: `VerifyFallingFx` + sửa bug `Advance(1.0)`
+  ở test v1 (mỗi step bị clamp 50 ms nên phải lặp frame-size steps).
+
 ## 6. Roadmap các phase tiếp theo
 
 | Phase | Scope | Settings mới (dự kiến) | Renderer |
 |---|---|---|---|
-| **2 · Falling** | Glow Trail, Sparkle Tail, Speed Lines, Pulsing, Motion Blur (+ impact.morph còn lại: Shatter, Melt…) | `FallingTrail` (Choice) + Intensity/Length; `FallingPulse` + rate | Vệt sau nốt trong `DrawConfiguredNote`; morph khi impact |
+| ✅ **2 · Falling** | Glow Trail, Sparkle Tail, Speed Lines, Pulsing, Motion Blur (+ impact.morph còn lại: Shatter, Melt…) | `FallingTrail` (Choice) + Intensity/Length; `FallingPulse` + rate | Vệt sau nốt trong `DrawConfiguredNote`; morph khi impact |
 | **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
 | **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
 | **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |

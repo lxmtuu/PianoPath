@@ -665,6 +665,7 @@ internal static class VerificationSuite
         visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount;
         stage.SetVisualSettings(visualSettings);
         VerifyImpactFx(window, stage, visualSettings, choices);
+        VerifyFallingFx(window, stage, visualSettings, choices);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -714,11 +715,60 @@ internal static class VerificationSuite
         }
         Assert(impactVisual.Drawing is not null && impactVisual.Drawing.Bounds.Width > 10 && impactVisual.Drawing.Bounds.Height > 4,
             "Impact waves and flashes should actually paint geometry into the stage.");
-        stage.Advance(1.0);
+        for (var i = 0; i < 40; i++) stage.Advance(.05); // 2 s of physics in frame-size steps (Advance clamps each step to 50 ms).
         Assert(stage.RingCount == 0 && stage.FlashCount == 0, "Impact waves (.55 s) and flashes (.18 s) should fade out over time.");
         visualSettings.ImpactWave = wasWave; visualSettings.ShowImpactRings = wasRings;
         visualSettings.ImpactWaveIntensity = wasWaveIntensity;
         visualSettings.ShowImpactFlash = wasFlash; visualSettings.ImpactFlashIntensity = wasFlashIntensity;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Falling phase FX (effects-redesign v2): trails/pulse/ghosts on the Notes page; burst styles,
+    /// morphs and flash styles on the Particles page. Hits spawn styled particles that paint geometry.
+    /// </summary>
+    private static void VerifyFallingFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.FallingTrail)) && toggles.ContainsKey(nameof(PianoVisualSettings.FallingPulse)) && toggles.ContainsKey(nameof(PianoVisualSettings.FallingGhost)),
+            "The Notes page should expose the falling trail choice, the pulse switch and the ghost switch.");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
+            "The Particles page should expose the burst style, the note morph and the flash style.");
+        Assert(EffectCatalog.Falling.All.All(e => e.Status == EffectStatus.Available),
+            "The whole falling catalogue should be implemented in v2.");
+        Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
+            "The whole impact catalogue should be implemented in v2.");
+        var wasTrail = visualSettings.FallingTrail; var wasTrailIntensity = visualSettings.FallingTrailIntensity;
+        var wasPulse = visualSettings.FallingPulse; var wasGhost = visualSettings.FallingGhost;
+        var wasBurst = visualSettings.ImpactBurst; var wasMorph = visualSettings.ImpactMorph;
+        var wasFlash = visualSettings.ShowImpactFlash; var wasFlashStyle = visualSettings.ImpactFlashStyle;
+        var wasLife = visualSettings.ParticleLife;
+        visualSettings.FallingTrail = "Sparkles"; visualSettings.FallingTrailIntensity = 80;
+        visualSettings.FallingPulse = true; visualSettings.FallingGhost = true;
+        visualSettings.ImpactBurst = "Confetti"; visualSettings.ImpactMorph = "Shatter"; visualSettings.ParticleLife = .3;
+        visualSettings.ShowImpactFlash = true; visualSettings.ImpactFlashStyle = "Lightning";
+        stage.SetVisualSettings(visualSettings);
+        var noteVisual = new DrawingVisual();
+        using (var dc = noteVisual.RenderOpen())
+        {
+            Invoke(stage, "DrawConfiguredNote", dc, new System.Windows.Rect(100, 100, 40, 120), System.Windows.Media.Color.FromRgb(120, 80, 255), 1d, false, 60, false, false);
+        }
+        Assert(noteVisual.Drawing is not null && noteVisual.Drawing.Bounds.Width > 40 && noteVisual.Drawing.Bounds.Height > 120,
+            "A falling note with trail, pulse and ghosts should paint beyond its own body.");
+        stage.Impact(60, 1);
+        Assert(stage.SparkCount > 0, "A confetti impact with shatter morph should spawn particles.");
+        Assert(stage.FlashCount > 0, "A lightning impact should spawn a flash.");
+        var bolts = new DrawingVisual();
+        using (var dc = bolts.RenderOpen()) { Invoke(stage, "DrawImpactFlashes", dc); }
+        Assert(bolts.Drawing is not null && bolts.Drawing.Bounds.Height > 60, "The lightning bolt should strike down from above the key.");
+        for (var i = 0; i < 60; i++) stage.Advance(.05);
+        Assert(stage.SparkCount == 0 && stage.FlashCount == 0, "Burst particles and flashes should fade out over time.");
+        visualSettings.FallingTrail = wasTrail; visualSettings.FallingTrailIntensity = wasTrailIntensity;
+        visualSettings.FallingPulse = wasPulse; visualSettings.FallingGhost = wasGhost;
+        visualSettings.ImpactBurst = wasBurst; visualSettings.ImpactMorph = wasMorph;
+        visualSettings.ShowImpactFlash = wasFlash; visualSettings.ImpactFlashStyle = wasFlashStyle;
+        visualSettings.ParticleLife = wasLife;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
     }

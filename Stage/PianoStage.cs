@@ -211,23 +211,57 @@ internal sealed class PianoStage : FrameworkElement
         var noteColor = AdjustColor(_activeKey[clamped] ? _activeKeyColor[clamped] : NoteColor(clamped, 0));
         SpawnImpactWave(x, y, noteColor, strength);
         SpawnImpactFlash(x, y, noteColor, strength);
-        if (!_visual.ShowEmbers || _visual.ParticleAmount < 1 || _sparks.Count >= MaxParticles) { InvalidateVisual(); return; }
+        SpawnImpactMorph(x, y, noteColor, strength);
+        SpawnImpactBurst(pitch, x, y, noteColor, strength, keyWidth);
+        InvalidateVisual();
+    }
+
+    /// <summary>Impact phase, burst channel: the particle explosion, styled per ImpactBurst (embers, splash, fireworks, confetti or dust).</summary>
+    private void SpawnImpactBurst(int pitch, double x, double y, Color noteColor, double strength, double keyWidth)
+    {
+        if (!_visual.ShowEmbers || _visual.ParticleAmount < 1 || _sparks.Count >= MaxParticles) return;
         var hue = Hue(pitch);
+        var style = _visual.ImpactBurst;
         var amount = Math.Clamp((int)(_visual.ParticleAmount * strength * _visual.ParticleResponse / 55.0), 0, 120);
         for (var i = 0; i < amount; i++)
         {
-            var isNeedle = i % 3 != 0;
+            var kind = 0; var grav = 1.0; var dragK = 1.0;
+            var speedScale = 1.0; var lifeScale = 1.0; var sizeScale = 1.0;
+            var particleColor = i % 4 == 0 ? Colors.White : Blend(noteColor, ColorFromHue(hue + (_random.NextDouble() - .5) * 28), .2);
+            switch (style)
+            {
+                case "Splash": // Liquid droplets: blue-white, heavy, arcing up then raining down.
+                    kind = 1; grav = 1.6;
+                    particleColor = Blend(Color.FromRgb(140, 200, 255), Colors.White, _random.NextDouble() * .5);
+                    speedScale = .8; lifeScale = 1.1;
+                    break;
+                case "Fireworks": // Bright saturated shells with long white-hot cores.
+                    speedScale = 1.25; lifeScale = 1.5; sizeScale = .9;
+                    particleColor = ColorFromHue(_random.NextDouble() * 360);
+                    break;
+                case "Confetti": // Paper pieces: light, fluttering, keeping their color.
+                    kind = 2; grav = .32; dragK = 3.2;
+                    particleColor = _random.NextDouble() switch { < .2 => Colors.White, _ => ColorFromHue(_random.NextDouble() * 360) };
+                    speedScale = .7; lifeScale = 2.2; sizeScale = 1.3;
+                    break;
+                case "Dust": // Soft gray puffs drifting up.
+                    kind = 3; grav = -.12; dragK = 2.4;
+                    particleColor = Blend(Color.FromRgb(150, 140, 130), noteColor, .25);
+                    speedScale = .35; lifeScale = 2.4; sizeScale = 2.2;
+                    break;
+            }
+            var isNeedle = i % 3 != 0 && kind != 2 && kind != 3;
             var spread = _visual.ParticleSpread / 100 * Math.PI;
             var angle = Math.PI - spread / 2 + _random.NextDouble() * spread;
             angle += Math.Sin(i * .37 + _elapsed * _visual.EvolutionSpeed / 100) * _visual.Spiral / 100 * .3;
             var speedMultiplier = isNeedle
                 ? (.65 + _random.NextDouble() * .85 * _visual.ParticleRandomness / 100)
                 : (.35 + _random.NextDouble() * .45 * _visual.ParticleRandomness / 100);
-            var speed = _visual.ParticleVelocity * speedMultiplier * _visual.ParticleSpeed / 100 * strength;
+            var speed = _visual.ParticleVelocity * speedMultiplier * _visual.ParticleSpeed / 100 * strength * speedScale;
             var emitter = _visual.EmitterSize / 100 * keyWidth * 2;
-            var life = isNeedle
+            var life = (isNeedle
                 ? _visual.ParticleLife * (.45 + _random.NextDouble() * .55 * _visual.ParticleLifeRandomness / 100)
-                : _visual.ParticleLife * (.85 + _random.NextDouble() * .75 * _visual.ParticleLifeRandomness / 100);
+                : _visual.ParticleLife * (.85 + _random.NextDouble() * .75 * _visual.ParticleLifeRandomness / 100)) * lifeScale;
             _sparks.Add(new Spark
             {
                 X = x + (_random.NextDouble() - .5) * emitter, Y = y,
@@ -235,9 +269,77 @@ internal sealed class PianoStage : FrameworkElement
                 Life = life, Age = 0,
                 Mass = isNeedle ? 0.6 : 1.5,
                 Phase = _random.NextDouble() * Math.PI * 2,
-                Size = _visual.ParticleSize * (isNeedle ? (.4 + _random.NextDouble() * .6) : (.7 + _random.NextDouble() * .8)),
-                Color = i % 4 == 0 ? Colors.White : Blend(noteColor, ColorFromHue(hue + (_random.NextDouble() - .5) * 28), .2)
+                Size = _visual.ParticleSize * (isNeedle ? (.4 + _random.NextDouble() * .6) : (.7 + _random.NextDouble() * .8)) * sizeScale,
+                Color = particleColor, Kind = kind, Grav = grav, DragK = dragK
             });
+        }
+    }
+
+    /// <summary>Impact phase, morph channel: what the note itself becomes when it lands.</summary>
+    private void SpawnImpactMorph(double x, double y, Color color, double strength)
+    {
+        var morph = _visual.ImpactMorph;
+        if (morph == "None" || ActualWidth < 1) return;
+        var intensity = _visual.ImpactMorphIntensity / 100 * strength;
+        if (intensity <= 0) return;
+        switch (morph)
+        {
+            case "Shatter": // Glass shards flying off the hit point.
+            {
+                var count = Math.Clamp((int)(10 * intensity) + 4, 0, 24);
+                for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
+                {
+                    var angle = -Math.PI / 2 + (_random.NextDouble() - .5) * 2.4;
+                    var speed = (140 + _random.NextDouble() * 260) * (.6 + .4 * strength);
+                    _sparks.Add(new Spark
+                    {
+                        Kind = 4, X = x, Y = y - 2, Vx = Math.Cos(angle) * speed, Vy = Math.Sin(angle) * speed,
+                        Life = .5 + _random.NextDouble() * .4, Age = 0, Mass = 1, Phase = _random.NextDouble() * Math.PI * 2,
+                        Size = 2 + _random.NextDouble() * 3.5, Grav = 1.4, Color = Blend(color, Colors.White, .45)
+                    });
+                }
+                break;
+            }
+            case "Melt": // Wax-like drips oozing down from the key.
+            {
+                var count = Math.Clamp((int)(8 * intensity) + 3, 0, 20);
+                for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
+                {
+                    _sparks.Add(new Spark
+                    {
+                        Kind = 1, X = x + (_random.NextDouble() - .5) * 22, Y = y + 2,
+                        Vx = (_random.NextDouble() - .5) * 30, Vy = 40 + _random.NextDouble() * 90,
+                        Life = .55 + _random.NextDouble() * .45, Age = 0, Mass = 2, Phase = _random.NextDouble() * Math.PI * 2,
+                        Size = 1.6 + _random.NextDouble() * 2.2, Grav = 1.1, DragK = 1.6,
+                        Color = Blend(color, Color.FromRgb(255, 220, 150), .3)
+                    });
+                }
+                break;
+            }
+            case "Absorb": // The key sucks the note in: a ring collapsing into the hit point.
+                if (_rings.Count <= 64) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .3, Implode = true, Strength = strength });
+                break;
+            case "Bounce": // The hit bounces back up: a narrow jet plus a small kick ring.
+            {
+                var count = Math.Clamp((int)(12 * intensity) + 4, 0, 26);
+                for (var i = 0; i < count && _sparks.Count < MaxParticles; i++)
+                {
+                    var speed = 220 + _random.NextDouble() * 320;
+                    _sparks.Add(new Spark
+                    {
+                        X = x + (_random.NextDouble() - .5) * 10, Y = y,
+                        Vx = (_random.NextDouble() - .5) * 60, Vy = -speed,
+                        Life = .4 + _random.NextDouble() * .3, Age = 0, Mass = .6, Phase = _random.NextDouble() * Math.PI * 2,
+                        Size = _visual.ParticleSize * (.5 + _random.NextDouble() * .5),
+                        Color = i % 3 == 0 ? Colors.White : color
+                    });
+                }
+                if (_rings.Count <= 64) _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .3, Strength = .6 * strength });
+                break;
+            }
+            case "Morph": // The note head becomes a star that pops at the hit point.
+                if (_flashes.Count <= 32) _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .3, Strength = strength, Style = 3 });
+                break;
         }
         InvalidateVisual();
     }
@@ -256,7 +358,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         if (!_visual.ShowImpactFlash || _visual.ImpactFlashIntensity <= 0 || ActualWidth < 1) return;
         if (_flashes.Count > 32) _flashes.RemoveAt(0);
-        _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .18, Strength = strength });
+        _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .18, Strength = strength, Style = _visual.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 } });
         InvalidateVisual();
     }
 
@@ -296,10 +398,11 @@ internal sealed class PianoStage : FrameworkElement
             // Thermal buoyancy + micro curl turbulence
             var heatRatio = Math.Clamp(1.0 - p.Age / p.Life, 0, 1);
             var buoyancy = -38.0 * heatRatio * (1.0 / Math.Max(0.2, p.Mass));
-            p.Vy += (_visual.Gravity + buoyancy) * dt;
+            p.Vy += (_visual.Gravity * p.Grav + buoyancy) * dt;
+            if (p.Kind == 2) p.Vx += Math.Sin(p.Age * 9 + p.Phase) * 60 * dt; // confetti flutter
             var curl = Math.Sin(p.Y * 0.04 + p.Phase + _elapsed * 3.2) * 14.0 * (1.0 - p.Age / p.Life);
             p.Vx += curl * dt;
-            var damping = Math.Exp(-_visual.Drag / 100 * dt); p.Vx *= damping; p.Vy *= damping;
+            var damping = Math.Exp(-_visual.Drag / 100 * p.DragK * dt); p.Vx *= damping; p.Vy *= damping;
         }
         for (var i = _rings.Count - 1; i >= 0; i--)
         {
@@ -574,8 +677,12 @@ internal sealed class PianoStage : FrameworkElement
         }
     }
 
-    private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity, bool sounding, int pitch, bool rising = false)
+    private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity, bool sounding, int pitch, bool rising = false, bool ghostPass = false)
     {
+        if (_visual.FallingPulse && !sounding && !ghostPass) // Pulsing: the note breathes bright/dim while it travels.
+            opacity *= .62 + .38 * Math.Sin(_elapsed * (1.5 + _visual.FallingPulseRate / 100 * 9) + pitch * .7);
+        if (_visual.FallingTrail == "Rainbow" && !ghostPass) // Rainbow Shift: the note body cycles through the rainbow.
+            color = ColorFromHue(_elapsed * (20 + _visual.FallingTrailIntensity * .8) + pitch * 9);
         color = AdjustColor(color);
         var style = _visual.NoteStyle;
         var radius = Math.Min(r.Height / 2, Math.Min(r.Width / 2, 2 + _visual.NoteRoundness / 100 * 12));
@@ -586,6 +693,7 @@ internal sealed class PianoStage : FrameworkElement
         var edgeWidth = .4 + _visual.NoteEdgeWidth / 45;
         var (cr, cg, cb) = (color.R, color.G, color.B);
         var bright = Blend(color, Colors.White, .35);
+        if (!ghostPass) DrawFallingTrail(dc, r, color, opacity, pitch, rising);
         // Outer bloom shared by every style; the neon style spreads it further to read as a glowing tube.
         var bloomScale = style == "Neon" ? 1.4 : 1;
         dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(16 * opacity * glow), cr, cg, cb)), null, Inflate(r, outer * 1.8 * bloomScale), radius + outer, radius + outer);
@@ -692,6 +800,7 @@ internal sealed class PianoStage : FrameworkElement
             var textColor = style == "Neon" ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
         }
+        if (_visual.FallingGhost && !ghostPass && r.Height > 4) DrawNoteGhosts(dc, r, color, opacity, pitch, rising);
     }
 
     /// <summary>Vertical bevel for solid note bars: a lit top edge, the saturated core and a shadowed bottom.</summary>
@@ -823,6 +932,10 @@ internal sealed class PianoStage : FrameworkElement
                 continue;
             }
             if (!_visual.ShowEmbers) continue;
+            if (particle.Kind == 1) { DrawDroplet(dc, particle, fade, bloom); continue; }
+            if (particle.Kind == 2) { DrawConfetti(dc, particle, fade); continue; }
+            if (particle.Kind == 3) { DrawDust(dc, particle, fade, bloom); continue; }
+            if (particle.Kind == 4) { DrawShard(dc, particle, fade); continue; }
 
             // Thermal blackbody cooling: White-hot -> Incandescent Gold -> Molten Amber/Orange -> Ruby Ember -> Smoke
             Color thermalCore, thermalGlow;
@@ -905,6 +1018,7 @@ internal sealed class PianoStage : FrameworkElement
         foreach (var ring in _rings)
         {
             if (ring.Shock) { DrawShockwave(dc, ring, intensity); continue; }
+            if (ring.Implode) { DrawImplode(dc, ring, intensity); continue; }
             var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
             var strength = Math.Clamp(.5 + ring.Strength * .5, 0, 1.2);
             var progress = 1.0 - Math.Exp(-4.2 * t);
@@ -967,6 +1081,9 @@ internal sealed class PianoStage : FrameworkElement
         if (intensity <= 0) return;
         foreach (var flash in _flashes)
         {
+            if (flash.Style == 1) { DrawLightning(dc, flash, intensity); continue; }
+            if (flash.Style == 2) { DrawPlasma(dc, flash, intensity); continue; }
+            if (flash.Style == 3) { DrawStarMorph(dc, flash, intensity); continue; }
             var t = Math.Clamp(flash.Age / flash.Life, 0, 1);
             var strength = Math.Clamp(.5 + flash.Strength * .5, 0, 1.2);
             var fade = (1 - t) * (1 - t) * intensity * strength;
@@ -982,6 +1099,296 @@ internal sealed class PianoStage : FrameworkElement
             var streak = new Pen(Brush(Color.FromArgb(Alpha(170 * fade), 255, 255, 255)), 1.6);
             streak.Freeze();
             dc.DrawLine(streak, new Point(flash.X - radius * 1.8, flash.Y), new Point(flash.X + radius * 1.8, flash.Y));
+        }
+    }
+
+    /// <summary>Deterministic 0-1 pseudo-random from an integer seed; keeps procedural effects stable between frames.</summary>
+    private static double SeededRandom(int seed) { var x = Math.Sin(seed * 127.1 + 311.7) * 43758.5453; return x - Math.Floor(x); }
+
+    /// <summary>Splash/melt droplet: a solid bead of liquid keeping its color, with a specular dot.</summary>
+    private void DrawDroplet(DrawingContext dc, Spark p, double fade, double bloom)
+    {
+        var alpha = Alpha(245 * Math.Pow(fade, .8) * _visual.ParticleGlow / 100);
+        if (alpha < 4) return;
+        var size = p.Size * (.7 + fade * .5);
+        var stretch = 1 + Math.Clamp(Math.Abs(p.Vy) / 700, 0, 1.2);
+        dc.DrawEllipse(Brush(Color.FromArgb((byte)(alpha * .3), p.Color.R, p.Color.G, p.Color.B)), null, new Point(p.X, p.Y), size * 2 * bloom, size * 2 * stretch * bloom);
+        dc.DrawEllipse(Brush(Color.FromArgb(alpha, p.Color.R, p.Color.G, p.Color.B)), null, new Point(p.X, p.Y), size, size * stretch);
+        dc.DrawEllipse(Brush(Color.FromArgb(alpha, 255, 255, 255)), null, new Point(p.X - size * .3, p.Y - size * .35 * stretch), size * .32, size * .32);
+    }
+
+    /// <summary>Confetti: a tumbling paper rectangle keeping its bright color.</summary>
+    private void DrawConfetti(DrawingContext dc, Spark p, double fade)
+    {
+        var alpha = Alpha(245 * Math.Min(1, fade * 2) * _visual.ParticleGlow / 100);
+        if (alpha < 4) return;
+        var w = p.Size * 1.7; var h = p.Size * 1.1 * (.35 + .65 * Math.Abs(Math.Sin(p.Age * 9 + p.Phase)));
+        dc.PushTransform(new TranslateTransform(p.X, p.Y));
+        dc.PushTransform(new RotateTransform((p.Phase * 57.3 + p.Age * 260) % 360));
+        dc.DrawRectangle(Brush(Color.FromArgb(alpha, p.Color.R, p.Color.G, p.Color.B)), null, new Rect(-w / 2, -h / 2, w, h));
+        dc.Pop(); dc.Pop();
+    }
+
+    /// <summary>Dust: a large soft gray puff that grows as it drifts.</summary>
+    private void DrawDust(DrawingContext dc, Spark p, double fade, double bloom)
+    {
+        var alpha = Alpha(120 * fade * _visual.ParticleGlow / 100);
+        if (alpha < 4) return;
+        var size = p.Size * (1.5 + (1 - fade) * 2.2);
+        dc.DrawEllipse(Brush(Color.FromArgb((byte)(alpha * .4), p.Color.R, p.Color.G, p.Color.B)), null, new Point(p.X, p.Y), size * 2.4 * bloom, size * 2.4 * bloom);
+        dc.DrawEllipse(Brush(Color.FromArgb(alpha, p.Color.R, p.Color.G, p.Color.B)), null, new Point(p.X, p.Y), size, size);
+    }
+
+    /// <summary>Shatter: an angular glass shard tumbling away from the hit point.</summary>
+    private void DrawShard(DrawingContext dc, Spark p, double fade)
+    {
+        var alpha = Alpha(255 * fade * _visual.ParticleGlow / 100);
+        if (alpha < 4) return;
+        var len = p.Size * 2.4; var w = p.Size * .8;
+        dc.PushTransform(new TranslateTransform(p.X, p.Y));
+        dc.PushTransform(new RotateTransform((p.Phase * 57.3 + p.Age * 420) % 360));
+        var shard = new StreamGeometry();
+        using (var ctx = shard.Open())
+        {
+            ctx.BeginFigure(new Point(-len / 2, 0), true, true);
+            ctx.LineTo(new Point(len / 2, -w / 2), true, false);
+            ctx.LineTo(new Point(len / 2, w / 2), true, false);
+        }
+        shard.Freeze();
+        dc.DrawGeometry(Brush(Color.FromArgb(alpha, p.Color.R, p.Color.G, p.Color.B)), null, shard);
+        var glint = new Pen(Brush(Color.FromArgb(alpha, 255, 255, 255)), 1); glint.Freeze();
+        dc.DrawLine(glint, new Point(-len / 2, 0), new Point(len / 2, 0));
+        dc.Pop(); dc.Pop();
+    }
+
+    /// <summary>Absorb morph: a ring collapsing into the key as it sucks the note in.</summary>
+    private void DrawImplode(DrawingContext dc, Ring ring, double intensity)
+    {
+        var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
+        var strength = Math.Clamp(.5 + ring.Strength * .5, 0, 1.2);
+        var radius = (34 + _visual.RingSize * 1.1) * (1 - t) + 3;
+        var fade = (1 - t) * intensity * strength;
+        if (fade <= .01) return;
+        var (r, g, b) = (ring.Color.R, ring.Color.G, ring.Color.B);
+        var pen = new Pen(Brush(Color.FromArgb(Alpha(235 * fade), r, g, b)), Math.Max(.6, 2.6 * (1 - t) + .6)); pen.Freeze();
+        dc.DrawEllipse(null, pen, new Point(ring.X, ring.Y), radius, radius * .34);
+        var suck = new Pen(Brush(Color.FromArgb(Alpha(150 * fade), 255, 255, 255)), 1.2); suck.Freeze();
+        dc.DrawEllipse(null, suck, new Point(ring.X, ring.Y), radius * .55, radius * .2);
+    }
+
+    /// <summary>Lightning flash style: a jagged bolt striking down onto the key.</summary>
+    private void DrawLightning(DrawingContext dc, Flash flash, double intensity)
+    {
+        var t = Math.Clamp(flash.Age / flash.Life, 0, 1);
+        var strength = Math.Clamp(.5 + flash.Strength * .5, 0, 1.2);
+        var fade = (1 - t) * intensity * strength;
+        if (fade <= .01) return;
+        var top = Math.Max(0, flash.Y - 260 - _visual.RingSize * 2);
+        var seed = (int)(flash.X * 13 + flash.Y);
+        var points = new Point[9];
+        for (var i = 0; i < 9; i++)
+        {
+            var y = top + (flash.Y - top) * i / 8;
+            var jitter = i == 0 || i == 8 ? 0 : (SeededRandom(seed + i * 7) - .5) * 44;
+            points[i] = new Point(flash.X + jitter, y);
+        }
+        var bolt = new PathGeometry();
+        bolt.Figures.Add(new PathFigure(points[0], points.Skip(1).Select(p => new LineSegment(p, true)), false));
+        bolt.Freeze();
+        var glowPen = new Pen(Brush(Color.FromArgb(Alpha(120 * fade), 140, 180, 255)), 5); glowPen.Freeze();
+        var corePen = new Pen(Brush(Color.FromArgb(Alpha(255 * fade), 235, 244, 255)), 1.8); corePen.Freeze();
+        dc.DrawGeometry(null, glowPen, bolt);
+        dc.DrawGeometry(null, corePen, bolt);
+    }
+
+    /// <summary>Plasma flash style: a crackling energy ball in violet and cyan.</summary>
+    private void DrawPlasma(DrawingContext dc, Flash flash, double intensity)
+    {
+        var t = Math.Clamp(flash.Age / flash.Life, 0, 1);
+        var strength = Math.Clamp(.5 + flash.Strength * .5, 0, 1.2);
+        var fade = (1 - t) * (1 - t) * intensity * strength;
+        if (fade <= .01) return;
+        var radius = 12 + t * (30 + _visual.RingSize);
+        var core = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        core.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(235 * fade), 220, 240, 255), 0));
+        core.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(170 * fade), 150, 110, 255), .45));
+        core.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(110 * fade), 60, 220, 255), .75));
+        core.GradientStops.Add(new GradientStop(Color.FromArgb(0, 60, 220, 255), 1));
+        core.Freeze();
+        dc.DrawEllipse(core, null, new Point(flash.X, flash.Y), radius * 1.3, radius * .8);
+        var seed = (int)(flash.X * 7 + flash.Y * 3);
+        for (var i = 0; i < 5; i++)
+        {
+            var a0 = SeededRandom(seed + i) * Math.PI * 2 + _elapsed * 6;
+            var inner = radius * .5; var outer = radius * 1.5;
+            var start = new Point(flash.X + Math.Cos(a0) * inner, flash.Y + Math.Sin(a0) * inner * .6);
+            var mid = new Point(flash.X + Math.Cos(a0 + .5) * (inner + outer) / 2 + (SeededRandom(seed + i + 40) - .5) * 14,
+                flash.Y + Math.Sin(a0 + .5) * (inner + outer) / 2 * .6);
+            var end = new Point(flash.X + Math.Cos(a0 + .9) * outer, flash.Y + Math.Sin(a0 + .9) * outer * .6);
+            var arc = new PathGeometry();
+            arc.Figures.Add(new PathFigure(start, [new LineSegment(mid, true), new LineSegment(end, true)], false));
+            arc.Freeze();
+            var pen = new Pen(Brush(Color.FromArgb(Alpha(200 * fade), 190, 220, 255)), 1.4); pen.Freeze();
+            dc.DrawGeometry(null, pen, arc);
+        }
+    }
+
+    /// <summary>Morph channel, star: the note head pops into a pointed star at the hit point.</summary>
+    private void DrawStarMorph(DrawingContext dc, Flash flash, double intensity)
+    {
+        var t = Math.Clamp(flash.Age / flash.Life, 0, 1);
+        var strength = Math.Clamp(.5 + flash.Strength * .5, 0, 1.2);
+        var fade = (1 - t) * intensity * strength;
+        if (fade <= .01) return;
+        var radius = (14 + _visual.RingSize * .9) * (.5 + .5 * t);
+        var (r, g, b) = (flash.Color.R, flash.Color.G, flash.Color.B);
+        var star = new StreamGeometry();
+        using (var ctx = star.Open())
+        {
+            for (var i = 0; i < 10; i++)
+            {
+                var angle = -Math.PI / 2 + i * Math.PI / 5;
+                var rad = i % 2 == 0 ? radius : radius * .45;
+                var pt = new Point(flash.X + Math.Cos(angle) * rad, flash.Y + Math.Sin(angle) * rad * .8);
+                if (i == 0) ctx.BeginFigure(pt, true, true); else ctx.LineTo(pt, true, false);
+            }
+        }
+        star.Freeze();
+        var edge = new Pen(Brush(Color.FromArgb(Alpha(255 * fade), 255, 255, 255)), 1.6); edge.Freeze();
+        dc.DrawGeometry(Brush(Color.FromArgb(Alpha(200 * fade), r, g, b)), edge, star);
+    }
+
+    /// <summary>Falling phase, trail channel: Glow, Sparkles, Speed Lines, Blur, Ribbon, Rainbow or Stream behind the note.</summary>
+    private void DrawFallingTrail(DrawingContext dc, Rect r, Color color, double opacity, int pitch, bool rising)
+    {
+        var trail = _visual.FallingTrail;
+        if (trail == "None" || _visual.FallingTrailIntensity <= 0) return;
+        var strength = _visual.FallingTrailIntensity / 100 * opacity;
+        if (strength <= .01) return;
+        var length = Math.Max(8, r.Height * _visual.FallingTrailLength / 100 + 10);
+        // The trail drags behind the motion: above the note while falling, below it while rising.
+        var trailRect = rising ? new Rect(r.X, r.Bottom, r.Width, length) : new Rect(r.X, r.Y - length, r.Width, length);
+        var (cr, cg, cb) = (color.R, color.G, color.B);
+        var cx = r.X + r.Width / 2;
+        switch (trail)
+        {
+            case "Glow":
+            {
+                var fade = new LinearGradientBrush { StartPoint = new Point(0, rising ? 0 : 1), EndPoint = new Point(0, rising ? 1 : 0), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+                fade.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(150 * strength), cr, cg, cb), 0));
+                fade.GradientStops.Add(new GradientStop(Color.FromArgb(0, cr, cg, cb), 1));
+                fade.Freeze();
+                dc.DrawRectangle(fade, null, trailRect);
+                break;
+            }
+            case "Sparkles":
+            {
+                var count = Math.Clamp((int)(length / 9), 2, 14);
+                for (var i = 0; i < count; i++)
+                {
+                    var f = (i + .5) / count;
+                    var y = rising ? trailRect.Y + f * length : trailRect.Y + (1 - f) * length;
+                    var x = r.X + SeededRandom(pitch * 31 + i * 7) * r.Width;
+                    var twinkle = .35 + .65 * Math.Abs(Math.Sin(_elapsed * (3 + SeededRandom(pitch + i) * 5) + i * 1.7));
+                    var a = Alpha(255 * strength * (1 - f) * twinkle);
+                    if (a < 5) continue;
+                    var s = 1 + SeededRandom(pitch * 57 + i * 13) * 2.2;
+                    var c = SeededRandom(pitch * 91 + i) < .4 ? Colors.White : color;
+                    dc.DrawEllipse(Brush(Color.FromArgb(a, c.R, c.G, c.B)), null, new Point(x, y), s, s);
+                    if (s > 2)
+                    {
+                        var pen = new Pen(Brush(Color.FromArgb((byte)(a * .7), c.R, c.G, c.B)), 1); pen.Freeze();
+                        dc.DrawLine(pen, new Point(x - s * 2, y), new Point(x + s * 2, y));
+                        dc.DrawLine(pen, new Point(x, y - s * 2), new Point(x, y + s * 2));
+                    }
+                }
+                break;
+            }
+            case "Speed Lines":
+            {
+                var lines = Math.Clamp((int)(r.Width / 5), 2, 6);
+                for (var i = 0; i < lines; i++)
+                {
+                    var x = r.X + (i + .5) * r.Width / lines;
+                    var scroll = (SeededRandom(pitch * 17 + i * 3) + _elapsed * 2.2) % 1;
+                    var y0 = rising ? trailRect.Y + scroll * length * .5 : trailRect.Bottom - scroll * length * .5;
+                    var len = length * (.35 + .3 * SeededRandom(pitch + i * 11));
+                    var y1 = rising ? y0 + len : y0 - len;
+                    var pen = new Pen(Brush(Color.FromArgb(Alpha(190 * strength), 255, 255, 255)), 1.4); pen.Freeze();
+                    dc.DrawLine(pen, new Point(x, y0), new Point(x, y1));
+                }
+                break;
+            }
+            case "Blur": // Motion Blur: the body smears along its travel direction.
+            {
+                var smear = new Rect(r.X, rising ? r.Y : r.Y - length * .7, r.Width, r.Height + length * .7);
+                dc.DrawRoundedRectangle(Brush(Color.FromArgb(Alpha(70 * strength), cr, cg, cb)), null, smear, 4, 4);
+                break;
+            }
+            case "Ribbon":
+            {
+                var steps = 16;
+                var pts = new Point[steps + 1];
+                for (var i = 0; i <= steps; i++)
+                {
+                    var f = i / (double)steps;
+                    var y = rising ? trailRect.Y + f * length : trailRect.Bottom - f * length;
+                    var sway = Math.Sin(f * 6.28 + _elapsed * 3 + pitch) * r.Width * .45 * f;
+                    pts[i] = new Point(cx + sway, y);
+                }
+                var ribbon = new PathGeometry();
+                ribbon.Figures.Add(new PathFigure(pts[0], pts.Skip(1).Select(p => new LineSegment(p, true)), false));
+                ribbon.Freeze();
+                var band = new Pen(Brush(Color.FromArgb(Alpha(150 * strength), cr, cg, cb)), Math.Max(2, r.Width * .5)) { StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round }; band.Freeze();
+                var coreLine = new Pen(Brush(Color.FromArgb(Alpha(200 * strength), 255, 255, 255)), 1.2); coreLine.Freeze();
+                dc.DrawGeometry(null, band, ribbon);
+                dc.DrawGeometry(null, coreLine, ribbon);
+                break;
+            }
+            case "Rainbow":
+            {
+                var bands = 7;
+                for (var i = 0; i < bands; i++)
+                {
+                    var f0 = i / (double)bands; var f1 = (i + 1) / (double)bands;
+                    var seg = rising ? new Rect(r.X, trailRect.Y + f0 * length, r.Width, length / bands + 1)
+                        : new Rect(r.X, trailRect.Bottom - f1 * length, r.Width, length / bands + 1);
+                    var c = ColorFromHue((_elapsed * 90 + i * 360.0 / bands + pitch * 9) % 360);
+                    dc.DrawRectangle(Brush(Color.FromArgb(Alpha(170 * strength * (1 - f0 * .7)), c.R, c.G, c.B)), null, seg);
+                }
+                break;
+            }
+            case "Stream":
+            {
+                var count = Math.Clamp((int)(length / 7), 3, 18);
+                for (var i = 0; i < count; i++)
+                {
+                    var speed = .5 + SeededRandom(pitch * 23 + i * 5) * 1.2;
+                    var f = (SeededRandom(pitch * 41 + i * 3) + _elapsed * speed * .4) % 1;
+                    var y = rising ? trailRect.Y + f * length : trailRect.Bottom - f * length;
+                    var x = cx + (SeededRandom(pitch * 13 + i * 29) - .5) * r.Width * 1.2;
+                    var a = Alpha(230 * strength * (1 - f * .8));
+                    if (a < 5) continue;
+                    var s = 1 + SeededRandom(pitch * 71 + i) * 1.8;
+                    dc.DrawEllipse(Brush(Color.FromArgb(a, cr, cg, cb)), null, new Point(x, y), s, s);
+                }
+                break;
+            }
+        }
+    }
+
+    /// <summary>Ghost Notes: faint echo copies leading the note along its travel direction.</summary>
+    private void DrawNoteGhosts(DrawingContext dc, Rect r, Color color, double opacity, int pitch, bool rising)
+    {
+        var amount = _visual.FallingGhostAmount / 100 * opacity;
+        if (amount <= .01) return;
+        var count = amount > .66 ? 3 : amount > .33 ? 2 : 1;
+        var step = 10 + r.Height * .12;
+        for (var i = 1; i <= count; i++)
+        {
+            var offset = step * i;
+            var ghost = rising ? new Rect(r.X, r.Y - offset, r.Width, r.Height) : new Rect(r.X, r.Y + offset, r.Width, r.Height);
+            DrawConfiguredNote(dc, ghost, color, amount * .3 / i, false, pitch, rising, true);
         }
     }
 
@@ -1497,8 +1904,8 @@ internal sealed class PianoStage : FrameworkElement
     private sealed record Petal(double X, double Y, double Size, double Speed, double Sway, double Drift, double Spin, double Phase);
     /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
     private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
-    private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; }
-    private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock; public Color Color; }
-    private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public Color Color; }
+    private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; public int Kind; public double Grav = 1, DragK = 1; }
+    private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock, Implode; public Color Color; }
+    private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public int Style; public Color Color; }
     private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; }
 }
