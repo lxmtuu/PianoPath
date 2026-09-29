@@ -1,0 +1,43 @@
+name: shell-snapshots
+
+# Temporary helper: renders the concert shell on a real Windows runner so the README
+# screenshots can be refreshed from a build of the current sources.
+on:
+  push:
+    branches: ["arena/**"]
+  workflow_dispatch:
+
+jobs:
+  snapshots:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          lfs: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore PianoPath.csproj
+
+      - name: Build
+        run: dotnet build PianoPath.csproj --configuration Release --no-restore
+
+      - name: Capture shell snapshots
+        shell: pwsh
+        run: |
+          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'snapshots'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          & $exe --snapshot (Join-Path $out 'menu-preview.png') --menu
+          & $exe --snapshot (Join-Path $out 'preview.png') --play-preview
+          & $exe --snapshot (Join-Path $out 'settings-preview.png') --show-settings --settings-tab=theme
+          Get-ChildItem $out | Select-Object Name, Length
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: keyflow-snapshots
+          path: ${{ runner.temp }}/snapshots/*.png
+          if-no-files-found: error

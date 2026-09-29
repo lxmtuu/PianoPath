@@ -22,8 +22,9 @@ public partial class App : Application
         // Automated captures wait several seconds for the SoundFont and must not animate:
         // a frozen chrome keeps every screenshot identical and the run inexpensive.
         if (automated) { window.AutoHideChrome = false; window.DisableChromeMotion(); }
-        // Normal launches open on the concert main menu; automated captures go straight to the stage.
-        if (!automated) window.ShowStartupMenu();
+        // Normal launches open on the concert main menu; automated captures go straight to the stage
+        // unless the capture asks for the shell with --menu (used to refresh the README screenshots).
+        if (!automated || e.Args.Contains("--menu")) window.ShowStartupMenu();
         if (e.Args.Contains("--show-settings"))
         {
             if (window.FindName("SettingsPanel") is System.Windows.Controls.Border panel) panel.Visibility = Visibility.Visible;
