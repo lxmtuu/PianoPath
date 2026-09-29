@@ -603,6 +603,22 @@ internal static class VerificationSuite
             $"The settings dock should expose all {pageCount} categorized pages from Style to Recording.");
         Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.Recording) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
             "Settings page names should resolve to their tab-strip index so no code has to keep magic tab numbers.");
+        // The navigation is grouped by intent. Order is derived from the sections, the XAML tab strip
+        // must match that order, and the header printed above a page must be the header of the section
+        // that owns it — so a page can never sit under a caption the code does not know about.
+        var headers = tabs.Items.Cast<TabItem>().Select(item => item.Header.ToString()).ToArray();
+        Assert(headers.SequenceEqual(SettingsPages.Order) && SettingsPages.Order.SequenceEqual(SettingsPages.Sections.SelectMany(section => section.Pages)),
+            "The dock should list exactly the pages of the settings catalogue, in catalogue order.");
+        foreach (var section in SettingsPages.Sections)
+        {
+            var first = SettingsPages.IndexOf(section.Pages[0]);
+            Assert(first >= 0 && SettingsPages.GetSection((TabItem)tabs.Items[first]) == section.Label,
+                $"The section “{section.Label}” should be carried by its first page in the tab strip.");
+            foreach (var page in section.Pages) Assert(SettingsPages.SectionOf(page)?.Label == section.Label, $"Settings page {page} should resolve to the section that lists it.");
+        }
+        Assert(SettingsPages.SectionOf("Nope") is null, "An unknown page name should have no section.");
+        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.Recording),
+            "The first section should open on Style and the last one should close on Recording.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)),
             "Note style, color mode, keyboard style, background mode and wisps should be editable from the dock.");
@@ -640,11 +656,19 @@ internal static class VerificationSuite
         var chips = (Panel?)Field(window, "themeChipHost");
         Assert(chips is not null && chips.Children.Count == ShellThemes.All.Length && chips.Children.OfType<Button>().All(b => b.Tag is Brush),
             "The Theme page should offer one palette chip per built-in interface theme.");
+        // Ids are slugs derived from the theme name. Older releases stored sakura / noir / velvet and
+        // the retired "Sakura Nocturne" name; those must still resolve and be rewritten on load.
+        Assert(ShellThemes.Find("sakura").Id == ShellThemes.ConcertGrandId && ShellThemes.Find("noir").Id == ShellThemes.ConcertNoirId
+                && ShellThemes.Find("velvet").Id == ShellThemes.VelvetGoldId && ShellThemes.Find("Sakura Nocturne").Id == ShellThemes.ConcertGrandId
+                && ShellThemes.Find("Concert Noir").Id == ShellThemes.ConcertNoirId && ShellThemes.Find("nonsense").Id == ShellThemes.DefaultId,
+            "Legacy theme ids and display names should resolve to the canonical concert themes.");
+        Assert(PianoVisualSettings.FromJson("{\"ShellTheme\":\"sakura\"}").ShellTheme == ShellThemes.ConcertGrandId && ShellThemes.DefaultId == ShellThemes.All[0].Id,
+            "Loading persisted settings should rewrite a legacy theme id to the canonical slug.");
         var beforeTheme = visualSettings.ShellTheme;
         visualSettings.ShellTheme = "velvet";
         Invoke(window, "ApplyChromeTheme");
-        Assert(ShellThemeManager.Current.Id == "velvet" && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.VelvetGold.Accent,
-            "Choosing an interface theme should publish its accent colour into the application resources.");
+        Assert(ShellThemeManager.Current.Id == ShellThemes.VelvetGoldId && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.VelvetGold.Accent,
+            "Choosing an interface theme should resolve its id and publish the accent colour into the application resources.");
         visualSettings.ShellTheme = beforeTheme;
         Invoke(window, "ApplyChromeTheme");
         Assert(ShellThemeManager.Current.Id == ShellThemes.Find(beforeTheme).Id, "Restoring the theme should republish the previous accents.");
@@ -683,7 +707,7 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         VerifyShadedStage(stage, choices);
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: eleven pages, theme chips and concert layers, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add("PASS settings dock: eleven pages grouped into three navigation sections, theme chips and concert layers, style/color-mode controls, per-hand and per-track colors, search filter, preset application and the ray-traced keyboard switch.");
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
@@ -751,6 +775,20 @@ internal static class VerificationSuite
         Assert(visualSettings.ShowNotes, "Switching the Notes layer back on should restore the stage settings.");
         Invoke(window, "PlayDialogClose_Click", window, new RoutedEventArgs());
         Assert(play!.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
+
+        // ---- Keyboard & shortcuts help card (F1): the shell hides itself, so the bindings are
+        // documented in the app and the card must stay reachable and dismissible.
+        var shortcuts = (FrameworkElement)window.FindName("ShortcutOverlay")!;
+        Assert(shortcuts.Visibility == Visibility.Collapsed && !window.ShortcutsVisible, "The shortcut card should stay closed until it is asked for.");
+        window.ToggleShortcuts();
+        Assert(shortcuts.Visibility == Visibility.Visible && window.ShortcutsVisible, "F1 should open the keyboard & shortcuts card.");
+        var shortcutGrid = (UniformGrid)window.FindName("ShortcutGrid")!;
+        Assert(shortcutGrid.Children.Count == 3 && shortcutGrid.Children.OfType<StackPanel>().All(column => column.Children.OfType<Grid>().Count() >= 4),
+            "The card should document the play, navigation and session groups with their bindings.");
+        Invoke(window, "ShortcutOverlay_Click", window, new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left));
+        Assert(shortcuts.Visibility == Visibility.Collapsed && !window.ShortcutsVisible, "Clicking the backdrop should close the shortcut card again.");
+        window.ToggleShortcuts(); window.HideShortcuts();
+        Assert(shortcuts.Visibility == Visibility.Collapsed, "Toggling the card twice should put it away.");
     }
 
     private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)

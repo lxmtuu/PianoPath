@@ -41,7 +41,7 @@ internal static class VisualPresets
         s.ShowFlame = true; s.FlameIntensity = 75; s.FlameHeight = 60; s.FlameColorMode = "Warm"; s.ShowWisps = false; s.ShowImpactRings = true;
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 55; s.BloomIntensity = 80; s.Vignette = 30; s.HorizonGlow = 35;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 85;
-        s.ShellTheme = "sakura";
+        s.ShellTheme = ShellThemes.ConcertGrandId;
         s.ShowPetals = false; s.ShowSpotlights = false;
         return s;
     }
@@ -56,7 +56,7 @@ internal static class VisualPresets
         s.ShowImpactRings = true; s.RingSize = 60; s.KeyboardStyle = "Studio"; s.KeyGlowRadius = 90; s.KeyLighting = 55; s.ShowKeyFelt = true; s.KeyFeltColor = "#FF2E3A";
         s.HorizonGlow = 80; s.BeamIntensity = 55; s.BloomIntensity = 110; s.BloomSize = 90; s.Vignette = 45; s.Saturation = 115;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 34; s.ShaderKeyLight = 78; s.ShaderGloss = 66; s.ShaderShadows = 88; s.ShaderEmissive = 120; s.ShaderRimLight = 84;
-        s.ShellTheme = "velvet";
+        s.ShellTheme = ShellThemes.VelvetGoldId;
         return s;
     }
 
@@ -68,7 +68,7 @@ internal static class VisualPresets
         s.ShowFlame = false; s.ParticleAmount = 10; s.ParticleVelocity = 90; s.Gravity = 60; s.ShowImpactRings = false; s.ShowLightBeams = true; s.BeamIntensity = 70;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 70; s.BloomIntensity = 70; s.Vignette = 35; s.HorizonGlow = 25;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 56; s.ShaderGloss = 88; s.ShaderShadows = 62; s.ShaderEmissive = 70;
-        s.ShellTheme = "sakura";
+        s.ShellTheme = ShellThemes.ConcertGrandId;
         return s;
     }
 
@@ -81,7 +81,7 @@ internal static class VisualPresets
         s.ShowWisps = false; s.ShowImpactRings = true; s.RingSize = 35; s.KeyboardStyle = "Classic"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 40;
         s.BloomIntensity = 45; s.Vignette = 20; s.HorizonGlow = 20; s.Saturation = 85;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 62; s.ShaderGloss = 94; s.ShaderShadows = 58; s.ShaderExposure = 112; s.ShaderEmissive = 55;
-        s.ShellTheme = "noir";
+        s.ShellTheme = ShellThemes.ConcertNoirId;
         return s;
     }
 
@@ -92,7 +92,7 @@ internal static class VisualPresets
         s.NoteGlow = 60; s.NoteEdge = 80; s.NoteEdgeWidth = 30; s.NoteTint = 85; s.ShowNoteLabels = true; s.KeyLabels = "C"; s.ParticleAmount = 12; s.ShowFlame = false;
         s.ShowImpactRings = true; s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.BloomIntensity = 50; s.Vignette = 20;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 44; s.ShaderEmissive = 95;
-        s.ShellTheme = "sakura";
+        s.ShellTheme = ShellThemes.ConcertGrandId;
         return s;
     }
 
@@ -103,7 +103,7 @@ internal static class VisualPresets
         s.NoteHeadGlow = 0; s.ShowEmbers = false; s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = false; s.ShowLightBeams = false; s.ShowHalo = true;
         s.HaloColor = "#FFFFFF"; s.HaloIntensity = 45; s.KeyboardStyle = "Classic"; s.KeyLighting = 20; s.KeyGlowRadius = 0; s.BloomIntensity = 0; s.Vignette = 0; s.HorizonGlow = 0;
         s.ShadingQuality = "Fast"; s.ShaderCameraTilt = 30; s.ShaderKeyLight = 104; s.ShaderGloss = 48; s.ShaderEmissive = 45;
-        s.ShellTheme = "noir";
+        s.ShellTheme = ShellThemes.ConcertNoirId;
         return s;
     }
 
@@ -115,7 +115,7 @@ internal static class VisualPresets
         s.BloomIntensity = 40; s.KeyGlowRadius = 0; s.ShowFlame = true; s.ShowImpactRings = false; s.KeyboardStyle = "Studio";
         s.ShadingQuality = "Off";
         // A neutral studio shell keeps chroma-key work free of decorative colour.
-        s.ShellTheme = "noir";
+        s.ShellTheme = ShellThemes.ConcertNoirId;
         return s;
     }
 
@@ -123,7 +123,7 @@ internal static class VisualPresets
     internal static PianoVisualSettings SakuraNocturne()
     {
         var s = Base("Sakura Nocturne");
-        s.ShellTheme = "sakura";
+        s.ShellTheme = ShellThemes.ConcertGrandId;
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#FF8FB8"; s.NoteColorEnd = "#FFD98A";
         s.HaloColor = "#FFC2D8"; s.HaloIntensity = 92; s.NoteGlow = 105; s.NoteEdge = 110; s.NoteEdgeWidth = 55; s.NoteTint = 42; s.NoteHeadGlow = 48; s.NoteRoundness = 55;
         s.ShowPetals = false; s.PetalAmount = 50; s.PetalColor = "#E5C06E";
@@ -138,7 +138,7 @@ internal static class VisualPresets
     internal static PianoVisualSettings ConcertGold()
     {
         var s = Base("Concert Gold");
-        s.ShellTheme = "velvet";
+        s.ShellTheme = ShellThemes.VelvetGoldId;
         s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Custom"; s.NoteColorStart = "#F3C05E"; s.NoteColorEnd = "#FFF0B8";
         s.HaloColor = "#FFD98A"; s.HaloIntensity = 100; s.NoteGlow = 115; s.NoteEdge = 100; s.NoteEdgeWidth = 45; s.NoteTint = 55; s.NoteHeadGlow = 52; s.NoteRoundness = 40;
         s.ShowSpotlights = false; s.SpotlightIntensity = 60; s.ShowPetals = false;
@@ -154,7 +154,7 @@ internal static class VisualPresets
     internal static PianoVisualSettings MoonlightSonata()
     {
         var s = Base("Moonlight Sonata");
-        s.ShellTheme = "noir";
+        s.ShellTheme = ShellThemes.ConcertNoirId;
         s.NoteStyle = "Glass"; s.ColorMode = "Gradient"; s.Palette = "Ocean"; s.NoteColorStart = "#8FA9FF"; s.NoteColorEnd = "#DCE6FF";
         s.HaloColor = "#B9C8FF"; s.HaloIntensity = 80; s.NoteGlow = 68; s.NoteEdge = 92; s.NoteEdgeWidth = 38; s.NoteTint = 76; s.NoteRefraction = 55; s.NoteRoundness = 42; s.Notes3D = true; s.NoteHeadGlow = 34;
         s.ShowSpotlights = false; s.SpotlightIntensity = 40; s.ShowPetals = false;

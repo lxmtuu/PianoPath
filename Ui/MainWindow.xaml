@@ -105,7 +105,7 @@
                     </Border>
 
                     <TabControl x:Name="SettingsTabs" Grid.Row="1" Style="{StaticResource SettingsTabControlStyle}" ItemContainerStyle="{StaticResource SettingsNavItemStyle}" SelectedIndex="0" SelectionChanged="SettingsTabs_SelectionChanged">
-                        <TabItem Header="Style" Tag="{StaticResource IconStyle}">
+                        <TabItem Header="Style" Tag="{StaticResource IconStyle}" local:SettingsPages.Section="STAGE DESIGN">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRESETS" Style="{StaticResource EyebrowTextStyle}"/>
@@ -142,7 +142,7 @@
                         <TabItem Header="Camera &amp; FX" Tag="{StaticResource IconCamera}">
                             <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="CameraSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Audio" Tag="{StaticResource IconAudio}">
+                        <TabItem Header="Audio" Tag="{StaticResource IconAudio}" local:SettingsPages.Section="SOUND &amp; INPUT">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="INSTRUMENT" Style="{StaticResource EyebrowTextStyle}"/>
@@ -182,7 +182,7 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Practice" Tag="{StaticResource IconPractice}">
+                        <TabItem Header="Practice" Tag="{StaticResource IconPractice}" local:SettingsPages.Section="SESSION">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRACTICE MODE" Style="{StaticResource EyebrowTextStyle}"/>
@@ -408,6 +408,30 @@
             </Border>
         </Grid>
 
+        <!-- ===================== KEYBOARD & SHORTCUTS (help card) =====================
+             The shell hides every toolbar after a few idle seconds, so the shortcuts are documented
+             inside the application instead of only in the README. The three columns are generated in
+             MainWindow.Shortcuts.cs; F1 toggles this card and Escape closes it. -->
+        <Grid x:Name="ShortcutOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="32" Background="#A8040509" MouseLeftButtonDown="ShortcutOverlay_Click">
+            <Border x:Name="ShortcutCard" Width="944" VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" CornerRadius="18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource DockShadow}" MouseLeftButtonDown="ShortcutCard_Click">
+                <StackPanel Margin="28,22,28,26">
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Path Data="{StaticResource IconKeyboard}" Fill="{DynamicResource Accent2Brush}" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock Text="KEYBOARD &amp; SHORTCUTS" Style="{StaticResource EyebrowTextStyle}"/>
+                            </StackPanel>
+                            <TextBlock Text="Every control on screen is also reachable from the keyboard, which matters because the shell hides itself while the mouse rests. Everything below is live while the stage has focus."
+                                       Style="{StaticResource MutedTextStyle}" Margin="0,6,0,0" TextWrapping="Wrap" MaxWidth="720" HorizontalAlignment="Left"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" VerticalAlignment="Top" Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconClose}" Click="ShortcutClose_Click" ToolTip="Close (Escape)"/>
+                    </Grid>
+                    <UniformGrid x:Name="ShortcutGrid" Columns="3" Margin="0,20,0,0"/>
+                </StackPanel>
+            </Border>
+        </Grid>
+
         <!-- ===================== MAIN MENU (concert shell) =====================
              The opening screen is the concert itself: an animated acoustic chamber backdrop,
              the Steinway concert grand brand, primary performance actions, a live theme picker and a
@@ -444,6 +468,7 @@
                     <Button x:Name="MenuDesignButton" Content="Stage Design Studio" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuDesign_Click" ToolTip="Fine-tune visual effects, ray-traced keyboard shading and colors"/>
                     <StackPanel x:Name="MenuLinkStack" Margin="10,22,0,0">
                         <Button Content="Audio &amp; MIDI Hardware Setup" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Disklavier SoundFonts, MIDI routing and latency settings"/>
+                        <Button Content="Keyboard &amp; Shortcuts" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuShortcuts_Click" ToolTip="Every shortcut the stage listens to (F1)"/>
                         <Button Content="About Keyflow Concert Grand" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
                         <Button Content="Exit Keyflow" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
                     </StackPanel>

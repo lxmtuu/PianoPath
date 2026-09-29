@@ -175,7 +175,7 @@ Phương pháp:
   `Math.Clamp(tab, 0, 9)`, mảng `pages` trong tìm kiếm, bảng `--settings-tab`) đều gọi
   `SettingsPages.IndexOf(name)` / `SettingsPageHost(index)`. Thêm trang mới = 1 dòng trong
   `SettingsPages` + 1 `TabItem` trong XAML.
-- **Trang Theme** (`BuildThemePage`) nối thật vào hệ cài đặt: chip giao diện (Sakura Nocturne /
+- **Trang Theme** (`BuildThemePage`) nối thật vào hệ cài đặt: chip giao diện (Concert Grand /
   Concert Noir / Velvet Gold) → `ShellTheme` → `ShellThemeManager.Apply` → hàng chục brush trong
   `Application.Resources` đổi qua `DynamicResource`; `ChromeMotion` (Off/Calm/Full) và
   `BackdropDensity` nuôi `ChromeBackdrop.Configure`; hai công tắc mới `ShowPetals`/`ShowSpotlights`
@@ -187,6 +187,10 @@ Phương pháp:
 - **Bằng chứng kiểm thử mới** (trong `VerificationSuite`):
   - `tabs.Items.Count == SettingsPages.Order.Length` (11), tiêu đề tab 0 = Style, tab 1 = Theme,
     tab cuối = Recording, và `IndexOf` trả đúng chỉ số / `-1` cho tên lạ;
+  - **điều hướng ba nhóm**: thứ tự tab bằng đúng `SettingsPages.Order`, `Order` bằng đúng chuỗi trang
+    của `Sections`, mỗi nhãn nhóm nằm trên trang đầu của nhóm đó và `SectionOf("Nope")` là `null`;
+  - **id giao diện cũ**: `Find("sakura" | "noir" | "velvet" | "Sakura Nocturne")` trả về id chuẩn, và
+    file lưu với `"ShellTheme":"sakura"` được viết lại thành `concert-grand` khi nạp;
   - trang Theme có chip cho từng giao diện, đổi `ShellTheme` → `AccentColor` trong resource đổi theo,
     `ShowPetals/ShowSpotlights` làm `HasActiveEffects` bật và `DrawPetals` vẽ ra petal thật
     (`stage.PetalCount` trong khoảng 1–150) cùng geometry thật của spotlight;

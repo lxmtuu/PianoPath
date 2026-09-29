@@ -19,6 +19,12 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      # Fast lane: syntax, XAML resources, the settings-navigation catalogue, the theme tokens and
+      # every README link are checked in seconds, before the Windows build can fail for a typo.
+      - name: Static source check
+        shell: pwsh
+        run: python tools/check_sources.py
+
       - name: Restore
         run: dotnet restore PianoPath.csproj
 
@@ -47,3 +53,38 @@ jobs:
           if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
+
+      # The README shows the real application, so the screenshots are rendered by the same executable
+      # that just passed the verification suite instead of being hand-made artwork that drifts out of
+      # date. Refresh the committed copies with:
+      #   gh run download <run-id> -n keyflow-previews -D docs/previews
+      - name: Render README previews
+        shell: pwsh
+        run: |
+          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $out = 'docs/previews'
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          $shots = @(
+            @{ Name = 'stage-live.png';  Args = @('--play-preview') },
+            @{ Name = 'main-menu.png';   Args = @('--menu') },
+            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style') },
+            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme') },
+            @{ Name = 'play-dialog.png'; Args = @('--play-dialog') },
+            @{ Name = 'shortcuts.png';   Args = @('--shortcuts') }
+          )
+          $failed = @()
+          foreach ($shot in $shots) {
+            $target = Join-Path $out $shot.Name
+            $proc = Start-Process -FilePath $exe -ArgumentList (@('--snapshot', $target, '--compact') + $shot.Args) -PassThru -Wait
+            if (Test-Path $target) { "rendered $($shot.Name) ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
+            else { $failed += "$($shot.Name) (exit $($proc.ExitCode))" }
+          }
+          if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
+
+      - name: Upload README previews
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: keyflow-previews
+          path: docs/previews/*.png
+          if-no-files-found: warn

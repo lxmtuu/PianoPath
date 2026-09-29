@@ -212,6 +212,107 @@ def scan_xaml_bindings(cs_files, xaml_files, xaml_names, resource_keys):
     return errors
 
 
+def scan_settings_navigation():
+    """The dock navigation lives in two places on purpose: ``SettingsPages`` owns the catalogue and
+    ``MainWindow.xaml`` owns the markup of each page. This check proves the two agree, so inserting a
+    page in one of them cannot silently leave the other behind."""
+    errors = []
+    catalogue = (ROOT / "Ui" / "SettingsPages.cs").read_text(encoding="utf-8")
+    xaml = (ROOT / "Ui" / "MainWindow.xaml").read_text(encoding="utf-8")
+
+    names = dict(re.findall(r'internal const string (\w+) = "([^"]+)";', catalogue))
+    sections_block = re.search(r"SettingsSection\[\]\s+Sections\s*=\s*\[(.*?)\n    \];", catalogue, re.S)
+    if not sections_block:
+        return ["Ui/SettingsPages.cs: the Sections catalogue could not be parsed"]
+    expected = []
+    for label_expr, pages in re.findall(r"new\((\w+),\s*\[([^\]]*)\]\)", sections_block.group(1)):
+        label = names.get(label_expr, label_expr)
+        pages = [names.get(p.strip(), p.strip()) for p in pages.split(",") if p.strip()]
+        if not pages:
+            errors.append(f"Ui/SettingsPages.cs: section '{label}' lists no pages")
+        expected.append((label, pages))
+    if not expected:
+        errors.append("Ui/SettingsPages.cs: no navigation sections found")
+
+    declared = []
+    for tag in re.findall(r"<TabItem\b[^>]*>", xaml):
+        header = re.search(r'Header="([^"]+)"', tag)
+        section = re.search(r'local:SettingsPages\.Section="([^"]+)"', tag)
+        if header:
+            declared.append((header.group(1).replace("&amp;", "&"), section.group(1).replace("&amp;", "&") if section else None))
+    if not declared:
+        return errors + ["Ui/MainWindow.xaml: the settings TabControl has no TabItem pages"]
+
+    flat = [(label, page) for label, pages in expected for page in pages]
+    if len(flat) != len(declared):
+        errors.append(f"the dock has {len(declared)} TabItems but the catalogue lists {len(flat)} pages")
+    for index, ((label, page), (header, section)) in enumerate(zip(flat, declared)):
+        # A header may decorate the page name (Camera → "Camera & FX") but must start with it, which
+        # still catches a page that was reordered or renamed on one side only.
+        if header != page and not header.startswith(page + " "):
+            errors.append(f"Ui/MainWindow.xaml: tab #{index} is '{header}' but the catalogue expects page '{page}'")
+        first_of_section = flat[index - 1][0] != label if index else True
+        if first_of_section and section != label:
+            errors.append(f"Ui/MainWindow.xaml: '{header}' should print the section header '{label}'" + (f" (found '{section}')" if section else " (none set)"))
+        if not first_of_section and section:
+            errors.append(f"Ui/MainWindow.xaml: '{header}' repeats the section header '{section}'; only the first page of a group carries it")
+    labels = [label for label, _ in expected]
+    if len(set(labels)) != len(labels):
+        errors.append("Ui/SettingsPages.cs: two sections share the same caption")
+    return errors
+
+
+def scan_theme_tokens():
+    """``ShellThemeManager`` writes every theme token into ``Application.Resources`` at runtime. Each
+    one needs a matching default in ``App.xaml``, otherwise the very first frame (before the theme is
+    published) would render an unresolved resource."""
+    errors = []
+    theme = (ROOT / "Theme" / "ShellTheme.cs").read_text(encoding="utf-8")
+    keys = set(re.findall(r'Set\(resources,\s*"([^"]+)"', theme))
+    if not keys:
+        return ["Theme/ShellTheme.cs: no published theme tokens found"]
+    app_xaml = (ROOT / "App.xaml").read_text(encoding="utf-8")
+    defined = set(re.findall(r'x:Key="([^"]+)"', app_xaml))
+    for key in sorted(keys - defined):
+        errors.append(f"App.xaml: theme token '{key}' is published by ShellThemeManager but has no default resource")
+    return errors
+
+
+def readme_slug(heading):
+    """GitHub's heading anchor: lower-case, drop punctuation, spaces to dashes."""
+    text = heading.strip().lower()
+    text = re.sub(r"[^\w\s\-À-ỹ]", "", text, flags=re.UNICODE)
+    return re.sub(r"\s", "-", text)
+
+
+def scan_readme():
+    """Documentation is part of the product: a screenshot that no longer exists or a table-of-contents
+    link that points at a renamed heading is a broken README for everyone who reads it first."""
+    errors = []
+    readme = ROOT / "README.md"
+    if not readme.exists():
+        return ["README.md is missing"]
+    text = readme.read_text(encoding="utf-8")
+    for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text):
+        if re.match(r"^(https?:|data:)", target):
+            continue
+        if not (ROOT / target).exists():
+            errors.append(f"README.md references the image '{target}', which does not exist")
+    headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
+    for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
+        if anchor not in headings:
+            errors.append(f"README.md links to '#{anchor}', which is not a heading in the file")
+    for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
+        if any(link.startswith(prefix) for prefix in ("!",)):
+            continue
+        if not (ROOT / link).exists() and not link.startswith("http"):
+            # A repo-relative link to a file that is not in the checkout (a published binary, a
+            # user-preset folder…) is tolerated when it carries no path separator.
+            if "/" in link or "\\" in link:
+                errors.append(f"README.md links to '{link}', which does not exist")
+    return errors
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -221,7 +322,11 @@ def main():
     xaml_errors, keys, names = scan_xaml(xaml_files)
     errors.extend(xaml_errors)
     errors.extend(scan_xaml_bindings(cs_files, xaml_files, names, keys))
+    errors.extend(scan_settings_navigation())
+    errors.extend(scan_theme_tokens())
+    errors.extend(scan_readme())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
+    print("checked the dock navigation catalogue against the XAML tab strip, the theme tokens against App.xaml and every README link")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

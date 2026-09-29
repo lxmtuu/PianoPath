@@ -44,7 +44,7 @@
              DynamicResource, so a theme switch restyles the whole interface instantly: no window
              reload, no template surgery, no flicker. -->
         <SolidColorBrush x:Key="GlowBrush" Color="#FFD275"/>
-        <SolidColorBrush x:Key="PetalBrush" Color="#E5C06E"/>
+        <SolidColorBrush x:Key="MoteBrush" Color="#E5C06E"/>
         <SolidColorBrush x:Key="BackdropTopBrush" Color="#141822"/>
         <LinearGradientBrush x:Key="CurtainGradientBrush" StartPoint="0,0" EndPoint="1,0">
             <GradientStop Color="#D4AF37" Offset="0"/>
@@ -1008,18 +1008,29 @@
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="TabItem">
-                        <Border x:Name="Chrome" Background="Transparent" CornerRadius="9" Margin="8,2" Padding="11,9">
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="24"/>
-                                    <ColumnDefinition Width="*"/>
-                                </Grid.ColumnDefinitions>
-                                <Path x:Name="Icon" Data="{TemplateBinding Tag}" Fill="{StaticResource DimTextBrush}" Width="15" Height="15" Stretch="Uniform" VerticalAlignment="Center"/>
-                                <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
-                                <Border x:Name="Marker" Width="3" Height="18" CornerRadius="2" Background="{StaticResource AccentGradientBrush}" HorizontalAlignment="Left" Margin="-11,0,0,0" Visibility="Collapsed"/>
-                            </Grid>
-                        </Border>
+                        <StackPanel>
+                            <!-- Section header of the navigation column. It is printed on the first page of a
+                                 group only: every other page leaves the attached property unset, which the
+                                 null trigger below turns into a collapsed label. The labels come from
+                                 SettingsPages.Sections, so the dock and the code share one catalogue. -->
+                            <TextBlock x:Name="SectionLabel" Style="{StaticResource EyebrowTextStyle}" Margin="20,16,0,8"
+                                       Text="{Binding Path=(local:SettingsPages.Section), RelativeSource={RelativeSource TemplatedParent}}"/>
+                            <Border x:Name="Chrome" Background="Transparent" CornerRadius="9" Margin="8,2" Padding="11,9">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="24"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Path x:Name="Icon" Data="{TemplateBinding Tag}" Fill="{StaticResource DimTextBrush}" Width="15" Height="15" Stretch="Uniform" VerticalAlignment="Center"/>
+                                    <ContentPresenter Grid.Column="1" ContentSource="Header" VerticalAlignment="Center" RecognizesAccessKey="True"/>
+                                    <Border x:Name="Marker" Width="3" Height="18" CornerRadius="2" Background="{StaticResource AccentGradientBrush}" HorizontalAlignment="Left" Margin="-11,0,0,0" Visibility="Collapsed"/>
+                                </Grid>
+                            </Border>
+                        </StackPanel>
                         <ControlTemplate.Triggers>
+                            <Trigger Property="local:SettingsPages.Section" Value="{x:Null}">
+                                <Setter TargetName="SectionLabel" Property="Visibility" Value="Collapsed"/>
+                            </Trigger>
                             <!-- Hover first, selection second: in WPF the later trigger wins, so a selected page keeps its accent. -->
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="Chrome" Property="Background" Value="{StaticResource ControlHoverBrush}"/>
@@ -1050,8 +1061,9 @@
                             </Grid.ColumnDefinitions>
                             <Border Background="{StaticResource PanelAltBrush}" BorderBrush="{StaticResource PanelBorderBrush}" BorderThickness="0,0,1,0">
                                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-                                    <StackPanel Margin="0,10,0,14">
-                                        <TextBlock Text="STAGE DESIGN" Style="{StaticResource EyebrowTextStyle}" Margin="20,4,0,10"/>
+                                    <!-- Section captions belong to the items themselves (see SettingsNavItemStyle),
+                                         so the strip has no hand-written heading that could drift out of date. -->
+                                    <StackPanel Margin="0,4,0,16">
                                         <TabPanel IsItemsHost="True"/>
                                     </StackPanel>
                                 </ScrollViewer>

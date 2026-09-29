@@ -38,7 +38,7 @@ internal sealed class PianoVisualSettings
     public int BackgroundAppearanceVersion { get; set; }
 
     // ---- Interface theme (the chrome around the stage) -----------------------------------------------
-    /// <summary>Shell theme id: sakura, noir or velvet. See <see cref="ShellThemes"/>.</summary>
+    /// <summary>Interface theme id: concert-grand, concert-noir or velvet-gold. See <see cref="ShellThemes"/>.</summary>
     public string ShellTheme { get; set; } = ShellThemes.DefaultId;
     /// <summary>Off, Calm or Full: how much the interface chrome animates.</summary>
     public string ChromeMotion { get; set; } = "Full";
@@ -288,6 +288,10 @@ internal sealed class PianoVisualSettings
             if (!string.IsNullOrWhiteSpace(BackgroundImagePath)) BackgroundMode = "Image";
             BackgroundAppearanceVersion = 2;
         }
+        // Interface themes are stored by id; older releases used the retro ids sakura / noir / velvet
+        // and the retired "Sakura Nocturne" name. Resolve them once on load so the picker, the header
+        // and the JSON on disk all agree on one id, and an unknown value falls back to the default.
+        ShellTheme = ShellThemes.Normalize(ShellTheme);
     }
 }
 
