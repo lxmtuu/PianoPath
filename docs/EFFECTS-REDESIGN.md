@@ -135,11 +135,11 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Flame Pillar | Cột lửa | hold.column | ✅ flames |
 | Sustain Particles | Hạt bay liên tục | hold.column | ✅ wisps |
 | Energy Column | Cột năng lượng | hold.column | ✅ light beams |
-| Hold Bar | Thanh giữ dài | hold.bar | 🔜 phase 3 |
-| Breathing Glow | Phím thở sáng | hold.glow | 🔜 phase 3 |
-| Vibration | Rung nhẹ | hold.glow | 🔜 phase 3 |
-| Color Cycle | Đổi màu liên tục | hold.glow | 🔜 phase 3 |
-| Electric Arc | Tia điện nối phím | hold.link | 🔜 phase 3 |
+| Hold Bar | Thanh giữ dài | hold.bar | ✅ v3 |
+| Breathing Glow | Phím thở sáng | hold.glow | ✅ v3 |
+| Vibration | Rung nhẹ | hold.glow | ✅ v3 |
+| Color Cycle | Đổi màu liên tục | hold.glow | ✅ v3 |
+| Electric Arc | Tia điện nối phím | hold.link | ✅ v3 |
 
 ### 3.4 Release — thả nốt (6)
 
@@ -248,6 +248,10 @@ Không đập bỏ: engine hiện có khớp hoàn toàn vào các kênh mới, 
 | (mới v2) `ImpactBurst` | `impact.burst` | Embers/Splash/Fireworks/Confetti/Dust |
 | (mới v2) `ImpactMorph` | `impact.morph` | Shatter/Melt/Absorb/Bounce/Star Morph |
 | (mới v2) `ImpactFlashStyle` | `impact.flash` | Flash/Lightning/Plasma |
+| (mới v3) `HoldBar` + Intensity | `hold.bar` | Thanh đang kêu rực sáng + viền nóng khi giữ |
+| (mới v3) `HoldBreath` + Rate | `hold.glow` | Phím + nốt "thở" (chỉ scale bán kính/glow, không phá cache brush) |
+| (mới v3) `HoldVibration` / `HoldColorCycle` | `hold.glow` | Rung nhẹ + xoay màu nốt đang giữ |
+| (mới v3) `HoldElectricArc` + Intensity | `hold.link` | Tia điện nối tối đa 6 cặp phím giữ |
 | `ParticleResponse` / strength | `mod.velocity` | Mở rộng sang wave/flash (size + brightness theo lực nhấn) |
 
 File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ qua key lạ).
@@ -288,12 +292,22 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
   Flash style (card IMPACT). **Kiểm thử**: `VerifyFallingFx` + sửa bug `Advance(1.0)`
   ở test v1 (mỗi step bị clamp 50 ms nên phải lặp frame-size steps).
 
+### 5.3 Phase 3 (v3) — Hold
+
+- **Settings**: `HoldBar` + Intensity, `HoldBreath` + Rate, `HoldVibration` + Amount,
+  `HoldColorCycle` + Speed, `HoldElectricArc` + Intensity — tất cả mặc định tắt nên
+  look hiện có không đổi.
+- **Renderer**: nốt đang kêu rung/xoay màu/viền nóng trong `DrawConfiguredNote`;
+  `BreathFactor()` điều nhịp glow phím + flare halo + glow nốt; `DrawElectricArcs`
+  nối các phím giữ bằng tia sét động (tối đa 6 cặp, không cần particle list mới).
+- **UI**: card HOLD FX (trang Notes). **Kiểm thử**: `VerifyHoldFx`.
+
 ## 6. Roadmap các phase tiếp theo
 
 | Phase | Scope | Settings mới (dự kiến) | Renderer |
 |---|---|---|---|
 | ✅ **2 · Falling** | Glow Trail, Sparkle Tail, Speed Lines, Pulsing, Motion Blur (+ impact.morph còn lại: Shatter, Melt…) | `FallingTrail` (Choice) + Intensity/Length; `FallingPulse` + rate | Vệt sau nốt trong `DrawConfiguredNote`; morph khi impact |
-| **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
+| ✅ **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
 | **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
 | **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
 | **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |

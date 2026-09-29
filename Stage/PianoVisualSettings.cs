@@ -149,6 +149,27 @@ internal sealed class PianoVisualSettings
     public double ImpactMorphIntensity { get; set; } = 70;
     /// <summary>Flash style: Flash, Lightning or Plasma.</summary>
     public string ImpactFlashStyle { get; set; } = "Flash";
+    // ---- Hold phase FX (while the key is held) ----------------------------------------------------
+    /// <summary>The sounding bar burns brighter with a hot outline while held.</summary>
+    public bool HoldBar { get; set; } = false;
+    /// <summary>Strength of the hold-bar highlight (0-100 %).</summary>
+    public double HoldBarIntensity { get; set; } = 60;
+    /// <summary>Held keys and notes rhythmically breathe bright/dim.</summary>
+    public bool HoldBreath { get; set; } = false;
+    /// <summary>Speed of the breathing (0-100).</summary>
+    public double HoldBreathRate { get; set; } = 35;
+    /// <summary>Held notes tremble subtly.</summary>
+    public bool HoldVibration { get; set; } = false;
+    /// <summary>Strength of the vibration (0-100).</summary>
+    public double HoldVibrationAmount { get; set; } = 40;
+    /// <summary>Held notes cycle hue continuously.</summary>
+    public bool HoldColorCycle { get; set; } = false;
+    /// <summary>Speed of the color cycling (0-100).</summary>
+    public double HoldColorCycleSpeed { get; set; } = 45;
+    /// <summary>Electric arcs chain simultaneously held keys.</summary>
+    public bool HoldElectricArc { get; set; } = false;
+    /// <summary>Brightness of the electric arcs (0-100 %).</summary>
+    public double HoldArcIntensity { get; set; } = 70;
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -274,6 +295,9 @@ internal sealed class PianoVisualSettings
         FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
         FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
         ImpactMorphIntensity = Math.Clamp(ImpactMorphIntensity, 0, 100);
+        HoldBarIntensity = Math.Clamp(HoldBarIntensity, 0, 100); HoldBreathRate = Math.Clamp(HoldBreathRate, 0, 100);
+        HoldVibrationAmount = Math.Clamp(HoldVibrationAmount, 0, 100); HoldColorCycleSpeed = Math.Clamp(HoldColorCycleSpeed, 0, 100);
+        HoldArcIntensity = Math.Clamp(HoldArcIntensity, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);

@@ -666,6 +666,7 @@ internal static class VerificationSuite
         stage.SetVisualSettings(visualSettings);
         VerifyImpactFx(window, stage, visualSettings, choices);
         VerifyFallingFx(window, stage, visualSettings, choices);
+        VerifyHoldFx(window, stage, visualSettings);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -770,6 +771,45 @@ internal static class VerificationSuite
         visualSettings.ShowImpactFlash = wasFlash; visualSettings.ImpactFlashStyle = wasFlashStyle;
         visualSettings.ParticleLife = wasLife;
         stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Hold phase FX (effects-redesign v3): the Notes page exposes the hold bar, breathing glow,
+    /// vibration, color cycle and electric arc; sounding notes and chained keys paint real geometry.
+    /// </summary>
+    private static void VerifyHoldFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.HoldBar)) && toggles.ContainsKey(nameof(PianoVisualSettings.HoldBreath))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.HoldVibration)) && toggles.ContainsKey(nameof(PianoVisualSettings.HoldColorCycle))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.HoldElectricArc)),
+            "The Notes page should expose the hold bar, breathing, vibration, color cycle and arc switches.");
+        Assert(EffectCatalog.Hold.All.All(e => e.Status == EffectStatus.Available),
+            "The whole hold catalogue should be implemented in v3.");
+        var wasBar = visualSettings.HoldBar; var wasBreath = visualSettings.HoldBreath;
+        var wasVibration = visualSettings.HoldVibration; var wasCycle = visualSettings.HoldColorCycle;
+        var wasArc = visualSettings.HoldElectricArc;
+        visualSettings.HoldBar = true; visualSettings.HoldBreath = true; visualSettings.HoldVibration = true;
+        visualSettings.HoldColorCycle = true; visualSettings.HoldElectricArc = true; visualSettings.HoldArcIntensity = 80;
+        stage.SetVisualSettings(visualSettings);
+        var sounding = new DrawingVisual();
+        using (var dc = sounding.RenderOpen())
+        {
+            Invoke(stage, "DrawConfiguredNote", dc, new System.Windows.Rect(100, 100, 40, 120), System.Windows.Media.Color.FromRgb(120, 80, 255), 1d, true, 60, false, false);
+        }
+        Assert(sounding.Drawing is not null && sounding.Drawing.Bounds.Width > 44,
+            "A sounding note with hold FX should paint its highlight beyond the bar.");
+        stage.SetState([], 0, false, new HashSet<int> { 60, 64 });
+        var arcs = new DrawingVisual();
+        using (var dc = arcs.RenderOpen()) { Invoke(stage, "DrawElectricArcs", dc, 1280d, 480d); }
+        Assert(arcs.Drawing is not null && arcs.Drawing.Bounds.Width > 10 && arcs.Drawing.Bounds.Height > 4,
+            "Two held keys should be chained by a visible electric arc.");
+        visualSettings.HoldBar = wasBar; visualSettings.HoldBreath = wasBreath;
+        visualSettings.HoldVibration = wasVibration; visualSettings.HoldColorCycle = wasCycle;
+        visualSettings.HoldElectricArc = wasArc;
+        stage.SetVisualSettings(visualSettings);
+        stage.SetState([], 0, false, new HashSet<int>());
         stage.ClearTransient();
     }
 

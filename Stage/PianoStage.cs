@@ -510,6 +510,7 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.ShowImpactFlash) DrawImpactFlashes(dc);
         if (_visual.ShowEmbers || _visual.ShowWisps) DrawSparks(dc, width, keyTop);
         if (_visual.ShowHalo) DrawImpactLine(dc, width, keyTop);
+        if (_visual.HoldElectricArc && _visual.HoldArcIntensity > 0) DrawElectricArcs(dc, width, keyTop);
         if (!chroma && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
         if (_visual.ShowKeys) DrawKeyboard(dc, width, height, lane, keyTop);
         if (_visual.ShowWatermark) DrawWatermark(dc, width, height);
@@ -679,6 +680,10 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity, bool sounding, int pitch, bool rising = false, bool ghostPass = false)
     {
+        if (sounding && !ghostPass && _visual.HoldVibration) // Vibration: the held note trembles subtly.
+            r.X += Math.Sin(_elapsed * 40 + pitch * 2.2) * _visual.HoldVibrationAmount / 100 * 4;
+        if (sounding && !ghostPass && _visual.HoldColorCycle) // Color Cycle: the held note keeps shifting hue.
+            color = Blend(color, ColorFromHue(Hue(pitch) + _elapsed * _visual.HoldColorCycleSpeed * 3), .8);
         if (_visual.FallingPulse && !sounding && !ghostPass) // Pulsing: the note breathes bright/dim while it travels.
             opacity *= .62 + .38 * Math.Sin(_elapsed * (1.5 + _visual.FallingPulseRate / 100 * 9) + pitch * .7);
         if (_visual.FallingTrail == "Rainbow" && !ghostPass) // Rainbow Shift: the note body cycles through the rainbow.
@@ -687,7 +692,7 @@ internal sealed class PianoStage : FrameworkElement
         var style = _visual.NoteStyle;
         var radius = Math.Min(r.Height / 2, Math.Min(r.Width / 2, 2 + _visual.NoteRoundness / 100 * 12));
         var bloom = _visual.BloomSize / 100;
-        var glow = _visual.NoteGlow / 100 * _visual.BloomIntensity / 65 * (sounding ? 1.35 : 1);
+        var glow = _visual.NoteGlow / 100 * _visual.BloomIntensity / 65 * (sounding ? 1.35 * BreathFactor() : 1);
         var outer = 2 + bloom * 10;
         var tint = _visual.NoteTint / 78;
         var edgeWidth = .4 + _visual.NoteEdgeWidth / 45;
@@ -801,6 +806,7 @@ internal sealed class PianoStage : FrameworkElement
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
         }
         if (_visual.FallingGhost && !ghostPass && r.Height > 4) DrawNoteGhosts(dc, r, color, opacity, pitch, rising);
+        if (_visual.HoldBar && sounding && !ghostPass) DrawHoldBar(dc, r, color, opacity);
     }
 
     /// <summary>Vertical bevel for solid note bars: a lit top edge, the saturated core and a shadowed bottom.</summary>
@@ -1392,6 +1398,54 @@ internal sealed class PianoStage : FrameworkElement
         }
     }
 
+    /// <summary>Breathing Glow: 1 normally, oscillating while held keys breathe (cache-safe: only radii and glow scale).</summary>
+    private double BreathFactor() => _visual.HoldBreath ? .72 + .28 * Math.Sin(_elapsed * (1 + _visual.HoldBreathRate / 100 * 5)) : 1;
+
+    /// <summary>Hold Bar: the sounding bar burns brighter with a hot outline while the key is held.</summary>
+    private void DrawHoldBar(DrawingContext dc, Rect r, Color color, double opacity)
+    {
+        var strength = _visual.HoldBarIntensity / 100 * opacity;
+        if (strength <= .01) return;
+        var rim = new Pen(Brush(Color.FromArgb(Alpha(255 * strength), 255, 255, 255)), 2); rim.Freeze();
+        dc.DrawRoundedRectangle(null, rim, Inflate(r, 1.5), 5, 5);
+        var halo = new Pen(Brush(Color.FromArgb(Alpha(120 * strength), color.R, color.G, color.B)), 5); halo.Freeze();
+        dc.DrawRoundedRectangle(null, halo, Inflate(r, 3.5), 7, 7);
+    }
+
+    /// <summary>Hold phase, link channel: crackling arcs chaining simultaneously held keys (up to 6 links).</summary>
+    private void DrawElectricArcs(DrawingContext dc, double width, double keyTop)
+    {
+        var strength = _visual.HoldArcIntensity / 100;
+        if (strength <= .01) return;
+        int prev = -1, pairs = 0;
+        for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount && pairs < 6; pitch++)
+        {
+            if (!_activeKey[pitch]) continue;
+            if (prev >= 0) { DrawArc(dc, KeyCenters[prev] * width, KeyCenters[pitch] * width, keyTop, strength, pairs); pairs++; }
+            prev = pitch;
+        }
+    }
+
+    private void DrawArc(DrawingContext dc, double x0, double x1, double keyTop, double strength, int pair)
+    {
+        const int segs = 10;
+        var lift = 26 + Math.Abs(x1 - x0) * .12;
+        var pts = new Point[segs + 1];
+        for (var i = 0; i <= segs; i++)
+        {
+            var f = i / (double)segs;
+            pts[i] = new Point(x0 + (x1 - x0) * f,
+                keyTop - 4 - Math.Sin(f * Math.PI) * lift + (SeededRandom(pair * 131 + i * 17 + (int)(_elapsed * 24)) - .5) * 16);
+        }
+        var arc = new PathGeometry();
+        arc.Figures.Add(new PathFigure(pts[0], pts.Skip(1).Select(p => new LineSegment(p, true)), false));
+        arc.Freeze();
+        var glow = new Pen(Brush(Color.FromArgb(Alpha(130 * strength), 130, 180, 255)), 4); glow.Freeze();
+        var core = new Pen(Brush(Color.FromArgb(Alpha(255 * strength), 230, 242, 255)), 1.5); corePen.Freeze();
+        dc.DrawGeometry(null, glow, arc);
+        dc.DrawGeometry(null, corePen, arc);
+    }
+
     private void DrawImpactLine(DrawingContext dc, double width, double y)
     {
         var baseColor = AdjustColor(ParseColor(_visual.HaloColor, ColorFromHue(266)));
@@ -1434,7 +1488,7 @@ internal sealed class PianoStage : FrameworkElement
             var hitX = KeyCenters[pitch] * width;
             var hitColor = KeyColor(pitch);
             var hitAmount = Math.Clamp(_keyHeat[pitch] > 0 ? _keyHeat[pitch] : 1.0, 0.35, 1.0);
-            var flareRadius = (16 + _visual.BloomSize * .35) * hitAmount;
+            var flareRadius = (16 + _visual.BloomSize * .35) * hitAmount * BreathFactor();
 
             var burstKey = GradientKey(12, Color.FromArgb((byte)pitch, hitColor.R, hitColor.G, hitColor.B));
             if (!_gradientCache.TryGetValue(burstKey, out var burstBrush))
@@ -1492,7 +1546,7 @@ internal sealed class PianoStage : FrameworkElement
                 if (!_activeKey[pitch]) continue;
                 var color = KeyColor(pitch);
                 var x = KeyCenters[pitch] * width;
-                var radiusX = 14 + glowRadius * 70; var radiusY = 10 + glowRadius * 60;
+                var breath = BreathFactor(); var radiusX = (14 + glowRadius * 70) * breath; var radiusY = (10 + glowRadius * 60) * breath;
                 var key = GradientKey(4, Color.FromArgb((byte)Math.Clamp(_visual.KeyLighting, 0, 255), color.R, color.G, color.B));
                 if (!_gradientCache.TryGetValue(key, out var glowBrush))
                 {

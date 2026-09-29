@@ -205,6 +205,18 @@ public partial class MainWindow
         SliderRow(falling, "Pulse rate", nameof(PianoVisualSettings.FallingPulseRate), 0, 100, "How fast the notes pulse.").VisibleWhen = () => _visualSettings.FallingPulse;
         Toggle(falling, "Ghost echoes", nameof(PianoVisualSettings.FallingGhost), "Faint echo copies lead each note.");
         SliderRow(falling, "Ghost amount", nameof(PianoVisualSettings.FallingGhostAmount), 0, 100, "Visibility and number of the echoes.").VisibleWhen = () => _visualSettings.FallingGhost;
+
+        var hold = Card(NoteSettingsHost, "HOLD FX", "What sounding notes and held keys do while the key stays down.");
+        Toggle(hold, "Hold bar highlight", nameof(PianoVisualSettings.HoldBar), "The sounding bar burns brighter with a hot outline.");
+        SliderRow(hold, "Hold bar intensity", nameof(PianoVisualSettings.HoldBarIntensity), 0, 100, "Strength of the highlight.").VisibleWhen = () => _visualSettings.HoldBar;
+        Toggle(hold, "Breathing glow", nameof(PianoVisualSettings.HoldBreath), "Held keys and notes breathe bright and dim.");
+        SliderRow(hold, "Breath rate", nameof(PianoVisualSettings.HoldBreathRate), 0, 100, "How fast the glow breathes.").VisibleWhen = () => _visualSettings.HoldBreath;
+        Toggle(hold, "Vibration", nameof(PianoVisualSettings.HoldVibration), "Held notes tremble subtly.");
+        SliderRow(hold, "Vibration amount", nameof(PianoVisualSettings.HoldVibrationAmount), 0, 100, "Strength of the tremble.").VisibleWhen = () => _visualSettings.HoldVibration;
+        Toggle(hold, "Color cycle", nameof(PianoVisualSettings.HoldColorCycle), "Held notes keep shifting hue.");
+        SliderRow(hold, "Cycle speed", nameof(PianoVisualSettings.HoldColorCycleSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.HoldColorCycle;
+        Toggle(hold, "Electric arc", nameof(PianoVisualSettings.HoldElectricArc), "Crackling arcs chain simultaneously held keys.");
+        SliderRow(hold, "Arc intensity", nameof(PianoVisualSettings.HoldArcIntensity), 0, 100, "Brightness of the arcs.").VisibleWhen = () => _visualSettings.HoldElectricArc;
     }
 
     private void BuildParticlesPage()

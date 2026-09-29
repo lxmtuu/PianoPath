@@ -91,7 +91,7 @@ internal static class EffectCatalog
     }
 
     // =============================================================================================
-    // Phase 3 · Hold — while the key is physically held down
+    // Phase 3 · Hold — while the key is physically held down (v3: all IMPLEMENTED)
     // =============================================================================================
     internal static class Hold
     {
@@ -100,11 +100,11 @@ internal static class EffectCatalog
             new("hold.flame-pillar", "Flame Pillar", "Cột lửa", "Fire column sustained while the key is held.", EffectStatus.Available, "hold.column"),
             new("hold.sustain-particles", "Sustain Particles", "Hạt bay liên tục", "Bright particles continuously rising from the key.", EffectStatus.Available, "hold.column"),
             new("hold.energy-column", "Energy Column", "Cột năng lượng", "Light column standing over the sounding key.", EffectStatus.Available, "hold.column"),
-            new("hold.bar", "Hold Bar", "Thanh giữ dài", "Long bar stretching with the hold duration.", EffectStatus.Planned, "hold.bar"),
-            new("hold.breathing-glow", "Breathing Glow", "Phím thở sáng", "Key rhythmically breathes bright/dim.", EffectStatus.Planned, "hold.glow"),
-            new("hold.vibration", "Vibration", "Rung nhẹ", "Note/key trembles subtly while held.", EffectStatus.Planned, "hold.glow"),
-            new("hold.color-cycle", "Color Cycle", "Đổi màu liên tục", "Key cycles hue continuously while held.", EffectStatus.Planned, "hold.glow"),
-            new("hold.electric-arc", "Electric Arc", "Tia điện nối phím", "Electric arcs linking the held keys.", EffectStatus.Planned, "hold.link"),
+            new("hold.bar", "Hold Bar", "Thanh giữ dài", "Long bar stretching with the hold duration.", EffectStatus.Available, "hold.bar"),
+            new("hold.breathing-glow", "Breathing Glow", "Phím thở sáng", "Key rhythmically breathes bright/dim.", EffectStatus.Available, "hold.glow"),
+            new("hold.vibration", "Vibration", "Rung nhẹ", "Note/key trembles subtly while held.", EffectStatus.Available, "hold.glow"),
+            new("hold.color-cycle", "Color Cycle", "Đổi màu liên tục", "Key cycles hue continuously while held.", EffectStatus.Available, "hold.glow"),
+            new("hold.electric-arc", "Electric Arc", "Tia điện nối phím", "Electric arcs linking the held keys.", EffectStatus.Available, "hold.link"),
         ];
     }
 
