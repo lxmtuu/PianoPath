@@ -1430,9 +1430,10 @@ internal static class VerificationSuite
     private static void VerifyPresetSharing(MainWindow window)
     {
         var settings = (PianoVisualSettings)Field(window, "_visualSettings");
-        var box = (TextBox)window.FindName("ShareCodeBox");
-        var status = (TextBlock)window.FindName("ShareCodeStatusLabel");
-        Assert(box is not null && status is not null, "The Style page should carry the share box and its status line.");
+        // Pattern matching both finds the controls and narrows them, which keeps the nullable analysis of
+        // this file honest: the check cannot run against a page that lost its share box.
+        if (window.FindName("ShareCodeBox") is not TextBox box || window.FindName("ShareCodeStatusLabel") is not TextBlock status)
+            throw new InvalidOperationException("The Style page should carry the share box and its status line.");
         var hadGlow = settings.NoteGlow; var hadStyle = settings.NoteStyle; var hadName = settings.PresetName;
 
         var code = window.RefreshShareCode();
@@ -1444,7 +1445,9 @@ internal static class VerificationSuite
         Invoke(window, "RefreshSettingControls");
         Assert(window.ApplyShareCode(code) && Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
             "Applying a code should carry the look it was taken from into the stage settings.");
-        Assert(box.Text != code && status.Text.Contains(hadName, StringComparison.Ordinal),
+        // The code is deterministic: the look that was just applied is the look that was copied, so the box
+        // holds the very same text, and it must be the code of what is on screen right now.
+        Assert(box.Text == code && box.Text == VisualPresetShare.Encode(settings) && status.Text.Contains(hadName, StringComparison.Ordinal),
             "After applying, the box should hold the code of what is now on screen and the status line should confirm it.");
 
         // What another person's code does, end to end.
