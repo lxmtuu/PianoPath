@@ -1615,7 +1615,7 @@ internal sealed class PianoStage : FrameworkElement
         arc.Figures.Add(new PathFigure(pts[0], pts.Skip(1).Select(p => new LineSegment(p, true)), false));
         arc.Freeze();
         var glow = new Pen(Brush(Color.FromArgb(Alpha(130 * strength), 130, 180, 255)), 4); glow.Freeze();
-        var core = new Pen(Brush(Color.FromArgb(Alpha(255 * strength), 230, 242, 255)), 1.5); corePen.Freeze();
+        var corePen = new Pen(Brush(Color.FromArgb(Alpha(255 * strength), 230, 242, 255)), 1.5); corePen.Freeze();
         dc.DrawGeometry(null, glow, arc);
         dc.DrawGeometry(null, corePen, arc);
     }
