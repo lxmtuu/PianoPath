@@ -11,13 +11,19 @@ public partial class App : Application
         base.OnStartup(e);
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
+        // Publish the saved shell theme before any window exists, so the very first frame is themed
+        // instead of flashing the XAML defaults and repainting one frame later.
+        ShellThemeManager.Apply(PianoVisualSettingsStore.Load().ShellTheme);
+
         var window = new MainWindow();
         MainWindow = window;
         var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
-        // Normal launches open on the Embers-style main menu; automated captures go straight to the stage.
-        if (snapshotIndex < 0 && !e.Args.Contains("--show-settings")) window.ShowStartupMenu();
-        // Automated captures wait several seconds for the SoundFont; the idle auto-hide must not blank the toolbar or settings meanwhile.
-        if (snapshotIndex >= 0 || e.Args.Contains("--show-settings")) window.AutoHideChrome = false;
+        var automated = snapshotIndex >= 0 || e.Args.Contains("--show-settings");
+        // Automated captures wait several seconds for the SoundFont and must not animate:
+        // a frozen chrome keeps every screenshot identical and the run inexpensive.
+        if (automated) { window.AutoHideChrome = false; window.DisableChromeMotion(); }
+        // Normal launches open on the concert main menu; automated captures go straight to the stage.
+        if (!automated) window.ShowStartupMenu();
         if (e.Args.Contains("--show-settings"))
         {
             if (window.FindName("SettingsPanel") is System.Windows.Controls.Border panel) panel.Visibility = Visibility.Visible;
@@ -26,11 +32,21 @@ public partial class App : Application
             if (window.FindName("SettingsTabs") is System.Windows.Controls.TabControl tabs)
             {
                 var tab = e.Args.FirstOrDefault(a => a.StartsWith("--settings-tab=", StringComparison.Ordinal))?[15..];
-                tabs.SelectedIndex = tab?.ToLowerInvariant() switch
+                var page = tab?.ToLowerInvariant() switch
                 {
-                    "notes" => 1, "particles" => 2, "keyboard" => 3, "background" or "scene" => 4, "camera" => 5,
-                    "audio" => 6, "midi" => 7, "practice" => 8, "recording" => 9, _ => 0
+                    "notes" => SettingsPages.Notes,
+                    "theme" or "themes" => SettingsPages.Theme,
+                    "particles" or "embers" => SettingsPages.Particles,
+                    "keyboard" or "keys" => SettingsPages.Keyboard,
+                    "background" or "scene" => SettingsPages.Background,
+                    "camera" or "fx" => SettingsPages.Camera,
+                    "audio" or "sound" => SettingsPages.Audio,
+                    "midi" => SettingsPages.Midi,
+                    "practice" => SettingsPages.Practice,
+                    "recording" or "record" => SettingsPages.Recording,
+                    _ => SettingsPages.Style
                 };
+                tabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));
             }
         }
         if (snapshotIndex >= 0 && snapshotIndex + 1 < e.Args.Length)

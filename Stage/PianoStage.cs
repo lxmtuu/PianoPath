@@ -32,6 +32,11 @@ internal sealed class PianoStage : FrameworkElement
     private readonly Dictionary<uint, SolidColorBrush> _brushCache = [];
     private readonly Dictionary<ulong, Brush> _gradientCache = [];
     private readonly List<Star> _stars = [];
+    private readonly List<Petal> _petals = [];
+    /// <summary>Own random stream so the blossom field stays identical when particle effects consume their own numbers.</summary>
+    private readonly Random _petalRandom = new(20240616);
+    private int _petalCount = -1;
+    private double _petalWidth = -1, _petalHeight = -1;
     private readonly List<Spark> _sparks = [];
     private readonly List<Ring> _rings = [];
     private readonly List<LiveTrail> _liveTrails = [];
@@ -71,9 +76,12 @@ internal sealed class PianoStage : FrameworkElement
     public double KeyboardHeight => Math.Max(80, Math.Min(300, Math.Max(110, Math.Min(228, ActualHeight * .205)) * _visual.KeyboardScale / 100));
     public int SparkCount => _sparks.Count;
     public int RingCount => _rings.Count;
+    /// <summary>Number of blossom petals currently in the air; surfaced by the verification suite.</summary>
+    public int PetalCount => _petals.Count;
     public int LiveTrailCount => _liveTrails.Count;
     /// <summary>True while anything on the stage still animates on its own (particles, rings, cooling flames or held keys).</summary>
-    public bool HasActiveEffects => _sparks.Count > 0 || _rings.Count > 0 || _liveTrails.Count > 0 || _anyHeat || _pressed.Count > 0;
+    public bool HasActiveEffects => _sparks.Count > 0 || _rings.Count > 0 || _liveTrails.Count > 0 || _anyHeat || _pressed.Count > 0
+        || (_visual.ShowPetals && _visual.PetalAmount > 0) || (_visual.ShowSpotlights && _visual.SpotlightIntensity > 0);
     public bool HasBackgroundImage => _backgroundImage is not null;
     public string? BackgroundLoadError { get; private set; }
     /// <summary>True while the ray-traced keyboard bake is driving the stage instead of the flat vector keys.</summary>
@@ -346,6 +354,9 @@ internal sealed class PianoStage : FrameworkElement
             }
             if (_visual.HorizonGlow > 0) DrawHorizonGlow(dc, width, keyTop);
             if (_visual.ShowLightBeams && _visual.BeamIntensity > 0) DrawKeyBeams(dc, width, keyTop, lane);
+            // Concert layers sit above the background but below the note roll, so the music stays readable.
+            if (_visual.ShowSpotlights && _visual.SpotlightIntensity > 0) DrawSpotlights(dc, width, keyTop, lane);
+            if (_visual.ShowPetals && _visual.PetalAmount > 0) DrawPetals(dc, width, keyTop);
         }
         dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, keyTop + 2)));
         DrawNotes(dc, width, keyTop, lane);
@@ -384,14 +395,27 @@ internal sealed class PianoStage : FrameworkElement
 
     private void DrawLanes(DrawingContext dc, double width, double height, double lane)
     {
-        // Guide lines sit on the centre of every key so they line up with the falling notes.
+        // Guide lines sit on the centre of every key so they line up with the falling notes. Only
+        // three pens are ever needed, so they are frozen once instead of built 88 times per frame.
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var alpha = pitch % 12 == 0 ? 23 : pitch % 12 is 2 or 4 or 7 or 9 or 11 ? 10 : 5;
             var color = Color.FromArgb((byte)alpha, 186, 141, 255);
             var x = KeyCenters[pitch] * width;
-            dc.DrawLine(new Pen(Brush(color), pitch % 12 == 0 ? 1 : .6), new Point(x, 0), new Point(x, height));
+            dc.DrawLine(LanePen(color, pitch % 12 == 0 ? 1 : .6), new Point(x, 0), new Point(x, height));
         }
+    }
+
+    private readonly Dictionary<(uint Color, int Thickness), Pen> _lanePens = [];
+
+    private Pen LanePen(Color color, double thickness)
+    {
+        var key = (PackColor(color), (int)Math.Round(thickness * 100));
+        if (_lanePens.TryGetValue(key, out var pen)) return pen;
+        pen = new Pen(Brush(color), thickness);
+        pen.Freeze();
+        _lanePens[key] = pen;
+        return pen;
     }
 
     private void DrawHorizonGlow(DrawingContext dc, double width, double keyTop)
@@ -429,6 +453,108 @@ internal sealed class PianoStage : FrameworkElement
             var x = KeyCenters[pitch] * width;
             dc.DrawRectangle(brush, null, new Rect(x - beamWidth / 2, 0, beamWidth, keyTop));
         }
+    }
+
+    /// <summary>
+    /// Coloured follow-spots sweeping the stage from above — the recital-hall layer of the concert
+    /// themes. Two beams (a third on wide stages) with a soft pool of light where each one lands.
+    /// </summary>
+    private void DrawSpotlights(DrawingContext dc, double width, double keyTop, double lane)
+    {
+        var warm = AdjustColor(ParseColor(_visual.HaloColor, ColorFromHue(266)));
+        var cool = AdjustColor(ParseColor(_visual.PetalColor, Color.FromRgb(255, 179, 207)));
+        DrawSpotlight(dc, width, keyTop, lane, warm, 0, .30, .55);
+        DrawSpotlight(dc, width, keyTop, lane, cool, 2.1, .22, .78);
+        if (width > 1100) DrawSpotlight(dc, width, keyTop, lane, Blend(warm, cool, .5), 4.2, .17, .64);
+    }
+
+    private void DrawSpotlight(DrawingContext dc, double width, double keyTop, double lane, Color color, double phase, double speed, double reach)
+    {
+        var apexX = width * (.5 + Math.Sin(_elapsed * speed + phase) * .34);
+        var hitX = width * (.5 + Math.Sin(_elapsed * speed + phase + .5) * .42);
+        var hitY = keyTop + lane * 1.6;
+        var spread = lane * (4.5 + reach * 9);
+        var cone = new StreamGeometry();
+        using (var ctx = cone.Open())
+        {
+            ctx.BeginFigure(new Point(apexX, -28), true, true);
+            ctx.LineTo(new Point(hitX - spread, hitY), true, false);
+            ctx.LineTo(new Point(hitX + spread, hitY), true, false);
+        }
+        cone.Freeze();
+        dc.DrawGeometry(SpotlightConeBrush(color), null, cone);
+        dc.DrawEllipse(SpotlightPoolBrush(color), null, new Point(hitX, hitY), spread * .8, lane * 1.7);
+    }
+
+    /// <summary>Vertical beam gradient: nearly clear at the fixture, brightest just above the keys.</summary>
+    private Brush SpotlightConeBrush(Color color)
+    {
+        var intensity = _visual.SpotlightIntensity / 100;
+        var bottom = Color.FromArgb(Alpha(130 * intensity), color.R, color.G, color.B);
+        var key = GradientKey(22, bottom);
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(34 * intensity), color.R, color.G, color.B), 0));
+        gradient.GradientStops.Add(new GradientStop(bottom, .84));
+        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+        gradient.Freeze();
+        return CacheGradient(key, gradient);
+    }
+
+    /// <summary>Radial pool of light where a spot lands on the stage floor.</summary>
+    private Brush SpotlightPoolBrush(Color color)
+    {
+        var intensity = _visual.SpotlightIntensity / 100;
+        var core = Color.FromArgb(Alpha(64 * intensity), color.R, color.G, color.B);
+        var key = GradientKey(23, core);
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        var gradient = new RadialGradientBrush { Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5), RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        gradient.GradientStops.Add(new GradientStop(core, 0));
+        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+        gradient.Freeze();
+        return CacheGradient(key, gradient);
+    }
+
+    /// <summary>Blossom petals drifting down the stage: the recital layer of the Sakura theme.</summary>
+    private void DrawPetals(DrawingContext dc, double width, double height)
+    {
+        var count = Math.Clamp((int)Math.Round(_visual.PetalAmount * Math.Clamp(width / 1280, .45, 1.6)), 0, 150);
+        if (count == 0) return;
+        if (count != _petalCount || Math.Abs(width - _petalWidth) > .5 || Math.Abs(height - _petalHeight) > .5) RebuildPetals(width, height, count);
+        var color = AdjustColor(ParseColor(_visual.PetalColor, Color.FromRgb(255, 179, 207)));
+        var body = Brush(Color.FromArgb(232, color.R, color.G, color.B));
+        var tipColor = Blend(color, Colors.White, .5);
+        var tip = Brush(Color.FromArgb(205, tipColor.R, tipColor.G, tipColor.B));
+        const double margin = 60; var span = height + margin * 2;
+        foreach (var petal in _petals)
+        {
+            // Position is a pure function of elapsed time, so petals never accumulate drift and a
+            // recording of the same song always shows the same flight path.
+            var y = (petal.Y + _elapsed * petal.Speed) % span - margin;
+            var x = petal.X + Math.Sin(_elapsed * petal.Drift + petal.Phase) * petal.Sway;
+            var angle = (petal.Phase * 57.3 + _elapsed * petal.Spin * 57.3) % 360;
+            var squash = .42 + .58 * Math.Abs(Math.Sin(_elapsed * petal.Drift * 1.35 + petal.Phase));
+            dc.PushTransform(new RotateTransform(angle, x, y));
+            dc.DrawEllipse(body, null, new Point(x, y), petal.Size, petal.Size * squash);
+            dc.DrawEllipse(tip, null, new Point(x + petal.Size * .3, y + petal.Size * .16), petal.Size * .5, petal.Size * .5 * squash);
+            dc.Pop();
+        }
+    }
+
+    private void RebuildPetals(double width, double height, int count)
+    {
+        _petals.Clear(); _petalCount = count; _petalWidth = width; _petalHeight = height;
+        var scale = Math.Clamp(height / 720, .6, 1.8);
+        for (var i = 0; i < count; i++)
+            _petals.Add(new Petal(
+                X: _petalRandom.NextDouble() * width,
+                Y: _petalRandom.NextDouble() * (height + 120),
+                Size: (2.6 + _petalRandom.NextDouble() * 5.2) * scale,
+                Speed: 18 + _petalRandom.NextDouble() * 52,
+                Sway: 8 + _petalRandom.NextDouble() * 34,
+                Drift: .35 + _petalRandom.NextDouble() * .9,
+                Spin: (_petalRandom.NextDouble() - .5) * 1.6,
+                Phase: _petalRandom.NextDouble() * Math.PI * 2));
     }
 
     private void DrawNotes(DrawingContext dc, double width, double hitY, double lane)
@@ -1134,7 +1260,7 @@ internal sealed class PianoStage : FrameworkElement
         }
         return whites[Math.Clamp((int)(point.X / keyWidth), 0, whites.Length - 1)];
     }
-    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); base.OnRenderSizeChanged(sizeInfo); InvalidateVisual(); }
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); _petals.Clear(); _petalCount = -1; base.OnRenderSizeChanged(sizeInfo); InvalidateVisual(); }
     private static bool IsBlack(int pitch) => pitch % 12 is 1 or 3 or 6 or 8 or 10;
     internal static double BlackKeyOffset(int pitch) => (pitch % 12) switch
     {
@@ -1218,6 +1344,8 @@ internal sealed class PianoStage : FrameworkElement
     private static Brush Freeze(Brush brush) { if (brush.CanFreeze) brush.Freeze(); return brush; }
     private static Rect Inflate(Rect r, double amount) => new(r.X - amount, r.Y - amount, Math.Max(1, r.Width + amount * 2), Math.Max(1, r.Height + amount * 2));
     private sealed record Star(double X, double Y, double Size, byte Alpha, double Speed, double Phase);
+    /// <summary>A petal of the blossom layer; its on-screen position derives from elapsed time plus these seeds.</summary>
+    private sealed record Petal(double X, double Y, double Size, double Speed, double Sway, double Drift, double Spin, double Phase);
     /// <summary>A cached overlay tile of one sounding key plus where it belongs on the stage.</summary>
     private sealed record ShadedKeyTile(BitmapSource Bitmap, Rect Where);
     private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase; public bool Wisp; public Color Color; }

@@ -13,10 +13,15 @@ namespace PianoPath;
 
 public partial class MainWindow : Window
 {
-    private readonly DispatcherTimer _timer = new() { Interval = TimeSpan.FromMilliseconds(16) };
     private readonly DispatcherTimer _chromeTimer = new() { Interval = TimeSpan.FromMilliseconds(220) };
     private readonly DispatcherTimer _settingsSaveTimer = new() { Interval = TimeSpan.FromMilliseconds(650) };
     private readonly Stopwatch _clock = new();
+    /// <summary>True while the stage is subscribed to the shared frame clock (playback, live keys or running effects).</summary>
+    private bool _stageFrames;
+    /// <summary>Theme currently published to Application.Resources; a change repaints the whole shell.</summary>
+    private ShellTheme _appliedShellTheme = ShellThemes.Default;
+    private string _backdropSignature = "";
+    private bool _chromeMotionLocked, _sweepStarted;
     private readonly Stopwatch _recordClock = new();
     private readonly MidiDeviceService _midi = new();
     private readonly PianoAudioEngine _audio = new();
@@ -69,7 +74,7 @@ public partial class MainWindow : Window
         _settingsSaveTimer.Tick += (_, _) => { _settingsSaveTimer.Stop(); SaveVisualSettings(); };
         _uiReady = true;
         _notes = _allNotes;
-        _timer.Tick += (_, _) => Tick();
+        FrameClock.Shared.Tick += OnFrame;
         _midi.NoteChanged += (pitch, velocity, on) => Dispatcher.BeginInvoke(() =>
         {
             if (on)
@@ -82,6 +87,8 @@ public partial class MainWindow : Window
         });
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() => SetPedalState(pedal, down));
         PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
+        ApplyChromeTheme();
+        StartChromeSweeps();
         SetChromeVisible(true); _chromeTimer.Start();
         if (loadBuiltInSoundFont) Loaded += MainWindow_Loaded;
     }
@@ -111,20 +118,47 @@ public partial class MainWindow : Window
     {
         if (_playing || SongDuration() <= 0) return;
         if (_position >= SongDuration()) { _position = 0; _outputFinished.Clear(); foreach (var n in _notes) { n.Played = false; n.Missed = false; } SyncPlayhead(); }
-        _clock.Restart(); _playing = true; _processCurrentOnsets = true; _timer.Start(); PlayButton.Tag = FindResource("IconPause"); UpdatePlaybackLabel();
+        _playing = true; _processCurrentOnsets = true; StartStageFrames(); PlayButton.Tag = FindResource("IconPause"); UpdatePlaybackLabel();
         UpdateStage();
     }
     private void Stop()
     {
-        _timer.Stop(); _clock.Stop(); _playing = false; _processCurrentOnsets = false; _metronomeOffAt = -1;
+        StopStageFrames(); _playing = false; _processCurrentOnsets = false; _metronomeOffAt = -1;
         PlayButton.Tag = FindResource("IconPlay");
         foreach (var note in _outputHeld.ToArray()) SendOutput(note.Pitch, 0, false);
         _outputHeld.Clear(); _audioHeld.Clear(); _audio.AllNotesOff(); ReleaseAllPressed(); Stage.ClearTransient(); UpdateStage(); UpdatePlaybackLabel();
     }
 
-    private void Tick()
+    /// <summary>
+    /// One animation frame, delivered by the shared <see cref="FrameClock"/> on the compositor's
+    /// cadence. The wall-clock delta is clamped so a stall (window drag, debugger, sleep) cannot
+    /// teleport the playhead; the stage clamps its own physics separately.
+    /// </summary>
+    private void OnFrame(double delta)
     {
-        var elapsed = _clock.Elapsed.TotalSeconds; _clock.Restart();
+        if (!_stageFrames) return;
+        Tick(Math.Clamp(delta, 0, .25));
+    }
+
+    /// <summary>Subscribes the stage to the frame clock; the clock unloads itself once every consumer leaves.</summary>
+    private void StartStageFrames()
+    {
+        if (_stageFrames) return;
+        _stageFrames = true;
+        _clock.Restart();
+        FrameClock.Shared.Acquire();
+    }
+
+    private void StopStageFrames()
+    {
+        if (!_stageFrames) return;
+        _stageFrames = false;
+        _clock.Stop();
+        FrameClock.Shared.Release();
+    }
+
+    private void Tick(double elapsed)
+    {
         if (_playing)
         {
             var previous = _position; var forceOnset = _processCurrentOnsets; _processCurrentOnsets = false;
@@ -167,7 +201,7 @@ public partial class MainWindow : Window
         Stage.Advance(elapsed);
         if (_playing && _position >= SongDuration()) { _position = SongDuration(); Stop(); }
         UpdateStage(); UpdateTime(); UpdateStats();
-        if (!_playing && !Stage.HasActiveEffects) { _timer.Stop(); _clock.Stop(); }
+        if (!_playing && !Stage.HasActiveEffects) StopStageFrames();
     }
 
     private void UpdateStage() => Stage.SetState(_notes, _position, _playing, _pressed);
@@ -368,8 +402,11 @@ public partial class MainWindow : Window
     {
         _settingsHiddenByIdle = false;
         SettingsTabs.SelectedIndex = Math.Max(0, SettingsTabs.SelectedIndex);
+        var wasHidden = SettingsPanel.Visibility != Visibility.Visible;
         SettingsPanel.Visibility = Visibility.Visible;
         SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
+        // The dock slides in from the stage edge; the clip of the stage grid keeps it inside the frame.
+        if (wasHidden) ChromeMotion.SlideIn(SettingsPanel, 56, 0, 320);
     }
     private void CloseSettingsPanel()
     {
@@ -384,14 +421,108 @@ public partial class MainWindow : Window
         var showRecord = showOverlay && showRecordButton;
         if (_chromeVisible == visible && LiveChromeOverlay.Visibility == (showOverlay ? Visibility.Visible : Visibility.Collapsed) && RecordButton.Visibility == (showRecord ? Visibility.Visible : Visibility.Collapsed)) return;
         _chromeVisible = visible;
-        HeaderRow.Height = new GridLength(visible ? 74 : 0);
-        FooterRow.Height = new GridLength(visible ? 94 : 0);
-        HeaderChrome.Opacity = visible ? 1 : 0;
-        FooterChrome.Opacity = visible ? 1 : 0;
+        if (visible)
+        {
+            HeaderRow.Height = new GridLength(74);
+            FooterRow.Height = new GridLength(94);
+            HeaderChrome.Opacity = 1; FooterChrome.Opacity = 1;
+            ChromeMotion.FadeIn(HeaderChrome, 240); ChromeMotion.FadeIn(FooterChrome, 240);
+        }
+        else
+        {
+            // Fade first, then collapse the rows: collapsing instantly while the fade runs would make
+            // the stage jump twice. The guard keeps a re-show during the fade from leaving a 0-height row.
+            var remaining = 2;
+            void Collapse()
+            {
+                if (--remaining > 0 || _chromeVisible) return;
+                HeaderRow.Height = new GridLength(0); FooterRow.Height = new GridLength(0);
+            }
+            if (ChromeMotion.Enabled) { ChromeMotion.FadeOut(HeaderChrome, 170, Collapse); ChromeMotion.FadeOut(FooterChrome, 170, Collapse); }
+            else { HeaderChrome.Opacity = 0; FooterChrome.Opacity = 0; Collapse(); Collapse(); }
+        }
         HeaderChrome.IsHitTestVisible = visible; FooterChrome.IsHitTestVisible = visible;
         LiveChromeOverlay.Visibility = showOverlay ? Visibility.Visible : Visibility.Collapsed;
         RecordButton.Visibility = showRecord ? Visibility.Visible : Visibility.Collapsed;
         DeviceStatusBadge.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    // =====================================================================================================
+    // Shell theme, backdrop and chrome animation
+    // =====================================================================================================
+
+    /// <summary>
+    /// Publishes the shell theme, the motion budget and the backdrop density taken from the visual
+    /// settings. Called on startup and after every settings change; only a real change does work, so
+    /// dragging an unrelated slider never rebuilds the backdrop.
+    /// </summary>
+    internal void ApplyChromeTheme()
+    {
+        var theme = ShellThemes.Find(_visualSettings.ShellTheme);
+        var themeChanged = !string.Equals(theme.Id, _appliedShellTheme.Id, StringComparison.OrdinalIgnoreCase);
+        if (themeChanged) { ShellThemeManager.Apply(theme); _appliedShellTheme = theme; }
+        ChromeMotion.Enabled = !_chromeMotionLocked && _visualSettings.ChromeMotion != "Off";
+        var signature = $"{theme.Id}|{_visualSettings.ChromeMotion}|{_visualSettings.BackdropDensity:0}|{(_chromeMotionLocked ? "locked" : "live")}";
+        if (themeChanged || signature != _backdropSignature) ConfigureBackdrops(signature);
+        if (themeChanged) UpdateThemeChrome(theme);
+    }
+
+    /// <summary>Freezes the chrome animation for automated captures, so screenshots are deterministic.</summary>
+    internal void DisableChromeMotion()
+    {
+        _chromeMotionLocked = true;
+        ChromeMotion.Enabled = false;
+        _sweepStarted = true;
+        HeaderSweep.Background = null; FooterSweep.Background = null;
+        ApplyChromeTheme();
+    }
+
+    private void ConfigureBackdrops()
+    {
+        var theme = ShellThemeManager.Current;
+        var signature = $"{theme.Id}|{_visualSettings.ChromeMotion}|{_visualSettings.BackdropDensity:0}";
+        ConfigureBackdrops(signature);
+    }
+
+    private void ConfigureBackdrops(string signature)
+    {
+        _backdropSignature = signature;
+        var theme = ShellThemeManager.Current;
+        var motion = _chromeMotionLocked ? "Off" : _visualSettings.ChromeMotion;
+        MenuBackdrop.Configure(theme, motion, _visualSettings.BackdropDensity);
+        // The dock keeps a quieter version of the same backdrop so the settings text stays readable.
+        DockBackdrop.Configure(theme, motion == "Full" ? "Calm" : motion, Math.Min(90, _visualSettings.BackdropDensity));
+    }
+
+    /// <summary>Repaints the chrome elements whose colour is not driven by a resource key.</summary>
+    private void UpdateThemeChrome(ShellTheme theme)
+    {
+        if (PlayDialogThemeOrb is not null) PlayDialogThemeOrb.Background = new SolidColorBrush(theme.Accent);
+        RefreshMenuThemeChips();
+        RefreshMenuStageLook();
+        if (_sweepStarted) StartChromeSweeps();
+    }
+
+    /// <summary>The header and footer carry a slow comet of the accent colour (unless motion is off).</summary>
+    private void StartChromeSweeps()
+    {
+        if (_sweepStarted || !ChromeMotion.Enabled) return;
+        _sweepStarted = true;
+        var theme = ShellThemeManager.Current;
+        HeaderSweep.Background = SweepBrush(theme, 4.2);
+        FooterSweep.Background = SweepBrush(theme, 5.6);
+    }
+
+    private static LinearGradientBrush SweepBrush(ShellTheme theme, double period)
+    {
+        var brush = new LinearGradientBrush { StartPoint = new Point(-.4, 0), EndPoint = new Point(.6, 0) };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 0));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), .34));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(210, theme.Accent.R, theme.Accent.G, theme.Accent.B), .50));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), .66));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 255, 255, 255), 1));
+        ChromeMotion.StartSweep(brush, period);
+        return brush;
     }
 
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
@@ -486,7 +617,7 @@ public partial class MainWindow : Window
     private void PressNote(int pitch, int velocity = 100)
     {
         if (!_pressed.Add(pitch)) return;
-        if (!_timer.IsEnabled) { _clock.Restart(); _timer.Start(); }
+        StartStageFrames();
         Stage.AddLiveNote(pitch); Stage.Impact(pitch, .75); _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
         if (_playing)
         {
@@ -562,16 +693,34 @@ public partial class MainWindow : Window
         }
     }
 
+    // The three stat labels only change on a scored event, but this runs on every animation frame;
+    // formatting the same strings 60 times a second would churn garbage and re-layout the footer.
+    private string _accuracyText = "", _scoreText = "", _streakText = "";
+
     private void UpdateStats()
     {
         var accuracy = _hits + _misses == 0 ? 0 : 100.0 * _hits / (_hits + _misses);
-        AccuracyLabel.Text = _hits + _misses == 0 ? "—" : $"{accuracy:0}%"; ProgressBar.Value = accuracy;
-        ScoreLabel.Text = $"{_hits} hits · {_misses} missed"; StreakLabel.Text = $"✦ {_streak} streak · best {_bestStreak}";
+        var accuracyText = _hits + _misses == 0 ? "—" : $"{accuracy:0}%";
+        if (accuracyText != _accuracyText) { _accuracyText = accuracyText; AccuracyLabel.Text = accuracyText; ProgressBar.Value = accuracy; }
+        var scoreText = $"{_hits} hits · {_misses} missed";
+        if (scoreText != _scoreText) { _scoreText = scoreText; ScoreLabel.Text = scoreText; }
+        var streakText = $"✦ {_streak} streak · best {_bestStreak}";
+        if (streakText != _streakText) { _streakText = streakText; StreakLabel.Text = streakText; }
     }
+    private string _timeText = "";
+
     private void UpdateTime()
     {
-        if (TimeLabel is null) return; TimeLabel.Text = $"{Fmt(_position)} / {Fmt(SongDuration())}";
-        if (!_updatingSeek && SongDuration() > 0) { _updatingSeek = true; SeekSlider.Value = Math.Clamp(100 * _position / SongDuration(), 0, 100); _updatingSeek = false; }
+        if (TimeLabel is null) return;
+        var duration = SongDuration();
+        var text = $"{Fmt(_position)} / {Fmt(duration)}";
+        if (text != _timeText) { _timeText = text; TimeLabel.Text = text; }
+        if (!_updatingSeek && duration > 0)
+        {
+            var percent = Math.Clamp(100 * _position / duration, 0, 100);
+            if (Math.Abs(SeekSlider.Value - percent) < .01) return;
+            _updatingSeek = true; SeekSlider.Value = percent; _updatingSeek = false;
+        }
     }
     private static string Fmt(double seconds) => $"{(int)seconds / 60:00}:{(int)seconds % 60:00}";
     private double SongDuration()
@@ -729,6 +878,8 @@ public partial class MainWindow : Window
     private void Window_Closed(object? sender, EventArgs e)
     {
         _closing = true;
+        FrameClock.Shared.Tick -= OnFrame;
+        StopStageFrames();
         _chromeTimer.Stop(); _settingsSaveTimer.Stop(); StopVideoRecording(false);
         try { SaveVisualSettings(); } catch { }
         Stop();

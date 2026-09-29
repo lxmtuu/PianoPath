@@ -144,3 +144,27 @@ giữ nguyên stage + dock hiện có làm phần "Design" chi tiết:
 - Khác biệt đã biết: Embers cho mỗi tay một *style document* độc lập; Keyflow hiện hỗ trợ tách màu
   hai tay (ColorMode PerHand) chứ chưa tách toàn bộ style — card Left/Right trong Play dialog hiện
   mở trang Notes để chỉnh, đây là giới hạn được ghi nhận chứ không giả vờ có.
+
+## 8. Đợt nâng cấp "concert shell" (giao diện hoà nhạc / Your Lie in April)
+
+- **Ba giao diện** trong `Theme/ShellTheme.cs`: *Sakura Nocturne* (mặc định — đêm chàm, hồng hoa
+  anh đào #FF7BAC và vàng ấm), *Concert Noir* (violet #8B5CFF → cyan #25D0FF, bản gốc), *Velvet Gold*
+  (nhung đỏ + đồng thau). Mọi token màu (Accent, Glow, Petal, Panel, Control, Track, Popup…) được
+  `ShellThemeManager` ghi đè vào `Application.Resources`; XAML đọc bằng `DynamicResource` nên cả
+  header, dock, menu, hộp thoại và thanh trượt đổi màu trong một khung hình, không cần mở lại app.
+- **Backdrop động** (`Theme/ChromeBackdrop.cs`): hoa anh đào rơi, quầng cực quang hay nếp nhung tuỳ
+  theme, mật độ theo `BackdropDensity`, biên độ theo `ChromeMotion` (Off/Calm/Full). Dùng cho nền
+  main menu và sau lưng dock cài đặt.
+- **Đồng hồ khung hình dùng chung** (`Ui/FrameClock.cs`): `CompositionTarget.Rendering` là nguồn duy
+  nhất cho mọi animation; đếm yêu cầu (`Acquire`/`Release`) nên khi sân khấu đứng yên thì WPF không
+  phải vẽ thêm khung nào. Sân khấu (nốt rơi, tia lửa, petal, spotlight) và backdrop chạy cùng nhịp
+  vsync, hết hiện tượng lệch nhịp giữa hai `DispatcherTimer` khác chu kỳ.
+- **Chuyển động giao diện** (`Ui/ChromeMotion.cs`): fade/slide/pop/cascade/pulse dùng chung một bộ
+  easing, tôn trọng `SystemParameters.ClientAreaAnimation`; `--snapshot`/`--show-settings` gọi
+  `DisableChromeMotion()` để ảnh chụp luôn tất định.
+- **Hai lớp sân khấu mới**: `DrawPetals` (petal bay theo hàm của thời gian, không tích luỹ sai số;
+  số lượng = `PetalAmount` × tỉ lệ bề rộng, trần 150) và `DrawSpotlights` (2–3 cột sáng quét qua
+  sân khấu, có pool sáng dưới phím, brush cache theo `GradientKey`).
+- **Hiệu năng**: bỏ `DispatcherTimer` 16 ms của sân khấu, nhãn thống kê/thanh thời gian chỉ cập nhật
+  khi giá trị đổi, pen lưới guide và mọi brush/petal/spotlight được cache; `HasActiveEffects` bao gồm
+  cả hai lớp mới nên chỉ chạy khung hình khi thật sự có gì chuyển động.
