@@ -566,6 +566,9 @@ internal static class VerificationSuite
         Assert(visualSettings.NoteGlow == 127 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "Adjusting note bloom should update the stage renderer immediately.");
         glowSlider.Value = originalGlow; ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         var wasShowingEmbers = visualSettings.ShowEmbers;
+        // The claim is about bursts this impact would add, so anything still in the air from a check above is
+        // cleared first: flames left burning by an earlier preset would otherwise keep emitting on the clock.
+        stage.ClearTransient();
         visualSettings.ShowEmbers = false; stage.SetVisualSettings(visualSettings); stage.Impact(60);
         Assert(stage.SparkCount == 0, "Turning off the ember layer should stop new particle bursts.");
         visualSettings.ShowEmbers = wasShowingEmbers; stage.SetVisualSettings(visualSettings);
@@ -1434,6 +1437,7 @@ internal static class VerificationSuite
         // this file honest: the check cannot run against a page that lost its share box.
         if (window.FindName("ShareCodeBox") is not TextBox box || window.FindName("ShareCodeStatusLabel") is not TextBlock status)
             throw new InvalidOperationException("The Style page should carry the share box and its status line.");
+        var hadLook = settings.ToJson();
         var hadGlow = settings.NoteGlow; var hadStyle = settings.NoteStyle; var hadName = settings.PresetName;
 
         var code = window.RefreshShareCode();
@@ -1463,8 +1467,12 @@ internal static class VerificationSuite
         Assert(status.Text.Contains(Loc.T("This does not look like a Keyflow look code."), StringComparison.Ordinal),
             "A refused code should print why it was refused in the dock.");
 
-        settings.NoteGlow = hadGlow; settings.NoteStyle = hadStyle; settings.PresetName = hadName; settings.PresetModified = false;
+        // The whole look goes back, not just the fields this check moved: a check that leaves the window in
+        // somebody else's preset makes every check after it depend on that preset.
+        settings.CopyFrom(PianoVisualSettings.FromJson(hadLook));
         Invoke(window, "RefreshSettingControls");
+        Assert(Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
+            "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
     }
 
