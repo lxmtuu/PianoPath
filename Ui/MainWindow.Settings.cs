@@ -983,6 +983,12 @@ public partial class MainWindow
         // Selector.SelectionChanged bubbles from combo boxes and lists inside the pages; only react to the tab strip itself.
         if (!ReferenceEquals(e.OriginalSource, SettingsTabs)) return;
         _lastPointerActivity = DateTime.UtcNow;
+        // The navigation strip holds twelve rows in a scrollable column, so arriving at a page from
+        // anywhere else — the header chip, a search hit, the General page at the bottom, --settings-tab —
+        // has to bring that row into view. Otherwise the dock shows a page whose own entry is off screen.
+        // One layout pass later, because the item is still being measured when SelectionChanged fires.
+        if (SettingsTabs.SelectedItem is FrameworkElement row)
+            row.Dispatcher.BeginInvoke(new Action(row.BringIntoView), System.Windows.Threading.DispatcherPriority.Loaded);
     }
 
     private void StyleQuick_Click(object sender, RoutedEventArgs e) { SettingsTabs.SelectedIndex = 0; OpenSettingsPanel(); }
