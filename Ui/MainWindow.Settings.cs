@@ -960,6 +960,24 @@ public partial class MainWindow
         ApplyVisualSettings("Background image applied", reloadBackground: true);
     }
 
+    /// <summary>
+    /// Preview one picture behind the keys for this run only. <c>--background-image=&lt;path&gt;</c> uses it so
+    /// the documented screenshots can show the feature without shipping anyone's artwork. The store is
+    /// deliberately untouched: no auto-save timer and no "modified" flag, because the picture is not a
+    /// setting the user chose. A bad path is likewise not escalated into a dialog - a preview run has
+    /// nobody to click it - the stage just keeps the solid colour and records <c>BackgroundLoadError</c>.
+    /// </summary>
+    public void PreviewBackgroundImage(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return;
+        _visualSettings.BackgroundImagePath = Path.GetFullPath(path.Trim());
+        _visualSettings.BackgroundMode = "Image";
+        _visualSettings.ShowBackground = true;
+        _visualSettings.Clamp();
+        RefreshSettingControls();
+        Stage.SetVisualSettings(_visualSettings, reloadBackground: true);
+    }
+
     // =====================================================================================================
     // Search, navigation and window chrome
     // =====================================================================================================

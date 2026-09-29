@@ -12,13 +12,17 @@ checks that do not need a compiler:
   * every event handler named in XAML exists in the C# sources;
   * the localization tables: every language translates exactly the keys of the English inventory,
     placeholders and line breaks survive a translation, and every literal the sources can print is a
-    key of that inventory (see ``docs/LOCALIZATION.md``).
+    key of that inventory (see ``docs/LOCALIZATION.md``);
+  * the command line: every switch the app parses is in the README table and vice versa, and every
+    switch and path the preview workflow passes to the executable really exists;
+  * the generated documentation assets: ``docs/samples`` still matches the script that builds it.
 
 Run it from the repository root (``python tools/check_sources.py``); CI runs it before the Windows
 build so a typo is caught in seconds instead of in a full Windows job. A .NET SDK is not needed.
 """
 import json
 import re
+import struct
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -612,6 +616,68 @@ def scan_readme():
     return errors
 
 
+def scan_cli_and_samples():
+    """Command line, workflow and documentation are one product, so they are checked against each other.
+
+    A switch the app parses but nobody documented is invisible to the people who read the README first,
+    and a switch the README promises but the app never parses is a trap. The same goes for the workflow:
+    it passes ``--background-image`` by name, and a typo there would silently render a black stage in the
+    documentation instead of failing, so every flag it uses has to exist and every path it points at has
+    to be in the checkout.
+    """
+    errors = []
+    parsed = set()
+    for name in ("App.xaml.cs", "Diagnostics/VerificationSuite.cs"):
+        parsed |= set(re.findall(r'"(--[a-z][a-z-]*)', (ROOT / name).read_text(encoding="utf-8")))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    table = re.search(r"^### Tham số dòng lệnh$(.*?)^### ", readme, re.M | re.S)
+    if not table:
+        errors.append("README.md lost the '### Tham số dòng lệnh' section that documents every switch")
+    else:
+        documented = set(re.findall(r"--[a-z][a-z-]*", table.group(1)))
+        for flag in sorted(parsed - documented):
+            errors.append(f"the app parses {flag}, but the README CLI table does not document it")
+        for flag in sorted(documented - parsed):
+            errors.append(f"the README CLI table documents {flag}, which no source file parses")
+    workflow = ROOT / ".github" / "workflows" / "build.yml"
+    if not workflow.exists():
+        return errors
+    shots = re.search(r"\$shots = @\((.*?)\n\s*\)\n", workflow.read_text(encoding="utf-8"), re.S)
+    if not shots:
+        return errors + ["build.yml lost the $shots list that renders the README previews"]
+    block = shots.group(1)
+    for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", block)) - parsed):
+        errors.append(f"build.yml passes {flag} to PianoPath.exe, which does not parse it")
+    for path in sorted(set(re.findall(r"((?:docs|Assets)/[A-Za-z0-9_./-]+)", block))):
+        if not (ROOT / path).exists():
+            errors.append(f"build.yml renders a preview from '{path}', which is not in the checkout")
+    return errors
+
+
+def scan_generated_assets():
+    """``docs/samples`` holds pictures the repository builds for itself (``tools/make_*.py``), because the
+    README wants to show the background feature without shipping artwork somebody else owns. A committed
+    asset whose generator disagrees about size or bit depth is either hand-edited or stale, so compare the
+    PNG header with the constants of the script that writes it."""
+    errors = []
+    script = ROOT / "tools" / "make_stage_background.py"
+    target = ROOT / "docs" / "samples" / "stage-backdrop.png"
+    if not script.exists():
+        return [str(script.relative_to(ROOT)) + " is missing; it is the licence and the recipe of the sample backdrop"]
+    if not target.exists():
+        return [str(target.relative_to(ROOT)) + " is missing; regenerate it with `python3 tools/make_stage_background.py`"]
+    width, height = (int(n) for n in re.search(r"^W, H = (\d+), (\d+)", script.read_text(encoding="utf-8"), re.M).groups())
+    head = target.read_bytes()
+    if not head.startswith(b"\x89PNG\r\n\x1a\n"):
+        return [str(target.relative_to(ROOT)) + " is not a PNG"]
+    fields = struct.unpack(">IIBBBBB", head[16:16 + 13])
+    if (fields[0], fields[1], fields[2], fields[3]) != (width, height, 8, 2):
+        errors.append(f"{target.relative_to(ROOT)} is {fields[0]}x{fields[1]} at {fields[2]} bit colour type {fields[3]}, "
+                      f"but tools/make_stage_background.py writes {width}x{height} at 8 bit colour type 2 (RGB) — "
+                      f"regenerate it instead of editing the picture by hand")
+    return errors
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -625,10 +691,13 @@ def main():
     errors.extend(scan_icon_glyphs())
     errors.extend(scan_theme_tokens())
     errors.extend(scan_readme())
+    errors.extend(scan_cli_and_samples())
+    errors.extend(scan_generated_assets())
     localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
     errors.extend(localization_errors)
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
+    print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
     print(f"checked the string tables against one another and against the {keys_used} keys the sources print ({keys_inventory} in the inventory)")
     if errors:
         print(f"\n{len(errors)} problem(s):")

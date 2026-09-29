@@ -29,6 +29,13 @@ public partial class App : Application
 
         var window = new MainWindow();
         MainWindow = window;
+        // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches
+        // the settings file: MainWindow.PreviewBackgroundImage sets the stage directly instead of going
+        // through the row handlers that arm the auto-save timer. CI uses it to render the README preview
+        // of the feature from a generated sample (tools/make_stage_background.py) rather than from
+        // somebody's screenshot, so the image stays reproducible and free of third-party artwork.
+        var backgroundImage = e.Args.FirstOrDefault(argument => argument.StartsWith("--background-image=", StringComparison.Ordinal))?["--background-image=".Length..];
+        if (!string.IsNullOrWhiteSpace(backgroundImage)) window.PreviewBackgroundImage(backgroundImage);
         var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
         // Automated captures: the chrome must not animate or hide while a screenshot is pending, and
         // they may ask for a specific surface with --menu / --show-settings / --play-dialog / --shortcuts.

@@ -465,7 +465,7 @@ internal static class VerificationSuite
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
         VerifySettingsDock(window, stage, visualSettings);
         VerifyLanguageSwitching(window);
-        VerifyBackgroundImageLoad(stage, visualSettings);
+        VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
         var glowSlider = sliders[nameof(PianoVisualSettings.NoteGlow)]; var originalGlow = glowSlider.Value; glowSlider.Value = 127;
@@ -1154,10 +1154,11 @@ internal static class VerificationSuite
         Assert(shortcuts.Visibility == Visibility.Collapsed, "Toggling the card twice should put it away.");
     }
 
-    private static void VerifyBackgroundImageLoad(PianoStage stage, PianoVisualSettings settings)
+    private static void VerifyBackgroundImageLoad(MainWindow window, PianoStage stage, PianoVisualSettings settings)
     {
         var path = Path.Combine(Path.GetTempPath(), $"keyflow-background-{Guid.NewGuid():N}.png");
         var originalPath = settings.BackgroundImagePath;
+        var originalBackgroundMode = settings.BackgroundMode; var originalShowBackground = settings.ShowBackground;
         try
         {
             var pixels = new byte[] { 20, 80, 240, 255, 40, 120, 220, 255, 60, 160, 200, 255, 80, 200, 180, 255 };
@@ -1172,17 +1173,35 @@ internal static class VerificationSuite
             Assert(stage.HasBackgroundImage && loaded?.PixelWidth == 2 && loaded.PixelHeight == 2 && stage.BackgroundLoadError is null,
                 $"The stage should load a selected local PNG after in-place settings changes and release the source file handle (has={stage.HasBackgroundImage}, size={loaded?.PixelWidth}x{loaded?.PixelHeight}, error={stage.BackgroundLoadError ?? "none"}).");
 
+            // The documented screenshots go through the same entry point, so pin its contract: applying a
+            // picture for one run has to behave like a chosen background for the renderer while leaving the
+            // saved profile alone (no dirty flag, no auto-save timer armed), and an unreadable path must
+            // surface through the stage instead of a modal dialog that nobody in a headless capture could
+            // dismiss. That is what lets `--background-image` render a preview without touching user data.
+            var saveTimer = (DispatcherTimer)Field(window, "_settingsSaveTimer");
+            var wasModified = settings.PresetModified; var timerWasArmed = saveTimer.IsEnabled;
+            window.PreviewBackgroundImage(path);
+            Assert(stage.HasBackgroundImage && settings.BackgroundMode == "Image" && settings.ShowBackground
+                   && settings.PresetModified == wasModified && saveTimer.IsEnabled == timerWasArmed,
+                $"PreviewBackgroundImage should paint one run only (image={stage.HasBackgroundImage}, mode={settings.BackgroundMode}, modified={settings.PresetModified}, auto-save={saveTimer.IsEnabled}).");
+            window.PreviewBackgroundImage(path + ".missing");
+            Assert(!stage.HasBackgroundImage && !string.IsNullOrWhiteSpace(stage.BackgroundLoadError),
+                "A preview background that cannot be read should fall back to the solid colour and report through the stage, without a dialog.");
+            saveTimer.Stop();
+
             settings.BackgroundImagePath = path + ".missing";
             stage.SetVisualSettings(settings);
             Assert(!stage.HasBackgroundImage && !string.IsNullOrWhiteSpace(stage.BackgroundLoadError), "An unreadable or missing background should expose a useful load error without crashing the stage.");
         }
         finally
         {
-            settings.BackgroundImagePath = originalPath;
+            // The preview entry point flips the mode as well, and the suite keeps handing this same
+            // settings object to the checks after it, so every field the block touched goes back first.
+            settings.BackgroundImagePath = originalPath; settings.BackgroundMode = originalBackgroundMode; settings.ShowBackground = originalShowBackground;
             stage.SetVisualSettings(settings, reloadBackground: true);
             if (File.Exists(path)) File.Delete(path);
         }
-        Results.Add("PASS background images: changed-path detection, PNG decoding, file release and missing-file diagnostics.");
+        Results.Add("PASS background images: changed-path detection, PNG decoding, file release, missing-file diagnostics and the single-run preview path.");
     }
 
     private static int CountToken(string source, string token)

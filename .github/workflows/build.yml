@@ -73,6 +73,10 @@ jobs:
             # --lang=en pins the captions: a runner whose Windows display language happens to be
             # something else must still render the same English README as every other machine.
             @{ Name = 'stage-live.png';  Args = @('--play-preview', '--lang=en') },
+            # The background page draws a picture of your own behind the keys. The README shows that
+            # feature with the generated sample from docs/samples, never with a visitor's screenshot: the
+            # shot stays deterministic and the repo stays free of artwork somebody else holds the rights to.
+            @{ Name = 'background-image.png'; Args = @('--play-preview', '--lang=en', "--background-image=$(Join-Path $PWD 'docs/samples/stage-backdrop.png')") },
             @{ Name = 'main-menu.png';   Args = @('--menu', '--lang=en') },
             @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style', '--lang=en') },
             @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme', '--lang=en') },

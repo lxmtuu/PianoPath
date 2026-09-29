@@ -67,6 +67,7 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 | Nhận dạng nốt từ audio, transcription AI trong app | Lĩnh vực riêng, khối lượng model lớn; người dùng có MIDI file là đầu vào chuẩn nhất |
 | Tài khoản, cloud sync, leaderboard | Dự án MIT, offline, không telemetry — giữ nguyên |
 | 3D camera toàn phần (quỹ đạo, mô hình piano 3D) | Chi phí kết xuất và rủi ro lệch thẩm mỹ so với piano roll phẳng + parallax; đường đáng giá hơn là shader keyboard như hiện tại |
+| Nhận screenshot của người dùng làm ảnh README | Ảnh chụp lệch ngay lần đổi UI kế tiếp và mang artwork bên thứ ba; tính năng nào cần ảnh thì CI render lấy (xem `docs/LOCALIZATION.md` §10) |
 | `.resx` / `ResourceManager` cho bản dịch | Xem `docs/LOCALIZATION.md` §7 — bảng `Dictionary` tĩnh cho đúng thứ dự án cần với ít máy móc hơn |
 
 ## 6. Khối lượng ước đoán

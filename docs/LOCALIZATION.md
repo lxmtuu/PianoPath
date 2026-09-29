@@ -163,12 +163,26 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 
 ## 10. Ảnh giao diện: chỉ ảnh do ứng dụng render
 
-`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`, sáu ảnh
-`--lang=en` và một ảnh `--lang=vi` của trang General). Screenshot của người dùng — kể cả ảnh đẹp có
+`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`): bảy ảnh
+`--lang=en` và một ảnh `--lang=vi` của trang General. Screenshot của người dùng — kể cả ảnh rất đẹp có
 ảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
-kế tiếp, và ảnh nền trong screenshot thường là artwork của bên thứ ba (nền tối, nốt vàng) không có
-giấy phép đi kèm repo MIT. Muốn thấy tính năng "ảnh nền" trong tài liệu: chạy app với ảnh của cậu,
-hoặc thêm một mục vào `build.yml` để CI tự render — ảnh khi đó tất định và tái tạo được.
+kế tiếp, và ảnh nền trong screenshot hầu như luôn là artwork của bên thứ ba, không kèm giấy phép cho repo MIT.
 
-`tools/check_sources.py` giữ quy tắc này: mọi `![...]()` trỏ tới `docs/previews/` phải hoặc đã tồn tại,
-hoặc nằm trong danh sách `$shots` của workflow (được phép chậm hơn README đúng một commit).
+Muốn tài liệu chiếu được một tính năng thì làm cho CI render được tính năng đó. Ảnh nền là ví dụ đã làm
+xong: `tools/make_stage_background.py` **tự sinh** `docs/samples/stage-backdrop.png` (thuần stdlib Python,
+chạy dưới một giây, ảnh tất định vì sao trời là một danh mục có seed), `--background-image=<file.png>`
+treo ảnh đó lên sân khấu **chỉ trong lần chạy này**, và `build.yml` chụp `background-image.png`. Cờ này
+gọi `MainWindow.PreviewBackgroundImage`, vốn đặt thẳng vào stage thay vì đi qua handler của các hàng cài
+đặt: không bật cờ "đã sửa", không mồi đồng hồ tự lưu, và ảnh đọc không được thì chỉ để stage tự báo lỗi
+trong `BackgroundLoadError` chứ không mở hộp thoại — một lượt chụp không có ai để bấm OK. `VerificationSuite`
+kiểm đúng hợp đồng đó, nên hành vi "chỉ xem, không ghi" không thể lệch trong im lặng.
+
+`tools/check_sources.py` giữ ba đầu mối thẳng hàng:
+
+* mọi `![...]()` trỏ vào `docs/previews/` phải hoặc đã tồn tại, hoặc có tên trong `$shots` của workflow —
+  được phép chậm hơn README đúng một commit, vì chính commit render ảnh sẽ bắt kịp;
+* mọi tham số dòng lệnh mà `App.xaml.cs` hoặc `VerificationSuite` đọc phải có trong bảng *Tham số dòng
+  lệnh* của README và ngược lại, còn mọi tham số + đường dẫn `build.yml` truyền cho `PianoPath.exe` phải
+  thật sự tồn tại — một cờ gõ sai không làm hỏng build, nó chỉ im lặng cho ra một ảnh xấu;
+* `docs/samples/stage-backdrop.png` phải khớp kích thước với `W, H` của script sinh ra nó: nộp ảnh sửa
+  tay vào `docs/samples` sẽ bị báo lỗi thay vì âm thầm chia rẽ khỏi script.
