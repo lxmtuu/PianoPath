@@ -1268,16 +1268,20 @@ internal static class VerificationSuite
         Invoke(window, "ResetPracticeTempoRuns");
         Assert(window.PracticeMissRun == 0 && window.PracticeHitRun == 0, "Restarting the score should forget both practice runs.");
 
-        // The wiring: key presses while a song plays must reach the same curve. The fixture song is loaded
-        // first, so this check knows which pitches are misses and which one is a hit, whatever ran before.
-        window.OpenMidiFile(Path.Combine(Path.GetTempPath(), "keyflow-fixture.mid"));
+        // The wiring: key presses while a song plays must reach the same curve. The demo song is staged in
+        // memory the way the other checks do it, so this block knows which pitches are misses and which one
+        // is the hit, whatever song ran before it.
+        var practiceSong = MainWindow.CreateDemoSong();
+        SetField(window, "_allNotes", practiceSong); SetField(window, "_notes", practiceSong);
+        SetField(window, "_position", .5);
+        Invoke(window, "PopulateTracks", false); Invoke(window, "UpdateSongUi"); Invoke(window, "UpdatePlaybackLabel");
         threshold.Value = 1; tempo.Value = 100;
         SetField(window, "_playing", true);
         Invoke(window, "PressNote", 30, 90); Invoke(window, "ReleaseNote", 30);
         Assert(Math.Abs(tempo.Value - 100) < .01 && window.PracticeMissRun == 1, "The first missed key with a threshold of one must not slow the song down yet.");
         Invoke(window, "PressNote", 31, 90); Invoke(window, "ReleaseNote", 31);
         Assert(Math.Abs(tempo.Value - 95) < .01, "A second missed key must slow the playing song down by one step.");
-        Invoke(window, "PressNote", 60, 90); Invoke(window, "ReleaseNote", 60);
+        Invoke(window, "PressNote", 68, 90); Invoke(window, "ReleaseNote", 68);
         Assert(Math.Abs(tempo.Value - 95) < .01 && window.PracticeHitRun == 1, "A correct key during playback must start the recovery run without moving the tempo.");
         Invoke(window, "Stop"); SetField(window, "_playing", false);
 
