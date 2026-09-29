@@ -222,6 +222,21 @@ public partial class MainWindow
         Choice(release, "Release effect", nameof(PianoVisualSettings.ReleaseEffect), "The farewell of every note: fade, float, dissolve, smoke, snap or echo.",
             ("Fade", "Fade out"), ("Float Up", "Float up"), ("Dissolve", "Dissolve"), ("Smoke", "Smoke puff"), ("Snap Back", "Snap back"), ("Echo Rings", "Echo rings"));
         SliderRow(release, "Release intensity", nameof(PianoVisualSettings.ReleaseIntensity), 0, 100, "Strength of the release effect.").VisibleWhen = () => _visualSettings.ReleaseEffect != "Fade";
+
+        var smart = Card(NoteSettingsHost, "SMART MODULATORS", "Music data that scales the effects above: they never draw anything themselves.");
+        Toggle(smart, "Velocity color", nameof(PianoVisualSettings.VelocityColor), "Soft hits cool blue, hard hits hot red.");
+        SliderRow(smart, "Velocity color amount", nameof(PianoVisualSettings.VelocityColorAmount), 0, 100, "How strongly velocity recolors notes and bursts.").VisibleWhen = () => _visualSettings.VelocityColor;
+        Toggle(smart, "Octave color", nameof(PianoVisualSettings.OctaveColor), "Each octave owns a slice of the rainbow.");
+        SliderRow(smart, "Octave blend", nameof(PianoVisualSettings.OctaveColorBlend), 0, 100, "How strongly the octave hue takes over.").VisibleWhen = () => _visualSettings.OctaveColor;
+        Toggle(smart, "Zone split", nameof(PianoVisualSettings.ZoneSplit), "Bass zone erupts fire, treble zone splashes ice.");
+        SliderRow(smart, "Split point", nameof(PianoVisualSettings.ZoneSplitPitch), 21, 108, "MIDI note where the treble zone begins (C4 = 60).").VisibleWhen = () => _visualSettings.ZoneSplit;
+        SliderRow(smart, "Zone amount", nameof(PianoVisualSettings.ZoneSplitAmount), 0, 100, "Strength of the zone tint.").VisibleWhen = () => _visualSettings.ZoneSplit;
+        Toggle(smart, "Pedal glow", nameof(PianoVisualSettings.PedalGlow), "Keys glow brighter while the sustain pedal is down.");
+        SliderRow(smart, "Pedal glow intensity", nameof(PianoVisualSettings.PedalGlowIntensity), 0, 100, "How much the pedal brightens the keys.").VisibleWhen = () => _visualSettings.PedalGlow;
+        Toggle(smart, "Tempo sync", nameof(PianoVisualSettings.TempoSync), "Glow pulses on every beat of the MIDI tempo map.");
+        SliderRow(smart, "Tempo sync amount", nameof(PianoVisualSettings.TempoSyncAmount), 0, 100, "Strength of the beat pulse.").VisibleWhen = () => _visualSettings.TempoSync;
+        Toggle(smart, "Audio reactive", nameof(PianoVisualSettings.AudioReactive), "Glow follows the musical energy of note onsets.");
+        SliderRow(smart, "Audio reactive amount", nameof(PianoVisualSettings.AudioReactiveAmount), 0, 100, "How strongly onsets pump the glow.").VisibleWhen = () => _visualSettings.AudioReactive;
     }
 
     private void BuildParticlesPage()

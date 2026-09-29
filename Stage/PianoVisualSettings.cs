@@ -193,6 +193,26 @@ internal sealed class PianoVisualSettings
     public string AmbientCosmic { get; set; } = "None";
     public double AmbientCosmicAmount { get; set; } = 60;
     public double AmbientCosmicSpeed { get; set; } = 50;
+    // ---- Smart modulators (scale parameters, never draw) ------------------------------------------------
+    /// <summary>Velocity colors notes and bursts: soft hits cool blue, hard hits hot red.</summary>
+    public bool VelocityColor { get; set; } = false;
+    public double VelocityColorAmount { get; set; } = 70;
+    /// <summary>Each octave owns a slice of the rainbow.</summary>
+    public bool OctaveColor { get; set; } = false;
+    public double OctaveColorBlend { get; set; } = 70;
+    /// <summary>Keys glow brighter while the sustain pedal is down.</summary>
+    public bool PedalGlow { get; set; } = false;
+    public double PedalGlowIntensity { get; set; } = 60;
+    /// <summary>Glow pulses on every beat of the MIDI tempo map.</summary>
+    public bool TempoSync { get; set; } = false;
+    public double TempoSyncAmount { get; set; } = 60;
+    /// <summary>Glow follows the musical energy envelope (note onsets).</summary>
+    public bool AudioReactive { get; set; } = false;
+    public double AudioReactiveAmount { get; set; } = 60;
+    /// <summary>Bass zone erupts fire, treble zone splashes ice.</summary>
+    public bool ZoneSplit { get; set; } = false;
+    public double ZoneSplitPitch { get; set; } = 60;
+    public double ZoneSplitAmount { get; set; } = 70;
 
     // ---- Keyboard -----------------------------------------------------------------------------------
     /// <summary>Classic, Studio (3D) or Glass.</summary>
@@ -331,6 +351,10 @@ internal sealed class PianoVisualSettings
         AmbientNatureAmount = Math.Clamp(AmbientNatureAmount, 0, 100); AmbientNatureSpeed = Math.Clamp(AmbientNatureSpeed, 0, 100);
         AmbientLightAmount = Math.Clamp(AmbientLightAmount, 0, 100); AmbientLightSpeed = Math.Clamp(AmbientLightSpeed, 0, 100);
         AmbientCosmicAmount = Math.Clamp(AmbientCosmicAmount, 0, 100); AmbientCosmicSpeed = Math.Clamp(AmbientCosmicSpeed, 0, 100);
+        VelocityColorAmount = Math.Clamp(VelocityColorAmount, 0, 100); OctaveColorBlend = Math.Clamp(OctaveColorBlend, 0, 100);
+        PedalGlowIntensity = Math.Clamp(PedalGlowIntensity, 0, 100); TempoSyncAmount = Math.Clamp(TempoSyncAmount, 0, 100);
+        AudioReactiveAmount = Math.Clamp(AudioReactiveAmount, 0, 100);
+        ZoneSplitPitch = Math.Clamp(ZoneSplitPitch, 21, 108); ZoneSplitAmount = Math.Clamp(ZoneSplitAmount, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);
         BackdropDensity = Math.Clamp(BackdropDensity, 0, 200);

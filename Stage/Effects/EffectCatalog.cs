@@ -205,12 +205,12 @@ internal static class EffectCatalog
             new("mod.velocity-size", "Velocity Size", "Lực → Kích thước", "Harder hits render bigger notes and bursts.", EffectStatus.Available, "mod.velocity"),
             new("mod.velocity-map", "Velocity Mapping", "Lực → Cường độ", "Effect strength follows the hit velocity.", EffectStatus.Available, "mod.velocity"),
             new("mod.key-color", "Key Color Mapping", "Mỗi nốt một màu", "Each pitch owns its color.", EffectStatus.Available, "mod.pitch"),
-            new("mod.velocity-color", "Velocity Color", "Lực → Màu sắc", "Soft = blue, hard = red.", EffectStatus.Planned, "mod.velocity"),
-            new("mod.octave-color", "Octave Color", "Mỗi quãng 8 một màu", "One color per octave.", EffectStatus.Planned, "mod.pitch"),
-            new("mod.pedal-glow", "Pedal Glow", "Phím sáng theo pedal", "Keys glow while the sustain pedal is down.", EffectStatus.Planned, "mod.pedal"),
-            new("mod.tempo-sync", "Tempo Sync", "Nháy theo nhịp", "Effects pulse on the song BPM.", EffectStatus.Planned, "mod.tempo"),
-            new("mod.audio-reactive", "Audio Reactive", "Nhảy theo âm thanh", "Visuals react to the audio spectrum (FFT).", EffectStatus.Planned, "mod.audio"),
-            new("mod.zone-split", "Zone Split FX", "Chia vùng Bass/Treble", "Bass = fire, treble = ice (split zones).", EffectStatus.Planned, "mod.zone"),
+            new("mod.velocity-color", "Velocity Color", "Lực → Màu sắc", "Soft = blue, hard = red.", EffectStatus.Available, "mod.velocity"),
+            new("mod.octave-color", "Octave Color", "Mỗi quãng 8 một màu", "One color per octave.", EffectStatus.Available, "mod.pitch"),
+            new("mod.pedal-glow", "Pedal Glow", "Phím sáng theo pedal", "Keys glow while the sustain pedal is down.", EffectStatus.Available, "mod.pedal"),
+            new("mod.tempo-sync", "Tempo Sync", "Nháy theo nhịp", "Effects pulse on the song BPM.", EffectStatus.Available, "mod.tempo"),
+            new("mod.audio-reactive", "Audio Reactive", "Nhảy theo âm thanh", "Glow follows the musical energy envelope of note onsets (FFT is future work).", EffectStatus.Available, "mod.audio"),
+            new("mod.zone-split", "Zone Split FX", "Chia vùng Bass/Treble", "Bass = fire, treble = ice (split zones).", EffectStatus.Available, "mod.zone"),
         ];
     }
 

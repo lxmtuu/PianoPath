@@ -210,12 +210,12 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Velocity Size | Lực → Kích thước | burst amount, wave/flash size | ✅ |
 | Velocity Mapping | Lực → Cường độ | burst/wave/flash brightness | ✅ |
 | Key Color Mapping | Mỗi nốt một màu | NoteColor | ✅ ColorMode |
-| Velocity Color | Lực → Màu (nhẹ=xanh, mạnh=đỏ) | note + burst color | 🔜 phase 6 |
-| Octave Color | Mỗi quãng 8 một màu | NoteColor | 🔜 phase 6 |
-| Pedal Glow | Phím sáng theo pedal | hold.glow khi sustain | 🔜 phase 6 |
-| Tempo Sync | Nháy theo nhịp BPM | pulse theo beat clock | 🔜 phase 6 |
-| Audio Reactive | Nhảy theo FFT | spectrum → intensity | 🔜 phase 6 |
-| Zone Split FX | Bass=lửa, Treble=băng | effect theo vùng phím | 🔜 phase 6 |
+| Velocity Color | Lực → Màu (nhẹ=xanh, mạnh=đỏ) | note + burst color | ✅ v6 |
+| Octave Color | Mỗi quãng 8 một màu | NoteColor | ✅ v6 |
+| Pedal Glow | Phím sáng theo pedal | hold.glow khi sustain | ✅ v6 |
+| Tempo Sync | Nháy theo nhịp BPM | pulse theo beat clock | ✅ v6 |
+| Audio Reactive | Nhảy theo FFT | spectrum → intensity | ✅ v6 |
+| Zone Split FX | Bass=lửa, Treble=băng | effect theo vùng phím | ✅ v6 |
 
 ### 3.10 Combo themes (7) — preset graphs
 
@@ -258,6 +258,9 @@ Không đập bỏ: engine hiện có khớp hoàn toàn vào các kênh mới, 
 | (mới v5) `AmbientLight` + Amount/Speed/Color | `ambient.light` | Gradient Wave/Prism/Color Splash |
 | (mới v5) `AmbientCosmic` + Amount/Speed | `ambient.cosmic` | Galaxy/Black Hole/Matrix/Geometric/Fractal |
 | (mới v5) `ImpactWave` += Ripple | `impact.wave` | Gợn sóng nước từ điểm chạm |
+| (mới v6) `VelocityColor`/`OctaveColor`/`ZoneSplit` | `mod.*` | Lực→màu, quãng 8→màu, bass=lửa/treble=băng (+ tint nốt) |
+| (mới v6) `PedalGlow`/`TempoSync`/`AudioReactive` | `mod.*` | Pedal thật, beat thật từ tempo map, envelope năng lượng |
+| (mới v6) nối dây host | — | MIDI/live velocity thật → `Impact`; pedal → `SetSustainPedal`; beat → `PulseBeat` |
 | `ParticleResponse` / strength | `mod.velocity` | Mở rộng sang wave/flash (size + brightness theo lực nhấn) |
 
 File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ qua key lạ).
@@ -326,6 +329,18 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 - **UI**: card AMBIENT LAYERS (trang Background); Wave style thêm Ripple.
 - **Kiểm thử**: `VerifyAmbientFx` (4 pass vẽ geometry toàn sân khấu + ripple spawn/decay).
 
+### 5.6 Phase 6 (v6) — Smart modulators
+
+- **Settings**: `VelocityColor` + Amount, `OctaveColor` + Blend, `ZoneSplit` + Pitch + Amount,
+  `PedalGlow` + Intensity, `TempoSync` + Amount, `AudioReactive` + Amount — đều mặc định tắt.
+- **Renderer**: `NoteColor` bọc thêm octave/zone (`NoteColorCore` giữ logic cũ); velocity tint
+  cho nốt MIDI/live/burst/wave/flash; zone ép kiểu burst theo vùng phím; `BeatBoost`/
+  `EnergyBoost`/`PedalBoost` nhân vào glow nốt + halo + phím sáng.
+- **Nối dây thật**: velocity MIDI/live vào `Impact` (thay hằng số .82/.75); pedal sustain
+  vào `SetSustainPedal`; beat từ tempo map vào `PulseBeat` (kể cả khi tắt metronome).
+  Audio Reactive v1 = envelope năng lượng từ note onset (FFT để tương lai).
+- **UI**: card SMART MODULATORS (trang Notes). **Kiểm thử**: `VerifySmartFx`.
+
 ## 6. Roadmap các phase tiếp theo
 
 | Phase | Scope | Settings mới (dự kiến) | Renderer |
@@ -334,7 +349,7 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 | ✅ **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
 | ✅ **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
 | ✅ **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
-| **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |
+| ✅ **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |
 | **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
 
 Thứ tự này là logic nhất: Impact trước vì engine đã có sẵn một nửa (xong v1);

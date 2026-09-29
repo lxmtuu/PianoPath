@@ -72,6 +72,8 @@ internal sealed class PianoStage : FrameworkElement
     private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip = 1, _fps;
     private int _releaseScanIndex;
     private double _releaseScanPos;
+    private double _beatPulse, _energyLevel;
+    private bool _sustainPedal;
     private bool _playing, _anyHeat;
     private bool _mouseDown;
     private int _mousePitch = -1;
@@ -185,9 +187,24 @@ internal sealed class PianoStage : FrameworkElement
         }
     }
 
-    public void AddLiveNote(int pitch)
+    public void AddLiveNote(int pitch, double strength = 1)
     {
-        _liveTrails.Add(new LiveTrail { Pitch = pitch, Age = 0, HeldSeconds = 0, KeyDown = true });
+        _liveTrails.Add(new LiveTrail { Pitch = pitch, Age = 0, HeldSeconds = 0, KeyDown = true, Strength = strength });
+        InvalidateVisual();
+    }
+
+    /// <summary>Sustain pedal state from the host; drives Pedal Glow.</summary>
+    public void SetSustainPedal(bool down)
+    {
+        if (_sustainPedal == down) return;
+        _sustainPedal = down;
+        InvalidateVisual();
+    }
+
+    /// <summary>Beat pulse from the MIDI tempo map; drives Tempo Sync.</summary>
+    public void PulseBeat(double strength)
+    {
+        _beatPulse = Math.Max(_beatPulse, Math.Clamp(strength, 0, 1.2));
         InvalidateVisual();
     }
 
@@ -213,19 +230,25 @@ internal sealed class PianoStage : FrameworkElement
         var x = KeyCenters[clamped] * ActualWidth;
         var y = ActualHeight - KeyboardHeight - 1;
         var noteColor = AdjustColor(_activeKey[clamped] ? _activeKeyColor[clamped] : NoteColor(clamped, 0));
+        if (_visual.VelocityColor && _visual.VelocityColorAmount > 0) // Velocity → Color on the burst, wave and flash.
+            noteColor = Blend(noteColor, VelocityTint(strength), _visual.VelocityColorAmount / 100);
+        _energyLevel = Math.Min(1.5, _energyLevel + .22 * strength); // Audio Reactive envelope attack.
+        var burstStyle = _visual.ImpactBurst;
+        if (_visual.ZoneSplit) // Zone Split: bass hits erupt fire, treble hits splash ice.
+            burstStyle = clamped < _visual.ZoneSplitPitch ? "Embers" : "Splash";
         SpawnImpactWave(x, y, noteColor, strength);
         SpawnImpactFlash(x, y, noteColor, strength);
         SpawnImpactMorph(x, y, noteColor, strength);
-        SpawnImpactBurst(pitch, x, y, noteColor, strength, keyWidth);
+        SpawnImpactBurst(pitch, x, y, noteColor, strength, keyWidth, burstStyle);
         InvalidateVisual();
     }
 
     /// <summary>Impact phase, burst channel: the particle explosion, styled per ImpactBurst (embers, splash, fireworks, confetti or dust).</summary>
-    private void SpawnImpactBurst(int pitch, double x, double y, Color noteColor, double strength, double keyWidth)
+    private void SpawnImpactBurst(int pitch, double x, double y, Color noteColor, double strength, double keyWidth, string burstStyle)
     {
         if (!_visual.ShowEmbers || _visual.ParticleAmount < 1 || _sparks.Count >= MaxParticles) return;
         var hue = Hue(pitch);
-        var style = _visual.ImpactBurst;
+        var style = burstStyle;
         var amount = Math.Clamp((int)(_visual.ParticleAmount * strength * _visual.ParticleResponse / 55.0), 0, 120);
         for (var i = 0; i < amount; i++)
         {
@@ -468,6 +491,7 @@ internal sealed class PianoStage : FrameworkElement
     public void Advance(double seconds)
     {
         var dt = Math.Clamp(seconds, 0, .05) * _visual.PhysicsTimeFactor / 100; _elapsed += dt;
+        _beatPulse *= Math.Exp(-6 * dt); _energyLevel *= Math.Exp(-2.2 * dt); // smart-modulator envelopes decay
         if (seconds > 0) _fps += (1 / seconds - _fps) * .08;
         var hitY = ActualHeight - KeyboardHeight;
         var lane = ActualWidth / KeyCount;
@@ -767,6 +791,8 @@ internal sealed class PianoStage : FrameworkElement
             if (note.Pitch < FirstPitch || note.Pitch >= FirstPitch + KeyCount || note.End < _position - 1) continue;
             var noteHeight = Math.Clamp(note.Duration * noteSpeed - gap, _visual.NoteMinLength, hitY * .9);
             var color = note.Played ? Color.FromRgb(82, 237, 208) : note.Missed ? Color.FromRgb(255, 83, 113) : NoteColor(note.Pitch, note.Track);
+            if (_visual.VelocityColor && !note.Played && !note.Missed) // Velocity → Color on song notes.
+                color = Blend(color, VelocityTint(note.Velocity / 127.0), _visual.VelocityColorAmount / 100);
             var sounding = note.Start <= _position && note.End > _position;
             if (rising)
             {
@@ -800,7 +826,7 @@ internal sealed class PianoStage : FrameworkElement
         var style = _visual.NoteStyle;
         var radius = Math.Min(r.Height / 2, Math.Min(r.Width / 2, 2 + _visual.NoteRoundness / 100 * 12));
         var bloom = _visual.BloomSize / 100;
-        var glow = _visual.NoteGlow / 100 * _visual.BloomIntensity / 65 * (sounding ? 1.35 * BreathFactor() : 1);
+        var glow = _visual.NoteGlow / 100 * _visual.BloomIntensity / 65 * (sounding ? 1.35 * BreathFactor() : 1) * BeatBoost() * EnergyBoost();
         var outer = 2 + bloom * 10;
         var tint = _visual.NoteTint / 78;
         var edgeWidth = .4 + _visual.NoteEdgeWidth / 45;
@@ -952,7 +978,7 @@ internal sealed class PianoStage : FrameworkElement
     }
 
     /// <summary>Resolves the color of a note according to the active color mode (gradient palette, hands, tracks or rainbows).</summary>
-    internal Color NoteColor(int pitch, int track)
+    private Color NoteColorCore(int pitch, int track)
     {
         var t = Math.Clamp((pitch - FirstPitch) / (double)(KeyCount - 1), 0, 1);
         switch (_visual.ColorMode)
@@ -983,6 +1009,40 @@ internal sealed class PianoStage : FrameworkElement
         };
     }
 
+    /// <summary>Note color plus the smart color modulators (octave blend, zone tint).</summary>
+    internal Color NoteColor(int pitch, int track)
+    {
+        var color = NoteColorCore(pitch, track);
+        if (_visual.OctaveColor && _visual.OctaveColorBlend > 0) // Octave → hue: each octave owns a slice of the rainbow.
+            color = Blend(color, ColorFromHue(pitch / 12 * 47 % 360), _visual.OctaveColorBlend / 100);
+        if (_visual.ZoneSplit && _visual.ZoneSplitAmount > 0) // Zone tint: warm bass, cool treble.
+            color = Blend(color, pitch < _visual.ZoneSplitPitch ? Color.FromRgb(255, 130, 60) : Color.FromRgb(120, 180, 255), _visual.ZoneSplitAmount / 100 * .5);
+        return color;
+    }
+
+    /// <summary>Velocity → Color: soft hits cool blue, hard hits hot red.</summary>
+    private static Color VelocityTint(double strength)
+    {
+        var t = Math.Clamp(strength, 0, 1.2) / 1.2;
+        return Blend(Color.FromRgb(80, 140, 255), Color.FromRgb(255, 70, 60), t);
+    }
+
+    /// <summary>Live-trail color: the note color plus the velocity tint from the recorded hit strength.</summary>
+    private Color LiveNoteColor(LiveTrail trail)
+    {
+        var color = NoteColor(trail.Pitch, 0);
+        if (_visual.VelocityColor && _visual.VelocityColorAmount > 0)
+            color = Blend(color, VelocityTint(trail.Strength), _visual.VelocityColorAmount / 100);
+        return color;
+    }
+
+    /// <summary>Tempo Sync: 1 normally, surging on every beat of the MIDI tempo map while enabled.</summary>
+    private double BeatBoost() => _visual.TempoSync ? 1 + _beatPulse * _visual.TempoSyncAmount / 100 : 1;
+    /// <summary>Audio Reactive: 1 normally, surging with the musical energy envelope while enabled.</summary>
+    private double EnergyBoost() => _visual.AudioReactive ? 1 + _energyLevel * _visual.AudioReactiveAmount / 100 : 1;
+    /// <summary>Pedal Glow: 1 normally, brighter while the sustain pedal is held down.</summary>
+    private double PedalBoost() => _sustainPedal && _visual.PedalGlow ? 1 + _visual.PedalGlowIntensity / 100 : 1;
+
     private Color AdjustColor(Color input)
     {
         var saturation = _visual.Saturation / 100;
@@ -1012,7 +1072,7 @@ internal sealed class PianoStage : FrameworkElement
                 var tailY = hitY - (trail.Age - trail.HeldSeconds) * _visual.NoteFallSpeed;
                 if (tailY <= headY) continue;
                 var opacity = Math.Clamp(1 - (hitY - tailY) / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
-                DrawConfiguredNote(dc, new Rect(x, headY, noteWidth, tailY - headY), NoteColor(trail.Pitch, 0), opacity, trail.KeyDown && trail.Hit, trail.Pitch, true);
+                DrawConfiguredNote(dc, new Rect(x, headY, noteWidth, tailY - headY), LiveNoteColor(trail), opacity, trail.KeyDown && trail.Hit, trail.Pitch, true);
             }
             else
             {
@@ -1021,7 +1081,7 @@ internal sealed class PianoStage : FrameworkElement
                 var bottom = Math.Min(hitY + 6, y);
                 if (bottom <= tailY) continue;
                 var opacity = Math.Clamp(1 - tailY / Math.Max(1, hitY + 18), .08, 1) * _visual.NoteTint / 100;
-                DrawConfiguredNote(dc, new Rect(x, tailY, noteWidth, bottom - tailY), NoteColor(trail.Pitch, 0), opacity, trail.KeyDown && trail.Hit, trail.Pitch);
+                DrawConfiguredNote(dc, new Rect(x, tailY, noteWidth, bottom - tailY), LiveNoteColor(trail), opacity, trail.KeyDown && trail.Hit, trail.Pitch);
             }
         }
     }
@@ -2028,7 +2088,7 @@ internal sealed class PianoStage : FrameworkElement
     private void DrawImpactLine(DrawingContext dc, double width, double y)
     {
         var baseColor = AdjustColor(ParseColor(_visual.HaloColor, ColorFromHue(266)));
-        var intensity = Math.Clamp(_visual.HaloIntensity / 100.0, 0.0, 2.0);
+        var intensity = Math.Clamp(_visual.HaloIntensity / 100.0 * BeatBoost() * EnergyBoost() * PedalBoost(), 0.0, 2.0);
         if (intensity <= 0.001) return;
 
         var haloSpread = 6 + _visual.BloomSize / 5.0;
@@ -2125,7 +2185,7 @@ internal sealed class PianoStage : FrameworkElement
                 if (!_activeKey[pitch]) continue;
                 var color = KeyColor(pitch);
                 var x = KeyCenters[pitch] * width;
-                var breath = BreathFactor(); var radiusX = (14 + glowRadius * 70) * breath; var radiusY = (10 + glowRadius * 60) * breath;
+                var breath = BreathFactor() * PedalBoost(); var radiusX = (14 + glowRadius * 70) * breath; var radiusY = (10 + glowRadius * 60) * breath;
                 var key = GradientKey(4, Color.FromArgb((byte)Math.Clamp(_visual.KeyLighting, 0, 255), color.R, color.G, color.B));
                 if (!_gradientCache.TryGetValue(key, out var glowBrush))
                 {
@@ -2138,7 +2198,7 @@ internal sealed class PianoStage : FrameworkElement
                 dc.DrawEllipse(glowBrush, null, new Point(x, top + 2), radiusX, radiusY);
             }
         }
-        var glowPen = new Pen(Brush(Color.FromArgb((byte)(30 + _visual.KeyLighting * .95), halo.R, halo.G, halo.B)), 5 + _visual.BloomSize / 10); glowPen.Freeze();
+        var pedalGlow = PedalBoost(); var glowPen = new Pen(Brush(Color.FromArgb((byte)Math.Clamp((30 + _visual.KeyLighting * .95) * pedalGlow, 0, 255), halo.R, halo.G, halo.B)), (5 + _visual.BloomSize / 10) * pedalGlow); glowPen.Freeze();
         dc.DrawLine(glowPen, new Point(0, top + 1), new Point(width, top + 1));
         if (TryDrawShadedKeyboard(dc, width, height - top, top))
         {
@@ -2540,5 +2600,5 @@ internal sealed class PianoStage : FrameworkElement
     private sealed class Spark { public double X, Y, Vx, Vy, Life, Age, Size, Phase, Mass; public bool Wisp; public Color Color; public int Kind; public double Grav = 1, DragK = 1; }
     private sealed class Ring { public double X, Y, Age, Life, Strength = 1; public bool Shock, Implode, Ripple; public Color Color; }
     private sealed class Flash { public double X, Y, Age, Life, Strength = 1; public int Style; public Color Color; }
-    private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; }
+    private sealed class LiveTrail { public int Pitch; public double Age, HeldSeconds; public bool KeyDown = true, Released, Hit; public double Strength = 1; }
 }

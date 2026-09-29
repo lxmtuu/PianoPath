@@ -669,6 +669,7 @@ internal static class VerificationSuite
         VerifyHoldFx(window, stage, visualSettings);
         VerifyReleaseFx(window, stage, visualSettings, choices);
         VerifyAmbientFx(window, stage, visualSettings, choices);
+        VerifySmartFx(window, stage, visualSettings);
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -892,6 +893,69 @@ internal static class VerificationSuite
         visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
+    }
+
+    /// <summary>
+    /// Smart modulators (effects-redesign v6): octave/velocity/zone recolor notes, pedal/beat/onset
+    /// boosts run through the halo renderer, and velocity scales the burst amount.
+    /// </summary>
+    private static void VerifySmartFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.VelocityColor)) && toggles.ContainsKey(nameof(PianoVisualSettings.OctaveColor))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.ZoneSplit)) && toggles.ContainsKey(nameof(PianoVisualSettings.PedalGlow))
+            && toggles.ContainsKey(nameof(PianoVisualSettings.TempoSync)) && toggles.ContainsKey(nameof(PianoVisualSettings.AudioReactive)),
+            "The Notes page should expose the velocity, octave, zone, pedal, tempo and audio modulators.");
+        Assert(EffectCatalog.Smart.All.All(e => e.Status == EffectStatus.Available),
+            "The whole smart catalogue should be implemented in v6.");
+        var wasColorMode = visualSettings.ColorMode; var wasStart = visualSettings.NoteColorStart; var wasEnd = visualSettings.NoteColorEnd;
+        var wasOctave = visualSettings.OctaveColor; var wasBlend = visualSettings.OctaveColorBlend;
+        visualSettings.ColorMode = "Gradient"; visualSettings.Palette = "Custom";
+        visualSettings.NoteColorStart = "#808080"; visualSettings.NoteColorEnd = "#808080";
+        visualSettings.OctaveColor = true; visualSettings.OctaveColorBlend = 100;
+        stage.SetVisualSettings(visualSettings);
+        var low = stage.NoteColor(36, 0); var high = stage.NoteColor(72, 0);
+        Assert(low != high, "With a flat base color, different octaves should resolve to different colors.");
+        visualSettings.ColorMode = wasColorMode; visualSettings.NoteColorStart = wasStart; visualSettings.NoteColorEnd = wasEnd;
+        visualSettings.OctaveColor = wasOctave; visualSettings.OctaveColorBlend = wasBlend;
+        var wasAmount = visualSettings.ParticleAmount; var wasResponse = visualSettings.ParticleResponse;
+        var wasBurst = visualSettings.ImpactBurst; var wasZone = visualSettings.ZoneSplit;
+        visualSettings.ParticleAmount = 40; visualSettings.ParticleResponse = 55; visualSettings.ImpactBurst = "Embers";
+        visualSettings.ZoneSplit = true; visualSettings.ZoneSplitPitch = 60;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+        stage.Impact(40, .2);
+        var softSparks = stage.SparkCount;
+        stage.ClearTransient();
+        stage.Impact(40, 1);
+        Assert(stage.SparkCount > softSparks, "A harder hit should burst more particles than a soft one.");
+        var bassKinds = SparkKinds(stage);
+        Assert(bassKinds.Count > 0 && bassKinds.All(k => k == 0), "Bass-zone hits should erupt ember bursts.");
+        stage.ClearTransient();
+        stage.Impact(80, 1);
+        var trebleKinds = SparkKinds(stage);
+        Assert(trebleKinds.Count > 0 && trebleKinds.All(k => k == 1), "Treble-zone hits should splash droplet bursts.");
+        visualSettings.VelocityColor = true; visualSettings.TempoSync = true; visualSettings.AudioReactive = true;
+        visualSettings.PedalGlow = true; stage.SetSustainPedal(true); stage.PulseBeat(1);
+        stage.Impact(60, 1);
+        var halo = new DrawingVisual();
+        using (var dc = halo.RenderOpen()) { Invoke(stage, "DrawImpactLine", dc, 1280d, 480d); }
+        Assert(halo.Drawing is not null && halo.Drawing.Bounds.Width > 100, "The boosted halo line should paint across the stage.");
+        stage.SetSustainPedal(false);
+        for (var i = 0; i < 40; i++) stage.Advance(.05);
+        visualSettings.ParticleAmount = wasAmount; visualSettings.ParticleResponse = wasResponse;
+        visualSettings.ImpactBurst = wasBurst; visualSettings.ZoneSplit = wasZone;
+        visualSettings.VelocityColor = false; visualSettings.TempoSync = false; visualSettings.AudioReactive = false;
+        visualSettings.PedalGlow = false;
+        stage.SetVisualSettings(visualSettings);
+        stage.ClearTransient();
+    }
+
+    /// <summary>Reads the Kind of every live spark; the zone modulator is asserted through it.</summary>
+    private static List<int> SparkKinds(PianoStage stage)
+    {
+        var sparks = (System.Collections.IList)Field(stage, "_sparks");
+        return sparks.Cast<object>().Select(s => (int)s.GetType().GetField("Kind")!.GetValue(s)!).ToList();
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
