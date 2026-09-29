@@ -849,7 +849,8 @@ public partial class MainWindow
     private static bool MatchesSearch(SettingRow row, string query)
     {
         foreach (var key in row.SearchKeys)
-            if (key.Contains(query, StringComparison.OrdinalIgnoreCase) || Loc.T(key).Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
+            if (key.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || Loc.Known(key) && Loc.T(key).Contains(query, StringComparison.OrdinalIgnoreCase)) return true;
         return false;
     }
 

@@ -540,7 +540,7 @@ internal static class VerificationSuite
 
                 var practiceSong = MainWindow.CreateDemoSong();
                 SetField(window, "_allNotes", practiceSong); SetField(window, "_notes", practiceSong);
-                Invoke(window, "PopulateTracks"); Invoke(window, "UpdateSongUi"); Invoke(window, "UpdatePlaybackLabel");
+                Invoke(window, "PopulateTracks", false); Invoke(window, "UpdateSongUi"); Invoke(window, "UpdatePlaybackLabel");
                 Assert(((Button)window.FindName("PlayButton")).IsEnabled, "Opening a MIDI song should enable the transport.");
                 Invoke(window, "Play_Click", window, new RoutedEventArgs());
                 Assert((bool)Field(window, "_playing"), "MIDI playback should start from an explicit Play command.");

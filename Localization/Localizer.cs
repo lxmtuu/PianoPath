@@ -120,6 +120,11 @@ internal static class Loc
         return key;
     }
 
+    /// <summary>True when the text is a string of the interface (and therefore worth translating).
+    /// A row's search phrase or a name the user typed is not: looking those up would fall through to
+    /// English anyway and report a phantom unknown key.</summary>
+    internal static bool Known(string key) => StringsEnglish.Table.ContainsKey(key);
+
     /// <summary>Translates a template and fills its placeholders, for text built at runtime.</summary>
     internal static string F(string template, params object?[] args) =>
         args.Length == 0 ? T(template) : string.Format(CultureInfo.CurrentCulture, T(template), args);
