@@ -126,6 +126,7 @@ public partial class MainWindow
         // (menu, dock and play dialog) through one path.
         ApplyVisualSettings($"Interface theme · {theme.Name}");
         RefreshMenuThemeChips();
+        RefreshPlayThemeChips();
         ChromeMotion.Pulse((UIElement)sender);
     }
 
@@ -190,6 +191,7 @@ public partial class MainWindow
         if (PlayDialogThemeOrb is not null)
             PlayDialogThemeOrb.Background = new SolidColorBrush(ShellThemeManager.Current.Accent);
         RefreshThemeChips();
+        SyncPlayInlineControls();
         PlayDialogOverlay.Visibility = Visibility.Visible;
         ChromeMotion.FadeIn(PlayDialogOverlay, 200);
         ChromeMotion.PopIn(PlayDialogCard);
@@ -281,4 +283,194 @@ public partial class MainWindow
     }
 
     private void PlaySpeedReset_Click(object sender, RoutedEventArgs e) => PlaySpeedSlider.Value = DefaultVisualSettings.NoteFallSpeed;
+
+    // =====================================================================================
+    // Play dialog: inline options under each layer row
+    // =====================================================================================
+
+    private sealed record InlineControl(string Label, string Property);
+
+    /// <summary>The controls a layer row unfolds in place, plus the dock page its "More settings" link opens.</summary>
+    private sealed record InlineSection(string DockPage, InlineControl[] Choices, InlineControl[] Sliders, InlineControl[] Toggles);
+
+    private static readonly Dictionary<string, InlineSection> PlayInlineSections = new()
+    {
+        ["Camera"] = new(SettingsPages.Camera, [],
+            [new("Parallax", nameof(PianoVisualSettings.CameraParallax)), new("Zoom", nameof(PianoVisualSettings.CameraZoom)), new("Saturation", nameof(PianoVisualSettings.Saturation)), new("Bloom", nameof(PianoVisualSettings.BloomIntensity))], []),
+        ["Background"] = new(SettingsPages.Background, [],
+            [new("Vignette", nameof(PianoVisualSettings.Vignette)), new("Horizon glow", nameof(PianoVisualSettings.HorizonGlow)), new("Light beams", nameof(PianoVisualSettings.BeamIntensity))],
+            [new("Stars", nameof(PianoVisualSettings.ShowStars)), new("Guide lanes", nameof(PianoVisualSettings.BackgroundGuide))]),
+        ["Notes"] = new(SettingsPages.Notes,
+            [new("Style", nameof(PianoVisualSettings.NoteStyle)), new("Direction", nameof(PianoVisualSettings.NoteDirection))],
+            [new("Width", nameof(PianoVisualSettings.NoteWidth)), new("Glow", nameof(PianoVisualSettings.NoteGlow)), new("Opacity", nameof(PianoVisualSettings.NoteTint))],
+            [new("3D shading", nameof(PianoVisualSettings.Notes3D))]),
+        ["Embers"] = new(SettingsPages.Particles, [],
+            [new("Amount", nameof(PianoVisualSettings.ParticleAmount)), new("Velocity", nameof(PianoVisualSettings.ParticleVelocity)), new("Glow", nameof(PianoVisualSettings.ParticleGlow))],
+            [new("Wisps", nameof(PianoVisualSettings.ShowWisps))]),
+        ["Halo"] = new(SettingsPages.Background, [], [new("Intensity", nameof(PianoVisualSettings.HaloIntensity))], []),
+        ["Flame"] = new(SettingsPages.Particles, [],
+            [new("Intensity", nameof(PianoVisualSettings.FlameIntensity)), new("Height", nameof(PianoVisualSettings.FlameHeight))],
+            [new("Impact rings", nameof(PianoVisualSettings.ShowImpactRings))]),
+        ["Keys"] = new(SettingsPages.Keyboard,
+            [new("Style", nameof(PianoVisualSettings.KeyboardStyle)), new("Shading", nameof(PianoVisualSettings.ShadingQuality))],
+            [new("Height", nameof(PianoVisualSettings.KeyboardScale)), new("Light intensity", nameof(PianoVisualSettings.KeyLighting))],
+            [new("Animate pressed keys", nameof(PianoVisualSettings.AnimateKeys))]),
+    };
+
+    private readonly Dictionary<string, StackPanel> _playInlinePanels = [];
+    private readonly Dictionary<string, Button> _playInlineChevrons = [];
+    private readonly List<(Slider Slider, TextBlock Value)> _playInlineSliders = [];
+    private readonly List<ComboBox> _playInlineChoices = [];
+    private WrapPanel? _playThemeChips;
+
+    /// <summary>Unfolds (or folds) the options of one layer row right under it; only one row stays open at a time.</summary>
+    private void PlayDialogExpand_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: string key, Parent: Grid row } chevron) return;
+        var created = !_playInlinePanels.TryGetValue(key, out var panel);
+        if (created)
+        {
+            panel = BuildPlayInlinePanel(key);
+            _playInlinePanels[key] = panel;
+            _playInlineChevrons[key] = chevron;
+            LayerRowsHost.Children.Insert(LayerRowsHost.Children.IndexOf(row) + 1, panel);
+        }
+        var open = created || panel!.Visibility != Visibility.Visible;
+        foreach (var (otherKey, other) in _playInlinePanels)
+        {
+            var isThis = otherKey == key;
+            other.Visibility = isThis && open ? Visibility.Visible : Visibility.Collapsed;
+            SetChevronOpen(_playInlineChevrons[otherKey], isThis && open);
+        }
+        if (open) ChromeMotion.FadeIn(panel!, 160);
+    }
+
+    private static void SetChevronOpen(Button chevron, bool open)
+    {
+        chevron.RenderTransformOrigin = new Point(.5, .5);
+        chevron.RenderTransform = new RotateTransform(open ? 180 : 0);
+    }
+
+    private StackPanel BuildPlayInlinePanel(string key)
+    {
+        var panel = new StackPanel { Margin = new Thickness(14, 0, 0, 8) };
+        var dockPage = SettingsPages.Theme;
+        if (key == "Theme")
+        {
+            _playThemeChips = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
+            panel.Children.Add(_playThemeChips);
+            RefreshPlayThemeChips();
+        }
+        else if (PlayInlineSections.TryGetValue(key, out var section))
+        {
+            dockPage = section.DockPage;
+            foreach (var choice in section.Choices) panel.Children.Add(BuildInlineChoice(choice));
+            foreach (var slider in section.Sliders) panel.Children.Add(BuildInlineSlider(slider));
+            foreach (var toggle in section.Toggles) panel.Children.Add(BuildInlineToggle(toggle));
+        }
+        var more = new Button { Content = "More settings…", DataContext = dockPage, Style = (Style)FindResource("MiniButtonStyle"), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
+        more.Click += PlayDialogDeepLink_Click;
+        panel.Children.Add(more);
+        return panel;
+    }
+
+    private FrameworkElement BuildInlineSlider(InlineControl spec)
+    {
+        var (min, max) = _sliderRanges[spec.Property];
+        var current = (double)Prop(spec.Property).GetValue(_visualSettings)!;
+        var grid = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var value = new TextBlock { Text = FormatSetting(spec.Property, current), Style = (Style)FindResource("MutedTextStyle"), HorizontalAlignment = HorizontalAlignment.Right };
+        var slider = new Slider { Minimum = min, Maximum = max, Value = Math.Clamp(current, min, max), Tag = spec.Property };
+        slider.ValueChanged += PlayInlineSlider_Changed;
+        Grid.SetColumn(value, 1); Grid.SetRow(slider, 1); Grid.SetColumnSpan(slider, 2);
+        grid.Children.Add(new TextBlock { Text = spec.Label, Style = (Style)FindResource("LabelTextStyle") });
+        grid.Children.Add(value); grid.Children.Add(slider);
+        _playInlineSliders.Add((slider, value));
+        return grid;
+    }
+
+    private FrameworkElement BuildInlineChoice(InlineControl spec)
+    {
+        var grid = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var dock = _visualChoices[spec.Property];
+        var combo = new ComboBox { Tag = spec.Property, Width = 180, Height = 28, DisplayMemberPath = dock.DisplayMemberPath, SelectedValuePath = dock.SelectedValuePath, ItemsSource = dock.ItemsSource, SelectedValue = dock.SelectedValue };
+        combo.SelectionChanged += PlayInlineChoice_Changed;
+        Grid.SetColumn(combo, 1);
+        grid.Children.Add(new TextBlock { Text = spec.Label, Style = (Style)FindResource("LabelTextStyle"), VerticalAlignment = VerticalAlignment.Center });
+        grid.Children.Add(combo);
+        _playInlineChoices.Add(combo);
+        return grid;
+    }
+
+    /// <summary>Inline switches join the shared toggle list, so <see cref="VisualToggle_Changed"/> keeps them and the dock in step.</summary>
+    private CheckBox BuildInlineToggle(InlineControl spec)
+    {
+        var check = new CheckBox { Content = spec.Label, Tag = spec.Property, IsChecked = (bool)Prop(spec.Property).GetValue(_visualSettings)!, Margin = new Thickness(0, 4, 0, 4) };
+        check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed;
+        _visualToggleList.Add(check);
+        return check;
+    }
+
+    // The inline controls hand every change to the matching dock control, whose handler stores,
+    // applies and schedules the save — one code path for both surfaces.
+    private void PlayInlineSlider_Changed(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (!_uiReady || _loadingVisualSettings || sender is not Slider { Tag: string property } slider) return;
+        if (_visualSliders.TryGetValue(property, out var dock)) dock.Value = slider.Value;
+        foreach (var (candidate, label) in _playInlineSliders)
+            if (ReferenceEquals(candidate, slider)) label.Text = FormatSetting(property, (double)Prop(property).GetValue(_visualSettings)!);
+    }
+
+    private void PlayInlineChoice_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_loadingVisualSettings || sender is not ComboBox { Tag: string property, SelectedValue: string value }) return;
+        if (_visualChoices.TryGetValue(property, out var dock)) dock.SelectedValue = value;
+    }
+
+    /// <summary>Pulls the current settings into the inline controls (dialog opened, preset applied, reset).</summary>
+    private void SyncPlayInlineControls()
+    {
+        var wasLoading = _loadingVisualSettings;
+        _loadingVisualSettings = true;
+        try
+        {
+            foreach (var (slider, label) in _playInlineSliders)
+            {
+                var property = (string)slider.Tag;
+                var value = (double)Prop(property).GetValue(_visualSettings)!;
+                slider.Value = Math.Clamp(value, slider.Minimum, slider.Maximum);
+                label.Text = FormatSetting(property, value);
+            }
+            foreach (var combo in _playInlineChoices) combo.SelectedValue = (string)Prop((string)combo.Tag).GetValue(_visualSettings)!;
+            RefreshPlayThemeChips();
+        }
+        finally { _loadingVisualSettings = wasLoading; }
+    }
+
+    private void RefreshPlayThemeChips()
+    {
+        if (_playThemeChips is null) return;
+        _playThemeChips.Children.Clear();
+        foreach (var theme in ShellThemes.All)
+        {
+            var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
+            var chip = new Button
+            {
+                Content = active ? "✦  " + theme.Name : theme.Name,
+                Tag = ThemeOrb(theme),
+                DataContext = theme.Id,
+                Style = (Style)FindResource("ThemeChipStyle"),
+                ToolTip = theme.Blurb,
+                Opacity = active ? 1 : .72
+            };
+            chip.Click += ThemeChip_Click;
+            _playThemeChips.Children.Add(chip);
+        }
+    }
 }

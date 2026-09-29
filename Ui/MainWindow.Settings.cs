@@ -687,6 +687,7 @@ public partial class MainWindow
         }
         if (PlaySpeedSlider is not null) PlaySpeedSlider.Value = Math.Clamp(_visualSettings.NoteFallSpeed, PlaySpeedSlider.Minimum, PlaySpeedSlider.Maximum);
         if (PlaySpeedLabel is not null) PlaySpeedLabel.Text = ((int)_visualSettings.NoteFallSpeed).ToString();
+        SyncPlayInlineControls();
     }
 
     private void UpdatePresetLabels()

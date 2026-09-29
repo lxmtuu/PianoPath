@@ -340,30 +340,30 @@
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Theme" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <Border Grid.Column="1" x:Name="PlayDialogThemeOrb" Width="14" Height="14" CornerRadius="7" Background="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Theme" Click="PlayDialogDeepLink_Click" ToolTip="Interface theme, motion, blossoms and spotlights"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Theme" Click="PlayDialogExpand_Click" ToolTip="Interface theme, motion, blossoms and spotlights"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Camera" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Camera" Click="PlayDialogDeepLink_Click" ToolTip="Parallax, zoom, saturation, bloom"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Camera" Click="PlayDialogExpand_Click" ToolTip="Parallax, zoom, saturation, bloom"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Background" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="LayerBackgroundToggle" Tag="ShowBackground" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Background" Click="PlayDialogDeepLink_Click" ToolTip="Image, dim, guide lanes, gradient"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Background" Click="PlayDialogExpand_Click" ToolTip="Image, dim, guide lanes, gradient"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Notes" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="LayerNotesToggle" Tag="ShowNotes" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Notes" Click="PlayDialogDeepLink_Click" ToolTip="Note style, colors, glow, edge"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Notes" Click="PlayDialogExpand_Click" ToolTip="Note style, colors, glow, edge"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Embers" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="LayerEmbersToggle" Tag="ShowEmbers" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Particles" Click="PlayDialogDeepLink_Click" ToolTip="Sparks, wisps, particle physics"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Embers" Click="PlayDialogExpand_Click" ToolTip="Sparks, wisps, particle physics"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -372,19 +372,19 @@
                                         <Border x:Name="PlayDialogHaloColorDot" Width="14" Height="14" CornerRadius="7" Background="#C66EFF"/>
                                     </Button>
                                     <CheckBox Grid.Column="2" x:Name="LayerHaloToggle" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="3" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Background" Click="PlayDialogDeepLink_Click" ToolTip="The burning impact line above the keys"/>
+                                    <Button Grid.Column="3" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Halo" Click="PlayDialogExpand_Click" ToolTip="The burning impact line above the keys"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Flame" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="LayerFlameToggle" Tag="ShowFlame" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Particles" Click="PlayDialogDeepLink_Click" ToolTip="Flame tongues rising from the key bed"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Flame" Click="PlayDialogExpand_Click" ToolTip="Flame tongues rising from the key bed"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Keys" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                     <CheckBox Grid.Column="1" x:Name="LayerKeysToggle" Tag="ShowKeys" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
-                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Keyboard" Click="PlayDialogDeepLink_Click" ToolTip="Keyboard style, lighting, overhang, ray-traced shading"/>
+                                    <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Keys" Click="PlayDialogExpand_Click" ToolTip="Keyboard style, lighting, overhang, ray-traced shading"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
