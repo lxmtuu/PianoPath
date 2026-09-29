@@ -50,6 +50,9 @@ public partial class MainWindow
         _loadingVisualSettings = true;
         BuildStylePage(); BuildThemePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage();
         _loadingVisualSettings = false;
+        // The theme chips are generated, so they have to be filled once the pages exist; the menu
+        // picker shares the same list of themes.
+        RefreshThemeChips(); RefreshMenuThemeChips();
         LoadPresetList();
         RefreshDependentRows();
         UpdateRecordingInfo();
