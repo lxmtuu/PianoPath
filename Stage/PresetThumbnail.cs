@@ -41,10 +41,18 @@ internal static class PresetThumbnail
         catch { return ""; }
     }
 
+    /// <summary>
+    /// How much larger than the stored picture the stage is laid out before it is drawn. The renderer sizes
+    /// its keyboard, tiles and particles for a real stage, so it is given one: the picture is a scaled-down
+    /// copy of a 4× layout instead of asking every part of the stage to cope with 112 pixels of height.
+    /// </summary>
+    internal const int RenderScale = 4;
+
     /// <summary>The PNG bytes of the look, at <see cref="Width"/> × <see cref="Height"/>.</summary>
     internal static byte[] RenderPng(PianoVisualSettings settings)
     {
-        var stage = new PianoStage { Width = Width, Height = Height };
+        var stageWidth = Width * RenderScale; var stageHeight = Height * RenderScale;
+        var stage = new PianoStage { Width = stageWidth, Height = stageHeight };
         stage.SetVisualSettings(settings);
         // A fixed, readable moment: a few bars above the hit line and three impacts lighting the keyboard,
         // so the picture shows the note style, the palette, the glow and the keys at once.
@@ -54,11 +62,17 @@ internal static class PresetThumbnail
         stage.SetState(notes, 1.0, true, new HashSet<int> { 52, 60 });
         foreach (var pitch in new[] { 48, 55, 64 }) stage.Impact(pitch, .9);
         stage.Advance(.12); stage.Advance(.12);
-        stage.Measure(new Size(Width, Height));
-        stage.Arrange(new Rect(0, 0, Width, Height));
+        stage.Measure(new Size(stageWidth, stageHeight));
+        stage.Arrange(new Rect(0, 0, stageWidth, stageHeight));
         stage.UpdateLayout();
+        var full = new RenderTargetBitmap(stageWidth, stageHeight, 96, 96, PixelFormats.Pbgra32);
+        full.Render(stage);
+        // The stored picture is the layout above, scaled down in one high-quality step.
+        var visual = new DrawingVisual();
+        RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
+        using (var dc = visual.RenderOpen()) dc.DrawImage(full, new Rect(0, 0, Width, Height));
         var bitmap = new RenderTargetBitmap(Width, Height, 96, 96, PixelFormats.Pbgra32);
-        bitmap.Render(stage);
+        bitmap.Render(visual);
         var encoder = new PngBitmapEncoder();
         encoder.Frames.Add(BitmapFrame.Create(bitmap));
         using var stream = new MemoryStream();
