@@ -104,9 +104,11 @@ internal static class SongFolderIndex
             if (song.Notes.Count == 0) return null;
             var seconds = 0.0;
             foreach (var note in song.Notes) seconds = Math.Max(seconds, note.End);
+            var remembered = new List<string>();
+            if (tags is not null) remembered.AddRange(tags.Take(MaxTags));
             return new SongFile(Path.GetFullPath(path), Path.GetFileNameWithoutExtension(path), extension, song.Notes.Count,
                 song.Notes.Select(note => note.Track).Distinct().Count(), seconds, AverageTempo(song.BeatTimes),
-                info.Length, info.LastWriteTimeUtc, [.. tags ?? Array.Empty<string>()].Take(MaxTags).ToList());
+                info.Length, info.LastWriteTimeUtc, remembered);
         }
         catch
         {
