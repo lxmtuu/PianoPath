@@ -263,15 +263,3 @@ jobs:
             exit 0
           fi
           exit 1
-
-      # TEMPORARY, removed again by the next commit: hands this run's renders to the session that prepares
-      # the change through a tag, because that session can clone from github.com but cannot reach the
-      # artifact store.
-      - name: Hand the renders over as a tag
-        if: always() && github.event_name == 'push'
-        continue-on-error: true
-        shell: bash
-        run: |
-          tag="ci-previews-$GITHUB_RUN_ID"
-          git tag "$tag"
-          git push origin "refs/tags/$tag"
