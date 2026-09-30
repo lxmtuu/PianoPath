@@ -1,8 +1,8 @@
 name: release
 
-# Builds distributable .exe packages. Runs when a version tag such as v0.3.0 is pushed
-# (the zips are attached to a GitHub Release) or manually from the Actions tab
-# (the zips are available as workflow artifacts).
+# Builds distributable packages: the portable zips and the .exe installer. Runs when a version tag
+# such as v0.3.0 is pushed (the packages are attached to a GitHub Release) or manually from the
+# Actions tab (they are available as workflow artifacts).
 on:
   push:
     tags: ["v*"]
@@ -15,12 +15,12 @@ jobs:
   publish:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # A release must ship the real SoundFont, so download the ~113 MiB LFS object (counts against the LFS bandwidth quota).
           lfs: true
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
 
@@ -53,16 +53,29 @@ jobs:
           @('# Keyflow verification suite (published build)', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
 
+      # The installer is compiled from the same publish\win-x64 the zips were made from, with the same
+      # script build.yml runs against a stub folder on every push, so the wizard text cannot be broken
+      # in a release without the check having gone red first.
+      - name: Build the .exe installer
+        shell: pwsh
+        run: |
+          $version = (dotnet msbuild PianoPath.csproj -getProperty:Version).Trim()
+          pwsh tools/build_installer.ps1 -Version $version -OutputDir installer\Output
+
       - name: Upload workflow artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: Keyflow-win-x64
-          path: publish/*.zip
+          path: |
+            publish/*.zip
+            installer/Output/Keyflow-Setup-*.exe
           if-no-files-found: error
 
       - name: Attach packages to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
-          files: publish/*.zip
+          files: |
+            publish/*.zip
+            installer/Output/Keyflow-Setup-*.exe
           generate_release_notes: true

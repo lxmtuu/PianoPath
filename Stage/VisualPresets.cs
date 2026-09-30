@@ -3,7 +3,9 @@ using System.IO;
 namespace PianoPath;
 
 /// <summary>A named look for the stage. Built-in presets are generated in code; user presets are JSON files.</summary>
-internal sealed record VisualPreset(string Name, string Description, bool BuiltIn, PianoVisualSettings Settings, string? FilePath = null);
+/// <param name="Thumbnail">Base64 PNG of the look as it was rendered when the preset was saved, when the
+/// file carries one. A preset without a picture is drawn from its own settings instead.</param>
+internal sealed record VisualPreset(string Name, string Description, bool BuiltIn, PianoVisualSettings Settings, string? FilePath = null, string? Thumbnail = null, bool Community = false);
 
 /// <summary>Built-in looks inspired by popular MIDI visualizers plus a JSON store for user-made presets.</summary>
 internal static class VisualPresets
@@ -301,10 +303,10 @@ internal sealed class VisualPresetStore(string directory)
             {
                 try
                 {
-                    var settings = PianoVisualSettings.FromJson(File.ReadAllText(file));
+                    var stored = ReadPresetFile(File.ReadAllText(file));
                     var name = Path.GetFileNameWithoutExtension(file);
-                    settings.PresetName = name;
-                    presets.Add(new VisualPreset(name, Loc.F("User preset · {0}", Path.GetFileName(file)), false, settings, file));
+                    stored.Settings.PresetName = name;
+                    presets.Add(new VisualPreset(name, Loc.F("User preset · {0}", Path.GetFileName(file)), false, stored.Settings, file, stored.Thumbnail));
                 }
                 catch { /* a corrupt file should not hide the remaining presets */ }
             }
@@ -313,7 +315,7 @@ internal sealed class VisualPresetStore(string directory)
         return presets;
     }
 
-    internal VisualPreset Save(string name, PianoVisualSettings settings)
+    internal VisualPreset Save(string name, PianoVisualSettings settings, string? thumbnail = null)
     {
         var safe = SanitizeName(name);
         System.IO.Directory.CreateDirectory(Directory);
@@ -322,9 +324,10 @@ internal sealed class VisualPresetStore(string directory)
         copy.BackgroundImagePath = "";
         var path = Path.Combine(Directory, safe + ".json");
         var temp = path + ".tmp";
-        File.WriteAllText(temp, copy.ToJson());
+        var picture = thumbnail ?? ""; // the file always carries the field, empty when there is no picture
+        File.WriteAllText(temp, WritePresetFile(copy, picture));
         File.Move(temp, path, true);
-        return new VisualPreset(safe, Loc.F("User preset · {0}", safe + ".json"), false, copy, path);
+        return new VisualPreset(safe, Loc.F("User preset · {0}", safe + ".json"), false, copy, path, picture);
     }
 
     internal bool Delete(VisualPreset preset)
@@ -333,22 +336,61 @@ internal sealed class VisualPresetStore(string directory)
         try { if (File.Exists(preset.FilePath)) File.Delete(preset.FilePath); return true; } catch { return false; }
     }
 
-    internal static void Export(PianoVisualSettings settings, string path)
+    internal static void Export(PianoVisualSettings settings, string path, string? thumbnail = null, string description = "")
     {
         var copy = settings.Clone();
         copy.BackgroundImagePath = "";
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
-        File.WriteAllText(path, copy.ToJson());
+        File.WriteAllText(path, WritePresetFile(copy, thumbnail, description));
     }
 
     internal static VisualPreset Import(string path)
     {
-        var settings = PianoVisualSettings.FromJson(File.ReadAllText(path));
-        var name = SanitizeName(string.IsNullOrWhiteSpace(settings.PresetName) || settings.PresetName == "Custom" ? Path.GetFileNameWithoutExtension(path) : settings.PresetName);
-        settings.PresetName = name;
-        return new VisualPreset(name, Loc.F("Imported · {0}", Path.GetFileName(path)), false, settings);
+        var stored = ReadPresetFile(File.ReadAllText(path));
+        var name = SanitizeName(string.IsNullOrWhiteSpace(stored.Settings.PresetName) || stored.Settings.PresetName == "Custom"
+            ? Path.GetFileNameWithoutExtension(path) : stored.Settings.PresetName);
+        stored.Settings.PresetName = name;
+        // A preset that travels with its own description keeps it, so an exported shelf look still reads
+        // like itself on the other machine.
+        var description = string.IsNullOrWhiteSpace(stored.Description) ? Loc.F("Imported · {0}", Path.GetFileName(path)) : stored.Description;
+        return new VisualPreset(name, description, false, stored.Settings, null, stored.Thumbnail);
     }
+
+    // =================================================================================================
+    // The preset file: a small envelope so a look can travel with the picture that was rendered for it.
+    // Files written before the envelope existed are plain settings JSON and still load, and a file with
+    // no picture at all is simply a preset that gets drawn from its settings.
+    // =================================================================================================
+
+    private sealed record PresetFile(int Version, string Thumbnail, string Description, PianoVisualSettings Settings);
+
+    internal static string WritePresetFile(PianoVisualSettings settings, string? thumbnail, string description = "") =>
+        System.Text.Json.JsonSerializer.Serialize(new PresetFile(1, thumbnail ?? "", description ?? "", settings),
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+
+    /// <summary>Reads a preset file: the envelope, or the bare settings JSON older versions wrote.</summary>
+    internal static PresetFileContent ReadPresetFile(string json)
+    {
+        using var document = System.Text.Json.JsonDocument.Parse(json);
+        if (document.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object
+            && document.RootElement.TryGetProperty("Settings", out var inner)
+            && inner.ValueKind == System.Text.Json.JsonValueKind.Object)
+        {
+            var settings = PianoVisualSettings.FromJson(inner.GetRawText());
+            var thumbnail = document.RootElement.TryGetProperty("Thumbnail", out var picture) && picture.ValueKind == System.Text.Json.JsonValueKind.String
+                ? picture.GetString() ?? ""
+                : "";
+            var description = document.RootElement.TryGetProperty("Description", out var text) && text.ValueKind == System.Text.Json.JsonValueKind.String
+                ? text.GetString() ?? ""
+                : "";
+            return new PresetFileContent(settings, thumbnail, description);
+        }
+        return new PresetFileContent(PianoVisualSettings.FromJson(json), "", "");
+    }
+
+    /// <summary>What a preset file holds: the look, the picture rendered for it and the human description.</summary>
+    internal sealed record PresetFileContent(PianoVisualSettings Settings, string Thumbnail, string Description);
 
     internal static string SanitizeName(string name)
     {

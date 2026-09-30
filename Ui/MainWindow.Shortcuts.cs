@@ -31,6 +31,7 @@ public partial class MainWindow
             ("F11", "Toggle full screen."),
             ("F1", "Open or close this card."),
             ("Esc", "Open or close the design dock; it clears the settings search box first."),
+            ("Ctrl+Z / Ctrl+Shift+Z", "Undo and redo design changes; the dock keeps the last 32 states, and a drag counts as one."),
             ("Pointer idle", "After 2.8 s of stillness the header, transport, dock and REC button hide so only the stage is left. Move the mouse to bring them back."),
         ]),
         ("SESSION & CAPTURE", [

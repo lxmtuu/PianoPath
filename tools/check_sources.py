@@ -15,6 +15,10 @@ checks that do not need a compiler:
     key of that inventory (see ``docs/LOCALIZATION.md``);
   * the command line: every switch the app parses is in the README table and vice versa, and every
     switch and path the preview workflow passes to the executable really exists;
+  * the installer: every message name the Vietnamese wizard text overrides exists in the Inno Setup
+    the script claims to support, keeps the placeholders of the English message, and is reachable
+    from the ``[Languages]``/``[LangOptions]`` sections that Inno Setup reads (see
+    ``tools/inno_messages.py``);
   * the generated documentation assets: ``docs/samples`` still matches the script that builds it.
 
 Run it from the repository root (``python tools/check_sources.py``); CI runs it before the Windows
@@ -30,6 +34,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _raw_string(text: str, i: int):
+    """A C# raw string literal starts at ``i`` (three or more quotes, optionally after ``$`` signs) and runs
+    to the next run of that many quotes. Returns ``(end, newlines)`` or ``None`` when this is not one."""
+    j = i
+    while j < len(text) and text[j] == "$":
+        j += 1
+    if text[j:j + 1] != '"':
+        return None
+    quotes = 0
+    while text[j + quotes: j + quotes + 1] == '"':
+        quotes += 1
+    if quotes < 3:
+        return None
+    k = j + quotes
+    while k < len(text):
+        if text[k] == '"':
+            run = 0
+            while text[k + run: k + run + 1] == '"':
+                run += 1
+            if run >= quotes:
+                return k + run, text.count("\n", i, k + run)
+            k += run
+            continue
+        k += 1
+    return len(text), text.count("\n", i)
+
+
 def scan_csharp(path: Path):
     text = path.read_text(encoding="utf-8")
     stack = []
@@ -42,6 +73,12 @@ def scan_csharp(path: Path):
         if c == "\n":
             line += 1
             i += 1
+            continue
+        # raw string literal (C# 11): its content is verbatim, so the scanner skips it whole
+        raw = _raw_string(text, i)
+        if raw is not None:
+            i, added = raw
+            line += added
             continue
         # line comment
         if c == "/" and i + 1 < n and text[i + 1] == "/":
@@ -287,6 +324,26 @@ def scan_icon_glyphs():
     return errors
 
 
+def scan_accessible_names():
+    """A button whose caption is a glyph or a single letter is anonymous to a screen reader. The WPF
+    layer mirrors the tooltip into ``AutomationProperties.Name`` at load time (see ``Loc.Track``), so
+    the static rule is: every glyph-only button carries a tooltip or an explicit accessible name. A new
+    icon button without either would ship a control that assistive technology cannot announce."""
+    errors = []
+    xaml = (ROOT / "Ui" / "MainWindow.xaml").read_text(encoding="utf-8")
+    for match in re.finditer(r"<Button\b[^>]*>", xaml):
+        tag = match.group(0)
+        line = xaml[: match.start()].count("\n") + 1
+        content = re.search(r'Content="([^"]*)"', tag)
+        text = content.group(1).replace("&amp;", "&") if content else ""
+        named = re.search(r'(ToolTip|AutomationProperties\.Name)="[^"]+"', tag) is not None
+        if content is None or len([char for char in text if char.isalpha()]) < 2:
+            if not named:
+                errors.append(f"Ui/MainWindow.xaml:{line}: a button shows “{text or 'an icon'}”, which is not a caption; "
+                              "add a ToolTip (the screen reader reads it) or AutomationProperties.Name")
+    return errors
+
+
 def scan_theme_tokens():
     """``ShellThemeManager`` writes every theme token into ``Application.Resources`` at runtime. Each
     one needs a matching default in ``App.xaml``, otherwise the very first frame (before the theme is
@@ -346,7 +403,12 @@ def _code(text: str) -> str:
     out, i, n = [], 0, len(text)
     while i < n:
         c = text[i]
-        if c == "/" and text[i + 1:i + 2] == "/":
+        raw = _raw_string(text, i)
+        if raw is not None:
+            # Keep the literal in place — it may be a localization key, so positions must not move.
+            out.append(text[i:raw[0]])
+            i = raw[0]
+        elif c == "/" and text[i + 1:i + 2] == "/":
             j = text.find("\n", i)
             j = n if j < 0 else j
             out.append(" " * (j - i))
@@ -536,6 +598,12 @@ def scan_localization(cs_files):
         if rel.name == "SettingsPages.cs":
             for match in re.finditer(r'internal const string \w+ = "([^"]+)";', text):
                 note(match.group(1), f"{rel}: navigation")
+        if rel.name == "MainWindow.Menu.cs" and "PlayInlineSections = new()" in text:
+            # The Play dialog repeats rows of the dock inside each OPTIONS layer; their labels are
+            # records built from literals, so they are collected from the table itself.
+            block = text[text.index("PlayInlineSections = new()"):]
+            for match in re.finditer(r'new\(\s*"((?:[^"\\]|\\.)*)"\s*,\s*nameof\(', block):
+                note(json.loads(f'"{match.group(1)}"'), f"{rel}: Play dialog layer row")
         if rel.name == "ShellTheme.cs":
             for match in re.finditer(r'new ShellTheme\(\s*"[^"]*",\s*"((?:[^"\\]|\\.)*)",\s*"((?:[^"\\]|\\.)*)"', text, re.S):
                 note(json.loads(f'"{match.group(1)}"'), f"{rel}: theme name")
@@ -551,11 +619,13 @@ def scan_localization(cs_files):
     markup = ROOT / "Ui" / "MainWindow.xaml"
     if markup.exists():
         xaml = markup.read_text(encoding="utf-8")
-        for match in re.finditer(r"<[A-Za-z][\w.]*((?:\s+[\w:]+=\"[^\"]*\")+)[^>]*?/?>", xaml):
+        # Attribute names may carry a dot (AutomationProperties.Name, local:Loc.Localize), so the
+        # qualified-name pattern has to allow one or the whole tag falls out of the match.
+        for match in re.finditer(r"<[A-Za-z][\w.]*((?:\s+[\w:.]+=\"[^\"]*\")+)[^>]*?/?>", xaml):
             attrs = match.group(1)
             if 'local:Loc.Localize="True"' not in attrs:
                 continue
-            for attr in re.finditer(r'(Text|Content|Header|ToolTip|Title)="([^"]*)"', attrs):
+            for attr in re.finditer(r'(Text|Content|Header|ToolTip|Title|AutomationProperties\.Name)="([^"]*)"', attrs):
                 value = (attr.group(2).replace("&amp;", "&").replace("&lt;", "<")
                          .replace("&gt;", ">").replace("&quot;", '"'))
                 # A single glyph (the ↺ of the speed reset) is not a sentence and the runtime skips it too.
@@ -575,44 +645,72 @@ def readme_slug(heading):
     return re.sub(r"\s", "-", text)
 
 
+# The READMEs are one document in two languages: both have to stay complete, and a relative link in
+# either of them has to resolve. The Vietnamese file is the original; the English one is what a reader
+# who does not speak Vietnamese opens first, so neither may quietly lose a section.
+READMES = ["README.md", "README.en.md"]
+
+
 def scan_readme():
     """Documentation is part of the product: a screenshot that no longer exists or a table-of-contents
     link that points at a renamed heading is a broken README for everyone who reads it first."""
     errors = []
-    readme = ROOT / "README.md"
-    if not readme.exists():
-        return ["README.md is missing"]
-    text = readme.read_text(encoding="utf-8")
     # ``docs/previews`` is rendered by CI and committed back, so a shot the workflow knows about can be
     # one commit behind the README line that introduces it. Every other image has to exist right now.
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow.read_text(encoding="utf-8"))) if workflow.exists() else set()
     pending = []
-    for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text):
-        if re.match(r"^(https?:|data:)", target):
+    # Each edition shows the interface in its own language, so every preview a README points at has to sit
+    # in that edition's own set — and the workflow has to render both sets in the first place.
+    rendered_languages = set()
+    language_loop = re.search(r"foreach \(\$lang in @\((.+?)\)\)", workflow.read_text(encoding="utf-8")) if workflow.exists() else None
+    if language_loop:
+        rendered_languages = set(re.findall(r"'([a-z]{2})'", language_loop.group(1)))
+    if rendered_languages != {"en", "vi"}:
+        errors.append("build.yml no longer renders one preview set per language (expected a loop over 'en' and 'vi')")
+    for name in READMES:
+        own = "vi" if name == "README.md" else "en"
+        readme = ROOT / name
+        if not readme.exists():
+            errors.append(f"{name} is missing")
             continue
-        if (ROOT / target).exists():
-            continue
-        if target.replace("\\", "/").startswith("docs/previews/") and Path(target).name in rendered:
-            pending.append(Path(target).name)
-            continue
-        errors.append(f"README.md references the image '{target}', which does not exist")
-    headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
-    for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
-        if anchor not in headings:
-            errors.append(f"README.md links to '#{anchor}', which is not a heading in the file")
-    for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
-        if any(link.startswith(prefix) for prefix in ("!",)):
-            continue
-        if Path(link).name in pending:
-            continue
-        if not (ROOT / link).exists() and not link.startswith("http"):
-            # A repo-relative link to a file that is not in the checkout (a published binary, a
-            # user-preset folder…) is tolerated when it carries no path separator.
-            if "/" in link or "\\" in link:
-                errors.append(f"README.md links to '{link}', which does not exist")
+        text = readme.read_text(encoding="utf-8")
+        for target in re.findall(r"!\[[^\]]*\]\(([^)\s]+)\)", text):
+            if re.match(r"^(https?:|data:)", target):
+                continue
+            if (ROOT / target).exists():
+                continue
+            relative = target.replace("\\", "/")
+            if relative.startswith("docs/previews/"):
+                if relative.split("/")[2] != own:
+                    errors.append(f"{name} shows the preview '{target}', which is not the '{own}' set this edition reads")
+                    continue
+                if Path(target).name in rendered:
+                    pending.append(f"{name}:{Path(target).name}")
+                    continue
+            errors.append(f"{name} references the image '{target}', which does not exist")
+        headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
+        for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
+            if anchor not in headings:
+                errors.append(f"{name} links to '#{anchor}', which is not a heading in the file")
+        for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
+            if any(link.startswith(prefix) for prefix in ("!",)):
+                continue
+            if Path(link).name in {entry.split(":", 1)[1] for entry in pending if entry.startswith(name + ":")}:
+                continue
+            if not (ROOT / link).exists() and not link.startswith("http"):
+                # A repo-relative link to a file that is not in the checkout (a published binary, a
+                # user-preset folder…) is tolerated when it carries no path separator.
+                if "/" in link or "\\" in link:
+                    errors.append(f"{name} links to '{link}', which does not exist")
     if pending:
-        print(f"note: README points at {len(pending)} preview(s) CI renders — {', '.join(sorted(pending))} — which this commit does not carry yet")
+        print(f"note: {len(pending)} README image reference(s) point at previews CI renders — "
+              f"{', '.join(sorted(pending))} — which this commit does not carry yet")
+    # Both files document the same product, so they have to link to each other: a reader who lands on
+    # one of them must be able to reach the other without editing the URL.
+    for name, other in (("README.md", "README.en.md"), ("README.en.md", "README.md")):
+        if (ROOT / name).exists() and (ROOT / other).exists() and other not in (ROOT / name).read_text(encoding="utf-8"):
+            errors.append(f"{name} never links to {other}; the two language editions have to reference each other")
     return errors
 
 
@@ -629,16 +727,21 @@ def scan_cli_and_samples():
     parsed = set()
     for name in ("App.xaml.cs", "Diagnostics/VerificationSuite.cs"):
         parsed |= set(re.findall(r'"(--[a-z][a-z-]*)', (ROOT / name).read_text(encoding="utf-8")))
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    table = re.search(r"^### Tham số dòng lệnh$(.*?)^### ", readme, re.M | re.S)
-    if not table:
-        errors.append("README.md lost the '### Tham số dòng lệnh' section that documents every switch")
-    else:
+    # Both language editions carry their own command-line table, and each one has to stand on its own:
+    # a reader of ``README.en.md`` must never have to open the Vietnamese file for a switch name.
+    for name, heading in (("README.md", "Tham số dòng lệnh"), ("README.en.md", "Command line switches")):
+        readme = ROOT / name
+        if not readme.exists():
+            continue
+        table = re.search(rf"^### {re.escape(heading)}$(.*?)^### ", readme.read_text(encoding="utf-8"), re.M | re.S)
+        if not table:
+            errors.append(f"{name} lost the '### {heading}' section that documents every switch")
+            continue
         documented = set(re.findall(r"--[a-z][a-z-]*", table.group(1)))
         for flag in sorted(parsed - documented):
-            errors.append(f"the app parses {flag}, but the README CLI table does not document it")
+            errors.append(f"the app parses {flag}, but the {name} CLI table does not document it")
         for flag in sorted(documented - parsed):
-            errors.append(f"the README CLI table documents {flag}, which no source file parses")
+            errors.append(f"the {name} CLI table documents {flag}, which no source file parses")
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     if not workflow.exists():
         return errors
@@ -651,6 +754,179 @@ def scan_cli_and_samples():
     for path in sorted(set(re.findall(r"((?:docs|Assets)/[A-Za-z0-9_./-]+)", block))):
         if not (ROOT / path).exists():
             errors.append(f"build.yml renders a preview from '{path}', which is not in the checkout")
+    return errors
+
+
+MESSAGE_SECTIONS = ("Messages", "CustomMessages")
+
+
+def read_isl(text: str):
+    """Parse an Inno Setup language file the way the compiler does: ``[Section]`` headers, ``;``
+    comments and ``name=text`` lines. Returns ``{section: {name: text}}``."""
+    sections, current = {}, None
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith(";"):
+            continue
+        header = re.match(r"^\[(\w+)\]$", line)
+        if header:
+            current = header.group(1)
+            sections.setdefault(current, {})
+        elif "=" in line and current is not None:
+            name, value = line.split("=", 1)
+            sections[current][name.strip()] = value.strip()
+    return sections
+
+
+def scan_installer():
+    """The setup program is part of the product, and Inno Setup is deliberately forgiving about wizard
+    text: a message name it does not recognize is only a *warning* — the line is dropped and the
+    English wording is shipped — and a name that is right but sits in the wrong section never
+    overrides anything. Both would ship half-translated dialogs with a green build, so the name list
+    from ``tools/inno_messages.py`` and ``installer/Languages/Vietnamese.isl`` are checked against
+    each other here.
+
+    The rest of the rules mirror what the compiler really does with these files:
+      * the .isl is UTF-8 with a BOM, which is how the compiler is told to read the diacritics (it
+        would otherwise guess the encoding, and fall back to the code page for an ANSI file);
+      * the .isl only overrides messages: LanguageName/LanguageID/LanguageCodePage live in the script,
+        prefixed with the language name, because a partial file must not count on overriding the
+        values Default.isl already set — and because an unprefixed LanguageID/LanguageName/
+        LanguageCodePage stops the compile as soon as a second language exists;
+      * placeholders (%1, %n, [name], [name/ver], [mb] …) survive the translation, since a dropped
+        %1 shows the user a message with no folder name or no version in it.
+    """
+    errors = []
+    script = ROOT / "installer" / "Keyflow.iss"
+    reference = ROOT / "installer" / "Languages" / "messages.txt"
+    translation = ROOT / "installer" / "Languages" / "Vietnamese.isl"
+    for path in (script, reference, translation):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT)} is missing; the installer would fall back to English"
+                    " wizard text, and these checks have nothing to compare"]
+    source = script.read_text(encoding="utf-8")
+
+    def section(name):
+        found = re.search(rf"^\[{name}\]\s*$(.*?)(?=^\[|\Z)", source, re.M | re.S)
+        return found.group(1) if found else ""
+
+    # [Languages]: the Vietnamese entry is Default.isl plus the partial translation, and the relative
+    # path is resolved from the folder the script lives in (the compiler's source directory).
+    languages = re.findall(r'^Name:\s*"([^"]+)"\s*;\s*MessagesFile:\s*"([^"]+)"', section("Languages"), re.M)
+    if len(languages) < 2:
+        errors.append("installer/Keyflow.iss declares fewer than two languages; the README promises the"
+                      " installer ships English and Vietnamese wizard text")
+    declared = {name for name, _ in languages}
+    partial = ""
+    for name, files in languages:
+        entries = [entry.strip() for entry in files.split(",")]
+        ours = [entry for entry in entries if not entry.startswith("compiler:")]
+        for entry in ours:
+            # The script is written for Windows: a relative MessagesFile uses "\" as its separator.
+            if not (script.parent / entry.replace("\\", "/")).exists():
+                errors.append(f'installer/Keyflow.iss: MessagesFile "{entry}" of the "{name}" language'
+                              " is not next to the script, which is where the compiler looks for it")
+        if name == "vietnamese":
+            if len(ours) != 1 or entries[-1] != ours[0]:
+                errors.append('installer/Keyflow.iss: the "vietnamese" language must list exactly'
+                              " compiler:Default.isl followed by Languages\\Vietnamese.isl, last, because"
+                              " the last file wins per message")
+            else:
+                partial = ours[0]
+
+    # [LangOptions]: the directives that describe one language need the "<language>." prefix. Without
+    # it the compile stops with "can only be specified for a single language" once two languages exist.
+    lang_options = section("LangOptions")
+    for key in ("LanguageName", "LanguageID", "LanguageCodePage"):
+        for match in re.finditer(rf"^(\w+\.)?{key}\s*=\s*(\S+)\s*$", lang_options, re.M):
+            prefix = (match.group(1) or "")[:-1]
+            if prefix not in declared:
+                errors.append(f"installer/Keyflow.iss: [LangOptions] {key} is"
+                              f"{' not' if not prefix else ' prefixed with an undeclared language; it is'}"
+                              " part of the language description, and the compiler rejects an unprefixed"
+                              f" value the moment a second language exists (write `{key}` as"
+                              f" `vietnamese.{key}=…`)")
+        if partial and not re.search(rf"^vietnamese\.{key}\s*=", lang_options, re.M):
+            errors.append(f"installer/Keyflow.iss: [LangOptions] does not set vietnamese.{key}; a partial"
+                          " translation inherits the English value from Default.isl unless it overrides it")
+    if partial and not re.search(r"^vietnamese\.LanguageID\s*=\s*\$041e\s*$", lang_options, re.M):
+        errors.append("installer/Keyflow.iss: vietnamese.LanguageID should be $041e (Vietnamese), which is"
+                      " what makes Setup pick this translation on a Vietnamese Windows")
+
+    # The translation: UTF-8 with a BOM, and only message sections (see the docstring).
+    raw = translation.read_bytes()
+    if not raw.startswith(b"\xef\xbb\xbf"):
+        errors.append("installer/Languages/Vietnamese.isl is not UTF-8 with a BOM; Inno Setup would guess"
+                      " the encoding of the Vietnamese text instead of being told")
+    text = raw.decode("utf-8-sig")
+    for number, line in enumerate(text.splitlines(), 1):
+        stripped = line.strip()
+        if stripped and not stripped.startswith(";") and "=" in stripped and line != line.lstrip():
+            errors.append(f"installer/Languages/Vietnamese.isl:{number}: the line starts with a space; the"
+                          " compiler trims message names, but the space is a typo")
+    translated = read_isl(text)
+    for name in sorted(set(translated) - set(MESSAGE_SECTIONS)):
+        errors.append(f"installer/Languages/Vietnamese.isl: [{name}] is not a message section; a partial"
+                      " translation may only override [Messages] and [CustomMessages] (the language name,"
+                      " id and code page belong in installer/Keyflow.iss)")
+    for name, messages in translated.items():
+        if not messages:
+            errors.append(f"installer/Languages/Vietnamese.isl: [{name}] translates nothing")
+
+    # The generated name list: valid names with the placeholders of the English message.
+    valid, marked = {}, set()
+    for section_name, messages in read_isl(reference.read_text(encoding="utf-8")).items():
+        for name, signature in messages.items():
+            is_marked = name.startswith("!")
+            valid[(section_name, name.lstrip("!"))] = signature
+            if is_marked:
+                marked.add((section_name, name.lstrip("!")))
+    if not valid:
+        errors.append("installer/Languages/messages.txt has no message names; run"
+                      " `python3 tools/inno_messages.py`")
+
+    placeholder = re.compile(r"%\d+|%n|\[[a-z/]+\]")
+    for section_name, messages in translated.items():
+        for name, value in messages.items():
+            if (section_name, name) not in valid:
+                hit = next((other for other in MESSAGE_SECTIONS if (other, name) in valid), None)
+                where = f" (it is a [{hit}] message)" if hit else " — Default.isl does not define it"
+                errors.append(f"installer/Languages/Vietnamese.isl: [{section_name}] {name}{where};"
+                              " Inno Setup would only warn and ship the English text")
+                continue
+            if (section_name, name) not in marked:
+                errors.append(f"installer/Languages/messages.txt does not mark [{section_name}] {name} as"
+                              " translated; run `python3 tools/inno_messages.py` so the list matches")
+            expected = set(filter(None, valid[(section_name, name)].split(",")))
+            found = set(placeholder.findall(value))
+            if expected != found:
+                errors.append(f"installer/Languages/Vietnamese.isl: {name} uses"
+                              f" {sorted(found) or 'no placeholders'} but the English message uses"
+                              f" {sorted(expected) or 'none'}; a dropped placeholder never reaches the dialog")
+    translated_keys = {(section_name, name) for section_name, messages in translated.items() for name in messages}
+    for section_name, name in sorted(marked - translated_keys):
+        errors.append(f"installer/Languages/messages.txt marks [{section_name}] {name} as translated, but"
+                      " installer/Languages/Vietnamese.isl does not translate it; regenerate the list")
+
+    # Display text in the script comes from a message, and every message it asks for is translated —
+    # otherwise the wizard shows a hardcoded English caption next to Vietnamese ones.
+    for match in re.finditer(r"(Description|GroupDescription):\s*\"([^\"]*)\"", source):
+        if "{cm:" not in match.group(2):
+            errors.append(f"installer/Keyflow.iss: {match.group(1)} \u201c{match.group(2)}\u201d is a literal"
+                          " caption; use a {cm:MessageName} so both languages follow the translation")
+    for name in sorted(set(re.findall(r"\{cm:([A-Za-z0-9_]+)", source))):
+        if name not in translated.get("CustomMessages", {}):
+            errors.append(f"installer/Keyflow.iss asks for the custom message {name}, which"
+                          " installer/Languages/Vietnamese.isl does not translate")
+
+    # Both workflows compile the installer through the same script: the per-push check is what keeps
+    # the wizard text honest, and the release job is what ships it.
+    for workflow in ("build.yml", "release.yml"):
+        path = ROOT / ".github" / "workflows" / workflow
+        if path.exists() and "tools/build_installer.ps1" not in path.read_text(encoding="utf-8"):
+            errors.append(f".github/workflows/{workflow} no longer compiles the installer with"
+                          " tools/build_installer.ps1; the wizard text would only be checked when"
+                          " nobody is looking")
     return errors
 
 
@@ -678,6 +954,85 @@ def scan_generated_assets():
     return errors
 
 
+def scan_preset_shelf():
+    """``presets/`` is the community shelf: preset files that ship inside the application.
+
+    A shelf file is an ordinary preset file, so the checks here are the ones a contributor cannot see:
+    every settings key of ``PianoVisualSettings`` must be present exactly once (a new setting added in
+    code would otherwise quietly fall back to its default in a stale file), the values must already be
+    final (``--verify`` loads the shelf in the app and asserts the same thing), the name must match the
+    file and must not shadow a built-in look, and the committed file must still be what
+    ``tools/make_presets.py`` writes, which is the recipe and the licence for the folder.
+    """
+    import importlib.util
+    import tempfile
+
+    errors = []
+    directory = ROOT / "presets"
+    files = sorted(directory.glob("*.json")) if directory.exists() else []
+    if not files:
+        return ["presets/ is empty; the community shelf ships preset files there (tools/make_presets.py writes them)"]
+    properties = re.findall(r"^    public [\w<>\[\]]+ (\w+) \{ get; set; \}", (ROOT / "Stage" / "PianoVisualSettings.cs").read_text(encoding="utf-8"), re.M)
+    if len(properties) < 100:
+        return ["Stage/PianoVisualSettings.cs no longer looks like the settings class; cannot check presets/"]
+    built_in = set(re.findall(r'new\("([^"]+)", "', (ROOT / "Stage" / "VisualPresets.cs").read_text(encoding="utf-8")))
+    seen = set()
+    for path in files:
+        label = f"presets/{path.name}"
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            errors.append(f"{label} is not valid JSON: {error}")
+            continue
+        if not isinstance(document, dict) or set(document) != {"Version", "Thumbnail", "Description", "Settings"}:
+            errors.append(f"{label} should hold exactly Version, Thumbnail, Description and Settings — the envelope the app writes")
+            continue
+        if not isinstance(document["Version"], int) or document["Version"] < 1:
+            errors.append(f"{label} should carry a version number")
+        for field in ("Thumbnail", "Description"):
+            if not isinstance(document[field], str):
+                errors.append(f"{label} should hold {field} as a string, empty when there is none")
+        if not document["Description"].strip():
+            errors.append(f"{label} needs a description: it is the second line of the preset in the list")
+        settings = document["Settings"]
+        if not isinstance(settings, dict):
+            errors.append(f"{label} should hold a Settings object")
+            continue
+        missing = [name for name in properties if name not in settings]
+        unknown = [name for name in settings if name not in properties]
+        if missing:
+            errors.append(f"{label} is missing {len(missing)} setting(s) ({', '.join(missing[:6])}) — regenerate it with `python3 tools/make_presets.py`")
+        if unknown:
+            errors.append(f"{label} sets {', '.join(unknown[:6])}, which is not a setting of PianoVisualSettings")
+        if settings.get("PresetName") != path.stem:
+            errors.append(f'{label} is named {settings.get("PresetName")!r}; the shelf uses the file name so the list, the badge and the file agree')
+        if settings.get("BackgroundAppearanceVersion", 0) < 2:
+            errors.append(f"{label} would be migrated on load; regenerate it with `python3 tools/make_presets.py`")
+        if path.stem.lower() in (name.lower() for name in built_in):
+            errors.append(f"{label} shadows the built-in preset {path.stem!r}")
+        if path.stem.lower() in seen:
+            errors.append(f"{label} repeats a shelf name")
+        seen.add(path.stem.lower())
+
+    generator = ROOT / "tools" / "make_presets.py"
+    if not files or not generator.exists():
+        return errors
+    spec = importlib.util.spec_from_file_location("make_presets", generator)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as scratch:
+            module.write_all(Path(scratch), quiet=True)
+            for path in files:
+                built = Path(scratch) / path.name
+                if not built.exists():
+                    errors.append(f"presets/{path.name} is not one of the presets tools/make_presets.py writes")
+                elif built.read_bytes() != path.read_bytes():
+                    errors.append(f"presets/{path.name} does not match tools/make_presets.py — regenerate it with `python3 tools/make_presets.py` instead of editing it by hand")
+    except SystemExit as error:
+        errors.append(f"tools/make_presets.py refuses to run: {error}")
+    return errors
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -689,15 +1044,20 @@ def main():
     errors.extend(scan_xaml_bindings(cs_files, xaml_files, names, keys))
     errors.extend(scan_settings_navigation())
     errors.extend(scan_icon_glyphs())
+    errors.extend(scan_accessible_names())
     errors.extend(scan_theme_tokens())
+    errors.extend(scan_installer())
     errors.extend(scan_readme())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
+    errors.extend(scan_preset_shelf())
     localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
     errors.extend(localization_errors)
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
+    print("checked the community preset shelf against the settings class and against tools/make_presets.py, the script that writes it")
+    print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
     print(f"checked the string tables against one another and against the {keys_used} keys the sources print ({keys_inventory} in the inventory)")
     if errors:
         print(f"\n{len(errors)} problem(s):")

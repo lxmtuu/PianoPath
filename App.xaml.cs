@@ -18,6 +18,17 @@ public partial class App : Application
 
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
+        // --encode-take=<file> is how the verification run has a child process write its MP4 take: the encoders
+        // are native code that can take a process down with it, so the writing happens out of the run's way and
+        // every line this mode prints goes back into the run's log. See Diagnostics/Mp4TakeAttempt.cs.
+        var takePath = e.Args.FirstOrDefault(argument => argument.StartsWith("--encode-take=", StringComparison.Ordinal));
+        if (takePath is not null) { ShutdownMode = ShutdownMode.OnExplicitShutdown; Shutdown(Mp4TakeAttempt.Run(takePath["--encode-take=".Length..])); return; }
+
+        // --encode-probe=<file.avi> is the same arrangement for the encoder-free plumbing probe, which runs only
+        // when a run produced no take at all. See Diagnostics/EncodeProbeAttempt.cs.
+        var probePath = e.Args.FirstOrDefault(argument => argument.StartsWith("--encode-probe=", StringComparison.Ordinal));
+        if (probePath is not null) { ShutdownMode = ShutdownMode.OnExplicitShutdown; Shutdown(EncodeProbeAttempt.Run(probePath["--encode-probe=".Length..])); return; }
+
         // Publish the saved language and shell theme before any window exists, so the very first
         // frame is already translated and themed instead of flashing the XAML defaults for a frame.
         // --lang=<en|vi> overrides the stored language for one run only, which is how CI renders the

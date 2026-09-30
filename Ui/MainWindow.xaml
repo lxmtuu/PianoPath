@@ -5,7 +5,7 @@
         Title="Keyflow — Piano VFX" local:Loc.Localize="True" Height="920" Width="1600" MinHeight="700" MinWidth="1080"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}" WindowStyle="None" ResizeMode="NoResize"
         Foreground="{StaticResource TextBrush}" FontFamily="Segoe UI" WindowState="Maximized"
-        PreviewKeyDown="Window_KeyDown" KeyUp="Window_KeyUp" MouseMove="Window_MouseMove" Deactivated="Window_Deactivated" Closed="Window_Closed">
+        PreviewKeyDown="Window_KeyDown" KeyUp="Window_KeyUp" MouseMove="Window_MouseMove" Deactivated="Window_Deactivated" Closed="Window_Closed" AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
     <Window.Resources>
         <DropShadowEffect x:Key="DockShadow" Color="#000000" BlurRadius="38" ShadowDepth="0" Opacity=".62"/>
     </Window.Resources>
@@ -70,7 +70,7 @@
             <local:PianoStage x:Name="Stage" PianoKeyChanged="Stage_PianoKeyChanged"/>
 
             <!-- Settings dock: full height, docked to the right, category navigation on the left. -->
-            <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="672" Margin="0,8,0,8" Background="{DynamicResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
+            <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="672" Margin="0,8,0,8" KeyboardNavigation.TabNavigation="Cycle" Background="{DynamicResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
@@ -110,7 +110,7 @@
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRESETS" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="Pick a complete look, then fine-tune it on the other pages. Save your own presets to reuse or share them." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
-                                    <ListBox x:Name="PresetList" Style="{StaticResource PresetListStyle}" SelectionChanged="PresetList_SelectionChanged" MouseDoubleClick="PresetList_MouseDoubleClick" MaxHeight="420"/>
+                                    <ListBox x:Name="PresetList" AutomationProperties.Name="Stage presets" local:Loc.Localize="True" Style="{StaticResource PresetListStyle}" SelectionChanged="PresetList_SelectionChanged" MouseDoubleClick="PresetList_MouseDoubleClick" MaxHeight="420"/>
                                     <TextBlock x:Name="PresetDescriptionLabel" Style="{StaticResource MutedTextStyle}" Margin="2,4,0,10"/>
                                     <WrapPanel>
                                         <Button x:Name="ApplyPresetButton" Content="APPLY PRESET" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="ApplyPreset_Click" Margin="0,0,8,8"/>
@@ -120,6 +120,14 @@
                                         <Button Content="EXPORT…" Click="ExportPreset_Click" Margin="0,0,8,8" ToolTip="Save the current look as a .json file" local:Loc.Localize="True"/>
                                         <Button Content="RESET TO DEFAULT" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Click="ResetVisualSettings_Click" Margin="0,0,8,8"/>
                                     </WrapPanel>
+                                    <TextBlock Text="SHARE CODE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,14,0,4"/>
+                                    <TextBlock Text="Send the current look to somebody as text: copy it from the box, or paste a code you received and press APPLY CODE." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
+                                    <TextBox x:Name="ShareCodeBox" AutomationProperties.Name="Look share code" local:Loc.Localize="True" FontSize="10.5" TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="74" VerticalScrollBarVisibility="Auto"/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="COPY CODE" local:Loc.Localize="True" Click="CopyShareCode_Click" Margin="0,0,8,8" ToolTip="Put the current look in the box and on the clipboard"/>
+                                        <Button Content="APPLY CODE" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="ApplyShareCode_Click" Margin="0,0,8,8" ToolTip="Apply the code that is in the box"/>
+                                    </WrapPanel>
+                                    <TextBlock x:Name="ShareCodeStatusLabel" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,10"/>
                                     <StackPanel x:Name="StyleSettingsHost"/>
                                 </StackPanel>
                             </ScrollViewer>
@@ -169,13 +177,13 @@
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="DEVICES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="MIDI input" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
-                                    <ComboBox x:Name="InputDeviceCombo" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="InputDeviceCombo_SelectionChanged"/>
+                                    <ComboBox x:Name="InputDeviceCombo" AutomationProperties.Name="MIDI input device" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="InputDeviceCombo_SelectionChanged"/>
                                     <TextBlock Text="MIDI output" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
-                                    <ComboBox x:Name="OutputDeviceCombo" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="OutputDeviceCombo_SelectionChanged"/>
+                                    <ComboBox x:Name="OutputDeviceCombo" AutomationProperties.Name="MIDI output device" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="OutputDeviceCombo_SelectionChanged"/>
                                     <Button Content="⟳  Refresh devices" local:Loc.Localize="True" Click="RefreshDevices_Click" HorizontalAlignment="Left" Margin="0,10,0,0"/>
                                     <TextBlock Text="SONG TRACKS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}" Margin="0,22,0,4"/>
                                     <TextBlock Text="Solo a single track for practice, or mute tracks and recolor them for the video." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
-                                    <ComboBox x:Name="TrackCombo" SelectionChanged="TrackCombo_SelectionChanged"/>
+                                    <ComboBox x:Name="TrackCombo" AutomationProperties.Name="MIDI track" local:Loc.Localize="True" SelectionChanged="TrackCombo_SelectionChanged"/>
                                     <StackPanel x:Name="TrackListHost" Margin="0,10,0,0"/>
                                     <TextBlock Text="METRONOME" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <CheckBox x:Name="MetronomeCheck" Content="SoundFont metronome click" local:Loc.Localize="True" IsEnabled="False"/>
@@ -186,13 +194,20 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRACTICE MODE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                    <ComboBox x:Name="ModeCombo" SelectedIndex="0" Margin="0,8,0,0" SelectionChanged="ModeCombo_SelectionChanged"><ComboBoxItem Content="Follow along" local:Loc.Localize="True"/><ComboBoxItem Content="Wait for my note" local:Loc.Localize="True"/><ComboBoxItem Content="Right hand only" local:Loc.Localize="True"/><ComboBoxItem Content="Left hand only" local:Loc.Localize="True"/></ComboBox>
+                                    <ComboBox x:Name="ModeCombo" AutomationProperties.Name="Practice mode" local:Loc.Localize="True" SelectedIndex="0" Margin="0,8,0,0" SelectionChanged="ModeCombo_SelectionChanged"><ComboBoxItem Content="Follow along" local:Loc.Localize="True"/><ComboBoxItem Content="Wait for my note" local:Loc.Localize="True"/><ComboBoxItem Content="Right hand only" local:Loc.Localize="True"/><ComboBoxItem Content="Left hand only" local:Loc.Localize="True"/></ComboBox>
                                     <Grid Margin="0,18,0,0">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Text="Playback tempo" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}"/>
                                         <TextBlock x:Name="TempoLabel" Grid.Column="1" Text="100%" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold"/>
                                     </Grid>
-                                    <Slider x:Name="TempoSlider" Minimum="50" Maximum="150" Value="100" ValueChanged="TempoSlider_ValueChanged"/>
+                                    <Slider x:Name="TempoSlider" Minimum="50" Maximum="150" Value="100" ValueChanged="TempoSlider_ValueChanged" AutomationProperties.Name="Playback tempo" local:Loc.Localize="True"/>
+                                    <CheckBox x:Name="AutoPracticeTempoCheck" Content="Auto practice tempo" local:Loc.Localize="True" Margin="0,14,0,0" Checked="AutoPracticeTempo_Changed" Unchecked="AutoPracticeTempo_Changed" ToolTip="Slows the song down after repeated misses and speeds it back up as you play correctly"/>
+                                    <Grid Margin="0,10,0,0">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock Text="Misses before slowing down" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}"/>
+                                        <TextBlock x:Name="AutoPracticeMissLabel" Grid.Column="1" Text="3" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold"/>
+                                    </Grid>
+                                    <Slider x:Name="AutoPracticeMissSlider" Minimum="1" Maximum="6" Value="3" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="AutoPracticeMiss_Changed" AutomationProperties.Name="Misses before slowing down" local:Loc.Localize="True"/>
                                     <TextBlock Text="LOOP RANGE" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <StackPanel Orientation="Horizontal">
                                         <Button Content="A" Click="SetLoopA_Click" Width="40" ToolTip="Set the loop start at the playhead" local:Loc.Localize="True"/>
@@ -202,6 +217,29 @@
                                     </StackPanel>
                                     <TextBlock Text="SHORTCUTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Style="{StaticResource MutedTextStyle}" Text="Keys A W S E D F T G Y H U J K play an octave from C3 · Space play/pause · Escape settings · F11 full screen · click the on-screen keyboard to play with the mouse." local:Loc.Localize="True"/>
+                                </StackPanel>
+                            </ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="History" local:Loc.Localize="True" Tag="{StaticResource IconPractice}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                                <StackPanel Margin="18,12,18,18">
+                                    <TextBlock Text="PRACTICE HISTORY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
+                                    <TextBlock Text="Every finished run of the open song lands here: when it was played, its accuracy, the hits and the longest streak." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
+                                    <TextBlock Text="PRACTICE CHART" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
+                                    <TextBlock Text="The last two weeks at a glance: one bar per day, taller when that day's notes landed better." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,6"/>
+                                    <Canvas x:Name="HistoryChartHost" Height="52" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="HistoryChartLabel" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
+                                    <TextBlock Text="GHOST OF THIS SONG" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
+                                    <TextBlock x:Name="HistoryGhostLabel" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,4"/>
+                                    <StackPanel x:Name="HistoryGhostHost"/>
+                                    <TextBlock x:Name="HistoryBestLabel" Style="{StaticResource LabelTextStyle}" Margin="0,12,0,6"/>
+                                    <StackPanel x:Name="PracticeHistoryHost"/>
+                                    <TextBlock x:Name="HistoryEmptyLabel" Text="Nothing recorded yet. Play a song through and its run will show up here." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
+                                    <TextBlock x:Name="HistorySummaryLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>
+                                    <StackPanel Orientation="Horizontal">
+                                        <Button Content="EXPORT HTML" local:Loc.Localize="True" Click="ExportHistory_Click" Margin="0,0,8,0"/>
+                                        <Button Content="CLEAR HISTORY" local:Loc.Localize="True" Style="{StaticResource DangerButtonStyle}" Click="ClearHistory_Click"/>
+                                    </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
@@ -290,7 +328,7 @@
                 </Grid>
                 <Grid Grid.Row="1">
                     <Border x:Name="FooterSweep" Style="{StaticResource SweepLineStyle}" VerticalAlignment="Top" Margin="2,-9,2,0" IsHitTestVisible="False"/>
-                    <Slider x:Name="SeekSlider" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" IsMoveToPointEnabled="True" IsEnabled="False" PreviewMouseLeftButtonDown="SeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="SeekSlider_PreviewMouseLeftButtonUp" ValueChanged="SeekSlider_ValueChanged"/>
+                    <Slider x:Name="SeekSlider" AutomationProperties.Name="Timeline position" local:Loc.Localize="True" Minimum="0" Maximum="100" Value="0" VerticalAlignment="Center" IsMoveToPointEnabled="True" IsEnabled="False" PreviewMouseLeftButtonDown="SeekSlider_PreviewMouseLeftButtonDown" PreviewMouseLeftButtonUp="SeekSlider_PreviewMouseLeftButtonUp" ValueChanged="SeekSlider_ValueChanged"/>
                     <ProgressBar x:Name="ProgressBar" Height="2" Maximum="100" Value="0" VerticalAlignment="Bottom" IsHitTestVisible="False" Opacity=".7"/>
                 </Grid>
             </Grid>
@@ -312,6 +350,23 @@
                                 <Button x:Name="PlayDialogMidiButton" Content="MIDI File" Tag="{StaticResource IconFolder}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogOpenMidi_Click" Padding="16,9" ToolTip="Choose a Standard MIDI file" local:Loc.Localize="True"/>
                                 <Button Grid.Column="2" Content="Live Play" Style="{StaticResource GhostButtonStyle}" Click="PlayDialogLive_Click" Padding="12,8" FontSize="12" ToolTip="Skip playback and perform live right away" local:Loc.Localize="True"/>
                             </Grid>
+                            <StackPanel x:Name="RecentSongsPanel" Margin="0,16,0,0">
+                                <TextBlock Text="RECENT" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="RecentSongsEmpty" Text="Songs you open are remembered here, with the values they were last played at." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}"/>
+                                <StackPanel x:Name="RecentSongHost"/>
+                            </StackPanel>
+                            <StackPanel x:Name="SongLibraryPanel" Margin="0,18,0,0">
+                                <TextBlock Text="LIBRARY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="LibraryFolderLabel" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Button Content="CHOOSE FOLDER" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="12,7" Click="ChooseSongFolder_Click" ToolTip="Index every song in a folder and keep the list up to date" AutomationProperties.Name="Choose song folder"/>
+                                    <Button Content="RESCAN" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="12,7" Margin="6,0,0,0" Click="RescanSongFolder_Click" ToolTip="Read the folder again, re-reading only the files that changed" AutomationProperties.Name="Rescan song folder"/>
+                                </StackPanel>
+                                <TextBox x:Name="LibrarySearchBox" TextChanged="LibrarySearch_Changed" Padding="8,6" Margin="0,0,0,6" ToolTip="Search by title or tag" local:Loc.Localize="True" AutomationProperties.Name="Search the song library"/>
+                                <StackPanel x:Name="LibrarySongHost"/>
+                                <TextBlock x:Name="LibraryEmptyLabel" Style="{StaticResource MutedTextStyle}"/>
+                                <TextBlock x:Name="LibraryStatusLabel" Style="{StaticResource MutedTextStyle}"/>
+                            </StackPanel>
                             <TextBlock Text="STYLES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,6"/>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
@@ -336,7 +391,7 @@
                                 <TextBlock Grid.Column="1" Text="Speed" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="PlaySpeedLabel" Grid.Column="2" Text="550" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <Button Grid.Column="3" Content="↺" Style="{StaticResource MiniButtonStyle}" Click="PlaySpeedReset_Click" ToolTip="Reset fall speed" local:Loc.Localize="True"/>
-                                <Slider Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="PlaySpeedSlider" Minimum="100" Maximum="1000" Value="550" Margin="0,6,0,0" ValueChanged="PlaySpeed_Changed"/>
+                                <Slider Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="PlaySpeedSlider" AutomationProperties.Name="Fall speed" local:Loc.Localize="True" Minimum="100" Maximum="1000" Value="550" Margin="0,6,0,0" ValueChanged="PlaySpeed_Changed"/>
                             </Grid>
                             <StackPanel x:Name="LayerRowsHost" Margin="0,10,0,0">
                                 <Grid Margin="0,4,0,4">
@@ -353,19 +408,19 @@
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Background" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <CheckBox Grid.Column="1" x:Name="LayerBackgroundToggle" Tag="ShowBackground" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerBackgroundToggle" AutomationProperties.Name="Background" local:Loc.Localize="True" Tag="ShowBackground" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Background" Click="PlayDialogExpand_Click" ToolTip="Image, dim, guide lanes, gradient" local:Loc.Localize="True"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Notes" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <CheckBox Grid.Column="1" x:Name="LayerNotesToggle" Tag="ShowNotes" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerNotesToggle" AutomationProperties.Name="Notes" local:Loc.Localize="True" Tag="ShowNotes" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Notes" Click="PlayDialogExpand_Click" ToolTip="Note style, colors, glow, edge" local:Loc.Localize="True"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Embers" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <CheckBox Grid.Column="1" x:Name="LayerEmbersToggle" Tag="ShowEmbers" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerEmbersToggle" AutomationProperties.Name="Embers" local:Loc.Localize="True" Tag="ShowEmbers" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Embers" Click="PlayDialogExpand_Click" ToolTip="Sparks, wisps, particle physics" local:Loc.Localize="True"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
@@ -374,19 +429,19 @@
                                     <Button Grid.Column="1" x:Name="PlayDialogHaloColorButton" Width="22" Height="22" Margin="0,0,8,0" Style="{StaticResource MiniButtonStyle}" Padding="0" Click="PlayDialogHaloColor_Click" ToolTip="Choose halo glow color" local:Loc.Localize="True">
                                         <Border x:Name="PlayDialogHaloColorDot" Width="14" Height="14" CornerRadius="7" Background="#C66EFF"/>
                                     </Button>
-                                    <CheckBox Grid.Column="2" x:Name="LayerHaloToggle" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <CheckBox Grid.Column="2" x:Name="LayerHaloToggle" AutomationProperties.Name="Halo" local:Loc.Localize="True" Tag="ShowHalo" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Grid.Column="3" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Halo" Click="PlayDialogExpand_Click" ToolTip="The burning impact line above the keys" local:Loc.Localize="True"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Flame" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <CheckBox Grid.Column="1" x:Name="LayerFlameToggle" Tag="ShowFlame" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerFlameToggle" AutomationProperties.Name="Flame" local:Loc.Localize="True" Tag="ShowFlame" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Flame" Click="PlayDialogExpand_Click" ToolTip="Flame tongues rising from the key bed" local:Loc.Localize="True"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">
                                     <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                     <TextBlock Text="Keys" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                    <CheckBox Grid.Column="1" x:Name="LayerKeysToggle" Tag="ShowKeys" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                    <CheckBox Grid.Column="1" x:Name="LayerKeysToggle" AutomationProperties.Name="Keys" local:Loc.Localize="True" Tag="ShowKeys" Checked="VisualToggle_Changed" Unchecked="VisualToggle_Changed" VerticalAlignment="Center" Margin="0,0,6,0"/>
                                     <Button Grid.Column="2" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconChevronDown}" Width="26" Height="26" DataContext="Keys" Click="PlayDialogExpand_Click" ToolTip="Keyboard style, lighting, overhang, ray-traced shading" local:Loc.Localize="True"/>
                                 </Grid>
                                 <Grid Margin="0,4,0,4">

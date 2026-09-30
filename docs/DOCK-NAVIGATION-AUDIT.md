@@ -1,5 +1,5 @@
 # Tái cấu trúc điều hướng dock: từ danh sách phẳng sang ba nhóm theo mục đích
-> **Cập nhật sau tài liệu này:** dock đã có trang thứ 12 (**General**, nhóm thứ tư **APP**) để chứa bộ chọn ngôn ngữ; mọi con số "11 trang / ba nhóm" ở dưới là trạng thái tại thời điểm rà soát. Kiến trúc điều hướng không đổi: `Ui/SettingsPages.cs` vẫn là nguồn sự thật duy nhất và `tools/check_sources.py` vẫn chứng minh XAML khớp danh mục.
+> **Cập nhật sau tài liệu này:** dock đã có trang thứ 12 (**General**, nhóm thứ tư **APP**) để chứa bộ chọn ngôn ngữ và trang thứ 13 (**History**, nhóm **SESSION**) để chứa lịch sử luyện tập; mọi con số "11 trang / ba nhóm" ở dưới là trạng thái tại thời điểm rà soát. Kiến trúc điều hướng không đổi: `Ui/SettingsPages.cs` vẫn là nguồn sự thật duy nhất và `tools/check_sources.py` vẫn chứng minh XAML khớp danh mục.
 
 
 Tài liệu này ghi lại đợt rà soát **cách sắp xếp chức năng** của Keyflow và những thay đổi đi kèm

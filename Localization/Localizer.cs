@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 
@@ -210,6 +211,7 @@ internal static class Loc
         ContentControl.ContentProperty,
         FrameworkElement.ToolTipProperty,
         Window.TitleProperty,
+        AutomationProperties.NameProperty,
     ];
 
     /// <summary>
@@ -230,6 +232,11 @@ internal static class Loc
             if (!text.Any(char.IsLetter)) continue;
             table[property] = () => T(text);
         }
+        // A control whose only text is a tooltip is anonymous to a screen reader, so the tooltip is
+        // mirrored into AutomationProperties.Name. The name is the same string in the same table, so
+        // it follows the interface language with everything else instead of freezing the first one.
+        if (table.TryGetValue(FrameworkElement.ToolTipProperty, out var tooltip) && !table.ContainsKey(AutomationProperties.NameProperty))
+            table[AutomationProperties.NameProperty] = tooltip;
         if (table.Count > 0 && !IsTracked(element)) _live.Add(new WeakReference<DependencyObject>(element));
     }
 
