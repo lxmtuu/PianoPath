@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.IO;
 
 namespace PianoPath;
@@ -29,9 +30,41 @@ internal static class Mp4TakeAttempt
     /// </summary>
     private static void Say(string line)
     {
-        try { Console.Out.WriteLine(line); Console.Out.Flush(); } catch { }
         try { _trace?.WriteLine(line); _trace?.Flush(); } catch { }
+        try { Pending.Add(line); } catch { }
     }
+
+    private static readonly BlockingCollection<string> Pending = new();
+    private static Thread? _pump;
+
+    /// <summary>
+    /// Starts the one thread that speaks on standard output. Everything this child says goes into a queue and is
+    /// written from there, so a pipe that stops being read cannot stop the child: a redirected pipe that nobody
+    /// drains blocks on the write, and that would look exactly like a media stack that had stalled — the run would
+    /// end quoting the line before the block and blaming the wrong call. The trace file is written first and from
+    /// the working thread, which is why it is the account the parent trusts.
+    /// </summary>
+    private static void StartPump()
+    {
+        _pump = new Thread(() =>
+        {
+            foreach (var line in Pending.GetConsumingEnumerable())
+            {
+                try { Console.Out.WriteLine(line); Console.Out.Flush(); } catch { }
+            }
+        }) { IsBackground = true, Name = "stdout-pump" };
+        _pump.Start();
+    }
+
+    /// <summary>Lets the pump finish what is queued, then lets it go.</summary>
+    private static void StopPump()
+    {
+        try { Pending.CompleteAdding(); } catch { }
+        try { _pump?.Join(1000); } catch { }
+        _pump = null;
+    }
+
+
 
     /// <summary>The file the child's own trace goes into; also where the parent looks after a run that stopped.</summary>
     internal static string TracePath(string takePath) => takePath + ".trace";
@@ -44,11 +77,13 @@ internal static class Mp4TakeAttempt
     internal static int Run(string path)
     {
         try { _trace = new StreamWriter(TracePath(path), append: false) { AutoFlush = true }; } catch { }
+        StartPump();
         try { return Attempt(path); }
         finally
         {
             try { _trace?.Dispose(); } catch { }
             _trace = null;
+            StopPump();
         }
     }
 
