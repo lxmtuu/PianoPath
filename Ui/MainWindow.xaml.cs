@@ -525,7 +525,9 @@ public partial class MainWindow : Window
         if (SettingsPanel.Visibility == Visibility.Visible) { _settingsHiddenByIdle = true; SettingsPanel.Visibility = Visibility.Collapsed; }
         SetChromeVisible(false);
     }
-    private void OpenSettingsPanel(NavigationSurface returnSurface = NavigationSurface.Stage)
+    private void OpenSettingsPanel() => OpenSettingsPanelFor(NavigationSurface.Stage);
+
+    private void OpenSettingsPanelFor(NavigationSurface returnSurface)
     {
         _settingsReturnSurface = returnSurface;
         UpdateSettingsReturnButton();

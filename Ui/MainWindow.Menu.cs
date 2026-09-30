@@ -55,14 +55,14 @@ public partial class MainWindow
     {
         HideStartupMenu();
         SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Style);
-        OpenSettingsPanel(NavigationSurface.MainMenu);
+        OpenSettingsPanelFor(NavigationSurface.MainMenu);
     }
 
     private void MainMenuSettings_Click(object sender, RoutedEventArgs e)
     {
         HideStartupMenu();
         SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Audio);
-        OpenSettingsPanel(NavigationSurface.MainMenu);
+        OpenSettingsPanelFor(NavigationSurface.MainMenu);
     }
 
     private void MainMenuAbout_Click(object sender, RoutedEventArgs e) => ShowMessage(
@@ -292,7 +292,7 @@ public partial class MainWindow
     {
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
         SettingsTabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));
-        OpenSettingsPanel(NavigationSurface.PlayDialog);
+        OpenSettingsPanelFor(NavigationSurface.PlayDialog);
     }
 
     private void PlayDialogLive_Click(object sender, RoutedEventArgs e)
