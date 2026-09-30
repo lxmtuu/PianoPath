@@ -143,7 +143,7 @@ internal static class SheetLayer
         return new SheetPlan(
             AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit, carried),
             Beams(notes, beats, handSplit, key, beatSeconds),
-            Rests(notes, handSplit),
+            Bars(Rests(notes, handSplit), downbeats),
             ties,
             Slurs(notes, handSplit),
             Chords(notes, handSplit),
@@ -341,6 +341,46 @@ internal static class SheetLayer
     internal enum RestShape { Whole, Half, Quarter, Eighth, Sixteenth }
 
     /// <summary>
+    /// How far two times may differ and still be the same moment of a grid: a bar line worked out from the beat
+    /// grid and a gap worked out from the notes meet at the same instant to within a fraction of a millisecond.
+    /// </summary>
+    internal const double RestTolerance = 1e-3;
+
+    /// <summary>
+    /// The silences written the way a score writes them: one rest per bar the hand is quiet for, rather than one
+    /// rest stretched over however long the hand stays off. A piece that fills a whole bar becomes a whole rest
+    /// (how a full bar of silence is written in any meter), and the pieces at either end — where the hand stops or
+    /// starts in the middle of a bar — keep the shape of their own length.
+    /// </summary>
+    internal static IReadOnlyList<RestGap> Bars(IReadOnlyList<RestGap> rests, IReadOnlyList<double> downbeats)
+    {
+        if (rests.Count == 0 || downbeats.Count < 2) return rests;
+        var bars = new List<RestGap>();
+        foreach (var rest in rests)
+        {
+            var start = rest.Start;
+            var end = rest.Start + rest.Seconds;
+            foreach (var boundary in downbeats)
+            {
+                if (boundary <= start + RestTolerance || boundary >= end - RestTolerance) continue;
+                bars.Add(new RestGap(rest.Staff, start, boundary - start, FillsBar(downbeats, start, boundary)));
+                start = boundary;
+            }
+            bars.Add(new RestGap(rest.Staff, start, end - start, FillsBar(downbeats, start, end)));
+        }
+        return bars;
+    }
+
+    /// <summary>Whether a silence runs from one bar line to the next, which is what makes it a whole rest.</summary>
+    private static bool FillsBar(IReadOnlyList<double> downbeats, double start, double end)
+    {
+        for (var index = 0; index + 1 < downbeats.Count; index++)
+            if (Math.Abs(downbeats[index] - start) <= RestTolerance && Math.Abs(downbeats[index + 1] - end) <= RestTolerance)
+                return true;
+        return false;
+    }
+
+    /// <summary>
     /// The shape that writes a silence of this length, counted in beats of the song's own grid: a quarter rest
     /// lasts a beat, a half two and a whole four, an eighth half a beat and a sixteenth a quarter of one. A
     /// silence longer than a whole rest is still drawn as one, the way a score writes a whole rest for a bar it
@@ -368,7 +408,11 @@ internal static class SheetLayer
     };
 
     /// <summary>A silence written on one staff: where it starts and how long it lasts.</summary>
-    internal readonly record struct RestGap(int Staff, double Start, double Seconds);
+    /// <summary>
+    /// One silence on one staff. <paramref name="Whole"/> marks the piece that fills a whole bar: a score writes a
+    /// full bar of silence as a whole rest whatever the meter is, so the shape cannot be read off the length alone.
+    /// </summary>
+    internal readonly record struct RestGap(int Staff, double Start, double Seconds, bool Whole = false);
 
     /// <summary>
     /// The silences the staves are written with: a grand staff has a voice per hand and each voice accounts for
@@ -682,7 +726,7 @@ internal static class SheetLayer
         {
             if (rest.Start + rest.Seconds < windowStart || rest.Start > windowStart + secondsVisible) continue;
             var bottom = StaffBottom(area, gap, rest.Staff);
-            var shape = Rest(rest.Seconds, beatSeconds);
+            var shape = rest.Whole ? RestShape.Whole : Rest(rest.Seconds, beatSeconds);
             var anchor = bottom - (shape == RestShape.Whole ? StaffSteps : 4) * half;
             var text = Text(RestText(shape, restGlyphs), gap * 2.6, dim, pixelsPerDip);
             var x = Math.Max(NoteX(rest.Start, windowStart, secondsVisible, area, inset), lineLeft);

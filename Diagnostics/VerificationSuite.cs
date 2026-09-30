@@ -2326,6 +2326,22 @@ internal static class VerificationSuite
         Assert(heldChord.Count == 1 && heldChord[0] == new SheetLayer.RestGap(1, 1, .5),
             $"A hand that plays a chord and then stops should rest only after the chord ends ({string.Join(" · ", heldChord.Select(rest => $"{rest.Staff}@{rest.Start}+{rest.Seconds}"))}).");
 
+        // A long silence is written the way a score writes it: one rest per bar of the hand's quiet, and a bar
+        // that is quiet from end to end is a whole rest in any meter.
+        var barred = SheetLayer.Bars([new SheetLayer.RestGap(1, 0, 4)], new double[] { 0, 1, 2, 3, 4 });
+        Assert(barred.Count == 4 && barred.All(rest => rest.Staff == 1 && rest.Whole && Math.Abs(rest.Seconds - 1) < 1e-9)
+                && barred.Select(rest => rest.Start).SequenceEqual(new double[] { 0, 1, 2, 3 }),
+            $"A hand quiet for four one-second bars should be written as four whole rests, one a bar ({string.Join(" · ", barred.Select(rest => $"{rest.Start}+{rest.Seconds}{(rest.Whole ? "w" : "")}"))}).");
+        var mixed = SheetLayer.Bars([new SheetLayer.RestGap(0, .5, 3)], new double[] { 0, 1, 2, 3 });
+        Assert(mixed.Count == 4 && !mixed[0].Whole && mixed[0] == new SheetLayer.RestGap(0, .5, .5)
+                && mixed[1].Whole && mixed[1] == new SheetLayer.RestGap(0, 1, 1, Whole: true)
+                && mixed[2] == new SheetLayer.RestGap(0, 2, 1, Whole: true) && !mixed[3].Whole && mixed[3] == new SheetLayer.RestGap(0, 3, .5),
+            $"A silence that starts and ends in the middle of a bar should keep a partial rest at each end and a whole rest for the bars it fills ({string.Join(" · ", mixed.Select(rest => $"{rest.Start}+{rest.Seconds}{(rest.Whole ? "w" : "")}"))}).");
+        Assert(SheetLayer.Bars([new SheetLayer.RestGap(1, .25, .5)], new double[] { 0, 1, 2 }).Count == 1
+                && SheetLayer.Bars([], new double[] { 0, 1 }).Count == 0
+                && SheetLayer.Bars([new SheetLayer.RestGap(1, 0, 4)], new double[] { 0 }).Count == 1,
+            "A silence inside one bar, an empty sheet and a grid with a single bar line should each stay as they are.");
+
         Assert(SheetLayer.Rest(.1, .5) == SheetLayer.RestShape.Sixteenth && SheetLayer.Rest(.25, .5) == SheetLayer.RestShape.Eighth
                 && SheetLayer.Rest(.5, .5) == SheetLayer.RestShape.Quarter && SheetLayer.Rest(1, .5) == SheetLayer.RestShape.Half
                 && SheetLayer.Rest(2, .5) == SheetLayer.RestShape.Whole && SheetLayer.Rest(9, .5) == SheetLayer.RestShape.Whole
@@ -2567,6 +2583,16 @@ internal static class VerificationSuite
             "The plan of a single right-hand note should rest the left hand for exactly as long as the note sounds.");
         var restInk = Ink(soloSong, soloPlan) - Ink(soloSong, soloPlan with { Rests = Array.Empty<SheetLayer.RestGap>() });
         Assert(restInk > 0, $"A rest should put ink on the staff of the quiet hand ({restInk} inked pixels came from the rest).");
+
+        // The same rule reaches the plan a renderer keeps: a hand quiet for two bars of 2/4 is written as two
+        // whole rests a bar apart, and a song whose left hand never plays still writes them for every bar.
+        var twoFour = new double[] { 0, .5, 1, 1.5, 2 };
+        var quietBars = SheetLayer.Plan(
+            [Note(72, 0, .5), Note(72, .5, .5), Note(72, 1, .5), Note(72, 1.5, .5)], twoFour, 2, 60, MusicKey.CMajor);
+        Assert(quietBars.Rests.Count == 2
+                && quietBars.Rests.All(rest => rest.Staff == 1 && rest.Whole && Math.Abs(rest.Seconds - 1) < 1e-9)
+                && Math.Abs(quietBars.Rests[0].Start) < 1e-9 && Math.Abs(quietBars.Rests[1].Start - 1) < 1e-9,
+            $"The left hand of a song in 2/4 playing eighths with the right should rest bar by bar, a whole rest each ({string.Join(" · ", quietBars.Rests.Select(rest => $"{rest.Start}+{rest.Seconds}{(rest.Whole ? "w" : "")}"))}).");
 
         // The tie is really drawn: the same two notes carry the curve's ink when they are tied and none of it when
         // they are not, and the curve is the only difference between the two drawings.
