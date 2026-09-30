@@ -157,8 +157,12 @@ public partial class MainWindow
         ApplyInferredHandSplit(path, song);
     }
 
-    /// <summary>Pushes a hand-split pitch through its dock slider, or straight into the settings when the row is not built.</summary>
-    private void SetHandSplit(int pitch)
+    /// <summary>
+    /// Pushes a hand-split pitch through its dock slider, or straight into the settings when the row is not
+    /// built. The pitch arrives as a double because the song library stores it next to the song's other
+    /// remembered values; the slider rounds it the same way a hand on the slider would.
+    /// </summary>
+    private void SetHandSplit(double pitch)
     {
         if (_visualSliders.TryGetValue(nameof(PianoVisualSettings.HandSplitPitch), out var slider))
             slider.Value = Math.Clamp(pitch, slider.Minimum, slider.Maximum);
