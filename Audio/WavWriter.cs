@@ -15,7 +15,7 @@ namespace PianoPath;
 /// bytes it writes with the specification instead of with the file it just produced.
 /// </para>
 /// </summary>
-internal sealed class WavWriter : IDisposable
+internal sealed class WavWriter : IAudioTrack
 {
     /// <summary>Bytes of the canonical PCM header: RIFF, fmt (16), data.</summary>
     internal const int HeaderBytes = 44;
@@ -91,14 +91,14 @@ internal sealed class WavWriter : IDisposable
     }
 
     /// <summary>Seconds of audio held so far, which is what the recording's clock is compared with.</summary>
-    internal double Seconds => SampleRate <= 0 ? 0 : Frames / (double)SampleRate;
+    public double Seconds => SampleRate <= 0 ? 0 : Frames / (double)SampleRate;
 
     /// <summary>
     /// Appends interleaved samples; <paramref name="count"/> is the number of <see cref="short"/> values, not
     /// frames. Appending after the file is closed is ignored, so a late block from the audio thread during
     /// shutdown cannot throw on the recording's way out.
     /// </summary>
-    internal void Append(short[] samples, int count)
+    public void Append(short[] samples, int count)
     {
         if (_closed || samples.Length == 0) return;
         count = Math.Clamp(count, 0, samples.Length);
@@ -131,7 +131,7 @@ internal sealed class WavWriter : IDisposable
     }
 
     /// <summary>Appends a stretch of silence, used to keep the track in step with the video clock.</summary>
-    internal void AppendSilence(long frames)
+    public void AppendSilence(long frames)
     {
         var block = Math.Min(Math.Max(0, frames), 4096);
         if (block == 0) return;

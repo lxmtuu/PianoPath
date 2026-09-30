@@ -9,6 +9,7 @@ internal static class RecordingFormatIds
 {
     internal const string Avi = "Avi";
     internal const string PngSequence = "PngSequence";
+    internal const string Mp4 = "Mp4";
 }
 
 /// <summary>Serializable, user-editable live-stage and note rendering controls.</summary>
@@ -348,7 +349,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] KeyLabelModes = ["None", "C", "All"];
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
-    internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence];
+    internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
 

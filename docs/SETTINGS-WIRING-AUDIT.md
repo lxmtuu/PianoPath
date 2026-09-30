@@ -127,6 +127,8 @@ Phương pháp:
 | Misses before slowing down (1–6) | `MainWindow.Practice.cs` (`AutoPracticeMiss_Changed` → `PracticeMissThreshold`, `Clamp()` trong `Stage/PianoVisualSettings.cs`) → ngưỡng của `RecordPracticeNote` |
 | Playback tempo 50–150% | `MainWindow.xaml.cs:199-201` → `:165` (`_position += elapsed * _tempo`) |
 | Loop A / B / × | `MainWindow.xaml.cs:592-601` (đặt/xóa), `:167-173` (quay vòng B→A, reset điểm số trong vùng loop) |
+| Recording format (AVI / PNG sequence / MP4) | `MainWindow.Settings.cs` (Choice `RecordingFormat`) → `MainWindow.xaml.cs` (`RecordVideo_Click`: `AviVideoRecorder` / `PngSequenceRecorder` / `Mp4Recorder`), `UpdateRecordingInfo` cho dòng trạng thái |
+| Record audio | `MainWindow.Settings.cs` (Toggle `RecordAudio`) → `MainWindow.xaml.cs` (`BeginAudioTrack`: WAV cạnh video, hoặc luồng AAC của `Mp4Recorder`), `PianoAudioEngine.SetTap` |
 | Recording resolution / fps | `MainWindow.Settings.cs:901-924` (RecordingSize) → `MainWindow.xaml.cs:404-405` (tạo `AviVideoRecorder` đúng kích thước + frame rate) |
 | START/STOP RECORDING | `MainWindow.xaml.cs:397-472` (SaveFileDialog, ghi frame theo đồng hồ thật, tự dừng ở 2 GB) |
 | Shortcuts (A W S E… / Space / F11 / Esc / chuột) | `MainWindow.xaml.cs:322-352` (MapComputerKey → PressNote), `:384-400` (F11/Esc), `:354-364` (chỉ hiện chrome), click phím ảo `PianoStage.PianoKeyChanged` |

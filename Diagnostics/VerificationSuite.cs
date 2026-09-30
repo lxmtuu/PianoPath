@@ -816,6 +816,7 @@ internal static class VerificationSuite
         Run(nameof(VerifyUserShellThemes), () => VerifyUserShellThemes(window));
         Run(nameof(VerifyPngSequenceRecorder), () => VerifyPngSequenceRecorder(window));
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
+        Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
         Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
         Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
@@ -1981,6 +1982,108 @@ internal static class VerificationSuite
     /// and the stage is asked for the same layer through the toggle the dock exposes — that is what proves the
     /// setting is not dead and that the staves really receive the song's own notes and beat grid.
     /// </summary>
+    /// <summary>
+    /// The MP4 take: the format that comes out ready to upload, because the audio is encoded into the same file
+    /// while it records. The arithmetic and the frame layout are checked on every machine; the file itself is
+    /// really encoded when the media stack has an H.264 encoder, and a machine that has none reports a SKIP
+    /// naming what it said instead of failing over a format it cannot write.
+    /// </summary>
+    private static void VerifyMp4Recorder(MainWindow window)
+    {
+        // The format is offered by the dock, not only understood by the recorder.
+        var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices");
+        var options = (Dictionary<string, (string Value, string Caption)[]>)Field(window, "_visualChoiceOptions");
+        var formats = options[nameof(PianoVisualSettings.RecordingFormat)];
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.RecordingFormat))
+                && formats.Select(option => option.Value).SequenceEqual(PianoVisualSettings.RecordingFormats)
+                && formats.Length == 3,
+            "The recording format picker should offer the MP4 take beside the AVI file and the PNG sequence.");
+
+        // The bitrate asked of the encoder: seven per cent of the frame size times the frame rate, floored so a
+        // small stage is not mush and capped so a 4K take is not enormous.
+        Assert(Mp4Recorder.BitrateFor(1920, 1080, 60) == 1920 * 1080 * 60 * 7 / 100
+                && Mp4Recorder.BitrateFor(320, 180, 15) == 2_000_000 && Mp4Recorder.BitrateFor(3840, 2160, 60) == 24_000_000,
+            "The MP4 bitrate should follow the frame size and rate, with a floor that keeps a small stage readable and a ceiling that keeps a 4K take sane.");
+
+        // Every frame and every block of audio is stamped in the 100-nanosecond units a media sample uses.
+        Assert(Mp4Recorder.FrameTime(0, 15) == (0L, 666666L) && Mp4Recorder.FrameTime(15, 15) == (10_000_000L, 666666L)
+                && Mp4Recorder.FrameTime(59, 60) == (9_833_333L, 166667L) && Mp4Recorder.FrameTime(60, 60) == (10_000_000L, 166666L),
+            "A frame should be stamped at its own index on the recording's clock, so sixty frames at sixty a second land exactly a second in.");
+        var second = Enumerable.Range(0, 15).Sum(index => Mp4Recorder.FrameTime(index, 15).Duration);
+        Assert(second == 10_000_000 && Enumerable.Range(0, 30).All(index => Mp4Recorder.FrameTime(index, 25).Duration > 0),
+            $"The lengths of the frames should add up to the time they cover, with no frame of zero length ({second} ticks for fifteen frames at fifteen a second).");
+        Assert(Mp4Recorder.AudioTime(0, 512) == (0L, 116099L) && Mp4Recorder.AudioTime(44100, 512) == (10_000_000L, 116099L),
+            "An audio block should be stamped where its first sample belongs on the recording's clock, so a second of audio is stamped a second in.");
+
+        // The frame layout the encoder is given: a full plane of brightness and one of colour pairs, BT.601.
+        Assert(Nv12Frame.Size(64, 48) == 64 * 48 * 3 / 2 && Nv12Frame.Size(1920, 1080) == 1920 * 1080 * 3 / 2,
+            "An NV12 frame should be a plane of brightness plus a quarter as much again of colour pairs.");
+        byte[] Converted(byte blue, byte green, byte red)
+        {
+            var pixels = new byte[2 * 2 * 4];
+            for (var pixel = 0; pixel < 4; pixel++)
+            {
+                pixels[pixel * 4] = blue; pixels[pixel * 4 + 1] = green; pixels[pixel * 4 + 2] = red; pixels[pixel * 4 + 3] = 255;
+            }
+            var frame = new byte[Nv12Frame.Size(2, 2)];
+            Nv12Frame.FromBgra(pixels, 2, 2, frame);
+            return frame;
+        }
+        var black = Converted(0, 0, 0); var white = Converted(255, 255, 255); var grey = Converted(128, 128, 128); var red = Converted(0, 0, 255);
+        Assert(black[0] == 16 && black[4] == 128 && black[5] == 128 && grey[4] == 128 && grey[5] == 128 && white[0] == 235 && white[4] == 128 && white[5] == 128,
+            $"Black should become brightness 16 with neutral colour samples, white 235 with the same neutrals, and a mid grey should stay neutral (got {black[0]}, {white[0]}, {grey[4]}).");
+        Assert(red[0] == 82 && red[4] == 90 && red[5] == 240,
+            $"Pure red should land on the brightness and colour pairs a player expects of BT.601 (Y {red[0]}, U {red[4]}, V {red[5]}).");
+        Assert(Throws(() => Nv12Frame.FromBgra(new byte[4], 4, 4, new byte[Nv12Frame.Size(4, 4)])),
+            "A frame that is not as long as the size it is converted at should be refused, not read past its end.");
+
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".mp4");
+        try
+        {
+            Mp4Recorder recorder;
+            try { recorder = new Mp4Recorder(path, 64, 48, 15, withAudio: true); }
+            catch (Exception ex)
+            {
+                Results.Add($"SKIP MP4 encoder: this machine's media stack cannot write an MP4 ({ex.Message}), so only the format's arithmetic and its frame layout were checked.");
+                return;
+            }
+            var audio = recorder.HasAudio;
+            byte[] bytes;
+            using (recorder)
+            {
+                Assert(recorder.FrameBytes == 64 * 4 * 48 && recorder.HasAlpha && !recorder.IsNearSizeLimit && recorder.OutputPath == path,
+                    "The MP4 recorder should take the stage's own packed pixels and have no 2 GB limit to stop at.");
+                Assert(Throws(() => recorder.WriteFrame(new byte[16])), "A frame of the wrong size should be refused instead of written half-way.");
+                var frame = new byte[recorder.FrameBytes];
+                for (var index = 0; index < 15; index++)
+                {
+                    for (var pixel = 0; pixel < frame.Length; pixel += 4)
+                    {
+                        frame[pixel] = (byte)(20 + index * 12); frame[pixel + 1] = 90; frame[pixel + 2] = (byte)(200 - index * 8); frame[pixel + 3] = 255;
+                    }
+                    recorder.WriteFrame(frame);
+                }
+                if (audio) recorder.AppendSilence(44100);
+                Assert(recorder.FrameCount == 15 && audio != recorder.AudioDropped && (!audio || Math.Abs(recorder.Seconds - 1) < .001),
+                    $"An MP4 take should hold every frame and the audio the recording clock writes, with the sound inside the file ({recorder.FrameCount} frames, {recorder.Seconds:0.###} s of audio).");
+            }
+            // The file is read back only once the writer has closed it: the sink writer holds it while it works.
+            bytes = File.ReadAllBytes(path);
+            Assert(!File.Exists(MainWindow.AudioTrackPath(path, false)),
+                "An MP4 take should leave no WAV beside it: the samples went into the file itself.");
+            Assert(bytes.Length > 1000 && bytes[4] == 'f' && bytes[5] == 't' && bytes[6] == 'y' && bytes[7] == 'p',
+                $"An MP4 should be a file of boxes beginning with the type box that makes it an MP4 ({bytes.Length} bytes were written).");
+            var sound = audio
+                ? Loc.T(" with the audio inside")
+                : Loc.T("; this machine's media stack has no AAC encoder, so this take carries the video only");
+            Results.Add($"PASS MP4 take: frames and audio blocks stamped on the recording's own clock, the stage's pixels converted to the encoder's NV12 layout, and a real 64×48 take encoded to a file of {bytes.Length} bytes{sound}.");
+        }
+        finally
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
+        }
+    }
+
     private static void VerifySheetLayer(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         Assert(SheetLayer.Step(60) == 28 && SheetLayer.Step(72) == 35 && SheetLayer.Step(61) == 28 && SheetLayer.Step(66) == 31 && SheetLayer.Step(43) == 18,

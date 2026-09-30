@@ -20,7 +20,7 @@ namespace PianoPath;
 /// simply says so instead of failing.
 /// </para>
 /// </summary>
-internal static class Mf
+internal static partial class Mf
 {
     // ---- HRESULTs and reader flags -------------------------------------------------------------------
     internal const int S_OK = 0;

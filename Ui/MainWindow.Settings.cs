@@ -592,12 +592,12 @@ public partial class MainWindow
     private void BuildRecordingPage()
     {
         var output = Card(RecordingSettingsHost, "OUTPUT", "Applied when the next recording starts.");
-        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, or a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage.",
-            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"));
+        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage, or an MP4 with the take's own audio written inside it as it records.",
+            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"), (RecordingFormatIds.Mp4, "MP4 (H.264 + AAC)"));
         Choice(output, "Resolution", nameof(PianoVisualSettings.RecordingResolution), "Match the window, or render to a fixed 16:9 size.", ("Window", "Match window"), ("720p", "1280 × 720"), ("1080p", "1920 × 1080"));
         SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the recording.");
         Toggle(output, "Record audio", nameof(PianoVisualSettings.RecordAudio),
-            "Write the piano's own audio beside the video as a 16-bit stereo WAV, exactly the blocks the engine renders. Mux the two with the ffmpeg line shown below the button; a machine with no SoundFont records video only.");
+            "Write the piano's own audio — the exact blocks the engine renders. An AVI or a PNG sequence gets a 16-bit stereo WAV beside it to mux with the ffmpeg line below the button; an MP4 takes the same samples straight into the file as AAC. A machine with no SoundFont records video only.");
         Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
             "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
     }
@@ -1626,12 +1626,17 @@ public partial class MainWindow
         if (RecordingInfoLabel is null) return;
         var (width, height) = RecordingSize();
         var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+        var mp4 = _visualSettings.RecordingFormat == RecordingFormatIds.Mp4;
         var format = sequence
             ? (_visualSettings.RecordingTransparent ? Loc.T("PNG frames (32-bit alpha)") : Loc.T("PNG frames (opaque)"))
-            : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
+            : mp4
+                ? Loc.T("MP4 (H.264 + AAC)")
+                : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
         var audio = _visualSettings.RecordAudio
             ? _audio.HasSoundFont
-                ? Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
+                ? mp4
+                    ? Loc.T("audio is written inside the file as AAC")
+                    : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
                 : Loc.T("no SoundFont is loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
         Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}.", width, height, _visualSettings.RecordingFrameRate, format, audio);

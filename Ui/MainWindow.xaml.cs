@@ -615,16 +615,22 @@ public partial class MainWindow : Window
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
         var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+        var mp4 = _visualSettings.RecordingFormat == RecordingFormatIds.Mp4;
         var (width, height) = RecordingSize();
         var frameRate = (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
         // A folder for the frames, or a file for the video: one choice in the dock decides which recorder runs.
-        var target = sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile();
+        var target = sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile(mp4);
         if (target is null) return;
         try
         {
+            // The MP4 writer owns its audio stream, so it has to know before it opens the file whether the
+            // engine will hand it samples.
+            var withAudio = _visualSettings.RecordAudio && _audio.HasSoundFont;
             _videoRecorder = target.Length > 0 && sequence
                 ? new PngSequenceRecorder(target, width, height, frameRate)
-                : new AviVideoRecorder(target!, width, height, frameRate);
+                : mp4
+                    ? new Mp4Recorder(target!, width, height, frameRate, withAudio)
+                    : new AviVideoRecorder(target!, width, height, frameRate);
             _recordingPath = target!;
             // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
             // the switch is the user's and is only honoured for that format.
@@ -638,6 +644,11 @@ public partial class MainWindow : Window
             {
                 Loc.Set(RecordButton, "Recording PNG frames · click to stop", FrameworkElement.ToolTipProperty);
                 Loc.Set(SettingsSaveLabel, "Recording a PNG sequence with alpha");
+            }
+            else if (_videoRecorder is Mp4Recorder mp4Recorder)
+            {
+                Loc.Set(RecordButton, "Recording MP4 with the audio inside · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, mp4Recorder.HasAudio ? "Recording MP4 (H.264 + AAC)" : "Recording MP4 (H.264, the sound stayed out)");
             }
             else if (((AviVideoRecorder)_videoRecorder).UsesMjpeg)
             {
@@ -658,10 +669,17 @@ public partial class MainWindow : Window
         }
     }
 
-    /// <summary>The AVI file the next recording goes into, or null when the user cancels.</summary>
-    private string? ChooseVideoFile()
+    /// <summary>The video file the next recording goes into, or null when the user cancels.</summary>
+    private string? ChooseVideoFile(bool mp4)
     {
-        var dialog = new SaveFileDialog { Filter = Loc.T("AVI video (*.avi)|*.avi"), DefaultExt = ".avi", AddExtension = true, FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}.avi", Title = Loc.T("Record piano visualizer") };
+        var dialog = new SaveFileDialog
+        {
+            Filter = mp4 ? Loc.T("MP4 video (*.mp4)|*.mp4") : Loc.T("AVI video (*.avi)|*.avi"),
+            DefaultExt = mp4 ? ".mp4" : ".avi",
+            AddExtension = true,
+            FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}{(mp4 ? ".mp4" : ".avi")}",
+            Title = Loc.T("Record piano visualizer")
+        };
         return dialog.ShowDialog(this) == true ? dialog.FileName : null;
     }
 
@@ -848,7 +866,7 @@ public partial class MainWindow : Window
         Stage.SetCameraFrame(_cameraBitmap);
     }
 
-    private WavWriter? _audioTrack;
+    private IAudioTrack? _audioTrack;
     private readonly Lock _audioTrackLock = new();
     private bool _audioTrackStarted;
     private double _audioTrackSeconds;
@@ -872,10 +890,13 @@ public partial class MainWindow : Window
     {
         EndAudioTrack();
         if (!_visualSettings.RecordAudio || !_audio.HasSoundFont || _recordingPath is null) return false;
-        var path = AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder);
-        var writer = WavWriter.TryCreate(path);
-        if (writer is null) return false;
-        _audioTrack = writer; _audioTrackSeconds = 0;
+        // An MP4 carries its own audio stream, so the same tap goes straight into the file being written;
+        // every other format gets a WAV beside the video to mux afterwards.
+        IAudioTrack? track = _videoRecorder is Mp4Recorder { HasAudio: true } mp4
+            ? mp4
+            : WavWriter.TryCreate(AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder));
+        if (track is null) return false;
+        _audioTrack = track; _audioTrackSeconds = 0;
         // The tap runs on the audio thread, so the writer is only ever touched under its lock.
         _audio.SetTap((samples, count) => { lock (_audioTrackLock) _audioTrack?.Append(samples, count); });
         return true;
@@ -888,12 +909,15 @@ public partial class MainWindow : Window
     internal string? EndAudioTrack()
     {
         _audio.SetTap(null);
-        WavWriter? writer;
-        lock (_audioTrackLock) { writer = _audioTrack; _audioTrack = null; }
-        if (writer is null) return null;
-        _audioTrackSeconds = writer.Seconds;
-        var path = writer.Path;
-        writer.Dispose();
+        IAudioTrack? track;
+        lock (_audioTrackLock) { track = _audioTrack; _audioTrack = null; }
+        if (track is null) return null;
+        _audioTrackSeconds = track.Seconds;
+        // The MP4's track is the recorder itself: it is closed with the file, not here, and there is no
+        // second file left to mux.
+        if (track is Mp4Recorder) return null;
+        var path = ((WavWriter)track).Path;
+        track.Dispose();
         return path;
     }
 
@@ -990,10 +1014,16 @@ public partial class MainWindow : Window
         if (showMessage && !_closing)
         {
             var noteText = note is null ? "" : note + "\n\n";
-            var audio = audioPath is null
-                ? Loc.T(" No audio track was written for this take.")
-                : Loc.F("\n\nAudio: {0} ({1:0.#} s, 16-bit stereo WAV) — mux it with\nffmpeg -i \"{2}\" -i \"{0}\" -c:v copy -c:a aac \"{3}\"", audioPath, _audioTrackSeconds, audioPath, path, MuxedName(path));
-            if (recorder is PngSequenceRecorder)
+            var audio = recorder is Mp4Recorder take
+                ? take.AudioDropped
+                    ? Loc.T(" The AAC encoder on this machine refused the audio stream, so this take has no sound.")
+                    : Loc.F("\n\nAudio: {0:0.#} s of 16-bit stereo AAC, written inside the file.", _audioTrackSeconds)
+                : audioPath is null
+                    ? Loc.T(" No audio track was written for this take.")
+                    : Loc.F("\n\nAudio: {0} ({1:0.#} s, 16-bit stereo WAV) — mux it with\nffmpeg -i \"{2}\" -i \"{0}\" -c:v copy -c:a aac \"{3}\"", audioPath, _audioTrackSeconds, audioPath, path, MuxedName(path));
+            if (recorder is Mp4Recorder)
+                ShowMessage(Loc.F("Video saved with its audio inside.\n{0}\n\n{1}This MP4 holds the piano visuals and the samples the engine played, encoded as H.264 and AAC, so it is ready to upload as it is.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
+            else if (recorder is PngSequenceRecorder)
                 ShowMessage(Loc.F("Frames saved.\n{0}\n\n{1}{2} PNG frames with an alpha channel. Import them at the frame rate you chose, or follow the ffmpeg line in sequence.json to turn them into alpha video; system audio is not mixed in.", path, noteText, frames) + audio, "Recording complete", MessageBoxImage.Information);
             else
                 ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
