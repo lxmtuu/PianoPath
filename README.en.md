@@ -320,7 +320,7 @@ startup menu and even error messages repaint within the current frame.
 | Command line | `--lang=vi` (or `en`) runs once in that language **without** writing to `visual-settings.json`. CI uses this switch to render the Vietnamese pictures. |
 | Dock search | A row matches English *and* translated words: typing `speed` or `tốc độ` finds the same *Fall speed* slider. Beyond its captions, every row also answers to **synonyms** (`tempo` → *Fall speed*, `fps` → *Frame rate*, `brighter` → the brightness sliders) and to the **name of the setting** (`NoteFallSpeed` → `fall`+`speed`), so you do not have to remember the exact wording. Several words are an **AND**: `speed fall` narrows to that one row. The matched part is **painted in the accent colour** inside the caption, and the search box jumps to the first page with a hit. |
 
-The General page in English — every picture in this edition comes from CI with `--lang=en`; the Vietnamese README carries the same nine subjects with the interface in Vietnamese:
+The General page in English — every picture in this edition comes from CI with `--lang=en`; the Vietnamese README carries the same subjects with the interface in Vietnamese:
 
 ![Keyflow General page](docs/previews/en/language-dock.png)
 
@@ -386,11 +386,13 @@ The rest of the interface:
 The pictures in the README (and in `docs/previews/en/`) are rendered by the application, not staged.
 
 **Automatic:** on every push to `main` or a working branch (`arena/**`), the `build.yml` workflow
-builds the app and then re-renders the 8 images with the very `PianoPath.exe` that just passed
-`--verify` — seven of them with `--lang=en` so the captions stay English regardless of the runner's
-display language, and the *General* picture with `--lang=vi` so the Vietnamese translation is visible
-too — and then **commits them straight into the branch**
-(`Refresh the README previews from CI [skip ci]`). After a UI change there is nothing else to do: the
+builds the app and then re-renders **two sets of images** — `docs/previews/en/` for this edition and
+`docs/previews/vi/` for `README.md` — with the very `PianoPath.exe` that just passed `--verify`. Each
+set pins the `--lang` of the language it belongs to, so the captions do not depend on the runner's
+display language — and then **commits them straight into the branch**
+(`Refresh the README previews from CI [skip ci]`). The list of subjects each run captures lives in
+`$shots` in `build.yml`, and `tools/check_sources.py` makes each edition point only at the set of its
+own language. After a UI change there is nothing else to do: the
 README pictures match that commit. The images are also uploaded as the `keyflow-previews` artifact if
 you want them separately:
 

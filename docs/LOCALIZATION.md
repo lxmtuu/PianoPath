@@ -29,7 +29,7 @@ ngôn ngữ là **một tệp bảng**, và mọi nhãn trên màn hình **tự 
 | `Ui/MainWindow.Language.cs` | Lối vào phía giao diện: `ApplyLanguage`, `RetranslateSurfaces`, tiêu đề nhóm điều hướng, caption combo thiết bị |
 | `Ui/MainWindow.Settings.cs` | Trang **General** (nhóm APP) với các chip ngôn ngữ; ô tìm kiếm của dock khớp cả tiếng Anh lẫn tiếng Việt |
 | `Ui/MainWindow.xaml` | `local:Loc.Localize="True"` trên mọi phần tử mang chữ tĩnh; thẻ **INTERFACE LANGUAGE** ở menu khởi động |
-| `tools/check_sources.py` | Kiểm tĩnh: hai bảng phải cùng tập khoá, placeholder còn nguyên, và **mọi chuỗi mã nguồn in ra phải là một khoá của inventory** |
+| `tools/check_sources.py` | Kiểm tĩnh: hai bảng phải cùng tập khoá, placeholder còn nguyên, **mọi chuỗi mã nguồn in ra phải là một khoá của inventory**, và **mọi khoá của inventory phải còn được một tệp mã nguồn giữ** (`scan_dead_keys`: một khoá không nguồn nào in ra là câu dịch vô ích — nó chỉ còn sống trong hai bảng, và lần đổi chữ sau sẽ để lại bên cạnh nó một bản sao thứ hai của cùng câu đó) |
 
 ## 3. API trong mã C#
 
@@ -184,8 +184,8 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 ## 10. Ảnh giao diện: chỉ ảnh do ứng dụng render
 
 `docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`), chia làm hai bộ:
-`docs/previews/vi/` cho `README.md` và `docs/previews/en/` cho `README.en.md`, mỗi bộ tám ảnh chụp cùng
-tám chủ đề bằng đúng ngôn ngữ của bản README đọc nó. Screenshot của người dùng — kể cả ảnh rất đẹp có
+`docs/previews/vi/` cho `README.md` và `docs/previews/en/` cho `README.en.md`, mỗi bộ chụp cùng danh sách
+chủ đề (`$shots` trong `build.yml`) nhưng bằng đúng ngôn ngữ của bản README đọc nó. Screenshot của người dùng — kể cả ảnh rất đẹp có
 ảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
 kế tiếp, và ảnh nền trong screenshot hầu như luôn là artwork của bên thứ ba, không kèm giấy phép cho repo MIT.
 

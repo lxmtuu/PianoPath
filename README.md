@@ -364,7 +364,7 @@ Phần còn lại của giao diện:
 
 Ảnh trong README (và trong `docs/previews/vi/`) do ứng dụng render, không phải ảnh dàn dựng.
 
-**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại 8 ảnh bằng chính file `PianoPath.exe` vừa vượt qua `--verify` — bảy ảnh chạy với `--lang=en` để caption luôn là tiếng Anh bất kể ngôn ngữ của runner, riêng ảnh *General* chạy với `--lang=vi` để thấy luôn bản dịch tiếng Việt — rồi **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`). Sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Ảnh cũng được upload thành artifact `keyflow-previews` nếu muốn tải rời:
+**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại **hai bộ ảnh** — `docs/previews/vi/` cho bản README này và `docs/previews/en/` cho `README.en.md` — bằng chính file `PianoPath.exe` vừa vượt qua `--verify`; mỗi bộ ghim `--lang` của đúng ngôn ngữ nó, nên caption không phụ thuộc ngôn ngữ hiển thị của runner, rồi **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`). Danh sách chủ đề mỗi lần chụp nằm ở `$shots` trong `build.yml`, và `tools/check_sources.py` buộc mỗi bản README chỉ trỏ vào bộ ảnh của đúng ngôn ngữ mình. Sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Ảnh cũng được upload thành artifact `keyflow-previews` nếu muốn tải rời:
 
 ```powershell
 gh run list --workflow build.yml --limit 5          # tìm run mới nhất
