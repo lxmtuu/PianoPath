@@ -46,7 +46,7 @@ internal static class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -122,22 +122,6 @@ internal static class VerificationSuite
         Assert(notes.Count == 3 && notes.All(n => n.Pitch != 36), "MIDI format 1 should read notes from multiple tracks and skip the percussion channel.");
         Assert(song.BeatsPerBar == 4 && song.BeatTimes.Count >= 3 && Math.Abs(song.BeatTimes[1] - .5) < .001 && Math.Abs(song.BeatTimes[2] - .75) < .001, "The beat grid should follow the tempo map for the metronome.");
         Assert(song.TrackNames.TryGetValue(0, out var trackName) && trackName == "Lead", "Track name meta events should be exposed for the track picker.");
-        // How a signature is felt: a simple meter beats on its beat-type, a compound one in threes.
-        Assert(Meter.Of(4, 4) == (4, 1) && Meter.Of(3, 4) == (3, 1) && Meter.Of(2, 2) == (2, 1) && Meter.Of(3, 8) == (3, 1)
-                && Meter.Of(6, 8) == (2, 3) && Meter.Of(9, 8) == (3, 3) && Meter.Of(12, 8) == (4, 3) && Meter.Of(6, 4) == (2, 3)
-                && Meter.Of(5, 4) == (5, 1) && Meter.Of(7, 8) == (7, 1)
-                && Math.Abs(Meter.BeatInQuarters(3, 8) - 1.5) < 1e-9 && Math.Abs(Meter.BeatInQuarters(1, 4) - 1) < 1e-9,
-            "A simple meter should beat on its written beat-type while a compound one (six, nine or twelve) is felt in threes, which is the grouping a score beams by.");
-        File.WriteAllBytes(path, CreateSignatureMidi(6, 8)); var compound = MidiReader.ReadSong(path);
-        Assert(compound.BeatsPerBar == 2 && compound.BeatTimes.Count == 2
-                && Math.Abs(compound.BeatTimes[0]) < 1e-9 && Math.Abs(compound.BeatTimes[1] - .75) < 1e-6,
-            $"A 6/8 bar should beat twice on dotted quarters rather than six times on eighths (found {compound.BeatsPerBar} beat(s) at {string.Join(", ", compound.BeatTimes.Select(time => time.ToString("0.###")))}).");
-        File.WriteAllBytes(path, CreateSignatureMidi(3, 4)); var triple = MidiReader.ReadSong(path);
-        Assert(triple.BeatsPerBar == 3 && triple.BeatTimes.Count == 3 && Math.Abs(triple.BeatTimes[1] - .5) < 1e-6,
-            $"A 3/4 bar should keep three quarter beats (found {triple.BeatsPerBar} beat(s)).");
-        File.WriteAllBytes(path, CreateSignatureMidi(12, 8)); var twelve = MidiReader.ReadSong(path);
-        Assert(twelve.BeatsPerBar == 4 && Math.Abs(twelve.BeatTimes[1] - .75) < 1e-6,
-            $"A 12/8 bar should be four dotted-quarter beats, the way a score groups it (found {twelve.BeatsPerBar}).");
         Assert(NoteTimeline.FirstIndexAtOrAfter(notes, .5) == 2 && NoteTimeline.FirstIndexAtOrAfter(notes, 9) == 3 && NoteTimeline.FirstIndexAtOrAfter(notes, -1) == 0, "Binary search over sorted note starts should find the first note at or after a time.");
         Assert(MidiReader.Read(path).Count == 3, "The note-only reader should stay compatible.");
         var middleC = notes.Single(n => n.Pitch == 60);
@@ -1793,6 +1777,34 @@ internal static class VerificationSuite
             "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
     }
+
+    /// <summary>
+    /// How a time signature is felt, as against how it is written: a simple meter beats on its beat-type
+    /// while a compound one is felt in threes, and the beat grid the readers hand the sheet follows that
+    /// grouping — the beams, the rests, the bar lines and the metronome's downbeat all count the felt beat.
+    /// </summary>
+    private static void VerifyMeter()
+    {
+            // How a signature is felt: a simple meter beats on its beat-type, a compound one in threes.
+            // Each signature has its own file, so the checks above keep reading the arrangement they wrote.
+            var meterPath = Path.Combine(Path.GetTempPath(), "keyflow-meter.mid");
+            Assert(Meter.Of(4, 4) == (4, 1) && Meter.Of(3, 4) == (3, 1) && Meter.Of(2, 2) == (2, 1) && Meter.Of(3, 8) == (3, 1)
+                    && Meter.Of(6, 8) == (2, 3) && Meter.Of(9, 8) == (3, 3) && Meter.Of(12, 8) == (4, 3) && Meter.Of(6, 4) == (2, 3)
+                    && Meter.Of(5, 4) == (5, 1) && Meter.Of(7, 8) == (7, 1)
+                    && Math.Abs(Meter.BeatInQuarters(3, 8) - 1.5) < 1e-9 && Math.Abs(Meter.BeatInQuarters(1, 4) - 1) < 1e-9,
+                "A simple meter should beat on its written beat-type while a compound one (six, nine or twelve) is felt in threes, which is the grouping a score beams by.");
+            File.WriteAllBytes(meterPath, CreateSignatureMidi(6, 8)); var compound = MidiReader.ReadSong(meterPath);
+            Assert(compound.BeatsPerBar == 2 && compound.BeatTimes.Count == 2
+                    && Math.Abs(compound.BeatTimes[0]) < 1e-9 && Math.Abs(compound.BeatTimes[1] - .75) < 1e-6,
+                $"A 6/8 bar should beat twice on dotted quarters rather than six times on eighths (found {compound.BeatsPerBar} beat(s) at {string.Join(", ", compound.BeatTimes.Select(time => time.ToString("0.###")))}).");
+            File.WriteAllBytes(meterPath, CreateSignatureMidi(3, 4)); var triple = MidiReader.ReadSong(meterPath);
+            Assert(triple.BeatsPerBar == 3 && triple.BeatTimes.Count == 3 && Math.Abs(triple.BeatTimes[1] - .5) < 1e-6,
+                $"A 3/4 bar should keep three quarter beats (found {triple.BeatsPerBar} beat(s)).");
+            File.WriteAllBytes(meterPath, CreateSignatureMidi(12, 8)); var twelve = MidiReader.ReadSong(meterPath);
+            Assert(twelve.BeatsPerBar == 4 && Math.Abs(twelve.BeatTimes[1] - .75) < 1e-6,
+                $"A 12/8 bar should be four dotted-quarter beats, the way a score groups it (found {twelve.BeatsPerBar}).");
+    }
+
 
     /// <summary>
     /// MusicXML import: divisions and tempo become seconds, chords share an onset, backup and forward move
