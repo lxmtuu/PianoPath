@@ -2164,8 +2164,8 @@ internal static class VerificationSuite
             ("the two hands", [Note(72, 0, .5), Note(48, .5, .5)]),
             ("another note of the song between them", [Note(60, 0, .25), Note(64, .25, .25), Note(60, .5, .5)]),
         };
-        foreach (var (what, pair) in notTies)
-            Assert(SheetLayer.Ties(pair, 60).Count == 0, $"Two notes are not tied when {what} separates them.");
+        foreach (var (what, candidates) in notTies)
+            Assert(SheetLayer.Ties(candidates, 60).Count == 0, $"Two notes are not tied when {what} separates them.");
         Assert(SheetLayer.Ties([Note(60, 0, .5)], 60).Count == 0 && SheetLayer.Ties([], 60).Count == 0
                 && SheetLayer.TieUnder(3) && !SheetLayer.TieUnder(7),
             "A lone note and an empty song have no ties, and a tie leans under the note when its stem points up and over it when the stem points down.");
