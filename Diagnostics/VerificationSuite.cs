@@ -1521,7 +1521,7 @@ internal static class VerificationSuite
         {
             var saved = store.Save(seeds);
             var loaded = store.Load();
-            Assert(loaded.Count == 1 && loaded[0].Id == saved.Id && loaded[0].Accent == built.Accent && loaded[0].Surface == built.Control
+            Assert(loaded.Count == 1 && loaded[0].Id == saved.Id && loaded[0].Accent == built.Accent && loaded[0].Control == built.Control
                     && loaded[0].Backdrop == BackdropStyle.Imperial,
                 "A theme the user made should round-trip through its file with the same colours and backdrop family.");
             store.Save(new UserShellTheme { Name = "Sunset Glow", Accent = "#59A6FF", AccentAlt = "#9BD0FF", Glow = "#7FC4FF", Surface = "#0E1420", Mote = "#CFE7FF" });
