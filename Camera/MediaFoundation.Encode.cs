@@ -95,9 +95,9 @@ internal static partial class Mf
     /// <returns>The first step that failed, or <see cref="S_OK"/> when the stream was taken.</returns>
     internal static int EncodeSinkProbe(string path, IMFMediaType target, Action<string>? step = null)
     {
-        var hr = MFStartup(MF_VERSION, 0);
+        var hr = MediaStartup();
         if (hr < 0) return hr;
-        step?.Invoke("NOTE MP4 encoder: the media stack started for the encoder check.");
+        step?.Invoke("NOTE MP4 encoder: the media stack is up for the encoder check.");
         IMFSinkWriter? writer = null;
         try
         {
@@ -112,7 +112,6 @@ internal static partial class Mf
         finally
         {
             if (writer is not null) { try { Marshal.ReleaseComObject(writer); } catch { } }
-            try { MFShutdown(); } catch { }
         }
     }
 
@@ -126,12 +125,12 @@ internal static partial class Mf
     internal static int EncodeAviProbe(string path, byte[] pixels, int width, int height, int frameRate, int frames,
         Action<string>? step = null)
     {
-        var hr = MFStartup(MF_VERSION, 0);
+        var hr = MediaStartup();
         if (hr < 0) return hr;
         IMFSinkWriter? writer = null;
         try
         {
-            step?.Invoke("NOTE MP4 encoder: the media stack started for the encoder-free probe.");
+            step?.Invoke("NOTE MP4 encoder: the media stack is up for the encoder-free probe.");
             hr = MFCreateSinkWriterFromURL(path, IntPtr.Zero, null, out writer);
             if (hr < 0) return hr;
             step?.Invoke("NOTE MP4 encoder: the AVI sink writer is open.");
@@ -168,7 +167,6 @@ internal static partial class Mf
         finally
         {
             if (writer is not null) { try { Marshal.ReleaseComObject(writer); } catch { } }
-            try { MFShutdown(); } catch { }
         }
     }
 

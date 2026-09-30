@@ -40,7 +40,6 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     private int _videoStream = -1;
     private int _audioStream = -1;
     private long _audioFrames;
-    private bool _mediaStarted;
     private bool _finalized;
     private readonly Action<string>? _step;
 
@@ -62,9 +61,10 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         _nv12 = new byte[Nv12Frame.Size(width, height)];
         try
         {
-            var hr = Mf.MFStartup(Mf.MF_VERSION, 0);
+            _step?.Invoke("NOTE MP4 encoder: starting the media stack for the take.");
+            var hr = Mf.MediaStartup();
             if (hr != Mf.S_OK) throw new InvalidOperationException(Loc.F("The media stack would not start ({0}).", Mf.Describe(hr)));
-            _mediaStarted = true;
+            _step?.Invoke("NOTE MP4 encoder: the media stack is up for the take.");
             // Whether the sound can go in at all is asked of a throwaway writer first: a stream that is added
             // and then refused would leave this writer unable to be told to drop it again, and the user's file
             // would have to be opened a second time. The answer decides the shape of the take before it starts.
@@ -220,7 +220,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
                 // both for the user who wants to open it and for anyone reading the take back.
                 Release();
             }
-            if (_mediaStarted) { try { Mf.MFShutdown(); } catch { } _mediaStarted = false; }
+            // The media stack is left running: it is started once for the whole process (see Mf.MediaStartup).
         }
     }
 

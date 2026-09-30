@@ -1341,6 +1341,5 @@ public partial class MainWindow : Window
         StopSongFolderWatch();
         StopCameraOverlay();
         _midi.Dispose(); _audio.Dispose();
-        CameraFrameReader.Shutdown();
     }
 }

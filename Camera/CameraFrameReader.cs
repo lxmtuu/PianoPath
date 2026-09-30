@@ -35,7 +35,6 @@ internal sealed class CameraFrameReader : IDisposable
     private static readonly Lock StartupLock = new();
     private static bool _started;
     private static string? _startupError;
-    private static int _openReaders;
 
     private Mf.IMFSourceReader? _reader;
     private byte[] _sample = [];
@@ -227,7 +226,6 @@ internal sealed class CameraFrameReader : IDisposable
             try { reader.Flush(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM); } catch { }
             Release(reader);
         }
-        lock (StartupLock) _openReaders = Math.Max(0, _openReaders - 1);
     }
 
     // =================================================================================================
@@ -263,7 +261,6 @@ internal sealed class CameraFrameReader : IDisposable
             var result = new CameraFrameReader { _reader = reader };
             reader = null;                       // the reader object owns it from here
             if (result.Configure() is { } configureError) { error = configureError; result.Dispose(); return null; }
-            lock (StartupLock) _openReaders++;
             error = null;
             return result;
         }
@@ -392,23 +389,12 @@ internal sealed class CameraFrameReader : IDisposable
             if (_started || _startupError is not null) return;
             try
             {
-                var hr = Mf.MFStartup(Mf.MF_VERSION, 0);
+                var hr = Mf.MediaStartup();
                 if (hr == Mf.S_OK) _started = true;
                 else _startupError = Loc.F("The media stack would not start ({0}).", Mf.Describe(hr));
             }
             catch (DllNotFoundException) { _startupError = Loc.T("This copy of Windows has no Media Foundation, so a camera overlay cannot run."); }
             catch (Exception ex) { _startupError = ex.Message; }
-        }
-    }
-
-    /// <summary>Stops Media Foundation once the window is closed and no reader is left.</summary>
-    internal static void Shutdown()
-    {
-        lock (StartupLock)
-        {
-            if (!_started || _openReaders > 0) return;
-            try { Mf.MFShutdown(); } catch { }
-            _started = false;
         }
     }
 

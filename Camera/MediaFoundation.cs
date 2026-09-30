@@ -52,8 +52,31 @@ internal static partial class Mf
     [DllImport("mfplat.dll", ExactSpelling = true)]
     internal static extern int MFStartup(int version, int flags);
 
+    /// <summary>The counterpart of <see cref="MFStartup"/>. Nothing in the app calls it — see <see cref="MediaStartup"/>.</summary>
     [DllImport("mfplat.dll", ExactSpelling = true)]
     internal static extern int MFShutdown();
+
+    private static readonly Lock MediaGate = new();
+    private static bool _mediaStarted;
+
+    /// <summary>
+    /// Starts the media stack for this process, once. Starting it and shutting it down around each job reads
+    /// tidier, but a machine can hang when the stack is started again after a shutdown: the verification's take
+    /// child hung exactly there on CI, right after its encoder check had shut the stack down, and no line said
+    /// which call had stopped because that call had been assumed to be a formality. The app can also open one
+    /// recording after another, so the stack is started when it is first needed and left running until the
+    /// process ends — <see cref="MFShutdown"/> is deliberately never called.
+    /// </summary>
+    internal static int MediaStartup()
+    {
+        lock (MediaGate)
+        {
+            if (_mediaStarted) return S_OK;
+            var hr = MFStartup(MF_VERSION, 0);
+            if (hr >= 0) _mediaStarted = true;
+            return hr;
+        }
+    }
 
     [DllImport("mfplat.dll", ExactSpelling = true)]
     internal static extern int MFCreateAttributes(out IMFAttributes attributes, int initialSize);
