@@ -10,7 +10,9 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
+// Only the two shapes the ghost check counts: the namespace would make Path ambiguous with System.IO.Path.
+using Ellipse = System.Windows.Shapes.Ellipse;
+using Rectangle = System.Windows.Shapes.Rectangle;
 using System.Windows.Threading;
 
 namespace PianoPath;
