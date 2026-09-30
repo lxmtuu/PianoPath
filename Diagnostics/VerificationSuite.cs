@@ -1871,8 +1871,9 @@ internal static class VerificationSuite
             "Days without a run should still be rows, with zero runs and no accuracy.");
         Assert(PracticeHistory.Runs.Count == 4 && days.Sum(day => day.Runs) == 3,
             "A run older than the window should stay out of the chart while the history file still keeps it.");
-        // The window holds 5 hits and 4 misses, so its average counts notes, not days.
-        Assert(Math.Abs(PracticeHistory.AverageAccuracy(days) - 5.0 / 9) < .01
+        // The window holds 5 hits and 4 misses, so its average counts notes, not days. AverageAccuracy is a
+        // percentage, so the expected value is 100 × 5/9 and not the bare fraction.
+        Assert(Math.Abs(PracticeHistory.AverageAccuracy(days) - 100.0 * 5 / 9) < .01
                 && PracticeHistory.ChartCaption(days) == Loc.F("Accuracy by day: {0} runs · {1:0.#}% average", 3, PracticeHistory.AverageAccuracy(days)),
             $"The window's caption should name its runs and count every note graded in it once ({PracticeHistory.ChartCaption(days)}).");
 
