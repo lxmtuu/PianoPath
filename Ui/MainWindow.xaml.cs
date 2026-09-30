@@ -90,9 +90,14 @@ public partial class MainWindow : Window
             // The GPU engine hears the note on the MIDI callback thread itself, so its trail and burst
             // never wait for the dispatcher; the stage then skips re-queuing the same note.
             var direct = ForwardMidiToGpu(pitch, velocity, on);
+            // The synthesizer is locked internally, so the note sounds from this thread too: a busy UI frame
+            // (a dock rebuild, a layout pass) can no longer sit between the key and the sound. Notes and pedals
+            // both go this way, in arrival order, so a note released under a just-pressed pedal still sustains.
+            if (on) _audio.NoteOn(pitch, velocity); else _audio.NoteOff(pitch);
             Dispatcher.BeginInvoke(() =>
             {
                 Stage.SuppressGpuForward = direct;
+                _liveAudioSent = true;
                 try
                 {
                     if (on)
@@ -103,10 +108,19 @@ public partial class MainWindow : Window
                     }
                     else ReleaseNote(pitch);
                 }
-                finally { Stage.SuppressGpuForward = false; }
+                finally { Stage.SuppressGpuForward = false; _liveAudioSent = false; }
             });
         };
-        _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() => SetPedalState(pedal, down));
+        _midi.PedalChanged += (pedal, down) =>
+        {
+            _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), down ? 127 : 0);
+            Dispatcher.BeginInvoke(() =>
+            {
+                _liveAudioSent = true;
+                try { SetPedalState(pedal, down); }
+                finally { _liveAudioSent = false; }
+            });
+        };
         PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
         // A folder indexed in an earlier session is watched from the start, so the library is live whether or
         // not the Play dialog has been opened yet.
@@ -1108,11 +1122,15 @@ public partial class MainWindow : Window
     private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }
     private void Window_KeyUp(object sender, KeyEventArgs e) { if (_keyDownPitches.Remove(e.Key, out var pitch)) ReleaseNote(pitch); }
 
+    /// <summary>True while a MIDI input event is being handled on the dispatcher: the MIDI thread has already
+    /// sent it to the synthesizer, so the handlers below must not sound it a second time.</summary>
+    private bool _liveAudioSent;
+
     private void PressNote(int pitch, int velocity = 100)
     {
         if (!_pressed.Add(pitch)) return;
         StartStageFrames();
-        var hit = velocity / 127.0; Stage.AddLiveNote(pitch, hit); Stage.Impact(pitch, hit); _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
+        var hit = velocity / 127.0; Stage.AddLiveNote(pitch, hit); Stage.Impact(pitch, hit); if (!_liveAudioSent) _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
         if (_playing)
         {
             // Same result as the previous LINQ Where/OrderBy/First chain, without allocating per keypress.
@@ -1141,7 +1159,8 @@ public partial class MainWindow : Window
     private void ReleaseNote(int pitch)
     {
         if (!_pressed.Remove(pitch)) return;
-        _audio.NoteOff(pitch); SendOutput(pitch, 0, false); Stage.ReleaseLiveNote(pitch); UpdateStage();
+        if (!_liveAudioSent) _audio.NoteOff(pitch);
+        SendOutput(pitch, 0, false); Stage.ReleaseLiveNote(pitch); UpdateStage();
     }
 
     private void PedalToggle_Changed(object sender, RoutedEventArgs e)
@@ -1163,7 +1182,7 @@ public partial class MainWindow : Window
         if (!changed) return;
         Stage.SetSustainPedal(_pedalsDown.Contains(PianoPedal.Sustain));
         var controller = MidiDeviceService.ControllerFor(pedal);
-        _audio.ControlChange(controller, down ? 127 : 0);
+        if (!_liveAudioSent) _audio.ControlChange(controller, down ? 127 : 0);
         _updatingPedals = true;
         try { PedalToggle(pedal).IsChecked = down; }
         finally { _updatingPedals = false; }
