@@ -559,6 +559,7 @@ internal static class VerificationSuite
         VerifySettingsHistory(window);
         VerifySettingsProfile(window);
         VerifyPresetSharing(window);
+        VerifyPresetThumbnails(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1474,6 +1475,71 @@ internal static class VerificationSuite
         Assert(Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
             "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
+    }
+
+    /// <summary>
+    /// The picture stored inside a preset file: the stage really renders at the fixed size, a saved preset
+    /// keeps that render in its file and gets it back on load, an exported preset carries it to another
+    /// machine through import, a file written before the envelope existed still loads, and a picture that
+    /// is not a PNG of the right size is refused instead of breaking the list.
+    /// </summary>
+    private static void VerifyPresetThumbnails(MainWindow window)
+    {
+        var look = VisualPresets.FindBuiltIn("Inferno")!.Settings.Clone();
+        var png = Stage.PresetThumbnail.RenderPng(look);
+        Assert(png.Length > 8 && png.Take(8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+            "A rendered preset picture should be a PNG.");
+        static int BigEndian(byte[] bytes, int offset) => (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
+        Assert(BigEndian(png, 16) == Stage.PresetThumbnail.Width && BigEndian(png, 20) == Stage.PresetThumbnail.Height && png.Length > 1000,
+            $"The rendered picture should be {Stage.PresetThumbnail.Width}×{Stage.PresetThumbnail.Height} and carry real content (found {BigEndian(png, 16)}×{BigEndian(png, 20)}, {png.Length} bytes).");
+        var stored = Stage.PresetThumbnail.Decode(Stage.PresetThumbnail.Encode(look));
+        Assert(stored is { PixelWidth: Stage.PresetThumbnail.Width, PixelHeight: Stage.PresetThumbnail.Height },
+            "The picture a preset stores should decode back to a bitmap of the rendered size.");
+        Assert(Stage.PresetThumbnail.Decode("") is null && Stage.PresetThumbnail.Decode(null) is null
+                && Stage.PresetThumbnail.Decode("not base64 at all!!") is null
+                && Stage.PresetThumbnail.Decode(Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 })) is null
+                && Stage.PresetThumbnail.Decode(new string('A', Stage.PresetThumbnail.MaxBase64Length + 1)) is null,
+            "A preset without a picture, and a picture that is not a PNG of the right size, must read as no picture.");
+
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-thumbs-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var store = new VisualPresetStore(directory);
+            var saved = store.Save("Pictured Look", look, Stage.PresetThumbnail.Encode(look));
+            Assert(saved.Thumbnail is { Length: > 1000 } && File.ReadAllText(saved.FilePath!).Contains("\"Thumbnail\""),
+                "Saving a preset from the app should write the rendered picture into its file.");
+            var loaded = store.LoadUserPresets();
+            Assert(loaded.Count == 1 && loaded[0].Thumbnail == saved.Thumbnail && loaded[0].Settings.NoteStyle == look.NoteStyle,
+                "Loading the preset back should return the same picture together with the same settings.");
+
+            // A file from before the envelope existed: bare settings JSON, no picture, still a preset.
+            var plain = Path.Combine(directory, "Old Look.json");
+            File.WriteAllText(plain, look.ToJson());
+            Assert(VisualPresetStore.ReadPresetFile(File.ReadAllText(plain)) is { Thumbnail: "" } oldFile && oldFile.Settings.NoteStyle == look.NoteStyle,
+                "A preset file written before the picture envelope existed should still load as a preset without a picture.");
+
+            var exportPath = Path.Combine(directory, "exported.json");
+            VisualPresetStore.Export(look, exportPath, Stage.PresetThumbnail.Encode(look));
+            var imported = VisualPresetStore.Import(exportPath);
+            Assert(imported.Thumbnail is { Length: > 1000 } && Stage.PresetThumbnail.Decode(imported.Thumbnail) is not null,
+                "An exported preset should carry its picture to the machine that imports it.");
+
+            var noPicture = store.Save("Plain Look", look);
+            Assert(noPicture.Thumbnail == "" && VisualPresetStore.ReadPresetFile(File.ReadAllText(noPicture.FilePath!)).Thumbnail == "",
+                "Saving without a picture should still write a preset that loads, just without a thumbnail.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+
+        // The list: a preset with a stored picture uses it, one without falls back to the drawn miniature.
+        var pictured = new VisualPreset("Pictured", "with a picture", false, look, null, Stage.PresetThumbnail.Encode(look));
+        var drawn = new VisualPreset("Drawn", "without a picture", false, look);
+        if (InvokeReturn(window, "PresetThumbnail", pictured) is not System.Windows.Media.ImageSource picturedImage
+            || InvokeReturn(window, "PresetThumbnail", drawn) is not System.Windows.Media.ImageSource drawnImage)
+            throw new InvalidOperationException("The preset list should be able to build a picture for both a pictured and a drawn preset.");
+        Assert(picturedImage is BitmapSource { PixelWidth: Stage.PresetThumbnail.Width, PixelHeight: Stage.PresetThumbnail.Height }
+                && drawnImage is BitmapSource { PixelWidth: Stage.PresetThumbnail.Width, PixelHeight: Stage.PresetThumbnail.Height },
+            "The preset list should show the stored picture at the same size as the miniature it draws for a preset without one.");
+        Results.Add("PASS preset pictures: the stage renders at 192×112, a saved or exported preset carries the picture and gets it back on load, older files load without one, and a picture that is not a PNG of the right size is refused.");
     }
 
     private static void VerifySettingsProfile(MainWindow window)

@@ -596,7 +596,10 @@ internal sealed class PianoStage : FrameworkElement
     {
         base.OnRender(dc);
         var width = ActualWidth; var height = ActualHeight; if (width < 1 || height < 1) return;
-        if (_pixelsPerDip <= 0) _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip; // read once; OnDpiChanged keeps it current
+        // Read once; OnDpiChanged keeps it current. The value is asked for defensively because the stage is
+        // also drawn off screen to make the picture a preset file carries (see PresetThumbnail), and an
+        // element that is not attached to a window yet has no DPI to report on some systems.
+        if (_pixelsPerDip <= 0) _pixelsPerDip = PixelsPerDip(this);
         var keyHeight = KeyboardHeight; var keyTop = height - keyHeight; var lane = width / KeyCount;
         var chroma = _visual.BackgroundMode == "ChromaGreen";
         var scale = _visual.CameraZoom / 100;
@@ -655,6 +658,13 @@ internal sealed class PianoStage : FrameworkElement
     }
 
     /// <summary>Keeps the cached DPI current so per-frame text and shader scaling stay crisp after a display change.</summary>
+    /// <summary>Pixels per DIP of a visual, or 1 when the visual cannot report one yet.</summary>
+    private static double PixelsPerDip(Visual visual)
+    {
+        try { return VisualTreeHelper.GetDpi(visual).PixelsPerDip; }
+        catch { return 1; }
+    }
+
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         _pixelsPerDip = newDpi.PixelsPerDip;

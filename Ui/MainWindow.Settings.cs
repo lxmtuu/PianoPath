@@ -1255,12 +1255,16 @@ public partial class MainWindow
 
     private readonly Dictionary<string, ImageSource> _presetThumbs = [];
 
-    /// <summary>Embers-style miniature: a tiny keyboard with the preset's note palette falling onto it.</summary>
+    /// <summary>
+    /// The picture of a preset: the render that was stored with the look when it was saved or imported,
+    /// and only when the file carries none, the embers-style miniature drawn from its settings.
+    /// </summary>
     private ImageSource PresetThumbnail(VisualPreset preset)
     {
         var s = preset.Settings;
         var key = $"{preset.Name}|{s.ColorMode}|{s.NoteColorStart}|{s.NoteColorEnd}|{s.HaloColor}|{s.NoteStyle}";
         if (_presetThumbs.TryGetValue(key, out var cached)) return cached;
+        if (Stage.PresetThumbnail.Decode(preset.Thumbnail) is { } stored) { _presetThumbs[key] = stored; return stored; }
         var w = 96; var h = 56;
         var visual = new DrawingVisual();
         using (var dc = visual.RenderOpen())
@@ -1342,7 +1346,7 @@ public partial class MainWindow
         try
         {
             if (VisualPresets.FindBuiltIn(name) is not null) { ShowMessage(Loc.F("“{0}” is a built-in preset. Choose another name.", name), "Save preset", MessageBoxImage.Information); return; }
-            var saved = VisualPresetStore.Default.Save(name, _visualSettings);
+            var saved = VisualPresetStore.Default.Save(name, _visualSettings, Stage.PresetThumbnail.Encode(_visualSettings));
             _visualSettings.PresetName = saved.Name; _visualSettings.PresetModified = false;
             LoadPresetList(saved.Name); UpdatePresetLabels();
             ApplyVisualSettings("Preset “{0}” saved", false, VisualPresets.DisplayName(saved.Name));
@@ -1377,7 +1381,7 @@ public partial class MainWindow
     {
         var dialog = new SaveFileDialog { Filter = "Keyflow preset (*.json)|*.json", DefaultExt = ".json", AddExtension = true, FileName = VisualPresetStore.SanitizeName(_visualSettings.PresetName) + ".json", Title = "Export the current look" };
         if (dialog.ShowDialog(this) != true) return;
-        try { VisualPresetStore.Export(_visualSettings, dialog.FileName); Loc.Set(SettingsSaveLabel, "Preset exported"); }
+        try { VisualPresetStore.Export(_visualSettings, dialog.FileName, Stage.PresetThumbnail.Encode(_visualSettings)); Loc.Set(SettingsSaveLabel, "Preset exported"); }
         catch (Exception ex) { ShowMessage(ex.Message, "Export preset", MessageBoxImage.Warning); }
     }
 
