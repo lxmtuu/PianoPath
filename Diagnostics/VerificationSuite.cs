@@ -1989,7 +1989,8 @@ internal static class VerificationSuite
             var songs = SongFolderIndex.Scan(folder);
             Assert(songs.Count == 3 && songs.Select(song => song.Title).SequenceEqual(["Etude", "Nocturne", "Scale"]),
                 $"A scan should index every readable song below the folder and list them by title (got {string.Join(", ", songs.Select(song => song.Title))}).");
-            Assert(songs[0] is { Format: "mid", Notes: 3, Tracks: 1 } && songs[1] is { Format: "musicxml", Notes: 2, Tracks: 1 }
+            // The MIDI fixture is a format-1 file whose three notes sit on two tracks, the score is one part.
+            Assert(songs[0] is { Format: "mid", Notes: 3, Tracks: 2 } && songs[1] is { Format: "musicxml", Notes: 2, Tracks: 1 }
                     && Math.Abs(songs[1].BeatsPerMinute - 120) < .01 && songs[2].Path.StartsWith(sub, StringComparison.OrdinalIgnoreCase),
                 "Facts should come from the files themselves: notes, tracks, tempo and the format of each one.");
             Assert(SongFolderIndex.Folder.EndsWith(Path.GetFileName(folder), StringComparison.OrdinalIgnoreCase) && songs.All(song => song.Tags.Count == 0),
