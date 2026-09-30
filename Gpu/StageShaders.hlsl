@@ -316,7 +316,8 @@ float4 PsNote(NoteOut v) : SV_Target
     {
         // Fire / lava: a cream-hot body cut by dark crusted cracks that crawl over it, glowing orange at
         // the rim and turning red-hot as it nears the keys
-        float2 q = float2(p.x / max(hb.x, 1.0) * 1.3, (v.SceneY + v.Misc.y * 97.0) / (16.0 * SceneB.y));
+        // coarse enough that a crack stays several pixels wide on a narrow bar (the software stage's texture)
+        float2 q = float2(p.x / max(hb.x, 1.0) * 0.7, (v.SceneY + v.Misc.y * 97.0) / (22.0 * SceneB.y));
         q.y -= ScreenTime.z * 0.35;
         float n = Fbm(q * float2(1.6, 1.0));
         float cracks = smoothstep(0.34, 0.5, n) * (0.35 + 0.65 * NoteC.x) + (1.0 - NoteC.x) * 0.65;
@@ -326,10 +327,10 @@ float4 PsNote(NoteOut v) : SV_Target
         float3 crust = float3(0.3, 0.02, 0.008);
         float3 body = lerp(crust, hot, saturate(cracks * veins));
         body = lerp(body, body * float3(1.0, 0.38, 0.2) + float3(0.25, 0.0, 0.0), heat * 0.75);
-        float rim = exp(-abs(d + edgeW * 0.4) / (edgeW * 0.7));
+        float rim = exp(-abs(d + edgeW * 0.3) / (edgeW * 0.45));
         // kept under the bloom threshold (1.8) so the cream body and its dark cracks read instead of
         // blooming into one white column; the orange rim and the halo carry the heat
-        emit += (body * (0.62 + 0.36 * NoteB.x) + float3(1.0, 0.36, 0.06) * rim * 1.1 * NoteB.y) * inside;
+        emit += (body * (0.62 + 0.36 * NoteB.x) + float3(1.0, 0.36, 0.06) * rim * 0.7 * NoteB.y) * inside;
         emit += float3(1.0, 0.3, 0.05) * exp(-outsideD / (glowR * 0.25)) * 0.55 * NoteC.z * (1.0 - inside);
         emit += float3(1.0, 0.55, 0.2) * sounding * 0.25 * inside;
         alpha = inside;
@@ -343,7 +344,8 @@ float4 PsNote(NoteOut v) : SV_Target
     {
         float rimLine = exp(-pow((d - 1.5) / 1.1, 2.0));
         float haloLine = exp(-pow((d - 3.5) / 2.6, 2.0));
-        emit += (float3(1.0, 1.0, 1.0) * rimLine * 1.6 + col * haloLine * 0.9) * holdBar;
+        // tinted by the note so a narrow bar keeps its colour instead of two white lines
+        emit += (lerp(col, 1.0, 0.6) * rimLine * 1.1 + col * haloLine * 0.6) * holdBar;
         alpha = max(alpha, rimLine * holdBar * 0.5);
     }
     return float4(emit * opacity, alpha * opacity);

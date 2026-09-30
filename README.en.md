@@ -275,6 +275,8 @@ The same engine with two presets that use the effect families: **Galaxy Voyage**
 ![Keyflow GPU stage · Galaxy Voyage](docs/previews/en/stage-gpu-galaxy.png)
 ![Keyflow GPU stage · Electric Storm](docs/previews/en/stage-gpu-storm.png)
 
+Every built-in preset, drawn by both engines side by side (software | GPU), is in one picture CI rebuilds on every push: [`docs/previews/presets.jpg`](docs/previews/presets.jpg). It is how the GPU engine is checked against the theme of each preset (pressed key colour, horizon, hollow neon tubes, Fire cracks…); `tools/check_sources.py` checks the workflow's preset list against `Stage/VisualPresets.cs`.
+
 ### Audio, MIDI & practice
 
 | Group | Details |

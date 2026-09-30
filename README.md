@@ -257,6 +257,8 @@ Cùng engine với hai preset dùng các họ hiệu ứng: **Galaxy Voyage** (v
 ![Keyflow GPU stage · Galaxy Voyage](docs/previews/vi/stage-gpu-galaxy.png)
 ![Keyflow GPU stage · Electric Storm](docs/previews/vi/stage-gpu-storm.png)
 
+Mọi preset có sẵn, mỗi preset vẽ bằng cả hai engine cạnh nhau (phần mềm | GPU), nằm trong một ảnh CI dựng lại ở mỗi lần đẩy: [`docs/previews/presets.jpg`](docs/previews/presets.jpg). Đây là cách kiểm tra engine GPU vẫn giữ đúng chủ đề của từng preset (màu phím đang nhấn, horizon, ống neon rỗng, vết nứt của Fire…); danh sách preset trong workflow được `tools/check_sources.py` đối chiếu với `Stage/VisualPresets.cs`.
+
 ### Âm thanh, MIDI & luyện tập
 
 | Nhóm | Chi tiết |

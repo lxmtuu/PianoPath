@@ -372,7 +372,8 @@ internal sealed class GpuStageRenderer : IDisposable
         var offsetY = (layout.Height - layout.Height * zoom) * .5f + (input.PointerY - .5f) * look.CameraParallax * 20;
         var beat = look.TempoSync ? input.BeatPulse * look.TempoSyncAmount : 0;
         var aura = look.ShowBackground && look.BackgroundGradient && !look.Chroma ? .22f * look.BloomIntensity / .65f : 0;
-        var stars = look.ShowBackground && look.ShowStars && !look.Chroma ? .12f + look.StarDensity * .45f : 0;
+        // the software star field: one star per 5200 DIP² at full density (a 26 DIP cell is 676 DIP²), drawn faint
+        var stars = look.ShowBackground && look.ShowStars && !look.Chroma ? Math.Max(.02f, look.StarDensity * 676f / 5200f) : 0;
         var edge = .9f + look.NoteEdgeWidth * 3.4f;
         return new GpuFrameConstants
         {
@@ -383,7 +384,7 @@ internal sealed class GpuStageRenderer : IDisposable
             Aura = new Vector4(.19f, .03f, .42f, aura),
             // the software stage's horizon: peak alpha glow x 1.7 / 255 in sRGB (0.667 at full), a little brighter while keys sound
             Horizon = new Vector4(simulation.HorizonColor, MathF.Pow(look.HorizonGlow * .667f, 2.2f) * (1 + simulation.Activity * .5f) * (1 + beat)),
-            SceneA = new Vector4(stars, 1.4f, _backgroundView is not null && look.ShowBackground && !look.Chroma ? 1 : 0, look.BackgroundDim),
+            SceneA = new Vector4(stars, .14f, _backgroundView is not null && look.ShowBackground && !look.Chroma ? 1 : 0, look.BackgroundDim),
             SceneB = new Vector4(_backgroundAspect, 1, beat, .88f),
             NoteA = new Vector4(look.NoteStyle, 2 + look.NoteRoundness * 12, edge, 5 + look.BloomSize * 16),
             NoteB = new Vector4(look.NoteTint, look.NoteEdge * 1.15f, look.NoteHeadGlow, look.NoteRefraction),
