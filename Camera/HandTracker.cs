@@ -94,7 +94,10 @@ internal static class HandTracker
 
     /// <summary>
     /// The video rule for skin in YCbCr, with a window the sensitivity widens or narrows: a floor on brightness,
-    /// then the chroma window a human skin tone sits in under any light the camera copes with at all.
+    /// then the chroma window a human skin tone sits in under any light the camera copes with at all, and the
+    /// warm lean every skin tone has — red above blue in chroma. That last part is what keeps white and grey out
+    /// of the count when the window is opened wide, since a neutral colour has nothing between its two chroma
+    /// samples to lean either way, and a wall is exactly the thing this layer must not mistake for a hand.
     /// </summary>
     /// <param name="spread">Cells of extra room on each side of the chroma window; negative narrows it.</param>
     internal static bool IsSkin(byte blue, byte green, byte red, int spread)
@@ -103,6 +106,7 @@ internal static class HandTracker
         if (y < 40) return false;
         var cb = ((-43 * red - 85 * green + 128 * blue) >> 8) + 128;
         var cr = ((128 * red - 107 * green - 21 * blue) >> 8) + 128;
+        if (cr <= cb) return false;
         return cb >= 77 - spread && cb <= 127 + spread && cr >= 133 - spread && cr <= 173 + spread;
     }
 

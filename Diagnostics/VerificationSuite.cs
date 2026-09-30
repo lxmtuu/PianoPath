@@ -399,8 +399,9 @@ internal static class VerificationSuite
     {
         // The skin rule: a light skin tone is skin, and the colours a stage or a wall is made of are not.
         Assert(HandTracker.IsSkin(120, 150, 200, 0), "A light skin tone should be read as skin.");
-        Assert(!HandTracker.IsSkin(0, 255, 0, 14) && !HandTracker.IsSkin(255, 255, 255, 14) && !HandTracker.IsSkin(255, 0, 0, 14),
-            "The key colour, white and blue should not be read as skin, however wide the window is opened.");
+        Assert(!HandTracker.IsSkin(0, 255, 0, 14) && !HandTracker.IsSkin(255, 255, 255, 14) && !HandTracker.IsSkin(255, 0, 0, 14)
+                && !HandTracker.IsSkin(128, 128, 128, 14) && !HandTracker.IsSkin(0, 0, 255, 14),
+            "The key colour, white, grey and blue should not be read as skin, however wide the window is opened.");
         // Sensitivity really moves the window: a colour one step outside it is skin with the window wide and
         // nothing with it narrow, which is what the slider promises.
         var outside = (Blue: 0, Green: 0, Red: 0);
