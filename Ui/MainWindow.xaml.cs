@@ -611,6 +611,14 @@ public partial class MainWindow : Window
         return brush;
     }
 
+    /// <summary>
+    /// How long the MP4 writer gets to open before the machine is treated as one whose media stack stopped
+    /// answering. Opening a take is a handful of native calls and takes well under a second wherever it works at
+    /// all; ten seconds is generous for a slow machine and short enough that a wedged one never looks like a
+    /// window that has hung.
+    /// </summary>
+    private static readonly TimeSpan RecorderOpenLimit = TimeSpan.FromSeconds(10);
+
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
@@ -626,12 +634,31 @@ public partial class MainWindow : Window
             // The MP4 writer owns its audio stream, so it has to know before it opens the file whether the
             // engine will hand it samples.
             var withAudio = _visualSettings.RecordAudio && _audio.HasSoundFont;
-            _videoRecorder = target.Length > 0 && sequence
-                ? new PngSequenceRecorder(target, width, height, frameRate)
-                : mp4
-                    ? new Mp4Recorder(target!, width, height, frameRate, withAudio)
-                    : new AviVideoRecorder(target!, width, height, frameRate);
-            _recordingPath = target!;
+            var path = target!;
+            if (target.Length > 0 && sequence)
+            {
+                _videoRecorder = new PngSequenceRecorder(path, width, height, frameRate);
+            }
+            else if (mp4)
+            {
+                // The MP4 writer is native code that can stop answering rather than fail, so it is opened on a
+                // thread of its own with a few seconds to come back (see Mp4Recorder.TryOpen): a machine like
+                // that records an AVI instead of losing both the take and the window.
+                var take = Mp4Recorder.TryOpen(path, width, height, frameRate, withAudio, RecorderOpenLimit, out var failure, out var stopped);
+                if (take is not null) _videoRecorder = take;
+                else if (!stopped) throw failure ?? new InvalidOperationException(Loc.T("A media type could not be prepared."));
+                else
+                {
+                    path = Path.ChangeExtension(path, ".avi");
+                    _videoRecorder = new AviVideoRecorder(path, width, height, frameRate);
+                    ShowMessage(Loc.T("This machine's media stack stopped answering while the MP4 recorder was being opened, so this take is being recorded as AVI instead."), "Video recording", MessageBoxImage.Warning);
+                }
+            }
+            else
+            {
+                _videoRecorder = new AviVideoRecorder(path, width, height, frameRate);
+            }
+            _recordingPath = path;
             // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
             // the switch is the user's and is only honoured for that format.
             Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;

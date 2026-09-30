@@ -1030,6 +1030,7 @@ internal static class StringsVietnamese
         ["This file is not a MusicXML score (found <{0}>)."] = "Tệp này không phải bản nhạc MusicXML (gặp <{0}>).",
         ["This file is not a valid Keyflow preset.\n{0}"] = "Tệp này không phải preset Keyflow hợp lệ.\n{0}",
         ["This is not an uncompressed SoundFont 2 (.sf2) file."] = "Đây không phải tệp SoundFont 2 (.sf2) không nén.",
+        ["This machine's media stack stopped answering while the MP4 recorder was being opened, so this take is being recorded as AVI instead."] = "Máy này đã ngừng phản hồi khi mở bộ ghi MP4, nên bản ghi này được ghi thành AVI thay vì MP4.",
         ["This page has no visual settings to reset"] = "Trang này không có thiết lập hình ảnh để đặt lại",
         ["This song is no longer on disk.\n{0}"] = "Bài này không còn trên đĩa.\n{0}",
         ["This source cannot produce the 32-bit frames the overlay draws ({0})."] = "Nguồn này không tạo được khung 32-bit mà lớp phủ cần ({0}).",

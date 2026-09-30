@@ -46,7 +46,7 @@ internal static class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -387,6 +387,37 @@ internal static class VerificationSuite
         Assert(compared > 100 && warmth / (double)compared > 10,
             $"A sounding key must come out warmer in its overlay tile than in the unlit base bake (delta={warmth / (double)Math.Max(1, compared):0.0} over {compared} pixels).");
         Results.Add("PASS shader pipeline: sRGB/ACES/GGX maths, deterministic jitter, bake cache signature, opaque shaded keyboard bake, ebony-vs-ivory light transport and per-key emissive overlay tiles.");
+    }
+
+    /// <summary>
+    /// Opening a take must not be able to take the window down with it. The media stack is native code that can
+    /// stop answering instead of failing — a verification run on such a machine showed the calls simply never
+    /// coming back — so the window opens an MP4 take behind <see cref="HangGuard"/>, keeps the take as AVI when
+    /// the machine stops answering, and says so. These checks exercise the guard itself, with a job that finishes
+    /// and one that does not, and the recorder's refusal of a take it cannot open.
+    /// </summary>
+    private static void VerifyGuardedStart()
+    {
+        var ran = false;
+        Assert(HangGuard.Run(() => ran = true, TimeSpan.FromSeconds(2)) && ran,
+            "Work that finishes at once should be reported as finished, and should really have run.");
+
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        var cameBack = HangGuard.Run(() => Thread.Sleep(3000), TimeSpan.FromMilliseconds(200));
+        clock.Stop();
+        Assert(!cameBack && clock.Elapsed < TimeSpan.FromSeconds(2),
+            $"Work that never comes back should be reported after its limit rather than waited out ({clock.Elapsed.TotalSeconds:0.##} s).");
+
+        var thrown = false;
+        try { HangGuard.Run(() => throw new InvalidOperationException("the guard should pass this on"), TimeSpan.FromSeconds(2)); }
+        catch (InvalidOperationException) { thrown = true; }
+        Assert(thrown, "Whatever the guarded work threw should come back to the caller that asked for it.");
+
+        // A take that cannot be opened for an ordinary reason is refused as such — not reported as a machine that
+        // stopped answering, and not left hanging: the empty path is a plain argument the recorder checks first.
+        var take = Mp4Recorder.TryOpen(string.Empty, 64, 48, 15, withAudio: false, TimeSpan.FromSeconds(5), out var failure, out var stopped);
+        Assert(take is null && !stopped && failure is not null,
+            "A take that cannot be opened should be refused with the reason the recorder gave, and only a machine that stops answering should be reported as such.");
     }
 
     private static void VerifyAviVideoRecorder()

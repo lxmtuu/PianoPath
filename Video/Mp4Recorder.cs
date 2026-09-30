@@ -83,6 +83,28 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         }
     }
 
+    /// <summary>
+    /// Opens a take on a thread of its own, with <paramref name="limit"/> to come back — the way the window opens
+    /// an MP4 recording, since everything in <see cref="Mp4Recorder"/> is native code and a machine whose media
+    /// stack wedges inside one of its calls would otherwise freeze the window itself. Returns null when the take
+    /// could not be opened; <paramref name="stopped"/> then says whether the machine stopped answering (the
+    /// media stack) or refused the take (<paramref name="failure"/>, with the sentence to show the user).
+    /// </summary>
+    internal static Mp4Recorder? TryOpen(string path, int width, int height, int frameRate, bool withAudio,
+        TimeSpan limit, out Exception? failure, out bool stopped)
+    {
+        Mp4Recorder? recorder = null;
+        Exception? error = null;
+        var opened = HangGuard.Run(() =>
+        {
+            try { recorder = new Mp4Recorder(path, width, height, frameRate, withAudio); }
+            catch (Exception ex) { error = ex; }
+        }, limit);
+        failure = error;
+        stopped = !opened;
+        return stopped ? null : recorder;
+    }
+
     /// <summary>Pixels across; part of <see cref="IFrameRecorder"/>.</summary>
     public int Width { get; }
 
