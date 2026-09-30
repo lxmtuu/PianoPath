@@ -30,6 +30,21 @@ internal static partial class VerificationSuite
         Assert(Math.Abs(look.NoteColor(60, 0).X - 120 / 255f) < .01 && look.KeyboardFraction == .2f,
             "The GPU look should carry the stage's own note colours and keyboard proportion.");
 
+        // ---- GPU-exclusive effects: the settings must reach the render look with their slider values ----
+        var gpuEffects = new PianoVisualSettings { NoteShimmer = true, NoteShimmerAmount = 60, HaloPulse = true, HaloPulseIntensity = 70, ShootingStars = true, ShootingStarsAmount = 30 };
+        var effectLook = GpuLook.From(gpuEffects, (pitch, track) => Color.FromRgb(255, 80, 220), .2);
+        Assert(effectLook.NoteShimmer && effectLook.HaloPulse && effectLook.ShootingStars
+            && Math.Abs(effectLook.NoteShimmerAmount - .6f) < .01f && Math.Abs(effectLook.HaloPulseIntensity - .7f) < .01f && Math.Abs(effectLook.ShootingStarsAmount - .3f) < .01f,
+            "Note shimmer, halo light pulses and shooting stars must flow into the GPU look with their slider values.");
+        Assert(Array.IndexOf(PianoVisualSettings.AmbientLights, "Spotlights") >= 0,
+            "The Spotlights light layer should be a choice the GPU stage draws.");
+        var landing = new PianoVisualSettings();
+        Assert(landing.NoteLandingGlow && Math.Abs(landing.NoteLandingGlowAmount - 45) < .01,
+            "The landing glow should gather where notes are about to land by default.");
+        var landingLook = GpuLook.From(new PianoVisualSettings { NoteLandingGlowAmount = 80 }, (pitch, track) => Color.FromRgb(255, 80, 220), .2);
+        Assert(landingLook.NoteLandingGlow && Math.Abs(landingLook.NoteLandingGlowAmount - .8f) < .01f,
+            "The landing glow must flow into the GPU look with its slider value.");
+
         // ---- feed: the render thread extrapolates the song clock between UI updates ---------------------
         var feed = new GpuStageFeed();
         var notes = MainWindow.CreateDemoSong();

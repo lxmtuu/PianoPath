@@ -322,12 +322,13 @@ internal sealed partial class GpuStageSimulation
                 // three hanging stage lights whose soft shafts sway with the music; the warm white is
                 // pulled towards the layer tint so the look's colour still leads
                 var shaft = Vector3.Lerp(Rgb(255, 244, 224), tint, .45f);
+                var beat = look.TempoSync ? _beatPulse : _activity;   // with Tempo sync the rig rides the beat
                 for (var i = 0; i < 3; i++)
                 {
                     var anchor = width * (.22f + .28f * i);
-                    var sway = MathF.Sin((float)(e * speed * .35) + i * 2.1f);
-                    var target = anchor + sway * width * .07f + MathF.Sin((float)(e * speed * .13) + i * 1.3f) * width * .03f;
-                    var flicker = .92f + .08f * MathF.Sin((float)(e * (9 + i * 2.3)) + i * 5);
+                    var sway = MathF.Sin((float)(e * speed * .35) + i * 2.1f + beat * (1.4f + i * .3f));
+                    var target = anchor + sway * width * (.07f + beat * .05f) + MathF.Sin((float)(e * speed * .13) + i * 1.3f) * width * .03f;
+                    var flicker = .92f + .08f * MathF.Sin((float)(e * (9 + i * 2.3)) + i * 5) + beat * .12f;
                     for (var layer = 0; layer < 3; layer++)
                     {
                         var halfWidth = width * (.028f + layer * .034f);

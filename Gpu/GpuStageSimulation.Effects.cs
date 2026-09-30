@@ -23,6 +23,11 @@ internal sealed partial class GpuStageSimulation
     private readonly List<NoteTrail> _noteLabels = [];
     /// <summary>Every travelling note this frame; the shimmer pass draws its sweeping sheen over them.</summary>
     private readonly List<NoteTrail> _shimmerBars = [];
+    /// <summary>Notes about to reach the keys; the impact pass draws their anticipation glow.</summary>
+    private readonly List<Landing> _landings = [];
+
+    /// <summary>A note approaching its key: lane centre, 0..1 time until the strike, note colour.</summary>
+    private readonly record struct Landing(float X, float T, Vector3 Color);
 
     /// <summary>
     /// The note name inside a bar, placed and coloured as the software stage does: near the bottom edge,

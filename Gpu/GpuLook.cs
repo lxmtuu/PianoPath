@@ -64,6 +64,9 @@ internal sealed class GpuLook
     /// <summary>Occasional meteors crossing the sky behind the notes (Style → ATMOSPHERE).</summary>
     public bool ShootingStars { get; init; }
     public float ShootingStarsAmount { get; init; } = .5f;
+    /// <summary>A glow gathering where a note is about to land (Style → IMPACT; off for chroma keying).</summary>
+    public bool NoteLandingGlow { get; init; } = true;
+    public float NoteLandingGlowAmount { get; init; } = .45f;
     public bool HoldBar { get; init; }
     public float HoldBarIntensity { get; init; } = .6f;
     public bool HoldBreath { get; init; }
@@ -260,6 +263,7 @@ internal sealed class GpuLook
             NoteShimmer = s.NoteShimmer, NoteShimmerAmount = P(s.NoteShimmerAmount),
             HaloPulse = s.HaloPulse, HaloPulseIntensity = P(s.HaloPulseIntensity),
             ShootingStars = s.ShootingStars, ShootingStarsAmount = P(s.ShootingStarsAmount),
+            NoteLandingGlow = s.NoteLandingGlow, NoteLandingGlowAmount = P(s.NoteLandingGlowAmount),
             HoldBar = s.HoldBar, HoldBarIntensity = P(s.HoldBarIntensity), HoldBreath = s.HoldBreath, HoldBreathRate = P(s.HoldBreathRate),
             HoldVibration = s.HoldVibration, HoldVibrationAmount = P(s.HoldVibrationAmount),
             HoldElectricArc = s.HoldElectricArc, HoldArcIntensity = P(s.HoldArcIntensity),

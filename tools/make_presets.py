@@ -66,7 +66,7 @@ PRESETS: list[dict] = [
         "description": "Quiet pastel bars, dust instead of sparks and almost no glow: the cheapest look, made for long study recordings.",
         "settings": {
             "NoteStyle": "Solid", "ColorMode": "Gradient", "Palette": "Ocean",
-            "NoteColorStart": "#8FB8C9", "NoteColorEnd": "#C9A6D8", "HaloColor": "#9AB6C4", "HaloIntensity": 40,
+            "NoteColorStart": "#8FB8C9", "NoteColorEnd": "#C9A6D8", "HaloColor": "#9AB6C4", "HaloIntensity": 40, "NoteLandingGlow": False,
             "NoteTexture": 20, "NoteTint": 60, "NoteGlow": 45, "NoteEdge": 30, "NoteEdgeWidth": 20,
             "NoteRoundness": 70, "NoteHeadGlow": 20, "NoteFallSpeed": 480, "Notes3D": False,
             "FallingTrail": "None",
@@ -90,7 +90,7 @@ PRESETS: list[dict] = [
         "description": "Synthwave neon in magenta and amber: speed-line trails, shattering hits, echo rings and laser beams over a purple horizon.",
         "settings": {
             "NoteStyle": "Neon", "ColorMode": "Gradient", "Palette": "Custom",
-            "NoteColorStart": "#FF3D7F", "NoteColorEnd": "#FFB86B", "HaloColor": "#FF7A59", "HaloIntensity": 110,
+            "NoteColorStart": "#FF3D7F", "NoteColorEnd": "#FFB86B", "HaloColor": "#FF7A59", "HaloIntensity": 110, "HaloPulse": True, "HaloPulseIntensity": 60, "NoteShimmer": True, "NoteShimmerAmount": 30,
             "NoteTexture": 35, "NoteTint": 40, "NoteGlow": 115, "NoteEdge": 120, "NoteEdgeWidth": 55,
             "NoteRoundness": 55, "NoteHeadGlow": 50, "NoteFallSpeed": 620,
             "FallingTrail": "Speed Lines", "FallingTrailIntensity": 80, "FallingTrailLength": 65,

@@ -322,6 +322,8 @@ public partial class MainWindow
         SliderRow(falling, "Ghost amount", nameof(PianoVisualSettings.FallingGhostAmount), 0, 100, "Visibility and number of the echoes.").VisibleWhen = () => _visualSettings.FallingGhost;
 
         var impact = Card(NoteSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
+        Toggle(impact, "Landing glow", nameof(PianoVisualSettings.NoteLandingGlow), "A soft glow gathers on the key a note is about to strike, then hands over to the impact — also a practice aid (GPU stage).");
+        SliderRow(impact, "Landing glow intensity", nameof(PianoVisualSettings.NoteLandingGlowAmount), 0, 100, "How bright the anticipation glow is.").VisibleWhen = () => _visualSettings.NoteLandingGlow;
         Toggle(impact, "Enable impact wave", nameof(PianoVisualSettings.ShowImpactRings), "Expanding wave on every hit.");
         Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring, a filled shockwave blast or flat water ripples.",
             ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("Ripple", "Ripple"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;

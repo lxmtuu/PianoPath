@@ -110,6 +110,10 @@ internal sealed class PianoVisualSettings
     public bool HaloPulse { get; set; } = false;
     /// <summary>Brightness of the travelling halo pulses (0-100).</summary>
     public double HaloPulseIntensity { get; set; } = 50;
+    /// <summary>GPU stage: a soft glow gathers where a note is about to land (also a practice aid).</summary>
+    public bool NoteLandingGlow { get; set; } = true;
+    /// <summary>Brightness of the anticipation glow (0-100).</summary>
+    public double NoteLandingGlowAmount { get; set; } = 45;
     public string PressedKeyColor { get; set; } = "#F782FF";
     public string KeyFeltColor { get; set; } = "#C41C4A";
     public string BackgroundColor { get; set; } = "#000000";
@@ -443,7 +447,7 @@ internal sealed class PianoVisualSettings
         FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
         FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
         NoteShimmerAmount = Math.Clamp(NoteShimmerAmount, 0, 100); HaloPulseIntensity = Math.Clamp(HaloPulseIntensity, 0, 100);
-        ShootingStarsAmount = Math.Clamp(ShootingStarsAmount, 0, 100);
+        ShootingStarsAmount = Math.Clamp(ShootingStarsAmount, 0, 100); NoteLandingGlowAmount = Math.Clamp(NoteLandingGlowAmount, 0, 100);
         ImpactMorphIntensity = Math.Clamp(ImpactMorphIntensity, 0, 100);
         HoldBarIntensity = Math.Clamp(HoldBarIntensity, 0, 100); HoldBreathRate = Math.Clamp(HoldBreathRate, 0, 100);
         HoldVibrationAmount = Math.Clamp(HoldVibrationAmount, 0, 100); HoldColorCycleSpeed = Math.Clamp(HoldColorCycleSpeed, 0, 100);

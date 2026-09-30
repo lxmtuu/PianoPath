@@ -55,6 +55,8 @@
     "HaloIntensity": 40,
     "HaloPulse": false,
     "HaloPulseIntensity": 50.0,
+    "NoteLandingGlow": false,
+    "NoteLandingGlowAmount": 45.0,
     "PressedKeyColor": "#F782FF",
     "KeyFeltColor": "#C41C4A",
     "BackgroundColor": "#000000",
