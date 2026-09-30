@@ -43,10 +43,16 @@ internal static partial class VerificationSuite
 
     public static void Run(string[] args, App app)
     {
+        // The expectations below spell numbers the invariant way ("0.5"), but the checks format them with the
+        // machine's regional format. A Windows set to Vietnamese (decimal comma) then failed a dozen of them
+        // ("62@2+0,5") for no product reason, while CI on en-US stayed green. Pin the culture for the whole run.
+        System.Globalization.CultureInfo.DefaultThreadCurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+        System.Globalization.CultureInfo.DefaultThreadCurrentUICulture = System.Globalization.CultureInfo.InvariantCulture;
+        Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -101,6 +107,10 @@ internal static partial class VerificationSuite
     private static void VerifyPracticeWindow(string[] args, App app)
     {
         var window = new MainWindow(loadBuiltInSoundFont: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+        // The checks below read the layout right after a change. With Windows animations on (every normal desktop)
+        // the chrome rows are still easing towards their target at that moment, so the checks failed there while a CI
+        // server, which runs with animations off, passed. Screenshot runs already switch the motion off for this reason.
+        window.DisableChromeMotion();
         window.ContentRendered += (_, _) =>
         {
             var delay = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
@@ -285,6 +295,36 @@ internal static partial class VerificationSuite
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
         Results.Add("PASS stage settings: automated runs isolated from the user settings folder, black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+    }
+
+    /// <summary>
+    /// A key that starts sounding needs its own ray-traced overlay tile (tens of milliseconds each). Pressing
+    /// keys must not block the UI thread on that bake, and the tiles must still arrive shortly afterwards.
+    /// </summary>
+    private static void VerifyLitKeyTilesBakeInBackground()
+    {
+        var stage = new PianoStage();
+        stage.Measure(new Size(1550, 900)); stage.Arrange(new Rect(0, 0, 1550, 900)); stage.UpdateLayout();
+        stage.SetVisualSettings(new PianoVisualSettings());
+        double DrawMilliseconds()
+        {
+            var timer = Stopwatch.StartNew();
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) InvokeReturn(stage, "TryDrawShadedKeyboard", dc, 1550d, 200d, 690d);
+            return timer.Elapsed.TotalMilliseconds;
+        }
+        DrawMilliseconds();   // the one-off base bake of the whole keyboard
+        var tiles = (System.Collections.ICollection)Field(stage, "_shadedTiles");
+        stage.SetState([], 0, false, new HashSet<int> { 48, 52, 55, 60, 64, 67 });
+        var pressMilliseconds = DrawMilliseconds();
+        Assert(pressMilliseconds < 100, $"Pressing six new keys must not block on their tile bakes ({pressMilliseconds:0.0} ms on the UI thread).");
+        for (var wait = 0; wait < 240 && tiles.Count < 6; wait++)
+        {
+            stage.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            Thread.Sleep(25);
+        }
+        Assert(tiles.Count >= 6, $"The overlay tiles of the sounding keys should be baked in the background and arrive ({tiles.Count} of 6).");
+        Results.Add($"PASS lit-key tiles: a six-key press cost {pressMilliseconds:0.0} ms on the UI thread; tiles arrived from the background worker.");
     }
 
     /// <summary>Exercises the ray-traced keyboard: shading maths, the bake cache key and real pixel output.</summary>
@@ -1005,7 +1045,7 @@ internal static partial class VerificationSuite
         void GoIdle() { SetField(window, "_lastPointerActivity", DateTime.UtcNow.AddSeconds(-4)); Invoke(window, "CheckChromeIdle"); }
         Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Live Play should start immersive with settings hidden and the idle toolbar available.");
         GoIdle();
-        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "An idle pointer should hide the toolbar, menu and REC so only the stage remains.");
+        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, $"An idle pointer should hide the toolbar, menu and REC so only the stage remains (rows {rowDefinitions[0].Height.Value} and {rowDefinitions[2].Height.Value}, expected 0).");
         MoveMouse();
         Assert(overlay.Visibility == Visibility.Visible && rowDefinitions[0].Height.Value > 0 && recordButton.Visibility == Visibility.Visible && panel.Visibility == Visibility.Collapsed, "Mouse movement should bring the toolbar, menu and REC back without opening settings.");
         GoIdle(); PressEscape();

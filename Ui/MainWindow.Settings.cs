@@ -892,7 +892,7 @@ public partial class MainWindow
         Loc.Set(swatch, "Open color picker", FrameworkElement.ToolTipProperty);
         Loc.Set(swatch, label, AutomationProperties.NameProperty);
         swatch.Click += VisualColorButton_Click; SetColorSwatch(swatch, current);
-        var box = new TextBox { Text = current, Tag = property, Width = 92, Height = 26, FontSize = 10.5, CharacterCasing = CharacterCasing.Upper, MaxLength = 9 };
+        var box = new TextBox { Text = current, Tag = property, Width = 92, Height = 26, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, CharacterCasing = CharacterCasing.Upper, MaxLength = 9 };
         Loc.Set(box, label, AutomationProperties.NameProperty);
         box.LostFocus += VisualColor_LostFocus; box.KeyDown += (s, e) => { if (e.Key == Key.Enter) { VisualColor_LostFocus(s, e); e.Handled = true; } };
         Grid.SetColumn(swatch, 1); Grid.SetColumn(box, 2);

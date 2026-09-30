@@ -375,7 +375,7 @@ internal sealed class CameraFrameReader : IDisposable
     }
 
     /// <summary>Reads a string attribute the way Media Foundation hands it out: an allocated wide string.</summary>
-    private static string? Attribute(Mf.IMFAttributes attributes, Guid key)
+    private static string? Attribute(object attributes, Guid key)
     {
         if (attributes.GetAllocatedStringKey(key, out var pointer, out _) != Mf.S_OK || pointer == IntPtr.Zero) return null;
         try { return Marshal.PtrToStringUni(pointer); }
