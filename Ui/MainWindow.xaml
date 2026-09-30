@@ -225,7 +225,14 @@
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRACTICE HISTORY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="Every finished run of the open song lands here: when it was played, its accuracy, the hits and the longest streak." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
-                                    <TextBlock x:Name="HistoryBestLabel" Style="{StaticResource LabelTextStyle}" Margin="0,0,0,6"/>
+                                    <TextBlock Text="PRACTICE CHART" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
+                                    <TextBlock Text="The last two weeks at a glance: one bar per day, taller when that day's notes landed better." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,6"/>
+                                    <Canvas x:Name="HistoryChartHost" Height="52" HorizontalAlignment="Left"/>
+                                    <TextBlock x:Name="HistoryChartLabel" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
+                                    <TextBlock Text="GHOST OF THIS SONG" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
+                                    <TextBlock x:Name="HistoryGhostLabel" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,4"/>
+                                    <StackPanel x:Name="HistoryGhostHost"/>
+                                    <TextBlock x:Name="HistoryBestLabel" Style="{StaticResource LabelTextStyle}" Margin="0,12,0,6"/>
                                     <StackPanel x:Name="PracticeHistoryHost"/>
                                     <TextBlock x:Name="HistoryEmptyLabel" Text="Nothing recorded yet. Play a song through and its run will show up here." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
                                     <TextBlock x:Name="HistorySummaryLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>

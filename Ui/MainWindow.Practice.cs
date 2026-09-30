@@ -24,13 +24,25 @@ public partial class MainWindow
 
     private int _practiceMissRun, _practiceHitRun;
 
+    /// <summary>
+    /// The graded notes of the take in progress, which becomes the ghost of the run written when it ends.
+    /// Capped at <see cref="PracticeHistory.GhostCapacity"/> while the take runs, so a long song does not build
+    /// a list that is thrown away at the end.
+    /// </summary>
+    private readonly List<PracticePoint> _practiceGhost = [];
+
     /// <summary>The two run counters, exposed so <c>--verify</c> can prove they reset as the rules say.</summary>
     internal int PracticeMissRun => _practiceMissRun;
     internal int PracticeHitRun => _practiceHitRun;
 
-    /// <summary>A note was scored: extend the run and, when a run is long enough, step the tempo.</summary>
-    internal void RecordPracticeNote(bool hit)
+    /// <summary>
+    /// A note was scored: remember where it sat for the ghost of this take, then extend the run and, when the
+    /// run is long enough, step the tempo. The ghost is kept whether or not the tempo curve is on, because the
+    /// History page draws it for every take.
+    /// </summary>
+    internal void RecordPracticeNote(bool hit, int pitch, double at)
     {
+        if (_practiceGhost.Count < PracticeHistory.GhostCapacity) _practiceGhost.Add(new PracticePoint(at, pitch, hit));
         if (!_visualSettings.PracticeAutoTempo)
         {
             _practiceMissRun = _practiceHitRun = 0;
@@ -52,8 +64,15 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>Forgets both runs; called when the score restarts so a new take starts from zero.</summary>
-    internal void ResetPracticeTempoRuns() => _practiceMissRun = _practiceHitRun = 0;
+    /// <summary>Forgets both runs and the ghost; called when the score restarts so a new take starts from zero.</summary>
+    internal void ResetPracticeTempoRuns()
+    {
+        _practiceMissRun = _practiceHitRun = 0;
+        _practiceGhost.Clear();
+    }
+
+    /// <summary>The graded notes of the take in progress; handed to <see cref="PracticeHistory.Record"/> on stop.</summary>
+    internal IReadOnlyList<PracticePoint> PracticeGhost => _practiceGhost;
 
     /// <summary>
     /// Moves the playback tempo by one step and lets the slider do the rest. The auto curve never

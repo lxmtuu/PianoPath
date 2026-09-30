@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Reflection;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -660,6 +661,7 @@ internal static class VerificationSuite
                         VerifyHandSplitInferenceOnSong(window);
                         VerifyPracticeTempo(window);
                         VerifyPracticeHistory(window);
+                        VerifyPracticeGhostAndChart(window);
                         completed();
                     }
                     catch (Exception ex) { failed(ex); }
@@ -1797,6 +1799,145 @@ internal static class VerificationSuite
         stage.SetSheet([], 4);
         stage.ClearTransient();
         Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
+    }
+
+    /// <summary>
+    /// The ghost and the fourteen-day chart. Both are arithmetic over the history file, so the check writes a
+    /// history with known days and known graded notes and then reads the picture back: the day the chart ends
+    /// on, the runs bucketed per local day, the days with nothing played still present, the geometry of a bar
+    /// and of a dot, and the dock page rebuilt from the same model. The last part drives the app path, where a
+    /// take's graded notes are collected note by note and written when the transport stops.
+    /// </summary>
+    private static void VerifyPracticeGhostAndChart(MainWindow window)
+    {
+        var chart = (Canvas)window.FindName("HistoryChartHost");
+        var chartLabel = (TextBlock)window.FindName("HistoryChartLabel");
+        var ghostHost = (StackPanel)window.FindName("HistoryGhostHost");
+        var ghostLabel = (TextBlock)window.FindName("HistoryGhostLabel");
+
+        // The arithmetic first: a bar is linear in accuracy with a floor, and a dot is the note's place in the
+        // song across and its pitch up.
+        Assert(Math.Abs(PracticeChart.BarHeight(100, 52, 3) - 52) < .001 && Math.Abs(PracticeChart.BarHeight(50, 52, 3) - 26) < .001
+                && PracticeChart.BarHeight(1, 52, 3) == 3 && PracticeChart.BarHeight(0, 52, 3) == 0,
+            "A day's bar should be as tall as that day's accuracy and a day that was practised at all should still show a sliver.");
+        Assert(PracticeChart.PitchWindow([]) == (48, 72) && PracticeChart.PitchWindow([new PracticePoint(1, 60, true)]) == (53, 67)
+                && PracticeChart.PitchWindow([new PracticePoint(1, 40, true), new PracticePoint(2, 90, false)]) == (39, 91),
+            "The ghost's pitch axis should be the notes' own range, padded, and at least an octave so a single note has somewhere to sit.");
+        var area = new Rect(0, 0, 200, 40);
+        var low = PracticeChart.Point(0, 40, 10, 40, 90, area); var high = PracticeChart.Point(10, 90, 10, 40, 90, area);
+        var middle = PracticeChart.Point(5, 65, 10, 40, 90, area);
+        Assert(Math.Abs(low.X - PracticeChart.DotRadius) < .001 && Math.Abs(high.X - (area.Right - PracticeChart.DotRadius)) < .001
+                && high.Y < middle.Y && middle.Y < low.Y && Math.Abs(middle.X - area.Width / 2) < .001,
+            $"A graded note should be drawn where it was played and where it sits in pitch ({low}, {middle}, {high}).");
+        Assert(PracticeChart.Point(5, 65, 0, 40, 90, area).X == PracticeChart.DotRadius,
+            "A take with no length — a live run — should draw every note at the left edge rather than dividing by zero.");
+
+        // A history with known days: two runs today, one yesterday, and one a month ago that the window leaves
+        // out of the chart while the file still keeps it.
+        PracticeHistory.Clear();
+        var today = DateTime.Now.Date;
+        static PracticeRun Run(string song, string path, DateTime day, int hits, int misses, params (double At, int Pitch, bool Hit)[] ghost) =>
+            new(song, path, day.ToUniversalTime(), hits, misses, 0)
+            {
+                Ghost = ghost.Length == 0 ? null : ghost.Select(point => new PracticePoint(point.At, point.Pitch, point.Hit)).ToList()
+            };
+        Directory.CreateDirectory(Path.GetDirectoryName(PracticeHistory.FilePath)!);
+        File.WriteAllLines(PracticeHistory.FilePath,
+        [
+            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddDays(-30), 1, 1)),
+            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddDays(-1), 2, 2,
+                (0, 48, true), (1, 50, false), (2, 52, false), (3, 55, true))),
+            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddHours(-2), 2, 1, (0.5, 60, true), (1, 64, false), (1.5, 67, true))),
+            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today, 1, 1, (0, 60, false), (2, 72, true))),
+        ]);
+        PracticeHistory.Reload();
+        var days = PracticeHistory.Daily(PracticeHistory.ChartDays, DateTime.Now);
+        Assert(PracticeChart.RowCaption(2, 1) == Loc.F("{0} hit · {1} missed · {2:0.#}%", 2, 1, 200.0 / 3)
+                && PracticeChart.RowCaption(0, 0) == Loc.F("{0} hit · {1} missed · {2:0.#}%", 0, 0, 0.0),
+            "A ghost row's caption should print the take's own hits, misses and accuracy.");
+        Assert(days.Count == PracticeHistory.ChartDays && days[^1].Day == today && days[0].Day == today.AddDays(1 - PracticeHistory.ChartDays),
+            "The chart should cover the requested number of days, oldest first and ending on today.");
+        Assert(days[^1] is { Runs: 2, Hits: 3, Misses: 3 } && Math.Abs(days[^1].Accuracy - 50) < .01,
+            $"Today's row should add up every run of the day (got {days[^1]}).");
+        Assert(days[^2] is { Runs: 1, Hits: 2, Misses: 2 } && days.Take(days.Count - 2).All(day => day.Runs == 0 && day.Accuracy == 0),
+            "Days without a run should still be rows, with zero runs and no accuracy.");
+        Assert(PracticeHistory.Runs.Count == 4 && days.Sum(day => day.Runs) == 3,
+            "A run older than the window should stay out of the chart while the history file still keeps it.");
+        Assert(Math.Abs(PracticeHistory.AverageAccuracy(days) - 50) < .01
+                && PracticeHistory.ChartCaption(days) == Loc.F("Accuracy by day: {0} runs · {1:0.#}% average", 3, PracticeHistory.AverageAccuracy(days)),
+            $"The window's caption should name its runs and count every note graded in it once ({PracticeHistory.ChartCaption(days)}).");
+
+        // The dock reads the same model.
+        Invoke(window, "RefreshPracticeHistory");
+        var bars = chart.Children.OfType<Rectangle>().ToList();
+        var accent = ((SolidColorBrush)window.FindResource("AccentBrush")).Color; var track = ((SolidColorBrush)window.FindResource("TrackBrush")).Color;
+        Assert(bars.Count == PracticeHistory.ChartDays && chartLabel.Text == PracticeHistory.ChartCaption(days),
+            $"The History page should draw one bar per day and print the caption of the window ({bars.Count} bars).");
+        Assert(Math.Abs(bars[^1].Height - PracticeChart.BarHeight(50, 52, 3)) < .001 && bars[0].Height == 0
+                && bars[^1].Fill is SolidColorBrush filled && filled.Color == accent && bars[0].Fill is SolidColorBrush blank && blank.Color == track,
+            "Today's bar should be as tall as today's accuracy, and a day with nothing played should be a flat track-coloured sliver.");
+
+        // The ghost of the open song: best on top, latest below, one dot per graded note.
+        SetField(window, "_songPath", @"C:\songs\alpha.mid");
+        Invoke(window, "RefreshPracticeHistory");
+        var canvases = ghostHost.Children.OfType<Canvas>().ToList();
+        var missColour = ((SolidColorBrush)window.FindResource("DangerBrush")).Color;
+        Assert(canvases.Count == 2 && ghostHost.Children.OfType<TextBlock>().Count() == 2
+                && ghostLabel.Text == Loc.T("Each dot is a graded note of the take: its place in the song and its pitch. Cyan landed, red was missed, and the rows share their axes."),
+            $"Two takes of the same song should be drawn as two rows with a caption each (drew {canvases.Count}).");
+        Assert(canvases[0].Children.Count == 3 && canvases[1].Children.Count == 2
+                && canvases[0].Children.OfType<Ellipse>().Count(dot => dot.Fill is SolidColorBrush brush && brush.Color == missColour) == 1,
+            "Each row should hold one dot per graded note the run kept, in the colour of whether it landed.");
+        Assert(Math.Abs(canvases[0].Width - MainWindow.GhostWidth) < .001 && canvases[0].Height > 0
+                && canvases[0].Children.OfType<Ellipse>().All(dot => Canvas.GetLeft(dot) >= 0 && Canvas.GetTop(dot) >= 0),
+            "Every dot of the ghost should sit inside its row, on the axes both rows share.");
+
+        // One take is not a comparison, and a song never played has nothing to draw.
+        PracticeHistory.Clear();
+        PracticeHistory.Record("Alpha", @"C:\songs\alpha.mid", 1, 1, 2, [new PracticePoint(1, 60, true), new PracticePoint(2, 62, false)]);
+        Invoke(window, "RefreshPracticeHistory");
+        Assert(ghostHost.Children.OfType<Canvas>().Count() == 1
+                && ghostHost.Children.OfType<TextBlock>().Single().Text.StartsWith(Loc.T("The only take"), StringComparison.Ordinal),
+            "A single take should be drawn on its own, labelled as the only one, instead of pretending to compare it with itself.");
+        SetField(window, "_songPath", @"C:\songs\beta.mid");
+        Invoke(window, "RefreshPracticeHistory");
+        Assert(ghostHost.Children.Count == 0 && ghostLabel.Text == Loc.T("No take of this song has graded notes recorded yet, so there is no ghost to draw. Play it once and every graded note is kept for the next time."),
+            "A song that has never been played should print why there is no ghost instead of an empty box.");
+
+        // The app path: notes are collected as they are graded, written with the run, and forgotten when the
+        // score restarts.
+        PracticeHistory.Clear();
+        SetField(window, "_songPath", @"C:\songs\alpha.mid"); SetField(window, "_songLabel", "Alpha");
+        SetField(window, "_hits", 3); SetField(window, "_misses", 1); SetField(window, "_bestStreak", 2); SetField(window, "_playing", true);
+        Invoke(window, "RecordPracticeNote", true, 60, 1.5);
+        Invoke(window, "RecordPracticeNote", false, 64, 2.0);
+        Invoke(window, "RecordPracticeNote", true, 67, 2.5);
+        static IReadOnlyList<PracticePoint> Collected(MainWindow target) =>
+            (IReadOnlyList<PracticePoint>)target.GetType().GetProperty("PracticeGhost", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.GetValue(target)!;
+        Assert(Collected(window) is [{ At: 1.5, Pitch: 60, Hit: true }, { At: 2, Pitch: 64, Hit: false }, { At: 2.5, Pitch: 67, Hit: true }],
+            "A graded note should be collected with its place in the song and its pitch, in the order the notes were scored.");
+        Invoke(window, "Stop");
+        var recorded = PracticeHistory.Runs[0];
+        Assert(recorded is { Song: "Alpha", Hits: 3, Misses: 1 } && recorded.Ghost is { Count: 3 } && recorded.Ghost[1] is { Pitch: 64, Hit: false },
+            "Stopping a take should write its graded notes as the ghost of the run.");
+        Invoke(window, "ResetScore");
+        Assert(Collected(window).Count == 0, "Restarting the score should forget the ghost so the next take starts from zero.");
+
+        PracticeHistory.Record("Long", "", 1, 0, 1, [.. Enumerable.Range(0, PracticeHistory.GhostCapacity + 40).Select(index => new PracticePoint(index, 60, true))]);
+        Assert(PracticeHistory.Runs[0].Ghost is { Count: PracticeHistory.GhostCapacity },
+            $"A take should keep at most {PracticeHistory.GhostCapacity} graded notes so the history file stays bounded.");
+        PracticeHistory.Reload();
+        Assert(PracticeHistory.Runs[0].Ghost is { Count: PracticeHistory.GhostCapacity } && PracticeHistory.Runs[0].Ghost![^1].At == PracticeHistory.GhostCapacity - 1,
+            "The ghost should survive a reload with the notes in the order they were graded.");
+        // A line written before the ghost existed has no such property at all, which is what an older file holds.
+        File.AppendAllText(PracticeHistory.FilePath,
+            $"{{\"Song\":\"Old\",\"SongPath\":\"C:\\\\songs\\\\old.mid\",\"PlayedUtc\":\"{DateTime.UtcNow:O}\",\"Hits\":2,\"Misses\":0,\"BestStreak\":2}}{Environment.NewLine}");
+        PracticeHistory.Reload();
+        Assert(PracticeHistory.Runs[0] is { Song: "Old", Ghost: null } && PracticeHistory.Runs.Any(run => run.Ghost is { Count: PracticeHistory.GhostCapacity }),
+            "A run written before the ghost existed should load without one while the ghosted runs keep theirs.");
+        Invoke(window, "RefreshPracticeHistory");
+        PracticeHistory.Clear(); SetField(window, "_songPath", ""); SetField(window, "_songLabel", ""); Invoke(window, "RefreshPracticeHistory");
+        Results.Add("PASS Practice ghost and chart: a bar per day for the last two weeks with days that were not practised still on the axis and the window's own average, and the best and latest takes of the open song drawn dot by dot from the notes each run graded, written when the transport stops, bounded at the cap, and readable back with the oldest runs that never had a ghost.");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>

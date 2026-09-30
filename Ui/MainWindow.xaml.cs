@@ -216,7 +216,7 @@ public partial class MainWindow : Window
             while (_missScanIndex < _notes.Count && _notes[_missScanIndex].Start < missLimit)
             {
                 var note = _notes[_missScanIndex++];
-                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; RecordPracticeNote(false); }
+                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; RecordPracticeNote(false, note.Pitch, note.Start); }
             }
             TickMetronome(previous, forceOnset);
         }
@@ -788,11 +788,12 @@ public partial class MainWindow : Window
             if (target != null)
             {
                 target.Played = true; var delta = Math.Abs(target.Start - _position);
-                if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); RecordPracticeNote(true); } else { _misses++; _streak = 0; RecordPracticeNote(false); }
+                if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); RecordPracticeNote(true, target.Pitch, target.Start); } else { _misses++; _streak = 0; RecordPracticeNote(false, target.Pitch, target.Start); }
                 target.Timing = Math.Max(0, 100 - delta * 180); Loc.Set(NoteNameLabel, delta < .11 ? "PERFECT" : delta < .28 ? "GREAT" : "KEEP GOING");
                 if (ModeCombo.SelectedIndex == 1) _clock.Restart();
             }
-            else { _misses++; _streak = 0; RecordPracticeNote(false); NoteNameLabel.Text = NoteLabel(pitch); }
+            // A key pressed where the song has no note still happened at this moment, so the ghost keeps it.
+            else { _misses++; _streak = 0; RecordPracticeNote(false, pitch, _position); NoteNameLabel.Text = NoteLabel(pitch); }
         }
         else NoteNameLabel.Text = NoteLabel(pitch);
         UpdateStats(); UpdateStage();
