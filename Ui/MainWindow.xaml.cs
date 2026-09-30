@@ -770,13 +770,23 @@ public partial class MainWindow : Window
     internal string CameraStatus { get; private set; } = "";
 
     /// <summary>
+    /// What the hand tracker is seeing right now, in words: the key the hand is over and the fingers it holds
+    /// up, or that no hand was found. Filled by the same pump that feeds the stage, so the dock and the stage
+    /// always agree on what the tracker saw in the newest frame.
+    /// </summary>
+    internal string HandStatus { get; private set; } = "";
+
+    /// <summary>
     /// Restarts the overlay when one of the settings that decide <em>what</em> it reads has changed; the corner,
     /// the size, the opacity, the mirror flag and the key are applied while drawing or per frame, so they never
     /// cost a camera reconnect.
     /// </summary>
     private void SyncCameraOverlay()
     {
-        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay, _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath);
+        // The reader opens for either layer: the picture can stay hidden while the hand is still followed, so a
+        // user who wants only the key markers never has to put the camera on the stage to get them.
+        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking,
+            _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath);
         if (wanted == _cameraSignature) return;
         _cameraSignature = wanted;
         StartCameraOverlay();
@@ -789,7 +799,7 @@ public partial class MainWindow : Window
     private void StartCameraOverlay()
     {
         StopCameraOverlay();
-        if (!_visualSettings.ShowCameraOverlay) { CameraStatus = ""; return; }
+        if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking) { CameraStatus = ""; HandStatus = ""; return; }
         var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
         var reader = live
             ? CameraFrameReader.OpenDevice(_visualSettings.CameraSourceLink, out var error)
@@ -832,6 +842,8 @@ public partial class MainWindow : Window
         if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
         lock (_cameraFrameLock) _cameraFrameFresh = false;
         Stage.SetCameraFrame(null);
+        Stage.SetHandReading(null);
+        HandStatus = "";
     }
 
     /// <summary>
@@ -886,6 +898,23 @@ public partial class MainWindow : Window
             frame = _cameraFrame; width = _cameraFrameWidth; height = _cameraFrameHeight;
         }
         if (frame.Length < width * height * 4) return;
+        // The tracker reads the frame before the key is applied: it wants the colours the camera really saw, and
+        // making the green see-through would only take pixels away from the count. It runs whatever the picture
+        // layer is set to, because the key markers are a layer of their own.
+        if (_visualSettings.ShowHandTracking)
+        {
+            var reading = HandTracker.Track(frame, width, height, _visualSettings.HandTrackingSensitivity);
+            Stage.SetHandReading(reading);
+            HandStatus = reading.Found
+                ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, PianoStage.FirstPitch, PianoStage.KeyCount)), reading.Coverage * 100)
+                : Loc.T("Hand: nothing found in the newest frame.");
+        }
+        else if (Stage.HasHand)
+        {
+            Stage.SetHandReading(null);
+            HandStatus = "";
+        }
+        RefreshHandStatus();
         CameraOverlay.ApplyKey(frame, width * height, _visualSettings.CameraKeyTolerance);
         if (_cameraBitmap is null || _cameraBitmap.PixelWidth != width || _cameraBitmap.PixelHeight != height)
             _cameraBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);

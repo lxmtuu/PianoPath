@@ -46,7 +46,7 @@ internal static class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -390,6 +390,98 @@ internal static class VerificationSuite
     }
 
     /// <summary>
+    /// The hand tracker, read rather than watched: the skin rule on single colours, the hand it finds in a frame
+    /// the check paints itself, the finger count on column profiles made by hand, and the key a position lands
+    /// on. The frame is the same shape a camera hands over — 32-bit pixels, top row first — so what is measured
+    /// here is what the pump measures from a real camera.
+    /// </summary>
+    private static void VerifyHandTracking()
+    {
+        // The skin rule: a light skin tone is skin, and the colours a stage or a wall is made of are not.
+        Assert(HandTracker.IsSkin(120, 150, 200, 0), "A light skin tone should be read as skin.");
+        Assert(!HandTracker.IsSkin(0, 255, 0, 14) && !HandTracker.IsSkin(255, 255, 255, 14) && !HandTracker.IsSkin(255, 0, 0, 14),
+            "The key colour, white and blue should not be read as skin, however wide the window is opened.");
+        // Sensitivity really moves the window: a colour one step outside it is skin with the window wide and
+        // nothing with it narrow, which is what the slider promises.
+        var outside = (Blue: 0, Green: 0, Red: 0);
+        foreach (var blue in new[] { 0, 40, 80, 120, 160, 200, 240 })
+        {
+            foreach (var green in new[] { 0, 40, 80, 120, 160, 200, 240 })
+            {
+                foreach (var red in new[] { 40, 80, 120, 160, 200, 240 })
+                {
+                    if (HandTracker.IsSkin((byte)blue, (byte)green, (byte)red, 0)) continue;
+                    if (!HandTracker.IsSkin((byte)blue, (byte)green, (byte)red, 14)) continue;
+                    outside = (blue, green, red);
+                }
+            }
+        }
+        Assert(outside != (0, 0, 0) && !HandTracker.IsSkin((byte)outside.Blue, (byte)outside.Green, (byte)outside.Red, -14),
+            $"A colour the skin rule only accepts with the window opened wide should be refused again when it is narrowed (tried {outside}).");
+
+        // A frame with nothing hand-shaped in it, and a frame painted with a hand: a palm with three fingers.
+        var empty = new byte[160 * 120 * 4];
+        for (var index = 3; index < empty.Length; index += 4) empty[index] = 255;
+        Assert(!HandTracker.Track(empty, 160, 120, 50).Found, "A frame with no skin in it should report no hand.");
+        var hand = new byte[160 * 120 * 4];
+        Array.Copy(empty, hand, hand.Length);
+        void Paint(int left, int top, int right, int bottom)
+        {
+            for (var y = top; y < bottom; y++)
+            {
+                for (var x = left; x < right; x++)
+                {
+                    var pixel = (y * 160 + x) * 4;
+                    hand[pixel] = 120; hand[pixel + 1] = 150; hand[pixel + 2] = 200;
+                }
+            }
+        }
+        Paint(50, 60, 110, 110);                       // the palm
+        Paint(55, 20, 65, 60); Paint(75, 20, 85, 60); Paint(95, 20, 105, 60);   // three fingers
+        var reading = HandTracker.Track(hand, 160, 120, 50);
+        Assert(reading.Found && Math.Abs(reading.CenterX - .5) < .08 && reading.CenterY > .4,
+            $"The painted hand should be found near the middle of the frame (found {reading.Found} at {reading.CenterX:0.###}, {reading.CenterY:0.###}).");
+        Assert(reading.Fingers == 3, $"A palm with three fingers up should count three fingers (counted {reading.Fingers}).");
+        Assert(reading.Width > .3 && reading.Width < .45 && reading.Height > .6 && reading.Coverage > .1,
+            $"The hand's box and its share of the picture should match what was painted (width {reading.Width:0.###}, height {reading.Height:0.###}, coverage {reading.Coverage:0.###}).");
+        // The same hand with the fingers folded away is a hand with nothing to count.
+        var closed = new byte[160 * 120 * 4];
+        Array.Copy(empty, closed, closed.Length);
+        for (var y = 60; y < 110; y++)
+            for (var x = 50; x < 110; x++)
+            {
+                var pixel = (y * 160 + x) * 4;
+                closed[pixel] = 120; closed[pixel + 1] = 150; closed[pixel + 2] = 200;
+            }
+        var fist = HandTracker.Track(closed, 160, 120, 50);
+        Assert(fist.Found && fist.Fingers == 0,
+            $"A flat hand with no fingers standing up should be found and counted as none (found {fist.Found}, counted {fist.Fingers}).");
+
+        // The finger count itself, on profiles written by hand: the palm line is where the hand mostly stands,
+        // and only a dip below the halfway line opens the hand into two.
+        Assert(HandTracker.CountFingers([]) == 0 && HandTracker.CountFingers([3, 3, 3]) == 0,
+            "An empty or tiny profile has no fingers in it.");
+        Assert(HandTracker.CountFingers([11, 11, 11, 11]) == 0, "A profile with no rise at all is a closed hand, not one finger.");
+        Assert(HandTracker.CountFingers([11, 11, 11, 11, 19, 19]) == 1, "One stretch standing above the palm line is one finger.");
+        Assert(HandTracker.CountFingers([11, 11, 11, 11, 19, 19, 11, 19, 19]) == 2,
+            "Two stretches with the palm line between them are two fingers.");
+        Assert(HandTracker.CountFingers([11, 11, 11, 11, 19, 19, 14, 14, 19, 19]) == 2,
+            "A dip that reaches below the halfway line opens the hand into two fingers, even if it is not all the way down to the palm.");
+
+        // Where the hand is across the frame becomes a key of the keyboard the stage draws.
+        Assert(HandTracker.KeyPitch(0, PianoStage.FirstPitch, PianoStage.KeyCount) == PianoStage.FirstPitch
+                && HandTracker.KeyPitch(1, PianoStage.FirstPitch, PianoStage.KeyCount) == PianoStage.FirstPitch + PianoStage.KeyCount - 1,
+            "The ends of the picture should land on the ends of the keyboard.");
+        Assert(HandTracker.KeyPitch(.5, PianoStage.FirstPitch, PianoStage.KeyCount)
+                == PianoStage.FirstPitch + (int)Math.Round((PianoStage.KeyCount - 1) * .5),
+            "The middle of the picture should land on the middle of the keyboard.");
+        Assert(HandTracker.KeyPitch(-5, PianoStage.FirstPitch, PianoStage.KeyCount) == PianoStage.FirstPitch
+                && HandTracker.KeyPitch(9, PianoStage.FirstPitch, PianoStage.KeyCount) == PianoStage.FirstPitch + PianoStage.KeyCount - 1,
+            "A position off the picture should be held at the ends of the keyboard rather than pointing at nothing.");
+        Results.Add($"PASS hand tracking: the skin rule and the sensitivity window, a painted hand found at the middle of the frame with three fingers counted, a closed hand with none, the finger count on written profiles, and positions turned into keys.");
+    }
+
+    /// <summary>
     /// Opening a take must not be able to take the window down with it. The media stack is native code that can
     /// stop answering instead of failing — a verification run on such a machine showed the calls simply never
     /// coming back — so the window opens an MP4 take behind <see cref="HangGuard"/>, keeps the take as AVI when
@@ -579,6 +671,81 @@ internal static class VerificationSuite
     /// clamped instead of trusted, and the frame the reader produced is keyed and drawn in the corner the
     /// settings ask for — read back from the rendered stage, not asserted from the settings.
     /// </summary>
+    /// <summary>
+    /// Handling the hand layer from the window the user has: the switch and the slider in the dock, the settings
+    /// behind them, the pump really running the tracker over a frame the check paints, the status line saying what
+    /// was seen, and the stage painting the marker only when the layer is on and a hand was found.
+    /// </summary>
+    private static void VerifyHandTrackingDock(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var beforeJson = visualSettings.ToJson(); var beforeName = visualSettings.PresetName;
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ShowHandTracking)),
+            "The Camera & FX page should expose hand tracking as a layer switch of its own.");
+        Assert(sliders.ContainsKey(nameof(PianoVisualSettings.HandTrackingSensitivity)),
+            "The tracker's sensitivity belongs on a slider, so it can be found by sliding.");
+        toggles[nameof(PianoVisualSettings.ShowHandTracking)].IsChecked = true;
+        Assert(visualSettings.ShowHandTracking, "Switching hand tracking on should reach the settings the pump reads.");
+        sliders[nameof(PianoVisualSettings.HandTrackingSensitivity)].Value = 100;
+        Assert(Math.Abs(visualSettings.HandTrackingSensitivity - 100) < .001, "The sensitivity slider should reach the settings.");
+        visualSettings.HandTrackingSensitivity = 500; visualSettings.Clamp();
+        Assert(Math.Abs(visualSettings.HandTrackingSensitivity - 100) < .001, "A sensitivity outside its range should be clamped rather than trusted.");
+
+        // The frame path the app really uses: a painted hand goes through the pump, the tracker finds it and the
+        // stage is told, and the dock's line says what it saw.
+        var frame = new byte[160 * 120 * 4];
+        for (var index = 3; index < frame.Length; index += 4) frame[index] = 255;
+        void Paint(int left, int top, int right, int bottom)
+        {
+            for (var y = top; y < bottom; y++)
+                for (var x = left; x < right; x++)
+                {
+                    var pixel = (y * 160 + x) * 4;
+                    frame[pixel] = 120; frame[pixel + 1] = 150; frame[pixel + 2] = 200;
+                }
+        }
+        Paint(50, 60, 110, 110); Paint(55, 20, 65, 60); Paint(75, 20, 85, 60); Paint(95, 20, 105, 60);
+        SetField(window, "_cameraFrame", frame);
+        SetField(window, "_cameraFrameWidth", 160); SetField(window, "_cameraFrameHeight", 120); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "PumpCameraFrame");
+        Assert(stage.HasHand || Field(stage, "_hand") is not null,
+            "A frame with a hand in it, pumped the way the camera pumps frames, should reach the stage.");
+        var status = (TextBlock?)Field(window, "_handStatus");
+        Assert(status is { Text.Length: > 0 }, "The Camera & FX page should say what the tracker is seeing.");
+
+        // The marker: drawn when the layer is on and a hand was found, and nothing at all when it is off.
+        visualSettings.ShowHandTracking = true; visualSettings.HandTrackingSensitivity = 50;
+        stage.SetVisualSettings(visualSettings);
+        stage.SetHandReading(HandTracker.Track(frame, 160, 120, 50));
+        int MarkerInk()
+        {
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) Invoke(stage, "DrawHandMarker", dc, 1000d, 460d, 1000d / PianoStage.KeyCount);
+            var bitmap = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[1000 * 600 * 4];
+            bitmap.CopyPixels(pixels, 4000, 0);
+            var lit = 0;
+            for (var index = 3; index < pixels.Length; index += 4) if (pixels[index] > 40) lit++;
+            return lit;
+        }
+        var marked = MarkerInk();
+        visualSettings.ShowHandTracking = false; stage.SetVisualSettings(visualSettings);
+        var unmarked = MarkerInk();
+        Assert(marked > unmarked + 200,
+            $"The hand marker should paint over the key the hand is over ({marked} inked pixels marked, {unmarked} unmarked).");
+        visualSettings.ShowHandTracking = true; stage.SetVisualSettings(visualSettings);
+        stage.SetHandReading(null);
+        Assert(!stage.HasHand && MarkerInk() == 0, "With no hand found there should be no marker at all.");
+        SetField(window, "_cameraFrameFresh", false);
+
+        visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
+        SetField(window, "_cameraSignature", "");
+        Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        Results.Add("PASS hand tracking dock: the switch and the sensitivity slider, the clamp, a painted hand carried through the camera pump into the stage, the dock's own line, and the marker drawn over the hand's key only while the layer is on.");
+    }
+
     private static void VerifyCameraOverlayDock(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         var beforeJson = visualSettings.ToJson(); var beforeName = visualSettings.PresetName;
@@ -869,6 +1036,7 @@ internal static class VerificationSuite
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
+        Run(nameof(VerifyHandTrackingDock), () => VerifyHandTrackingDock(window, stage, visualSettings));
         Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
         Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
         Run(nameof(VerifyBackgroundImageLoad), () => VerifyBackgroundImageLoad(window, stage, visualSettings));

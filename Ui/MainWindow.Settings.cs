@@ -53,6 +53,7 @@ public partial class MainWindow
     private readonly Dictionary<string, CheckBox> _visualToggles = [];
     /// <summary>The camera rows live on the Camera & FX page; the status line and the list are rebuilt on demand.</summary>
     private TextBlock? _cameraStatus;
+    private TextBlock? _handStatus;
     private IReadOnlyList<CameraInfo> _cameraDevices = [];
     private string? _cameraListError;
     /// <summary>Every generated switch; a layer such as sparks appears both on the Style page and on its own page.</summary>
@@ -509,8 +510,17 @@ public partial class MainWindow
         SliderRow(overlay, "Key tolerance", nameof(PianoVisualSettings.CameraKeyTolerance), 0, 100, "How much of the picture counts as the green key colour and is made see-through. Zero keeps the whole picture.");
         _cameraStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(overlay, _cameraStatus, null, "camera overlay status green screen chroma key");
+
+        // Hand tracking is its own card: it reads the same camera but paints on the keyboard, and it works with
+        // the picture hidden, which is the point of having it separate from the overlay.
+        var hands = Card(CameraSettingsHost, "HAND TRACKING", "Follow the hand the camera sees and mark the key it is over, with the fingers it holds up. No model and no download: the shape of a hand is read from the picture, so it wants a plain background and reasonable light.");
+        Toggle(hands, "Hand tracking", nameof(PianoVisualSettings.ShowHandTracking), "Mark the key under the hand the camera sees. The camera opens for this even when the overlay picture is off.");
+        SliderRow(hands, "Skin sensitivity", nameof(PianoVisualSettings.HandTrackingSensitivity), 0, 100, "How much of the picture counts as skin. A warm light or a dark room asks for more; a background the same colour as a hand asks for less.");
+        _handStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
+        Register(hands, _handStatus, null, "hand tracking status fingers key camera");
         SyncCameraOverlay();
         RefreshCameraOverlayStatus(announce: false);
+        RefreshHandStatus();
     }
 
     /// <summary>Rows of the camera picker built from the machine's own list, refreshed on demand.</summary>
@@ -587,6 +597,23 @@ public partial class MainWindow
                                 : Loc.F("{0} camera(s) found. The overlay opens the one picked above.", _cameraDevices.Count);
         _cameraStatus.Text = text;
         if (announce) Loc.Set(SettingsSaveLabel, text);
+    }
+
+    /// <summary>
+    /// The line under the hand rows: what the tracker is seeing in the newest frame — the key, the fingers, how
+    /// much of the picture is hand — or why there is nothing to show. It reads the window's own status, so the
+    /// dock and the stage can never disagree about the same frame.
+    /// </summary>
+    private void RefreshHandStatus()
+    {
+        if (_handStatus is null) return;
+        var text = !_visualSettings.ShowHandTracking
+            ? Loc.T("Hand tracking is off. Switch it on to follow the hand the camera sees and mark its key.")
+            : CameraStatus.Length == 0
+                ? Loc.T("The camera is not running, so there is nothing to follow.")
+                : HandStatus.Length > 0 ? HandStatus : Loc.T("Hand: waiting for the first frame.");
+        if (_handStatus.Text == text) return;
+        _handStatus.Text = text;
     }
 
     private void BuildRecordingPage()
@@ -1228,6 +1255,7 @@ public partial class MainWindow
         Stage.SetVisualSettings(_visualSettings, reloadBackground);
         SyncCameraOverlay();
         ApplyChromeTheme();
+        RefreshHandStatus();
         if (reloadBackground && Stage.BackgroundLoadError is { } error)
         {
             Loc.Set(SettingsSaveLabel, "Background image failed to load");

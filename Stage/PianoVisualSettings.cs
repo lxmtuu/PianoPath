@@ -40,6 +40,16 @@ internal sealed class PianoVisualSettings
     public bool CameraMirror { get; set; } = true;
     /// <summary>Chroma-key tolerance against pure green; zero turns keying off.</summary>
     public double CameraKeyTolerance { get; set; } = 30;
+    /// <summary>
+    /// Follow the hand the camera sees and mark the key it is over, with the fingers it holds up
+    /// (see <see cref="HandTracker"/>). Its own layer: the picture can stay hidden while the keys are marked.
+    /// </summary>
+    public bool ShowHandTracking { get; set; } = false;
+    /// <summary>
+    /// How much of the picture counts as skin, 0 to 100. Higher accepts more colours, which is what a warm light
+    /// or a dark room needs; lower keeps more of the background out of the count.
+    /// </summary>
+    public double HandTrackingSensitivity { get; set; } = 50;
     public bool ShowEmbers { get; set; } = true;
     public bool ShowHalo { get; set; } = true;
     public bool ShowFlame { get; set; } = true;
@@ -455,6 +465,7 @@ internal sealed class PianoVisualSettings
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
         CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);
+        HandTrackingSensitivity = Math.Clamp(HandTrackingSensitivity, 0, 100);
         if (!ChromeMotions.Contains(ChromeMotion)) ChromeMotion = "Full";
         if (string.IsNullOrWhiteSpace(ShellTheme)) ShellTheme = ShellThemes.DefaultId;
         TrackColors ??= [];

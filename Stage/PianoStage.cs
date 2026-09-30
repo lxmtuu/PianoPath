@@ -10,7 +10,7 @@ namespace PianoPath;
 /// <summary>Immersive piano-roll renderer: live key trails, optional MIDI playback notes, sparks, wisps, flames and a lit keyboard.</summary>
 internal sealed class PianoStage : FrameworkElement
 {
-    private const int FirstPitch = 21, KeyCount = 88, MaxParticles = 2600;
+    internal const int FirstPitch = 21, KeyCount = 88, MaxParticles = 2600;
     private const double FallSpeed = 258;
     private const int FireMaskWidth = 96, FireMaskHeight = 384;
     /// <summary>MIDI pitches of the 52 white keys, in keyboard order.</summary>
@@ -684,6 +684,8 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.HoldElectricArc && _visual.HoldArcIntensity > 0) DrawElectricArcs(dc, width, keyTop);
         if (!chroma && !_transparentBackdrop && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
         if (_visual.ShowKeys) DrawKeyboard(dc, width, height, lane, keyTop);
+        // The hand marker belongs to the keyboard: it says which key the hand in the picture is over.
+        DrawHandMarker(dc, width, keyTop, lane);
         // The camera overlay is drawn last: the player is in front of everything the stage paints.
         DrawCameraOverlay(dc, width, height);
         if (_visual.ShowWatermark) DrawWatermark(dc, width, height);
@@ -819,6 +821,42 @@ internal sealed class PianoStage : FrameworkElement
     }
 
     /// <summary>
+    /// The key the tracked hand is over: a soft band down the key it lands on, a disc at its centre, and one pip
+    /// per finger the tracker could count. Drawn only when the layer is switched on and a hand was really found,
+    /// so a machine without a camera shows the stage exactly as it always did.
+    /// </summary>
+    private void DrawHandMarker(DrawingContext dc, double width, double keyTop, double lane)
+    {
+        if (!_visual.ShowHandTracking || _hand is not { } hand || width < 80) return;
+        var pitch = HandTracker.KeyPitch(hand.CenterX, FirstPitch, KeyCount);
+        var centre = (pitch - FirstPitch + .5) * lane;
+        var accent = _visual.TrackColors.Count > 0 ? _visual.TrackColors[0] : "#43E6FF";
+        var colour = (Color)ColorConverter.ConvertFromString(accent);
+        var height = Math.Max(24, ActualHeight - keyTop);
+        // The band: a wash over the key, brightest at its edges so the key itself stays readable under it.
+        var bandWidth = Math.Max(6, lane * .9);
+        var left = Math.Max(0, Math.Min(width - bandWidth, centre - bandWidth / 2));
+        var wash = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(1, 0),
+        };
+        wash.GradientStops.Add(new GradientStop(Color.FromArgb(150, colour.R, colour.G, colour.B), 0));
+        wash.GradientStops.Add(new GradientStop(Color.FromArgb(40, colour.R, colour.G, colour.B), .5));
+        wash.GradientStops.Add(new GradientStop(Color.FromArgb(150, colour.R, colour.G, colour.B), 1));
+        dc.DrawRectangle(wash, null, new Rect(left, keyTop, bandWidth, height));
+        // The disc: where across the key the hand really is, and how high it is held.
+        var radius = Math.Max(3, Math.Min(lane * .3, 14));
+        var discY = keyTop + Math.Clamp(1 - hand.CenterY, 0, 1) * height;
+        dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(200, colour.R, colour.G, colour.B)), null, new Point(centre, keyTop + height * .5), radius, radius);
+        // One pip per finger along the bottom of the band, so a count can be read at a glance.
+        for (var finger = 0; finger < hand.Fingers && finger < 10; finger++)
+        {
+            var pipX = left + bandWidth * (finger + .5) / Math.Max(1, hand.Fingers);
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(230, colour.R, colour.G, colour.B)), null, new Point(pipX, keyTop + height - 6), 2.5, 2.5);
+        }
+    }
+
+    /// <summary>
     /// The webcam overlay: the newest frame, placed by the corner and size settings and faded by the opacity,
     /// on top of the keyboard. Nothing is drawn when the layer is off or no frame has arrived, so a machine
     /// without a camera shows the stage exactly as it always did.
@@ -837,6 +875,22 @@ internal sealed class PianoStage : FrameworkElement
 
     /// <summary>The newest camera frame, or <c>null</c> when nothing has arrived; handed over by the window.</summary>
     private BitmapSource? _cameraFrame;
+
+    /// <summary>The hand the tracker last saw, or null when it is not following one; handed over by the window.</summary>
+    private HandTracker.Reading? _hand;
+
+    /// <summary>
+    /// Publishes what the tracker saw, so the stage can mark the key the hand is over. Note that the reading
+    /// arrives whether or not the picture is shown: the keys are a layer of their own.
+    /// </summary>
+    public void SetHandReading(HandTracker.Reading? reading)
+    {
+        _hand = reading is { Found: true } ? reading : null;
+        InvalidateVisual();
+    }
+
+    /// <summary>True while a hand is being followed; the dock uses it to say what the tracker is seeing.</summary>
+    public bool HasHand => _hand is { Found: true };
 
     /// <summary>
     /// Publishes the newest frame of the overlay. The window builds it on the UI thread from the buffer the
