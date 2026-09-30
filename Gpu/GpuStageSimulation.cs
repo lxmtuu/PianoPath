@@ -401,6 +401,7 @@ internal sealed partial class GpuStageSimulation
         notes.Clear();
         _noteTrails.Clear();
         _noteLabels.Clear();
+        _shimmerBars.Clear();
         var look = input.Look;
         if (!look.ShowNotes) return;
         var noteWidth = layout.Lane * look.NoteWidth;
@@ -490,6 +491,7 @@ internal sealed partial class GpuStageSimulation
         var holdBar = sounding && look.HoldBar ? look.HoldBarIntensity * opacity : 0;
         var shown = AddNote(notes, look, x, y, w, h, color, opacity, sounding, pitch, seed, direction, holdBar, breath);
         if (look.ShowNoteLabels && w >= 11 && h >= 15) _noteLabels.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
+        if (look.NoteShimmer && look.NoteShimmerAmount > 0) _shimmerBars.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
         if (look.FallingTrail != "None" && look.FallingTrailIntensity > 0)
             _noteTrails.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
     }
@@ -672,8 +674,54 @@ internal sealed partial class GpuStageSimulation
         {
             var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * GlowBoost;
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
+            if (look.HaloPulse && look.HaloPulseIntensity > 0) AddHaloPulses(sprites, look, layout);
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);
         foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label);
+        foreach (var bar in _shimmerBars) AddNoteShimmer(sprites, look, bar);
+    }
+
+    /// <summary>
+    /// The GPU stage's shimmer: a bright, narrow sheen that sweeps back and forth along every travelling
+    /// bar (Style → GLOW &amp; EDGES → Note shimmer), tinted by the bar's own colour so a rainbow or
+    /// colour-cycling look shimmers in its current hue. Two bands at different speeds give the surface
+    /// depth; the additive pass over the note turns them into moving gloss.
+    /// </summary>
+    private void AddNoteShimmer(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n)
+    {
+        var strength = look.NoteShimmerAmount * Math.Clamp(n.Opacity, 0, 1);
+        if (strength <= .01f || n.W < 5 || n.H < 6) return;
+        var e = (float)_time;
+        var center = n.Y + n.H * .5f;
+        var tint = Vector3.Lerp(ToLinear(n.Color), Vector3.One * 1.3f, .72f);
+        for (var k = 0; k < 2; k++)
+        {
+            var phase = SeededRandom(n.Pitch * 17 + k * 3 + 1) * MathF.Tau;
+            var sweep = .5f + .5f * MathF.Sin(e * (.5f + k * .27f) + phase);
+            var x = n.X + n.W * (.16f + .68f * sweep);
+            // the sheen brightens towards the middle of its sweep and fades at the bar's edges
+            var alpha = strength * (.1f + .2f * MathF.Pow(MathF.Sin(sweep * MathF.PI), 2)) * (1 - k * .45f);
+            Glow(sprites, x, center, MathF.Max(1.1f, n.W * .13f), MathF.Min(n.H * .72f, 26 + n.H * .18f), tint, alpha);
+        }
+    }
+
+    /// <summary>
+    /// Halo light pulses (Style → HIT LINE): three bright waves of the halo colour that travel across the
+    /// hit line, fading in and out so the stage keeps breathing even between notes.
+    /// </summary>
+    private void AddHaloPulses(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, GpuSceneLayout layout)
+    {
+        var gain = look.HaloPulseIntensity;
+        var width = layout.Width;
+        var color = ToLinear(look.HaloColor) * 2.2f;
+        for (var i = 0; i < 3; i++)
+        {
+            var f = Frac((float)(_time * .38) + i / 3f);
+            var x = f * width;
+            var envelope = MathF.Sin(f * MathF.PI);
+            Glow(sprites, x, layout.HitY, width * .05f, 10, color, .42f * envelope * gain);
+            Glow(sprites, x, layout.HitY, width * .018f, 4.5f, Vector3.One * 2.4f, .6f * envelope * gain);
+            Line(sprites, x - width * .028f, layout.HitY, x + width * .028f, layout.HitY, 1.1f, Vector3.One * 1.8f, .48f * envelope * gain, 1);
+        }
     }
 }

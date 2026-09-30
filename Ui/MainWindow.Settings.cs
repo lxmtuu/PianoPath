@@ -302,6 +302,8 @@ public partial class MainWindow
         SliderRow(glow, "Edge width", nameof(PianoVisualSettings.NoteEdgeWidth), 0, 100, "Thickness of the outline (the tube in Neon style).");
         SliderRow(glow, "Leading-edge glow", nameof(PianoVisualSettings.NoteHeadGlow), 0, 100, "Bright cap on the edge that leads (bottom while falling, top while rising), stronger while the note sounds.");
         SliderRow(glow, "Light refraction", nameof(PianoVisualSettings.NoteRefraction), 0, 100, "Thin white highlight along the left edge.");
+        Toggle(glow, "Note shimmer", nameof(PianoVisualSettings.NoteShimmer), "A light sheen sweeps along every travelling bar — the GPU stage's moving gloss, tinted by the note's own colour.");
+        SliderRow(glow, "Shimmer strength", nameof(PianoVisualSettings.NoteShimmerAmount), 0, 100, "How bright the sweeping sheen is.").VisibleWhen = () => _visualSettings.NoteShimmer;
 
         var motion = Card(NoteSettingsHost, "MOTION", "Speed and travel of the piano roll.");
         SliderRow(motion, "Fall speed", nameof(PianoVisualSettings.NoteFallSpeed), 100, 1000, "Pixels per second for live trails; MIDI notes scale with it.");
@@ -466,6 +468,8 @@ public partial class MainWindow
         Toggle(atmosphere, "Purple aura gradient", nameof(PianoVisualSettings.BackgroundGradient), "Soft radial glow at the top of the stage.");
         Toggle(atmosphere, "Stars", nameof(PianoVisualSettings.ShowStars), "Twinkling star field.");
         SliderRow(atmosphere, "Star density", nameof(PianoVisualSettings.StarDensity), 0, 100, "How many stars are visible.").VisibleWhen = () => _visualSettings.ShowStars;
+        Toggle(atmosphere, "Shooting stars", nameof(PianoVisualSettings.ShootingStars), "Every so often a meteor streaks across the sky above the keyboard (GPU stage).");
+        SliderRow(atmosphere, "Meteor rate", nameof(PianoVisualSettings.ShootingStarsAmount), 0, 100, "How often a meteor crosses the sky.").VisibleWhen = () => _visualSettings.ShootingStars;
         Toggle(atmosphere, "Guide lanes", nameof(PianoVisualSettings.BackgroundGuide), "Faint vertical lines for every key.");
         Toggle(atmosphere, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
         SliderRow(atmosphere, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
@@ -483,8 +487,8 @@ public partial class MainWindow
             ("None", "None"), ("Rain", "Rain"), ("Snow", "Snow"), ("Smoke", "Smoke"), ("Leaves", "Leaves"), ("Butterflies", "Butterflies"), ("Dust", "Dust"), ("Aurora", "Aurora"));
         SliderRow(ambient, "Nature amount", nameof(PianoVisualSettings.AmbientNatureAmount), 0, 100, "How much fills the air.").VisibleWhen = () => _visualSettings.AmbientNature != "None";
         SliderRow(ambient, "Nature speed", nameof(PianoVisualSettings.AmbientNatureSpeed), 0, 100, "How fast it drifts.").VisibleWhen = () => _visualSettings.AmbientNature != "None";
-        Choice(ambient, "Light layer", nameof(PianoVisualSettings.AmbientLight), "Gradient waves, a crystal prism or color splashes.",
-            ("None", "None"), ("Gradient Wave", "Gradient wave"), ("Prism", "Prism"), ("Color Splash", "Color splash"));
+        Choice(ambient, "Light layer", nameof(PianoVisualSettings.AmbientLight), "Stage spotlights, gradient waves, a crystal prism or color splashes.",
+            ("None", "None"), ("Spotlights", "Spotlights"), ("Gradient Wave", "Gradient wave"), ("Prism", "Prism"), ("Color Splash", "Color splash"));
         SliderRow(ambient, "Light amount", nameof(PianoVisualSettings.AmbientLightAmount), 0, 100, "How strong the light is.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
         SliderRow(ambient, "Light speed", nameof(PianoVisualSettings.AmbientLightSpeed), 0, 100, "How fast it shifts.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
         ColorRow(ambient, "Light tint", nameof(PianoVisualSettings.AmbientLightColor), "Tint of the light layer.").VisibleWhen = () => _visualSettings.AmbientLight != "None";
@@ -497,6 +501,8 @@ public partial class MainWindow
         Toggle(halo, "Show halo line", nameof(PianoVisualSettings.ShowHalo), "Glowing line across the stage at key height.");
         ColorRow(halo, "Halo color", nameof(PianoVisualSettings.HaloColor), "Also tints the horizon glow and the keyboard rim light.");
         SliderRow(halo, "Halo intensity", nameof(PianoVisualSettings.HaloIntensity), 0, 200, "Brightness and photon emission of the hit line.");
+        Toggle(halo, "Halo light pulses", nameof(PianoVisualSettings.HaloPulse), "Bright pulses of the halo colour travel along the hit line, so the stage keeps breathing between notes (GPU stage).").VisibleWhen = () => _visualSettings.ShowHalo;
+        SliderRow(halo, "Pulse intensity", nameof(PianoVisualSettings.HaloPulseIntensity), 0, 100, "How bright the travelling pulses are.").VisibleWhen = () => _visualSettings.ShowHalo && _visualSettings.HaloPulse;
     }
 
     private void BuildCameraPage()

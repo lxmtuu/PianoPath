@@ -21,6 +21,8 @@ internal sealed partial class GpuStageSimulation
     private readonly List<NoteTrail> _noteTrails = [];
     /// <summary>Notes wide and tall enough to carry their name this frame (Note names on bars).</summary>
     private readonly List<NoteTrail> _noteLabels = [];
+    /// <summary>Every travelling note this frame; the shimmer pass draws its sweeping sheen over them.</summary>
+    private readonly List<NoteTrail> _shimmerBars = [];
 
     /// <summary>
     /// The note name inside a bar, placed and coloured as the software stage does: near the bottom edge,

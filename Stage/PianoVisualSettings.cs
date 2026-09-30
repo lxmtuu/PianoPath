@@ -106,6 +106,10 @@ internal sealed class PianoVisualSettings
     public string RightHandColor { get; set; } = "#FF6FD8";
     public string HaloColor { get; set; } = "#C66EFF";
     public double HaloIntensity { get; set; } = 90;
+    /// <summary>GPU stage: bright pulses of the halo colour travelling along the hit line.</summary>
+    public bool HaloPulse { get; set; } = false;
+    /// <summary>Brightness of the travelling halo pulses (0-100).</summary>
+    public double HaloPulseIntensity { get; set; } = 50;
     public string PressedKeyColor { get; set; } = "#F782FF";
     public string KeyFeltColor { get; set; } = "#C41C4A";
     public string BackgroundColor { get; set; } = "#000000";
@@ -153,6 +157,14 @@ internal sealed class PianoVisualSettings
     public bool FallingGhost { get; set; } = false;
     /// <summary>Visibility and number of the echo copies (0-100).</summary>
     public double FallingGhostAmount { get; set; } = 40;
+    /// <summary>GPU stage: a light sheen sweeps along every travelling bar.</summary>
+    public bool NoteShimmer { get; set; } = false;
+    /// <summary>Strength of the sweeping sheen (0-100).</summary>
+    public double NoteShimmerAmount { get; set; } = 45;
+    /// <summary>GPU stage: occasional meteors cross the sky behind the notes.</summary>
+    public bool ShootingStars { get; set; } = false;
+    /// <summary>How often a meteor crosses (0-100).</summary>
+    public double ShootingStarsAmount { get; set; } = 50;
 
     // ---- Particles: sparks --------------------------------------------------------------------------
     public double EmitterSize { get; set; } = 24;
@@ -359,7 +371,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave", "Ripple"];
     internal static readonly string[] AmbientEnergies = ["None", "Lightning Storm", "Laser Beams", "Confetti Rain", "Fireworks"];
     internal static readonly string[] AmbientNatures = ["None", "Rain", "Snow", "Smoke", "Leaves", "Butterflies", "Dust", "Aurora"];
-    internal static readonly string[] AmbientLights = ["None", "Gradient Wave", "Prism", "Color Splash"];
+    internal static readonly string[] AmbientLights = ["None", "Gradient Wave", "Prism", "Color Splash", "Spotlights"];
     internal static readonly string[] AmbientCosmics = ["None", "Galaxy", "Black Hole", "Matrix Rain", "Geometric", "Fractal"];
     internal static readonly string[] FallingTrails = ["None", "Glow", "Sparkles", "Speed Lines", "Blur", "Ribbon", "Rainbow", "Stream"];
     internal static readonly string[] ImpactBursts = ["Embers", "Splash", "Fireworks", "Confetti", "Dust"];
@@ -430,6 +442,8 @@ internal sealed class PianoVisualSettings
         ImpactWaveIntensity = Math.Clamp(ImpactWaveIntensity, 0, 150); ImpactFlashIntensity = Math.Clamp(ImpactFlashIntensity, 0, 100);
         FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
         FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
+        NoteShimmerAmount = Math.Clamp(NoteShimmerAmount, 0, 100); HaloPulseIntensity = Math.Clamp(HaloPulseIntensity, 0, 100);
+        ShootingStarsAmount = Math.Clamp(ShootingStarsAmount, 0, 100);
         ImpactMorphIntensity = Math.Clamp(ImpactMorphIntensity, 0, 100);
         HoldBarIntensity = Math.Clamp(HoldBarIntensity, 0, 100); HoldBreathRate = Math.Clamp(HoldBreathRate, 0, 100);
         HoldVibrationAmount = Math.Clamp(HoldVibrationAmount, 0, 100); HoldColorCycleSpeed = Math.Clamp(HoldColorCycleSpeed, 0, 100);

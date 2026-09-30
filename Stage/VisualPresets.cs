@@ -114,6 +114,7 @@ internal static class VisualPresets
         s.ImpactMorph = "Absorb"; s.ImpactMorphIntensity = 70; s.HoldVibration = true; s.HoldVibrationAmount = 25;
         s.ReleaseEffect = "Dissolve"; s.ReleaseIntensity = 60;
         s.AmbientNature = "Snow"; s.AmbientNatureAmount = 55; s.AmbientNatureSpeed = 45;
+        s.NoteShimmer = true; s.NoteShimmerAmount = 35;
         return s;
     }
 
@@ -184,6 +185,8 @@ internal static class VisualPresets
         s.KeyboardStyle = "Studio"; s.ShowKeyFelt = true; s.KeyFeltColor = "#B0703C"; s.KeyLighting = 70; s.KeyGlowRadius = 70; s.PressedKeyColorMode = "Note";
         s.BloomIntensity = 92; s.BloomSize = 82; s.Vignette = 36; s.HorizonGlow = 55; s.Saturation = 112;
         s.ShadingQuality = "Cinematic"; s.ShaderKeyLight = 82; s.ShaderGloss = 70; s.ShaderShadows = 82; s.ShaderEmissive = 100; s.ShaderRimLight = 72;
+        s.AmbientLight = "Spotlights"; s.AmbientLightAmount = 40; s.AmbientLightSpeed = 30; s.AmbientLightColor = "#FFD98A";
+        s.HaloPulse = true; s.HaloPulseIntensity = 55;
         return s;
     }
 
@@ -200,6 +203,7 @@ internal static class VisualPresets
         s.KeyboardStyle = "Glass"; s.KeyGlowRadius = 45; s.PressedKeyColorMode = "Note";
         s.BloomIntensity = 55; s.BloomSize = 60; s.Vignette = 40; s.HorizonGlow = 30; s.StarDensity = 70; s.BackgroundDim = 25; s.Saturation = 85;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 58; s.ShaderGloss = 90; s.ShaderShadows = 60; s.ShaderExposure = 105; s.ShaderEmissive = 60; s.ShaderRimLight = 40;
+        s.ShootingStars = true; s.ShootingStarsAmount = 35;
         return s;
     }
 
@@ -214,7 +218,7 @@ internal static class VisualPresets
         s.ImpactBurst = "Fireworks"; s.ParticleAmount = 34; s.ShowImpactRings = true; s.ImpactWave = "Shockwave"; s.RingSize = 62; s.ImpactWaveIntensity = 115;
         s.ShowImpactFlash = true; s.ImpactFlashStyle = "Plasma"; s.ImpactFlashIntensity = 75;
         s.HoldBreath = true; s.HoldBreathRate = 30; s.ReleaseEffect = "Dissolve"; s.ReleaseIntensity = 60;
-        s.ShowStars = true; s.StarDensity = 90; s.AmbientCosmic = "Galaxy"; s.AmbientCosmicAmount = 65; s.AmbientCosmicSpeed = 40;
+        s.ShowStars = true; s.StarDensity = 90; s.ShootingStars = true; s.ShootingStarsAmount = 70; s.AmbientCosmic = "Galaxy"; s.AmbientCosmicAmount = 65; s.AmbientCosmicSpeed = 40;
         s.ShowFlame = false; s.ShowWisps = false;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60;
         s.BloomIntensity = 95; s.Vignette = 38; s.HorizonGlow = 40; s.Saturation = 112;
