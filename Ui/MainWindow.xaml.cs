@@ -266,9 +266,30 @@ public partial class MainWindow : Window
 
     private void OpenMidi_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = Loc.T("MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*") };
+        var dialog = new OpenFileDialog { Filter = Loc.T("Songs (*.mid;*.midi;*.musicxml;*.xml;*.mxl)|*.mid;*.midi;*.musicxml;*.xml;*.mxl|MIDI files (*.mid;*.midi)|*.mid;*.midi|MusicXML scores (*.musicxml;*.mxl)|*.musicxml;*.mxl|All files (*.*)|*.*") };
         if (dialog.ShowDialog(this) != true) return;
-        OpenMidiFile(dialog.FileName);
+        OpenSongFile(dialog.FileName);
+    }
+
+    /// <summary>True when the extension names a MusicXML score rather than a MIDI file.</summary>
+    internal static bool IsMusicXml(string path) =>
+        path.EndsWith(".musicxml", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Loads a song by extension: a MusicXML score (.musicxml, .xml, .mxl) or a Standard MIDI file. Both end
+    /// on the stage the same way; the score brings the staff of every note with it, which is the hand split
+    /// the file states rather than one measured from the pitches.
+    /// </summary>
+    internal void OpenSongFile(string path)
+    {
+        try
+        {
+            if (!IsMusicXml(path)) { OpenMidiFile(path); return; }
+            var score = MusicXmlReader.ReadScore(path);
+            LoadSong(path, score.ToSong(), score);
+        }
+        catch (Exception ex) { ShowMessage(Loc.F("Could not read this MusicXML file.\n{0}", ex.Message), "MusicXML import"); }
     }
 
     /// <summary>Loads a Standard MIDI file — from the open dialog, the Play dialog or a drop on the window.</summary>
@@ -276,17 +297,26 @@ public partial class MainWindow : Window
     {
         try
         {
-            Stop(); var song = MidiReader.ReadSong(path); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
-            _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
-            _songLabel = Path.GetFileNameWithoutExtension(path); _songPath = path;
-            Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
-            _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
-            // The recent list is written only after the file really parsed, so the Play dialog never
-            // offers a song that failed to open; the split point follows before the entry remembers it.
-            ApplyInferredHandSplit(path, song);
-            RememberSong(path, song);
+            var song = MidiReader.ReadSong(path); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
+            LoadSong(path, song, null);
         }
         catch (Exception ex) { ShowMessage(Loc.F("Could not read this MIDI file.\n{0}", ex.Message), "MIDI import"); }
+    }
+
+    /// <summary>
+    /// Puts a parsed song on the stage: the notes, the metronome grid, the track list and the labels, then
+    /// the hand split and the recent list. The recent list is written only after the file really parsed, so
+    /// the Play dialog never offers a song that failed to open.
+    /// </summary>
+    private void LoadSong(string path, MidiSong song, MusicXmlScore? score)
+    {
+        Stop();
+        _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
+        _songLabel = Path.GetFileNameWithoutExtension(path); _songPath = path;
+        Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
+        _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
+        ApplySongHandSplit(path, song, score);
+        RememberSong(path, song);
     }
 
     private async void LoadSoundFont_Click(object sender, RoutedEventArgs e)

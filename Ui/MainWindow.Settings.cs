@@ -1724,6 +1724,7 @@ public partial class MainWindow
         var path = files[0];
         if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) ImportProfile(path);
         else if (path.EndsWith(".mid", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".midi", StringComparison.OrdinalIgnoreCase)) OpenMidiFile(path);
+        else if (IsMusicXml(path)) OpenSongFile(path);
         else ApplyDroppedBackground(path);
         e.Handled = true;
     }

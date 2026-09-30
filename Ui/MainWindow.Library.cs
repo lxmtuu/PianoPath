@@ -100,7 +100,8 @@ public partial class MainWindow
             return;
         }
         RestoreSongValues(entry);
-        OpenMidiFile(entry.Path);
+        // A remembered song may be a score as well as a MIDI file; the extension decides which reader runs.
+        OpenSongFile(entry.Path);
     }
 
     /// <summary>Moves the controls that carry the values stored with a song, clamped to their ranges.</summary>
@@ -138,6 +139,32 @@ public partial class MainWindow
     /// library has never seen is measured again. The result is written through the dock slider, so the
     /// colour mode, the practice modes and the settings file follow their ordinary paths.
     /// </summary>
+    /// <summary>
+    /// The hand split of a freshly opened song, in order of authority: what the score's staves say
+    /// (<paramref name="score"/>), then a value already remembered for this file, then a measurement of the
+    /// pitches. A remembered value still beats a fresh measurement, so the split stays what it was the last
+    /// time. The result is written through the dock slider, so the colour mode, the practice modes and the
+    /// settings file follow their ordinary paths.
+    /// </summary>
+    private void ApplySongHandSplit(string path, MidiSong song, MusicXmlScore? score)
+    {
+        if (score?.HandSplitPitch is { } fromStaves && _visualSettings.InferHandSplit)
+        {
+            _splitInferred = true;
+            SetHandSplit(fromStaves);
+            return;
+        }
+        ApplyInferredHandSplit(path, song);
+    }
+
+    /// <summary>Pushes a hand-split pitch through its dock slider, or straight into the settings when the row is not built.</summary>
+    private void SetHandSplit(int pitch)
+    {
+        if (_visualSliders.TryGetValue(nameof(PianoVisualSettings.HandSplitPitch), out var slider))
+            slider.Value = Math.Clamp(pitch, slider.Minimum, slider.Maximum);
+        else _visualSettings.HandSplitPitch = Math.Clamp(pitch, 21, 108);
+    }
+
     private void ApplyInferredHandSplit(string path, MidiSong song)
     {
         _splitInferred = false;
@@ -147,9 +174,7 @@ public partial class MainWindow
             ? remembered.HandSplitPitch
             : HandSplit.Infer(song.Notes, _visualSettings.HandSplitPitch);
         _splitInferred = true;
-        if (_visualSliders.TryGetValue(nameof(PianoVisualSettings.HandSplitPitch), out var slider))
-            slider.Value = Math.Clamp(split, slider.Minimum, slider.Maximum);
-        else _visualSettings.HandSplitPitch = Math.Clamp(split, 21, 108);
+        SetHandSplit(split);
     }
 
     /// <summary>Average tempo of the metronome grid; 0 when the file carries fewer than two beats.</summary>

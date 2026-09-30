@@ -22,7 +22,7 @@ internal static class VerificationSuite
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
-            try { VerifyMidiImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+            try { VerifyMidiImport(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -1478,6 +1478,125 @@ internal static class VerificationSuite
         Assert(Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
             "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
+    }
+
+    /// <summary>
+    /// MusicXML import: divisions and tempo become seconds, chords share an onset, backup and forward move
+    /// the cursor, a tempo change moves everything after it, parts are simultaneous with their own names,
+    /// the staves state the hand split (and nothing is invented when the hands overlap), compressed .mxl is
+    /// read through its container, and a file that is not a score is refused with a reason.
+    /// </summary>
+    private static void VerifyMusicXmlImport()
+    {
+        // A piano measure of 2/4 at 60 bpm with two divisions per quarter, so a quarter note is exactly one
+        // second: the right hand plays C4 then an E4+G4 chord, the left hand enters after a backup with a
+        // quarter and an eighth plus a forward, and the second measure doubles the tempo.
+        var twoHands = """
+<score-partwise version="4.0">
+  <work><work-title>Fixture Waltz</work-title></work>
+  <identification><creator type="composer">Nobody</creator></identification>
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>2</divisions><staves>2</staves><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <direction><sound tempo="60"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><staff>1</staff></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><staff>1</staff></note>
+      <note><chord/><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration><staff>1</staff></note>
+      <backup><duration>4</duration></backup>
+      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><staff>2</staff></note>
+      <note><pitch><step>G</step><octave>3</octave></pitch><duration>1</duration><staff>2</staff></note>
+      <forward><duration>1</duration></forward>
+    </measure>
+    <measure number="2">
+      <direction><sound tempo="120"/></direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><staff>1</staff></note>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><staff>2</staff></note>
+      <note><rest/><duration>2</duration></note>
+    </measure>
+  </part>
+</score-partwise>
+""";
+        var score = MusicXmlReader.Parse(twoHands);
+        Assert(score.Title == "Fixture Waltz" && score.Composer == "Nobody" && score.MeasureCount == 2 && score.BeatsPerBar == 2,
+            $"A score should carry its title, composer, measure count and time signature (found {score.Title}/{score.Composer}, {score.MeasureCount} measure(s), {score.BeatsPerBar} beats).");
+        static string Describe(NoteEvent note) => $"{note.Pitch}@{note.Start:0.###}+{note.Duration:0.###}/t{note.Track}";
+        var right = score.Notes.Where(note => note.Pitch >= 60).OrderBy(note => note.Start).Select(Describe).ToList();
+        var left = score.Notes.Where(note => note.Pitch < 60).OrderBy(note => note.Start).Select(Describe).ToList();
+        Assert(right.SequenceEqual(new[] { "60@0+1/t0", "64@1+1/t0", "67@1+1/t0", "62@2+0.5/t0" }) && left.SequenceEqual(new[] { "52@0+1/t0", "55@1+0.5/t0", "48@2+0.5/t0" }),
+            $"Divisions, tempo, chords, backup and forward should place every note in seconds (right: {string.Join(", ", right)}; left: {string.Join(", ", left)}).");
+        Assert(score.HandSplitPitch == 57 && score.SplitFromStaves,
+            $"The staves should state the split between G3 and C4 as 57 (found {score.HandSplitPitch}).");
+        Assert(score.BeatTimes.Count >= 4 && Math.Abs(score.BeatTimes[0]) < 1e-9 && Math.Abs(score.BeatTimes[1] - 1) < 1e-9
+                && Math.Abs(score.BeatTimes[2] - 2) < 1e-9 && Math.Abs(score.BeatTimes[3] - 2.5) < 1e-9,
+            $"The beat grid should follow the time signature and the tempo of each measure (found {string.Join(", ", score.BeatTimes.Take(4).Select(time => time.ToString("0.###")))}).");
+        Assert(score.TrackNames[0] == "Piano" && score.ToSong().Notes.Count == score.Notes.Count && score.ToSong().BeatsPerBar == 2,
+            "The part list should name the track a note carries, and the score should hand itself over as a song.");
+
+        // Two parts instead of two staves: the first part is the right hand, the second the left.
+        var twoParts = """
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Right</part-name></score-part><score-part id="P2"><part-name>Left</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes>
+    <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note></measure></part>
+  <part id="P2"><measure number="1"><attributes><divisions>1</divisions></attributes>
+    <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration></note></measure></part>
+</score-partwise>
+""";
+        var parts = MusicXmlReader.Parse(twoParts);
+        Assert(parts.Notes.Count == 2 && parts.Notes.Any(note => note is { Pitch: 72, Track: 0 }) && parts.Notes.Any(note => note is { Pitch: 48, Track: 1 })
+                && parts.TrackNames[0] == "Right" && parts.TrackNames[1] == "Left" && parts.HandSplitPitch == 60,
+            "Two parts should be simultaneous and named, and the hand split should come from the part each note is in.");
+
+        // Overlapping hands: the file does not state a split, so none is invented.
+        var overlapping = twoHands.Replace("<step>C</step><octave>4</octave>", "<step>C</step><octave>3</octave>");
+        Assert(MusicXmlReader.Parse(overlapping).HandSplitPitch is null,
+            "A score whose hands overlap should leave the split to the user instead of inventing one.");
+        // One hand only, and a melody on a single staff: nothing to split either.
+        var oneHand = MusicXmlReader.Parse(twoHands.Replace("<staff>2</staff>", "<staff>1</staff>"));
+        Assert(oneHand.HandSplitPitch is null, "A score with a single hand should not claim a split.");
+        Assert(Throws(() => MusicXmlReader.Parse("<score-partwise><part-list/></score-partwise>")),
+            "A score without notes should be refused instead of opening an empty stage.");
+
+        // Compressed: the container points at the score, which is what a real .mxl looks like inside.
+        var folder = Path.Combine(Path.GetTempPath(), "keyflow-verify-musicxml-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var mxl = Path.Combine(folder, "fixture.mxl");
+            using (var archive = System.IO.Compression.ZipFile.Open(mxl, System.IO.Compression.ZipArchiveMode.Create))
+            {
+                using (var writer = new StreamWriter(archive.CreateEntry("META-INF/container.xml").Open()))
+                    writer.Write("<container><rootfiles><rootfile full-path=\"score.xml\" media-type=\"application/vnd.recordare.musicxml+xml\"/></rootfiles></container>");
+                using (var writer = new StreamWriter(archive.CreateEntry("score.xml").Open())) writer.Write(twoHands);
+            }
+            var compressed = MusicXmlReader.ReadScore(mxl);
+            Assert(compressed.Notes.Count == score.Notes.Count && compressed.HandSplitPitch == 57 && compressed.Title == "Fixture Waltz",
+                "A compressed .mxl should be read through its container and arrive as the same score.");
+            var bare = Path.Combine(folder, "bare.mxl");
+            using (var archive = System.IO.Compression.ZipFile.Open(bare, System.IO.Compression.ZipArchiveMode.Create))
+                using (var writer = new StreamWriter(archive.CreateEntry("score.musicxml").Open())) writer.Write(twoHands);
+            Assert(MusicXmlReader.ReadScore(bare).Notes.Count == score.Notes.Count,
+                "A compressed score without a container should still be found by its extension.");
+            var empty = Path.Combine(folder, "empty.mxl");
+            using (var archive = System.IO.Compression.ZipFile.Open(empty, System.IO.Compression.ZipArchiveMode.Create))
+                archive.CreateEntry("readme.txt");
+            Assert(Throws(() => MusicXmlReader.ReadScore(empty)), "A compressed file with no score inside should be refused.");
+
+            var plain = Path.Combine(folder, "plain.musicxml");
+            File.WriteAllText(plain, twoHands);
+            var fromDisk = MusicXmlReader.ReadScore(plain);
+            Assert(fromDisk.Title == "Fixture Waltz" && fromDisk.HandSplitPitch == 57 && MainWindow.IsMusicXml(plain) && !MainWindow.IsMusicXml(Path.ChangeExtension(plain, ".mid")),
+                "A plain score should load from disk, and only the score extensions should route to this reader.");
+
+            Assert(Throws(() => MusicXmlReader.Parse("not xml at all <")) && Throws(() => MusicXmlReader.Parse("<foo><bar/></foo>"))
+                    && Throws(() => MusicXmlReader.Parse("<score-timewise><part-list/></score-timewise>")),
+                "Text that is not XML, a foreign root element and a time-wise score should each be refused with an exception.");
+            var untitled = MusicXmlReader.Parse(twoHands.Replace("<work><work-title>Fixture Waltz</work-title></work>", ""), "fallback-name");
+            Assert(untitled.Title == "fallback-name", "A score without a work title should fall back to the name it was opened under.");
+        }
+        finally { try { Directory.Delete(folder, true); } catch { } }
+        Results.Add($"PASS MusicXML import: {score.Notes.Count} notes with divisions, chords, backups and a tempo change placed to the second, the staves state the hand split (57) while overlapping hands state none, .mxl reads through its container, and foreign or note-less files are refused.");
     }
 
     /// <summary>

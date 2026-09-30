@@ -34,6 +34,33 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def _raw_string(text: str, i: int):
+    """A C# raw string literal starts at ``i`` (three or more quotes, optionally after ``$`` signs) and runs
+    to the next run of that many quotes. Returns ``(end, newlines)`` or ``None`` when this is not one."""
+    j = i
+    while j < len(text) and text[j] == "$":
+        j += 1
+    if text[j:j + 1] != '"':
+        return None
+    quotes = 0
+    while text[j + quotes: j + quotes + 1] == '"':
+        quotes += 1
+    if quotes < 3:
+        return None
+    k = j + quotes
+    while k < len(text):
+        if text[k] == '"':
+            run = 0
+            while text[k + run: k + run + 1] == '"':
+                run += 1
+            if run >= quotes:
+                return k + run, text.count("\n", i, k + run)
+            k += run
+            continue
+        k += 1
+    return len(text), text.count("\n", i)
+
+
 def scan_csharp(path: Path):
     text = path.read_text(encoding="utf-8")
     stack = []
@@ -46,6 +73,12 @@ def scan_csharp(path: Path):
         if c == "\n":
             line += 1
             i += 1
+            continue
+        # raw string literal (C# 11): its content is verbatim, so the scanner skips it whole
+        raw = _raw_string(text, i)
+        if raw is not None:
+            i, added = raw
+            line += added
             continue
         # line comment
         if c == "/" and i + 1 < n and text[i + 1] == "/":
@@ -370,7 +403,12 @@ def _code(text: str) -> str:
     out, i, n = [], 0, len(text)
     while i < n:
         c = text[i]
-        if c == "/" and text[i + 1:i + 2] == "/":
+        raw = _raw_string(text, i)
+        if raw is not None:
+            # Keep the literal in place — it may be a localization key, so positions must not move.
+            out.append(text[i:raw[0]])
+            i = raw[0]
+        elif c == "/" and text[i + 1:i + 2] == "/":
             j = text.find("\n", i)
             j = n if j < 0 else j
             out.append(" " * (j - i))
