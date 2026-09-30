@@ -97,6 +97,9 @@ public partial class MainWindow : Window
         });
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() => SetPedalState(pedal, down));
         PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
+        // A folder indexed in an earlier session is watched from the start, so the library is live whether or
+        // not the Play dialog has been opened yet.
+        RefreshLibrarySongs(); StartSongFolderWatch(SongFolderIndex.Folder);
         ApplyChromeTheme();
         StartChromeSweeps();
         SetChromeVisible(true); _chromeTimer.Start();
@@ -1073,6 +1076,7 @@ public partial class MainWindow : Window
         try { SaveVisualSettings(); } catch { }
         Stop();
         foreach (var pedal in _pedalsDown.ToArray()) SetPedalState(pedal, false);
+        StopSongFolderWatch();
         _midi.Dispose(); _audio.Dispose();
     }
 }

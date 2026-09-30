@@ -355,6 +355,18 @@
                                 <TextBlock x:Name="RecentSongsEmpty" Text="Songs you open are remembered here, with the values they were last played at." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}"/>
                                 <StackPanel x:Name="RecentSongHost"/>
                             </StackPanel>
+                            <StackPanel x:Name="SongLibraryPanel" Margin="0,18,0,0">
+                                <TextBlock Text="LIBRARY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,4"/>
+                                <TextBlock x:Name="LibraryFolderLabel" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                                    <Button Content="CHOOSE FOLDER" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="12,7" Click="ChooseSongFolder_Click" ToolTip="Index every song in a folder and keep the list up to date" AutomationProperties.Name="Choose song folder"/>
+                                    <Button Content="RESCAN" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="12,7" Margin="6,0,0,0" Click="RescanSongFolder_Click" ToolTip="Read the folder again, re-reading only the files that changed" AutomationProperties.Name="Rescan song folder"/>
+                                </StackPanel>
+                                <TextBox x:Name="LibrarySearchBox" TextChanged="LibrarySearch_Changed" Padding="8,6" Margin="0,0,0,6" ToolTip="Search by title or tag" local:Loc.Localize="True" AutomationProperties.Name="Search the song library"/>
+                                <StackPanel x:Name="LibrarySongHost"/>
+                                <TextBlock x:Name="LibraryEmptyLabel" Style="{StaticResource MutedTextStyle}"/>
+                                <TextBlock x:Name="LibraryStatusLabel" Style="{StaticResource MutedTextStyle}"/>
+                            </StackPanel>
                             <TextBlock Text="STYLES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,6"/>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>

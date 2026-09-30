@@ -568,6 +568,7 @@ internal static class VerificationSuite
         VerifyUserShellThemes(window);
         VerifyPngSequenceRecorder(window);
         VerifySheetLayer(window, stage, visualSettings);
+        VerifySongFolderLibrary(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1944,6 +1945,144 @@ internal static class VerificationSuite
         Invoke(window, "RefreshPracticeHistory");
         PracticeHistory.Clear(); SetField(window, "_songPath", ""); SetField(window, "_songLabel", ""); Invoke(window, "RefreshPracticeHistory");
         Results.Add("PASS Practice ghost and chart: a bar per day for the last two weeks with days that were not practised still on the axis and the window's own average, and the best and latest takes of the open song drawn dot by dot from the notes each run graded, written when the transport stops, bounded at the cap, and readable back with the oldest runs that never had a ghost.");
+    }
+
+    /// <summary>
+    /// The song library of a folder: a scan that finds every readable file under it, facts read from the
+    /// files themselves, a cache that only re-reads what changed, tags that survive a rescan, the search over
+    /// titles and tags, and the watcher that makes the list follow the disk. The Play dialog is then asked for
+    /// the same list through the controls a user touches.
+    /// </summary>
+    private static void VerifySongFolderLibrary(MainWindow window)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "keyflow-verify-library-" + Guid.NewGuid().ToString("N"));
+        var sub = Path.Combine(folder, "Scales");
+        Directory.CreateDirectory(sub);
+        try
+        {
+            var etude = Path.Combine(folder, "Etude.mid");
+            File.WriteAllBytes(etude, CreateFormatOneMidi());
+            File.WriteAllBytes(Path.Combine(sub, "Scale.midi"), CreateFormatOneMidi());
+            File.WriteAllText(Path.Combine(folder, "Nocturne.musicxml"),
+                """
+                <?xml version="1.0" encoding="UTF-8"?>
+                <score-partwise version="4.0">
+                  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+                  <part id="P1">
+                    <measure number="1">
+                      <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+                      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><staff>1</staff></note>
+                      <backup><duration>2</duration></backup>
+                      <note><pitch><step>E</step><octave>3</octave></pitch><duration>2</duration><staff>2</staff></note>
+                    </measure>
+                  </part>
+                </score-partwise>
+                """);
+            File.WriteAllBytes(Path.Combine(folder, "Broken.mid"), Encoding.ASCII.GetBytes("this is not a MIDI file"));
+            File.WriteAllText(Path.Combine(folder, "notes.txt"), "a text file next to the songs");
+            Assert(SongFolderIndex.IsSong(etude) && SongFolderIndex.IsSong(Path.Combine(folder, "Nocturne.musicxml"))
+                    && SongFolderIndex.IsSong("x.MXL") && !SongFolderIndex.IsSong("x.txt") && !SongFolderIndex.IsSong("x.mp3"),
+                "The library should only claim the file types the readers actually read.");
+
+            var songs = SongFolderIndex.Scan(folder);
+            Assert(songs.Count == 3 && songs.Select(song => song.Title).SequenceEqual(["Etude", "Nocturne", "Scale"]),
+                $"A scan should index every readable song below the folder and list them by title (got {string.Join(", ", songs.Select(song => song.Title))}).");
+            Assert(songs[0] is { Format: "mid", Notes: 3, Tracks: 1 } && songs[1] is { Format: "musicxml", Notes: 2, Tracks: 1 }
+                    && Math.Abs(songs[1].BeatsPerMinute - 120) < .01 && songs[2].Path.StartsWith(sub, StringComparison.OrdinalIgnoreCase),
+                "Facts should come from the files themselves: notes, tracks, tempo and the format of each one.");
+            Assert(SongFolderIndex.Folder.EndsWith(Path.GetFileName(folder), StringComparison.OrdinalIgnoreCase) && songs.All(song => song.Tags.Count == 0),
+                "A fresh scan should remember the folder it read and start every song without tags.");
+            Assert(songs.All(song => !song.Title.Contains("Broken", StringComparison.OrdinalIgnoreCase)) && songs.All(song => !song.Path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase)),
+                "A file the reader refuses, and a file that is not a song at all, should stay out of the library.");
+
+            // The cache: an unchanged file is not read again, a changed one is, and the tags survive both.
+            var cached = SongFolderIndex.Scan(folder);
+            Assert(ReferenceEquals(cached[0], songs[0]) && ReferenceEquals(cached[1], songs[1]),
+                "Scanning again should reuse the entries of files that did not change instead of re-reading them.");
+            SongFolderIndex.Tag(etude, "Chopin");
+            File.WriteAllBytes(etude, [.. CreateFormatOneMidi(), .. new byte[16]]);
+            File.SetLastWriteTimeUtc(etude, DateTime.UtcNow.AddMinutes(1));
+            var rescanned = SongFolderIndex.Scan(folder);
+            var etudeEntry = rescanned.Single(song => string.Equals(song.Path, etude, StringComparison.OrdinalIgnoreCase));
+            Assert(etudeEntry.Size != songs[0].Size && etudeEntry.Tags.SequenceEqual(["chopin"]),
+                "Editing a file should make the next scan re-read it while its tags stay with it.");
+            Assert(!ReferenceEquals(SongFolderIndex.Scan(folder, force: true)[1], rescanned[1]),
+                "RESCAN should read every file again, changed or not.");
+
+            // Tags and search.
+            Assert(SongFolderIndex.Tag(etude, "  Chopin  ") is null && SongFolderIndex.CleanTag("  A  B ") == "a b"
+                    && SongFolderIndex.CleanTag(new string('x', 40)).Length == SongFolderIndex.MaxTagLength
+                    && SongFolderIndex.Tag(etude, "   ") is null && SongFolderIndex.Tag(Path.Combine(folder, "ghost.mid"), "x") is null,
+                "A tag should be trimmed, lower-cased, cut to the limit, never empty and never added to a song that is not indexed.");
+            for (var index = 0; index < SongFolderIndex.MaxTags + 2; index++) SongFolderIndex.Tag(Path.Combine(folder, "Nocturne.musicxml"), $"tag{index}");
+            var capped = SongFolderIndex.Songs.Single(song => song.Title == "Nocturne");
+            Assert(capped.Tags.Count == SongFolderIndex.MaxTags, $"A song should carry at most {SongFolderIndex.MaxTags} tags (has {capped.Tags.Count}).");
+            Assert(SongFolderIndex.Untag(Path.Combine(folder, "Nocturne.musicxml"), "TAG0") is { } trimmed && trimmed.Tags.Count == SongFolderIndex.MaxTags - 1
+                    && SongFolderIndex.Untag(Path.Combine(folder, "Nocturne.musicxml"), "nope") is null,
+                "Removing a tag should ignore case and report when there was nothing to remove.");
+            Assert(SongFolderIndex.Search("etu").Count == 1 && SongFolderIndex.Search("CHOPIN").Count == 1
+                    && SongFolderIndex.Search("chopin etu").Single().Title == "Etude" && SongFolderIndex.Search("").Count == 3
+                    && SongFolderIndex.Search("tag1").Count == 1 && SongFolderIndex.Search("nothing at all").Count == 0,
+                "Search should match a title, a file name or a tag, require every word of the query, and match nothing when it should.");
+            SongFolderIndex.Reload();
+            Assert(SongFolderIndex.Songs.Count == 3 && SongFolderIndex.Search("chopin").Count == 1 && SongFolderIndex.Folder.Length > 0,
+                "The folder, the songs and their tags should come back from the index file.");
+            File.WriteAllText(SongFolderIndex.FilePath, "{ half a file");
+            SongFolderIndex.Reload();
+            Assert(SongFolderIndex.Songs.Count == 0 && SongFolderIndex.Folder.Length == 0,
+                "A damaged index should be forgotten rather than breaking the library, and the folder can be scanned again.");
+            Assert(SongFolderIndex.Scan(Path.Combine(folder, "does-not-exist")).Count == 0 && SongFolderIndex.Tag(etude, "x") is null,
+                "Scanning a folder that is not there should yield an empty library instead of throwing.");
+
+            // The Play dialog: the same list, the search box and the tagged chips.
+            SongFolderIndex.Scan(folder);
+            Invoke(window, "RefreshLibrarySongs");
+            var host = (StackPanel)window.FindName("LibrarySongHost");
+            var label = (TextBlock)window.FindName("LibraryFolderLabel");
+            var empty = (TextBlock)window.FindName("LibraryEmptyLabel");
+            var search = (TextBox)window.FindName("LibrarySearchBox");
+            Assert(host.Children.Count == 3 && label.Text.StartsWith(Loc.F("{0} songs in {1}", 3, SongFolderIndex.Folder), StringComparison.Ordinal),
+                $"The Play dialog should list the indexed songs and say where they came from ({label.Text}).");
+            search.Text = "nocturne";
+            Assert(host.Children.Count == 1 && empty.Text.Length == 0, "Typing in the search box should filter the library down to the matches.");
+            search.Text = "zzz";
+            Assert(host.Children.Count == 0 && empty.Text == Loc.T("No song in this folder matches what you typed. Tags and the file name are searched too."),
+                "A query that matches nothing should say so instead of leaving an empty list.");
+            search.Text = "chopin";
+            var row = (Grid)host.Children[0];
+            var chips = ((StackPanel)((StackPanel)row.Children[0]).Children[2]).Children.OfType<Button>().ToList();
+            Assert(chips.Any(chip => (chip.Content as string) == "#chopin"), "A tagged song should show its tag as a chip in the library row.");
+            search.Text = "";
+
+            // The watcher: the list follows the disk, and a file added while it watches is indexed.
+            Invoke(window, "StartSongFolderWatch", folder);
+            var watcher = (SongFolderWatcher)Field(window, "_songWatcher")!;
+            Assert(watcher.IsWatching && watcher.WatchedFolder == folder, "Choosing a folder should start watching it for changes.");
+            var added = Path.Combine(folder, "Late.mid");
+            File.WriteAllBytes(added, CreateFormatOneMidi());
+            // The watcher runs on its own thread and only raises the flag; the window's timer would do the
+            // rescanning, but the check is holding the UI thread, so it rescan on demand below instead.
+            var noticed = false;
+            for (var attempt = 0; attempt < 60 && !noticed; attempt++)
+            {
+                Thread.Sleep(50);
+                noticed = (bool)Field(window, "_libraryDirty") || SongFolderIndex.Songs.Count == 4;
+            }
+            Assert(noticed, "Adding a song to the watched folder should mark the library for a rescan without pressing anything.");
+            Invoke(window, "RescanSongFolder_Click", window, new RoutedEventArgs());
+            Assert(SongFolderIndex.Songs.Count == 4 && host.Children.Count == 4,
+                $"The rescan the watcher asked for should pick the new song up (library has {SongFolderIndex.Songs.Count}).");
+            Invoke(window, "StopSongFolderWatch");
+            Assert(!watcher.IsWatching, "Closing the window should stop watching the folder.");
+            SetField(window, "_libraryDirty", false);
+        }
+        finally
+        {
+            try { Directory.Delete(folder, true); } catch { }
+            SongFolderIndex.Forget();
+            Invoke(window, "RefreshLibrarySongs");
+        }
+        Results.Add("PASS Song library: a folder scan that indexes MIDI and MusicXML under it, facts read from the files, a cache that only re-reads what changed and keeps tags, tag limits and search over titles, file names and tags, an index that survives a reload and forgives a damaged file, the Play dialog list and its search box, and a watcher that notices a song added to the folder.");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>

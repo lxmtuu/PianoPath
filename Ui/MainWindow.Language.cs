@@ -56,6 +56,7 @@ public partial class MainWindow
 
         LoadPresetList();
         RefreshRecentSongs();
+        RefreshLibrarySongs();
         RefreshPracticeHistory();
         RefreshSettingControls();
         UpdateSoundFontUi();

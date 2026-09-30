@@ -197,6 +197,8 @@ public partial class MainWindow
         RefreshThemeChips();
         SyncPlayInlineControls();
         RefreshRecentSongs();
+        RefreshLibrarySongs();
+        if (SongFolderIndex.Folder.Length > 0) StartSongFolderWatch(SongFolderIndex.Folder);
         PlayDialogOverlay.Visibility = Visibility.Visible;
         ChromeMotion.FadeIn(PlayDialogOverlay, 200);
         ChromeMotion.PopIn(PlayDialogCard);
