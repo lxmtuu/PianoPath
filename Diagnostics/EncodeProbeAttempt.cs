@@ -19,11 +19,21 @@ internal static class EncodeProbeAttempt
     /// <summary>Three pictures of the take's own size: enough to write a real file, few enough to be quick.</summary>
     internal const int Width = 64, Height = 48, FrameRate = 15, Frames = 3;
 
-    /// <summary>What this process is doing. The parent copies these into the verification log.</summary>
+    private static StreamWriter? _trace;
+
+    /// <summary>
+    /// What this process is doing, said twice: on standard output for the parent's log, and into a trace file
+    /// beside the AVI. The file outlives the process even when it is killed, which is the only way to read the
+    /// step a stalled media stack really stopped at (see <see cref="Mp4TakeAttempt"/>).
+    /// </summary>
     private static void Say(string line)
     {
         try { Console.Out.WriteLine(line); Console.Out.Flush(); } catch { }
+        try { _trace?.WriteLine(line); _trace?.Flush(); } catch { }
     }
+
+    /// <summary>The file this child's trace goes into; also where the parent looks after a run that stopped.</summary>
+    internal static string TracePath(string probePath) => probePath + ".trace";
 
     /// <summary>
     /// Returns 0 when the AVI really was written and 2 when this machine did not manage it — the caller turns
@@ -31,6 +41,18 @@ internal static class EncodeProbeAttempt
     /// machine rather than a fault of the app.
     /// </summary>
     internal static int Run(string path)
+    {
+        try { _trace = new StreamWriter(TracePath(path), append: false) { AutoFlush = true }; } catch { }
+        try { return Attempt(path); }
+        finally
+        {
+            try { _trace?.Dispose(); } catch { }
+            _trace = null;
+        }
+    }
+
+    /// <summary>The probe itself, once the trace file is open. See <see cref="Run"/>.</summary>
+    private static int Attempt(string path)
     {
         // The media objects a take is made of, built on their own first: no file, no encoder, no writer, so a
         // machine that stalls while they are handed over is named here rather than after a take has timed out.

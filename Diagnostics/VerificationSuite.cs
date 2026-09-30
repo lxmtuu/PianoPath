@@ -2104,7 +2104,27 @@ internal static class VerificationSuite
 
         var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".mp4");
         try { VerifyMp4Take(path); }
-        finally { try { if (File.Exists(path)) File.Delete(path); } catch { } }
+        finally
+        {
+            try { if (File.Exists(path)) File.Delete(path); } catch { }
+            try { File.Delete(Mp4TakeAttempt.TracePath(path)); } catch { }
+        }
+    }
+
+    /// <summary>
+    /// The last line of a child's own trace file, or null when it wrote none. The children write these because
+    /// they are killed when a machine stalls: what they had already written down is then the only account of
+    /// where the machine stopped, and a pipe can lose its last lines at exactly that moment.
+    /// </summary>
+    private static string? LastTraceLine(string tracePath)
+    {
+        try
+        {
+            if (!File.Exists(tracePath)) return null;
+            var trace = File.ReadAllLines(tracePath);
+            return trace.Length > 0 ? trace[^1] : null;
+        }
+        catch { return null; }
     }
 
     /// <summary>
@@ -2143,6 +2163,12 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
+        // The child's trace file outlives the kill that follows a stall, and its last line is the step the machine
+        // really stopped at: a child taken down inside native code can lose the lines still in flight on the pipe,
+        // which is how a report can end up naming a call that had in fact already returned.
+        var trace = LastTraceLine(Mp4TakeAttempt.TracePath(path));
+        if (trace is not null && (lines.Count == 0 || !string.Equals(trace, lines[^1], StringComparison.Ordinal)))
+            Results.Add("NOTE MP4 encoder (from the child's own trace): " + trace);
         // The encoder check runs before the take is opened, so a child that got as far as the take must also have
         // said whether this machine holds an H.264 stream: without that line the run is reading a take with no
         // word on how the machine got there. A child that died inside the check never did — its last line names
@@ -2162,7 +2188,7 @@ internal static class VerificationSuite
         {
             // The child says what it was doing before each call it makes, so its last line is the step this
             // machine's media stack stopped at — the whole point of writing the take out of this process.
-            var last = lines.Count > 0 ? lines[^1] : "<the child reported nothing at all>";
+            var last = trace ?? (lines.Count > 0 ? lines[^1] : "<the child reported nothing at all>");
             Results.Add(exit < 0
                 ? $"SKIP MP4 encoder: this machine's media stack never came back from the encoders, so the take was stopped after {TakeTimeoutSeconds} seconds; the last step the child reported was: {last}"
                 : $"SKIP MP4 encoder: the child process stopped without finishing a take (it ended with code {exit} at: {last}) — this machine's media stack rather than the app, so only the format's arithmetic and its frame layout were checked.");
@@ -2220,7 +2246,8 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
-        var last = lines.Count > 0 ? lines[^1] : "<the probe reported nothing at all>";
+        var last = LastTraceLine(EncodeProbeAttempt.TracePath(probe))
+            ?? (lines.Count > 0 ? lines[^1] : "<the probe reported nothing at all>");
         Results.Add(exit == 0
             ? "PASS MP4 encoder plumbing: with no take written, a child process wrote three uncompressed pictures into an AVI through the take's own sample step, so this machine's media stack and this side's buffers both work and the take got stuck at the encoder."
             : exit < 0

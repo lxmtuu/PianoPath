@@ -18,11 +18,23 @@ internal static class Mp4TakeAttempt
     /// <summary>The take the verification writes: small enough for any encoder, long enough to close a file.</summary>
     internal const int Width = 64, Height = 48, FrameRate = 15, Frames = 15;
 
-    /// <summary>What this process is doing. The parent copies these into the verification log.</summary>
+    private static StreamWriter? _trace;
+
+    /// <summary>
+    /// What this process is doing, said twice: on standard output, which the parent copies into the verification
+    /// log, and into a trace file beside the take. The file is not a luxury — this process is killed when the
+    /// media stack does not come back, and the last lines in flight on a pipe can be lost exactly when they
+    /// matter most. A run that stops then reads the file's last line, which is the step the machine really
+    /// stopped at, however hostile the ending was.
+    /// </summary>
     private static void Say(string line)
     {
         try { Console.Out.WriteLine(line); Console.Out.Flush(); } catch { }
+        try { _trace?.WriteLine(line); _trace?.Flush(); } catch { }
     }
+
+    /// <summary>The file the child's own trace goes into; also where the parent looks after a run that stopped.</summary>
+    internal static string TracePath(string takePath) => takePath + ".trace";
 
     /// <summary>
     /// Encodes the take. Returns 0 when the file was written, 1 when one of the recorder's own promises did not
@@ -30,6 +42,18 @@ internal static class Mp4TakeAttempt
     /// caller reports as a skipped check rather than as a fault of the app.
     /// </summary>
     internal static int Run(string path)
+    {
+        try { _trace = new StreamWriter(TracePath(path), append: false) { AutoFlush = true }; } catch { }
+        try { return Attempt(path); }
+        finally
+        {
+            try { _trace?.Dispose(); } catch { }
+            _trace = null;
+        }
+    }
+
+    /// <summary>The take itself, once the trace file is open. See <see cref="Run"/>.</summary>
+    private static int Attempt(string path)
     {
         // The machine gets asked one question before the take, and only one: can this media stack hold an
         // H.264 stream at all? Asking a sink writer for one writes no frame and finds the encoder behind the
