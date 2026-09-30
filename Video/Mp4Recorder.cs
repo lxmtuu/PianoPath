@@ -345,7 +345,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// cannot finish the probe cannot finish a take either, and a machine that writes the probe but hangs on
     /// the take has a codec to blame rather than this side's sample plumbing.
     /// </summary>
-    internal static int WriteSampleTo(IMFSinkWriter writer, int streamIndex, byte[] bytes, int count, long time, long duration)
+    internal static int WriteSampleTo(Mf.IMFSinkWriter writer, int streamIndex, byte[] bytes, int count, long time, long duration)
     {
         var hr = Mf.MFCreateMemoryBuffer(count, out var buffer);
         if (hr < 0) return hr;

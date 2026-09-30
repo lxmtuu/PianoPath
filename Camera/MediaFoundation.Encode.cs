@@ -109,7 +109,7 @@ internal static partial class Mf
             target.SetUINT64Key(FrameRateKey, Pack(frameRate, 1));
             target.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
             target.SetUINT32Key(InterlaceMode, InterlaceProgressive);
-            hr = writer.AddStream(target, out var index);
+            hr = writer!.AddStream(target, out var index);
             if (hr < 0) return hr;
             if (MFCreateMediaType(out var input) != S_OK) return MF_E_OUT_OF_MEMORY;
             input.SetGUIDKey(MajorType, VideoMajorType);
