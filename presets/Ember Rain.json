@@ -188,6 +188,8 @@
     "BloomIntensity": 100,
     "BloomSize": 85,
     "RecordingResolution": "Window",
-    "RecordingFrameRate": 30.0
+    "RecordingFrameRate": 30.0,
+    "RecordingFormat": "Avi",
+    "RecordingTransparent": true
   }
 }

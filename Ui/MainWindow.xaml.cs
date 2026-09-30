@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, TextBox> _visualColorInputs = [];
     private readonly Dictionary<string, Button> _visualColorButtons = [];
     private PianoVisualSettings _visualSettings = new();
-    private AviVideoRecorder? _videoRecorder;
+    private IFrameRecorder? _videoRecorder;
     private DispatcherTimer? _recordTimer;
     private string? _recordingPath;
     private List<NoteEvent> _allNotes = [];
@@ -578,28 +578,65 @@ public partial class MainWindow : Window
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
-        var dialog = new SaveFileDialog { Filter = Loc.T("AVI video (*.avi)|*.avi"), DefaultExt = ".avi", AddExtension = true, FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}.avi", Title = Loc.T("Record piano visualizer") };
-        if (dialog.ShowDialog(this) != true) return;
+        var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+        var (width, height) = RecordingSize();
+        var frameRate = (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
+        // A folder for the frames, or a file for the video: one choice in the dock decides which recorder runs.
+        var target = sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile();
+        if (target is null) return;
         try
         {
-            var (width, height) = RecordingSize();
-            _videoRecorder = new AviVideoRecorder(dialog.FileName, width, height, (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60));
-            _recordingPath = dialog.FileName;
+            _videoRecorder = target.Length > 0 && sequence
+                ? new PngSequenceRecorder(target, width, height, frameRate)
+                : new AviVideoRecorder(target!, width, height, frameRate);
+            _recordingPath = target!;
+            // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
+            // the switch is the user's and is only honoured for that format.
+            Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
             _recordTimer.Tick += RecordTimer_Tick; _recordTimer.Start();
             Loc.Set(RecordButton, "REC 00:00"); RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
-            var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
-            if (_videoRecorder.UsesMjpeg) Loc.Set(RecordButton, "Recording MJPEG AVI · click to stop", FrameworkElement.ToolTipProperty);
-            else Loc.Format(RecordButton, "Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop", FrameworkElement.ToolTipProperty, rawSeconds);
-            if (_videoRecorder.UsesMjpeg) Loc.Set(SettingsSaveLabel, "Video recording started");
-            else Loc.Format(SettingsSaveLabel, "Recording raw AVI · about {0:0} s fit before the 2 GB limit", rawSeconds);
+            if (_videoRecorder is PngSequenceRecorder)
+            {
+                Loc.Set(RecordButton, "Recording PNG frames · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, "Recording a PNG sequence with alpha");
+            }
+            else if (((AviVideoRecorder)_videoRecorder).UsesMjpeg)
+            {
+                Loc.Set(RecordButton, "Recording MJPEG AVI · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, "Video recording started");
+            }
+            else
+            {
+                var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
+                Loc.Format(RecordButton, "Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop", FrameworkElement.ToolTipProperty, rawSeconds);
+                Loc.Format(SettingsSaveLabel, "Recording raw AVI · about {0:0} s fit before the 2 GB limit", rawSeconds);
+            }
         }
         catch (Exception ex)
         {
             StopVideoRecording(showMessage: false);
             ShowMessage(ex.Message, "Video recording");
         }
+    }
+
+    /// <summary>The AVI file the next recording goes into, or null when the user cancels.</summary>
+    private string? ChooseVideoFile()
+    {
+        var dialog = new SaveFileDialog { Filter = Loc.T("AVI video (*.avi)|*.avi"), DefaultExt = ".avi", AddExtension = true, FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}.avi", Title = Loc.T("Record piano visualizer") };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
+    }
+
+    /// <summary>
+    /// The folder the PNG frames go into: the user picks a parent, and the frames land in a timestamped
+    /// subfolder so two recordings never overwrite each other.
+    /// </summary>
+    private string? ChooseFrameFolder(int width, int height, int frameRate)
+    {
+        var dialog = new OpenFolderDialog { Title = Loc.T("Choose a folder for the PNG frames"), Multiselect = false };
+        if (dialog.ShowDialog(this) != true) return null;
+        return System.IO.Path.Combine(dialog.FolderName, $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}");
     }
 
     private void RecordTimer_Tick(object? sender, EventArgs e)
@@ -611,7 +648,11 @@ public partial class MainWindow : Window
             var due = (int)Math.Floor(_recordClock.Elapsed.TotalSeconds * _videoRecorder.FrameRate) + 1 - _videoRecorder.FrameCount;
             if (due > 0)
             {
-                _videoRecorder.WriteBgrFrame(CaptureStageBgr(_videoRecorder.Width, _videoRecorder.Height), Math.Min(due, _videoRecorder.FrameRate * 2));
+                var recorder = _videoRecorder;
+                // The recorder names the buffer it wants: stride-aligned BGR for AVI, tightly packed BGRA
+                // (with the stage's alpha) for the PNG sequence.
+                var frame = recorder.HasAlpha ? CaptureStageBgra(recorder.Width, recorder.Height) : CaptureStageBgr(recorder.Width, recorder.Height);
+                recorder.WriteFrame(frame, Math.Min(due, recorder.FrameRate * 2));
                 if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, Loc.T("The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically.")); return; }
             }
             var elapsed = _recordClock.Elapsed;
@@ -626,18 +667,36 @@ public partial class MainWindow : Window
 
     private RenderTargetBitmap? _captureBitmap;
     private byte[]? _captureSource, _captureTarget;
-    private byte[] CaptureStageBgr(int width, int height)
+
+    /// <summary>
+    /// Draws the stage into the shared capture bitmap at the recording size and hands back the tightly
+    /// packed BGRA pixels. The bitmap and the buffers are reused between frames; at 1280×720 fresh arrays
+    /// would add roughly 130 MB/s of garbage while recording.
+    /// </summary>
+    private byte[] RenderStagePixels(int width, int height)
     {
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen()) context.DrawRectangle(new VisualBrush(Stage) { Stretch = Stretch.Uniform }, null, new Rect(0, 0, width, height));
-        // Reuse the capture bitmap and buffers between frames; at 1280×720 fresh arrays would add roughly 130 MB/s of garbage while recording.
         if (_captureBitmap is null || _captureBitmap.PixelWidth != width || _captureBitmap.PixelHeight != height)
         {
             _captureBitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             _captureSource = new byte[width * 4 * height]; _captureTarget = new byte[AviVideoRecorder.BgrStride(width) * height];
         }
         var bitmap = _captureBitmap; bitmap.Clear(); bitmap.Render(visual);
-        var sourceStride = width * 4; var source = _captureSource!; bitmap.CopyPixels(source, sourceStride, 0);
+        var source = _captureSource!; bitmap.CopyPixels(source, width * 4, 0);
+        return source;
+    }
+
+    /// <summary>
+    /// One frame as premultiplied BGRA, alpha included: what the PNG sequence writes (see
+    /// <see cref="PngSequenceRecorder"/>). The buffer belongs to the session and is reused every frame.
+    /// </summary>
+    internal byte[] CaptureStageBgra(int width, int height) => RenderStagePixels(width, height);
+
+    private byte[] CaptureStageBgr(int width, int height)
+    {
+        var source = RenderStagePixels(width, height);
+        var sourceStride = width * 4;
         var targetStride = AviVideoRecorder.BgrStride(width); var target = _captureTarget!;
         for (var y = 0; y < height; y++)
         {
@@ -657,11 +716,20 @@ public partial class MainWindow : Window
         var recorder = _videoRecorder; _videoRecorder = null;
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;
+        var frames = recorder.FrameCount;
         try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) ShowMessage(ex.Message, "Video recording"); }
+        // The export is over: the stage goes back to painting its own background, whatever the framing was.
+        Stage.TransparentBackdrop = false;
         Loc.Set(RecordButton, "REC"); RecordButton.ClearValue(BackgroundProperty);
         Loc.Set(RecordButton, "Record the live piano visualizer", FrameworkElement.ToolTipProperty);
         if (showMessage && !_closing)
-            ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, note is null ? "" : note + "\n\n"), "Recording complete", MessageBoxImage.Information);
+        {
+            var noteText = note is null ? "" : note + "\n\n";
+            if (recorder is PngSequenceRecorder)
+                ShowMessage(Loc.F("Frames saved.\n{0}\n\n{1}{2} PNG frames with an alpha channel. Import them at the frame rate you chose, or follow the ffmpeg line in sequence.json to turn them into alpha video; system audio is not mixed in.", path, noteText, frames), "Recording complete", MessageBoxImage.Information);
+            else
+                ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, noteText), "Recording complete", MessageBoxImage.Information);
+        }
     }
     internal static int MapComputerKey(Key key) { var index = Array.IndexOf(ComputerKeys, key); return index < 0 ? -1 : 48 + ComputerMap[index]; }
     private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }

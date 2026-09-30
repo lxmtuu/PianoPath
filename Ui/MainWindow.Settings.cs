@@ -495,8 +495,12 @@ public partial class MainWindow
     private void BuildRecordingPage()
     {
         var output = Card(RecordingSettingsHost, "OUTPUT", "Applied when the next recording starts.");
+        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, or a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage.",
+            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"));
         Choice(output, "Resolution", nameof(PianoVisualSettings.RecordingResolution), "Match the window, or render to a fixed 16:9 size.", ("Window", "Match window"), ("720p", "1280 × 720"), ("1080p", "1920 × 1080"));
-        SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the AVI file.");
+        SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the recording.");
+        Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
+            "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
     }
 
     /// <summary>
@@ -817,6 +821,7 @@ public partial class MainWindow
         if (_visualValueBoxes.TryGetValue(property, out var box) && !box.IsKeyboardFocused) box.Text = FormatSetting(property, slider.Value);
         MarkModified(property);
         if (property is nameof(PianoVisualSettings.RecordingFrameRate)) UpdateRecordingInfo();
+        if (property is nameof(PianoVisualSettings.RecordingFormat)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.HandSplitPitch) && ModeCombo.SelectedIndex is 2 or 3) { ApplyTrackFilter(); UpdateSongUi(); }
         if (property is nameof(PianoVisualSettings.NoteFallSpeed) && PlaySpeedSlider is not null)
         {
@@ -857,6 +862,7 @@ public partial class MainWindow
         if (property == nameof(PianoVisualSettings.BackgroundMode) && value == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) ChooseStageBackground(sender, e);
         MarkModified(property); RefreshDependentRows(); RebuildTrackList();
         if (property is nameof(PianoVisualSettings.RecordingResolution)) UpdateRecordingInfo();
+        if (property is nameof(PianoVisualSettings.RecordingTransparent)) UpdateRecordingInfo();
         var what = property switch
         {
             nameof(PianoVisualSettings.NoteStyle) => "Note style updated",
@@ -1506,7 +1512,11 @@ public partial class MainWindow
     {
         if (RecordingInfoLabel is null) return;
         var (width, height) = RecordingSize();
-        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · AVI (MJPEG when a codec is installed, raw BGR otherwise) · audio is not captured.", width, height, _visualSettings.RecordingFrameRate);
+        var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+        var format = sequence
+            ? (_visualSettings.RecordingTransparent ? Loc.T("PNG frames (32-bit alpha)") : Loc.T("PNG frames (opaque)"))
+            : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
+        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · audio is not captured.", width, height, _visualSettings.RecordingFrameRate, format);
     }
 
     private (int Width, int Height) RecordingSize()

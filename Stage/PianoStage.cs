@@ -72,6 +72,7 @@ internal sealed class PianoStage : FrameworkElement
     private IReadOnlyList<NoteEvent> _notes = [];
     private IReadOnlySet<int> _pressed = new HashSet<int>();
     private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip, _fps;
+    private bool _transparentBackdrop;
     private int _releaseScanIndex;
     private double _releaseScanPos;
     private double _beatPulse, _energyLevel;
@@ -81,6 +82,18 @@ internal sealed class PianoStage : FrameworkElement
     private int _mousePitch = -1;
     public event Action<int, bool>? PianoKeyChanged;
     public double KeyboardHeight => Math.Max(80, Math.Min(300, Math.Max(110, Math.Min(228, ActualHeight * .205)) * _visual.KeyboardScale / 100));
+    /// <summary>
+    /// Renders the stage without its opaque background so an export can keep the alpha channel (the PNG
+    /// sequence; see <see cref="PngSequenceRecorder"/>). Every layer the look enables is still drawn — the
+    /// stars, the note roll, the keys and the effects — while the fills a viewer would otherwise see
+    /// through are skipped: the ink, the background colour, the image, the gradient and the vignette.
+    /// </summary>
+    internal bool TransparentBackdrop
+    {
+        get => _transparentBackdrop;
+        set { if (_transparentBackdrop == value) return; _transparentBackdrop = value; InvalidateVisual(); }
+    }
+
     public int SparkCount => _sparks.Count;
     public int RingCount => _rings.Count;
     public int FlashCount => _flashes.Count;
@@ -606,20 +619,25 @@ internal sealed class PianoStage : FrameworkElement
         var parallax = _visual.CameraParallax / 100;
         var offsetX = (width - width * scale) * _visual.CameraOffset / 100 + (_pointerX - .5) * parallax * 28;
         var offsetY = (height - height * scale) * .5 + (_pointerY - .5) * parallax * 20;
-        dc.DrawRectangle(chroma ? ChromaGreen : Ink, null, new Rect(0, 0, width, height));
+        if (!_transparentBackdrop) dc.DrawRectangle(chroma ? ChromaGreen : Ink, null, new Rect(0, 0, width, height));
         dc.PushTransform(new TranslateTransform(offsetX, offsetY)); dc.PushTransform(new ScaleTransform(scale, scale));
-        if (chroma) dc.DrawRectangle(ChromaGreen, null, new Rect(0, 0, width, height));
+        if (chroma)
+        {
+            if (!_transparentBackdrop) dc.DrawRectangle(ChromaGreen, null, new Rect(0, 0, width, height));
+        }
         else
         {
-            dc.DrawRectangle(Brush(ParseColor(_visual.BackgroundColor, Colors.Black)), null, new Rect(0, 0, width, height));
-            if (_visual.ShowBackground && _visual.BackgroundMode == "Image" && _backgroundImage is not null)
+            // A transparent export skips the fills that would cover the alpha channel; the layers the look
+            // enables (stars, lanes, horizon, beams, motes, ambient families) are drawn either way.
+            if (!_transparentBackdrop) dc.DrawRectangle(Brush(ParseColor(_visual.BackgroundColor, Colors.Black)), null, new Rect(0, 0, width, height));
+            if (!_transparentBackdrop && _visual.ShowBackground && _visual.BackgroundMode == "Image" && _backgroundImage is not null)
             {
                 var imageScale = Math.Max(width / _backgroundImage.Width, height / _backgroundImage.Height);
                 var imageWidth = _backgroundImage.Width * imageScale; var imageHeight = _backgroundImage.Height * imageScale;
                 dc.DrawImage(_backgroundImage, new Rect((width - imageWidth) / 2, (height - imageHeight) / 2, imageWidth, imageHeight));
                 if (_visual.BackgroundDim > 0) dc.DrawRectangle(Brush(Color.FromArgb((byte)(_visual.BackgroundDim * 2.1), 0, 0, 0)), null, new Rect(0, 0, width, height));
             }
-            if (_visual.ShowBackground && _visual.BackgroundGradient)
+            if (!_transparentBackdrop && _visual.ShowBackground && _visual.BackgroundGradient)
             {
                 var aura = new RadialGradientBrush { Center = new Point(.5, .24), GradientOrigin = new Point(.5, .24), RadiusX = .72, RadiusY = .88, MappingMode = BrushMappingMode.RelativeToBoundingBox };
                 aura.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(40 * _visual.BloomIntensity / 65), 121, 48, 174), 0));
@@ -650,7 +668,7 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.ShowEmbers || _visual.ShowWisps) DrawSparks(dc, width, keyTop);
         if (_visual.ShowHalo) DrawImpactLine(dc, width, keyTop);
         if (_visual.HoldElectricArc && _visual.HoldArcIntensity > 0) DrawElectricArcs(dc, width, keyTop);
-        if (!chroma && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
+        if (!chroma && !_transparentBackdrop && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
         if (_visual.ShowKeys) DrawKeyboard(dc, width, height, lane, keyTop);
         if (_visual.ShowWatermark) DrawWatermark(dc, width, height);
         if (_visual.ShowCounter || _visual.ShowFps) DrawCounter(dc, width);

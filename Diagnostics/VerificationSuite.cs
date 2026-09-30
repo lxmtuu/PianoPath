@@ -562,6 +562,7 @@ internal static class VerificationSuite
         VerifyPresetThumbnails(window);
         VerifyCommunityPresets(window);
         VerifyUserShellThemes(window);
+        VerifyPngSequenceRecorder(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1477,6 +1478,97 @@ internal static class VerificationSuite
         Assert(Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
             "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
+    }
+
+    /// <summary>
+    /// The PNG sequence exporter: every frame is a 32-bit PNG of the recording size (8-bit RGBA, exactly
+    /// the format a compositor needs for an alpha layer), a repeated frame is written as a copy, the folder
+    /// gets a manifest that names the pattern and the ffmpeg line back to alpha video, a wrong-sized frame
+    /// or an impossible size is refused, and the stage drops its opaque fills only when the export asks for
+    /// transparency.
+    /// </summary>
+    private static void VerifyPngSequenceRecorder(MainWindow window)
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-frames-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            var recorder = new PngSequenceRecorder(directory, 64, 48, 24);
+            Assert(recorder.HasAlpha && !recorder.IsNearSizeLimit && recorder.FrameBytes == 64 * 4 * 48 && recorder.OutputPath == directory,
+                "The PNG sequence recorder should ask for tightly packed BGRA frames, keep alpha and have no 2 GB limit to stop at.");
+            var frame = new byte[64 * 4 * 48];
+            for (var y = 0; y < 48; y++)
+                for (var x = 0; x < 64; x++)
+                {
+                    var at = (y * 64 + x) * 4;
+                    var inside = x > 16 && y > 24; // premultiplied: an opaque mid grey inside, nothing outside
+                    frame[at] = frame[at + 1] = frame[at + 2] = inside ? (byte)60 : (byte)0;
+                    frame[at + 3] = inside ? (byte)255 : (byte)0;
+                }
+            recorder.WriteFrame(frame, 3);
+            Assert(recorder.FrameCount == 3 && File.Exists(Path.Combine(directory, "frame-000001.png")) && File.Exists(Path.Combine(directory, "frame-000003.png")),
+                "A repeated frame should land in the folder once per copy, numbered from one.");
+            var first = Path.Combine(directory, "frame-000001.png");
+            var bytes = File.ReadAllBytes(first);
+            Assert(bytes.Length > 8 && bytes.Take(8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
+                "Every frame of the sequence should be a PNG.");
+            using (var stream = new MemoryStream(bytes))
+            {
+                var decoded = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                var pixels = new byte[decoded.PixelWidth * 4 * decoded.PixelHeight];
+                var source = new FormatConvertedBitmap(decoded, PixelFormats.Bgra32, null, 0);
+                source.CopyPixels(pixels, decoded.PixelWidth * 4, 0);
+                var corner = pixels[3];
+                var middle = pixels[((decoded.PixelHeight - 4) * decoded.PixelWidth + decoded.PixelWidth - 4) * 4 + 3];
+                Assert(bytes[24] == 8 && bytes[25] == 6 && decoded.PixelWidth == 64 && decoded.PixelHeight == 48 && corner == 0 && middle > 200,
+                    $"A frame should be an 8-bit RGBA PNG carrying the alpha the stage drew (colour type {bytes[25]}, corner alpha {corner}, inside alpha {middle}).");
+            }
+            Assert(recorder.BytesWritten > 0 && recorder.BytesWritten >= new FileInfo(first).Length,
+                "The recorder should count the bytes it wrote.");
+            Assert(Throws(() => recorder.WriteFrame(new byte[16])), "A frame of the wrong size should be refused instead of written half-way.");
+            recorder.Dispose();
+            var manifestPath = Path.Combine(directory, PngSequenceRecorder.ManifestName);
+            Assert(File.Exists(manifestPath), "Stopping a sequence should leave a manifest next to the frames.");
+            using (var document = System.Text.Json.JsonDocument.Parse(File.ReadAllText(manifestPath)))
+            {
+                var root = document.RootElement;
+                Assert(root.GetProperty("format").GetString() == "png32" && root.GetProperty("width").GetInt32() == 64
+                        && root.GetProperty("height").GetInt32() == 48 && root.GetProperty("fps").GetInt32() == 24
+                        && root.GetProperty("frames").GetInt32() == 3 && root.GetProperty("alpha").GetBoolean()
+                        && root.GetProperty("pattern").GetString() == PngSequenceRecorder.Pattern
+                        && root.GetProperty("ffmpeg").GetString()!.Contains("libvpx-vp9"),
+                    "The manifest should describe the frames and how to turn them back into alpha video.");
+            }
+            Assert(Throws(() => new PngSequenceRecorder(directory, 0, 48, 24)) && Throws(() => new PngSequenceRecorder(directory, 64, 48, 120)),
+                "An impossible size and an impossible frame rate should be refused with an exception.");
+
+            // The stage: transparency is a property of the export, and it is what the alpha frames come from.
+            var stage = (PianoStage)Field(window, "Stage")!;
+            var hadLook = ((PianoVisualSettings)Field(window, "_visualSettings")!).ToJson();
+            var flat = PianoVisualSettings.FromJson(hadLook);
+            flat.ShowBackground = false; flat.ShowWatermark = false; flat.ShowCounter = false; flat.ShowFps = false;
+            flat.ShowPetals = false; flat.AmbientEnergy = "None"; flat.AmbientNature = "None"; flat.AmbientLight = "None"; flat.AmbientCosmic = "None";
+            flat.HorizonGlow = 0; flat.ShowLightBeams = false; flat.ShowHalo = false; flat.ShowNotes = false; flat.ShowImpactFlash = false;
+            stage.SetVisualSettings(flat); stage.ClearTransient(); stage.UpdateLayout();
+            var opaque = (byte[])InvokeReturn(window, "CaptureStageBgra", 64, 48)!;
+            var opaqueCorner = opaque[3];
+            stage.TransparentBackdrop = true; stage.UpdateLayout();
+            var clear = (byte[])InvokeReturn(window, "CaptureStageBgra", 64, 48)!;
+            var clearCorner = clear[3];
+            stage.TransparentBackdrop = false; stage.UpdateLayout();
+            Assert(opaque.Length == 64 * 4 * 48 && opaqueCorner == 255 && clearCorner == 0,
+                $"A transparent export should hand the alpha channel the stage drew: the same pixel is opaque while the stage paints its background and clear while it does not (was {opaqueCorner}, then {clearCorner}).");
+            var restored = PianoVisualSettings.FromJson(hadLook);
+            ((PianoVisualSettings)Field(window, "_visualSettings")!).CopyFrom(restored);
+            stage.SetVisualSettings(restored); Invoke(window, "RefreshSettingControls");
+            Results.Add("PASS PNG sequence: 32-bit frames of the chosen size, repeated frames written once per copy, a manifest with the pattern and the ffmpeg line, bad sizes refused, and a transparent stage that really produces clear pixels.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+    }
+
+    /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>
+    private static bool Throws(Action action)
+    {
+        try { action(); return false; } catch { return true; }
     }
 
     /// <summary>

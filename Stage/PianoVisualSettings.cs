@@ -4,6 +4,13 @@ using System.Text.Json.Serialization;
 
 namespace PianoPath;
 
+/// <summary>The values <see cref="PianoVisualSettings.RecordingFormat"/> accepts; stored as written.</summary>
+internal static class RecordingFormatIds
+{
+    internal const string Avi = "Avi";
+    internal const string PngSequence = "PngSequence";
+}
+
 /// <summary>Serializable, user-editable live-stage and note rendering controls.</summary>
 internal sealed class PianoVisualSettings
 {
@@ -286,6 +293,16 @@ internal sealed class PianoVisualSettings
     /// <summary>Window, 720p or 1080p.</summary>
     public string RecordingResolution { get; set; } = "Window";
     public double RecordingFrameRate { get; set; } = 30;
+    /// <summary>
+    /// What REC writes: <c>Avi</c> for a video file, <c>PngSequence</c> for a folder of 32-bit frames with
+    /// an alpha channel (see <see cref="IFrameRecorder"/>). An unknown value falls back to AVI.
+    /// </summary>
+    public string RecordingFormat { get; set; } = RecordingFormatIds.Avi;
+    /// <summary>
+    /// PNG sequence only: draw the stage without its opaque background so the frames keep their alpha.
+    /// Every layer the look enables is still drawn; what is skipped is the fill that would block it.
+    /// </summary>
+    public bool RecordingTransparent { get; set; } = true;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -309,6 +326,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] KeyLabelModes = ["None", "C", "All"];
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
+    internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
 
@@ -410,6 +428,7 @@ internal sealed class PianoVisualSettings
         if (!KeyLabelModes.Contains(KeyLabels)) KeyLabels = "C";
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
+        if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Avi;
         if (!ChromeMotions.Contains(ChromeMotion)) ChromeMotion = "Full";
         if (string.IsNullOrWhiteSpace(ShellTheme)) ShellTheme = ShellThemes.DefaultId;
         TrackColors ??= [];

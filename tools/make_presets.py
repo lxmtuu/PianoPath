@@ -120,27 +120,43 @@ PRESETS: list[dict] = [
 
 
 def read_consts() -> dict[str, str]:
-    """``internal const string VelvetGoldId = "velvet-gold";`` → ``{"ShellThemes.VelvetGoldId": "velvet-gold"}``.
+    """Every ``internal const string`` in the theme and settings classes, as ``Class.Name`` → value.
 
-    A const may name another const (``DefaultId = ConcertGrandId``), so resolve those too.
+    A const may name another const (``DefaultId = ConcertGrandId``), so those are resolved too. This is what
+    lets a property default such as ``RecordingFormatIds.Avi`` be read exactly like the compiled value.
     """
-    text = SHELL_THEMES.read_text(encoding="utf-8")
-    raw = {name: value.strip() for name, value in re.findall(r"internal const string (\w+) = ([^;]+);", text)}
+    raw: dict[str, str] = {}
+    for path in (SHELL_THEMES, SETTINGS):
+        text = path.read_text(encoding="utf-8")
+        for owner, body in re.findall(r"internal static class (\w+)\s*\{(.*?)\n\}", text, re.S):
+            for name, value in re.findall(r"internal const string (\w+) = ([^;]+);", body):
+                raw[f"{owner}.{name}"] = value.strip()
+        # A class may be written without "static" (PianoVisualSettings is sealed); every const in the file is
+        # collected under the name of the type that declares it, taken from the nearest class header above.
+        for match in re.finditer(r"internal (?:static )?(?:sealed )?class (\w+)", text):
+            tail = text[match.end():]
+            end = tail.find("\ninternal ")
+            body = tail[:end if end >= 0 else len(tail)]
+            for name, value in re.findall(r"internal const string (\w+) = ([^;]+);", body):
+                raw.setdefault(f"{match.group(1)}.{name}", value.strip())
     consts: dict[str, str] = {}
 
-    def resolve(name: str, seen: frozenset[str]) -> str | None:
-        if name in seen or name not in raw:
-            return None
-        value = raw[name]
-        literal = re.fullmatch(r'"([^"]*)"', value)
-        if literal:
-            return literal.group(1)
-        return resolve(value, seen | {name})
+    def resolve(name: str, owner: str, seen: frozenset[str]) -> str | None:
+        # A const may name another const of the same class, written either bare or qualified.
+        for candidate in (name, f"{owner}.{name}"):
+            if candidate in seen or candidate not in raw:
+                continue
+            value = raw[candidate]
+            literal = re.fullmatch(r'"([^"]*)"', value)
+            if literal:
+                return literal.group(1)
+            return resolve(value, owner, seen | {candidate})
+        return None
 
-    for name in raw:
-        value = resolve(name, frozenset())
+    for key in raw:
+        value = resolve(key, key.rsplit(".", 1)[0], frozenset())
         if value is not None:
-            consts[f"ShellThemes.{name}"] = value
+            consts[key] = value
     return consts
 
 
