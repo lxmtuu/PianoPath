@@ -2064,6 +2064,7 @@ internal static class VerificationSuite
     /// </summary>
     private static void VerifyMp4Take(string path)
     {
+        const int TakeTimeoutSeconds = 60;
         var lines = new List<string>();
         var exit = 0;
         try
@@ -2077,7 +2078,10 @@ internal static class VerificationSuite
             child.OutputDataReceived += (_, line) => { if (line.Data is not null) lock (lines) lines.Add(line.Data); };
             child.Start();
             child.BeginOutputReadLine();
-            exit = child.WaitForExit(120_000) ? child.ExitCode : -1;
+            // A take this small is written in well under a second wherever the encoders work at all. A minute
+            // is the point past which the media stack is not slow, it is stuck — and a runner whose encoder
+            // never comes back is reported as such rather than left to hold the whole run up.
+            exit = child.WaitForExit(TakeTimeoutSeconds * 1000) ? child.ExitCode : -1;
             if (exit < 0) { try { child.Kill(entireProcessTree: true); } catch { } }
             child.WaitForExit();
         }
@@ -2092,9 +2096,14 @@ internal static class VerificationSuite
         else if (exit == 0 && !File.Exists(path))
             Results.Add("FAIL MP4 encoder: the child process wrote no take yet reported that it had finished one.");
         else if (exit != 0)
+        {
+            // The child says what it was doing before each call it makes, so its last line is the step this
+            // machine's media stack stopped at — the whole point of writing the take out of this process.
+            var last = lines.Count > 0 ? lines[^1] : "<the child reported nothing at all>";
             Results.Add(exit < 0
-                ? "SKIP MP4 encoder: the child process that writes the take had to be stopped after two minutes, so only the format's arithmetic and its frame layout were checked."
-                : $"SKIP MP4 encoder: the child process never finished a take (it ended with code {exit}), which is this machine's media stack rather than the app, so only the format's arithmetic and its frame layout were checked.");
+                ? $"SKIP MP4 encoder: this machine's media stack never came back from the encoders, so the take was stopped after {TakeTimeoutSeconds} seconds; the last step the child reported was: {last}"
+                : $"SKIP MP4 encoder: the child process stopped without finishing a take (it ended with code {exit} at: {last}) — this machine's media stack rather than the app, so only the format's arithmetic and its frame layout were checked.");
+        }
         else
         {
             // The file is read only now that the child has closed it: a sink writer holds its file while it works.

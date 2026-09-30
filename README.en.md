@@ -513,8 +513,10 @@ dotnet run --project .\PianoPath.csproj -- --verify
 
 The log is written **as the run goes**, so a process that is taken down inside a native call still leaves the
 line naming what it was doing. The suite writes a real MP4 take too, and it has a **child process** do that
-writing (see `--encode-take`): a media stack that dies inside its encoders then costs the run a SKIP line
-instead of its verdict.
+writing (see `--encode-take`): a media stack that dies — or never comes back — inside its encoders then
+costs the run a SKIP line instead of its verdict. That line names the step the machine stopped at, a
+working encoder takes well under a second for a take this small, and a child still inside one after a
+minute is let go of.
 
 Exit code `0` means passed, `1` means a failure; the log lists every PASS/FAIL item. The suite creates
 a small MIDI file, SoundFont SF2 and AVI in a temporary folder; it checks the MIDI parser (multiple
