@@ -1875,9 +1875,12 @@ internal static class VerificationSuite
 </score-partwise>
 """;
         var compoundXml = MusicXmlReader.Parse(compoundScore);
-        Assert(compoundXml.BeatsPerBar == 2 && compoundXml.BeatTimes.Count == 2
-                && Math.Abs(compoundXml.BeatTimes[0]) < 1e-9 && Math.Abs(compoundXml.BeatTimes[1] - 1.5) < 1e-9,
-            $"A 6/8 score should beat twice on dotted quarters at the measure's tempo (found {compoundXml.BeatsPerBar} beat(s) at {string.Join(", ", compoundXml.BeatTimes.Select(time => time.ToString("0.###")))}).");
+        // The bar itself is two beats half a bar apart, and the grid keeps that step past the last note so the
+        // metronome and the sheet still have a beat to stand on (three quarters of music fill a 6/8 bar).
+        Assert(compoundXml.BeatsPerBar == 2 && compoundXml.BeatTimes.Count >= 3
+                && Math.Abs(compoundXml.BeatTimes[0]) < 1e-9 && Math.Abs(compoundXml.BeatTimes[1] - 1.5) < 1e-9
+                && Math.Abs(compoundXml.BeatTimes[2] - 3) < 1e-9,
+            $"A 6/8 score should beat twice on dotted quarters at the measure's tempo and keep that step past the bar (found {compoundXml.BeatsPerBar} beat(s) at {string.Join(", ", compoundXml.BeatTimes.Take(4).Select(time => time.ToString("0.###")))}).");
         Assert(compoundXml.Notes.Count == 3 && Math.Abs(compoundXml.Notes[^1].Start - 2) < 1e-9,
             "Reading the grid of a compound signature should not move the notes themselves.");
 
