@@ -42,13 +42,18 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     private long _audioFrames;
     private bool _mediaStarted;
     private bool _finalized;
+    private readonly Action<string>? _step;
 
     /// <summary>
     /// Opens the file and starts the encoders. <paramref name="withAudio"/> asks for the audio stream as well,
-    /// which is only ever true when the engine has a SoundFont to play.
+    /// which is only ever true when the engine has a SoundFont to play. <paramref name="step"/>, when given,
+    /// hears every stage of the way — the AAC probe, the writer opening, each stream going in, the writer
+    /// starting — so the verification's child process can leave a log that names the call a machine stopped at
+    /// rather than the call it was going to make next.
     /// </summary>
-    internal Mp4Recorder(string path, int width, int height, int frameRate, bool withAudio)
+    internal Mp4Recorder(string path, int width, int height, int frameRate, bool withAudio, Action<string>? step = null)
     {
+        _step = step;
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException(Loc.T("An MP4 recording needs a file to go into."), nameof(path));
         if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
         if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
@@ -63,7 +68,11 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
             // Whether the sound can go in at all is asked of a throwaway writer first: a stream that is added
             // and then refused would leave this writer unable to be told to drop it again, and the user's file
             // would have to be opened a second time. The answer decides the shape of the take before it starts.
-            var wantsAudio = withAudio && CanEncodeAudio();
+            _step?.Invoke("NOTE MP4 encoder: asking a throwaway writer whether this machine can encode AAC.");
+            var wantsAudio = withAudio && CanEncodeAudio(_step);
+            _step?.Invoke(wantsAudio
+                ? "NOTE MP4 encoder: the AAC probe says yes, so the take carries the sound."
+                : "NOTE MP4 encoder: the AAC probe says no, so the take carries the picture only.");
             AudioDropped = withAudio && !wantsAudio;
             Open(encodersForAudio: wantsAudio);
         }
@@ -232,11 +241,14 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     {
         var hr = Mf.MFCreateSinkWriterFromURL(OutputPath, IntPtr.Zero, null, out var writer);
         if (hr < 0) throw new InvalidOperationException(Loc.F("No MP4 writer is available on this machine ({0}).", Mf.Describe(hr)));
+        _step?.Invoke("NOTE MP4 encoder: the take's sink writer is open.");
         _writer = writer;
         _videoStream = AddVideoStream();
-        if (encodersForAudio) _audioStream = AddAudioStream();
+        _step?.Invoke("NOTE MP4 encoder: the take's H.264 stream is in.");
+        if (encodersForAudio) { _audioStream = AddAudioStream(); _step?.Invoke("NOTE MP4 encoder: the take's AAC stream is in."); }
         hr = writer.BeginWriting();
         if (hr < 0) throw new InvalidOperationException(Loc.F("The MP4 writer would not start writing ({0}).", Mf.Describe(hr)));
+        _step?.Invoke($"NOTE MP4 encoder: the take's writer began writing at {Width}×{Height}.");
     }
 
     /// <summary>
@@ -315,16 +327,18 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// Whether this machine can put the engine's samples into an MP4 at all, asked on a throwaway file so the
     /// user's own take is only ever opened once and only in a shape the machine has already accepted.
     /// </summary>
-    private static bool CanEncodeAudio()
+    private static bool CanEncodeAudio(Action<string>? step)
     {
         var probe = Path.Combine(Path.GetTempPath(), "keyflow-mp4-probe-" + Guid.NewGuid().ToString("N") + ".mp4");
         Mf.IMFSinkWriter? writer = null;
         try
         {
             if (Mf.MFCreateSinkWriterFromURL(probe, IntPtr.Zero, null, out writer) < 0) return false;
+            step?.Invoke("NOTE MP4 encoder: the AAC probe writer is open.");
             var target = AudioTarget(); var source = AudioSource();
             if (target is null || source is null) return false;
             if (writer.AddStream(target, out var index) < 0) return false;
+            step?.Invoke("NOTE MP4 encoder: the AAC probe took the stream.");
             return writer.SetInputMediaType(index, source, null) >= 0;
         }
         catch { return false; }

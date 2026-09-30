@@ -48,7 +48,7 @@ internal static class Mp4TakeAttempt
 
         Say($"NOTE MP4 encoder: opening a {Width}×{Height} take at {FrameRate} fps, asking for the audio stream as well.");
         Mp4Recorder recorder;
-        try { recorder = new Mp4Recorder(path, Width, Height, FrameRate, withAudio: true); }
+        try { recorder = new Mp4Recorder(path, Width, Height, FrameRate, withAudio: true, step: Say); }
         catch (Exception ex)
         {
             Say("NOTE MP4 encoder: this machine's media stack cannot write an MP4 (" + ex.Message + ").");
