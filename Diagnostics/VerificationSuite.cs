@@ -1486,26 +1486,26 @@ internal static class VerificationSuite
     private static void VerifyPresetThumbnails(MainWindow window)
     {
         var look = VisualPresets.FindBuiltIn("Inferno")!.Settings.Clone();
-        var png = Stage.PresetThumbnail.RenderPng(look);
+        var png = PianoPath.PresetThumbnail.RenderPng(look);
         Assert(png.Length > 8 && png.Take(8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }),
             "A rendered preset picture should be a PNG.");
         static int BigEndian(byte[] bytes, int offset) => (bytes[offset] << 24) | (bytes[offset + 1] << 16) | (bytes[offset + 2] << 8) | bytes[offset + 3];
-        Assert(BigEndian(png, 16) == Stage.PresetThumbnail.Width && BigEndian(png, 20) == Stage.PresetThumbnail.Height && png.Length > 1000,
-            $"The rendered picture should be {Stage.PresetThumbnail.Width}×{Stage.PresetThumbnail.Height} and carry real content (found {BigEndian(png, 16)}×{BigEndian(png, 20)}, {png.Length} bytes).");
-        var stored = Stage.PresetThumbnail.Decode(Stage.PresetThumbnail.Encode(look));
-        Assert(stored is { PixelWidth: Stage.PresetThumbnail.Width, PixelHeight: Stage.PresetThumbnail.Height },
+        Assert(BigEndian(png, 16) == PianoPath.PresetThumbnail.Width && BigEndian(png, 20) == PianoPath.PresetThumbnail.Height && png.Length > 1000,
+            $"The rendered picture should be {PianoPath.PresetThumbnail.Width}×{PianoPath.PresetThumbnail.Height} and carry real content (found {BigEndian(png, 16)}×{BigEndian(png, 20)}, {png.Length} bytes).");
+        var stored = PianoPath.PresetThumbnail.Decode(PianoPath.PresetThumbnail.Encode(look));
+        Assert(stored is { PixelWidth: PianoPath.PresetThumbnail.Width, PixelHeight: PianoPath.PresetThumbnail.Height },
             "The picture a preset stores should decode back to a bitmap of the rendered size.");
-        Assert(Stage.PresetThumbnail.Decode("") is null && Stage.PresetThumbnail.Decode(null) is null
-                && Stage.PresetThumbnail.Decode("not base64 at all!!") is null
-                && Stage.PresetThumbnail.Decode(Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 })) is null
-                && Stage.PresetThumbnail.Decode(new string('A', Stage.PresetThumbnail.MaxBase64Length + 1)) is null,
+        Assert(PianoPath.PresetThumbnail.Decode("") is null && PianoPath.PresetThumbnail.Decode(null) is null
+                && PianoPath.PresetThumbnail.Decode("not base64 at all!!") is null
+                && PianoPath.PresetThumbnail.Decode(Convert.ToBase64String(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9 })) is null
+                && PianoPath.PresetThumbnail.Decode(new string('A', PianoPath.PresetThumbnail.MaxBase64Length + 1)) is null,
             "A preset without a picture, and a picture that is not a PNG of the right size, must read as no picture.");
 
         var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-thumbs-" + Guid.NewGuid().ToString("N"));
         try
         {
             var store = new VisualPresetStore(directory);
-            var saved = store.Save("Pictured Look", look, Stage.PresetThumbnail.Encode(look));
+            var saved = store.Save("Pictured Look", look, PianoPath.PresetThumbnail.Encode(look));
             Assert(saved.Thumbnail is { Length: > 1000 } && File.ReadAllText(saved.FilePath!).Contains("\"Thumbnail\""),
                 "Saving a preset from the app should write the rendered picture into its file.");
             var loaded = store.LoadUserPresets();
@@ -1519,9 +1519,9 @@ internal static class VerificationSuite
                 "A preset file written before the picture envelope existed should still load as a preset without a picture.");
 
             var exportPath = Path.Combine(directory, "exported.json");
-            VisualPresetStore.Export(look, exportPath, Stage.PresetThumbnail.Encode(look));
+            VisualPresetStore.Export(look, exportPath, PianoPath.PresetThumbnail.Encode(look));
             var imported = VisualPresetStore.Import(exportPath);
-            Assert(imported.Thumbnail is { Length: > 1000 } && Stage.PresetThumbnail.Decode(imported.Thumbnail) is not null,
+            Assert(imported.Thumbnail is { Length: > 1000 } && PianoPath.PresetThumbnail.Decode(imported.Thumbnail) is not null,
                 "An exported preset should carry its picture to the machine that imports it.");
 
             var noPicture = store.Save("Plain Look", look);
@@ -1531,13 +1531,13 @@ internal static class VerificationSuite
         finally { try { Directory.Delete(directory, true); } catch { } }
 
         // The list: a preset with a stored picture uses it, one without falls back to the drawn miniature.
-        var pictured = new VisualPreset("Pictured", "with a picture", false, look, null, Stage.PresetThumbnail.Encode(look));
+        var pictured = new VisualPreset("Pictured", "with a picture", false, look, null, PianoPath.PresetThumbnail.Encode(look));
         var drawn = new VisualPreset("Drawn", "without a picture", false, look);
         if (InvokeReturn(window, "PresetThumbnail", pictured) is not System.Windows.Media.ImageSource picturedImage
             || InvokeReturn(window, "PresetThumbnail", drawn) is not System.Windows.Media.ImageSource drawnImage)
             throw new InvalidOperationException("The preset list should be able to build a picture for both a pictured and a drawn preset.");
-        Assert(picturedImage is BitmapSource { PixelWidth: Stage.PresetThumbnail.Width, PixelHeight: Stage.PresetThumbnail.Height }
-                && drawnImage is BitmapSource { PixelWidth: Stage.PresetThumbnail.Width, PixelHeight: Stage.PresetThumbnail.Height },
+        Assert(picturedImage is BitmapSource { PixelWidth: PianoPath.PresetThumbnail.Width, PixelHeight: PianoPath.PresetThumbnail.Height }
+                && drawnImage is BitmapSource { PixelWidth: PianoPath.PresetThumbnail.Width, PixelHeight: PianoPath.PresetThumbnail.Height },
             "The preset list should show the stored picture at the same size as the miniature it draws for a preset without one.");
         Results.Add("PASS preset pictures: the stage renders at 192×112, a saved or exported preset carries the picture and gets it back on load, older files load without one, and a picture that is not a PNG of the right size is refused.");
     }
