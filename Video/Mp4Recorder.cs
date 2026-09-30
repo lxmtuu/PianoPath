@@ -391,8 +391,9 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         if (hr < 0) return hr;
         step?.Invoke("NOTE MP4 encoder: the buffer is being put into the sample.");
         sample.AddBuffer(buffer);
-        step?.Invoke("NOTE MP4 encoder: the sample is being stamped.");
+        step?.Invoke("NOTE MP4 encoder: the sample's time is being set.");
         sample.SetSampleTime(time);
+        step?.Invoke("NOTE MP4 encoder: the sample's duration is being set.");
         sample.SetSampleDuration(duration);
         step?.Invoke("NOTE MP4 encoder: the sample is stamped; handing it to the writer.");
         return writer.WriteSample(streamIndex, sample);

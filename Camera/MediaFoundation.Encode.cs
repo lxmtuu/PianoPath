@@ -118,9 +118,12 @@ internal static partial class Mf
         if (hr < 0) return hr;
         step?.Invoke("NOTE media objects: the buffer is being put into the sample.");
         sample.AddBuffer(buffer);
-        step?.Invoke("NOTE media objects: the sample is being stamped.");
-        sample.SetSampleTime(0);
-        sample.SetSampleDuration(1);
+        step?.Invoke("NOTE media objects: the sample's time is being set.");
+        hr = sample.SetSampleTime(0);
+        step?.Invoke($"NOTE media objects: the time is set ({Describe(hr)}); the duration is being set.");
+        if (hr < 0) return hr;
+        hr = sample.SetSampleDuration(1);
+        if (hr < 0) return hr;
         step?.Invoke("NOTE media objects: the buffer and the sample came together and were stamped.");
         return S_OK;
     }

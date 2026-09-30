@@ -2167,8 +2167,9 @@ internal static class VerificationSuite
         // really stopped at: a child taken down inside native code can lose the lines still in flight on the pipe,
         // which is how a report can end up naming a call that had in fact already returned.
         var trace = LastTraceLine(Mp4TakeAttempt.TracePath(path));
-        if (trace is not null && (lines.Count == 0 || !string.Equals(trace, lines[^1], StringComparison.Ordinal)))
-            Results.Add("NOTE MP4 encoder (from the child's own trace): " + trace);
+        Results.Add(trace is null
+            ? "NOTE MP4 encoder: the child kept no trace file, so the steps below are only what reached this run through the pipe."
+            : $"NOTE MP4 encoder: the child's own trace file was found; its last line is: {trace}");
         // The encoder check runs before the take is opened, so a child that got as far as the take must also have
         // said whether this machine holds an H.264 stream: without that line the run is reading a take with no
         // word on how the machine got there. A child that died inside the check never did — its last line names
@@ -2246,8 +2247,11 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
-        var last = LastTraceLine(EncodeProbeAttempt.TracePath(probe))
-            ?? (lines.Count > 0 ? lines[^1] : "<the probe reported nothing at all>");
+        var probeTrace = LastTraceLine(EncodeProbeAttempt.TracePath(probe));
+        Results.Add(probeTrace is null
+            ? "NOTE MP4 encoder plumbing: the probe kept no trace file, so its steps are only what reached this run through the pipe."
+            : $"NOTE MP4 encoder plumbing: the probe's own trace file was found; its last line is: {probeTrace}");
+        var last = probeTrace ?? (lines.Count > 0 ? lines[^1] : "<the probe reported nothing at all>");
         Results.Add(exit == 0
             ? "PASS MP4 encoder plumbing: with no take written, a child process wrote three uncompressed pictures into an AVI through the take's own sample step, so this machine's media stack and this side's buffers both work and the take got stuck at the encoder."
             : exit < 0
