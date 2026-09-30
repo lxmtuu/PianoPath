@@ -964,8 +964,13 @@ public partial class MainWindow : Window
     internal static string AudioTrackPath(string target, bool sequence) =>
         sequence ? Path.Combine(target, "audio.wav") : Path.ChangeExtension(target, ".wav");
 
-    /// <summary>The name a muxed copy gets, next to the recording.</summary>
-    internal static string MuxedName(string target) => Path.ChangeExtension(target, null) + ".mp4";
+    /// <summary>
+    /// The name a muxed copy gets, next to the recording; empty when there is nothing to derive one from.
+    /// The line that prints the ffmpeg hint only wants a string, so deriving the name must not be the
+    /// place where a path that was already cleared turns into an exception.
+    /// </summary>
+    internal static string MuxedName(string? target) =>
+        string.IsNullOrEmpty(target) ? "" : Path.ChangeExtension(target, null) + ".mp4";
 
     /// <summary>
     /// Opens the WAV for this take and attaches the engine's tap to it. Returns false when there is nothing to

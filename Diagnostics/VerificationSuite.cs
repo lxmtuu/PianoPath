@@ -3334,8 +3334,9 @@ internal static partial class VerificationSuite
             // Where the recorder puts the track, next to the video or inside the frame folder.
             Assert(MainWindow.AudioTrackPath(@"C:\clips\take.avi", false).EndsWith("take.wav", StringComparison.Ordinal)
                     && MainWindow.AudioTrackPath(@"C:\clips\frames", true).EndsWith(Path.Combine("frames", "audio.wav"), StringComparison.Ordinal)
-                    && MainWindow.MuxedName(@"C:\clips\take.avi").EndsWith("take.mp4", StringComparison.Ordinal),
-                "The audio track should land beside an AVI (and inside the PNG folder), and the muxed copy should be named next to it.");
+                    && MainWindow.MuxedName(@"C:\clips\take.avi").EndsWith("take.mp4", StringComparison.Ordinal)
+                    && MainWindow.MuxedName(null) == "" && MainWindow.MuxedName("") == "",
+                "The audio track should land beside an AVI (and inside the PNG folder), and the muxed copy should be named next to it — a take with no name at all names nothing instead of throwing.");
 
             // The real path: the engine renders the loaded SoundFont into the writer, block by block.
             var font = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(font, CreateTestSoundFont());
@@ -3371,6 +3372,9 @@ internal static partial class VerificationSuite
             var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
             Assert(toggles.TryGetValue(nameof(PianoVisualSettings.RecordAudio), out var audioToggle) && audioToggle.IsChecked == true,
                 "The Recording page should offer the audio track as a switch, on by default.");
+            // The assert above records the failure; without this the run would go on and crash on the very
+            // control it just reported missing.
+            if (audioToggle is null) return;
             var settings = (PianoVisualSettings)Field(window, "_visualSettings");
             audioToggle.IsChecked = false;
             Assert(!settings.RecordAudio && ReferenceEquals(Field(window, "_audioTrack"), null),
