@@ -9,8 +9,8 @@ namespace PianoPath;
 /// playhead. Each note is written on the staff its hand split assigns it to, at the place the song's key spells
 /// it, with a key signature at the head of both staves, the accidentals the bars really need, ledger lines where
 /// a note leaves the staff, bar lines on the beat grid, short notes beamed within their beat (or flagged when
-/// they stand alone), a rest wherever one hand is silent while the other plays, and a ring on whatever is
-/// sounding.
+/// they stand alone), a rest wherever one hand is silent while the other plays, a curve where a note is carried
+/// on by a tie, and a ring on whatever is sounding.
 ///
 /// <para>
 /// The geometry is plain arithmetic (<see cref="Step"/>, <see cref="Place"/>, <see cref="LedgerLines"/>,
@@ -125,17 +125,22 @@ internal static class SheetLayer
     /// with, the beams its short notes share and the silences of both hands. None of it depends on the practice
     /// state or on where the playhead is, so a renderer can work it out once per song instead of once per frame.
     /// </summary>
-    internal sealed record SheetPlan(NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests);
+    internal sealed record SheetPlan(NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests, IReadOnlyList<Tie> Ties);
 
-    /// <summary>Works out the plan of a song: its accidentals, its beams and its rests.</summary>
+    /// <summary>Works out the plan of a song: its accidentals, its beams, its rests and its ties.</summary>
     internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key)
     {
         var beatSeconds = BeatSeconds(beats);
         var downbeats = Downbeats(beats, beatsPerBar);
+        var ties = Ties(notes, handSplit);
+        // A note a tie carries on from is a continuation of the one before it, which the accidentals have to know.
+        var carried = new HashSet<int>();
+        foreach (var tie in ties) carried.Add(tie.Second);
         return new SheetPlan(
-            AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit),
+            AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit, carried),
             Beams(notes, beats, handSplit, key, beatSeconds),
-            Rests(notes, handSplit));
+            Rests(notes, handSplit),
+            ties);
     }
 
     /// <summary>What is written beside a note head: nothing, a sharp, a flat or a natural.</summary>
@@ -151,8 +156,14 @@ internal static class SheetLayer
     /// sharp back. The two staves keep their own bars, and <paramref name="barOf"/> says which bar of the song
     /// each note index sits in (the sheet derives it from the beat grid).
     /// </para>
+    ///
+    /// <para>
+    /// A note a tie carries on from <paramref name="carried"/> takes the sign the note before it was written with
+    /// rather than a new one: the note did not stop sounding, so a score does not sign it again even when the bar
+    /// line has passed — and everything after it in the new bar is written as if the sign had been put there.
+    /// </para>
     /// </summary>
-    internal static NoteAccidental[] AccidentalPlan(IReadOnlyList<NoteEvent> notes, MusicKey key, Func<int, int> barOf, double handSplit)
+    internal static NoteAccidental[] AccidentalPlan(IReadOnlyList<NoteEvent> notes, MusicKey key, Func<int, int> barOf, double handSplit, IReadOnlySet<int>? carried = null)
     {
         var plan = new NoteAccidental[notes.Count];
         var bars = new Dictionary<(int Staff, int Bar, int Step), int>();
@@ -163,6 +174,12 @@ internal static class SheetLayer
             var (staff, _) = Place(pitch, handSplit, key);
             var cell = (staff, barOf(index), octave * 7 + letter);
             var inForce = bars.TryGetValue(cell, out var altered) ? altered : key.Signature(letter);
+            if (carried is not null && carried.Contains(index))
+            {
+                // The tie carries the sign in: record it for the rest of the bar and write nothing beside this note.
+                bars[cell] = alteration;
+                continue;
+            }
             if (alteration == inForce) continue;
             plan[index] = alteration switch { > 0 => NoteAccidental.Sharp, < 0 => NoteAccidental.Flat, _ => NoteAccidental.Natural };
             bars[cell] = alteration;
@@ -232,6 +249,49 @@ internal static class SheetLayer
         while (flags < 3 && durationSeconds <= slot * .7) { flags++; slot /= 2; }
         return flags;
     }
+
+    /// <summary>One note carried on into the next: the note a tie starts at and the note it is carried into.</summary>
+    internal readonly record struct Tie(int First, int Second);
+
+    /// <summary>
+    /// How late a note may start and still be the same written note carried on. A score ties a note exactly, but a
+    /// performance recorded to MIDI often leaves a few milliseconds between the two halves of it, so the tie
+    /// tolerates that much air and no more.
+    /// </summary>
+    internal const double TieGapSeconds = .03;
+
+    /// <summary>
+    /// The ties of a song: a note that starts where the same pitch left off is not a new note but the same written
+    /// note carried on, so it is written once and joined by a curve instead of being struck again. The notes of one
+    /// pitch and one hand are walked in time and neighbouring pairs whose end and start meet — within
+    /// <see cref="TieGapSeconds"/> of air, as a played file usually leaves — are tied. An overlap means the note was
+    /// struck again, and a different pitch or a different hand is a different note. A chain of three is two ties,
+    /// which is what an engraving draws.
+    /// </summary>
+    internal static IReadOnlyList<Tie> Ties(IReadOnlyList<NoteEvent> notes, double handSplit)
+    {
+        var ties = new List<Tie>();
+        // One bucket per pitch and staff, in the order the song already has its notes sorted in.
+        var voices = new Dictionary<(int Pitch, int Staff), int>();
+        for (var index = 0; index < notes.Count; index++)
+        {
+            var note = notes[index];
+            var key = (note.Pitch, StaffOf(note.Pitch, handSplit));
+            if (voices.TryGetValue(key, out var previous))
+            {
+                var air = note.Start - notes[previous].End;
+                if (air >= -1e-6 && air <= TieGapSeconds) ties.Add(new Tie(previous, index));
+            }
+            voices[key] = index;
+        }
+        return ties;
+    }
+
+    /// <summary>
+    /// Whether a tie arcs under its note or over it: a curve leans away from the stems, so it goes under when they
+    /// point up and over when they point down, the way an engraving draws it.
+    /// </summary>
+    internal static bool TieUnder(int relativeStep) => StemUp(relativeStep);
 
     /// <summary>The shapes a written rest takes, longest first: a whole rest hangs under a line, a half rest sits on one.</summary>
     internal enum RestShape { Whole, Half, Quarter, Eighth, Sixteenth }
@@ -575,6 +635,31 @@ internal static class SheetLayer
                 }
             }
         }
+        // The ties: a curve from the head of the note a tie starts at to the head of the note it carries on into,
+        // leaning away from the stems the way an engraving draws it. A tie whose other end is outside the window
+        // is drawn up to the edge, so a note carried across the view is not left looking like it just stopped.
+        foreach (var tie in sheet.Ties)
+        {
+            var from = notes[tie.First]; var to = notes[tie.Second];
+            var (staff, relative) = Place(from.Pitch, handSplit, key);
+            var bottom = StaffBottom(area, gap, staff);
+            var y = bottom - relative * half;
+            var under = TieUnder(relative);
+            var start = Math.Clamp(NoteX(from.End, windowStart, secondsVisible, area, inset) - headWidth * .6, lineLeft, lineRight);
+            var end = Math.Clamp(NoteX(to.Start, windowStart, secondsVisible, area, inset) + headWidth * .6, lineLeft, lineRight);
+            if (end < lineLeft + 1) continue;
+            var edge = y + (under ? half * 1.5 : -half * 1.5);
+            var bulge = edge + (under ? half * 1.4 : -half * 1.4);
+            var curve = new StreamGeometry();
+            using (var figure = curve.Open())
+            {
+                figure.BeginFigure(new Point(start, edge), false, false);
+                figure.QuadraticBezierTo(new Point((start + end) / 2, bulge), new Point(end, edge), true, false);
+            }
+            curve.Freeze();
+            dc.DrawGeometry(null, new Pen(new SolidColorBrush(NoteColour(from, position, dim, ink, accent)), Math.Max(1.1, gap * .22)), curve);
+        }
+
         // The beams themselves, drawn last so they sit on top of the stems they join.
         foreach (var beam in beams)
         {

@@ -2139,8 +2139,47 @@ internal static class VerificationSuite
                 && SheetLayer.RestText(SheetLayer.RestShape.Whole, false) == "W" && SheetLayer.RestText(SheetLayer.RestShape.Eighth, false) == "E",
             "A rest is written with the musical glyph when the font has it and with the shape's own initial when it does not.");
         var plan = SheetLayer.Plan([Note(60, 0, .25), Note(62, .25, .25)], eighthGrid, 4, 60, MusicKey.CMajor);
-        Assert(plan.Accidentals.Length == 2 && plan.Beams.Count == 1 && plan.Rests.Count == 1,
-            "The plan of a song should gather the accidentals, the beams and the rests in one working-out a renderer can keep for the whole song.");
+        Assert(plan.Accidentals.Length == 2 && plan.Beams.Count == 1 && plan.Rests.Count == 1 && plan.Ties.Count == 0,
+            "The plan of a song should gather the accidentals, the beams, the rests and the ties in one working-out a renderer can keep for the whole song.");
+
+        // ---- Ties: a note that starts exactly where the same pitch left off is the same written note carried on,
+        // so it is joined by a curve and never signed again.
+        var tied = SheetLayer.Ties([Note(60, 0, .5), Note(60, .5, .5)], 60);
+        Assert(tied.Count == 1 && tied[0] == new SheetLayer.Tie(0, 1),
+            $"A note starting where the same pitch left off should be tied to it (got {tied.Count} tie(s)).");
+        var chain = SheetLayer.Ties([Note(60, 0, .5), Note(60, .5, .5), Note(60, 1, .5)], 60);
+        Assert(chain.Count == 2 && chain[0] == new SheetLayer.Tie(0, 1) && chain[1] == new SheetLayer.Tie(1, 2),
+            $"A note carried on twice should be written as two ties, the middle note ending one and starting the next (got {chain.Count}).");
+        var chordTies = SheetLayer.Ties([Note(60, 0, .5), Note(64, 0, .5), Note(60, .5, .5), Note(64, .5, .5)], 60);
+        Assert(chordTies.Count == 2 && chordTies[0] == new SheetLayer.Tie(0, 2) && chordTies[1] == new SheetLayer.Tie(1, 3),
+            "Every pitch of a chord carried on should get its own tie, so a chord is tied chord-wise and not note-wise.");
+        Assert(SheetLayer.Ties([Note(60, 0, .5), Note(60, .52, .5)], 60).Count == 1,
+            "A played file that leaves twenty milliseconds between the two halves of a note should still be written as one tied note.");
+        var notTies = new (string What, NoteEvent[] Notes)[]
+        {
+            ("a gap wider than the tie allows", [Note(60, 0, .5), Note(60, .531, .5)]),
+            ("a gap of silence", [Note(60, 0, .4), Note(60, .6, .5)]),
+            ("an overlap", [Note(60, 0, .5), Note(60, .4, .5)]),
+            ("a different pitch", [Note(60, 0, .5), Note(64, .5, .5)]),
+            ("the two hands", [Note(72, 0, .5), Note(48, .5, .5)]),
+            ("another note of the song between them", [Note(60, 0, .25), Note(64, .25, .25), Note(60, .5, .5)]),
+        };
+        foreach (var (what, pair) in notTies)
+            Assert(SheetLayer.Ties(pair, 60).Count == 0, $"Two notes are not tied when {what} separates them.");
+        Assert(SheetLayer.Ties([Note(60, 0, .5)], 60).Count == 0 && SheetLayer.Ties([], 60).Count == 0
+                && SheetLayer.TieUnder(3) && !SheetLayer.TieUnder(7),
+            "A lone note and an empty song have no ties, and a tie leans under the note when its stem points up and over it when the stem points down.");
+
+        // A tie carries the sign it started with, even across a bar line: in D major an F♮ tied into the next bar
+        // is written bare, and the F♯ after it still needs its sharp because the tie left F♮ in force.
+        var carriedNotes = new[] { Note(65, 0, .5), Note(65, .5, .5), Note(66, 1, .5) };
+        var carriedBars = new Func<int, int>(index => index == 0 ? 0 : 1);
+        var carriedTies = SheetLayer.Ties(carriedNotes, 60);
+        var carriedPlan = SheetLayer.AccidentalPlan(carriedNotes, dMajor, carriedBars, 60, new HashSet<int>(carriedTies.Select(tie => tie.Second)));
+        var unsignedPlan = SheetLayer.AccidentalPlan(carriedNotes, dMajor, carriedBars, 60);
+        Assert(carriedTies.Count == 1 && carriedPlan.SequenceEqual([SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.None, SheetLayer.NoteAccidental.Sharp])
+                && unsignedPlan.SequenceEqual([SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.Sharp]),
+            $"A tie should carry its sign into the bar it reaches rather than signing the note again, while the note after it is still signed ({string.Join(", ", carriedPlan)}).");
 
         var area = SheetLayer.Band(1280, 480, 34);
         Assert(Math.Abs(area.Height - 163.2) < .01 && area.Width > 1100 && area.X > 0 && area.Bottom < 240,
@@ -2271,6 +2310,14 @@ internal static class VerificationSuite
         var restInk = Ink(soloSong, soloPlan) - Ink(soloSong, soloPlan with { Rests = Array.Empty<SheetLayer.RestGap>() });
         Assert(restInk > 0, $"A rest should put ink on the staff of the quiet hand ({restInk} inked pixels came from the rest).");
 
+        // The tie is really drawn: the same two notes carry the curve's ink when they are tied and none of it when
+        // they are not, and the curve is the only difference between the two drawings.
+        var tieSong = new NoteEvent[] { Note(60, 0, .5), Note(60, .5, .5) };
+        var tiePlan = SheetLayer.Plan(tieSong, beats, 4, 60, MusicKey.CMajor);
+        var tieInk = Ink(tieSong, tiePlan) - Ink(tieSong, tiePlan with { Ties = Array.Empty<SheetLayer.Tie>() });
+        Assert(tiePlan.Ties.Count == 1 && tieInk > 0,
+            $"A tie should draw a curve between the two heads, and nothing else about the drawing should change ({tieInk} inked pixels came from the tie).");
+
         Assert(SheetLayer.SignatureWidth(MusicKey.CMajor, SheetLayer.StaffGap(area)) == 0
                 && Math.Abs(SheetLayer.LeftInset(area, dMajor) - SheetLayer.LeftInset(area, MusicKey.CMajor) - SheetLayer.SignatureWidth(dMajor, SheetLayer.StaffGap(area))) < .001
                 && SheetLayer.LeftInset(area, dMajor) > SheetLayer.ClefSpace(area),
@@ -2280,7 +2327,7 @@ internal static class VerificationSuite
         sheetToggle.IsChecked = wasShowing;
         stage.SetSheet([], 4);
         stage.ClearTransient();
-        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
+        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the ties that carry a note on, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
     }
 
     /// <summary>
