@@ -6,9 +6,9 @@ namespace PianoPath;
 
 /// <summary>
 /// The sheet layer: a grand staff drawn across the top of the stage, above the piano roll and following the
-/// playhead. It is a reading aid rather than an engraving — each note is written on the staff its hand split
-/// assigns it to, with ledger lines where it leaves the staff, bar lines on the beat grid and a ring on
-/// whatever is sounding.
+/// playhead. Each note is written on the staff its hand split assigns it to, at the place the song's key spells
+/// it, with a key signature at the head of both staves, the accidentals the bars really need, ledger lines where
+/// a note leaves the staff, bar lines on the beat grid and a ring on whatever is sounding.
 ///
 /// <para>
 /// The geometry is plain arithmetic (<see cref="Step"/>, <see cref="Place"/>, <see cref="LedgerLines"/>,
@@ -40,50 +40,141 @@ internal static class SheetLayer
     private const string TrebleGlyph = "\U0001D11E";
     private const string BassGlyph = "\U0001D122";
 
-    /// <summary>The unicode letter of each pitch class when written with sharps, plus whether it needs a sharp sign.</summary>
-    private static readonly (int Letter, bool Sharp)[] Spelling =
-    [
-        (0, false), (0, true), (1, false), (1, true), (2, false), (3, false), (3, true),
-        (4, false), (4, true), (5, false), (5, true), (6, false)
-    ];
-
     private static readonly Typeface MusicTypeface = new(new FontFamily("Segoe UI Symbol"), FontStyles.Normal, FontWeights.Normal, FontStretches.Normal);
     private static readonly Dictionary<(string Text, double Size, uint Color, int Dpi), FormattedText> Cache = [];
-    private static readonly bool GlyphsAvailable = ProbeGlyphs();
+    private static readonly bool GlyphsAvailable = ProbeGlyphs(0x1D11E);
+    private static readonly bool SignsAvailable = ProbeGlyphs(0x266F);
 
     /// <summary>True when the installed symbol font carries the clef glyphs, so <see cref="ClefText"/> draws them.</summary>
     internal static bool MusicGlyphsAvailable => GlyphsAvailable;
 
-    private static bool ProbeGlyphs()
+    /// <summary>True when the font carries the sharp, flat and natural signs, so notes are signed with music glyphs.</summary>
+    internal static bool MusicSignsAvailable => SignsAvailable;
+
+    private static bool ProbeGlyphs(int codePoint)
     {
-        try { return MusicTypeface.TryGetGlyphTypeface(out var glyphs) && glyphs.CharacterToGlyphMap.ContainsKey(0x1D11E); }
+        try { return MusicTypeface.TryGetGlyphTypeface(out var glyphs) && glyphs.CharacterToGlyphMap.ContainsKey(codePoint); }
         catch { return false; }
     }
 
     /// <summary>
     /// The diatonic step of a pitch in scientific notation: C-1 is 0, so middle C is 28 (four octaves of seven
-    /// steps) and B4 is 35. A black key is spelled as the white key below it (C♯ sits on the C line), which is
-    /// how a piano-roll's worth of pitches can be written without a key signature and still land on the right
-    /// line. The constants above are this function's values for the bottom lines of the two staves.
+    /// steps) and B4 is 35. Which line a black key lands on is the key's business: without a signature it is
+    /// spelled as the white key below it (C♯ sits on the C line), while F major writes B♭ on the B line.
+    /// The constants above are this function's values for the bottom lines of the two staves.
     /// </summary>
-    internal static int Step(int pitch)
+    internal static int Step(int pitch) => Step(pitch, MusicKey.CMajor);
+
+    /// <summary>The diatonic step of a pitch as this key spells it.</summary>
+    internal static int Step(int pitch, MusicKey key)
     {
-        var clamped = Math.Clamp(pitch, 0, 127);
-        return (clamped / 12 - 1) * 7 + Spelling[clamped % 12].Letter;
+        var (letter, octave, _) = key.Spell(pitch);
+        return octave * 7 + letter;
     }
 
-    /// <summary>True when the written note needs a sharp sign beside its head.</summary>
-    internal static bool NeedsSharp(int pitch) => Spelling[Math.Clamp(pitch, 0, 127) % 12].Sharp;
+    /// <summary>True when the written note needs a sharp sign beside its head in a song with no signature.</summary>
+    internal static bool NeedsSharp(int pitch) => NeedsSign(pitch, MusicKey.CMajor);
+
+    /// <summary>True when this key spells the pitch with a sign of its own — a sharp, a flat or a natural.</summary>
+    internal static bool NeedsSign(int pitch, MusicKey key) => key.Spell(pitch).Alteration != 0;
 
     /// <summary>
     /// Which staff a pitch belongs to — 0 treble, 1 bass, the split deciding — and how many steps its note
     /// head sits above that staff's bottom line: 0 the bottom line, 8 the top line, negative below the staff
     /// and above eight above it. The split is the same one that colours the roll, so sheet and roll agree.
     /// </summary>
-    internal static (int Staff, int RelativeStep) Place(int pitch, double handSplit)
+    internal static (int Staff, int RelativeStep) Place(int pitch, double handSplit) => Place(pitch, handSplit, MusicKey.CMajor);
+
+    /// <summary>Where a pitch is written on which staff, as this key spells it.</summary>
+    internal static (int Staff, int RelativeStep) Place(int pitch, double handSplit, MusicKey key)
     {
         var staff = pitch >= handSplit ? 0 : 1;
-        return (staff, Step(pitch) - (staff == 0 ? TrebleBottomStep : BassBottomStep));
+        return (staff, Step(pitch, key) - (staff == 0 ? TrebleBottomStep : BassBottomStep));
+    }
+
+    /// <summary>
+    /// Where a signature sign sits on a staff, as a step from that staff's bottom line. Every letter has its own
+    /// place — F on the top line of a treble staff, C in the third space, and so on — and the bass staff writes
+    /// the same letters two steps lower, which is what makes one table serve both staves.
+    /// </summary>
+    internal static int SignatureStep(int staff, int letter)
+    {
+        var treble = letter switch { 0 => 5, 1 => 6, 2 => 7, 3 => 8, 4 => 9, 5 => 3, _ => 4 };
+        return staff == 1 ? treble - 2 : treble;
+    }
+
+    /// <summary>The spacing between two staff lines for a band of this height.</summary>
+    internal static double StaffGap(Rect area) => Math.Clamp(area.Height * GapRatio, GapMin, GapMax);
+
+    /// <summary>The room the clef takes at the head of the staff, in pixels.</summary>
+    internal static double ClefSpace(Rect area) => Math.Clamp(area.Height * .30, 18, 44);
+
+    /// <summary>How much room a signature takes between the clef and the music, in pixels.</summary>
+    internal static double SignatureWidth(MusicKey key, double gap) => key.Count == 0 ? 0 : gap * (1.3 + 1.2 * key.Count);
+
+    /// <summary>Everything written in time starts after this much of the band: the clef and the signature.</summary>
+    internal static double LeftInset(Rect area, MusicKey key) => ClefSpace(area) + SignatureWidth(key, StaffGap(area));
+
+    /// <summary>What is written beside a note head: nothing, a sharp, a flat or a natural.</summary>
+    internal enum NoteAccidental { None, Sharp, Flat, Natural }
+
+    /// <summary>
+    /// The sign really written beside each note, in the order the notes are handed over.
+    ///
+    /// <para>
+    /// The key says what a note needs on its own; the bar says whether it has to be written again. An accidental
+    /// holds from where it is written to the end of its bar — and only for the same written note, not for the
+    /// rest of the song — so the second C♯ of a bar is bare, while a C♮ after it needs a natural to take the
+    /// sharp back. The two staves keep their own bars, and <paramref name="barOf"/> says which bar of the song
+    /// each note index sits in (the sheet derives it from the beat grid).
+    /// </para>
+    /// </summary>
+    internal static NoteAccidental[] AccidentalPlan(IReadOnlyList<NoteEvent> notes, MusicKey key, Func<int, int> barOf, double handSplit)
+    {
+        var plan = new NoteAccidental[notes.Count];
+        var bars = new Dictionary<(int Staff, int Bar, int Step), int>();
+        for (var index = 0; index < notes.Count; index++)
+        {
+            var pitch = Math.Clamp(notes[index].Pitch, 0, 127);
+            var (letter, octave, alteration) = key.Spell(pitch);
+            var (staff, _) = Place(pitch, handSplit, key);
+            var cell = (staff, barOf(index), octave * 7 + letter);
+            var inForce = bars.TryGetValue(cell, out var altered) ? altered : key.Signature(letter);
+            if (alteration == inForce) continue;
+            plan[index] = alteration switch { > 0 => NoteAccidental.Sharp, < 0 => NoteAccidental.Flat, _ => NoteAccidental.Natural };
+            bars[cell] = alteration;
+        }
+        return plan;
+    }
+
+    /// <summary>The sign drawn beside a note: the music glyphs when the symbol font has them, letters when it does not.</summary>
+    internal static string AccidentalText(NoteAccidental accidental) => accidental switch
+    {
+        NoteAccidental.Sharp => SignsAvailable ? "♯" : "#",
+        NoteAccidental.Flat => SignsAvailable ? "♭" : "b",
+        NoteAccidental.Natural => SignsAvailable ? "♮" : "n",
+        _ => "",
+    };
+
+    /// <summary>The measure a note falls in, as the count of downbeats already passed; -1 is before the first one.</summary>
+    internal static int BarOf(double start, IReadOnlyList<double> downbeats)
+    {
+        int low = 0, high = downbeats.Count - 1, found = -1;
+        while (low <= high)
+        {
+            var middle = (low + high) / 2;
+            if (downbeats[middle] <= start + 1e-9) { found = middle; low = middle + 1; } else high = middle - 1;
+        }
+        return found;
+    }
+
+    /// <summary>The times a measure starts: every <paramref name="beatsPerBar"/>-th beat of the song's grid.</summary>
+    internal static IReadOnlyList<double> Downbeats(IReadOnlyList<double> beats, int beatsPerBar)
+    {
+        var perBar = Math.Max(1, beatsPerBar);
+        var downbeats = new List<double>();
+        for (var index = 0; index < beats.Count; index += perBar) downbeats.Add(beats[index]);
+        return downbeats;
     }
 
     /// <summary>
@@ -126,9 +217,14 @@ internal static class SheetLayer
         return GlyphsAvailable ? TrebleGlyph : "G";
     }
 
-    /// <summary>Where a note that starts at <paramref name="start"/> is drawn: the window's left edge is the playhead minus a quarter of its own width.</summary>
-    internal static double NoteX(double start, double windowStart, double secondsVisible, Rect area) =>
-        area.X + (start - windowStart) / Math.Max(.001, secondsVisible) * area.Width;
+    /// <summary>
+    /// Where a note that starts at <paramref name="start"/> is drawn: the window's left edge is the playhead
+    /// minus a quarter of its own width. <paramref name="leftInset"/> is the room the clef and the key signature
+    /// take at the head of the staff, and everything written in time — notes, bar lines and the playhead — is
+    /// mapped inside what is left, so they stay aligned with each other.
+    /// </summary>
+    internal static double NoteX(double start, double windowStart, double secondsVisible, Rect area, double leftInset = 0) =>
+        area.X + leftInset + (start - windowStart) / Math.Max(.001, secondsVisible) * Math.Max(1, area.Width - leftInset);
 
     /// <summary>The left edge of the visible window: the playhead sits a quarter of the way in from the left.</summary>
     internal static double WindowStart(double position, double secondsVisible) => position - secondsVisible * .25;
@@ -149,7 +245,7 @@ internal static class SheetLayer
     /// says which beats start a measure.
     /// </summary>
     internal static void Draw(
-        DrawingContext dc, Rect area, IReadOnlyList<NoteEvent> notes, double position, double handSplit,
+        DrawingContext dc, Rect area, IReadOnlyList<NoteEvent> notes, double position, double handSplit, MusicKey key,
         IReadOnlyList<double> beats, int beatsPerBar, double secondsVisible, Color ink, Color accent, double opacity, double pixelsPerDip)
     {
         if (area.Width < 40 || area.Height < 24) return;
@@ -159,11 +255,17 @@ internal static class SheetLayer
 
         var windowStart = WindowStart(position, secondsVisible);
         var dim = Color.FromArgb((byte)Math.Clamp(150 * opacity, 20, 210), ink.R, ink.G, ink.B);
-        var gap = Math.Clamp(area.Height * GapRatio, GapMin, GapMax);
+        var gap = StaffGap(area);
         // One diatonic step is half of the line spacing, which is the grid every note position is put on.
         var half = gap / 2;
-        var lineLeft = area.X + Math.Clamp(area.Height * .30, 18, 44);
+        // The clef and the key signature sit in front of the music: the room they take is measured once and
+        // everything written in time is mapped inside what is left of the band.
+        var clefSpace = ClefSpace(area);
+        var inset = LeftInset(area, key);
+        var lineLeft = area.X + inset;
         var lineRight = area.Right - 8;
+        var downbeats = Downbeats(beats, beatsPerBar);
+        var plan = AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit);
 
         for (var staff = 0; staff < 2; staff++)
         {
@@ -173,6 +275,15 @@ internal static class SheetLayer
             // The clef glyph is several times taller than the spacing, so it is centred on the staff.
             var clef = Text(ClefText(staff), gap * 4.4, ink, pixelsPerDip);
             dc.DrawText(clef, new Point(area.X + 6, bottom - 4 * gap - (clef.Height - 4 * gap) * .62));
+            // The signature: one sign per altered letter, in the order a signature writes them, each one at the
+            // place that letter has on this staff.
+            var sign = Text(AccidentalText(key.UsesFlats ? NoteAccidental.Flat : NoteAccidental.Sharp), gap * 2.6, ink, pixelsPerDip);
+            var index = 0;
+            foreach (var letter in key.SignedLetters)
+            {
+                var x = area.X + clefSpace + gap * .8 + index++ * gap * 1.15;
+                dc.DrawText(sign, new Point(x, bottom - SignatureStep(staff, letter) * half - sign.Height * .55));
+            }
         }
         // One brace linking the two staves into a grand staff.
         var braceTop = StaffBottom(area, gap, 0) - 4 * gap;
@@ -185,7 +296,7 @@ internal static class SheetLayer
             var beat = beats[index];
             if (beat < windowStart || beat > windowStart + secondsVisible) continue;
             var startsMeasure = index % Math.Max(1, beatsPerBar) == 0;
-            var x = NoteX(beat, windowStart, secondsVisible, area);
+            var x = NoteX(beat, windowStart, secondsVisible, area, inset);
             if (startsMeasure && x - lastBarX < 6) continue;      // two downbeats inside one pixel must not darken it
             if (startsMeasure) lastBarX = x;
             var alpha = (byte)Math.Clamp((startsMeasure ? 120 : 55) * opacity, 0, 220);
@@ -194,7 +305,7 @@ internal static class SheetLayer
         }
 
         // The playhead, drawn through both staves so the reader can see where the music is.
-        var playheadX = NoteX(position, windowStart, secondsVisible, area);
+        var playheadX = NoteX(position, windowStart, secondsVisible, area, inset);
         dc.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb((byte)Math.Clamp(200 * opacity, 0, 240), accent.R, accent.G, accent.B)), 1.6),
             new Point(playheadX, area.Y + 4), new Point(playheadX, area.Bottom - 4));
 
@@ -204,10 +315,10 @@ internal static class SheetLayer
         {
             var note = notes[index];
             if (note.Start > windowStart + secondsVisible) break;
-            var (staff, relative) = Place(note.Pitch, handSplit);
+            var (staff, relative) = Place(note.Pitch, handSplit, key);
             var bottom = StaffBottom(area, gap, staff);
             var y = bottom - relative * half;
-            var x = NoteX(note.Start, windowStart, secondsVisible, area);
+            var x = NoteX(note.Start, windowStart, secondsVisible, area, inset);
             var colour = NoteColour(note, position, dim, ink, accent);
             var brush = new SolidColorBrush(colour);
             foreach (var offset in LedgerLines(relative))
@@ -220,8 +331,12 @@ internal static class SheetLayer
             if (note.Start <= position && note.End >= position)
                 dc.DrawEllipse(null, new Pen(new SolidColorBrush(Color.FromArgb((byte)Math.Clamp(160 * opacity, 0, 220), accent.R, accent.G, accent.B)), 1.2), head, headWidth, half * 1.4);
             dc.Pop();
-            if (NeedsSharp(note.Pitch))
-                dc.DrawText(Text("♯", gap * 1.6, colour, pixelsPerDip), new Point(x - headWidth * 1.9, y - gap * .8));
+            // The sign this bar really needs: nothing when the signature already writes the note that way, a
+            // sharp or a flat when the note leaves the key, and a natural when an earlier note of the same bar
+            // altered it.
+            var accidental = plan[index];
+            if (accidental != NoteAccidental.None)
+                dc.DrawText(Text(AccidentalText(accidental), gap * 1.7, colour, pixelsPerDip), new Point(x - headWidth * 2.1, y - gap * .8));
             if (HasStem(note.Duration))
             {
                 var up = StemUp(relative);

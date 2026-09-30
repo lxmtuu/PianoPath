@@ -1956,6 +1956,61 @@ internal static class VerificationSuite
             && SheetLayer.LedgerLines(8).Count == 0 && SheetLayer.LedgerLines(9).Count == 0 && SheetLayer.LedgerLines(12).SequenceEqual([10, 12]),
             "A note in the space outside a staff needs no ledger line, one on a line outside needs that line, and a note two lines out needs both.");
 
+        // ---- The key: what a song is written in, where the signature goes, and which accidentals a bar needs.
+        NoteEvent[] Scale(int tonic, int[] degrees) =>
+            [.. degrees.Select((degree, index) => new NoteEvent { Pitch = tonic + degree, Start = index * .5, Duration = .5 })];
+        var majorSteps = new[] { 0, 2, 4, 5, 7, 9, 11 };
+        var naturalMinor = new[] { 0, 2, 3, 5, 7, 8, 10 };
+        var dMajor = MusicKey.Infer(Scale(62, majorSteps));
+        Assert(dMajor.Accidentals == 2 && !dMajor.UsesFlats && dMajor.SignedLetters.SequenceEqual([3, 0]),
+            $"A D major scale is written with two sharps, F first then C (got {dMajor.Accidentals}, letters [{string.Join(", ", dMajor.SignedLetters)}]).");
+        var fMajor = MusicKey.Infer(Scale(65, majorSteps));
+        Assert(fMajor.Accidentals == -1 && fMajor.UsesFlats && fMajor.SignedLetters.SequenceEqual([6]),
+            $"An F major scale is written with one flat, B (got {fMajor.Accidentals}, letters [{string.Join(", ", fMajor.SignedLetters)}]).");
+        var eFlat = MusicKey.Infer(Scale(63, majorSteps));
+        Assert(eFlat.Accidentals == -3 && eFlat.SignedLetters.SequenceEqual([6, 2, 5]),
+            $"Three flats are written B, E, then A in that order (got {eFlat.Accidentals}, letters [{string.Join(", ", eFlat.SignedLetters)}]).");
+        Assert(MusicKey.Infer(Scale(64, naturalMinor)).Accidentals == 1 && MusicKey.Infer(Scale(57, naturalMinor)).Accidentals == 0,
+            "A minor-key scale takes the signature of the major key three semitones above its tonic: one sharp for E, none for A.");
+        Assert(MusicKey.Infer([]) == MusicKey.CMajor && MusicKey.Infer(Scale(60, [0, 1, 2, 3, 4, 5])).Accidentals == 0,
+            "A song that fits no key — an empty one, or a chromatic run — keeps the plain C major spelling instead of inventing a signature.");
+
+        // Where the letters sit: F♯ on the top line of a treble staff, C♯ in its third space, and the bass staff
+        // two steps lower, which is what makes B♭ at the head of a bass staff the line below.
+        Assert(SheetLayer.SignatureStep(0, 3) == 8 && SheetLayer.SignatureStep(0, 0) == 5 && SheetLayer.SignatureStep(0, 6) == 4
+                && SheetLayer.SignatureStep(1, 3) == 6 && SheetLayer.SignatureStep(1, 0) == 3,
+            "A signature writes F♯ on the top line of the treble staff and C♯ in its third space, with the bass staff repeating the letters two steps lower.");
+
+        // Spelling follows the key: F major writes B♭ on the B line while C major would have written A♯ on the A line.
+        var fSpelling = fMajor.Spell(70);
+        var cSpelling = MusicKey.CMajor.Spell(70);
+        Assert(fSpelling == (6, 4, -1) && cSpelling == (5, 4, 1) && SheetLayer.Step(70, fMajor) == SheetLayer.Step(71, MusicKey.CMajor)
+                && SheetLayer.Step(70, MusicKey.CMajor) != SheetLayer.Step(70, fMajor),
+            $"F major should write B♭ on the B line and C major A♯ on the A line (got {fSpelling} and {cSpelling}).");
+        Assert(MusicKey.Infer(Scale(65, majorSteps)).Spell(67) == (4, 4, 0) && dMajor.Spell(66) == (3, 4, 1)
+                && fMajor.Spell(66) == (4, 4, -1) && MusicKey.CMajor.Spell(66) == (3, 4, 1),
+            "A note the key already writes is spelled without a sign — G♮ in F major — while a chromatic note leans the way the signature does: F♯ in D major, G♭ in F major.");
+
+        // What a bar really writes: the signature covers the notes it already alters, an accidental holds to the
+        // end of its bar, and a natural takes it back.
+        NoteEvent Note(int pitch, double start = 0, double duration = .5) => new() { Pitch = pitch, Start = start, Duration = duration };
+        var barPlan = SheetLayer.AccidentalPlan([Note(61), Note(60), Note(60), Note(61), Note(66), Note(65)], dMajor, _ => 0, 60);
+        Assert(barPlan[0] == SheetLayer.NoteAccidental.None && barPlan[1] == SheetLayer.NoteAccidental.Natural
+                && barPlan[2] == SheetLayer.NoteAccidental.None && barPlan[3] == SheetLayer.NoteAccidental.Sharp,
+            "C♯ is in D major so it is bare, the C♮ in the same bar takes a natural, the second C♮ is bare again and the C♯ after it takes the sharp back.");
+        Assert(barPlan[4] == SheetLayer.NoteAccidental.None && barPlan[5] == SheetLayer.NoteAccidental.Natural,
+            "F♯ comes from the signature while an F♮ in the same bar is written with a natural.");
+        var nextBar = SheetLayer.AccidentalPlan([Note(61), Note(60), Note(60)], dMajor, index => index == 0 ? 0 : 1, 60);
+        Assert(nextBar[1] == SheetLayer.NoteAccidental.Natural && nextBar[2] == SheetLayer.NoteAccidental.None,
+            "A bar starts from the signature again, so the first C♮ of each bar is written with a natural and the ones after it in the same bar are not.");
+        var hands = SheetLayer.AccidentalPlan([Note(61), Note(60), Note(49)], dMajor, _ => 0, 60);
+        Assert(hands[0] == SheetLayer.NoteAccidental.None && hands[1] == SheetLayer.NoteAccidental.Natural && hands[2] == SheetLayer.NoteAccidental.None,
+            "The two staves keep separate bars: the natural C♮ in the treble hand does not change how the bass hand is written.");
+        Assert(SheetLayer.BarOf(0, [0, 2, 4]) == 0 && SheetLayer.BarOf(1.9, [0, 2, 4]) == 0 && SheetLayer.BarOf(2, [0, 2, 4]) == 1
+                && SheetLayer.BarOf(-1, [0, 2, 4]) == -1 && SheetLayer.BarOf(2.5, []) == -1
+                && SheetLayer.Downbeats([0, .5, 1, 1.5, 2], 4).SequenceEqual([0, 2]) && SheetLayer.Downbeats([0, .5], 0).SequenceEqual([0, .5]),
+            "A note belongs to the last downbeat at or before it, with nothing before the first one, and the downbeats of a grid are every fourth beat.");
+
         var area = SheetLayer.Band(1280, 480, 34);
         Assert(Math.Abs(area.Height - 163.2) < .01 && area.Width > 1100 && area.X > 0 && area.Bottom < 240,
             $"The staff band should stay in the upper part of the stage and scale with it (got {area}).");
@@ -1990,10 +2045,10 @@ internal static class VerificationSuite
         var beats = new List<double> { 0, .5, 1, 1.5, 2, 2.5, 3, 3.5 };
         var withSong = new DrawingVisual();
         using (var dc = withSong.RenderOpen())
-            SheetLayer.Draw(dc, area, song, 1.2, 60, beats, 4, 8, ink, accent, 1, 1);
+            SheetLayer.Draw(dc, area, song, 1.2, 60, MusicKey.CMajor, beats, 4, 8, ink, accent, 1, 1);
         var empty = new DrawingVisual();
         using (var dc = empty.RenderOpen())
-            SheetLayer.Draw(dc, area, [], 0, 60, [], 4, 8, ink, accent, 1, 1);
+            SheetLayer.Draw(dc, area, [], 0, 60, MusicKey.CMajor, [], 4, 8, ink, accent, 1, 1);
         Assert(withSong.Drawing.Bounds.Height > 120 && withSong.Drawing.Bounds.Width > area.Width * .8 && empty.Drawing.Bounds.Height > 120,
             $"The sheet should paint both staves with and without a song to read ({withSong.Drawing.Bounds}, {empty.Drawing.Bounds}).");
 
@@ -2012,6 +2067,40 @@ internal static class VerificationSuite
         var stageSheet = new DrawingVisual();
         using (var dc = stageSheet.RenderOpen()) Invoke(stage, "DrawSheet", dc, 1280d, 480d);
         Assert(stageSheet.Drawing.Bounds.Height > 100, $"The stage should draw the sheet from its own notes and beat grid (bounds {stageSheet.Drawing.Bounds}).");
+        // The key of the song is worked out once, and a signature really puts ink at the head of both staves.
+        var cachedKey = (MusicKey)Field(stage, "_sheetKey");
+        var sentinel = MusicKey.Infer(Scale(65, majorSteps));
+        SetField(stage, "_sheetKey", sentinel);
+        using (var dc = stageSheet.RenderOpen()) Invoke(stage, "DrawSheet", dc, 1280d, 480d);
+        Assert(((MusicKey)Field(stage, "_sheetKey")) == sentinel && ReferenceEquals(Field(stage, "_sheetKeyNotes"), Field(stage, "_notes")),
+            "The key of a song should be worked out once per song rather than once per frame, so another render keeps the key it already has.");
+        SetField(stage, "_sheetKey", cachedKey);
+        // The signature really takes ink: draw an empty band in both keys and count the pixels inside the strip
+        // between the clef and the first room the music could use, where nothing but the signature can land.
+        var stripLeft = (int)Math.Ceiling(area.X + SheetLayer.ClefSpace(area) + 3);
+        var stripRight = (int)Math.Ceiling(area.X + SheetLayer.LeftInset(area, dMajor) - 3);
+        int LitPixels(MusicKey key)
+        {
+            var width = (int)Math.Ceiling(area.Width); var height = (int)Math.Ceiling(area.Height);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) SheetLayer.Draw(dc, area, [], 0, 60, key, [], 4, 8, ink, accent, 1, 1);
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[width * height * 4];
+            bitmap.CopyPixels(pixels, width * 4, 0);
+            var lit = 0;
+            for (var y = 0; y < height; y++)
+                for (var x = stripLeft; x < stripRight; x++)
+                    if (pixels[(y * width + x) * 4 + 3] != 0) lit++;
+            return lit;
+        }
+        var plainInk = LitPixels(MusicKey.CMajor); var signedInk = LitPixels(dMajor);
+        Assert(plainInk == 0 && signedInk > 0,
+            $"A key signature should put ink between the clef and the music: C major writes nothing there, D major writes two sharps on each staff (counted {plainInk} and {signedInk} pixels).");
+        Assert(SheetLayer.SignatureWidth(MusicKey.CMajor, SheetLayer.StaffGap(area)) == 0
+                && Math.Abs(SheetLayer.LeftInset(area, dMajor) - SheetLayer.LeftInset(area, MusicKey.CMajor) - SheetLayer.SignatureWidth(dMajor, SheetLayer.StaffGap(area))) < .001
+                && SheetLayer.LeftInset(area, dMajor) > SheetLayer.ClefSpace(area),
+            "A song with a signature writes its music after the signs, and a song with no signature takes no room at all in front of it.");
         Assert(ReferenceEquals(Field(stage, "_beats"), beats), "The stage should keep the grid the song was loaded with for the sheet's bar lines.");
         visualSettings.HandSplitPitch = previousSplit; stage.SetVisualSettings(visualSettings);
         sheetToggle.IsChecked = wasShowing;

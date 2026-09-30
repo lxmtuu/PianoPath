@@ -851,14 +851,21 @@ internal sealed class PianoStage : FrameworkElement
     /// <summary>True while a frame is available; the dock uses it to say whether the overlay is really drawing.</summary>
     public bool HasCameraFrame => _cameraFrame is not null;
 
+    /// <summary>The key the open song is written in, plus the note list it was worked out from.</summary>
+    private MusicKey _sheetKey = MusicKey.CMajor;
+    private IReadOnlyList<NoteEvent>? _sheetKeyNotes;
+
     /// <summary>
     /// The staff band: the same seconds-per-pixel the roll uses, so a written note and its falling bar always
-    /// line up under the playhead.
+    /// line up under the playhead. The key is worked out once per song — the stage hands the sheet a new note
+    /// list whenever the song changes — rather than on every frame.
     /// </summary>
+
     private void DrawSheet(DrawingContext dc, double width, double hitY)
     {
         var noteSpeed = FallSpeed * _visual.NoteFallSpeed / 550;
-        SheetLayer.Draw(dc, SheetLayer.Band(width, hitY, 34), _notes, _position, _visual.HandSplitPitch,
+        if (!ReferenceEquals(_sheetKeyNotes, _notes)) { _sheetKeyNotes = _notes; _sheetKey = MusicKey.Infer(_notes); }
+        SheetLayer.Draw(dc, SheetLayer.Band(width, hitY, 34), _notes, _position, _visual.HandSplitPitch, _sheetKey,
             _beats, _beatsPerBar, hitY / Math.Max(1, noteSpeed),
             Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip);
     }
