@@ -9,11 +9,15 @@ namespace PianoPath;
 /// <summary>
 /// Concert shell: the startup main menu (Play / Design / Settings / About / Exit, with a live theme
 /// picker and a stage-look read-out) and the pre-flight Play dialog with per-hand style cards and
-/// quick layer switches. Every quick switch mirrors a real stage setting, so the dock and the dialog
-/// never disagree.
+/// quick layer switches. Play, dock and menu navigation share an explicit return surface, and every
+/// quick switch mirrors a real stage setting so the dock and dialog never disagree.
 /// </summary>
 public partial class MainWindow
 {
+    private enum NavigationSurface { Stage, MainMenu, PlayDialog }
+
+    private NavigationSurface _playDialogReturnSurface = NavigationSurface.Stage;
+    private NavigationSurface _settingsReturnSurface = NavigationSurface.Stage;
     private readonly List<Button> _menuThemeChips = [];
 
     internal void ShowStartupMenu()
@@ -25,6 +29,7 @@ public partial class MainWindow
         RefreshMenuStageLook();
         MainMenuOverlay.Visibility = Visibility.Visible;
         MenuBackdrop.Configure(ShellThemeManager.Current, _visualSettings.ChromeMotion, _visualSettings.BackdropDensity);
+        MenuPlayButton.Focus();
         // Choreography: the two primary actions arrive first, then the links and the side card.
         ChromeMotion.FadeIn(MainMenuOverlay, 260);
         ChromeMotion.Cascade([MenuBrand, MenuPlayButton, MenuDesignButton], 60, 18);
@@ -37,29 +42,27 @@ public partial class MainWindow
     {
         Stop();
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        _playDialogReturnSurface = NavigationSurface.Stage;
+        _settingsReturnSurface = NavigationSurface.Stage;
+        UpdateSettingsReturnButton();
         CloseSettingsPanel();
         ShowStartupMenu();
     }
 
-    private void MainMenuPlay_Click(object sender, RoutedEventArgs e)
-    {
-        HideStartupMenu();
-        OpenPlayDialog();
-    }
+    private void MainMenuPlay_Click(object sender, RoutedEventArgs e) => OpenPlayDialog(returnToMenu: true);
 
     private void MainMenuDesign_Click(object sender, RoutedEventArgs e)
     {
         HideStartupMenu();
-        SetChromeVisible(true);
-        OpenSettingsPanel();
+        SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Style);
+        OpenSettingsPanelFor(NavigationSurface.MainMenu);
     }
 
     private void MainMenuSettings_Click(object sender, RoutedEventArgs e)
     {
         HideStartupMenu();
-        SetChromeVisible(true);
-        OpenSettingsPanel();
         SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Audio);
+        OpenSettingsPanelFor(NavigationSurface.MainMenu);
     }
 
     private void MainMenuAbout_Click(object sender, RoutedEventArgs e) => ShowMessage(
@@ -162,8 +165,21 @@ public partial class MainWindow
     // =====================================================================================
 
     /// <summary>Opens the pre-flight performance dialog; also the target of <c>--play-dialog</c> captures.</summary>
-    internal void OpenPlayDialog()
+    internal void OpenPlayDialog(bool returnToMenu = false)
     {
+        _playDialogReturnSurface = returnToMenu ? NavigationSurface.MainMenu : NavigationSurface.Stage;
+        _settingsReturnSurface = NavigationSurface.Stage;
+        UpdateSettingsReturnButton();
+        HideStartupMenu();
+        if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel();
+        ShowPlayDialog();
+    }
+
+    /// <summary>Re-shows the dialog without replacing the surface it should return to.</summary>
+    private void ShowPlayDialog()
+    {
+        SetChromeVisible(true);
+        RefreshPlayDialogNavigation();
         _loadingVisualSettings = true;
         try
         {
@@ -196,12 +212,15 @@ public partial class MainWindow
             PlayDialogThemeOrb.Background = new SolidColorBrush(ShellThemeManager.Current.Accent);
         RefreshThemeChips();
         SyncPlayInlineControls();
+        RefreshPlayDialogState();
         RefreshRecentSongs();
         RefreshLibrarySongs();
         if (SongFolderIndex.Folder.Length > 0) StartSongFolderWatch(SongFolderIndex.Folder);
+        _lastPointerActivity = DateTime.UtcNow;
         PlayDialogOverlay.Visibility = Visibility.Visible;
         ChromeMotion.FadeIn(PlayDialogOverlay, 200);
         ChromeMotion.PopIn(PlayDialogCard);
+        PlayDialogMidiButton.Focus();
     }
 
     private static Color SafeColor(string hex)
@@ -210,16 +229,70 @@ public partial class MainWindow
         catch { return Color.FromRgb(139, 92, 246); }
     }
 
+    private void RefreshPlayDialogNavigation()
+    {
+        if (PlayDialogBackButton is null) return;
+        var destination = _playDialogReturnSurface == NavigationSurface.MainMenu
+            ? "Back to the main menu"
+            : "Back to the live stage";
+        Loc.Set(PlayDialogBackButton, destination, FrameworkElement.ToolTipProperty);
+        Loc.Set(PlayDialogBackButton, destination, AutomationProperties.NameProperty);
+    }
+
+    private void RefreshPlayDialogState()
+    {
+        if (PlayDialogPrimaryButton is null) return;
+        var canPlay = SongDuration() > 0;
+        var label = _playing ? "Return to playback" : canPlay ? "Start playback" : "Choose a MIDI file";
+        Loc.Set(PlayDialogPrimaryLabel, label);
+        Loc.Set(PlayDialogPrimaryButton, label, AutomationProperties.NameProperty);
+        Loc.Set(PlayDialogPrimaryButton, label, FrameworkElement.ToolTipProperty);
+        PlayDialogPrimaryIcon.Data = FindResource(canPlay || _playing ? "IconPlay" : "IconFolder") as Geometry;
+
+        var hasLoadedSong = !string.IsNullOrWhiteSpace(_songPath) && _allNotes.Count > 0;
+        PlayDialogLoadedSongPanel.Visibility = hasLoadedSong ? Visibility.Visible : Visibility.Collapsed;
+        if (!hasLoadedSong) return;
+
+        PlayDialogLoadedSongTitle.Text = _songLabel;
+        var noteCount = _allNotes.Count;
+        var trackCount = _allNotes.Select(note => note.Track).Distinct().Count();
+        var duration = TimeSpan.FromSeconds(_allNotes.Max(note => note.End)).ToString("m\\:ss");
+        var details = _playing ? "Playing · {0} notes · {1} tracks · {2}" : "Ready · {0} notes · {1} tracks · {2}";
+        Loc.Bind(PlayDialogLoadedSongDetails, () => Loc.F(details, noteCount, trackCount, duration));
+    }
+
+    private void PlayDialogOpen_Click(object sender, RoutedEventArgs e) => OpenPlayDialog();
+
+    private void PlayDialogBack_Click(object sender, RoutedEventArgs e)
+    {
+        PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        _lastPointerActivity = DateTime.UtcNow;
+        if (_playDialogReturnSurface == NavigationSurface.MainMenu)
+        {
+            ShowStartupMenu();
+            return;
+        }
+        SetChromeVisible(true);
+        Stage.Focus();
+    }
+
     private void PlayDialogClose_Click(object sender, RoutedEventArgs e)
     {
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        _lastPointerActivity = DateTime.UtcNow;
         SetChromeVisible(true);
+        Stage.Focus();
     }
 
-    private void PlayDialogOpenMidi_Click(object sender, RoutedEventArgs e)
+    private void PlayDialogOpenMidi_Click(object sender, RoutedEventArgs e) => OpenMidi_Click(sender, e);
+
+    private void PlayDialogSettings_Click(object sender, RoutedEventArgs e) => OpenSettingsFromPlayDialog(SettingsPages.Style);
+
+    private void OpenSettingsFromPlayDialog(string page)
     {
-        OpenMidi_Click(sender, e);
-        Loc.Bind(PlayDialogMidiButton, () => _songLabel);
+        PlayDialogOverlay.Visibility = Visibility.Collapsed;
+        SettingsTabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));
+        OpenSettingsPanelFor(NavigationSurface.PlayDialog);
     }
 
     private void PlayDialogLive_Click(object sender, RoutedEventArgs e)
@@ -228,15 +301,29 @@ public partial class MainWindow
         SetChromeVisible(true);
         _lastPointerActivity = DateTime.UtcNow;
         Stop();
+        Stage.Focus();
     }
 
     private void PlayDialogPlay_Click(object sender, RoutedEventArgs e)
     {
+        if (_playing)
+        {
+            PlayDialogClose_Click(sender, e);
+            return;
+        }
+        if (SongDuration() <= 0)
+        {
+            // Keep the setup visible if the picker is cancelled; after a successful load the same
+            // primary action becomes "Start playback" without making the user reopen this dialog.
+            OpenMidi_Click(sender, e);
+            RefreshPlayDialogState();
+            return;
+        }
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
         SetChromeVisible(true);
         _lastPointerActivity = DateTime.UtcNow;
-        if (SongDuration() > 0) StartPlayback();
-        else OpenMidi_Click(sender, e);
+        StartPlayback();
+        Stage.Focus();
     }
 
     private void PlayDialogHaloColor_Click(object sender, RoutedEventArgs e)
@@ -254,20 +341,14 @@ public partial class MainWindow
         ApplyVisualSettings("Halo color applied");
     }
 
-    private void PlayDialogStyleCard_Click(object sender, MouseButtonEventArgs e)
-    {
-        PlayDialogOverlay.Visibility = Visibility.Collapsed;
-        OpenSettingsPanel();
-        SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Notes);
-    }
+    private void PlayDialogStyleCard_Click(object sender, RoutedEventArgs e) => OpenSettingsFromPlayDialog(SettingsPages.Notes);
 
     /// <summary>Opens the design dock on the page named by the chevron's DataContext.</summary>
     private void PlayDialogDeepLink_Click(object sender, RoutedEventArgs e)
     {
-        var page = sender is FrameworkElement { DataContext: string name } ? SettingsPages.IndexOf(name) : -1;
-        PlayDialogOverlay.Visibility = Visibility.Collapsed;
-        OpenSettingsPanel();
-        if (page >= 0 && page < SettingsTabs.Items.Count) SettingsTabs.SelectedIndex = page;
+        var page = sender is FrameworkElement { DataContext: string name } ? name : SettingsPages.Style;
+        if (SettingsPages.IndexOf(page) < 0) page = SettingsPages.Style;
+        OpenSettingsFromPlayDialog(page);
     }
 
     private void PlayDialogExtras_Click(object sender, RoutedEventArgs e) =>

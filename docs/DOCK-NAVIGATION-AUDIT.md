@@ -1,5 +1,5 @@
-# Tái cấu trúc điều hướng dock: từ danh sách phẳng sang ba nhóm theo mục đích
-> **Cập nhật sau tài liệu này:** dock đã có trang thứ 12 (**General**, nhóm thứ tư **APP**) để chứa bộ chọn ngôn ngữ và trang thứ 13 (**History**, nhóm **SESSION**) để chứa lịch sử luyện tập; mọi con số "11 trang / ba nhóm" ở dưới là trạng thái tại thời điểm rà soát. Kiến trúc điều hướng không đổi: `Ui/SettingsPages.cs` vẫn là nguồn sự thật duy nhất và `tools/check_sources.py` vẫn chứng minh XAML khớp danh mục.
+# Tái cấu trúc điều hướng dock: danh mục trang theo mục đích
+> **Cập nhật sau lần rà soát ban đầu:** phần mô tả vấn đề ở §1 ghi lại dock 11 trang, trước khi thêm **General** (nhóm **APP**) và **History** (nhóm **SESSION**). Dock hiện có 13 trang chia thành bốn nhóm; danh mục hiện tại bên dưới phản ánh `Ui/SettingsPages.cs`, nguồn sự thật duy nhất mà `tools/check_sources.py` đối chiếu với XAML.
 
 
 Tài liệu này ghi lại đợt rà soát **cách sắp xếp chức năng** của Keyflow và những thay đổi đi kèm
@@ -25,17 +25,20 @@ cài đặt vẫn được đối chiếu ở `docs/SETTINGS-WIRING-AUDIT.md`; s
 | 7 | **Nút đóng tròn của hộp thoại Play vẽ ra vòng tròn rỗng** (không có dấu ✕): template `RoundGlyphButtonStyle` tô icon bằng `Fill`, nhưng `IconClose`/`IconMinimize` là hình **nét hở** nên `Fill` không vẽ gì | Lỗi im lặng, chỉ lộ ra khi nhìn ảnh render thật | Mọi template vẽ icon từ `Tag` giờ tô **cả `Fill` và `Stroke`** (`GlyphButtonStyle`, `IconTextButtonStyle`, `RoundGlyphButtonStyle`, `CaptionButtonStyle`, `CaptionCloseStyle`, nav item), kèm quy tắc mới trong `check_sources.py`: icon nào là hình đặc hay nét hở cũng hiện |
 | 8 | **Không có gì bảo đảm danh mục trang, XAML và tài liệu khớp nhau** | Một trang thêm vào chỉ ở XAML sẽ lặng lẽ lệch khỏi tìm kiếm, menu `--settings-tab` và thẻ nhóm | Bốn kiểm tra tự động: runtime (`VerificationSuite`), tĩnh (`check_sources.py`: danh mục ↔ tab strip, theme token ↔ `App.xaml`, template icon ↔ luật Fill+Stroke) |
 
-## 2. Vì sao là ba nhóm này
+## 2. Vì sao là bốn nhóm này
 
 | Nhóm | Trang | Câu hỏi người dùng đang hỏi |
 |---|---|---|
 | **STAGE DESIGN** | Style, Theme, Notes, Particles, Keyboard, Background, Camera & FX | "Sân khấu trông thế nào?" |
 | **SOUND & INPUT** | Audio, MIDI | "Tiếng đàn và đường MIDI đến từ đâu?" |
-| **SESSION** | Practice, Recording | "Buổi tập này chạy và được ghi lại ra sao?" |
+| **SESSION** | Practice, History, Recording | "Buổi tập này chạy và được ghi lại ra sao?" |
+| **APP** | General | "Ứng dụng và giao diện được thiết lập thế nào?" |
 
-Ba nhóm này cũng là cách thẻ Play dialog và menu nói chuyện với dock: mọi chevron trong dialog deep-link
-tới một trang, còn nút **OPEN DESIGN** mở nhóm thiết kế. Tìm kiếm trong dock tự nhảy sang trang đầu tiên
-có kết quả, nên người dùng không cần nhớ trang nào nằm ở nhóm nào.
+Bốn nhóm này cũng là cách thẻ Play dialog và menu nói chuyện với dock: mọi chevron trong dialog deep-link
+tới một trang, nút **SETTINGS** mở trang Style và thẻ tay mở đúng trang Notes. Mỗi tuyến giữ lại bề mặt
+đã gọi nó — Play, menu chính hoặc sân khấu — để Back/Escape quay về đúng chỗ; nút **OPEN DESIGN** ở menu
+mở dock và Back trở lại menu. Tìm kiếm trong dock tự nhảy sang trang đầu tiên có kết quả, nên người dùng
+không cần nhớ trang nào nằm ở nhóm nào.
 
 ## 3. Nguồn sự thật duy nhất cho danh mục trang
 
@@ -44,7 +47,8 @@ internal static readonly SettingsSection[] Sections =
 [
     new(DesignSection,  [Style, Theme, Notes, Particles, Keyboard, Background, Camera]),  // STAGE DESIGN
     new(SoundSection,   [Audio, Midi]),                                                    // SOUND & INPUT
-    new(SessionSection, [Practice, Recording]),                                            // SESSION
+    new(SessionSection, [Practice, History, Recording]),                                  // SESSION
+    new(AppSection,     [General]),                                                       // APP
 ];
 
 internal static readonly string[] Order = [.. Sections.SelectMany(section => section.Pages)];
@@ -64,7 +68,7 @@ internal static readonly string[] Order = [.. Sections.SelectMany(section => sec
 - `F1` mở/đóng, `Esc` đóng trước khi xử lý tới ô tìm kiếm/dock, click nền hoặc nút ✕ cũng đóng.
 - Trong lúc thẻ mở, đồng hồ tự ẩn giao diện **không** chạy (`ShortcutsVisible` được kiểm ở
   `CheckChromeIdle` và `Window_MouseMove`), nên thẻ không biến mất khi người dùng đang đọc.
-- `VerificationSuite` mở/đóng thẻ bằng chính các hàm của UI và khẳng định có đủ ba nhóm, mỗi nhóm ≥ 4 dòng.
+- `VerificationSuite` mở/đóng thẻ bằng chính các hàm của UI và khẳng định có đủ ba nhóm phím tắt, mỗi nhóm có ít nhất bốn dòng.
 
 ## 5. Ảnh giao diện do CI render
 
