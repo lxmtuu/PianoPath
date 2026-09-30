@@ -76,18 +76,18 @@ internal static class HandTracker
         var coverage = blob.Sum(cell => counts[cell]) / (double)(width * height / (step * step));
         if (coverage < MinimumCoverage) return Reading.Nothing;
         // The centre and the box come from the cells, weighted by how much skin each of them really held.
-        double weight = 0, x = 0, y = 0;
+        double weight = 0, sumX = 0, sumY = 0;
         int left = Columns, right = -1, top = Rows, bottom = -1;
         foreach (var cell in blob)
         {
             var column = cell % Columns; var row = cell / Columns; var mass = counts[cell];
-            weight += mass; x += (column + .5) * mass; y += (row + .5) * mass;
+            weight += mass; sumX += (column + .5) * mass; sumY += (row + .5) * mass;
             left = Math.Min(left, column); right = Math.Max(right, column);
             top = Math.Min(top, row); bottom = Math.Max(bottom, row);
         }
         var fingers = CountFingers(ColumnDepths(blob, top, bottom));
         return new Reading(true,
-            Math.Clamp(x / weight / Columns, 0, 1), Math.Clamp(y / weight / Rows, 0, 1),
+            Math.Clamp(sumX / weight / Columns, 0, 1), Math.Clamp(sumY / weight / Rows, 0, 1),
             Math.Clamp((right - left + 1) / (double)Columns, 0, 1), Math.Clamp((bottom - top + 1) / (double)Rows, 0, 1),
             fingers, coverage);
     }
