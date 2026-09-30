@@ -245,6 +245,10 @@ Thẻ **F1** trong ứng dụng liệt kê đúng bảng này (ảnh ở đầu 
 | Lớp không khí (tuỳ chọn) | Hạt acoustic lơ lửng trong không gian hoà nhạc (số lượng, màu), bật ở **Theme → Acoustic motes**; 4 lớp ambient độc lập (Energy/Nature/Light/Cosmic) ở trang **Background** — sét, mưa, thiên hà, matrix... Mặc định **tắt** để sân khấu sạch. |
 | Hiệu năng | Mọi animation (nốt rơi, cánh hoa, backdrop, chuyển panel) chạy trên **cùng một đồng hồ vsync** (`FrameClock`) nên không rung, không vẽ thừa khung hình; đồng hồ tự nhả khi sân khấu đứng yên. Mức chuyển động Off/Calm/Full, tôn trọng thiết lập giảm animation của Windows. |
 
+Sân khấu vẽ bằng engine GPU Direct3D 11 (`--gpu`, ảnh CI dựng bằng WARP):
+
+![Keyflow GPU stage](docs/previews/vi/stage-gpu.png)
+
 ### Âm thanh, MIDI & luyện tập
 
 | Nhóm | Chi tiết |

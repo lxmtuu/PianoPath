@@ -263,6 +263,10 @@ never have to open the documentation:
 | Air layers (optional) | Acoustic motes floating in the concert space (amount, colour), enabled under **Theme → Acoustic motes**; 4 independent ambient layers (Energy/Nature/Light/Cosmic) on the **Background** page — lightning, rain, galaxies, matrix… **Off** by default so the stage stays clean. |
 | Performance | Every animation (falling notes, petals, backdrop, panel transitions) runs on **one vsync clock** (`FrameClock`), so nothing judders and no frame is drawn twice; the clock releases itself when the stage is still. Motion level Off/Calm/Full respects the Windows "reduce animations" setting. |
 
+The stage drawn by the Direct3D 11 GPU engine (`--gpu`; the CI picture is rendered on WARP):
+
+![Keyflow GPU stage](docs/previews/en/stage-gpu.png)
+
 ### Audio, MIDI & practice
 
 | Group | Details |

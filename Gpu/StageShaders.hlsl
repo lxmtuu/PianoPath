@@ -443,6 +443,19 @@ float3 KeyLight(float3 n, float3 v, float3 l, float3 albedo, float roughness, fl
     return (diffuse + spec) * lightColor * nl * PI;
 }
 
+// Specular part only, for keys that scale their gloss by where on the key the pixel is.
+float3 KeySpecular(float3 n, float3 v, float3 l, float roughness, float3 f0, float3 lightColor)
+{
+    float3 h = normalize(l + v);
+    float nl = saturate(dot(n, l));
+    float nv = saturate(dot(n, v)) + 1e-3;
+    float nh = saturate(dot(n, h));
+    float3 f = FresnelSchlick(saturate(dot(h, v)), f0);
+    float k = (roughness + 1.0) * (roughness + 1.0) / 8.0;
+    float g = (nl / (nl * (1.0 - k) + k)) * (nv / (nv * (1.0 - k) + k));
+    return DistributionGgx(nh, roughness) * g * f / max(4.0 * nl * nv, 1e-3) * lightColor * nl * PI;
+}
+
 float4 PsKey(KeyOut v) : SV_Target
 {
     float kind = v.Misc.x;
@@ -473,7 +486,19 @@ float4 PsKey(KeyOut v) : SV_Target
 
     // lights: a soft box above and in front, a fill from the room and a rim from behind the keys
     float3 keyDir = normalize(float3(-0.18, 1.0, 0.62));
-    float3 color = KeyLight(n, view, keyDir, albedo, roughness, f0, float3(1.0, 0.98, 0.95) * (0.35 + 1.25 * KeyA.x));
+    float3 lightColor = float3(1.0, 0.98, 0.95) * (0.35 + 1.25 * KeyA.x);
+    float3 color = KeyLight(n, view, keyDir, albedo, roughness, f0, lightColor);
+    if (black)
+    {
+        // A flat top under one directional light would reflect the soft box evenly and turn the ebony
+        // grey. Real lacquer shows the box as a band: keep the diffuse, drop the flat specular and add
+        // a narrow highlight a little behind the front edge of each black key.
+        float3 spec = KeySpecular(n, view, keyDir, roughness, f0, lightColor);
+        float along = saturate(v.KeyPos.z / max(v.Size.y, 1.0));
+        float band = exp(-pow((along - 0.82) / 0.07, 2.0)) * (n.y > 0.5 ? 1.0 : 0.0);
+        color -= spec * (1.0 - (0.04 + 0.55 * band));
+        color = max(color, 0.0);
+    }
     color += albedo * (0.16 + 0.12 * n.y) * (0.6 + 0.4 * KeyA.x);
     float3 rimDir = normalize(float3(0.0, 0.45, -1.0));
     float rim = pow(saturate(1.0 - dot(n, view)), 3.0) * saturate(dot(n, rimDir) * 0.5 + 0.6);

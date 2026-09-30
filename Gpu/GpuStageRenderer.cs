@@ -359,7 +359,8 @@ internal sealed class GpuStageRenderer : IDisposable
             KeyD = new Vector4(whiteWidth, blackWidth, blackHeight, .22f),
             RimColor = new Vector4(GpuStageSimulation.ToLinear(look.HaloColor), 0),
             Post = new Vector4(look.ShaderExposure, look.ShaderFilmic ? 1 : 0, 1, 1),
-            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f, .85f, .8f / 255f)
+            // threshold 1.3: lit white keys (about 0.9 linear) stay crisp, only emissive light blooms
+            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f, 1.3f, .8f / 255f)
         };
     }
 
