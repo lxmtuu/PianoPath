@@ -153,20 +153,27 @@ public partial class MainWindow
 
     private void BuildStylePage()
     {
-        var body = Card(StyleSettingsHost, "LAYERS", "Quick switches for every layer of the stage. Detailed controls live on the other pages.");
-        Toggle(body, "Falling notes", nameof(PianoVisualSettings.ShowNotes), "Draw the piano-roll bars for MIDI playback and live playing.");
+        var body = Card(StyleSettingsHost, "LAYERS", "Quick switches for every layer of the stage. The › button beside a layer opens the card with its detailed controls.");
+        LayerToggle(body, "Falling notes", nameof(PianoVisualSettings.ShowNotes), "Draw the piano-roll bars for MIDI playback and live playing.", "SHAPE & STYLE");
         Toggle(body, "Sheet music", nameof(PianoVisualSettings.ShowSheet), "Grand staff above the roll, following the playhead: MusicXML and MIDI notes written on the staff their hand split puts them on.");
-        Toggle(body, "Sparks", nameof(PianoVisualSettings.ShowEmbers), "Particle burst when a note reaches the keyboard.");
-        Toggle(body, "Wisps", nameof(PianoVisualSettings.ShowWisps), "Smoke-like plasma streams rising from held keys (Embers style).");
-        Toggle(body, "Flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts at the impact point.");
-        Toggle(body, "Impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding shock ring when a note hits the key line.");
-        Toggle(body, "Light beams", nameof(PianoVisualSettings.ShowLightBeams), "Soft columns of light above every sounding key.");
-        Toggle(body, "Hit line halo", nameof(PianoVisualSettings.ShowHalo), "Glowing line where the notes meet the keys.");
-        Toggle(body, "Piano keys", nameof(PianoVisualSettings.ShowKeys), "Show the 88-key keyboard.");
-        Toggle(body, "Background layers", nameof(PianoVisualSettings.ShowBackground), "Image, gradient, stars and guide lanes.");
+        LayerToggle(body, "Sparks", nameof(PianoVisualSettings.ShowEmbers), "Particle burst when a note reaches the keyboard.", "SPARKS · EMITTER");
+        LayerToggle(body, "Wisps", nameof(PianoVisualSettings.ShowWisps), "Smoke-like plasma streams rising from held keys (Embers style).", "WISPS");
+        LayerToggle(body, "Flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts at the impact point.", "FLAMES");
+        LayerToggle(body, "Impact rings", nameof(PianoVisualSettings.ShowImpactRings), "Expanding shock ring when a note hits the key line.", "IMPACT · WAVE & FLASH");
+        LayerToggle(body, "Light beams", nameof(PianoVisualSettings.ShowLightBeams), "Soft columns of light above every sounding key.", "ATMOSPHERE");
+        LayerToggle(body, "Hit line halo", nameof(PianoVisualSettings.ShowHalo), "Glowing line where the notes meet the keys.", "HIT LINE");
+        LayerToggle(body, "Piano keys", nameof(PianoVisualSettings.ShowKeys), "Show the 88-key keyboard.", "KEYBOARD");
+        LayerToggle(body, "Background layers", nameof(PianoVisualSettings.ShowBackground), "Image, gradient, stars and guide lanes.", "BACKGROUND");
         Toggle(body, "Keyflow watermark", nameof(PianoVisualSettings.ShowWatermark), "Small logo above the keyboard.");
         Toggle(body, "Key counter", nameof(PianoVisualSettings.ShowCounter), "Show how many keys are held.");
         Toggle(body, "FPS & particle HUD", nameof(PianoVisualSettings.ShowFps), "Performance overlay in the top-right corner.");
+
+        // the three places most looks are tuned in, one click away from the switches
+        var more = Card(StyleSettingsHost, "GO TO", "The note's journey, the sky behind it and the engine that draws it all.");
+        ButtonRow(more,
+            ("NOTE EFFECTS ›", (_, _) => JumpToCard("FALLING FX")),
+            ("AMBIENT LAYERS ›", (_, _) => JumpToCard("AMBIENT LAYERS")),
+            ("GRAPHICS ENGINE ›", (_, _) => JumpToCard("GRAPHICS ENGINE")));
     }
 
     /// <summary>
@@ -192,17 +199,20 @@ public partial class MainWindow
             ("Delete theme", DeleteTheme_Click));
         Note(custom, "Only themes you made can be edited or deleted; the three built-in looks stay as they are. A theme named after a built-in one is refused, and saving over one of your own names updates it.");
 
-        var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE", "Optional recital layer: floating acoustic motes drifting through the concert space.");
-        Toggle(concert, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
-        SliderRow(concert, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
-        ColorRow(concert, "Mote color", nameof(PianoVisualSettings.PetalColor), "Colour of the floating ambient particles.").VisibleWhen = () => _visualSettings.ShowPetals;
-
         var looks = Card(ThemeSettingsHost, "QUICK LOOKS", "One click applies a complete concert look: stage preset plus matching interface theme.");
         ButtonRow(looks,
             ("Concert Grand", (_, _) => ApplyBuiltInPreset("Neon Violet")),
             ("Concert Gold", (_, _) => ApplyBuiltInPreset("Concert Gold")),
             ("Moonlight", (_, _) => ApplyBuiltInPreset("Moonlight Sonata")));
         Note(looks, "Every preset can be edited afterwards; the pages next to this one keep the piano roll, keyboard and camera in sync with the new theme.");
+    }
+
+    /// <summary>Applies a built-in preset named on the command line; spaces and case do not matter.</summary>
+    internal void PreviewPreset(string name)
+    {
+        static string Key(string value) => value.Replace(" ", "", StringComparison.Ordinal).ToLowerInvariant();
+        var preset = VisualPresets.BuiltIn.FirstOrDefault(candidate => Key(candidate.Name) == Key(name));
+        if (preset is not null) ApplyBuiltInPreset(preset.Name);
     }
 
     /// <summary>Applies a built-in preset by name (used by the Theme page quick looks).</summary>
@@ -309,6 +319,21 @@ public partial class MainWindow
         Toggle(falling, "Ghost echoes", nameof(PianoVisualSettings.FallingGhost), "Faint echo copies lead each note.");
         SliderRow(falling, "Ghost amount", nameof(PianoVisualSettings.FallingGhostAmount), 0, 100, "Visibility and number of the echoes.").VisibleWhen = () => _visualSettings.FallingGhost;
 
+        var impact = Card(NoteSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
+        Toggle(impact, "Enable impact wave", nameof(PianoVisualSettings.ShowImpactRings), "Expanding wave on every hit.");
+        Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring, a filled shockwave blast or flat water ripples.",
+            ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("Ripple", "Ripple"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
+        Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
+            ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph")).VisibleWhen = () => _visualSettings.ShowImpactRings;
+        SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactMorph != "None";
+        Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading in about 180 ms.");
+        Choice(impact, "Flash style", nameof(PianoVisualSettings.ImpactFlashStyle), "A white-hot flare, a lightning strike or a plasma ball.",
+            ("Flash", "Flash"), ("Lightning", "Lightning"), ("Plasma", "Plasma")).VisibleWhen = () => _visualSettings.ShowImpactFlash;
+        SliderRow(impact, "Flash intensity", nameof(PianoVisualSettings.ImpactFlashIntensity), 0, 100, "Brightness of the hit flash.").VisibleWhen = () => _visualSettings.ShowImpactFlash;
+        Note(impact, "The particle burst of the impact (its amount, style and physics) is tuned on the Particles page.");
+
         var hold = Card(NoteSettingsHost, "HOLD FX", "What sounding notes and held keys do while the key stays down.");
         Toggle(hold, "Hold bar highlight", nameof(PianoVisualSettings.HoldBar), "The sounding bar burns brighter with a hot outline.");
         SliderRow(hold, "Hold bar intensity", nameof(PianoVisualSettings.HoldBarIntensity), 0, 100, "Strength of the highlight.").VisibleWhen = () => _visualSettings.HoldBar;
@@ -384,20 +409,6 @@ public partial class MainWindow
         SliderRow(flames, "Flame intensity", nameof(PianoVisualSettings.FlameIntensity), 0, 100, "Brightness and size of the fire.");
         SliderRow(flames, "Flame height", nameof(PianoVisualSettings.FlameHeight), 0, 100, "How tall the flames reach.");
         Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Classic warm fire or the color of the note.", ("Warm", "Warm fire"), ("Note", "Note color"));
-
-        var impact = Card(ParticleSettingsHost, "IMPACT · WAVE & FLASH", "The first half second after a note lands on the keys. Size and brightness follow the hit strength.");
-        Toggle(impact, "Enable impact wave", nameof(PianoVisualSettings.ShowImpactRings), "Expanding wave on every hit.");
-        Choice(impact, "Wave style", nameof(PianoVisualSettings.ImpactWave), "Hollow acoustic ring, a filled shockwave blast or flat water ripples.",
-            ("Ring", "Ring"), ("Shockwave", "Shockwave"), ("Ripple", "Ripple"), ("None", "None")).VisibleWhen = () => _visualSettings.ShowImpactRings;
-        SliderRow(impact, "Wave size", nameof(PianoVisualSettings.RingSize), 0, 100, "Final radius of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
-        SliderRow(impact, "Wave intensity", nameof(PianoVisualSettings.ImpactWaveIntensity), 0, 150, "Brightness of the wave.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactWave != "None";
-        Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
-            ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph")).VisibleWhen = () => _visualSettings.ShowImpactRings;
-        SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactMorph != "None";
-        Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading in about 180 ms.");
-        Choice(impact, "Flash style", nameof(PianoVisualSettings.ImpactFlashStyle), "A white-hot flare, a lightning strike or a plasma ball.",
-            ("Flash", "Flash"), ("Lightning", "Lightning"), ("Plasma", "Plasma")).VisibleWhen = () => _visualSettings.ShowImpactFlash;
-        SliderRow(impact, "Flash intensity", nameof(PianoVisualSettings.ImpactFlashIntensity), 0, 100, "Brightness of the hit flash.").VisibleWhen = () => _visualSettings.ShowImpactFlash;
     }
 
     private void BuildKeyboardPage()
@@ -422,10 +433,14 @@ public partial class MainWindow
 
         var shader = Card(KeyboardSettingsHost, "RAY-TRACED SHADING",
             "Every pixel of the keyboard is shaded with a real light transport model: a GGX specular lobe, a softbox with true penumbra shadows, contact occlusion in the gaps, colored lights from every sounding key and an ACES filmic tonemapper.");
-        var shadingOn = () => _visualSettings.ShadingQuality != "Off";
+        // the GPU engine always draws lit 3D keys, and it reads these same sliders
+        var gpuKeys = () => _visualSettings.RenderBackend == "Gpu";
+        var shadingOn = () => _visualSettings.ShadingQuality != "Off" || gpuKeys();
         Choice(shader, "Shading engine", nameof(PianoVisualSettings.ShadingQuality),
             "Off draws the flat vector keys. Fast, Balanced and Cinematic trade bake time for shadow and occlusion samples.",
-            ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"));
+            ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"))
+            .VisibleWhen = () => !gpuKeys();
+        Note(shader, "The GPU engine is on: it renders the keys in 3D with real-time lights and shadows every frame, and the sliders below shape them. The shading engine picker applies to the software renderer only.").VisibleWhen = gpuKeys;
         SliderRow(shader, "Camera tilt", nameof(PianoVisualSettings.ShaderCameraTilt), 0, 100, "Low camera exaggerates the perspective and lengthens the black key shadows; high camera flattens the bed.").VisibleWhen = shadingOn;
         SliderRow(shader, "Key light", nameof(PianoVisualSettings.ShaderKeyLight), 0, 200, "Intensity of the softbox above the keyboard.").VisibleWhen = shadingOn;
         SliderRow(shader, "Shadow strength", nameof(PianoVisualSettings.ShaderShadows), 0, 100, "How dark the shadows are; also widens the penumbra.").VisibleWhen = shadingOn;
@@ -435,7 +450,7 @@ public partial class MainWindow
         SliderRow(shader, "Key emission", nameof(PianoVisualSettings.ShaderEmissive), 0, 200, "How strongly a sounding key glows and lights the bed around it.").VisibleWhen = shadingOn;
         SliderRow(shader, "Exposure", nameof(PianoVisualSettings.ShaderExposure), 20, 250, "Applied before the filmic tonemapper.").VisibleWhen = shadingOn;
         Toggle(shader, "ACES filmic tonemapper", nameof(PianoVisualSettings.ShaderFilmic), "Unreal's default filmic curve; off clips highlights linearly instead.").VisibleWhen = shadingOn;
-        Note(shader, "The keyboard is baked once and cached, then only the sounding keys are re-shaded, so the shader stays inside the frame budget. Green-screen recording always uses the flat keys.").VisibleWhen = shadingOn;
+        Note(shader, "The keyboard is baked once and cached, then only the sounding keys are re-shaded, so the shader stays inside the frame budget. Green-screen recording always uses the flat keys.").VisibleWhen = () => _visualSettings.ShadingQuality != "Off" && !gpuKeys();
     }
 
     private void BuildBackgroundPage()
@@ -455,6 +470,9 @@ public partial class MainWindow
         Toggle(atmosphere, "Stars", nameof(PianoVisualSettings.ShowStars), "Twinkling star field.");
         SliderRow(atmosphere, "Star density", nameof(PianoVisualSettings.StarDensity), 0, 100, "How many stars are visible.").VisibleWhen = () => _visualSettings.ShowStars;
         Toggle(atmosphere, "Guide lanes", nameof(PianoVisualSettings.BackgroundGuide), "Faint vertical lines for every key.");
+        Toggle(atmosphere, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
+        SliderRow(atmosphere, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
+        ColorRow(atmosphere, "Mote color", nameof(PianoVisualSettings.PetalColor), "Colour of the floating ambient particles.").VisibleWhen = () => _visualSettings.ShowPetals;
         SliderRow(atmosphere, "Vignette", nameof(PianoVisualSettings.Vignette), 0, 100, "Darkens the corners for a cinematic frame.");
         SliderRow(atmosphere, "Horizon glow", nameof(PianoVisualSettings.HorizonGlow), 0, 100, "Colored glow rising from the keyboard line.");
         SliderRow(atmosphere, "Light beam intensity", nameof(PianoVisualSettings.BeamIntensity), 0, 100, "Brightness of the columns above sounding keys.");
@@ -645,6 +663,18 @@ public partial class MainWindow
         RefreshLanguageChips();
         Note(language, "Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another.");
 
+        var graphics = Card(GeneralSettingsHost, "GRAPHICS ENGINE", "Software draws the stage with WPF on the interface thread. GPU renders it with Direct3D 11 on a thread of its own: HDR bloom, lit 3D keys with shadows, tens of thousands of particles and up to 240 frames per second, without ever holding up MIDI input.");
+        Choice(graphics, "Renderer", nameof(PianoVisualSettings.RenderBackend), "Which engine draws the stage. If Direct3D 11 cannot start, Keyflow stays on the software engine and says why.",
+            ("Software", "Software (WPF)"), ("Gpu", "GPU (Direct3D 11)"));
+        Choice(graphics, "GPU frame rate", nameof(PianoVisualSettings.GpuFrameRate), "Frames per second the GPU render thread aims for. Match your display (60, 120, 144 or 240 Hz); Unlimited renders as fast as the graphics card allows.",
+            ("60", "60 FPS"), ("120", "120 FPS"), ("144", "144 FPS"), ("240", "240 FPS"), ("Unlimited", "Unlimited"));
+        Toggle(graphics, "VSync in the GPU stage window", nameof(PianoVisualSettings.GpuVSync), "Present on the display's refresh. Turn it off for the lowest latency; the picture may tear.");
+        ButtonRow(graphics, ("OPEN GPU STAGE WINDOW", OpenGpuStage_Click));
+        Note(graphics, "The GPU stage window runs at the full frame rate on any monitor and suits a projector or OBS window capture. F11 toggles full screen, Esc leaves it. Graphics settings belong to this computer: applying a preset keeps them.");
+        _gpuStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
+        Register(graphics, _gpuStatusLabel, null, "gpu direct3d graphics engine renderer status adapter");
+        RefreshGpuStatus();
+
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click), ("IMPORT PROFILE…", ImportProfile_Click));
         Note(profile, "A profile is plain JSON: dropping one on the window applies it, a dropped MIDI file opens the song and a dropped image becomes the stage background.");
@@ -710,8 +740,43 @@ public partial class MainWindow
         Loc.Set(heading, title); Loc.Set(caption, subtitle);
         body.Children.Add(heading);
         body.Children.Add(caption);
-        card.Child = body; page.Children.Add(card); _settingCards.Add(card);
+        card.Child = body; page.Children.Add(card); _settingCards.Add(card); _cardsByTitle[title] = card;
         return body;
+    }
+
+    private readonly Dictionary<string, Border> _cardsByTitle = [];
+
+    /// <summary>
+    /// Opens the page that holds the card titled <paramref name="title"/> (its English key), scrolls the
+    /// card into view and pulses it so the eye lands on it.
+    /// </summary>
+    private void JumpToCard(string title)
+    {
+        if (!_cardsByTitle.TryGetValue(title, out var card) || card.Parent is not Panel page) return;
+        for (var i = 0; i < SettingsPages.Order.Length; i++)
+            if (ReferenceEquals(SettingsPageHost(i), page)) { SettingsTabs.SelectedIndex = i; break; }
+        Dispatcher.BeginInvoke(new Action(() => { card.BringIntoView(); ChromeMotion.Pulse(card); }), System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
+    /// <summary>A layer switch with a › button that opens the card holding the layer's detailed controls.</summary>
+    private SettingRow LayerToggle(Panel body, string label, string property, string tooltip, string detailCard)
+    {
+        var row = Toggle(body, label, property, tooltip);
+        var check = row.Element;
+        var index = body.Children.IndexOf(check);
+        body.Children.RemoveAt(index);
+        var line = new Grid();
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        line.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        var jump = new Button { Content = "›", Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        Loc.Set(jump, "Open the detailed controls for this layer", FrameworkElement.ToolTipProperty);
+        Loc.Set(jump, "Open the detailed controls for this layer", AutomationProperties.NameProperty);
+        jump.Click += (_, _) => JumpToCard(detailCard);
+        Grid.SetColumn(jump, 1);
+        line.Children.Add(check); line.Children.Add(jump);
+        body.Children.Insert(index, line);
+        row.Element = line;
+        return row;
     }
 
     private SettingRow Register(Panel body, FrameworkElement element, string? property = null, params string[] searchKeys)
@@ -1253,6 +1318,7 @@ public partial class MainWindow
     {
         _visualSettings.Clamp();
         Stage.SetVisualSettings(_visualSettings, reloadBackground);
+        ApplyRenderBackend();
         SyncCameraOverlay();
         ApplyChromeTheme();
         RefreshHandStatus();
@@ -1667,7 +1733,14 @@ public partial class MainWindow
                     : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
                 : Loc.T("no SoundFont is loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
-        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}.", width, height, _visualSettings.RecordingFrameRate, format, audio);
+        // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
+        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null) && !(sequence && _visualSettings.RecordingTransparent);
+        var engine = gpuTake
+            ? Loc.T("Frames are rendered by the GPU stage at exactly this size.")
+            : sequence && _visualSettings.RecordingTransparent && _gpuLoop is not null
+                ? Loc.T("Transparent frames are drawn by the software stage (the GPU frame is opaque).")
+                : Loc.T("Frames are drawn by the software stage.");
+        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}. {5}", width, height, _visualSettings.RecordingFrameRate, format, audio, engine);
     }
 
     private (int Width, int Height) RecordingSize()

@@ -749,6 +749,19 @@ def scan_cli_and_samples():
     if not shots:
         return errors + ["build.yml lost the $shots list that renders the README previews"]
     block = shots.group(1)
+    # The preset gallery renders every built-in look by name (spaces dropped, as --preset accepts them).
+    gallery = re.search(r"\$presets = @\(([^)]*)\)", workflow.read_text(encoding="utf-8"))
+    presets_source = ROOT / "Stage" / "VisualPresets.cs"
+    if gallery and presets_source.exists():
+        text = presets_source.read_text(encoding="utf-8")
+        default = re.search(r'DefaultPresetName = "([^"]+)"', text)
+        names = re.findall(r'^\s*new\("([^"]+)", "', text, re.M) + ([default.group(1)] if default else [])
+        wanted = {name.replace(" ", "") for name in names}
+        listed = set(re.findall(r"'([^']+)'", gallery.group(1)))
+        for name in sorted(wanted - listed):
+            errors.append(f"build.yml's preset gallery leaves out the built-in preset {name}")
+        for name in sorted(listed - wanted):
+            errors.append(f"build.yml's preset gallery renders {name}, which is not a built-in preset")
     for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", block)) - parsed):
         errors.append(f"build.yml passes {flag} to PianoPath.exe, which does not parse it")
     for path in sorted(set(re.findall(r"((?:docs|Assets)/[A-Za-z0-9_./-]+)", block))):

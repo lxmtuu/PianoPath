@@ -336,6 +336,16 @@ internal sealed class PianoVisualSettings
     /// Every layer the look enables is still drawn; what is skipped is the fill that would block it.
     /// </summary>
     public bool RecordingTransparent { get; set; } = true;
+    /// <summary>
+    /// Which engine draws the stage: <c>Software</c> (WPF drawing on the UI thread, the default) or
+    /// <c>Gpu</c> (Direct3D 11 on a render thread of its own; see <see cref="GpuRenderLoop"/>). It belongs
+    /// to the machine, not to a look, so applying a preset keeps it.
+    /// </summary>
+    public string RenderBackend { get; set; } = "Software";
+    /// <summary>GPU engine: frames per second the render thread aims for (<c>Unlimited</c> renders as fast as the GPU allows).</summary>
+    public string GpuFrameRate { get; set; } = "144";
+    /// <summary>GPU stage window: present on the display's vertical blank (off allows tearing for the lowest latency).</summary>
+    public bool GpuVSync { get; set; } = true;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -359,6 +369,8 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] KeyLabelModes = ["None", "C", "All"];
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
+    internal static readonly string[] RenderBackends = ["Software", "Gpu"];
+    internal static readonly string[] GpuFrameRates = ["60", "120", "144", "240", "Unlimited"];
     internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
@@ -370,6 +382,9 @@ internal sealed class PianoVisualSettings
         settings.Clamp();
         return settings;
     }
+
+    /// <summary>The GPU engine's target frame rate as a number; 0 means unlimited.</summary>
+    internal int GpuTargetFps => int.TryParse(GpuFrameRate, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var fps) ? fps : 0;
 
     internal string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
 
@@ -385,6 +400,8 @@ internal sealed class PianoVisualSettings
             if (!property.CanWrite || !property.CanRead) continue;
             // The interface language belongs to the person, not to the look being applied.
             if (property.Name == nameof(Language)) continue;
+            // So does the graphics engine: it depends on the machine's GPU, not on the look.
+            if (property.Name is nameof(RenderBackend) or nameof(GpuFrameRate) or nameof(GpuVSync)) continue;
             var value = property.GetValue(source);
             property.SetValue(this, value is List<string> list ? new List<string>(list) : value);
         }
@@ -462,6 +479,8 @@ internal sealed class PianoVisualSettings
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
         if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Avi;
+        if (!RenderBackends.Contains(RenderBackend)) RenderBackend = "Software";
+        if (!GpuFrameRates.Contains(GpuFrameRate)) GpuFrameRate = "144";
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
         CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);

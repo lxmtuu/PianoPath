@@ -40,6 +40,12 @@ public partial class App : Application
 
         var window = new MainWindow();
         MainWindow = window;
+        // --gpu draws the stage with the Direct3D 11 engine for this run only (the settings file keeps its choice).
+        if (e.Args.Contains("--gpu")) window.UseGpuForSession();
+        // --preset=<name> applies a built-in look (spaces optional: --preset=GalaxyVoyage); CI renders the
+        // GPU effect previews with it, each from a private settings folder.
+        var presetName = e.Args.FirstOrDefault(argument => argument.StartsWith("--preset=", StringComparison.Ordinal))?["--preset=".Length..];
+        if (!string.IsNullOrWhiteSpace(presetName)) window.PreviewPreset(presetName);
         // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches
         // the settings file: MainWindow.PreviewBackgroundImage sets the stage directly instead of going
         // through the row handlers that arm the auto-save timer. CI uses it to render the README preview
@@ -96,6 +102,8 @@ public partial class App : Application
                 if (previewPressed) return;
                 previewPressed = true;
                 if (e.Args.Contains("--play-preview")) VerificationSuite.PressPreviewNote(window, 60);
+                // --play-chord holds a spread chord as well, so the hold effects that link keys (electric arcs) show
+                if (e.Args.Contains("--play-chord")) foreach (var pitch in new[] { 48, 55, 64, 67, 72 }) VerificationSuite.PressPreviewNote(window, pitch);
             }
             // The SoundFont scan and the first render both settle over a few seconds; the timer waits
             // for the instrument (bounded, so a silent CI runner still gets its screenshot) and the

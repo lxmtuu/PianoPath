@@ -18,7 +18,7 @@ using System.Windows.Threading;
 namespace PianoPath;
 
 /// <summary>In-app smoke and regression checks, runnable with PianoPath.exe --verify.</summary>
-internal static class VerificationSuite
+internal static partial class VerificationSuite
 {
     /// <summary>
     /// The lines a run reports. Each one is appended to the log as it is recorded — not only at the end — so a
@@ -52,7 +52,7 @@ internal static class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
