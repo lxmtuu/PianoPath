@@ -212,6 +212,9 @@ public partial class MainWindow
         if (LibrarySongHost is null) return;
         LibrarySongHost.Children.Clear();
         var folder = SongFolderIndex.Folder;
+        var hasSongs = folder.Length > 0 && SongFolderIndex.Songs.Count > 0;
+        if (LibrarySearchBox is not null) LibrarySearchBox.Visibility = hasSongs ? Visibility.Visible : Visibility.Collapsed;
+        if (RescanSongFolderButton is not null) RescanSongFolderButton.IsEnabled = folder.Length > 0;
         if (LibraryFolderLabel is not null)
             LibraryFolderLabel.Text = folder.Length == 0
                 ? Loc.T("No folder is indexed yet. Choose one and every MIDI file and MusicXML score under it is listed here with its notes, tracks, length and tempo.")

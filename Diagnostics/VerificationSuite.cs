@@ -4052,20 +4052,82 @@ internal static partial class VerificationSuite
     {
         var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
         var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
-        Assert(menu is not null && play is not null, "The Embers-style shell should provide a main menu and a pre-flight play dialog.");
+        var settings = (FrameworkElement)window.FindName("SettingsPanel")!;
+        var tabs = (TabControl)window.FindName("SettingsTabs")!;
+        Assert(menu is not null && play is not null, "The concert shell should provide a main menu and a pre-flight Play dialog.");
         Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+
         window.ShowStartupMenu();
         Assert(menu!.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
         Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
+        Assert(((TextBlock)window.FindName("PlayDialogPrimaryLabel")!).Text == Loc.T("Choose a MIDI file"),
+            "With no loaded score, the sticky primary action should clearly offer to choose a MIDI file.");
+        Assert(KeyboardNavigation.GetTabNavigation((FrameworkElement)window.FindName("PlayDialogCard")!) == KeyboardNavigationMode.Cycle,
+            "Tab should remain inside the Play dialog while it is open.");
+        Assert(((TextBox)window.FindName("LibrarySearchBox")!).Visibility == Visibility.Collapsed,
+            "The empty song library should not leave a dead search field taking up space.");
+
         var notesToggle = (CheckBox)window.FindName("LayerNotesToggle")!;
         Assert(notesToggle.IsChecked == visualSettings.ShowNotes, "Play-dialog layer switches should mirror the live stage settings.");
         notesToggle.IsChecked = false;
         Assert(!visualSettings.ShowNotes, "Switching the Notes layer off in the play dialog should update the stage settings.");
         notesToggle.IsChecked = true;
         Assert(visualSettings.ShowNotes, "Switching the Notes layer back on should restore the stage settings.");
+
+        // The visible settings link opens the right dock page and keeps the Play dialog as a return route.
+        Invoke(window, "PlayDialogSettings_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed && settings.Visibility == Visibility.Visible
+                && tabs.SelectedIndex == SettingsPages.IndexOf(SettingsPages.Style)
+                && ((FrameworkElement)window.FindName("SettingsReturnButton")!).Visibility == Visibility.Visible,
+            "Play setup Settings should open the design dock with an explicit way back.");
+        Invoke(window, "SettingsBack_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
+            "The settings dock's return control should restore the Play dialog, not drop the user onto the stage.");
+
+        var notesLink = new Button { DataContext = SettingsPages.Notes };
+        Invoke(window, "PlayDialogDeepLink_Click", notesLink, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed && settings.Visibility == Visibility.Visible
+                && tabs.SelectedIndex == SettingsPages.IndexOf(SettingsPages.Notes),
+            "An inline More settings link should open the exact dock page it names.");
+
+        var source = PresentationSource.FromVisual(window)!;
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(play.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
+            "Escape from a deep-linked dock page should restore Play and keep its navigation origin.");
+
+        // Escape must navigate back from the dialog (not open the dock or send a piano note underneath it).
+        var pressedBefore = ((HashSet<int>)Field(window, "_pressed")).Count;
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.A) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(((HashSet<int>)Field(window, "_pressed")).Count == pressedBefore,
+            "Typing a piano-mapped key while Play is open must not play a hidden stage note.");
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(play.Visibility == Visibility.Collapsed && menu.Visibility == Visibility.Visible,
+            "Escape/Back should return to the main menu when Play was opened from there.");
+
+        // Settings opened from the menu also return to their source. The header Play button is the
+        // discoverable entry point once the user has moved from the startup menu to the live stage.
+        Invoke(window, "MainMenuDesign_Click", window, new RoutedEventArgs());
+        Assert(settings.Visibility == Visibility.Visible && menu.Visibility == Visibility.Collapsed,
+            "Stage Design from the menu should open the dock.");
+        Invoke(window, "SettingsBack_Click", window, new RoutedEventArgs());
+        Assert(menu.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
+            "Back from menu-origin settings should restore the main menu.");
+        Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
         Invoke(window, "PlayDialogClose_Click", window, new RoutedEventArgs());
-        Assert(play!.Visibility == Visibility.Collapsed, "The play dialog close button should return to the stage.");
+        Assert(play.Visibility == Visibility.Collapsed && menu.Visibility == Visibility.Collapsed,
+            "The close control should dismiss Play to the live stage.");
+        Assert(window.FindName("PlaySetupButton") is Button, "The live header should expose a button that opens the Play dialog.");
+        Invoke(window, "PlayDialogOpen_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Visible && menu.Visibility == Visibility.Collapsed,
+            "The live header Play button should open the setup dialog without detouring through the main menu.");
+        Invoke(window, "PlayDialogBack_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed && menu.Visibility == Visibility.Collapsed,
+            "Back from a stage-origin Play dialog should return to the live stage.");
+        window.ShowStartupMenu();
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(menu.Visibility == Visibility.Collapsed,
+            "Escape from the main menu should return to the live stage and restore the toolbar.");
 
         // ---- Keyboard & shortcuts help card (F1): the shell hides itself, so the bindings are
         // documented in the app and the card must stay reachable and dismissible.

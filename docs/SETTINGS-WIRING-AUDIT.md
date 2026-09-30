@@ -139,8 +139,9 @@ Phương pháp:
 |---|---|
 | Main menu Play / Design / Settings / About / Exit | `MainWindow.Menu.cs` (MainMenuPlay/Design/Settings/About/Exit_Click) |
 | HOME (header) | `MainWindow.xaml:55` → `MainMenu_Click` (`MainWindow.Menu.cs`) |
-| OPEN MIDI / SETTINGS / thu nhỏ / toàn màn hình / thoát (header) | `MainWindow.xaml.cs` (OpenMidi_Click, Settings_Click, Minimize/FullScreen/CloseWindow_Click) |
-| Play dialog: MIDI File / Live Play / Play | `MainWindow.Menu.cs` (PlayDialogOpenMidi/Live/Play_Click) |
+| PLAY / SETTINGS / thu nhỏ / toàn màn hình / thoát (header) | Header **PLAY** mở `OpenPlayDialog`; **MIDI File** bên trong hộp thoại gọi `OpenMidi_Click`; dock dùng `Settings_Click`, các nút cửa sổ giữ handler riêng |
+| Play dialog: Back / Close / MIDI File / Live Play / CTA | `MainWindow.Menu.cs`: Back trở về bề mặt gọi hộp thoại, Close đóng về sân khấu, CTA đổi giữa chọn tệp và bắt đầu phát, Live Play chuyển sang biểu diễn trực tiếp |
+| Play dialog ↔ dock cài đặt | Nút SETTINGS mở trang Style; thẻ tay và “More settings…” deep-link tới đúng tab. Dock giữ bề mặt quay lại (Play/menu/sân khấu), có nút Back riêng và Escape theo cùng tuyến |
 | Play dialog: toggle lớp Background/Notes/Embers/Halo/Flame/Keys | `MainWindow.Menu.cs:66-90` — mỗi toggle Tag = thuộc tính thật, dùng chung handler `VisualToggle_Changed` nên dialog và dock luôn khớp; đồng bộ ngược qua `SyncPlayDialogToggle` |
 | Play dialog: Speed + reset | `NoteFallSpeed` hai chiều (PlaySpeed_Changed ↔ slider dock) |
 | Play dialog: màu halo, chevron deep-link 8 mục, card tay | `MainWindow.Menu.cs` (PlayDialogHaloColor_Click → `HaloColor`; PlayDialogDeepLink_Click mở đúng tab theo index; card biên màu `LeftHandColor/RightHandColor` hoặc gradient nốt) |

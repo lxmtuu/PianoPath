@@ -2,6 +2,7 @@ using Microsoft.Win32;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -160,6 +161,7 @@ public partial class MainWindow : Window
         if (_playing || SongDuration() <= 0) return;
         if (_position >= SongDuration()) { _position = 0; _outputFinished.Clear(); foreach (var n in _notes) { n.Played = false; n.Missed = false; } SyncPlayhead(); }
         _playing = true; _processCurrentOnsets = true; StartStageFrames(); PlayButton.Tag = FindResource("IconPause"); UpdatePlaybackLabel();
+        if (PlayDialogPrimaryButton is not null) RefreshPlayDialogState();
         UpdateStage();
     }
     private void Stop()
@@ -169,6 +171,7 @@ public partial class MainWindow : Window
         PlayButton.Tag = FindResource("IconPlay");
         foreach (var note in _outputHeld.ToArray()) SendOutput(note.Pitch, 0, false);
         _outputHeld.Clear(); _audioHeld.Clear(); _audio.AllNotesOff(); ReleaseAllPressed(); Stage.ClearTransient(); UpdateStage(); UpdatePlaybackLabel();
+        if (PlayDialogPrimaryButton is not null) RefreshPlayDialogState();
     }
 
     /// <summary>
@@ -447,6 +450,7 @@ public partial class MainWindow : Window
         SeekSlider.IsEnabled = hasNotes;
         if (!hasNotes) { _position = 0; _outputFinished.Clear(); }
         SyncPlayhead();
+        if (PlayDialogPrimaryButton is not null) RefreshPlayDialogState();
     }
 
     private void UpdatePlaybackLabel()
@@ -469,13 +473,22 @@ public partial class MainWindow : Window
         }
         if (e.Key == Key.Escape)
         {
-            // Escape closes the help card first, then clears an active settings search, then toggles
-            // the settings dock — the layer that is on screen always wins.
+            // Escape unwinds the visible surface first: help → Play setup → its settings dock → menu → stage.
             if (ShortcutsVisible) { HideShortcuts(); e.Handled = true; return; }
+            if (PlayDialogOverlay.Visibility == Visibility.Visible)
+            {
+                if (LibrarySearchBox.IsKeyboardFocused && LibrarySearchBox.Text.Length > 0) LibrarySearchBox.Text = "";
+                else PlayDialogBack_Click(this, new RoutedEventArgs());
+                e.Handled = true; return;
+            }
             if (SettingsSearchBox.IsKeyboardFocused && SettingsSearchBox.Text.Length > 0) { SettingsSearchBox.Text = ""; e.Handled = true; return; }
-            if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel(); else OpenSettingsPanel();
+            if (SettingsPanel.Visibility == Visibility.Visible || _settingsHiddenByIdle) ReturnFromSettings();
+            else if (MainMenuOverlay.Visibility == Visibility.Visible) { HideStartupMenu(); SetChromeVisible(true); Stage.Focus(); }
+            else OpenSettingsPanel();
             e.Handled = true; return;
         }
+        // Modal surfaces own keyboard focus: never let a piano-mapped key or Space start playback behind them.
+        if (PlayDialogOverlay.Visibility == Visibility.Visible || MainMenuOverlay.Visibility == Visibility.Visible) return;
         // Typing inside the settings panel (hex colors, combo boxes) counts as activity and must not play piano keys.
         if (SettingsPanel.IsKeyboardFocusWithin || Keyboard.FocusedElement is TextBox) { _lastPointerActivity = DateTime.UtcNow; return; }
         var pitch = MapComputerKey(e.Key);
@@ -512,8 +525,10 @@ public partial class MainWindow : Window
         if (SettingsPanel.Visibility == Visibility.Visible) { _settingsHiddenByIdle = true; SettingsPanel.Visibility = Visibility.Collapsed; }
         SetChromeVisible(false);
     }
-    private void OpenSettingsPanel()
+    private void OpenSettingsPanel(NavigationSurface returnSurface = NavigationSurface.Stage)
     {
+        _settingsReturnSurface = returnSurface;
+        UpdateSettingsReturnButton();
         _settingsHiddenByIdle = false;
         SettingsTabs.SelectedIndex = Math.Max(0, SettingsTabs.SelectedIndex);
         var wasHidden = SettingsPanel.Visibility != Visibility.Visible;
@@ -522,11 +537,51 @@ public partial class MainWindow : Window
         // The dock slides in from the stage edge; the clip of the stage grid keeps it inside the frame.
         if (wasHidden) ChromeMotion.SlideIn(SettingsPanel, 56, 0, 320);
     }
+
+    private void UpdateSettingsReturnButton()
+    {
+        if (SettingsReturnButton is null) return;
+        var hasDestination = _settingsReturnSurface != NavigationSurface.Stage;
+        SettingsReturnButton.Visibility = hasDestination ? Visibility.Visible : Visibility.Collapsed;
+        if (!hasDestination) return;
+        var destination = _settingsReturnSurface == NavigationSurface.PlayDialog
+            ? "Return to the Play dialog"
+            : "Back to the main menu";
+        Loc.Set(SettingsReturnButton, destination, FrameworkElement.ToolTipProperty);
+        Loc.Set(SettingsReturnButton, destination, AutomationProperties.NameProperty);
+    }
+
+    private void ReturnFromSettings()
+    {
+        var destination = _settingsReturnSurface;
+        _settingsReturnSurface = NavigationSurface.Stage;
+        UpdateSettingsReturnButton();
+        CloseSettingsPanel();
+        switch (destination)
+        {
+            case NavigationSurface.MainMenu:
+                ShowStartupMenu();
+                break;
+            case NavigationSurface.PlayDialog:
+                ShowPlayDialog();
+                break;
+        }
+    }
+
+    private void SettingsBack_Click(object sender, RoutedEventArgs e) => ReturnFromSettings();
+
+    private void SettingsClose_Click(object sender, RoutedEventArgs e)
+    {
+        _settingsReturnSurface = NavigationSurface.Stage;
+        UpdateSettingsReturnButton();
+        CloseSettingsPanel();
+    }
+
     private void CloseSettingsPanel()
     {
         _settingsHiddenByIdle = false;
         SettingsPanel.Visibility = Visibility.Collapsed;
-        SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
+        SetChromeVisible(true); _lastPointerActivity = DateTime.UtcNow;
         Stage.Focus();
     }
     private void SetChromeVisible(bool visible, bool showRecordButton = true)
@@ -1413,7 +1468,7 @@ public partial class MainWindow : Window
     private void Window_Deactivated(object? sender, EventArgs e) { ReleaseAllPressed(); }
     private void Settings_Click(object sender, RoutedEventArgs e)
     {
-        if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel(); else OpenSettingsPanel();
+        if (SettingsPanel.Visibility == Visibility.Visible) ReturnFromSettings(); else OpenSettingsPanel();
     }
     private void ToggleFullScreen()
     {
