@@ -581,7 +581,7 @@ public partial class MainWindow : Window
     {
         _settingsHiddenByIdle = false;
         SettingsPanel.Visibility = Visibility.Collapsed;
-        SetChromeVisible(true); _lastPointerActivity = DateTime.UtcNow;
+        SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
         Stage.Focus();
     }
     private void SetChromeVisible(bool visible, bool showRecordButton = true)
