@@ -51,12 +51,12 @@ internal sealed class PianoStage : FrameworkElement
     private static readonly KeyLightState NoLights = new();
     /// <summary>Keys sounding right now; each one becomes an emissive surface plus a colored area light.</summary>
     private readonly KeyLightState _keyLights = new();
-    /// <summary>Scratch light state reused for each overlay tile bake.</summary>
-    private readonly KeyLightState _tileLights = new();
     private readonly Dictionary<long, ShadedKeyTile> _shadedTiles = [];
-    /// <summary>Most recent tile per pitch, reused when a frame runs out of its shading budget.</summary>
+    /// <summary>Most recent tile per pitch, drawn while the tile for a new color is still baking in the background.</summary>
     private readonly Dictionary<int, ShadedKeyTile> _lastTile = [];
-    private int _tileBudget;
+    /// <summary>Tiles a background bake has been requested for, so a slow bake is not requested again every frame.</summary>
+    private readonly HashSet<long> _pendingTiles = [];
+    private readonly SemaphoreSlim _tileGate = new(1, 1);
     private BitmapSource? _shadedBase;
     /// <summary>Fingerprint of the scene the current <see cref="_shadedBase"/> was baked from; equality avoids both a rebake and the per-frame signature string.</summary>
     private PianoShaderScene.SceneKey _shadedSceneKey;
@@ -2560,7 +2560,7 @@ internal sealed class PianoStage : FrameworkElement
                 _shadedMilliseconds = clock.Elapsed.TotalMilliseconds;
                 _shadedBakes++;
                 if (bake is null) { IsShadedKeyboardActive = false; return false; }
-                _shadedBase = bake; _shadedSceneKey = sceneKey; _hasShadedSceneKey = true; _shadedTiles.Clear(); _lastTile.Clear();
+                _shadedBase = bake; _shadedSceneKey = sceneKey; _hasShadedSceneKey = true; _shadedTiles.Clear(); _lastTile.Clear(); _pendingTiles.Clear();
             }
             dc.DrawImage(_shadedBase, new Rect(0, top, width, bandHeight));
             DrawShadedLitKeys(dc, scene, width, bandHeight, top);
@@ -2570,11 +2570,17 @@ internal sealed class PianoStage : FrameworkElement
         catch (Exception)
         {
             // A memory or imaging failure must never take the stage down; the vector keyboard takes over.
-            _shadedBase = null; _shadedTiles.Clear(); _lastTile.Clear(); _hasShadedSceneKey = false; IsShadedKeyboardActive = false;
+            _shadedBase = null; _shadedTiles.Clear(); _lastTile.Clear(); _pendingTiles.Clear(); _hasShadedSceneKey = false; IsShadedKeyboardActive = false;
             return false;
         }
     }
 
+    /// <summary>
+    /// Draws the overlay tile of every sounding key. A tile is a small ray-traced bake that costs tens of
+    /// milliseconds (about 44 ms measured for a single key, 140 ms for a three-key chord), so it is never made
+    /// on the UI thread: a missing tile is requested from a background worker and, until it arrives, the key
+    /// keeps its previous tile or a plain colored glow. Baking these inline made every new note drop several frames.
+    /// </summary>
     private void DrawShadedLitKeys(DrawingContext dc, PianoShaderScene scene, double width, double bandHeight, double top)
     {
         _keyLights.Clear();
@@ -2585,34 +2591,58 @@ internal sealed class PianoStage : FrameworkElement
             _keyLights.Light(pitch, KeyColor(pitch), .55 + Math.Clamp(_keyHeat[pitch], 0, 1) * .45);
         }
         if (_keyLights.Pitches.Count == 0) return;
-        // A fast rainbow passage can ask for a brand new tile every frame; the budget caps the work per
-        // frame and the per-pitch fallback keeps those keys lit with their previous color instead of flickering.
-        _tileBudget = 6;
-        var bleed = Math.Max(2, (int)Math.Ceiling(2.5 / PianoShaderScene.WorldWidth * scene.BandWidth));
         foreach (var pitch in _keyLights.Pitches)
         {
             var color = KeyColor(pitch);
             var cacheKey = ((long)pitch << 20) | (uint)ColorBucket(color);
             if (_shadedTiles.TryGetValue(cacheKey, out var cached)) { dc.DrawImage(cached.Bitmap, cached.Where); continue; }
-            if (_tileBudget <= 0)
-            {
-                if (_lastTile.TryGetValue(pitch, out var previous)) dc.DrawImage(previous.Bitmap, previous.Where);
-                continue;
-            }
-            _tileBudget--;
-            if (_shadedTiles.Count > 192) { _shadedTiles.Clear(); _lastTile.Clear(); }
-            var center = PianoShaderScene.KeyCenterX[pitch] / PianoShaderScene.WorldWidth * scene.BandWidth;
-            var x0 = Math.Clamp((int)Math.Floor(center - bleed), 0, scene.BandWidth - 1);
-            var tileWidth = Math.Min(bleed * 2, scene.BandWidth - x0);
-            _tileLights.Clear(); _tileLights.Light(pitch, color, 1);
-            var bitmap = PianoKeyboardRenderer.Render(scene, _tileLights, x0, 0, tileWidth, scene.BandHeight, pitch);
-            if (bitmap is null) continue;
-            var tile = new ShadedKeyTile(bitmap, new Rect(x0 / (double)scene.BandWidth * width, top, tileWidth / (double)scene.BandWidth * width, bandHeight));
-            _shadedTiles[cacheKey] = tile;
-            if (_lastTile.Count > 128) _lastTile.Clear();
-            _lastTile[pitch] = tile;
-            dc.DrawImage(tile.Bitmap, tile.Where);
+            if (_lastTile.TryGetValue(pitch, out var previous)) dc.DrawImage(previous.Bitmap, previous.Where);
+            else DrawLitKeyPlaceholder(dc, pitch, color, width, bandHeight, top);
+            RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
         }
+    }
+
+    /// <summary>A soft colored glow over the key, shown for the few frames before its shaded tile is ready.</summary>
+    private void DrawLitKeyPlaceholder(DrawingContext dc, int pitch, Color color, double width, double bandHeight, double top)
+    {
+        var lane = width / KeyCount;
+        var x = KeyCenters[pitch] * width;
+        var rect = new Rect(x - lane * .5, top + bandHeight * .04, lane, bandHeight * .86);
+        dc.DrawRectangle(KeyLightBrush(color, Blend(color, Colors.White, .5)), null, rect);
+    }
+
+    private void RequestKeyTile(long cacheKey, int pitch, Color color, PianoShaderScene scene, double width, double bandHeight, double top)
+    {
+        if (!_pendingTiles.Add(cacheKey)) return;
+        var requestedFor = _shadedSceneKey;
+        var bleed = Math.Max(2, (int)Math.Ceiling(2.5 / PianoShaderScene.WorldWidth * scene.BandWidth));
+        var center = PianoShaderScene.KeyCenterX[pitch] / PianoShaderScene.WorldWidth * scene.BandWidth;
+        var x0 = Math.Clamp((int)Math.Floor(center - bleed), 0, scene.BandWidth - 1);
+        var tileWidth = Math.Min(bleed * 2, scene.BandWidth - x0);
+        var where = new Rect(x0 / (double)scene.BandWidth * width, top, tileWidth / (double)scene.BandWidth * width, bandHeight);
+        var lights = new KeyLightState();
+        lights.Light(pitch, color, 1);
+        _ = Task.Run(async () =>
+        {
+            BitmapSource? bitmap = null;
+            // One tile at a time: each bake already spreads over every core, so running several together only makes them all slower.
+            await _tileGate.WaitAsync().ConfigureAwait(false);
+            try { bitmap = PianoKeyboardRenderer.Render(scene, lights, x0, 0, tileWidth, scene.BandHeight, pitch); }
+            catch (Exception) { /* the placeholder glow stays; a failed tile must never take the stage down */ }
+            finally { _tileGate.Release(); }
+            _ = Dispatcher.BeginInvoke(new Action(() =>
+            {
+                _pendingTiles.Remove(cacheKey);
+                // A settings or size change since the request means the tile no longer matches the base bake.
+                if (bitmap is null || !_hasShadedSceneKey || !requestedFor.Equals(_shadedSceneKey)) return;
+                if (_shadedTiles.Count > 192) { _shadedTiles.Clear(); _lastTile.Clear(); }
+                var tile = new ShadedKeyTile(bitmap, where);
+                _shadedTiles[cacheKey] = tile;
+                if (_lastTile.Count > 128) _lastTile.Clear();
+                _lastTile[pitch] = tile;
+                InvalidateVisual();
+            }));
+        });
     }
 
     /// <summary>Quantizes a note color to 4 bits per channel so the tile cache survives smoothly animated colors.</summary>

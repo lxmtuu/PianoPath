@@ -80,10 +80,10 @@ internal static partial class Mf
     /// Sets a UINT64 attribute from a key constant. Like the five helpers beside the camera's half, this copies
     /// the key into a local first because a readonly field cannot be passed by reference.
     /// </summary>
-    internal static int SetUINT64Key(this IMFAttributes attributes, Guid key, long value)
+    internal static int SetUINT64Key(this object attributes, Guid key, long value)
     {
         var local = key;
-        return attributes.SetUINT64(ref local, value);
+        return ((IMFAttributes)attributes).SetUINT64(ref local, value);
     }
 
     /// <summary>One experiment on the objects a take is made of; see <see cref="MediaObjectCaseRun"/>.</summary>
