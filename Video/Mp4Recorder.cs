@@ -291,6 +291,9 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         input.SetUINT32Key(Mf.AudioBitsPerSample, 16);
         input.SetUINT32Key(Mf.AudioBlockAlignment, Channels * 2);
         input.SetUINT32Key(Mf.AudioAverageBytesPerSecond, SampleRate * Channels * 2);
+        // The AAC encoder insists that every block of PCM stands on its own; without the flag it refuses the
+        // media type outright (MF_E_INVALIDMEDIATYPE, as a CI run showed).
+        input.SetUINT32Key(Mf.AllSamplesIndependent, 1);
         hr = _writer.SetInputMediaType(index, input, null);
         if (hr < 0) throw new InvalidOperationException(Loc.F("The AAC encoder refused the engine's samples ({0}).", Mf.Describe(hr)));
         stream = index;
