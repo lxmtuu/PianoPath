@@ -21,7 +21,7 @@ internal static class VerificationSuite
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
-            try { VerifyMidiImport(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+            try { VerifyMidiImport(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -136,6 +136,36 @@ internal static class VerificationSuite
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
         Results.Add("PASS stage settings: automated runs isolated from the user settings folder, black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+    }
+
+    /// <summary>
+    /// A key that starts sounding needs its own ray-traced overlay tile (tens of milliseconds each). Pressing
+    /// keys must not block the UI thread on that bake, and the tiles must still arrive shortly afterwards.
+    /// </summary>
+    private static void VerifyLitKeyTilesBakeInBackground()
+    {
+        var stage = new PianoStage();
+        stage.Measure(new Size(1550, 900)); stage.Arrange(new Rect(0, 0, 1550, 900)); stage.UpdateLayout();
+        stage.SetVisualSettings(new PianoVisualSettings());
+        double DrawMilliseconds()
+        {
+            var timer = Stopwatch.StartNew();
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) InvokeReturn(stage, "TryDrawShadedKeyboard", dc, 1550d, 200d, 690d);
+            return timer.Elapsed.TotalMilliseconds;
+        }
+        DrawMilliseconds();   // the one-off base bake of the whole keyboard
+        var tiles = (System.Collections.ICollection)Field(stage, "_shadedTiles");
+        stage.SetState([], 0, false, new HashSet<int> { 48, 52, 55, 60, 64, 67 });
+        var pressMilliseconds = DrawMilliseconds();
+        Assert(pressMilliseconds < 30, $"Pressing six new keys must not block on their tile bakes ({pressMilliseconds:0.0} ms on the UI thread).");
+        for (var wait = 0; wait < 120 && tiles.Count < 6; wait++)
+        {
+            stage.Dispatcher.Invoke(() => { }, DispatcherPriority.Background);
+            Thread.Sleep(25);
+        }
+        Assert(tiles.Count >= 6, $"The overlay tiles of the sounding keys should be baked in the background and arrive ({tiles.Count} of 6).");
+        Results.Add($"PASS lit-key tiles: a six-key press cost {pressMilliseconds:0.0} ms on the UI thread; tiles arrived from the background worker.");
     }
 
     /// <summary>Exercises the ray-traced keyboard: shading maths, the bake cache key and real pixel output.</summary>
