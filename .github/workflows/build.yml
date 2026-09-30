@@ -160,6 +160,59 @@ jobs:
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
 
+      # Every built-in look, drawn by both engines side by side (software | Direct3D 11), in one picture:
+      # docs/previews/presets.jpg. It is how a change to the GPU engine is checked against the look each
+      # preset was designed with, and the list of names is checked against Stage/VisualPresets.cs by
+      # tools/check_sources.py so a new preset cannot be left out.
+      - name: Render the preset gallery
+        shell: pwsh
+        run: |
+          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $presets = @('NeonViolet', 'Inferno', 'AuroraRainbow', 'IceCrystal', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'SakuraNocturne', 'ConcertGold', 'MoonlightSonata', 'GalaxyVoyage', 'ElectricStorm', 'OceanDepths', 'RetroArcade')
+          $work = Join-Path $env:TEMP 'keyflow-gallery'
+          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          foreach ($preset in $presets) {
+            foreach ($engine in @('sw', 'gpu')) {
+              $target = Join-Path $work "$preset-$engine.png"
+              $settings = Join-Path $work "settings-$preset-$engine"
+              $args = @('--snapshot', $target, '--compact', '--lang=en', "--settings-dir=$settings", '--play-preview', '--play-chord', "--preset=$preset")
+              if ($engine -eq 'gpu') { $args += '--gpu' }
+              Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait | Out-Null
+              if (-not (Test-Path $target)) { "::warning title=Preset gallery::$preset ($engine) was not rendered" }
+            }
+          }
+          Add-Type -AssemblyName System.Drawing
+          $cellW = 540; $cellH = 350; $label = 26
+          $sheet = New-Object System.Drawing.Bitmap ($cellW * 2), (($cellH + $label) * $presets.Count)
+          $g = [System.Drawing.Graphics]::FromImage($sheet)
+          $g.Clear([System.Drawing.Color]::FromArgb(12, 12, 16))
+          $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+          $font = New-Object System.Drawing.Font 'Segoe UI', 11
+          $brush = [System.Drawing.Brushes]::White
+          for ($i = 0; $i -lt $presets.Count; $i++) {
+            $y = $i * ($cellH + $label)
+            $col = 0
+            foreach ($engine in @('sw', 'gpu')) {
+              $g.DrawString("$($presets[$i]) - $(if ($engine -eq 'sw') { 'software' } else { 'GPU (WARP)' })", $font, $brush, ($col * $cellW + 8), ($y + 4))
+              $file = Join-Path $work "$($presets[$i])-$engine.png"
+              if (Test-Path $file) {
+                $img = [System.Drawing.Image]::FromFile($file)
+                $g.DrawImage($img, (New-Object System.Drawing.Rectangle ($col * $cellW), ($y + $label), $cellW, $cellH))
+                $img.Dispose()
+              }
+              $col++
+            }
+          }
+          $g.Dispose()
+          $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+          $params = New-Object System.Drawing.Imaging.EncoderParameters 1
+          $params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 84L
+          New-Item -ItemType Directory -Force -Path 'docs/previews' | Out-Null
+          $sheet.Save((Join-Path $PWD 'docs/previews/presets.jpg'), $codec, $params)
+          $sheet.Dispose()
+          "preset gallery: $([math]::Round((Get-Item 'docs/previews/presets.jpg').Length / 1KB)) KB"
+
       - name: Upload README previews
         if: always()
         uses: actions/upload-artifact@v7
