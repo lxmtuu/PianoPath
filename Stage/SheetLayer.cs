@@ -122,16 +122,16 @@ internal static class SheetLayer
 
     /// <summary>
     /// Everything the sheet works out for a song before it draws anything: the accidental each note is written
-    /// with, the beams its short notes share, the silences of both hands, the notes carried on by ties, and the
-    /// way the reader groups the notes — the chords and the live notes — into single streams. None of it depends
+    /// with, the beams its short notes share, the silences of both hands, the notes carried on by ties, the lines
+    /// handed from one hand to the other, and the way the reader groups the notes — the chords and the live notes — into single streams. None of it depends
     /// on the practice state or on where the playhead is, so a renderer can work it out once per song instead of
     /// once per frame.
     /// </summary>
     internal sealed record SheetPlan(
         NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests, IReadOnlyList<Tie> Ties,
-        IReadOnlyList<IReadOnlyList<int>> Chords, IReadOnlyList<IReadOnlyList<int>>[] Streams);
+        IReadOnlyList<Slur> Slurs, IReadOnlyList<IReadOnlyList<int>> Chords, IReadOnlyList<IReadOnlyList<int>>[] Streams);
 
-    /// <summary>Works out the plan of a song: its accidentals, its beams, its rests and its ties.</summary>
+    /// <summary>Works out the plan of a song: its accidentals, its beams, its rests, its ties and its hand-offs.</summary>
     internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key)
     {
         var beatSeconds = BeatSeconds(beats);
@@ -145,6 +145,7 @@ internal static class SheetLayer
             Beams(notes, beats, handSplit, key, beatSeconds),
             Rests(notes, handSplit),
             ties,
+            Slurs(notes, handSplit),
             Chords(notes, handSplit),
             Streams(notes, handSplit));
     }
@@ -298,6 +299,43 @@ internal static class SheetLayer
     /// point up and over when they point down, the way an engraving draws it.
     /// </summary>
     internal static bool TieUnder(int relativeStep) => StemUp(relativeStep);
+
+    /// <summary>One line handed from one hand to the other: the note that gives the line up and the note that takes it.</summary>
+    internal readonly record struct Slur(int First, int Second);
+
+    /// <summary>
+    /// How far apart two notes may sit and still be one line changing hands. A melody crossing into the other hand
+    /// moves by a step or a leap, not by the two registers a bass line and a tune live in, so an octave or more is
+    /// two voices and not a hand-off.
+    /// </summary>
+    internal const int SlurSpanSemitones = 12;
+
+    /// <summary>
+    /// The places a line changes hands: a note in one hand that stops exactly where a note in the other begins is
+    /// the same line carried on, so the sheet draws one curve over the hand-off instead of leaving two notes that
+    /// look like separate thoughts. The two notes have to be neighbours in the song, within
+    /// <see cref="TieGapSeconds"/> of each other and less than <see cref="SlurSpanSemitones"/> semitones apart, and
+    /// neither of them may be part of a chord: a block of notes taking over is a new chord, not a line continuing.
+    /// </summary>
+    internal static IReadOnlyList<Slur> Slurs(IReadOnlyList<NoteEvent> notes, double handSplit)
+    {
+        var sizes = new int[notes.Count];
+        foreach (var group in Chords(notes, handSplit))
+            foreach (var member in group) sizes[member] = group.Count;
+        var slurs = new List<Slur>();
+        for (var index = 1; index < notes.Count; index++)
+        {
+            var previous = notes[index - 1];
+            var note = notes[index];
+            if (StaffOf(previous.Pitch, handSplit) == StaffOf(note.Pitch, handSplit)) continue;
+            var air = note.Start - previous.End;
+            if (air < -1e-6 || air > TieGapSeconds) continue;
+            if (Math.Abs(note.Pitch - previous.Pitch) >= SlurSpanSemitones) continue;
+            if (sizes[index - 1] != 1 || sizes[index] != 1) continue;
+            slurs.Add(new Slur(index - 1, index));
+        }
+        return slurs;
+    }
 
     /// <summary>The shapes a written rest takes, longest first: a whole rest hangs under a line, a half rest sits on one.</summary>
     internal enum RestShape { Whole, Half, Quarter, Eighth, Sixteenth }
@@ -776,6 +814,31 @@ internal static class SheetLayer
             {
                 figure.BeginFigure(new Point(start, edge), false, false);
                 figure.QuadraticBezierTo(new Point((start + end) / 2, bulge), new Point(end, edge), true, false);
+            }
+            curve.Freeze();
+            dc.DrawGeometry(null, new Pen(new SolidColorBrush(NoteColour(from, position, dim, ink, accent)), Math.Max(1.1, gap * .22)), curve);
+        }
+
+        // The hand-offs: a curve from the head that gives the line up to the head that takes it, bowing the way it
+        // travels so it hugs the gap between the staves instead of cutting through either of them. Like a tie, one
+        // whose far end is off the window is drawn up to the edge rather than left looking finished.
+        foreach (var slur in sheet.Slurs)
+        {
+            var from = notes[slur.First]; var to = notes[slur.Second];
+            var (fromStaff, fromStep) = Place(from.Pitch, handSplit, key);
+            var (toStaff, toStep) = Place(to.Pitch, handSplit, key);
+            var fromY = StaffBottom(area, gap, fromStaff) - fromStep * half;
+            var toY = StaffBottom(area, gap, toStaff) - toStep * half;
+            var start = Math.Clamp(NoteX(from.End, windowStart, secondsVisible, area, inset) - headWidth * .6, lineLeft, lineRight);
+            var end = Math.Clamp(NoteX(to.Start, windowStart, secondsVisible, area, inset) + headWidth * .6, lineLeft, lineRight);
+            if (end < lineLeft + 1) continue;
+            var span = end - start;
+            var bow = toY < fromY ? -gap * 1.4 : gap * 1.4;
+            var curve = new StreamGeometry();
+            using (var figure = curve.Open())
+            {
+                figure.BeginFigure(new Point(start, fromY), false, false);
+                figure.BezierTo(new Point(start + span * .3, fromY + bow), new Point(start + span * .7, toY + bow), new Point(end, toY), true, false);
             }
             curve.Freeze();
             dc.DrawGeometry(null, new Pen(new SolidColorBrush(NoteColour(from, position, dim, ink, accent)), Math.Max(1.1, gap * .22)), curve);

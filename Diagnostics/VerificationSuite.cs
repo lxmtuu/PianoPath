@@ -2139,8 +2139,8 @@ internal static class VerificationSuite
                 && SheetLayer.RestText(SheetLayer.RestShape.Whole, false) == "W" && SheetLayer.RestText(SheetLayer.RestShape.Eighth, false) == "E",
             "A rest is written with the musical glyph when the font has it and with the shape's own initial when it does not.");
         var plan = SheetLayer.Plan([Note(60, 0, .25), Note(62, .25, .25)], eighthGrid, 4, 60, MusicKey.CMajor);
-        Assert(plan.Accidentals.Length == 2 && plan.Beams.Count == 1 && plan.Rests.Count == 1 && plan.Ties.Count == 0,
-            "The plan of a song should gather the accidentals, the beams, the rests and the ties in one working-out a renderer can keep for the whole song.");
+        Assert(plan.Accidentals.Length == 2 && plan.Beams.Count == 1 && plan.Rests.Count == 1 && plan.Ties.Count == 0 && plan.Slurs.Count == 0,
+            "The plan of a song should gather the accidentals, the beams, the rests, the ties and the hand-offs in one working-out a renderer can keep for the whole song.");
 
         // ---- Ties: a note that starts exactly where the same pitch left off is the same written note carried on,
         // so it is joined by a curve and never signed again.
@@ -2180,6 +2180,33 @@ internal static class VerificationSuite
         Assert(carriedTies.Count == 1 && carriedPlan.SequenceEqual([SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.None, SheetLayer.NoteAccidental.Sharp])
                 && unsignedPlan.SequenceEqual([SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.Sharp]),
             $"A tie should carry its sign into the bar it reaches rather than signing the note again, while the note after it is still signed ({string.Join(", ", carriedPlan)}).");
+
+        // ---- Hand-offs: a line that stops in one hand and continues in the other is one phrase, so the sheet
+        // draws a curve over the change of hands instead of leaving two notes that read as separate thoughts.
+        var handedOver = SheetLayer.Slurs([Note(60, 0, .5), Note(55, .5, .5)], 60);
+        Assert(handedOver.Count == 1 && handedOver[0] == new SheetLayer.Slur(0, 1),
+            $"A note that takes the line over exactly where the other hand left it should be a hand-off (got {handedOver.Count}).");
+        Assert(SheetLayer.Slurs([Note(60, 0, .5), Note(64, .5, .5)], 60).Count == 0
+                && SheetLayer.Slurs([Note(60, 0, .6), Note(55, .5, .5)], 60).Count == 0,
+            "The same hand is not a hand-off and neither is a pair that overlaps: a hand-off is a line leaving one hand exactly when the other takes it.");
+        Assert(SheetLayer.Slurs([Note(60, 0, .5), Note(55, .52, .5)], 60).Count == 1
+                && SheetLayer.Slurs([Note(60, 0, .5), Note(55, .531, .5)], 60).Count == 0,
+            "A hand-off may leave the same few milliseconds of air a tie tolerates and no more.");
+        Assert(SheetLayer.Slurs([Note(60, 0, .5), Note(48, .5, .5)], 60).Count == 0
+                && SheetLayer.Slurs([Note(72, 0, .5), Note(55, .5, .5)], 60).Count == 0,
+            "Two registers an octave or more apart are a bass line and a tune rather than one line changing hands.");
+        var handOffChain = SheetLayer.Slurs([Note(60, 0, .5), Note(55, .5, .5), Note(57, 1, .5)], 60);
+        Assert(handOffChain.Count == 1 && handOffChain[0] == new SheetLayer.Slur(0, 1),
+            $"A line handed over once is one hand-off: the hand that took it keeps it while its own notes run on (got {handOffChain.Count}).");
+        Assert(SheetLayer.Slurs([Note(60, 0, .5), Note(64, 0, .5), Note(55, .5, .5)], 60).Count == 0
+                && SheetLayer.Slurs([Note(60, 0, .5), Note(55, .5, .5), Note(57, .5, .5)], 60).Count == 0,
+            "A chord is a block of notes rather than a line, so a chord neither hands one over nor takes one.");
+        Assert(SheetLayer.Slurs([Note(60, 0, .5), Note(59, .5, .5)], 60).Count == 1 && SheetLayer.Slurs([Note(60, 0, .5)], 60).Count == 0
+                && SheetLayer.Slurs([], 60).Count == 0,
+            "The same pitch written in the other hand is carried across the staves by a hand-off, since a tie cannot cross them, and a song with nothing to hand over has none.");
+        var handedPlan = SheetLayer.Plan([Note(60, 0, .5), Note(55, .5, .5)], eighthGrid, 4, 60, MusicKey.CMajor);
+        Assert(handedPlan.Slurs.Count == 1 && handedPlan.Slurs[0] == new SheetLayer.Slur(0, 1),
+            "The plan of a song should carry the hand-offs a caller would work out for itself.");
 
         // ---- Chords: the notes written at one moment in one hand are one event, so a chord is one column of heads
         // with one stem, and the sheet's own reading of the song is kept in the plan for whoever draws it.
@@ -2352,6 +2379,14 @@ internal static class VerificationSuite
         Assert(tiePlan.Ties.Count == 1 && tieInk > 0,
             $"A tie should draw a curve between the two heads, and nothing else about the drawing should change ({tieInk} inked pixels came from the tie).");
 
+        // The hand-off is really drawn: a line that crosses the split carries the curve's ink, and none of it is
+        // drawn when the plan is handed over without the hand-off.
+        var handSong = new NoteEvent[] { Note(60, 0, .5), Note(55, .5, .5) };
+        var handPlan = SheetLayer.Plan(handSong, beats, 4, 60, MusicKey.CMajor);
+        var handInk = Ink(handSong, handPlan) - Ink(handSong, handPlan with { Slurs = Array.Empty<SheetLayer.Slur>() });
+        Assert(handPlan.Slurs.Count == 1 && handInk > 0,
+            $"A hand-off should draw one curve across the staves, and nothing else about the drawing should change ({handInk} inked pixels came from the hand-off).");
+
         // The chord is stemmed once: the same three heads carry more ink when the plan hands them over as three
         // separate groups, which is the drawing a sheet makes when it does not know they are a chord.
         var chordSong = new NoteEvent[] { Note(60, 0, .25), Note(64, 0, .25), Note(67, 0, .25), Note(72, .25, .25) };
@@ -2370,7 +2405,7 @@ internal static class VerificationSuite
         sheetToggle.IsChecked = wasShowing;
         stage.SetSheet([], 4);
         stage.ClearTransient();
-        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the ties that carry a note on, the chords stemmed once, the streams a hand reads as, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
+        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the ties that carry a note on, the hand-offs between the hands, the chords stemmed once, the streams a hand reads as, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
     }
 
     /// <summary>
