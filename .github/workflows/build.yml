@@ -62,8 +62,17 @@ jobs:
           # summary and in the run's artifacts either way.
           $notes = @($lines | Where-Object { $_ -like 'NOTE*' })
           $tail = @($notes | Select-Object -Last 6)
+          # A FAIL line is this run's own failure, with one exception. The MP4 take is written by a child
+          # process, and the suite copies that child's lines into the log in the machine's own words — FAIL lines
+          # and all, since they are what says where the machine stopped. The suite's own answer to them is a SKIP
+          # line that names the step the child stopped at word for word (see Diagnostics/Mp4TakeAttempt.cs). So a
+          # FAIL line that appears inside a SKIP line was written by the machine's child process and not by the
+          # suite: the suite has already ruled on that step, and annotating it as an error put a red mark on
+          # green runs whose only trouble was a take this machine cannot write. The line is still in the job
+          # summary and in the artifact, right where the suite answers it.
+          $skipLines = @($lines | Where-Object { $_ -like 'SKIP*' }) -join "`n"
           $lines | ForEach-Object {
-            if ($_ -like 'FAIL*') { $level = 'error' }
+            if ($_ -like 'FAIL*') { if ($skipLines.Contains($_)) { return }; $level = 'error' }
             elseif ($_ -like 'SKIP*') { $level = 'warning' }
             elseif ($_ -like 'NOTE*') { if ($_ -notin $tail) { return }; $level = 'warning' }
             elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
