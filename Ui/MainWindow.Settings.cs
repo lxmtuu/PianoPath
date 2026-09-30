@@ -51,6 +51,10 @@ public partial class MainWindow
     /// <summary>Raw (value, caption) pairs of every picker, so a language switch can rebuild its items without losing the English captions.</summary>
     private readonly Dictionary<string, (string Value, string Caption)[]> _visualChoiceOptions = [];
     private readonly Dictionary<string, CheckBox> _visualToggles = [];
+    /// <summary>The camera rows live on the Camera & FX page; the status line and the list are rebuilt on demand.</summary>
+    private TextBlock? _cameraStatus;
+    private IReadOnlyList<CameraInfo> _cameraDevices = [];
+    private string? _cameraListError;
     /// <summary>Every generated switch; a layer such as sparks appears both on the Style page and on its own page.</summary>
     private readonly List<CheckBox> _visualToggleList = [];
     private readonly List<Button> _trackPaletteSwatches = [];
@@ -491,6 +495,98 @@ public partial class MainWindow
         SliderRow(post, "Contrast", nameof(PianoVisualSettings.Contrast), 0, 200, "Difference between bright and dark tones.");
         SliderRow(post, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150, "Global glow strength.");
         SliderRow(post, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150, "How far the glow spreads.");
+
+        var overlay = Card(CameraSettingsHost, "WEBCAM OVERLAY", "A live camera or a video file drawn over the stage, keyed against pure green. Use a green screen behind you (or the Green Screen preset on the stage) and the background of the picture disappears.");
+        Toggle(overlay, "Camera overlay", nameof(PianoVisualSettings.ShowCameraOverlay), "Draw the source below over the stage as a picture-in-picture.");
+        ButtonRow(overlay, ("CHOOSE VIDEO…", ChooseCameraVideo_Click), ("USE CAMERA", UseCameraOverlay_Click), ("REFRESH CAMERAS", RefreshCameraOverlay_Click));
+        Choice(overlay, "Camera", nameof(PianoVisualSettings.CameraSourceLink), "Which camera the overlay opens; the list is read from the machine when the page opens and when REFRESH is pressed.",
+            CameraChoices());
+        Choice(overlay, "Corner", nameof(PianoVisualSettings.CameraCorner), "Which corner of the stage the picture sits in.",
+            CameraOverlay.Corners.Select(corner => (corner, corner)).ToArray());
+        SliderRow(overlay, "Size", nameof(PianoVisualSettings.CameraSize), 15, 60, "Width of the picture as a percentage of the stage width; the height follows the camera's own shape.");
+        SliderRow(overlay, "Opacity", nameof(PianoVisualSettings.CameraOpacity), 20, 100, "How solid the picture is over the stage.");
+        Toggle(overlay, "Mirror", nameof(PianoVisualSettings.CameraMirror), "Flip the picture, the way a camera pointed at the player should look.");
+        SliderRow(overlay, "Key tolerance", nameof(PianoVisualSettings.CameraKeyTolerance), 0, 100, "How much of the picture counts as the green key colour and is made see-through. Zero keeps the whole picture.");
+        _cameraStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
+        Register(overlay, _cameraStatus, null, "camera overlay status green screen chroma key");
+        SyncCameraOverlay();
+        RefreshCameraOverlayStatus(announce: false);
+    }
+
+    /// <summary>Rows of the camera picker built from the machine's own list, refreshed on demand.</summary>
+    private (string Value, string Caption)[] CameraChoices()
+    {
+        var devices = CameraFrameReader.Devices(out _cameraListError);
+        _cameraDevices = devices;
+        return [("", Loc.T("First camera")), .. devices.Where(device => device.Link.Length > 0).Select(device => (device.Link, device.Name))];
+    }
+
+    /// <summary>
+    /// Rebuilds the camera picker from the machine's own list. The stored link stays in the settings even when
+    /// that camera is currently unplugged, so plugging it back in restores the choice; the overlay opens the
+    /// first camera meanwhile and the status line says so.
+    /// </summary>
+    private void RefreshCameraChoices()
+    {
+        _visualChoiceOptions[nameof(PianoVisualSettings.CameraSourceLink)] = CameraChoices();
+        RefreshChoiceCaptions();
+    }
+
+    private void RefreshCameraOverlay_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshCameraChoices();
+        RefreshCameraOverlayStatus(announce: true);
+        ApplyVisualSettings("Camera list refreshed");
+    }
+
+    private void UseCameraOverlay_Click(object sender, RoutedEventArgs e)
+    {
+        _visualSettings.CameraVideoPath = "";
+        MarkModified(nameof(PianoVisualSettings.CameraVideoPath));
+        RefreshCameraOverlayStatus(announce: true);
+        ApplyVisualSettings("Camera overlay source: the live camera");
+    }
+
+    private void ChooseCameraVideo_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new OpenFileDialog
+        {
+            Filter = Loc.T("Video files (*.avi;*.mp4;*.wmv;*.mov;*.mkv)|*.avi;*.mp4;*.wmv;*.mov;*.mkv|All files (*.*)|*.*"),
+            Title = Loc.T("Choose a video to overlay"),
+            CheckFileExists = true,
+            Multiselect = false,
+        };
+        if (dialog.ShowDialog(this) != true) return;
+        _visualSettings.CameraVideoPath = dialog.FileName;
+        MarkModified(nameof(PianoVisualSettings.CameraVideoPath));
+        RefreshCameraOverlayStatus(announce: true);
+        ApplyVisualSettings("Camera overlay source: {0}", false, Path.GetFileName(dialog.FileName));
+    }
+
+    /// <summary>
+    /// The line under the camera rows: what the overlay will open and why it cannot, read from the same
+    /// enumeration and the same reader the pump uses, so it can never claim something the stage does not do.
+    /// </summary>
+    private void RefreshCameraOverlayStatus(bool announce)
+    {
+        if (_cameraStatus is null) return;
+        var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
+        var text = !_visualSettings.ShowCameraOverlay
+            ? Loc.T("The overlay is off. Switch Camera overlay on to put the picture over the stage.")
+            // What the reader is really doing wins over what the settings say it should do.
+            : CameraStatus.Length > 0
+                ? Stage.HasCameraFrame ? CameraStatus : Loc.F("{0} Waiting for the first frame.", CameraStatus)
+                : !CameraFrameReader.Available
+                    ? Loc.F("The camera cannot run here: {0}", CameraFrameReader.StartupError ?? Loc.T("the media stack is unavailable"))
+                    : !live
+                        ? Loc.F("Overlaying the video file {0}, looping it.", Path.GetFileName(_visualSettings.CameraVideoPath))
+                        : _cameraListError is not null
+                            ? Loc.F("The camera list could not be read: {0}", _cameraListError)
+                            : _cameraDevices.Count == 0
+                                ? Loc.T("No camera was found on this machine. Choose a video file to overlay instead.")
+                                : Loc.F("{0} camera(s) found. The overlay opens the one picked above.", _cameraDevices.Count);
+        _cameraStatus.Text = text;
+        if (announce) Loc.Set(SettingsSaveLabel, text);
     }
 
     private void BuildRecordingPage()
@@ -663,16 +759,25 @@ public partial class MainWindow
         combo.SelectedValue = (string)Prop(property).GetValue(_visualSettings)!;
         combo.SelectionChanged += VisualChoice_Changed;
         Grid.SetColumn(combo, 1); row.Children.Add(text); row.Children.Add(combo);
-        _visualChoices[property] = combo;
+        _visualChoices[property] = combo; _visualChoiceOptions[property] = options;
         return Register(body, row, property, [label, tooltip, .. options.Select(o => o.Caption)]).WithCaption(text, TextBlock.TextProperty, label);
     }
 
-    /// <summary>Repaints every picker after a language switch, keeping the selected value.</summary>
+    /// <summary>
+    /// Repaints every picker after a language switch or a changed list (the camera picker), keeping the
+    /// selected value. The English captions come from the recorded options, never from the painted items.
+    /// </summary>
     private void RefreshChoiceCaptions()
     {
         foreach (var (property, combo) in _visualChoices)
         {
-            if (combo.ItemsSource is not IEnumerable<ChoiceOption> options) continue;
+            // The declared type keeps the tuple names on both branches of the choice below.
+            (string Value, string Caption)[]? options = _visualChoiceOptions.TryGetValue(property, out var recorded)
+                ? recorded
+                : combo.ItemsSource is IEnumerable<ChoiceOption> painted
+                    ? painted.Select(option => (option.Value, option.Caption)).ToArray()
+                    : null;
+            if (options is null) continue;
             var selected = combo.SelectedValue;
             var loading = _loadingVisualSettings;
             _loadingVisualSettings = true;
@@ -1121,6 +1226,7 @@ public partial class MainWindow
     {
         _visualSettings.Clamp();
         Stage.SetVisualSettings(_visualSettings, reloadBackground);
+        SyncCameraOverlay();
         ApplyChromeTheme();
         if (reloadBackground && Stage.BackgroundLoadError is { } error)
         {

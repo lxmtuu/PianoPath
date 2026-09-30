@@ -703,6 +703,151 @@ public partial class MainWindow : Window
         }
     }
 
+    // =====================================================================================================
+    // Webcam overlay: one reader on its own thread, the newest frame handed to the stage
+    // =====================================================================================================
+
+    private CameraFrameReader? _camera;
+    private Thread? _cameraThread;
+    private volatile bool _cameraStop;
+    private readonly Lock _cameraFrameLock = new();
+    private byte[] _cameraFrame = [];
+    private int _cameraFrameWidth, _cameraFrameHeight;
+    private bool _cameraFrameFresh;
+    private WriteableBitmap? _cameraBitmap;
+    private DispatcherTimer? _cameraUiTimer;
+    private string _cameraSignature = "";
+
+    /// <summary>
+    /// What the overlay is doing right now — the camera it opened, the file it is looping, or why neither
+    /// worked. Read by the Camera &amp; FX page, so the dock says the same thing the stage does.
+    /// </summary>
+    internal string CameraStatus { get; private set; } = "";
+
+    /// <summary>
+    /// Restarts the overlay when one of the settings that decide <em>what</em> it reads has changed; the corner,
+    /// the size, the opacity, the mirror flag and the key are applied while drawing or per frame, so they never
+    /// cost a camera reconnect.
+    /// </summary>
+    private void SyncCameraOverlay()
+    {
+        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay, _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath);
+        if (wanted == _cameraSignature) return;
+        _cameraSignature = wanted;
+        StartCameraOverlay();
+    }
+
+    /// <summary>
+    /// Starts the overlay for the current settings: a live camera or a file, read on its own thread so looking
+    /// for a frame never blocks a drawing pass. Nothing is opened when the layer is off.
+    /// </summary>
+    private void StartCameraOverlay()
+    {
+        StopCameraOverlay();
+        if (!_visualSettings.ShowCameraOverlay) { CameraStatus = ""; return; }
+        var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
+        var reader = live
+            ? CameraFrameReader.OpenDevice(_visualSettings.CameraSourceLink, out var error)
+            : CameraFrameReader.OpenFile(_visualSettings.CameraVideoPath, out error);
+        if (reader is null)
+        {
+            CameraStatus = error ?? Loc.T("The camera overlay could not be opened.");
+            return;
+        }
+        _camera = reader;
+        CameraStatus = live
+            ? Loc.F("Live: {0}", reader.Label)
+            : Loc.F("Video: {0} · {1} × {2}", reader.Label, reader.Width, reader.Height);
+        // A reader that opened but had something to add (the stored camera is gone, say) is heard too.
+        if (error is { Length: > 0 } note) CameraStatus = $"{CameraStatus} {note}";
+        _cameraStop = false;
+        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        _cameraThread = new Thread(CameraLoop) { IsBackground = true, Name = "Keyflow camera overlay" };
+        _cameraThread.Start();
+        // The frames are turned into a bitmap on the UI thread, once per frame time at most.
+        if (_cameraUiTimer is null)
+        {
+            _cameraUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / CameraFrameReader.FrameRate) };
+            _cameraUiTimer.Tick += (_, _) => PumpCameraFrame();
+        }
+        _cameraUiTimer.Start();
+    }
+
+    /// <summary>Stops the overlay, closes the reader and clears the picture from the stage.</summary>
+    private void StopCameraOverlay()
+    {
+        _cameraStop = true;
+        _cameraUiTimer?.Stop();
+        var thread = _cameraThread;
+        _cameraThread = null;
+        // The reader is closed before the thread is joined: a read that is already waiting comes back at once,
+        // so closing never hangs on a camera that has stopped answering.
+        _camera?.Dispose();
+        _camera = null;
+        if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
+        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        Stage.SetCameraFrame(null);
+    }
+
+    /// <summary>
+    /// The reading thread: one frame at a time into the shared buffer, paced to the overlay's frame rate, with
+    /// a file rewound when it ends and a reader that fails reported instead of spinning.
+    /// </summary>
+    private void CameraLoop()
+    {
+        var reader = _camera;
+        if (reader is null) return;
+        try
+        {
+            while (!_cameraStop && reader.Error is null)
+            {
+                var size = reader.Width * reader.Height * 4;
+                if (size <= 0) { Thread.Sleep(20); continue; }
+                byte[] buffer;
+                lock (_cameraFrameLock)
+                {
+                    if (_cameraFrame.Length < size) _cameraFrame = new byte[size];
+                    buffer = _cameraFrame;
+                }
+                if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror, out var width, out var height))
+                {
+                    if (reader.AtEnd) { reader.Rewind(); Thread.Sleep(20); continue; }
+                    if (reader.Error is null) { Thread.Sleep(5); continue; }
+                    break;
+                }
+                lock (_cameraFrameLock)
+                {
+                    _cameraFrameWidth = width; _cameraFrameHeight = height; _cameraFrameFresh = true;
+                }
+                Thread.Sleep((int)(CameraFrameReader.FrameSeconds * 1000));
+            }
+            if (reader.Error is { Length: > 0 } failure) CameraStatus = failure;
+        }
+        catch (Exception ex) { CameraStatus = ex.Message; }
+    }
+
+    /// <summary>
+    /// Turns the newest frame the reader produced into a bitmap for the stage, on the UI thread. The copy also
+    /// applies the key, so the stage receives pixels that are already see-through where the green was.
+    /// </summary>
+    private void PumpCameraFrame()
+    {
+        byte[] frame;
+        int width, height;
+        lock (_cameraFrameLock)
+        {
+            if (!_cameraFrameFresh || _cameraFrameWidth <= 0 || _cameraFrameHeight <= 0) return;
+            _cameraFrameFresh = false;
+            frame = _cameraFrame; width = _cameraFrameWidth; height = _cameraFrameHeight;
+        }
+        if (frame.Length < width * height * 4) return;
+        CameraOverlay.ApplyKey(frame, width * height, _visualSettings.CameraKeyTolerance);
+        if (_cameraBitmap is null || _cameraBitmap.PixelWidth != width || _cameraBitmap.PixelHeight != height)
+            _cameraBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
+        _cameraBitmap.WritePixels(new Int32Rect(0, 0, width, height), frame, width * 4, 0);
+        Stage.SetCameraFrame(_cameraBitmap);
+    }
+
     private WavWriter? _audioTrack;
     private readonly Lock _audioTrackLock = new();
     private bool _audioTrackStarted;
@@ -1164,6 +1309,8 @@ public partial class MainWindow : Window
         Stop();
         foreach (var pedal in _pedalsDown.ToArray()) SetPedalState(pedal, false);
         StopSongFolderWatch();
+        StopCameraOverlay();
         _midi.Dispose(); _audio.Dispose();
+        CameraFrameReader.Shutdown();
     }
 }

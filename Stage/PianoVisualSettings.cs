@@ -21,6 +21,24 @@ internal sealed class PianoVisualSettings
     public bool ShowSheet { get; set; } = false;
     /// <summary>Record the piano's own audio next to the video, as a WAV beside the recording.</summary>
     public bool RecordAudio { get; set; } = true;
+
+    // ---- Webcam overlay -----------------------------------------------------------------------------
+    /// <summary>Draw a live camera (or a video file) over the stage as a picture-in-picture.</summary>
+    public bool ShowCameraOverlay { get; set; } = false;
+    /// <summary>Symbolic link of the camera to open; empty means the first camera of the machine.</summary>
+    public string CameraSourceLink { get; set; } = "";
+    /// <summary>A video file to use instead of a live camera; empty means the camera.</summary>
+    public string CameraVideoPath { get; set; } = "";
+    /// <summary>Corner the overlay sits in, one of <see cref="CameraOverlay.Corners"/>.</summary>
+    public string CameraCorner { get; set; } = "Bottom left";
+    /// <summary>Width of the overlay as a percentage of the stage width.</summary>
+    public double CameraSize { get; set; } = 30;
+    /// <summary>Opacity of the overlay, percent.</summary>
+    public double CameraOpacity { get; set; } = 90;
+    /// <summary>Mirror the picture, the way a camera pointed at the player should look.</summary>
+    public bool CameraMirror { get; set; } = true;
+    /// <summary>Chroma-key tolerance against pure green; zero turns keying off.</summary>
+    public double CameraKeyTolerance { get; set; } = 30;
     public bool ShowEmbers { get; set; } = true;
     public bool ShowHalo { get; set; } = true;
     public bool ShowFlame { get; set; } = true;
@@ -433,6 +451,9 @@ internal sealed class PianoVisualSettings
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
         if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Avi;
+        if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
+        CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
+        CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);
         if (!ChromeMotions.Contains(ChromeMotion)) ChromeMotion = "Full";
         if (string.IsNullOrWhiteSpace(ShellTheme)) ShellTheme = ShellThemes.DefaultId;
         TrackColors ??= [];

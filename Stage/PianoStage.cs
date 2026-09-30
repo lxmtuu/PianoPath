@@ -684,6 +684,8 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.HoldElectricArc && _visual.HoldArcIntensity > 0) DrawElectricArcs(dc, width, keyTop);
         if (!chroma && !_transparentBackdrop && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
         if (_visual.ShowKeys) DrawKeyboard(dc, width, height, lane, keyTop);
+        // The camera overlay is drawn last: the player is in front of everything the stage paints.
+        DrawCameraOverlay(dc, width, height);
         if (_visual.ShowWatermark) DrawWatermark(dc, width, height);
         if (_visual.ShowCounter || _visual.ShowFps) DrawCounter(dc, width);
         dc.Pop(); dc.Pop();
@@ -815,6 +817,39 @@ internal sealed class PianoStage : FrameworkElement
                 Spin: (_petalRandom.NextDouble() - .5) * 1.6,
                 Phase: _petalRandom.NextDouble() * Math.PI * 2));
     }
+
+    /// <summary>
+    /// The webcam overlay: the newest frame, placed by the corner and size settings and faded by the opacity,
+    /// on top of the keyboard. Nothing is drawn when the layer is off or no frame has arrived, so a machine
+    /// without a camera shows the stage exactly as it always did.
+    /// </summary>
+    private void DrawCameraOverlay(DrawingContext dc, double width, double height)
+    {
+        var frame = _cameraFrame;
+        if (!_visual.ShowCameraOverlay || frame is null || width < 80 || height < 80) return;
+        var aspect = frame.PixelHeight <= 0 ? 16.0 / 9 : frame.PixelWidth / (double)frame.PixelHeight;
+        var area = CameraOverlay.Place(_visual.CameraCorner, width, height, _visual.CameraSize, aspect);
+        if (area.Width < 8 || area.Height < 8) return;
+        dc.PushOpacity(CameraOverlay.OpacityFactor(_visual.CameraOpacity));
+        dc.DrawImage(frame, area);
+        dc.Pop();
+    }
+
+    /// <summary>The newest camera frame, or <c>null</c> when nothing has arrived; handed over by the window.</summary>
+    private BitmapSource? _cameraFrame;
+
+    /// <summary>
+    /// Publishes the newest frame of the overlay. The window builds it on the UI thread from the buffer the
+    /// reader thread fills, so the stage never touches a camera itself.
+    /// </summary>
+    public void SetCameraFrame(BitmapSource? frame)
+    {
+        _cameraFrame = frame;
+        InvalidateVisual();
+    }
+
+    /// <summary>True while a frame is available; the dock uses it to say whether the overlay is really drawing.</summary>
+    public bool HasCameraFrame => _cameraFrame is not null;
 
     /// <summary>
     /// The staff band: the same seconds-per-pixel the roll uses, so a written note and its falling bar always

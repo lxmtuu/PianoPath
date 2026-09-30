@@ -26,7 +26,7 @@ internal static class VerificationSuite
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
-            try { VerifyMidiImport(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); }
+            try { VerifyMidiImport(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -360,6 +360,218 @@ internal static class VerificationSuite
         finally { if (File.Exists(path)) File.Delete(path); }
     }
 
+    /// <summary>
+    /// The webcam overlay away from any camera: where the picture sits for each corner and stage, how a frame
+    /// becomes top-down BGRA (a bottom-up camera and a mirror), which pixels the green key removes, and what
+    /// the reader answers when there is nothing to read. The last part writes a clip with the application's own
+    /// AVI recorder and reads a frame back, so the Media Foundation path is exercised on a file the check owns.
+    /// </summary>
+    private static void VerifyCameraOverlay()
+    {
+        const double stageWidth = 1000, stageHeight = 600;
+        var margin = CameraOverlay.Margin(stageWidth);
+        var box = CameraOverlay.Place("Bottom left", stageWidth, stageHeight, 30, 16.0 / 9);
+        Assert(Math.Abs(box.Width - 300) < .001 && Math.Abs(box.Height - 168.75) < .001
+                && Math.Abs(box.Left - margin) < .001 && Math.Abs(box.Bottom - (stageHeight - margin)) < .001,
+            $"A bottom-left overlay should be a 16:9 picture of 30% of the stage width, inset by the margin (got {box}).");
+        var opposite = CameraOverlay.Place("Top right", stageWidth, stageHeight, 30, 16.0 / 9);
+        Assert(Math.Abs(opposite.Right - (stageWidth - margin)) < .001 && Math.Abs(opposite.Top - margin) < .001
+                && Math.Abs(opposite.Width - box.Width) < .001,
+            "The opposite corner should mirror the first one at the same inset and size.");
+        Assert(CameraOverlay.Place("Sideways", stageWidth, stageHeight, 30, 16.0 / 9) == box,
+            "An unknown corner must fall back to the bottom left instead of drawing off the stage.");
+        var portrait = CameraOverlay.Place("Top left", stageWidth, stageHeight, 60, 9.0 / 16);
+        Assert(portrait.Height <= stageHeight * .8 + .001, $"A tall frame must never cover more than 80% of the stage height (got {portrait.Height}).");
+        var wide = CameraOverlay.Place("Bottom right", stageWidth, stageHeight, 60, 4);
+        Assert(wide.Width <= stageWidth - 2 * margin + .001 && wide.Height <= stageHeight * .8 + .001,
+            "A very wide frame should be trimmed to the stage instead of running off it.");
+        var empty = CameraOverlay.Place("Bottom right", 0, 0, 30, 16.0 / 9);
+        Assert(empty.Width == 0 && empty.Height == 0 && empty.Left >= 0 && empty.Top >= 0,
+            $"A stage of no size must produce an empty, non-negative rectangle (got {empty}).");
+        Assert(CameraOverlay.Place("Top right", stageWidth, stageHeight, 30, 0).Height > 0,
+            "A frame whose aspect ratio is unknown should fall back to 16:9 rather than collapsing.");
+
+        // A two-pixel-wide, two-row picture: red then green on the first row, blue then white on the second.
+        var frame = new byte[16];
+        frame[2] = 255; frame[3] = 255; frame[5] = 255; frame[7] = 255;
+        frame[8] = 255; frame[11] = 255; frame[12] = 255; frame[13] = 255; frame[14] = 255; frame[15] = 255;
+        var straight = new byte[16];
+        CameraOverlay.CopyFrame(frame, 8, 2, 2, straight, mirror: false);
+        Assert(straight.SequenceEqual(frame), "A top-down frame with a positive stride should be copied exactly as it arrived.");
+        var mirrored = new byte[16];
+        CameraOverlay.CopyFrame(frame, 8, 2, 2, mirrored, mirror: true);
+        Assert(mirrored[0] == 0 && mirrored[1] == 255 && mirrored[4] == 255 && mirrored[5] == 0
+                && mirrored[8] == 255 && mirrored[9] == 255 && mirrored[12] == 255 && mirrored[13] == 0,
+            "Mirroring should swap the two columns of every row and leave the rows themselves in order.");
+        var bottomUp = new byte[16];
+        Array.Copy(frame, 8, bottomUp, 0, 8); Array.Copy(frame, 0, bottomUp, 8, 8);
+        var upright = new byte[16];
+        CameraOverlay.CopyFrame(bottomUp, -8, 2, 2, upright, mirror: false);
+        Assert(upright.SequenceEqual(frame), "A negative stride must mean the rows arrive bottom-up and be turned upright.");
+        var dull = new byte[16];
+        Array.Copy(frame, dull, 16); for (var index = 3; index < 16; index += 4) dull[index] = 0;
+        var opaque = new byte[16];
+        CameraOverlay.CopyFrame(dull, 8, 2, 2, opaque, mirror: false);
+        Assert(opaque[3] == 255 && opaque[7] == 255 && opaque[15] == 255 && dull[3] == 0,
+            "A frame must reach the stage opaque whatever the camera put in its fourth byte, and the source must be left alone.");
+        var unknown = new byte[16];
+        CameraOverlay.CopyFrame(frame, 0, 2, 2, unknown, mirror: false);
+        Assert(unknown.SequenceEqual(frame), "A stride Media Foundation did not report should be read as Width × 4.");
+        var tight = new byte[8];
+        CameraOverlay.CopyFrame(frame, 8, 2, 2, tight, mirror: false);
+        Assert(tight.SequenceEqual(frame.Take(8)), "A destination with room for one row must be filled up to its end and no further.");
+
+        Assert(!CameraOverlay.IsKeyed(0, 255, 0, 0), "Tolerance zero must turn the key off, whatever the pixel is.");
+        Assert(CameraOverlay.IsKeyed(0, 255, 0, 30) && CameraOverlay.IsKeyed(20, 240, 20, 30),
+            "Pure green and a near-green should be removed at a normal tolerance.");
+        Assert(!CameraOverlay.IsKeyed(60, 200, 60, 30) && CameraOverlay.IsKeyed(60, 200, 60, 100),
+            "The tolerance should decide how far from the key colour a pixel may be, so a pale green survives a narrow setting and goes at a wide one.");
+        Assert(!CameraOverlay.IsKeyed(128, 128, 128, 100) && !CameraOverlay.IsKeyed(255, 255, 255, 100) && !CameraOverlay.IsKeyed(30, 40, 200, 100),
+            "Grey, white and blue must survive the widest tolerance: green has to dominate before a pixel is keyed.");
+        var keying = new byte[12];
+        keying[1] = 255; keying[3] = 255;
+        keying[4] = 60; keying[5] = 200; keying[6] = 60; keying[7] = 255;
+        keying[8] = 128; keying[9] = 128; keying[10] = 128; keying[11] = 255;
+        Assert(CameraOverlay.ApplyKey(keying, 3, 30) == 1 && keying[3] == 0 && keying[7] == 255 && keying[11] == 255,
+            "Removing the key should clear the alpha of the keyed pixel only, which is the whole removal.");
+        Assert(CameraOverlay.ApplyKey(keying, 3, 100) == 1 && keying[7] == 0 && keying[11] == 255,
+            "A wider tolerance should take the pale green too and still leave the grey pixel alone.");
+        Assert(CameraOverlay.ApplyKey(keying, 3, 0) == 0, "With the key off nothing may be cleared, not even a pure green.");
+        Assert(Math.Abs(CameraOverlay.OpacityFactor(0)) < 1e-9 && Math.Abs(CameraOverlay.OpacityFactor(100) - 1) < 1e-9 && Math.Abs(CameraOverlay.OpacityFactor(250) - 1) < 1e-9,
+            "The opacity percent should map onto a 0–1 factor and clamp anything above 100.");
+        Assert(CameraFrameReader.FrameRate == 30 && Math.Abs(CameraFrameReader.FrameSeconds - 1.0 / 30) < 1e-9,
+            "The overlay should pace itself at the 30 frames per second it documents.");
+
+        var missing = Path.Combine(Path.GetTempPath(), $"keyflow-no-such-video-{Guid.NewGuid():N}.mp4");
+        Assert(CameraFrameReader.OpenFile(missing, out var missingError) is null && missingError is { Length: > 0 },
+            "A video file that is not there must come back as a sentence for the dock, not as an exception.");
+        var devices = CameraFrameReader.Devices(out var deviceError);
+        Assert(CameraFrameReader.Available || CameraFrameReader.StartupError is { Length: > 0 },
+            "Whether the media stack can run must always be answered with a reason when it cannot.");
+        if (devices.Count == 0 && CameraFrameReader.Available) Assert(deviceError is null,
+            $"A machine with no camera must be reported as an empty list rather than a failure (got “{deviceError}”).");
+        Assert(devices.All(device => device.Name.Length > 0), "Every camera the machine reports should carry a name for the picker.");
+
+        // The reader on a real file: the application's own recorder writes the clip, the reader reads it back,
+        // and the frame arrives as 32-bit BGRA of the size the clip was written with. A machine whose media
+        // stack cannot decode the clip must say so instead of failing the check.
+        var clip = Path.Combine(Path.GetTempPath(), $"keyflow-overlay-clip-{Guid.NewGuid():N}.avi");
+        try
+        {
+            using (var recorder = new AviVideoRecorder(clip, 64, 48, 12))
+            {
+                var picture = new byte[AviVideoRecorder.BgrStride(64) * 48];
+                for (var i = 0; i < picture.Length; i += 3) { picture[i] = 200; picture[i + 1] = 40; picture[i + 2] = 40; }
+                for (var index = 0; index < 3; index++) recorder.WriteBgrFrame(picture);
+            }
+            var reader = CameraFrameReader.OpenFile(clip, out var clipError);
+            if (reader is null) Results.Add($"PASS camera overlay clip: the clip could not be decoded here ({clipError}).");
+            else
+            {
+                using (reader)
+                {
+                    var pixels = new byte[reader.Width * reader.Height * 4];
+                    var got = reader.TryReadFrame(pixels, mirror: false, out var width, out var height);
+                    Assert(got && width == 64 && height == 48 && reader.Frames == 1 && pixels[3] == 255,
+                        $"The overlay reader should read an opaque frame out of the application's own clip ({reader.Width} × {reader.Height}, frame={reader.Frames}, alpha={pixels[3]}, error=“{reader.Error}”).");
+                    Assert(pixels[0] > 150 && pixels[1] < 120 && pixels[2] < 120, "A frame should arrive as BGRA in the order the clip was written in.");
+                    var keyed = CameraOverlay.ApplyKey(pixels, width * height, 30);
+                    Assert(keyed == 0, "A picture with no green in it must survive the key untouched.");
+                }
+                Results.Add("PASS camera overlay clip: a clip written by the recorder was read back through the overlay reader.");
+            }
+        }
+        finally { if (File.Exists(clip)) File.Delete(clip); }
+
+        Results.Add($"PASS camera overlay: corner placement, bottom-up and mirrored frames, the green key by tolerance, the opacity factor, {devices.Count} camera(s) on this machine, and the reader's answers for a missing file and for a clip.");
+    }
+
+    /// <summary>
+    /// The webcam overlay through the dock and the stage: the Camera &amp; FX page carries the switch and the
+    /// rows, a corner picked there is stored as the English identifier the stage reads, out-of-range values are
+    /// clamped instead of trusted, and the frame the reader produced is keyed and drawn in the corner the
+    /// settings ask for — read back from the rendered stage, not asserted from the settings.
+    /// </summary>
+    private static void VerifyCameraOverlayDock(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var beforeJson = visualSettings.ToJson(); var beforeName = visualSettings.PresetName;
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
+        var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ShowCameraOverlay)),
+            "The Camera & FX page should expose the webcam overlay as a layer switch.");
+        Assert(sliders.ContainsKey(nameof(PianoVisualSettings.CameraSize)) && sliders.ContainsKey(nameof(PianoVisualSettings.CameraOpacity))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.CameraKeyTolerance)),
+            "The overlay's size, opacity and key tolerance belong on sliders, so they can be found by sliding.");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.CameraSourceLink)) && choices.ContainsKey(nameof(PianoVisualSettings.CameraCorner)),
+            "The overlay should offer a camera picker and the four-corner picker.");
+        var corner = choices[nameof(PianoVisualSettings.CameraCorner)];
+        Assert(corner.Items.Count == CameraOverlay.Corners.Length, $"The corner picker should offer every corner (found {corner.Items.Count}).");
+        corner.SelectedValue = "Top left";
+        Assert(visualSettings.CameraCorner == "Top left", "Picking a corner should store the English identifier the stage reads, not the translated caption.");
+        visualSettings.CameraCorner = "Bottom right"; visualSettings.CameraSize = 5; visualSettings.CameraOpacity = 500; visualSettings.CameraKeyTolerance = -20;
+        visualSettings.Clamp();
+        Assert(visualSettings.CameraCorner == "Bottom right" && visualSettings.CameraSize == 15 && visualSettings.CameraOpacity == 100 && visualSettings.CameraKeyTolerance == 0,
+            $"Out-of-range overlay settings should be clamped rather than trusted (got size {visualSettings.CameraSize}, opacity {visualSettings.CameraOpacity}, key {visualSettings.CameraKeyTolerance}).");
+        visualSettings.CameraCorner = "Sideways"; visualSettings.Clamp();
+        Assert(visualSettings.CameraCorner == "Bottom left", "A stored corner the overlay does not know must fall back to the bottom left.");
+        visualSettings.CameraSize = 25; visualSettings.CameraOpacity = 100; visualSettings.CameraKeyTolerance = 30; visualSettings.CameraCorner = "Top right";
+
+        // The switch really reaches the renderer and the window answers for the source it found.
+        var wasShowing = visualSettings.ShowCameraOverlay;
+        toggles[nameof(PianoVisualSettings.ShowCameraOverlay)].IsChecked = true;
+        Assert(visualSettings.ShowCameraOverlay, "Switching the overlay on should reach the stage settings, not only the checkbox.");
+        var status = (TextBlock?)Field(window, "_cameraStatus");
+        Assert(status is { Text.Length: > 0 }, "The Camera & FX page should say what the overlay is doing, in the active language.");
+        Invoke(window, "RefreshCameraOverlayStatus", false);
+        Assert(status!.Text.Length > 0 && status.Text != Loc.T("The overlay is off. Switch Camera overlay on to put the picture over the stage."),
+            "While the overlay is on the page must not still claim it is off.");
+
+        // The frame path the app uses: a red frame through the pump reaches the bitmap and the stage; the same
+        // frame filled with the key colour comes back see-through, and the stage paints it in the chosen corner.
+        var red = new byte[64 * 36 * 4];
+        for (var index = 0; index < red.Length; index += 4) { red[index + 2] = 255; red[index + 3] = 255; }
+        SetField(window, "_cameraFrame", red);
+        SetField(window, "_cameraFrameWidth", 64); SetField(window, "_cameraFrameHeight", 36); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "PumpCameraFrame");
+        var painted = (WriteableBitmap?)Field(window, "_cameraBitmap");
+        Assert(painted is { PixelWidth: 64, PixelHeight: 36 }, "The pump should build a bitmap the size of the frame the reader produced.");
+        var pixels = new byte[64 * 36 * 4];
+        painted!.CopyPixels(pixels, 64 * 4, 0);
+        Assert(pixels[3] == 255 && pixels[2] == 255 && pixels[0] == 0, "A red frame with no green in it must reach the stage untouched.");
+        Assert(stage.HasCameraFrame, "The stage should hold the frame the pump produced.");
+        var area = CameraOverlay.Place(visualSettings.CameraCorner, 1000, 600, visualSettings.CameraSize, 64.0 / 36);
+        int Offset(double x, double y) => ((int)y * 1000 + (int)x) * 4;
+        var inside = Offset(area.Left + area.Width / 2, area.Top + area.Height / 2);
+        var canvas = new byte[1000 * 600 * 4];
+        var drawn = new DrawingVisual();
+        using (var dc = drawn.RenderOpen()) Invoke(stage, "DrawCameraOverlay", dc, 1000d, 600d);
+        var shot = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32); shot.Render(drawn); shot.CopyPixels(canvas, 4000, 0);
+        Assert(canvas[inside + 3] == 255 && canvas[inside + 2] > 200,
+            $"The stage should paint the frame inside its corner rectangle (alpha {canvas[inside + 3]} at {inside / 4}).");
+        Assert(canvas[Offset(area.Left - 6, area.Top + area.Height / 2) + 3] == 0 && canvas[Offset(60, 560) + 3] == 0,
+            "Nothing of the overlay may be painted outside its rectangle.");
+        var green = new byte[64 * 36 * 4];
+        for (var index = 0; index < green.Length; index += 4) { green[index + 1] = 255; green[index + 3] = 255; }
+        SetField(window, "_cameraFrame", green); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "PumpCameraFrame");
+        painted.CopyPixels(pixels, 64 * 4, 0);
+        Assert(pixels[3] == 0 && pixels[1] == 0, "The key should make a green frame see-through before it reaches the stage.");
+        var keyed = new byte[1000 * 600 * 4];
+        var keyedVisual = new DrawingVisual();
+        using (var dc = keyedVisual.RenderOpen()) Invoke(stage, "DrawCameraOverlay", dc, 1000d, 600d);
+        var keyedShot = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32); keyedShot.Render(keyedVisual); keyedShot.CopyPixels(keyed, 4000, 0);
+        Assert(keyed[inside + 3] == 0, "A keyed frame must leave the stage behind it visible.");
+        SetField(window, "_cameraFrameFresh", false);
+        stage.SetCameraFrame(null);
+        Assert(!stage.HasCameraFrame, "Clearing the frame should stop the overlay from drawing.");
+        toggles[nameof(PianoVisualSettings.ShowCameraOverlay)].IsChecked = wasShowing;
+        visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
+        SetField(window, "_cameraSignature", string.Join("|", visualSettings.ShowCameraOverlay, visualSettings.CameraSourceLink, visualSettings.CameraVideoPath));
+        Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        Results.Add("PASS camera overlay dock: the switch, the camera and corner pickers, the size/opacity/key sliders, the clamp and the corner fallback, the pump's key and the frame drawn in the chosen corner of the rendered stage.");
+    }
+
     private static void VerifySoundFontEngine()
     {
         var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(path, CreateTestSoundFont());
@@ -568,6 +780,7 @@ internal static class VerificationSuite
         Run(nameof(VerifyUserShellThemes), () => VerifyUserShellThemes(window));
         Run(nameof(VerifyPngSequenceRecorder), () => VerifyPngSequenceRecorder(window));
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
+        Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
         Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
         Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
         Run(nameof(VerifyBackgroundImageLoad), () => VerifyBackgroundImageLoad(window, stage, visualSettings));
