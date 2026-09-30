@@ -67,6 +67,10 @@ internal sealed class GpuStageFeed
     /// <summary>The decoded background picture (null for none); swapped whole, uploaded by the render thread when its version changes.</summary>
     internal GpuBackgroundImage? Background { get => Volatile.Read(ref _background); set => Volatile.Write(ref _background, value); }
 
+    private GpuBackgroundImage? _labelAtlas;
+    /// <summary>The glyph atlas (note names, Matrix Rain glyphs); built once on the UI thread, uploaded once by the render thread.</summary>
+    internal GpuBackgroundImage? LabelAtlas { get => Volatile.Read(ref _labelAtlas); set => Volatile.Write(ref _labelAtlas, value); }
+
     internal void SetStageHeight(double dips)
     {
         if (dips < 1) return;

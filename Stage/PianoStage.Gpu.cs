@@ -67,6 +67,7 @@ internal sealed partial class PianoStage
             {
                 _gpuBackgroundSource = null;
                 PublishGpuBackground();
+                feed.LabelAtlas ??= GpuGlyphAtlas;
                 PublishGpuLook();
                 feed.SetStageHeight(ActualHeight);
                 feed.SetPointer(_pointerX, _pointerY);
@@ -99,8 +100,45 @@ internal sealed partial class PianoStage
         if (_gpu is null) return;
         var height = ActualHeight;
         var fraction = height >= 1 ? KeyboardHeight / height : .205 * _visual.KeyboardScale / 100;
-        _gpu.SetLook(GpuLook.From(_visual, (pitch, track) => AdjustColor(NoteColor(pitch, track)), Math.Clamp(fraction, .05, .6)));
+        _gpu.SetLook(GpuLook.From(_visual, (pitch, track) => AdjustColor(NoteColor(pitch, track)), Math.Clamp(fraction, .05, .6), AdjustColor));
         _gpuLookElapsed = _elapsed;
+    }
+
+    private static GpuBackgroundImage? s_gpuGlyphAtlas;
+    /// <summary>
+    /// The text the GPU stage draws (note names on the keys, Matrix Rain glyphs), rendered once with WPF's
+    /// own text stack into a 1024 × 768 atlas of 64 × 32 px cells: 0-127 note names ("C4"), 128-255 the
+    /// short key names of the All mode ("C4", "C♯", "D"), 256-351 katakana. White text, coverage in alpha.
+    /// Must be called on a WPF (STA) thread; the pixels are then immutable and shared by every renderer.
+    /// </summary>
+    internal static GpuBackgroundImage GpuGlyphAtlas
+    {
+        get
+        {
+            if (s_gpuGlyphAtlas is not null) return s_gpuGlyphAtlas;
+            const int columns = 16, rows = 24, cellWidth = 64, cellHeight = 32;
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+            {
+                for (var cell = 0; cell < GpuStageSimulation.AtlasKatakanaCell + 96; cell++)
+                {
+                    string text; bool bold;
+                    if (cell < GpuStageSimulation.AtlasShortCell) { text = NoteLabels[cell]; bold = cell % 12 == 0; }
+                    else if (cell < GpuStageSimulation.AtlasKatakanaCell) { var pitch = cell - GpuStageSimulation.AtlasShortCell; text = AllKeyLabels[pitch]; bold = pitch % 12 == 0; }
+                    else { text = ((char)(0x30A0 + cell - GpuStageSimulation.AtlasKatakanaCell)).ToString(); bold = false; }
+                    var formatted = new FormattedText(text, System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                        bold ? LabelBoldTypeface : LabelTypeface, 22, Brushes.White, 1.0);
+                    var x = cell % columns * cellWidth + (cellWidth - formatted.Width) / 2;
+                    var y = cell / columns * cellHeight + (cellHeight - formatted.Height) / 2;
+                    dc.DrawText(formatted, new Point(x, y));
+                }
+            }
+            var bitmap = new RenderTargetBitmap(columns * cellWidth, rows * cellHeight, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+            bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+            return s_gpuGlyphAtlas = new GpuBackgroundImage { Pixels = pixels, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Version = 1 };
+        }
     }
 
     /// <summary>Hands the decoded background picture to the render thread (BGRA, straight from the file).</summary>

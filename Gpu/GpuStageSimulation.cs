@@ -51,12 +51,12 @@ internal readonly struct GpuSceneLayout
 /// frame, so its motion is as smooth as the output's refresh rate - 144 Hz output means 144 simulation
 /// steps per second, independent of the WPF composition rate.
 /// </summary>
-internal sealed class GpuStageSimulation
+internal sealed partial class GpuStageSimulation
 {
     internal const int MaxParticles = 24000;
     private const int FirstPitch = 21, KeyCount = 88;
 
-    private enum Shape : byte { Dot, Streak, Confetti, Dust, Flame }
+    private enum Shape : byte { Dot, Streak, Confetti, Dust, Flame, Droplet, Shard }
 
     private struct Particle
     {
@@ -66,8 +66,10 @@ internal sealed class GpuStageSimulation
         public bool Wisp;
     }
 
-    private struct Ring { public float X, Y, Age, Life, Size, Width; public Vector3 Color; public float Intensity; }
-    private struct Flash { public float X, Y, Age, Life, Size; public Vector3 Color; public float Intensity; }
+    /// <summary>Impact / release wave: Kind 0 = ring, 1 = shockwave, 2 = ripple, 3 = implosion (Absorb, Snap Back).</summary>
+    private struct Ring { public float X, Y, Age, Life, Strength; public byte Kind; public Vector3 Color; }
+    /// <summary>Impact flash: Style 0 = flare, 1 = lightning, 2 = plasma, 3 = star (the Morph impact).</summary>
+    private struct Flash { public float X, Y, Age, Life, Size, Strength; public byte Style; public Vector3 Color; public float Intensity; }
 
     private sealed class LiveTrail
     {
@@ -165,10 +167,11 @@ internal sealed class GpuStageSimulation
             else
             {
                 for (var i = _trails.Count - 1; i >= 0; i--)
-                    if (_trails[i].Pitch == live.Pitch && _trails[i].KeyDown) { _trails[i].KeyDown = false; _trails[i].Released = true; break; }
+                    if (_trails[i].Pitch == live.Pitch && _trails[i].KeyDown) { _trails[i].KeyDown = false; _trails[i].Released = true; SpawnReleaseFx(live.Pitch, layout); break; }
             }
         }
         while (feed.TryDequeueHit(out var hit)) Impact(hit.Pitch, hit.Strength, layout);
+        ScanReleaseFx(input, layout);
 
         // ---- keys: press animation, glow, heat, spill ----
         var totalGlow = 0f; var horizon = Vector3.Zero;
@@ -320,7 +323,7 @@ internal sealed class GpuStageSimulation
         _particles[_count++] = particle;
     }
 
-    /// <summary>A note reached the keys: burst, flash and wave, styled like the software stage.</summary>
+    /// <summary>A note reached the keys: wave, flash, morph and burst, styled like the software stage.</summary>
     private void Impact(int pitch, float strength, GpuSceneLayout layout)
     {
         var look = _look;
@@ -330,19 +333,20 @@ internal sealed class GpuStageSimulation
         var color = _active[clamped] ? _keyColor[clamped] : look.NoteColor(clamped, 0);
         if (look.VelocityColor && look.VelocityColorAmount > 0) color = Vector3.Lerp(color, VelocityTint(strength), look.VelocityColorAmount);
         _glow[clamped] = Math.Max(_glow[clamped], Math.Min(1, .6f + strength * .4f));
-        if (look.ShowImpactFlash)
-            _flashes.Add(new Flash { X = x, Y = y, Life = .28f, Size = layout.Lane * (1.6f + strength * 1.6f) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * (.5f + strength) });
-        if (look.ShowImpactRings && look.ImpactWave != "None")
+        // wave channel
+        if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0 && _rings.Count < 96)
+            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }) });
+        // flash channel: the anamorphic flare, a lightning strike or a plasma ball
+        if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0 && _flashes.Count < 48)
         {
-            var size = 16 + 60 * look.RingSize;
-            var life = look.ImpactWave == "Shockwave" ? .45f : .6f;
-            if (look.ImpactWave == "Shockwave") size *= 1.8f;
-            _rings.Add(new Ring { X = x, Y = y, Life = life, Size = size * (.6f + strength * .5f), Width = look.ImpactWave == "Shockwave" ? 2 : 1, Color = color, Intensity = 1.4f * look.ImpactWaveIntensity });
-            if (look.ImpactWave == "Ripple")
-                _rings.Add(new Ring { X = x, Y = y, Life = life * 1.4f, Size = size * 1.5f, Width = 1, Color = color, Intensity = .8f * look.ImpactWaveIntensity });
+            if (look.ImpactFlashStyle == 0)
+                _flashes.Add(new Flash { X = x, Y = y, Life = .28f, Size = layout.Lane * (1.6f + strength * 1.6f) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * (.5f + strength), Strength = strength });
+            else
+                _flashes.Add(new Flash { X = x, Y = y, Life = .18f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity });
         }
+        SpawnImpactMorph(x, y, color, strength);
         if (!look.ShowEmbers || look.ParticleAmount < 1) return;
-        var style = look.ImpactBurst == "Zone" ? (clamped < 60 ? "Embers" : "Splash") : look.ImpactBurst;
+        var style = look.ImpactBurst == "Zone" ? (clamped < look.ZoneSplitPitch ? "Embers" : "Splash") : look.ImpactBurst;
         var amount = Math.Clamp((int)(look.ParticleAmount * strength * look.ParticleResponse / 55f * 2.2f), 0, 300);
         for (var i = 0; i < amount && _count < MaxParticles; i++)
         {
@@ -350,7 +354,7 @@ internal sealed class GpuStageSimulation
             var c = i % 4 == 0 ? Vector3.One : Vector3.Lerp(color, Hue(clamped * 4.1 + (Rand() - .5f) * 28), .2f);
             switch (style)
             {
-                case "Splash": grav = 1.6f; c = Vector3.Lerp(new Vector3(.55f, .78f, 1f), Vector3.One, Rand() * .5f); speedScale = .8f; lifeScale = 1.1f; break;
+                case "Splash": shape = Shape.Droplet; grav = 1.6f; c = Vector3.Lerp(new Vector3(.55f, .78f, 1f), Vector3.One, Rand() * .5f); speedScale = .8f; lifeScale = 1.1f; break;
                 case "Fireworks": speedScale = 1.25f; lifeScale = 1.5f; sizeScale = .9f; c = Hue(Rand() * 360); break;
                 case "Confetti": shape = Shape.Confetti; grav = .32f; drag = 3.2f; c = Rand() < .2f ? Vector3.One : Hue(Rand() * 360); speedScale = .7f; lifeScale = 2.2f; sizeScale = 1.3f; break;
                 case "Dust": shape = Shape.Dust; grav = -.12f; drag = 2.4f; c = Vector3.Lerp(new Vector3(.59f, .55f, .51f), color, .25f); speedScale = .35f; lifeScale = 2.4f; sizeScale = 2.2f; break;
@@ -381,6 +385,7 @@ internal sealed class GpuStageSimulation
     internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes)
     {
         notes.Clear();
+        _noteTrails.Clear();
         var look = input.Look;
         if (!look.ShowNotes) return;
         var noteWidth = layout.Lane * look.NoteWidth;
@@ -418,7 +423,7 @@ internal sealed class GpuStageSimulation
                         bottom = Math.Min(bottom, hitY + 2); direction = 1;
                     }
                     if (bottom - top < 1) continue;
-                    AddNote(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction, played);
+                    AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction);
                 }
             }
             catch (ArgumentOutOfRangeException) { }
@@ -435,7 +440,7 @@ internal sealed class GpuStageSimulation
                 var tailY = Math.Min(hitY, hitY - (trail.Age - trail.Held) * look.LiveFallSpeed);
                 if (tailY - headY < 1) continue;
                 var opacity = Math.Clamp(1 - (hitY - tailY) / Math.Max(1, hitY + 18), .08f, 1) * look.NoteTint;
-                AddNote(notes, look, x, headY, noteWidth, tailY - headY, color, opacity, sounding, trail.Pitch, trail.Pitch, -1, false);
+                AddNoteWithFx(notes, look, x, headY, noteWidth, tailY - headY, color, opacity, sounding, trail.Pitch, trail.Pitch, -1);
             }
             else
             {
@@ -444,23 +449,49 @@ internal sealed class GpuStageSimulation
                 var bottom = Math.Min(hitY + 2, y);
                 if (bottom - tailY < 1) continue;
                 var opacity = Math.Clamp(1 - tailY / Math.Max(1, hitY + 18), .08f, 1) * look.NoteTint;
-                AddNote(notes, look, x, tailY, noteWidth, bottom - tailY, color, opacity, sounding, trail.Pitch, trail.Pitch, 1, false);
+                AddNoteWithFx(notes, look, x, tailY, noteWidth, bottom - tailY, color, opacity, sounding, trail.Pitch, trail.Pitch, 1);
             }
         }
     }
 
-    private void AddNote(GpuInstanceList<GpuNoteInstance> notes, GpuLook look, float x, float y, float w, float h, Vector3 color, float opacity, bool sounding, int pitch, int seed, float direction, bool played)
+    /// <summary>
+    /// One note with its hold-phase (vibration, breathing, hold bar) and falling-phase (ghost copies, trail)
+    /// effects, in the order the software stage applies them.
+    /// </summary>
+    private void AddNoteWithFx(GpuInstanceList<GpuNoteInstance> notes, GpuLook look, float x, float y, float w, float h, Vector3 color, float opacity, bool sounding, int pitch, int seed, float direction)
     {
-        if (sounding && look.HoldColorCycle) color = Vector3.Lerp(color, Hue(pitch * 4.1 + _time * look.HoldColorCycleSpeed * 3), .8f);
+        var rising = direction < 0;
+        if (sounding && look.HoldVibration) x += MathF.Sin((float)_time * 40 + pitch * 2.2f) * look.HoldVibrationAmount * 4;
+        if (look.FallingGhost && look.FallingGhostAmount * opacity > .01f && !sounding)
+        {
+            // faint echo copies leading the note along its travel direction
+            var amount = look.FallingGhostAmount * opacity;
+            var count = amount > .66f ? 3 : amount > .33f ? 2 : 1;
+            var step = 10 + h * .12f;
+            for (var i = 1; i <= count; i++)
+                AddNote(notes, look, x, rising ? y - step * i : y + step * i, w, h, color, amount * .3f / i, false, pitch, seed, direction, 0, 1);
+        }
+        var breath = sounding && look.HoldBreath ? .72f + .28f * MathF.Sin((float)_time * (1 + look.HoldBreathRate * 5)) : 1f;
+        var holdBar = sounding && look.HoldBar ? look.HoldBarIntensity * opacity : 0;
+        var shown = AddNote(notes, look, x, y, w, h, color, opacity, sounding, pitch, seed, direction, holdBar, breath);
+        if (look.FallingTrail != "None" && look.FallingTrailIntensity > 0)
+            _noteTrails.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
+    }
+
+    /// <summary>Adds one note capsule and returns the sRGB colour it was drawn in (after cycling and rainbow shifts).</summary>
+    private Vector3 AddNote(GpuInstanceList<GpuNoteInstance> notes, GpuLook look, float x, float y, float w, float h, Vector3 color, float opacity, bool sounding, int pitch, int seed, float direction, float holdBar, float brightness)
+    {
+        if (sounding && look.HoldColorCycle) color = Vector3.Lerp(color, ColorFromHue(Hue188(pitch) + _time * look.HoldColorCycleSpeed * 3), .8f);
         if (look.FallingPulse && !sounding) opacity *= .62f + .38f * MathF.Sin((float)_time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f);
-        if (look.RainbowTrail) color = Hue(_time * 60 + pitch * 9);
-        var linear = ToLinear(color);
+        if (look.RainbowTrail) color = ColorFromHue(_time * look.RainbowHueSpeed + pitch * 9);
+        var linear = ToLinear(color) * brightness;
         notes.Add(new GpuNoteInstance
         {
             Rect = new Vector4(x, y, w, h),
             Color = new Vector4(linear, opacity),
-            Misc = new Vector4(sounding ? 1 : 0, (seed % 97) / 97f, direction, played ? 1 : 0)
+            Misc = new Vector4(sounding ? 1 : 0, (seed % 97) / 97f, direction, holdBar)
         });
+        return color;
     }
 
     /// <summary>The 88 keys (plus the felt strip) as 3D boxes.</summary>
@@ -530,13 +561,7 @@ internal sealed class GpuStageSimulation
                 sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.X(pitch), hitY, layout.Lane * 1.1f, 5), Color = new Vector4(c, 1), Dir = new Vector4(0, -1, hitY * .95f, 0) });
             }
         }
-        foreach (var ring in _rings)
-        {
-            var u = ring.Age / ring.Life;
-            var eased = 1 - (1 - u) * (1 - u);
-            var c = ToLinear(ring.Color) * ring.Intensity * (1 - u);
-            sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(ring.X * scaleX, ring.Y, 4 + ring.Size * eased, 2), Color = new Vector4(c, 1), Dir = new Vector4(0, -1, 0, u) });
-        }
+        foreach (var ring in _rings) AddRingSprites(sprites, look, ring, scaleX);
         for (var i = 0; i < _count; i++)
         {
             ref var p = ref _particles[i];
@@ -551,6 +576,28 @@ internal sealed class GpuStageSimulation
                     var speed = MathF.Sqrt(p.Vx * p.Vx + p.Vy * p.Vy);
                     var dir = speed > 1e-3f ? new Vector2(p.Vx / speed, p.Vy / speed) : new Vector2(0, -1);
                     sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.4f, 1), Color = new Vector4(c * glowGain * p.Glow * fade * 1.3f, 1), Dir = new Vector4(dir, Math.Clamp(speed * .018f, .5f, 7), u) });
+                    break;
+                }
+                case Shape.Droplet:
+                {
+                    // a bead of liquid keeping its colour, stretched by its fall, with a specular dot
+                    var alpha = MathF.Pow(fade, .8f) * look.ParticleGlow;
+                    var size = p.Size * (.7f + fade * .5f);
+                    var stretch = 1 + Math.Clamp(Math.Abs(p.Vy) / 700, 0, 1.2f);
+                    Glow(sprites, x, p.Y, size * 2.4f, size * 2.4f * stretch, c, alpha * .5f);
+                    Ellipse(sprites, x, p.Y, size, size * stretch, 0, c * 1.2f, alpha, .15f);
+                    Ellipse(sprites, x - size * .3f, p.Y - size * .35f * stretch, size * .32f, size * .32f, 0, Vector3.One * 1.5f, alpha, .2f);
+                    break;
+                }
+                case Shape.Shard:
+                {
+                    // a tumbling glass shard: a thin bright wedge with a white glint along it
+                    var alpha = fade * look.ParticleGlow;
+                    var angle = p.Phase + p.Age * 7.3f;
+                    var len = p.Size * 2.4f;
+                    Ellipse(sprites, x, p.Y, len * .5f, p.Size * .4f, angle, c * 1.4f, alpha, .1f);
+                    var dx = MathF.Cos(angle) * len * .5f; var dy = MathF.Sin(angle) * len * .5f;
+                    Line(sprites, x - dx, p.Y - dy, x + dx, p.Y + dy, .5f, Vector3.One, alpha * .9f, 1);
                     break;
                 }
                 case Shape.Confetti:
@@ -589,9 +636,11 @@ internal sealed class GpuStageSimulation
         foreach (var flash in _flashes)
         {
             var u = flash.Age / flash.Life;
+            if (flash.Style != 0) { AddFlashSprites(sprites, look, flash, scaleX); continue; }
             var c = ToLinear(flash.Color) * flash.Intensity * (1 - u) * (1 - u);
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(flash.X * scaleX, flash.Y, flash.Size * (.8f + u * .6f), 4), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 0, u) });
         }
+        if (look.HoldElectricArc && look.HoldArcIntensity > .01f) AddElectricArcs(sprites, look, layout);
         if (look.ShowHalo || look.ShowImpactFlash)
         {
             // steady white-hot glow where a held note meets its key
@@ -608,5 +657,6 @@ internal sealed class GpuStageSimulation
             var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f);
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
         }
+        if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);
     }
 }

@@ -114,6 +114,13 @@ internal sealed class GpuStageRenderer : IDisposable
     private readonly DynamicStructuredBuffer<GpuKeyInstance> _keys;
     private readonly DynamicStructuredBuffer<GpuSpriteInstance> _sprites;
     private readonly DynamicStructuredBuffer<Vector4> _keyColors;
+    // the layers behind the notes (lanes, petals, ambient, note trails) need their own buffer:
+    // SV_InstanceID restarts at 0 for every draw, so one buffer cannot serve two sprite batches
+    private readonly DynamicStructuredBuffer<GpuSpriteInstance> _ambient;
+    private readonly GpuInstanceList<GpuSpriteInstance> _ambientList = new(2048);
+    private ID3D11Texture2D? _atlasTexture;
+    private ID3D11ShaderResourceView? _atlasView;
+    private long _atlasVersion = -1;
     private ID3D11Texture2D? _backgroundTexture;
     private ID3D11ShaderResourceView? _backgroundView;
     private float _backgroundAspect = 1;
@@ -134,6 +141,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _keys = new DynamicStructuredBuffer<GpuKeyInstance>(device, 128);
         _sprites = new DynamicStructuredBuffer<GpuSpriteInstance>(device, 4096);
         _keyColors = new DynamicStructuredBuffer<Vector4>(device, 128);
+        _ambient = new DynamicStructuredBuffer<GpuSpriteInstance>(device, 2048);
         CreateStates();
         CompileShaders();
     }
@@ -212,6 +220,19 @@ internal sealed class GpuStageRenderer : IDisposable
         _backgroundAspect = image.Width / (float)image.Height;
     }
 
+    /// <summary>Uploads the glyph atlas (note names, Matrix Rain glyphs) once; coverage is read from its alpha channel.</summary>
+    internal void UpdateAtlas(GpuBackgroundImage? image)
+    {
+        var version = image?.Version ?? 0;
+        if (version == _atlasVersion) return;
+        _atlasVersion = version;
+        _atlasView?.Dispose(); _atlasTexture?.Dispose(); _atlasView = null; _atlasTexture = null;
+        if (image is null || image.Width <= 0 || image.Height <= 0) return;
+        _atlasTexture = Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)image.Width, (uint)image.Height, mipLevels: 1, bindFlags: BindFlags.ShaderResource);
+        Context.UpdateSubresource(image.Pixels, _atlasTexture, 0, (uint)(image.Width * 4));
+        _atlasView = Device.CreateShaderResourceView(_atlasTexture);
+    }
+
     /// <summary>Renders one frame of the stage into <paramref name="output"/> (a BGRA8 render target of the target's size).</summary>
     internal void Render(GpuRenderTarget target, ID3D11RenderTargetView output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
         GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites)
@@ -220,6 +241,7 @@ internal sealed class GpuStageRenderer : IDisposable
         simulation.BuildNotes(input, layout, notes);
         simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
         simulation.BuildSprites(look, layout, sprites);
+        simulation.BuildAmbient(look, layout, _ambientList);
 
         var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth);
         var context = Context;
@@ -227,6 +249,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _notes.Upload(context, notes.Span);
         _keys.Upload(context, keys.Span);
         _sprites.Upload(context, sprites.Span);
+        _ambient.Upload(context, _ambientList.Span);
         _keyColors.Upload(context, simulation.KeyColors);
 
         context.ClearState();
@@ -252,6 +275,17 @@ internal sealed class GpuStageRenderer : IDisposable
         if (_backgroundView is not null && look.ShowBackground && !look.Chroma) context.PSSetShaderResource(1, _backgroundView);
         context.Draw(3, 0);
         context.PSUnsetShaderResource(1);
+
+        if (_atlasView is not null) context.PSSetShaderResource(6, _atlasView);
+        if (_ambientList.Count > 0)
+        {
+            context.OMSetBlendState(_blendPremultiplied);
+            context.VSSetShader(_vsSprite);
+            context.PSSetShader(_psSprite);
+            context.VSSetShaderResource(4, _ambient.View);
+            context.PSSetShaderResource(5, _keyColors.View);
+            context.DrawInstanced(6, (uint)_ambientList.Count, 0, 0);
+        }
 
         if (notes.Count > 0)
         {
@@ -368,7 +402,8 @@ internal sealed class GpuStageRenderer : IDisposable
     public void Dispose()
     {
         try { Context.ClearState(); Context.Flush(); } catch { }
-        _notes.Dispose(); _keys.Dispose(); _sprites.Dispose(); _keyColors.Dispose();
+        _notes.Dispose(); _keys.Dispose(); _sprites.Dispose(); _keyColors.Dispose(); _ambient.Dispose();
+        _atlasView?.Dispose(); _atlasTexture?.Dispose();
         _backgroundView?.Dispose(); _backgroundTexture?.Dispose();
         foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
             _blendPremultiplied, _blendAdditive, _blendOpaque, _depthOff, _depthWrite, _depthRead, _raster, _linear, _point, _frameBuffer, _passBuffer })

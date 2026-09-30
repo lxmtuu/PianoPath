@@ -73,6 +73,7 @@ StructuredBuffer<float4> KeyColors : register(t5);   // 128 entries: rgb = note 
 
 Texture2D SourceTex : register(t0);
 Texture2D SecondTex : register(t1);
+Texture2D AtlasTex : register(t6);       // glyph atlas: 16 x 24 cells of 64 x 32 px, coverage in alpha
 SamplerState LinearClamp : register(s0);
 SamplerState PointClamp : register(s1);
 
@@ -330,6 +331,16 @@ float4 PsNote(NoteOut v) : SV_Target
     }
 
     emit += lerp(col, 1.0, 0.65) * head * inside * 2.2;
+
+    // Hold Bar: a white-hot outline just outside a sounding bar plus a tinted halo around it
+    float holdBar = v.Misc.w;
+    if (holdBar > 0.0)
+    {
+        float rimLine = exp(-pow((d - 1.5) / 1.1, 2.0));
+        float haloLine = exp(-pow((d - 3.5) / 2.6, 2.0));
+        emit += (float3(1.0, 1.0, 1.0) * rimLine * 1.6 + col * haloLine * 0.9) * holdBar;
+        alpha = max(alpha, rimLine * holdBar * 0.5);
+    }
     return float4(emit * opacity, alpha * opacity);
 }
 
@@ -551,7 +562,8 @@ struct SpriteOut
     float4 Position : SV_Position;
     float2 Local : TEXCOORD0;     // corner in [-1, 1] along (axis, normal)
     float4 Color : TEXCOORD1;
-    float4 Params : TEXCOORD2;    // x = kind, y = age, z = aspect, w = scene x
+    float4 Params : TEXCOORD2;    // x = kind, y = age (shapes: Dir.w), z = aspect (shapes: Dir.z), w = scene x
+    float4 Extra : TEXCOORD3;     // shapes: xy = half extent in scene px, zw = per-kind values
 };
 
 SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
@@ -566,18 +578,54 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 normal = float2(-axis.y, axis.x);
     float2 extent = float2(size, size);
     float2 offset = 0.0;
-    if (kind > 0.5 && kind < 1.5) extent = float2(size * (1.0 + s.Dir.z), size);          // streak
+    float4 extra = 0.0;
+    float depth = 0.6;
+    if (kind > 6.5)
+    {
+        // shapes (kind 7+): Dir.xy is a rotation (the whole segment for lines), Dir.zw per-kind values
+        float2 along = s.Dir.xy;
+        normal = float2(-axis.y, axis.x);
+        if (kind < 7.5)
+        {
+            // line segment from PosSize.xy along Dir.xy; size = glow half-width
+            float halfLength = length(along) * 0.5;
+            float pad = size * 3.0 + 1.0;
+            offset = along * 0.5;
+            extent = float2(halfLength + pad, pad);
+            extra = float4(extent, halfLength, max(size, 0.35));
+        }
+        else if (kind < 10.5)
+        {
+            // ellipse (8 filled, 9 glow, 10 ring): size = x radius, Dir.z = y/x ratio, Dir.w = softness / ring width
+            float margin = kind > 9.5 ? 1.2 : 1.0;
+            extent = float2(size, size * max(s.Dir.z, 0.02)) * margin;
+            extra = float4(extent, margin, s.Dir.w);
+        }
+        else
+        {
+            axis = float2(1.0, 0.0);
+            normal = float2(0.0, 1.0);
+            if (kind < 11.5) { extent = float2(size * 2.0, size); depth = 0.01; }         // glyph, in front of the keys
+            else if (kind < 12.5) extent = float2(size, size * 0.866);                      // Sierpinski triangle
+            else if (kind < 13.5) extent = float2(size * 1.4, max(s.Dir.w, 1.0));           // aurora curtain
+            else if (kind < 14.5) { extent = float2(size, size * 0.8); depth = 0.01; }      // star
+            else extent = float2(size, max(s.Dir.x, 0.5));                                  // gradient rectangle
+            extra = kind > 11.5 && kind < 12.5 ? float4(s.Dir.xyz, 0.0) : float4(extent, 0.0, 0.0);
+        }
+    }
+    else if (kind > 0.5 && kind < 1.5) extent = float2(size * (1.0 + s.Dir.z), size);          // streak
     else if (kind > 4.5 && kind < 5.5) { axis = float2(0.0, -1.0); normal = float2(1.0, 0.0); extent = float2(s.Dir.z * 0.5, size); offset = float2(0.0, -s.Dir.z * 0.5); }   // beam
-    else if (kind > 5.5) { axis = float2(1.0, 0.0); normal = float2(0.0, 1.0); extent = float2(size, s.Dir.z); }  // hit line
-    else if (kind > 3.5) extent = float2(size * 2.6, size);                               // flare
+    else if (kind > 5.5 && kind < 6.5) { axis = float2(1.0, 0.0); normal = float2(0.0, 1.0); extent = float2(size, s.Dir.z); }  // hit line
+    else if (kind > 3.5 && kind < 4.5) extent = float2(size * 2.6, size);                   // flare
     float2 scene = s.PosSize.xy + offset + axis * corner.x * extent.x + normal * corner.y * extent.y;
     // flares and the hit line sit in front of the keys; particles fly behind them
-    float depth = ((kind > 3.5 && kind < 4.5) || kind > 5.5) ? 0.01 : 0.6;
+    if ((kind > 3.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5)) depth = 0.01;
     SpriteOut o;
     o.Position = ToClip(SceneToScreen(scene), depth);
     o.Local = corner;
     o.Color = s.Color;
-    o.Params = float4(kind, s.Dir.w, extent.x / max(extent.y, 1e-3), scene.x);
+    o.Params = kind > 6.5 ? float4(kind, s.Dir.w, s.Dir.z, scene.x) : float4(kind, s.Dir.w, extent.x / max(extent.y, 1e-3), scene.x);
+    o.Extra = extra;
     return o;
 }
 
@@ -601,9 +649,105 @@ float3 HitLineColor(float x)
     return base * 0.55 + lit * 1.6;
 }
 
+// Shapes shared by the ambient layers, the hold/release/morph effects, note trails and the key labels.
+float4 SpriteShape(SpriteOut v)
+{
+    float kind = v.Params.x;
+    float3 c = v.Color.rgb;
+    float a = v.Color.a;
+    if (kind < 7.5)
+    {
+        // glowing line: a coloured glow around a hot core (bolts, arcs, lasers, lanes, speed lines, ribbons)
+        float2 px = v.Local * v.Extra.xy;
+        float dx = max(abs(px.x) - v.Extra.z, 0.0);
+        float d = length(float2(dx, px.y)) / v.Extra.w;
+        float glow = exp(-d * d * 0.7);
+        float core = exp(-d * d * 6.0);
+        return float4((c * glow + lerp(c, 1.0, 0.8) * core * v.Params.z * 1.5) * a, 0.0);
+    }
+    if (kind < 10.5)
+    {
+        float r = length(v.Local) * v.Extra.z;
+        if (kind > 9.5)
+        {
+            // flat ring lying on the key plane: the impact waves and implosions
+            float w = max(v.Params.y, 0.01);
+            float band = exp(-pow((r - 1.0) / w, 2.0));
+            return float4(c * a * band, 0.0);
+        }
+        float soft = exp(-r * r * 3.0) * saturate((1.0 - r) * 3.0);
+        if (kind > 8.5) return float4(c * a * soft, 0.0);                     // additive glow
+        float aa = max(fwidth(r), 1e-3);
+        float crisp = saturate((1.0 - r) / (aa * 1.5));
+        float m = lerp(crisp, soft, saturate(v.Params.y));
+        return float4(c * a * m, a * m);                                      // solid: petals, leaves, wings, smoke
+    }
+    if (kind < 11.5)
+    {
+        // glyph from the atlas (key labels, matrix rain)
+        float cell = v.Params.z;
+        float2 cellXY = float2(fmod(cell, 16.0), floor(cell / 16.0));
+        float2 uv = (cellXY + v.Local * 0.5 + 0.5) / float2(16.0, 24.0);
+        float t = AtlasTex.SampleLevel(LinearClamp, uv, 0).a;
+        return float4(c * a * t, a * t);
+    }
+    if (kind < 12.5)
+    {
+        // Sierpinski triangle, four levels, apex up; colour runs from Color (apex) to Extra.rgb (base)
+        float u = v.Local.y * 0.5 + 0.5;
+        if (abs(v.Local.x) > u) return 0.0;
+        float2 st = float2(v.Local.x + u, u - v.Local.x) * 0.5 * 16.0;
+        int2 ij = (int2)floor(st);
+        float2 f = frac(st);
+        bool present = f.x + f.y < 1.0 && (ij.x & ij.y) == 0 && ij.x + ij.y < 16;
+        if (!present) return 0.0;
+        float3 col = lerp(c, v.Extra.rgb, u);
+        return float4(col * a, a);
+    }
+    if (kind < 13.5)
+    {
+        // aurora curtain: a wavy vertical band, brightest low down, with faint vertical rays
+        float f = v.Local.y * 0.5 + 0.5;
+        float phase = v.Params.z;
+        float wobble = 0.257 * f;
+        float left = -0.714 + sin(f * 5.0 + phase) * wobble;
+        float right = 0.714 + sin(f * 5.0 + phase + 0.8) * wobble;
+        float x = v.Local.x;
+        float m = saturate((x - left) / 0.1) * saturate((right - x) / 0.1);
+        float g = f < 0.55 ? f / 0.55 * 0.43 : (f < 0.85 ? lerp(0.43, 0.59, (f - 0.55) / 0.3) : lerp(0.59, 0.0, (f - 0.85) / 0.15));
+        float rays = 0.75 + 0.25 * sin(x * 38.0 + phase * 3.0);
+        return float4(c * a * g * m * rays, 0.0);
+    }
+    if (kind < 14.5)
+    {
+        // five-pointed star with a white edge (the Morph impact)
+        float2 q = v.Local;
+        float seg = 6.2831853 / 5.0;
+        float ang = atan2(q.x, -q.y);
+        float fold = abs(fmod(ang + 12.5663706 + seg * 0.5, seg) - seg * 0.5);
+        float r = length(q);
+        float2 qp = r * float2(sin(fold), cos(fold));
+        float2 po = float2(0.0, 1.0);
+        float2 pin = 0.45 * float2(sin(seg * 0.5), cos(seg * 0.5));
+        float2 e = pin - po;
+        float d = (e.x * (qp.y - po.y) - e.y * (qp.x - po.x)) / length(e);
+        float w = max(fwidth(d), 1e-3);
+        float fill = saturate(-d / w);
+        float edge = exp(-pow(d / (w * 1.6), 2.0));
+        return float4((c * fill + edge * 1.2) * a, a * max(fill, edge));
+    }
+    // rectangle with a vertical alpha gradient: Params.z at the top, Params.y at the bottom
+    float2 px2 = v.Local * v.Extra.xy;
+    float2 inset = v.Extra.xy - abs(px2);
+    float mask = saturate(inset.x + 0.5) * saturate(inset.y + 0.5);
+    float grad = lerp(v.Params.z, v.Params.y, v.Local.y * 0.5 + 0.5);
+    return float4(c * a * grad * mask, 0.0);
+}
+
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if (kind > 6.5) return SpriteShape(v);
     float2 p = v.Local;
     float3 c = v.Color.rgb;
     float a = v.Color.a;

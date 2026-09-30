@@ -149,6 +149,7 @@ internal sealed class GpuRenderLoop : IDisposable
 
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
+                gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
@@ -251,6 +252,7 @@ internal sealed class GpuRenderLoop : IDisposable
             var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
             simulation.Step(frameSeconds, input, feed, layout.Width);
             renderer.UpdateBackground(feed.Background);
+            renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
         }
         renderer.Context.CopyResource(staging, output);

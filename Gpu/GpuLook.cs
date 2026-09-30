@@ -45,6 +45,22 @@ internal sealed class GpuLook
     public bool FallingPulse { get; init; }
     public float FallingPulseRate { get; init; }
     public bool RainbowTrail { get; init; }
+    /// <summary>Rainbow body hue speed in degrees per second (the software stage's 20 + intensity × 0.8).</summary>
+    public float RainbowHueSpeed { get; init; } = 76;
+    /// <summary>Trail drawn behind travelling notes: None, Glow, Sparkles, Speed Lines, Blur, Ribbon, Rainbow or Stream.</summary>
+    public string FallingTrail { get; init; } = "None";
+    public float FallingTrailIntensity { get; init; } = .7f;
+    public float FallingTrailLength { get; init; } = .55f;
+    public bool FallingGhost { get; init; }
+    public float FallingGhostAmount { get; init; } = .4f;
+    public bool HoldBar { get; init; }
+    public float HoldBarIntensity { get; init; } = .6f;
+    public bool HoldBreath { get; init; }
+    public float HoldBreathRate { get; init; } = .35f;
+    public bool HoldVibration { get; init; }
+    public float HoldVibrationAmount { get; init; } = .4f;
+    public bool HoldElectricArc { get; init; }
+    public float HoldArcIntensity { get; init; } = .7f;
 
     // ---- particles ----
     public bool ShowEmbers { get; init; } = true;
@@ -57,6 +73,18 @@ internal sealed class GpuLook
     public float ImpactWaveIntensity { get; init; } = 1;
     public float ImpactFlashIntensity { get; init; } = .8f;
     public float RingSize { get; init; } = .5f;
+    /// <summary>The raw 0-100 ring size slider, for the formulas shared with the software stage.</summary>
+    public float RingSizeRaw { get; init; } = 50;
+    /// <summary>0 = Flash, 1 = Lightning, 2 = Plasma.</summary>
+    public int ImpactFlashStyle { get; init; }
+    /// <summary>What the note becomes on impact: None, Shatter, Melt, Absorb, Bounce or Morph.</summary>
+    public string ImpactMorph { get; init; } = "None";
+    public float ImpactMorphIntensity { get; init; } = .7f;
+    /// <summary>Zone Split: hits below this pitch erupt embers, hits at or above it splash.</summary>
+    public int ZoneSplitPitch { get; init; } = 60;
+    /// <summary>Release phase: Fade, Float Up, Dissolve, Smoke, Snap Back or Echo Rings.</summary>
+    public string ReleaseEffect { get; init; } = "Fade";
+    public float ReleaseIntensity { get; init; } = .7f;
     public float ParticleAmount { get; init; } = 34;
     public float ParticleResponse { get; init; } = 55;
     public float ParticleVelocity { get; init; } = 210;
@@ -99,6 +127,8 @@ internal sealed class GpuLook
     public float KeyLighting { get; init; } = .32f;
     public float KeyGlowRadius { get; init; } = .5f;
     public bool PressedKeyFixed { get; init; }
+    /// <summary>Note names engraved on the white keys: 0 = none, 1 = only the Cs, 2 = every white key.</summary>
+    public int KeyLabels { get; init; } = 1;
     public float ShaderKeyLight { get; init; } = .92f;
     public float ShaderShadows { get; init; } = .78f;
     public float ShaderAmbientOcclusion { get; init; } = .7f;
@@ -118,6 +148,23 @@ internal sealed class GpuLook
     public float BackgroundDim { get; init; } = .3f;
     public float HorizonGlow { get; init; } = .35f;
     public bool ShowLightBeams { get; init; }
+    public bool BackgroundGuide { get; init; }
+    public bool ShowPetals { get; init; }
+    public float PetalAmount { get; init; } = 55;
+
+    // ---- ambient layers (behind the notes); speed is the software stage's .25 + slider × 1.75 ----
+    public string AmbientEnergy { get; init; } = "None";
+    public float AmbientEnergyAmount { get; init; } = .6f;
+    public float AmbientEnergySpeed { get; init; } = 1.125f;
+    public string AmbientNature { get; init; } = "None";
+    public float AmbientNatureAmount { get; init; } = .6f;
+    public float AmbientNatureSpeed { get; init; } = 1.125f;
+    public string AmbientLight { get; init; } = "None";
+    public float AmbientLightAmount { get; init; } = .6f;
+    public float AmbientLightSpeed { get; init; } = 1.125f;
+    public string AmbientCosmic { get; init; } = "None";
+    public float AmbientCosmicAmount { get; init; } = .6f;
+    public float AmbientCosmicSpeed { get; init; } = 1.125f;
     public float BeamIntensity { get; init; } = .45f;
     public float Vignette { get; init; } = .25f;
     public float Saturation { get; init; } = 1;
@@ -135,12 +182,20 @@ internal sealed class GpuLook
     public Vector3 HaloColor { get; init; } = new(.78f, .43f, 1f);
     public Vector3 PressedKeyColor { get; init; } = new(.97f, .51f, 1f);
     public Vector3 KeyFeltColor { get; init; } = new(.77f, .11f, .29f);
+    public Vector3 PetalColor { get; init; } = new(1f, .7f, .81f);
+    public Vector3 AmbientLightColor { get; init; } = new(.48f, .36f, 1f);
     /// <summary>Note colour per pitch (0..127) and track slot (0..7), sRGB, already graded by saturation/contrast on the stage.</summary>
     public Vector3[] NoteColors { get; init; } = new Vector3[128 * TrackSlots];
 
     internal Vector3 NoteColor(int pitch, int track) => NoteColors[Math.Clamp(pitch, 0, 127) * TrackSlots + ((track % TrackSlots) + TrackSlots) % TrackSlots];
 
     internal static Vector3 ToVector(WpfColor color) => new(color.R / 255f, color.G / 255f, color.B / 255f);
+
+    internal static WpfColor ParseWpf(string? hex, WpfColor fallback)
+    {
+        try { return string.IsNullOrWhiteSpace(hex) ? fallback : (WpfColor)System.Windows.Media.ColorConverter.ConvertFromString(hex)!; }
+        catch { return fallback; }
+    }
 
     internal static Vector3 ParseHex(string? hex, Vector3 fallback)
     {
@@ -157,13 +212,15 @@ internal sealed class GpuLook
     /// Builds the look from the settings. <paramref name="noteColor"/> is the stage's own colour function
     /// (note colour with every modulator and the saturation/contrast grade applied).
     /// </summary>
-    internal static GpuLook From(PianoVisualSettings s, Func<int, int, WpfColor> noteColor, double keyboardFraction)
+    internal static GpuLook From(PianoVisualSettings s, Func<int, int, WpfColor> noteColor, double keyboardFraction, Func<WpfColor, WpfColor>? adjustColor = null)
     {
+        var grade = adjustColor ?? (c => c);
         var colors = new Vector3[128 * TrackSlots];
         for (var pitch = 0; pitch < 128; pitch++)
             for (var track = 0; track < TrackSlots; track++)
                 colors[pitch * TrackSlots + track] = ToVector(noteColor(pitch, track));
         static float P(double value) => (float)(value / 100);
+        static float Speed(double value) => (float)(.25 + value / 100 * 1.75);
         return new GpuLook
         {
             ShowNotes = s.ShowNotes,
@@ -177,12 +234,20 @@ internal sealed class GpuLook
             VelocityColor = s.VelocityColor, VelocityColorAmount = P(s.VelocityColorAmount),
             HoldColorCycle = s.HoldColorCycle, HoldColorCycleSpeed = (float)s.HoldColorCycleSpeed,
             FallingPulse = s.FallingPulse, FallingPulseRate = P(s.FallingPulseRate),
-            RainbowTrail = s.FallingTrail == "Rainbow",
+            RainbowTrail = s.FallingTrail == "Rainbow", RainbowHueSpeed = (float)(20 + s.FallingTrailIntensity * .8),
+            FallingTrail = s.FallingTrail, FallingTrailIntensity = P(s.FallingTrailIntensity), FallingTrailLength = P(s.FallingTrailLength),
+            FallingGhost = s.FallingGhost, FallingGhostAmount = P(s.FallingGhostAmount),
+            HoldBar = s.HoldBar, HoldBarIntensity = P(s.HoldBarIntensity), HoldBreath = s.HoldBreath, HoldBreathRate = P(s.HoldBreathRate),
+            HoldVibration = s.HoldVibration, HoldVibrationAmount = P(s.HoldVibrationAmount),
+            HoldElectricArc = s.HoldElectricArc, HoldArcIntensity = P(s.HoldArcIntensity),
 
             ShowEmbers = s.ShowEmbers, ShowWisps = s.ShowWisps, ShowFlame = s.ShowFlame && s.FlameIntensity > 0,
             ShowImpactRings = s.ShowImpactRings, ShowImpactFlash = s.ShowImpactFlash,
             ImpactBurst = s.ZoneSplit ? "Zone" : s.ImpactBurst, ImpactWave = s.ImpactWave, ImpactWaveIntensity = P(s.ImpactWaveIntensity),
-            ImpactFlashIntensity = P(s.ImpactFlashIntensity), RingSize = P(s.RingSize),
+            ImpactFlashIntensity = P(s.ImpactFlashIntensity), RingSize = P(s.RingSize), RingSizeRaw = (float)s.RingSize,
+            ImpactFlashStyle = s.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 },
+            ImpactMorph = s.ImpactMorph, ImpactMorphIntensity = P(s.ImpactMorphIntensity), ZoneSplitPitch = (int)Math.Round(s.ZoneSplitPitch),
+            ReleaseEffect = s.ReleaseEffect, ReleaseIntensity = P(s.ReleaseIntensity),
             ParticleAmount = (float)s.ParticleAmount, ParticleResponse = (float)s.ParticleResponse, ParticleVelocity = (float)s.ParticleVelocity,
             ParticleSpeed = P(s.ParticleSpeed), ParticleRandomness = P(s.ParticleRandomness), ParticleSpread = P(s.ParticleSpread),
             ParticleLife = (float)s.ParticleLife, ParticleLifeRandomness = P(s.ParticleLifeRandomness), ParticleSize = (float)s.ParticleSize,
@@ -197,6 +262,7 @@ internal sealed class GpuLook
             KeyboardStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.KeyboardStyles, s.KeyboardStyle)),
             KeyboardFraction = (float)keyboardFraction, KeyOverhang = P(s.KeyOverhang), KeyPressDepth = P(s.KeyPressDepth),
             KeyLighting = P(s.KeyLighting), KeyGlowRadius = P(s.KeyGlowRadius), PressedKeyFixed = s.PressedKeyColorMode == "Fixed",
+            KeyLabels = Math.Max(0, Array.IndexOf(PianoVisualSettings.KeyLabelModes, s.KeyLabels)),
             ShaderKeyLight = P(s.ShaderKeyLight), ShaderShadows = P(s.ShaderShadows), ShaderAmbientOcclusion = P(s.ShaderAmbientOcclusion),
             ShaderGloss = P(s.ShaderGloss), ShaderRimLight = P(s.ShaderRimLight), ShaderEmissive = P(s.ShaderEmissive),
             ShaderExposure = P(s.ShaderExposure), ShaderCameraTilt = P(s.ShaderCameraTilt), ShaderFilmic = s.ShaderFilmic,
@@ -204,6 +270,11 @@ internal sealed class GpuLook
             ShowBackground = s.ShowBackground, BackgroundGradient = s.BackgroundGradient, ShowStars = s.ShowStars, StarDensity = P(s.StarDensity),
             Chroma = s.BackgroundMode == "ChromaGreen", BackgroundDim = P(s.BackgroundDim),
             HorizonGlow = P(s.HorizonGlow), ShowLightBeams = s.ShowLightBeams, BeamIntensity = P(s.BeamIntensity),
+            BackgroundGuide = s.ShowBackground && s.BackgroundGuide, ShowPetals = s.ShowPetals, PetalAmount = (float)s.PetalAmount,
+            AmbientEnergy = s.AmbientEnergy, AmbientEnergyAmount = P(s.AmbientEnergyAmount), AmbientEnergySpeed = Speed(s.AmbientEnergySpeed),
+            AmbientNature = s.AmbientNature, AmbientNatureAmount = P(s.AmbientNatureAmount), AmbientNatureSpeed = Speed(s.AmbientNatureSpeed),
+            AmbientLight = s.AmbientLight, AmbientLightAmount = P(s.AmbientLightAmount), AmbientLightSpeed = Speed(s.AmbientLightSpeed),
+            AmbientCosmic = s.AmbientCosmic, AmbientCosmicAmount = P(s.AmbientCosmicAmount), AmbientCosmicSpeed = Speed(s.AmbientCosmicSpeed),
             Vignette = P(s.Vignette), Saturation = P(s.Saturation), Contrast = P(s.Contrast),
             BloomIntensity = P(s.BloomIntensity), BloomSize = P(s.BloomSize),
             CameraZoom = P(s.CameraZoom), CameraOffset = P(s.CameraOffset), CameraParallax = P(s.CameraParallax),
@@ -213,6 +284,9 @@ internal sealed class GpuLook
             HaloColor = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f)),
             PressedKeyColor = ParseHex(s.PressedKeyColor, new Vector3(.97f, .51f, 1f)),
             KeyFeltColor = ParseHex(s.KeyFeltColor, new Vector3(.77f, .11f, .29f)),
+            // the software stage grades these through AdjustColor as well, so they go through the stage's colour function
+            PetalColor = ToVector(grade(ParseWpf(s.PetalColor, WpfColor.FromRgb(255, 179, 207)))),
+            AmbientLightColor = ToVector(grade(ParseWpf(s.AmbientLightColor, WpfColor.FromRgb(123, 92, 255)))),
             NoteColors = colors
         };
     }
