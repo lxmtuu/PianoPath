@@ -61,13 +61,18 @@ internal sealed class UserThemeStore(string directory)
         return built;
     }
 
-    /// <summary>Deletes the file of a theme. A built-in theme has no file, so it cannot be deleted.</summary>
+    /// <summary>
+    /// Deletes the file of a theme, by id or by name. The id is resolved against <em>this</em> folder — a
+    /// store is a view of one directory, so it must not consult the global theme registry to know what it
+    /// holds. A built-in theme has no file anywhere, so it cannot be deleted.
+    /// </summary>
     internal bool Delete(string nameOrId)
     {
         if (!UserShellThemes.IsUserTheme(nameOrId)) return false;
         try
         {
-            var name = ShellThemes.Find(nameOrId).Name;
+            var theme = Load().FirstOrDefault(candidate => string.Equals(candidate.Id, nameOrId, StringComparison.OrdinalIgnoreCase));
+            var name = theme?.Name ?? Path.GetFileNameWithoutExtension(nameOrId);
             var path = Path.Combine(Directory, name + ".json");
             if (!File.Exists(path)) return false;
             File.Delete(path);
