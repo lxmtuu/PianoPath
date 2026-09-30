@@ -324,9 +324,10 @@ internal sealed class VisualPresetStore(string directory)
         copy.BackgroundImagePath = "";
         var path = Path.Combine(Directory, safe + ".json");
         var temp = path + ".tmp";
-        File.WriteAllText(temp, WritePresetFile(copy, thumbnail));
+        var picture = thumbnail ?? ""; // the file always carries the field, empty when there is no picture
+        File.WriteAllText(temp, WritePresetFile(copy, picture));
         File.Move(temp, path, true);
-        return new VisualPreset(safe, Loc.F("User preset · {0}", safe + ".json"), false, copy, path, thumbnail);
+        return new VisualPreset(safe, Loc.F("User preset · {0}", safe + ".json"), false, copy, path, picture);
     }
 
     internal bool Delete(VisualPreset preset)
