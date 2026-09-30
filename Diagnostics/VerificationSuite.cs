@@ -2046,7 +2046,8 @@ internal static class VerificationSuite
             Assert(host.Children.Count == 3 && label.Text.StartsWith(Loc.F("{0} songs in {1}", 3, SongFolderIndex.Folder), StringComparison.Ordinal),
                 $"The Play dialog should list the indexed songs and say where they came from ({label.Text}).");
             search.Text = "nocturne";
-            Assert(host.Children.Count == 1 && empty.Text.Length == 0, "Typing in the search box should filter the library down to the matches.");
+            Assert(host.Children.Count == 1 && empty.Text == Loc.F("Showing {0} of {1} matching songs", 1, 1),
+                $"Typing in the search box should filter the library down to the matches ({empty.Text}).");
             search.Text = "zzz";
             Assert(host.Children.Count == 0 && empty.Text == Loc.T("No song in this folder matches what you typed. Tags and the file name are searched too."),
                 "A query that matches nothing should say so instead of leaving an empty list.");
