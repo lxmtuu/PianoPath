@@ -1549,14 +1549,26 @@ internal static class VerificationSuite
             flat.ShowPetals = false; flat.AmbientEnergy = "None"; flat.AmbientNature = "None"; flat.AmbientLight = "None"; flat.AmbientCosmic = "None";
             flat.HorizonGlow = 0; flat.ShowLightBeams = false; flat.ShowHalo = false; flat.ShowNotes = false; flat.ShowImpactFlash = false;
             stage.SetVisualSettings(flat); stage.ClearTransient(); stage.UpdateLayout();
+            // The capture fits the stage into the frame with Uniform, so the sampled pixel is the middle of
+            // the frame: the bars around a wide stage are clear in both modes and would say nothing.
+            static byte CentreAlpha(byte[] frame) => frame[(48 / 2 * 64 + 64 / 2) * 4 + 3];
+            static int OpaquePixels(byte[] frame)
+            {
+                var count = 0;
+                for (var i = 3; i < frame.Length; i += 4) if (frame[i] >= 250) count++;
+                return count;
+            }
             var opaque = (byte[])InvokeReturn(window, "CaptureStageBgra", 64, 48)!;
-            var opaqueCorner = opaque[3];
+            var opaqueCentre = CentreAlpha(opaque);
             stage.TransparentBackdrop = true; stage.UpdateLayout();
             var clear = (byte[])InvokeReturn(window, "CaptureStageBgra", 64, 48)!;
-            var clearCorner = clear[3];
+            var clearCentre = CentreAlpha(clear);
+            var clearOpaque = OpaquePixels(clear);
             stage.TransparentBackdrop = false; stage.UpdateLayout();
-            Assert(opaque.Length == 64 * 4 * 48 && opaqueCorner == 255 && clearCorner == 0,
-                $"A transparent export should hand the alpha channel the stage drew: the same pixel is opaque while the stage paints its background and clear while it does not (was {opaqueCorner}, then {clearCorner}).");
+            Assert(opaque.Length == 64 * 4 * 48 && opaqueCentre == 255 && clearCentre == 0,
+                $"A transparent export should hand the alpha channel the stage drew: the same pixel is opaque while the stage paints its background and clear while it does not (was {opaqueCentre}, then {clearCentre}).");
+            Assert(clearOpaque > 0 && clearOpaque < 64 * 48,
+                $"Dropping the background should leave the piano itself in the frame (an all-clear or all-opaque frame would mean the export threw the stage away; {clearOpaque} of {64 * 48} pixels were opaque).");
             var restored = PianoVisualSettings.FromJson(hadLook);
             ((PianoVisualSettings)Field(window, "_visualSettings")!).CopyFrom(restored);
             stage.SetVisualSettings(restored); Invoke(window, "RefreshSettingControls");
