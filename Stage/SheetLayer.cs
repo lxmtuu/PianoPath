@@ -277,7 +277,7 @@ internal static class SheetLayer
         var gaps = new List<RestGap>();
         if (notes.Count == 0) return gaps;
         // Each hand's sounding time as a list of +1/-1 edges, so one sweep reads both hands at once.
-        var edges = new List<(double Time, int Delta)>[2] { [], [] };
+        List<(double Time, int Delta)>[] edges = [[], []];
         foreach (var note in notes)
         {
             var staff = StaffOf(note.Pitch, handSplit);
@@ -454,6 +454,7 @@ internal static class SheetLayer
         var downbeats = Downbeats(beats, beatsPerBar);
         var sheet = plan ?? Plan(notes, beats, beatsPerBar, handSplit, key);
         var accidentals = sheet.Accidentals;
+        var beatSeconds = BeatSeconds(beats);
 
         for (var staff = 0; staff < 2; staff++)
         {
@@ -515,7 +516,6 @@ internal static class SheetLayer
         var headWidth = Math.Clamp(gap * 1.35, 3.5, 12);
         // Which notes share a beam, and where the stem ends of each run sit: a run's stems all reach one line, so
         // the beam that joins them is straight.
-        var beatSeconds = BeatSeconds(beats);
         var beams = sheet.Beams;
         var beamEnds = new double[notes.Count];
         for (var index = 0; index < beamEnds.Length; index++) beamEnds[index] = double.NaN;
