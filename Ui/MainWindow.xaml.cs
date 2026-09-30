@@ -85,16 +85,27 @@ public partial class MainWindow : Window
         StartHistory();
         _notes = _allNotes;
         FrameClock.Shared.Tick += OnFrame;
-        _midi.NoteChanged += (pitch, velocity, on) => Dispatcher.BeginInvoke(() =>
+        _midi.NoteChanged += (pitch, velocity, on) =>
         {
-            if (on)
+            // The GPU engine hears the note on the MIDI callback thread itself, so its trail and burst
+            // never wait for the dispatcher; the stage then skips re-queuing the same note.
+            var direct = ForwardMidiToGpu(pitch, velocity, on);
+            Dispatcher.BeginInvoke(() =>
             {
-                Loc.Format(DeviceLabel, "MIDI IN · {0}", NoteLabel(pitch));
-                DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(75, 244, 187));
-                PressNote(pitch, velocity);
-            }
-            else ReleaseNote(pitch);
-        });
+                Stage.SuppressGpuForward = direct;
+                try
+                {
+                    if (on)
+                    {
+                        Loc.Format(DeviceLabel, "MIDI IN · {0}", NoteLabel(pitch));
+                        DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(75, 244, 187));
+                        PressNote(pitch, velocity);
+                    }
+                    else ReleaseNote(pitch);
+                }
+                finally { Stage.SuppressGpuForward = false; }
+            });
+        };
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() => SetPedalState(pedal, down));
         PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
         // A folder indexed in an earlier session is watched from the start, so the library is live whether or

@@ -221,7 +221,7 @@ internal sealed partial class PianoStage : FrameworkElement
     public void AddLiveNote(int pitch, double strength = 1)
     {
         _liveTrails.Add(new LiveTrail { Pitch = pitch, Age = 0, HeldSeconds = 0, KeyDown = true, Strength = strength });
-        _gpu?.LiveNote(pitch, true, strength);
+        GpuForward?.LiveNote(pitch, true, strength);
         InvalidateVisual();
     }
 
@@ -243,7 +243,7 @@ internal sealed partial class PianoStage : FrameworkElement
 
     public void ReleaseLiveNote(int pitch)
     {
-        _gpu?.LiveNote(pitch, false, 0);
+        GpuForward?.LiveNote(pitch, false, 0);
         var trail = _liveTrails.LastOrDefault(note => note.Pitch == pitch && note.KeyDown);
         if (trail is null) return;
         trail.KeyDown = false;
@@ -261,7 +261,7 @@ internal sealed partial class PianoStage : FrameworkElement
 
     public void Impact(int pitch, double strength = 1)
     {
-        _gpu?.Impact(pitch, strength);
+        GpuForward?.Impact(pitch, strength);
         ImpactLocal(pitch, strength);
     }
 

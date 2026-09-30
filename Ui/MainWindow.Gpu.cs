@@ -62,6 +62,23 @@ public partial class MainWindow
         RefreshGpuStatus();
     }
 
+    /// <summary>
+    /// MIDI callback thread: queues a note straight into the GPU feed (lock-free queues) when the GPU
+    /// engine runs. Returns whether it did, so the dispatcher side does not queue the note again.
+    /// </summary>
+    private bool ForwardMidiToGpu(int pitch, int velocity, bool on)
+    {
+        if (Volatile.Read(ref _gpuLoop) is not { Error: null }) return false;
+        if (on)
+        {
+            var hit = velocity / 127.0;
+            _gpuFeed.LiveNote(pitch, true, hit);
+            _gpuFeed.Impact(pitch, hit);
+        }
+        else _gpuFeed.LiveNote(pitch, false, 0);
+        return true;
+    }
+
     private void StopGpuLoop()
     {
         if (_gpuLoop is null) return;

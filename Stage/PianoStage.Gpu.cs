@@ -21,6 +21,13 @@ internal sealed partial class PianoStage
     private static long s_gpuBackgroundVersion;
     private BitmapSource? _gpuBackgroundSource;
 
+    /// <summary>
+    /// Set while the main window replays a note the MIDI callback already handed to the GPU feed
+    /// directly (see <c>MainWindow.ForwardMidiToGpu</c>), so the live trail and the burst are not queued twice.
+    /// </summary>
+    internal bool SuppressGpuForward { get; set; }
+    private GpuStageFeed? GpuForward => SuppressGpuForward ? null : _gpu;
+
     /// <summary>Frame rate and particle count of the render thread, for the FPS readout.</summary>
     internal Func<(double Fps, int Particles)>? GpuStats { get; set; }
 

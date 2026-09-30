@@ -497,8 +497,9 @@ float4 PsKey(KeyOut v) : SV_Target
         float3 spec = KeySpecular(n, view, keyDir, roughness, f0, lightColor);
         float along = saturate(v.KeyPos.z / max(v.Size.y, 1.0));
         float band = exp(-pow((along - 0.82) / 0.07, 2.0)) * (n.y > 0.5 ? 1.0 : 0.0);
-        color -= spec * (1.0 - (0.04 + 0.55 * band));
-        color = max(color, 0.0);
+        color = max(color - spec, 0.0);
+        // bounded highlight: a GGX peak on a flat top is tens of times the light, far too much for a band
+        color += band * lightColor * (0.018 + 0.05 * KeyA.w);
     }
     color += albedo * (0.16 + 0.12 * n.y) * (0.6 + 0.4 * KeyA.x);
     // the black keys' side walls catch a faint cool edge so their outline still reads against the gaps
