@@ -1122,8 +1122,27 @@ internal static class VerificationSuite
         var unknownKeys = Loc.UnknownKeys;
         Assert(unknownKeys.Count == 0,
             $"{unknownKeys.Count} printed string(s) are not keys of the English inventory — a reworded caption cannot be translated: {string.Join(" · ", unknownKeys.Take(5))}.");
+        // The camera corners are stored as English ids, so the picker must print the translated caption while
+        // still carrying the id: display text is never the stored value.
+        string? Painted(object item, string name) => (string?)item.GetType().GetProperty(name)?.GetValue(item);
+        var cornerChoices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices");
+        var cornerCombo = (ComboBox)cornerChoices[nameof(PianoVisualSettings.CameraCorner)];
+        object[] PaintedCorners() => ((System.Collections.IEnumerable)cornerCombo.ItemsSource).Cast<object>().ToArray();
+        bool TranslatedCorner(object item)
+        {
+            var value = Painted(item, "Value")!;
+            var caption = Painted(item, "Caption");
+            return caption is not null && caption != value && caption == Loc.T(value);
+        }
+        Assert(PaintedCorners().Length == CameraOverlay.Corners.Length
+                && PaintedCorners().Select(item => Painted(item, "Value")).SequenceEqual(CameraOverlay.Corners)
+                && PaintedCorners().All(TranslatedCorner),
+            "The camera corner picker should offer each corner under the English id the settings file stores while printing the translated caption.");
+
         Loc.Apply("en");
         Assert(firstHeader() == "Style" && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
+        Assert(PaintedCorners().Select(item => Painted(item, "Caption")).SequenceEqual(CameraOverlay.Corners),
+            "Switching back to English must restore the camera corner captions to the ids they are stored as.");
         Loc.Apply("");
         Results.Add($"PASS localization: {Languages.All.Length} languages cover all {StringsEnglish.Table.Count} keys, a live switch repaints the open dock in both directions and the settings search answers to either language.");
     }
