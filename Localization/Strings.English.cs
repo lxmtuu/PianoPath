@@ -818,7 +818,7 @@ internal static class StringsEnglish
         ["Record audio"] = "Record audio",
         ["Record piano visualizer"] = "Record piano visualizer",
         ["Record the live piano visualizer"] = "Record the live piano visualizer",
-        ["Record the stage to AVI at the resolution and frame rate chosen on the Recording page."] = "Record the stage to AVI at the resolution and frame rate chosen on the Recording page.",
+        ["Record the stage as AVI, a PNG sequence or MP4; the format, size and frame rate are set on the Recording page."] = "Record the stage as AVI, a PNG sequence or MP4; the format, size and frame rate are set on the Recording page.",
         ["Recording"] = "Recording",
         ["Recording MJPEG AVI · click to stop"] = "Recording MJPEG AVI · click to stop",
         ["Recording MP4 (H.264 + AAC)"] = "Recording MP4 (H.264 + AAC)",

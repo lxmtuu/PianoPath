@@ -185,8 +185,8 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 
 `docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`), chia làm hai bộ:
 `docs/previews/vi/` cho `README.md` và `docs/previews/en/` cho `README.en.md`, mỗi bộ chụp cùng danh sách
-chủ đề (`$shots` trong `build.yml`) nhưng bằng đúng ngôn ngữ của bản README đọc nó. Screenshot của người dùng — kể cả ảnh rất đẹp có
-ảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
+chủ đề (`$shots` trong `build.yml`) bằng đúng ngôn ngữ của bản README đọc nó (cộng `docs/previews/presets.jpg`,
+gallery mọi preset do một bước riêng của cùng workflow dựng, dùng chung cho cả hai bản). Screenshot của người dùng — kể cả ảnh rất đẹp cóảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
 kế tiếp, và ảnh nền trong screenshot hầu như luôn là artwork của bên thứ ba, không kèm giấy phép cho repo MIT.
 
 Muốn tài liệu chiếu được một tính năng thì làm cho CI render được tính năng đó. Ảnh nền là ví dụ đã làm

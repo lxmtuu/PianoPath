@@ -6,7 +6,8 @@ on:
   pull_request:
 
 # The preview step commits the freshly rendered screenshots back to the branch it built, which keeps
-# docs/previews in step with the interface without anyone copying files around by hand.
+# docs/previews in step with the interface without anyone copying files around by hand. A branch that
+# only takes pull requests declines that push; the step then warns instead of failing (see below).
 permissions:
   contents: write
 
@@ -221,7 +222,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: keyflow-previews
-          path: docs/previews/**/*.png
+          path: |
+            docs/previews/**/*.png
+            docs/previews/presets.jpg
           if-no-files-found: warn
 
       # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README
@@ -230,13 +233,33 @@ jobs:
       # Publish the screenshots with the change that produced them. The step is skipped for pull
       # requests (the checkout is a merge commit then) and for runs triggered by its own commit, so a
       # refresh can never loop.
+      #
+      # A branch that only takes pull requests (a repository rule the workflow's own token cannot bypass)
+      # declines the push with GH013. Nothing is wrong with the build then, so that one rejection is
+      # reported as a warning instead of turning the job red, and the renders are still in the
+      # keyflow-previews artifact. Every other push failure (network, authentication, a branch that moved
+      # meanwhile) still fails the step. bash rather than pwsh because the decision needs git's exit code
+      # and its message side by side.
       - name: Commit refreshed previews
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
-        shell: pwsh
+        shell: bash
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
           git add docs/previews
-          if (git diff --cached --quiet) { "docs/previews is already up to date."; exit 0 }
+          if git diff --cached --quiet; then
+            echo "docs/previews is already up to date."
+            exit 0
+          fi
           git commit -m "Refresh the README previews from CI [skip ci]"
-          git push
+          log="$RUNNER_TEMP/previews-push.log"
+          if git push >"$log" 2>&1; then
+            cat "$log"
+            exit 0
+          fi
+          cat "$log"
+          if grep -Eqi 'GH013|repository rule violations|protected branch' "$log"; then
+            echo "::warning title=Previews not committed::The branch only accepts pull requests, so the refreshed screenshots were not pushed. They are in the keyflow-previews artifact of this run."
+            exit 0
+          fi
+          exit 1

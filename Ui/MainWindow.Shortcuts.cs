@@ -38,7 +38,7 @@ public partial class MainWindow
             ("A · B · ×", "Set the loop start and end at the playhead, or clear the A–B loop."),
             ("Drag the timeline", "Seek anywhere in the score. Skipped notes are not counted as misses."),
             ("Practice modes", "Follow along, wait for my note, or train one hand at a time (Practice page)."),
-            ("REC", "Record the stage to AVI at the resolution and frame rate chosen on the Recording page."),
+            ("REC", "Record the stage as AVI, a PNG sequence or MP4; the format, size and frame rate are set on the Recording page."),
         ]),
     ];
 
