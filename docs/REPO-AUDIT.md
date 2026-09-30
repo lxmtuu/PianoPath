@@ -62,7 +62,7 @@ Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy n�
 ### 3.2 Giới hạn kỹ thuật của sản phẩm (giữ nguyên, đã ghi ở README)
 
 * SoundFont chỉ đọc SF2 **không nén** (không `.sf3`), một phần modulator/filter/FX của đặc tả chưa có.
-* MusicXML, khuông nhạc và hoá biểu đã có (điểm chia tay đọc từ `<staff>`, tông suy ra từ chính bài), nhưng khuông vẫn chưa phải bản khắc nhạc đầy đủ: chưa nối đuôi, ghép phách, dấu luyến/nghỉ, và MIDI format 2 cùng SMPTE time division vẫn chưa đọc được. Lịch sử luyện tập, ghost/biểu đồ 14 ngày và thư viện theo thư mục đã xong (xem các dòng ở trên); phần còn lại của suy luận chia tay là sửa theo khoảng nghỉ/repeat và chỉ áp dụng khi hai tay tách nhau rõ (chồng lấn thì giữ điểm người dùng chọn).
+* MusicXML, khuông nhạc và hoá biểu đã có (điểm chia tay đọc từ `<staff>`, tông suy ra từ chính bài), nhưng khuông vẫn chưa phải bản khắc nhạc đầy đủ: chưa nối đuôi, ghép phách, dấu luyến/nghỉ, đồng thời MIDI format 2 (các chuỗi độc lập, chạy lần lượt) và SMPTE time division (tick là thời gian tuyệt đối, tempo chỉ ảnh hưởng lưới phách) nay đã đọc được qua `Midi/MidiFileReader.cs`. Lịch sử luyện tập, ghost/biểu đồ 14 ngày và thư viện theo thư mục đã xong (xem các dòng ở trên); phần còn lại của suy luận chia tay là sửa theo khoảng nghỉ/repeat và chỉ áp dụng khi hai tay tách nhau rõ (chồng lấn thì giữ điểm người dùng chọn).
 * REC ghi **AVI phần hình** (MJPEG hoặc RGB không nén, trần 2 GB), chưa ghép tiếng, chưa có MP4/alpha.
 * Chỉ Windows (WPF + WinMM), cần thiết bị MIDI mà Windows nhìn thấy.
 * Chưa có webcam/3D phối cảnh; âm thanh chưa có convolution reverb, sympathetic resonance.

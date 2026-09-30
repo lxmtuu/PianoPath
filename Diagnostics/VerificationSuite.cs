@@ -110,10 +110,46 @@ internal static class VerificationSuite
         Assert(Math.Abs(notes.Single(n => n.Pitch == 64).Duration - .25) < .001, "Short note duration should be retained.");
         var changed = notes.Single(n => n.Pitch == 67);
         Assert(Math.Abs(changed.Start - .5) < .001 && Math.Abs(changed.Duration - .25) < .001, "Tempo changes should affect following notes.");
+        // Format 2 is a set of independent sequences, so its patterns play one after another: the second note
+        // starts where the first pattern ended instead of on top of it, and the beat grid keeps running.
+        File.WriteAllBytes(path, CreateFormatTwoMidi()); var patterns = MidiReader.ReadSong(path);
+        var patternLine = string.Join(", ", patterns.Notes.Select(note => note.Pitch + "@" + note.Start.ToString("0.###")));
+        Assert(patterns.Notes.Count == 2 && patterns.Notes[0].Pitch == 60 && Math.Abs(patterns.Notes[0].Start) < .001
+                && patterns.Notes[1].Pitch == 67 && Math.Abs(patterns.Notes[1].Start - .5) < .001
+                && Math.Abs(patterns.Notes[1].Duration - .5) < .001 && patterns.Notes[1].Track == 1,
+            $"A format 2 file should play its patterns one after another, not stacked on one another (read {patternLine}).");
+        Assert(patterns.BeatTimes.SequenceEqual([0, .5]),
+            $"The beat grid of a format 2 file should run across the patterns instead of restarting or overlapping ({string.Join(", ", patterns.BeatTimes)}).");
+        Assert(patterns.TrackNames.TryGetValue(1, out var patternName) && patternName == "Lead" && patterns.TrackNames.Count == 2,
+            "Track names should stay tied to the track they were written in once the patterns are laid end to end.");
+
+        // An SMPTE division names ticks per second, so ticks are absolute time: the tempo change moves the
+        // metronome and not the notes.
+        File.WriteAllBytes(path, CreateSmpteMidi()); var smpte = MidiReader.ReadSong(path);
+        var smpteLine = string.Join(", ", smpte.Notes.Select(note => note.Pitch + "@" + note.Start.ToString("0.###") + "+" + note.Duration.ToString("0.###")));
+        Assert(smpte.Notes.Count == 2 && Math.Abs(smpte.Notes[0].Start) < .001 && Math.Abs(smpte.Notes[0].Duration - .5) < .001
+                && Math.Abs(smpte.Notes[1].Start - 1) < .001 && Math.Abs(smpte.Notes[1].Duration - .5) < .001,
+            $"An SMPTE division should read 500 ticks as half a second whatever the tempo says (read {smpteLine}).");
+        Assert(smpte.BeatTimes.Count == 5 && Math.Abs(smpte.BeatTimes[1] - .5) < .001 && Math.Abs(smpte.BeatTimes[2] - 1) < .001
+                && Math.Abs(smpte.BeatTimes[3] - 1.25) < .001 && Math.Abs(smpte.BeatTimes[4] - 1.5) < .001,
+            $"An SMPTE file has no tick grid, so its beats come from the tempo map: half seconds, then quarter seconds after the change ({string.Join(", ", smpte.BeatTimes)}).");
+
+        // A header this reader cannot use is refused instead of read as noise: an unknown format, an unknown
+        // SMPTE frame rate, and an SMPTE division that counts no ticks in a frame.
+        var unusable = new[] { CreateHeaderMidi(3, 480), CreateHeaderMidi(1, 0xE520), CreateHeaderMidi(1, 0xE700) };
+        var refused = 0;
+        foreach (var bytes in unusable)
+        {
+            File.WriteAllBytes(path, bytes);
+            try { MidiReader.ReadSong(path); } catch (InvalidDataException) { refused++; }
+        }
+        Assert(refused == unusable.Length && MidiReader.ReadSong(WriteFormatOneMidi(path)).Notes.Count == 3,
+            $"An unknown MIDI format (3) and an unusable time division (27 frames, or zero ticks in a frame) must be refused, while a good file still reads (refused {refused} of {unusable.Length}).");
+
         File.WriteAllBytes(path, Encoding.ASCII.GetBytes("BAD!")); var rejected = false;
         try { MidiReader.Read(path); } catch (InvalidDataException) { rejected = true; }
         Assert(rejected, "Invalid MIDI headers should be rejected cleanly.");
-        Results.Add("PASS MIDI: multi-track import, tempo map, beat grid, track names, percussion skip, timing, velocity and malformed input.");
+        Results.Add("PASS MIDI: multi-track import, tempo map, beat grid, track names, percussion skip, timing, velocity, format 2 patterns played end to end, SMPTE division as absolute time, and malformed input.");
     }
 
     /// <summary>
@@ -3436,6 +3472,46 @@ internal static class VerificationSuite
         }
         w.Write((byte)0); w.Write((byte)0xFF); w.Write((byte)0x2F); w.Write((byte)0);
         return s.ToArray();
+    }
+
+    /// <summary>
+    /// A format 2 file: two independent patterns, each one bar of one quarter note at 120 BPM. Playing them one
+    /// after another puts the second note half a second in; playing them together would put both at zero.
+    /// </summary>
+    private static byte[] CreateFormatTwoMidi()
+    {
+        var patternA = new byte[] { 0, 0xFF, 0x03, 4, 0x42, 0x61, 0x73, 0x73, 0, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0, 0xFF, 0x2F, 0 };
+        var patternB = new byte[] { 0, 0xFF, 0x03, 4, 0x4C, 0x65, 0x61, 0x64, 0, 0x90, 67, 100, 0x83, 0x60, 0x80, 67, 0, 0, 0xFF, 0x2F, 0 };
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, 2); Write16(w, 2); Write16(w, 480); WriteTrack(w, patternA); WriteTrack(w, patternB); return s.ToArray();
+    }
+
+    /// <summary>
+    /// An SMPTE file: 25 frames of 40 ticks, so a tick is a millisecond. The tempo map starts at 120 BPM and
+    /// changes to 240 BPM one second in, which the note times must ignore and the beat grid must follow.
+    /// </summary>
+    private static byte[] CreateSmpteMidi()
+    {
+        var track = new byte[]
+        {
+            0, 0xFF, 0x51, 3, 0x07, 0xA1, 0x20,                                  // 500000 µs per quarter
+            0, 0x90, 60, 100, 0x83, 0x74, 0x80, 60, 0,                           // C4 for 500 ticks = half a second
+            0x83, 0x74, 0xFF, 0x51, 3, 0x03, 0xD0, 0x90,                         // 250000 µs per quarter, one second in
+            0, 0x90, 67, 100, 0x83, 0x74, 0x80, 67, 0, 0, 0xFF, 0x2F, 0          // G4 for half a second of absolute time
+        };
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        // The division word is SMPTE: a signed -25 in the high byte and 40 ticks in the low one.
+        w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, 1); Write16(w, 1); Write16(w, 0xE728); WriteTrack(w, track); return s.ToArray();
+    }
+
+    /// <summary>A file whose header declares the given format and division, with one empty track: everything else about it is valid.</summary>
+    private static string WriteFormatOneMidi(string path) { File.WriteAllBytes(path, CreateFormatOneMidi()); return path; }
+
+    private static byte[] CreateHeaderMidi(int format, int division)
+    {
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, format); Write16(w, 1); Write16(w, division);
+        WriteTrack(w, [0, 0xFF, 0x2F, 0]); return s.ToArray();
     }
 
     private static byte[] CreateFormatOneMidi()
