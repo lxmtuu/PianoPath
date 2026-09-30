@@ -1851,8 +1851,10 @@ internal static class VerificationSuite
             JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddDays(-30), 1, 1)),
             JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddDays(-1), 2, 2,
                 (0, 48, true), (1, 50, false), (2, 52, false), (3, 55, true))),
-            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddHours(-2), 2, 1, (0.5, 60, true), (1, 64, false), (1.5, 67, true))),
-            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today, 1, 1, (0, 60, false), (2, 72, true))),
+            // Anchored at a safe hour of the day: a run stamped "two hours ago" would fall on yesterday when
+            // the check happens to run just after midnight.
+            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddHours(9), 2, 1, (0.5, 60, true), (1, 64, false), (1.5, 67, true))),
+            JsonSerializer.Serialize(Run("Alpha", @"C:\songs\alpha.mid", today.AddHours(12), 1, 1, (0, 60, false), (2, 72, true))),
         ]);
         PracticeHistory.Reload();
         var days = PracticeHistory.Daily(PracticeHistory.ChartDays, DateTime.Now);
