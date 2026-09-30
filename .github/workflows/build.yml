@@ -88,42 +88,48 @@ jobs:
       # The README shows the real application, so the screenshots are rendered by the same executable
       # that just passed the verification suite instead of being hand-made artwork that drifts out of
       # date. Refresh the committed copies with:
-      #   gh run download <run-id> -n keyflow-previews -D docs/previews
+      #   gh run download <run-id> -n keyflow-previews -D docs/previews   # both language sets
       - name: Render README previews
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
           $out = 'docs/previews'
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Two sets of the same eight subjects, one per language: README.md reads docs/previews/vi and
+          # README.en.md reads docs/previews/en, so each edition shows the interface in its own language.
+          # --lang pins it either way, because a runner whose Windows display language happens to be
+          # something else must still render the same pictures as every other machine.
           $shots = @(
-            # --lang=en pins the captions: a runner whose Windows display language happens to be
-            # something else must still render the same English README as every other machine.
-            @{ Name = 'stage-live.png';  Args = @('--play-preview', '--lang=en') },
+            @{ Name = 'stage-live.png';  Args = @('--play-preview') },
             # The background page draws a picture of your own behind the keys. The README shows that
             # feature with the generated sample from docs/samples, never with a visitor's screenshot: the
             # shot stays deterministic and the repo stays free of artwork somebody else holds the rights to.
-            @{ Name = 'background-image.png'; Args = @('--play-preview', '--lang=en', "--background-image=$(Join-Path $PWD 'docs/samples/stage-backdrop.png')") },
-            @{ Name = 'main-menu.png';   Args = @('--menu', '--lang=en') },
-            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style', '--lang=en') },
-            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme', '--lang=en') },
-            @{ Name = 'play-dialog.png'; Args = @('--play-dialog', '--lang=en') },
-            @{ Name = 'shortcuts.png';   Args = @('--shortcuts', '--lang=en') },
-            # One shot in Vietnamese, on the page that owns the setting: the interface language is a
-            # feature, and the README shows it instead of only describing it. docs/previews is owned by
-            # this step, so the file may be one commit behind the README line pointing at it.
-            @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general', '--lang=vi') }
+            @{ Name = 'background-image.png'; Args = @('--play-preview', "--background-image=$(Join-Path $PWD 'docs/samples/stage-backdrop.png')") },
+            @{ Name = 'main-menu.png';   Args = @('--menu') },
+            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style') },
+            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme') },
+            @{ Name = 'play-dialog.png'; Args = @('--play-dialog') },
+            @{ Name = 'shortcuts.png';   Args = @('--shortcuts') },
+            # The page that owns the interface language, so each set shows that language in the app itself.
+            @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general') }
           )
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
           $failed = @()
-          foreach ($shot in $shots) {
-            $target = Join-Path $out $shot.Name
-            # A private settings folder per shot: the README must show a pristine first run, never the
-            # leftovers of the verification suite that ran before it in this job.
-            $settings = Join-Path $env:TEMP "keyflow-preview-$([IO.Path]::GetFileNameWithoutExtension($shot.Name))"
-            Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
-            $args = @('--snapshot', $target, '--compact', "--settings-dir=$settings") + $shot.Args
-            $proc = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
-            if (Test-Path $target) { "rendered $($shot.Name) ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
-            else { $failed += "$($shot.Name) (exit $($proc.ExitCode))" }
+          foreach ($lang in @('en', 'vi')) {
+            foreach ($shot in $shots) {
+              $name = "$lang/$($shot.Name)"
+              $target = Join-Path $out $name
+              New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+              # A private settings folder per shot: the README must show a pristine first run, never the
+              # leftovers of the verification suite that ran before it in this job.
+              $settings = Join-Path $env:TEMP "keyflow-preview-$lang-$([IO.Path]::GetFileNameWithoutExtension($shot.Name))"
+              Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
+              $args = @('--snapshot', $target, '--compact', "--lang=$lang", "--settings-dir=$settings") + $shot.Args
+              $proc = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
+              # docs/previews is owned by this step, so a picture may be one commit behind the README
+              # line that introduces it.
+              if (Test-Path $target) { "rendered $name ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
+              else { $failed += "$name (exit $($proc.ExitCode))" }
+            }
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
 
@@ -132,7 +138,7 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: keyflow-previews
-          path: docs/previews/*.png
+          path: docs/previews/**/*.png
           if-no-files-found: warn
 
       # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README

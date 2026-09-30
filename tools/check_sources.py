@@ -660,7 +660,16 @@ def scan_readme():
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow.read_text(encoding="utf-8"))) if workflow.exists() else set()
     pending = []
+    # Each edition shows the interface in its own language, so every preview a README points at has to sit
+    # in that edition's own set — and the workflow has to render both sets in the first place.
+    rendered_languages = set()
+    language_loop = re.search(r"foreach \(\$lang in @\((.+?)\)\)", workflow.read_text(encoding="utf-8")) if workflow.exists() else None
+    if language_loop:
+        rendered_languages = set(re.findall(r"'([a-z]{2})'", language_loop.group(1)))
+    if rendered_languages != {"en", "vi"}:
+        errors.append("build.yml no longer renders one preview set per language (expected a loop over 'en' and 'vi')")
     for name in READMES:
+        own = "vi" if name == "README.md" else "en"
         readme = ROOT / name
         if not readme.exists():
             errors.append(f"{name} is missing")
@@ -671,9 +680,14 @@ def scan_readme():
                 continue
             if (ROOT / target).exists():
                 continue
-            if target.replace("\\", "/").startswith("docs/previews/") and Path(target).name in rendered:
-                pending.append(f"{name}:{Path(target).name}")
-                continue
+            relative = target.replace("\\", "/")
+            if relative.startswith("docs/previews/"):
+                if relative.split("/")[2] != own:
+                    errors.append(f"{name} shows the preview '{target}', which is not the '{own}' set this edition reads")
+                    continue
+                if Path(target).name in rendered:
+                    pending.append(f"{name}:{Path(target).name}")
+                    continue
             errors.append(f"{name} references the image '{target}', which does not exist")
         headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
         for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):

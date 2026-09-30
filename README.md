@@ -6,13 +6,13 @@
 
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng.
 
-Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`) và được cập nhật tự động trong `docs/previews/` — không phải ảnh dàn dựng:
+Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`) với `--lang=vi`, nằm trong `docs/previews/vi/` và được cập nhật tự động — không phải ảnh dàn dựng (bản tiếng Anh có bộ ảnh riêng ở `docs/previews/en/`):
 
-![Keyflow live piano stage](docs/previews/stage-live.png)
+![Keyflow live piano stage](docs/previews/vi/stage-live.png)
 
 *Sân khấu live: nốt rơi, đường chạm phát sáng, bàn phím ray-traced và transport dưới cùng.*
 
-![Keyflow stage with a chosen background image](docs/previews/background-image.png)
+![Keyflow stage with a chosen background image](docs/previews/vi/background-image.png)
 
 *Cùng sân khấu với một ảnh nền do người dùng chọn: ảnh phủ kín khung (crop giữa, không méo tỉ lệ) và bị*
 *làm tối ở mức mặc định 30/100 nên nốt vẫn đọc được. Ảnh nền ở đây là `docs/samples/stage-backdrop.png` — repo tự sinh bằng*
@@ -20,11 +20,11 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 
 | Bàn phím & phím tắt | Hộp thoại Play |
 | --- | --- |
-| ![Keyboard and shortcuts card](docs/previews/shortcuts.png) | ![Play dialog](docs/previews/play-dialog.png) |
+| ![Keyboard and shortcuts card](docs/previews/vi/shortcuts.png) | ![Play dialog](docs/previews/vi/play-dialog.png) |
 
 | Menu khởi động (thẻ giao diện có cả chọn ngôn ngữ) | Dock thiết kế (Style) | Dock thiết kế (Theme) |
 | --- | --- | --- |
-| ![Keyflow main menu](docs/previews/main-menu.png) | ![Design dock](docs/previews/design-dock.png) | ![Theme page](docs/previews/theme-dock.png) |
+| ![Keyflow main menu](docs/previews/vi/main-menu.png) | ![Design dock](docs/previews/vi/design-dock.png) | ![Theme page](docs/previews/vi/theme-dock.png) |
 
 > **Ảnh trong README do chính ứng dụng render** trong CI (`--snapshot`). Muốn làm mới sau khi sửa
 > giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).
@@ -148,20 +148,24 @@ dotnet run --project .\PianoPath.csproj -c Release       # biên dịch (nếu c
 | `--background-image=<file.png>` | Vẽ một ảnh cụ thể phía sau bàn phím **chỉ trong lần chạy này**: không bật cờ "đã sửa", không tự lưu, nên `visual-settings.json` giữ nguyên. CI dùng nó để render ảnh minh hoạ tính năng ảnh nền từ ảnh mẫu `docs/samples/stage-backdrop.png` (sinh bởi `tools/make_stage_background.py`) thay vì ảnh chụp của người nào đó. |
 | `--settings-dir=<thư mục>` | Đọc/ghi cài đặt và preset người dùng ở thư mục khác (mặc định `%LOCALAPPDATA%\Keyflow`) — hữu ích cho bản portable hoặc khi muốn chụp ảnh từ trạng thái mặc định. Chạy `--verify` luôn tự dùng thư mục tạm nên **không bao giờ ghi đè cài đặt/preset thật của bạn**. |
 
-Ví dụ tạo lại đúng ảnh của README (tám ảnh — `--lang=en` để caption luôn là tiếng Anh, riêng `language-dock.png` chạy `--lang=vi`):
+Ví dụ tạo lại đúng ảnh của README (mười sáu ảnh — mỗi ngôn ngữ một bộ: bản này đọc `docs/previews/vi`, còn
+`README.en.md` đọc `docs/previews/en`, `--lang` ghim đúng ngôn ngữ của bộ ảnh):
 
 ```powershell
 $exe = ".\bin\Release\net10.0-windows\PianoPath.exe"
-$dir = "$env:TEMP\keyflow-preview"     # thư mục cài đặt tạm: ảnh chụp luôn là trạng thái chạy lần đầu
-Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI dùng một thư mục tạm riêng cho từng ảnh
-& $exe --snapshot docs\previews\stage-live.png       --compact --play-preview    --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\background-image.png --compact --play-preview    --lang=en --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
-& $exe --snapshot docs\previews\main-menu.png         --compact --menu            --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\design-dock.png       --compact --show-settings   --lang=en --settings-dir="$dir" --settings-tab=style
-& $exe --snapshot docs\previews\theme-dock.png        --compact --show-settings   --lang=en --settings-dir="$dir" --settings-tab=theme
-& $exe --snapshot docs\previews\play-dialog.png       --compact --play-dialog     --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\shortcuts.png         --compact --shortcuts       --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\language-dock.png     --compact --show-settings   --lang=vi --settings-dir="$dir" --settings-tab=general
+foreach ($lang in @('en', 'vi')) {
+  $set = "docs\previews\$lang"        # mỗi bản README chỉ đọc bộ ảnh của đúng ngôn ngữ đó
+  $dir = "$env:TEMP\keyflow-preview-$lang"   # thư mục cài đặt tạm: ảnh chụp luôn là trạng thái chạy lần đầu
+  Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI dùng một thư mục tạm riêng cho từng ảnh
+  & $exe --snapshot $set\stage-live.png       --compact --play-preview  --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\background-image.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
+  & $exe --snapshot $set\main-menu.png         --compact --menu          --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\design-dock.png       --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=style
+  & $exe --snapshot $set\theme-dock.png        --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=theme
+  & $exe --snapshot $set\play-dialog.png       --compact --play-dialog   --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\shortcuts.png         --compact --shortcuts     --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\language-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=general
+}
 ```
 
 ### Visual Studio 2026
@@ -282,9 +286,9 @@ Giao diện có hai ngôn ngữ đóng gói — **English** và **Tiếng Việt
 | Dòng lệnh | `--lang=vi` (hoặc `en`) chạy một lần bằng ngôn ngữ chỉ định, **không** ghi vào `visual-settings.json`. CI dùng cờ này để render ảnh tiếng Việt. |
 | Tìm kiếm trong dock | Một hàng khớp cả từ tiếng Anh lẫn từ đã dịch: gõ `speed` hoặc `tốc độ` đều ra cùng slider *Fall speed*. Ngoài nhãn, mỗi hàng còn trả lời **từ đồng nghĩa** (`tempo` → *Fall speed*, `fps` → *Frame rate*, `brighter` → các slider độ sáng) và **tên setting** (`NoteFallSpeed` → `fall`+`speed`), nên không phải nhớ đúng chữ trên nhãn. Nhiều từ khoá là phép **giao**: `speed fall` thu hẹp đúng hàng đó. Phần khớp được **tô màu accent** ngay trong nhãn, và ô tìm kiếm tự nhảy sang trang đầu tiên có kết quả. |
 
-Ảnh chụp trang General khi app chạy tiếng Việt — cũng do CI render, với `--lang=vi`:
+Ảnh chụp trang General khi app chạy tiếng Việt — bộ ảnh tiếng Việt của CI, render với `--lang=vi`:
 
-![Keyflow General page in Vietnamese](docs/previews/language-dock.png)
+![Keyflow General page in Vietnamese](docs/previews/vi/language-dock.png)
 
 *Toàn bộ điều hướng, nhãn, chú thích và nút bấm đều là tiếng Việt; tên preset `Neon Violet` vẫn giữ nguyên vì đó là id đã lưu.*
 
@@ -339,7 +343,7 @@ Phần còn lại của giao diện:
 
 ## Tạo lại ảnh giao diện
 
-Ảnh trong README (và trong `docs/previews/`) do ứng dụng render, không phải ảnh dàn dựng.
+Ảnh trong README (và trong `docs/previews/vi/`) do ứng dụng render, không phải ảnh dàn dựng.
 
 **Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại 8 ảnh bằng chính file `PianoPath.exe` vừa vượt qua `--verify` — bảy ảnh chạy với `--lang=en` để caption luôn là tiếng Anh bất kể ngôn ngữ của runner, riêng ảnh *General* chạy với `--lang=vi` để thấy luôn bản dịch tiếng Việt — rồi **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`). Sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Ảnh cũng được upload thành artifact `keyflow-previews` nếu muốn tải rời:
 
@@ -518,7 +522,7 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 - `presets/`: kệ preset cộng đồng — mỗi tệp là một preset đầy đủ, `tools/make_presets.py` sinh ra và `PianoPath.csproj` nhúng thẳng vào bản build (`Stage/CommunityPresets.cs` đọc), nên thêm một diện mạo mới chỉ là thêm một tệp JSON.
 - `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README/bảng tham số dòng lệnh, chạy mọi máy), `make_presets.py` (sinh `presets/*.json` từ giá trị mặc định của `PianoVisualSettings`), `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit) và `make_stage_background.py` (sinh ảnh nền mẫu `docs/samples/stage-backdrop.png`), `inno_messages.py` (sinh danh sách tên câu hợp lệ của Inno Setup — `installer/Languages/messages.txt`) và `build_installer.ps1` (biên dịch bộ cài, dùng chung cho cả hai workflow).
 - `Localization/`: `Localizer.cs` (ngôn ngữ, bảng tra, nhãn sống, marker XAML) và `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + bản dịch; thêm ngôn ngữ = thêm một tệp như vậy).
-- `docs/previews/`: ảnh giao diện do ứng dụng render trong CI (nguồn cho README) — thư mục này do workflow sở hữu, không nên tay nộp ảnh khác vào.
+- `docs/previews/`: ảnh giao diện do ứng dụng render trong CI — `vi/` cho bản README này, `en/` cho `README.en.md`; cả hai do workflow sở hữu, không nên tay nộp ảnh khác vào.
 - `docs/samples/`: ảnh nền mẫu mà repo tự sinh (`tools/make_stage_background.py`), dùng cho ảnh chụp tính năng ảnh nền và để mọi người thử tính năng này mà không cần tìm ảnh trên mạng.
 - `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `installer/Keyflow.iss`: script Inno Setup tạo bộ cài; `installer/Languages/`: bản dịch tiếng Việt dạng tệp một phần (`Vietnamese.isl`) cùng danh sách tên câu hợp lệ (`messages.txt`).
 - `.github/workflows/`: `build.yml` (job `static` trên Ubuntu chạy kiểm tra tĩnh, rồi job `build` trên Windows: build Release, `--verify`, render ảnh README) và `release.yml` (publish + đính kèm ZIP vào GitHub Release khi đẩy tag `v*`).

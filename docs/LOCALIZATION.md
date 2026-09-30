@@ -183,8 +183,9 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 
 ## 10. Ảnh giao diện: chỉ ảnh do ứng dụng render
 
-`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`): bảy ảnh
-`--lang=en` và một ảnh `--lang=vi` của trang General. Screenshot của người dùng — kể cả ảnh rất đẹp có
+`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`), chia làm hai bộ:
+`docs/previews/vi/` cho `README.md` và `docs/previews/en/` cho `README.en.md`, mỗi bộ tám ảnh chụp cùng
+tám chủ đề bằng đúng ngôn ngữ của bản README đọc nó. Screenshot của người dùng — kể cả ảnh rất đẹp có
 ảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
 kế tiếp, và ảnh nền trong screenshot hầu như luôn là artwork của bên thứ ba, không kèm giấy phép cho repo MIT.
 
@@ -200,7 +201,9 @@ kiểm đúng hợp đồng đó, nên hành vi "chỉ xem, không ghi" không t
 `tools/check_sources.py` giữ ba đầu mối thẳng hàng:
 
 * mọi `![...]()` trỏ vào `docs/previews/` phải hoặc đã tồn tại, hoặc có tên trong `$shots` của workflow —
-  được phép chậm hơn README đúng một commit, vì chính commit render ảnh sẽ bắt kịp;
+  được phép chậm hơn README đúng một commit, vì chính commit render ảnh sẽ bắt kịp — **và** bản `README.md`
+  chỉ được trỏ vào `docs/previews/vi/`, bản `README.en.md` chỉ được trỏ vào `docs/previews/en/`, còn
+  workflow phải thật sự render cả hai ngôn ngữ (vòng `foreach ($lang in @('en', 'vi'))`);
 * mọi tham số dòng lệnh mà `App.xaml.cs` hoặc `VerificationSuite` đọc phải có trong bảng *Tham số dòng
   lệnh* của README và ngược lại, còn mọi tham số + đường dẫn `build.yml` truyền cho `PianoPath.exe` phải
   thật sự tồn tại — một cờ gõ sai không làm hỏng build, nó chỉ im lặng cho ra một ảnh xấu;

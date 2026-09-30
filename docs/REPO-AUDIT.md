@@ -13,7 +13,7 @@ Rà soát chạy bằng ba lớp đã có của repo, không thêm công cụ m�
 |---|---|---|
 | `tools/check_sources.py` | mọi máy, ~2 s (`build.yml` chạy nó ở job `static` trên `ubuntu-latest` **trước** khi job Windows được xếp lịch) | Cân bằng ngoặc/chuỗi C#, XML hợp lệ, tham chiếu resource, khoá chuỗi in ra, bảng tham số dòng lệnh, ảnh/anchor của **cả hai** README, tên trợ năng của nút chỉ có glyph |
 | `--verify` (`Diagnostics/VerificationSuite.cs`) | Windows (CI) | Toán shader, MIDI, SoundFont, AVI, **MP4**, cài đặt, dock, ngôn ngữ, lịch sử, hồ sơ, trợ năng, high contrast, các lớp hiệu ứng |
-| Ảnh CI render | `build.yml` | Tám ảnh trong `docs/previews/` (bảy `--lang=en`, một `--lang=vi`) do chính `PianoPath.exe` chụp, cộng ảnh mẫu `docs/samples/stage-backdrop.png` do script Python sinh |
+| Ảnh CI render | `build.yml` | **Hai bộ tám ảnh** do chính `PianoPath.exe` chụp: `docs/previews/vi/` (bản README này, `--lang=vi`) và `docs/previews/en/` (`README.en.md`, `--lang=en`), cộng ảnh mẫu `docs/samples/stage-backdrop.png` do script Python sinh |
 
 Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy nó (luật 0 của `docs/ROADMAP.md`).
 

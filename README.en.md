@@ -14,11 +14,11 @@ radiation, acoustic resonance waves drift, a flame burns at the impact point and
 The pictures below are **rendered by the application itself** in CI (`--snapshot`) and refreshed in
 `docs/previews/` automatically — they are not staged artwork:
 
-![Keyflow live piano stage](docs/previews/stage-live.png)
+![Keyflow live piano stage](docs/previews/en/stage-live.png)
 
 *The live stage: falling notes, the glowing hit line, the ray-traced keyboard and the transport bar.*
 
-![Keyflow stage with a chosen background image](docs/previews/background-image.png)
+![Keyflow stage with a chosen background image](docs/previews/en/background-image.png)
 
 *The same stage with a user-chosen picture behind the keys: the image fills the frame (centre crop, no
 stretching) and is dimmed at the default 30/100 so the notes stay readable. The backdrop shown here is
@@ -28,11 +28,11 @@ else's artwork.*
 
 | Keyboard & shortcuts | Play dialog |
 | --- | --- |
-| ![Keyboard and shortcuts card](docs/previews/shortcuts.png) | ![Play dialog](docs/previews/play-dialog.png) |
+| ![Keyboard and shortcuts card](docs/previews/en/shortcuts.png) | ![Play dialog](docs/previews/en/play-dialog.png) |
 
 | Startup menu (with the language chips) | Design dock (Style) | Design dock (Theme) |
 | --- | --- | --- |
-| ![Keyflow main menu](docs/previews/main-menu.png) | ![Design dock](docs/previews/design-dock.png) | ![Theme page](docs/previews/theme-dock.png) |
+| ![Keyflow main menu](docs/previews/en/main-menu.png) | ![Design dock](docs/previews/en/design-dock.png) | ![Theme page](docs/previews/en/theme-dock.png) |
 
 > **Every image in the README is rendered by the application** in CI (`--snapshot`). To refresh them
 > after a UI change, see [Rendering the interface pictures again](#rendering-the-interface-pictures-again).
@@ -162,21 +162,24 @@ dotnet run --project .\PianoPath.csproj -c Release       # build (if needed) and
 | `--background-image=<file.png>` | Draw a specific picture behind the keyboard **for this run only**: it does not set the "modified" flag and never auto-saves, so `visual-settings.json` stays untouched. CI uses it to render the background-feature illustration from the generated sample `docs/samples/stage-backdrop.png` (built by `tools/make_stage_background.py`) instead of somebody's screenshot. |
 | `--settings-dir=<folder>` | Read/write settings and user presets in another folder (default `%LOCALAPPDATA%\Keyflow`) — handy for a portable build or for capturing a pristine first run. `--verify` always uses a temporary folder, so it **never overwrites your real settings or presets**. |
 
-Example that reproduces the README pictures exactly (eight images — `--lang=en` pins the captions to
-English, and `language-dock.png` alone runs `--lang=vi`):
+Example that reproduces the README pictures exactly (sixteen images — a set per language: this edition
+reads `docs/previews/en` and `README.md` reads `docs/previews/vi`, with `--lang` pinning each set):
 
 ```powershell
 $exe = ".\bin\Release\net10.0-windows\PianoPath.exe"
-$dir = "$env:TEMP\keyflow-preview"     # temporary settings folder: every capture is a pristine first run
-Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI uses one temporary folder per picture
-& $exe --snapshot docs\previews\stage-live.png       --compact --play-preview    --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\background-image.png --compact --play-preview    --lang=en --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
-& $exe --snapshot docs\previews\main-menu.png         --compact --menu            --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\design-dock.png       --compact --show-settings   --lang=en --settings-dir="$dir" --settings-tab=style
-& $exe --snapshot docs\previews\theme-dock.png        --compact --show-settings   --lang=en --settings-dir="$dir" --settings-tab=theme
-& $exe --snapshot docs\previews\play-dialog.png       --compact --play-dialog     --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\shortcuts.png         --compact --shortcuts       --lang=en --settings-dir="$dir"
-& $exe --snapshot docs\previews\language-dock.png     --compact --show-settings   --lang=vi --settings-dir="$dir" --settings-tab=general
+foreach ($lang in @('en', 'vi')) {
+  $set = "docs\previews\$lang"        # each README reads only its own language's pictures
+  $dir = "$env:TEMP\keyflow-preview-$lang"   # temporary settings folder: every capture is a pristine first run
+  Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI uses a temporary folder per picture
+  & $exe --snapshot $set\stage-live.png       --compact --play-preview  --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\background-image.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
+  & $exe --snapshot $set\main-menu.png         --compact --menu          --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\design-dock.png       --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=style
+  & $exe --snapshot $set\theme-dock.png        --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=theme
+  & $exe --snapshot $set\play-dialog.png       --compact --play-dialog   --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\shortcuts.png         --compact --shortcuts     --lang=$lang --settings-dir="$dir"
+  & $exe --snapshot $set\language-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=general
+}
 ```
 
 ### Visual Studio 2026
@@ -298,12 +301,12 @@ startup menu and even error messages repaint within the current frame.
 | Command line | `--lang=vi` (or `en`) runs once in that language **without** writing to `visual-settings.json`. CI uses this switch to render the Vietnamese pictures. |
 | Dock search | A row matches English *and* translated words: typing `speed` or `tốc độ` finds the same *Fall speed* slider. Beyond its captions, every row also answers to **synonyms** (`tempo` → *Fall speed*, `fps` → *Frame rate*, `brighter` → the brightness sliders) and to the **name of the setting** (`NoteFallSpeed` → `fall`+`speed`), so you do not have to remember the exact wording. Several words are an **AND**: `speed fall` narrows to that one row. The matched part is **painted in the accent colour** inside the caption, and the search box jumps to the first page with a hit. |
 
-The General page while the app runs in Vietnamese — also rendered by CI, with `--lang=vi`:
+The General page in English — every picture in this edition comes from CI with `--lang=en`; the Vietnamese README carries the same eight subjects with the interface in Vietnamese:
 
-![Keyflow General page in Vietnamese](docs/previews/language-dock.png)
+![Keyflow General page](docs/previews/en/language-dock.png)
 
-*All navigation, labels, captions and buttons are Vietnamese; the preset name `Neon Violet` stays as
-it is because that is the stored id.*
+*The language picker, the project name, the profile buttons and the preset name `Neon Violet` are all in
+one language here; pick **Tiếng Việt** and every label in the frame is repainted without a restart.*
 
 Three principles:
 
@@ -362,7 +365,7 @@ The rest of the interface:
 
 ## Rendering the interface pictures again
 
-The pictures in the README (and in `docs/previews/`) are rendered by the application, not staged.
+The pictures in the README (and in `docs/previews/en/`) are rendered by the application, not staged.
 
 **Automatic:** on every push to `main` or a working branch (`arena/**`), the `build.yml` workflow
 builds the app and then re-renders the 8 images with the very `PianoPath.exe` that just passed
@@ -631,7 +634,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `presets/`: the community shelf — one full preset per file, written by `tools/make_presets.py` and embedded into the build by `PianoPath.csproj` (read by `Stage/CommunityPresets.cs`), so adding a look is adding a JSON file.
 - `tools/`: `check_sources.py` (static checks for syntax/XAML/dock catalogue/theme tokens/README/command line, runs anywhere), `make_presets.py` (writes `presets/*.json` from the defaults `PianoVisualSettings` declares), `shader_preview.py` (Python port of the shader for previewing, writes to `tools/out/`, not committed) and `make_stage_background.py` (generates the sample backdrop `docs/samples/stage-backdrop.png`), `inno_messages.py` (generates the list of valid Inno Setup message names, `installer/Languages/messages.txt`) and `build_installer.ps1` (compiles the installer; both workflows call it).
 - `Localization/`: `Localizer.cs` (languages, table lookup, live labels, XAML markers) and `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + translation; adding a language means adding one such file).
-- `docs/previews/`: the interface pictures rendered by the application in CI (the source for the README) — the workflow owns this folder, so do not hand-commit other images into it.
+- `docs/previews/`: the interface pictures rendered by the application in CI — `en/` for this edition, `vi/` for `README.md`; the workflow owns both folders, so do not hand-commit other images into them.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
 - `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
 - `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, then a `build` job on Windows: Release build, `--verify`, README image rendering) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).
