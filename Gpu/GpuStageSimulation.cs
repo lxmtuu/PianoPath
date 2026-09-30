@@ -95,6 +95,9 @@ internal sealed partial class GpuStageSimulation
     internal int LiveTrailCount => _trails.Count;
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
+    private float _pedalBoost = 1;
+    /// <summary>Pedal Glow: 1, or up to 2 while the sustain pedal is down (eased so the glow swells and settles).</summary>
+    internal float PedalBoost => _pedalBoost;
     internal float SimulationWidth => _simWidth;
     /// <summary>Linear note colour and activity (0..1) per pitch, uploaded for the hit line.</summary>
     internal readonly Vector4[] KeyColors = new Vector4[128];
@@ -193,6 +196,8 @@ internal sealed partial class GpuStageSimulation
             _spill[pitch] = Math.Min(1, spill);
         }
         _activity = Math.Min(1, totalGlow / 4);
+        var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity : 1;
+        _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-dt * 10));
         HorizonColor = totalGlow > .01f ? ToLinear(horizon / totalGlow) : ToLinear(look.HaloColor) * .5f;
         for (var pitch = 0; pitch < 128; pitch++)
         {
@@ -648,13 +653,13 @@ internal sealed partial class GpuStageSimulation
             {
                 if (_glow[pitch] <= .02f) continue;
                 var flicker = .85f + .15f * MathF.Sin((float)_time * 23 + pitch * 1.7f);
-                var c = ToLinear(Vector3.Lerp(_keyColor[pitch], Vector3.One, .3f)) * 1.7f * _glow[pitch] * flicker * (.4f + look.HaloIntensity * .8f);
+                var c = ToLinear(Vector3.Lerp(_keyColor[pitch], Vector3.One, .3f)) * 1.7f * _glow[pitch] * flicker * (.4f + look.HaloIntensity * .8f) * _pedalBoost;
                 sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.X(pitch), hitY - 1, layout.Lane * (1.2f + .5f * _glow[pitch]), 4), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 0, 0) });
             }
         }
         if (look.ShowHalo)
         {
-            var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f);
+            var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * _pedalBoost;
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);

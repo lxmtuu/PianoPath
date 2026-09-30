@@ -388,7 +388,7 @@ internal sealed class GpuStageRenderer : IDisposable
             NoteB = new Vector4(look.NoteTint, look.NoteEdge * 1.15f, look.NoteHeadGlow, look.NoteRefraction),
             NoteC = new Vector4(look.NoteTexture, look.Notes3D ? 1 : 0, look.NoteGlow * look.BloomIntensity / .65f * .75f * (1 + beat * .5f), 150),
             KeyA = new Vector4(look.ShaderKeyLight, look.ShaderShadows, look.ShaderAmbientOcclusion, look.ShaderGloss),
-            KeyB = new Vector4(look.ShaderRimLight, look.ShaderEmissive * 1.7f, look.ShaderCameraTilt, look.KeyboardStyle),
+            KeyB = new Vector4(look.ShaderRimLight, look.ShaderEmissive * 1.7f * simulation.PedalBoost, look.ShaderCameraTilt, look.KeyboardStyle),
             KeyC = new Vector4(layout.KeyboardHeight, blackLength, look.KeyLighting, frontHeight),
             KeyD = new Vector4(whiteWidth, blackWidth, blackHeight, .22f),
             RimColor = new Vector4(GpuStageSimulation.ToLinear(look.HaloColor), 0),

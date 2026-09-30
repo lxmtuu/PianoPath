@@ -176,6 +176,8 @@ internal sealed class GpuLook
     public float CameraParallax { get; init; } = .24f;
     public bool TempoSync { get; init; }
     public float TempoSyncAmount { get; init; }
+    public bool PedalGlow { get; init; }
+    public float PedalGlowIntensity { get; init; }
 
     // ---- colours (sRGB 0..1) ----
     public Vector3 BackgroundColor { get; init; }
@@ -278,7 +280,7 @@ internal sealed class GpuLook
             Vignette = P(s.Vignette), Saturation = P(s.Saturation), Contrast = P(s.Contrast),
             BloomIntensity = P(s.BloomIntensity), BloomSize = P(s.BloomSize),
             CameraZoom = P(s.CameraZoom), CameraOffset = P(s.CameraOffset), CameraParallax = P(s.CameraParallax),
-            TempoSync = s.TempoSync, TempoSyncAmount = P(s.TempoSyncAmount),
+            TempoSync = s.TempoSync, TempoSyncAmount = P(s.TempoSyncAmount), PedalGlow = s.PedalGlow, PedalGlowIntensity = P(s.PedalGlowIntensity),
 
             BackgroundColor = ParseHex(s.BackgroundColor, Vector3.Zero),
             HaloColor = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f)),

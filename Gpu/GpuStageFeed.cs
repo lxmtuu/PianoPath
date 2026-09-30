@@ -19,6 +19,7 @@ internal sealed class GpuFrameInput
     public readonly bool[] Pressed = new bool[128];
     public GpuLook Look = new();
     public float BeatPulse;
+    public bool Sustain;
     public float PointerX = .5f, PointerY = .5f;
     public double StageHeightDip = 720;
 }
@@ -50,6 +51,7 @@ internal sealed class GpuStageFeed
     private bool _playing;
     private GpuLook _look = new();
     private float _beatPulse;
+    private bool _sustain;
     private long _beatStamp;
     private float _pointerX = .5f, _pointerY = .5f;
     private double _stageHeightDip = 720;
@@ -74,6 +76,12 @@ internal sealed class GpuStageFeed
     private GpuBackgroundImage? _labelAtlas;
     /// <summary>The glyph atlas (note names, Matrix Rain glyphs); built once on the UI thread, uploaded once by the render thread.</summary>
     internal GpuBackgroundImage? LabelAtlas { get => Volatile.Read(ref _labelAtlas); set => Volatile.Write(ref _labelAtlas, value); }
+
+    /// <summary>Sustain pedal state (drives Pedal Glow).</summary>
+    internal void SetSustain(bool down)
+    {
+        lock (_gate) _sustain = down;
+    }
 
     internal void SetStageHeight(double dips)
     {
@@ -157,6 +165,7 @@ internal sealed class GpuStageFeed
             input.Playing = _playing;
             Array.Copy(_pressed, input.Pressed, 128);
             input.BeatPulse = _beatPulse * BeatDecay();
+            input.Sustain = _sustain;
             input.PointerX = _pointerX; input.PointerY = _pointerY;
             input.StageHeightDip = _stageHeightDip;
         }

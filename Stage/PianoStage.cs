@@ -230,6 +230,7 @@ internal sealed partial class PianoStage : FrameworkElement
     {
         if (_sustainPedal == down) return;
         _sustainPedal = down;
+        _gpu?.SetSustain(down);
         InvalidateVisual();
     }
 
