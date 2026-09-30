@@ -78,7 +78,7 @@ public partial class MainWindow
         if (MenuThemeHost is null) return;
         MenuThemeHost.Children.Clear();
         _menuThemeChips.Clear();
-        foreach (var theme in ShellThemes.All)
+        foreach (var theme in ShellThemes.Everything)
         {
             var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
             var chip = new Button
@@ -469,7 +469,7 @@ public partial class MainWindow
     {
         if (_playThemeChips is null) return;
         _playThemeChips.Children.Clear();
-        foreach (var theme in ShellThemes.All)
+        foreach (var theme in ShellThemes.Everything)
         {
             var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
             var chip = new Button

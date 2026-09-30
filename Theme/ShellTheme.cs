@@ -149,6 +149,12 @@ internal static class ShellThemes
     internal static ShellTheme Default => ConcertGrand;
 
     /// <summary>
+    /// Everything the pickers offer: the built-in themes first, then the ones the user made
+    /// (<see cref="UserThemeStore"/>), which is also exactly what <see cref="Find"/> resolves.
+    /// </summary>
+    internal static IEnumerable<ShellTheme> Everything => All.Concat(UserThemeStore.Default.Load());
+
+    /// <summary>
     /// Resolves a stored theme name: canonical or legacy id first, then the display name; unknown or
     /// empty values fall back to the default look.
     /// </summary>
@@ -157,8 +163,9 @@ internal static class ShellThemes
         var value = id?.Trim();
         if (string.IsNullOrEmpty(value)) return Default;
         if (LegacyIds.TryGetValue(value, out var canonical)) value = canonical;
-        return All.FirstOrDefault(theme => string.Equals(theme.Id, value, StringComparison.OrdinalIgnoreCase))
-            ?? All.FirstOrDefault(theme => string.Equals(theme.Name, value, StringComparison.OrdinalIgnoreCase))
+        var themes = Everything.ToList();
+        return themes.FirstOrDefault(theme => string.Equals(theme.Id, value, StringComparison.OrdinalIgnoreCase))
+            ?? themes.FirstOrDefault(theme => string.Equals(theme.Name, value, StringComparison.OrdinalIgnoreCase))
             ?? Default;
     }
 

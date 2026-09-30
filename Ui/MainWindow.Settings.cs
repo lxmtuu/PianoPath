@@ -179,6 +179,13 @@ public partial class MainWindow
             ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
         SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the floating concert dust motes and acoustic waves in the backdrop.");
 
+        var custom = Card(ThemeSettingsHost, "USER THEMES", "Themes you made: pick five colours and a backdrop family, and the rest of the chrome follows. They live in the settings folder as small JSON files and show up in both theme chip rows.");
+        ButtonRow(custom,
+            ("Create theme", CreateTheme_Click),
+            ("Edit theme", EditTheme_Click),
+            ("Delete theme", DeleteTheme_Click));
+        Note(custom, "Only themes you made can be edited or deleted; the three built-in looks stay as they are. A theme named after a built-in one is refused, and saving over one of your own names updates it.");
+
         var concert = Card(ThemeSettingsHost, "STAGE ATMOSPHERE", "Optional recital layer: floating acoustic motes drifting through the concert space.");
         Toggle(concert, "Acoustic motes", nameof(PianoVisualSettings.ShowPetals), "Floating ambient particles drift through the concert space; the colour below tints them.");
         SliderRow(concert, "Mote amount", nameof(PianoVisualSettings.PetalAmount), 0, 150, "Density of floating concert particles in the air.").VisibleWhen = () => _visualSettings.ShowPetals;
@@ -206,7 +213,7 @@ public partial class MainWindow
     {
         if (themeChipHost is null) return;
         themeChipHost.Children.Clear();
-        foreach (var theme in ShellThemes.All)
+        foreach (var theme in ShellThemes.Everything)
         {
             var active = string.Equals(theme.Id, ShellThemeManager.Current.Id, StringComparison.OrdinalIgnoreCase);
             var chip = new Button
@@ -1388,6 +1395,57 @@ public partial class MainWindow
         if (dialog.ShowDialog(this) != true) return;
         try { VisualPresetStore.Export(_visualSettings, dialog.FileName, PianoPath.PresetThumbnail.Encode(_visualSettings)); Loc.Set(SettingsSaveLabel, "Preset exported"); }
         catch (Exception ex) { ShowMessage(ex.Message, "Export preset", MessageBoxImage.Warning); }
+    }
+
+    // =================================================================================================
+    // Themes the user made (see Theme/UserShellTheme.cs and Ui/ThemeStudioWindow.cs)
+    // =================================================================================================
+
+    private void CreateTheme_Click(object sender, RoutedEventArgs e)
+    {
+        var seed = UserShellThemes.FromTheme(ShellThemeManager.Current, Loc.T("My theme"));
+        var studio = new ThemeStudioWindow(seed, "Create theme") { Owner = this };
+        if (studio.ShowDialog() != true || studio.Result is not { } theme) return;
+        SaveUserTheme(theme);
+    }
+
+    private void EditTheme_Click(object sender, RoutedEventArgs e)
+    {
+        var current = ShellThemeManager.Current;
+        if (!UserShellThemes.IsUserTheme(current.Id)) { Loc.Set(SettingsSaveLabel, "Only themes you made can be edited or deleted."); return; }
+        var studio = new ThemeStudioWindow(UserShellThemes.FromTheme(current, current.Name), "Edit theme") { Owner = this };
+        if (studio.ShowDialog() != true || studio.Result is not { } theme) return;
+        // Renaming writes a new file, so the old one has to go or the picker would show the theme twice.
+        if (!string.Equals(theme.Name, current.Name, StringComparison.OrdinalIgnoreCase)) UserThemeStore.Default.Delete(current.Id);
+        SaveUserTheme(theme);
+    }
+
+    private void DeleteTheme_Click(object sender, RoutedEventArgs e)
+    {
+        var current = ShellThemeManager.Current;
+        if (!UserShellThemes.IsUserTheme(current.Id)) { Loc.Set(SettingsSaveLabel, "Only themes you made can be edited or deleted."); return; }
+        if (!UserThemeStore.Default.Delete(current.Id)) { Loc.Set(SettingsSaveLabel, "Only themes you made can be edited or deleted."); return; }
+        _visualSettings.ShellTheme = ShellThemes.DefaultId;
+        MarkModified();
+        ApplyVisualSettings("Theme “{0}” deleted", false, current.Name);
+        RefreshThemeChips(); RefreshMenuThemeChips();
+    }
+
+    /// <summary>Saves a theme the user made, selects it and repaints both chip rows.</summary>
+    private void SaveUserTheme(UserShellTheme theme)
+    {
+        if (UserThemeStore.NameConflict(theme.Name) is { } conflict)
+        {
+            ShowMessage(Loc.F(conflict, theme.Name), "Create theme", MessageBoxImage.Information);
+            return;
+        }
+        ShellTheme saved;
+        try { saved = UserThemeStore.Default.Save(theme); }
+        catch (Exception ex) { ShowMessage(ex.Message, "Create theme", MessageBoxImage.Warning); return; }
+        _visualSettings.ShellTheme = saved.Id;
+        MarkModified();
+        ApplyVisualSettings("Theme “{0}” saved", false, saved.Name);
+        RefreshThemeChips(); RefreshMenuThemeChips();
     }
 
     private void ResetVisualSettings_Click(object sender, RoutedEventArgs e)

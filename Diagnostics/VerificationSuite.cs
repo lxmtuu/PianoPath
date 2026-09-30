@@ -561,6 +561,7 @@ internal static class VerificationSuite
         VerifyPresetSharing(window);
         VerifyPresetThumbnails(window);
         VerifyCommunityPresets(window);
+        VerifyUserShellThemes(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -773,7 +774,7 @@ internal static class VerificationSuite
         stage.ClearTransient();
         // ---- Theme page: shell themes and the concert stage layers -------------------------------
         var chips = (Panel?)Field(window, "themeChipHost");
-        Assert(chips is not null && chips.Children.Count == ShellThemes.All.Length && chips.Children.OfType<Button>().All(b => b.Tag is Brush),
+        Assert(chips is not null && chips.Children.Count == ShellThemes.Everything.Count() && chips.Children.OfType<Button>().All(b => b.Tag is Brush),
             "The Theme page should offer one palette chip per built-in interface theme.");
         // Ids are slugs derived from the theme name. Older releases stored sakura / noir / velvet and
         // the retired "Sakura Nocturne" name; those must still resolve and be rewritten on load.
@@ -1476,6 +1477,125 @@ internal static class VerificationSuite
         Assert(Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
             "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
+    }
+
+    /// <summary>
+    /// Themes the user made: the palette is derived from five seeds and stays readable (dark surfaces, an
+    /// accent that stands out, lighter hover and border layers), a stored theme round-trips through the
+    /// folder, a hand-edited file is repaired instead of refused, a corrupt file is skipped, an id resolves
+    /// through <see cref="ShellThemes.Find"/> once the folder holds it, applying one publishes its colours,
+    /// both chip rows show it, and it is refused when named after a built-in theme.
+    /// </summary>
+    private static void VerifyUserShellThemes(MainWindow window)
+    {
+        var seeds = new UserShellTheme
+        {
+            Name = "Sunset Glow", Backdrop = nameof(BackdropStyle.Imperial),
+            Accent = "#FF7A59", AccentAlt = "#FFD166", Glow = "#FFB86B", Surface = "#141019", Mote = "#FFE3B0"
+        };
+        var built = UserShellThemes.Build(seeds);
+        Assert(built.Id == "user-sunset-glow" && built.Name == "Sunset Glow" && built.Backdrop == BackdropStyle.Imperial && built.Blurb == UserShellThemes.BlurbKey(BackdropStyle.Imperial),
+            "A theme the user made should take its id from its name and describe itself with a translatable key.");
+        static int Peak(Color colour) => Math.Max(colour.R, Math.Max(colour.G, colour.B));
+        Assert(Peak(built.Control) <= UserShellThemes.MaxSurface && Peak(built.Control) >= UserShellThemes.MinSurface,
+            $"A user theme keeps its base surface inside the dark band ({UserShellThemes.MinSurface:X2}-{UserShellThemes.MaxSurface:X2}) so the light chrome text stays readable.");
+        Assert(UserShellThemes.HasContrast(built.Accent, built.Control) && Peak(built.ControlHover) > Peak(built.Control)
+                && Peak(built.Border) > Peak(built.Control) && Peak(built.ControlBorder) > Peak(built.Border)
+                && Peak(built.Track) > Peak(built.Control) && Peak(built.Window) < Peak(built.Control)
+                && Peak(built.PanelTop) > Peak(built.PanelBottom) && Peak(built.MoteAlt) > Peak(built.Mote),
+            "The derived chrome should keep the accent visible and stack the surfaces: window below control, hover, border and track above it.");
+        var clampedLight = UserShellThemes.Build(new UserShellTheme { Name = "Too Light", Surface = "#FFFFFF" });
+        var clampedDark = UserShellThemes.Build(new UserShellTheme { Name = "Too Dark", Surface = "#000000" });
+        Assert(Peak(clampedLight.Control) == UserShellThemes.MaxSurface && Peak(clampedDark.Control) == UserShellThemes.MinSurface,
+            "A surface outside the readable band should be clamped, not accepted as typed.");
+        var repaired = UserShellThemes.Build(new UserShellTheme { Name = "Edited by hand", Accent = "not a colour", Surface = "", Mote = null! });
+        Assert(Peak(repaired.Control) >= UserShellThemes.MinSurface && UserShellThemes.HasContrast(repaired.Accent, repaired.Control),
+            "A theme file edited by hand should be repaired into a readable palette instead of failing to load.");
+        Assert(UserShellThemes.Id("Sunset Glow!") == "user-sunset-glow" && UserShellThemes.Id("  ") == "user-custom"
+                && UserShellThemes.IsUserTheme("user-sunset-glow") && !UserShellThemes.IsUserTheme(ShellThemes.ConcertNoirId),
+            "Theme ids should be stable slugs carrying the user prefix, so the pickers can tell them from the built-in looks.");
+
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-themes-" + Guid.NewGuid().ToString("N"));
+        var store = new UserThemeStore(directory);
+        try
+        {
+            var saved = store.Save(seeds);
+            var loaded = store.Load();
+            Assert(loaded.Count == 1 && loaded[0].Id == saved.Id && loaded[0].Accent == built.Accent && loaded[0].Surface == built.Control
+                    && loaded[0].Backdrop == BackdropStyle.Imperial,
+                "A theme the user made should round-trip through its file with the same colours and backdrop family.");
+            store.Save(new UserShellTheme { Name = "Sunset Glow", Accent = "#59A6FF", AccentAlt = "#9BD0FF", Glow = "#7FC4FF", Surface = "#0E1420", Mote = "#CFE7FF" });
+            var replaced = store.Load();
+            Assert(replaced.Count == 1 && replaced[0].Accent == Color.FromRgb(0x59, 0xA6, 0xFF),
+                "Saving a theme under a name that already exists should update that theme instead of adding a second one.");
+            File.WriteAllText(Path.Combine(directory, "Broken.json"), "{ not a theme at all");
+            File.WriteAllText(Path.Combine(directory, "Renamed.json"), System.Text.Json.JsonSerializer.Serialize(new UserShellTheme { Name = "Something Else", Accent = "#7CFF6B" }));
+            var survivors = store.Load();
+            Assert(survivors.Count == 2 && survivors.Any(theme => theme.Name == "Renamed" && theme.Accent == Color.FromRgb(0x7C, 0xFF, 0x6B)),
+                "A corrupt theme file should be skipped, and a renamed file should arrive under its new name.");
+            Assert(store.Delete("user-renamed") && store.Load().Count == 1 && !store.Delete(ShellThemes.ConcertNoirId),
+                "Deleting a theme removes its file, while a built-in theme cannot be deleted.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+
+        // The pickers: a theme saved in the settings folder resolves by id, applies, and shows up as a chip.
+        var originalDirectory = PianoVisualSettingsStore.SettingsDirectory;
+        var originalTheme = ShellThemeManager.Current;
+        var hadHighContrast = ShellThemeManager.ForceHighContrast;
+        var folder = Path.Combine(Path.GetTempPath(), "keyflow-verify-themes-live-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            PianoVisualSettingsStore.UseDirectory(folder);
+            ShellThemeManager.ForceHighContrast = false;
+            UserThemeStore.Default.Save(seeds);
+            var resolved = ShellThemes.Find("user-sunset-glow");
+            Assert(resolved.Id == "user-sunset-glow" && resolved.Accent == built.Accent && ShellThemes.Everything.Any(theme => theme.Id == resolved.Id),
+                "A theme in the settings folder should resolve by id through the same lookup the pickers and the settings file use.");
+            ShellThemeManager.Apply(resolved);
+            var accentBrush = Application.Current.Resources["AccentBrush"] as SolidColorBrush;
+            Assert(ShellThemeManager.Current.Id == resolved.Id && accentBrush is not null && accentBrush.Color == built.Accent,
+                "Applying a theme the user made should publish its accent to the chrome.");
+            Invoke(window, "RefreshThemeChips");
+            var chips = (WrapPanel?)Field(window, "themeChipHost");
+            Assert(chips is not null && chips.Children.Count == ShellThemes.Everything.Count()
+                    && chips.Children.OfType<Button>().Any(chip => (chip.DataContext as string) == resolved.Id),
+                "Both theme chip rows should offer the themes the user made next to the built-in looks.");
+            Assert(UserThemeStore.NameConflict("Concert Noir") is not null && UserThemeStore.NameConflict("Sunset Glow") is null,
+                "Naming a theme after a built-in look should be refused, while any other name stays free.");
+            PianoVisualSettingsStore.UseDirectory(originalDirectory);
+            Invoke(window, "RefreshThemeChips");
+            var afterRestore = (WrapPanel?)Field(window, "themeChipHost");
+            Assert(!ShellThemes.Everything.Any(theme => theme.Id == resolved.Id) && afterRestore is not null
+                    && afterRestore.Children.Count == ShellThemes.Everything.Count(),
+                "Pointing the settings folder back should drop the themes of the temporary folder from both the lookup and the chips.");
+        }
+        finally
+        {
+            ShellThemeManager.ForceHighContrast = hadHighContrast;
+            ShellThemeManager.Apply(originalTheme);
+            PianoVisualSettingsStore.UseDirectory(originalDirectory);
+            Invoke(window, "RefreshThemeChips");
+            try { Directory.Delete(folder, true); } catch { }
+        }
+
+        // The studio: it refuses to save without a name or with a colour that is not one, and previews the
+        // eleven palette surfaces the seeds derive.
+        var studio = new ThemeStudioWindow(seeds, "Create theme");
+        Assert(studio.PreviewHost is StackPanel { Children.Count: 11 },
+            "The studio should preview every surface and colour the seeds derive.");
+        Assert(studio.ColourBox(nameof(UserShellTheme.Accent)).Text == seeds.Accent && studio.NameBox.Text == seeds.Name,
+            "The studio should open on the theme it was given.");
+        studio.NameBox.Text = "   ";
+        Assert(!studio.TryBuild(out _, out var nameError) && nameError == "A theme needs a name.",
+            "The studio should refuse to save a theme without a name.");
+        studio.NameBox.Text = "Sunset Glow"; studio.ColourBox(nameof(UserShellTheme.Glow)).Text = "purple";
+        Assert(!studio.TryBuild(out _, out var hexError) && hexError == "One of the colours is not a hex value like #1A2B3C.",
+            "The studio should refuse to save a colour that is not a hex value.");
+        studio.ColourBox(nameof(UserShellTheme.Glow)).Text = "#FFB86B"; studio.BackdropBox.SelectedIndex = 1;
+        Assert(studio.TryBuild(out var result, out var noError) && noError is null && result is not null
+                && result.Backdrop == nameof(BackdropStyle.Obsidian) && UserShellThemes.Build(result).Backdrop == BackdropStyle.Obsidian,
+            "A filled-in studio should hand back the theme the fields describe, backdrop family included.");
+        Results.Add("PASS user themes: five seeds derive a readable twenty-token chrome, files round-trip and are repaired or skipped when damaged, an id resolves and applies through the pickers, and the studio refuses a nameless or non-hex theme.");
     }
 
     /// <summary>

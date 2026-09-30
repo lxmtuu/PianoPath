@@ -468,6 +468,7 @@ internal static class PianoVisualSettingsStore
     {
         _directory = Path.GetFullPath(path);
         VisualPresetStore.InvalidateDefault();
+        UserThemeStore.InvalidateDefault();
     }
 
     internal static PianoVisualSettings Load()
