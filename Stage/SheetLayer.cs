@@ -160,6 +160,7 @@ internal static class SheetLayer
         var windowStart = WindowStart(position, secondsVisible);
         var dim = Color.FromArgb((byte)Math.Clamp(150 * opacity, 20, 210), ink.R, ink.G, ink.B);
         var gap = Math.Clamp(area.Height * GapRatio, GapMin, GapMax);
+        // One diatonic step is half of the line spacing, which is the grid every note position is put on.
         var half = gap / 2;
         var lineLeft = area.X + Math.Clamp(area.Height * .30, 18, 44);
         var lineRight = area.Right - 8;

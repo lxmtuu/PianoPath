@@ -224,7 +224,7 @@ internal static class VerificationSuite
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
-        VerifyPresets();
+        Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
@@ -556,20 +556,20 @@ internal static class VerificationSuite
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
         Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
-        VerifySettingsDock(window, stage, visualSettings);
-        VerifyLanguageSwitching(window);
-        VerifyAccessibility(window);
-        VerifyDockAccessibility(window);
-        VerifySettingsHistory(window);
-        VerifySettingsProfile(window);
-        VerifyPresetSharing(window);
-        VerifyPresetThumbnails(window);
-        VerifyCommunityPresets(window);
-        VerifyUserShellThemes(window);
-        VerifyPngSequenceRecorder(window);
-        VerifySheetLayer(window, stage, visualSettings);
-        VerifySongFolderLibrary(window);
-        VerifyBackgroundImageLoad(window, stage, visualSettings);
+        Run(nameof(VerifySettingsDock), () => VerifySettingsDock(window, stage, visualSettings));
+        Run(nameof(VerifyLanguageSwitching), () => VerifyLanguageSwitching(window));
+        Run(nameof(VerifyAccessibility), () => VerifyAccessibility(window));
+        Run(nameof(VerifyDockAccessibility), () => VerifyDockAccessibility(window));
+        Run(nameof(VerifySettingsHistory), () => VerifySettingsHistory(window));
+        Run(nameof(VerifySettingsProfile), () => VerifySettingsProfile(window));
+        Run(nameof(VerifyPresetSharing), () => VerifyPresetSharing(window));
+        Run(nameof(VerifyPresetThumbnails), () => VerifyPresetThumbnails(window));
+        Run(nameof(VerifyCommunityPresets), () => VerifyCommunityPresets(window));
+        Run(nameof(VerifyUserShellThemes), () => VerifyUserShellThemes(window));
+        Run(nameof(VerifyPngSequenceRecorder), () => VerifyPngSequenceRecorder(window));
+        Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
+        Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
+        Run(nameof(VerifyBackgroundImageLoad), () => VerifyBackgroundImageLoad(window, stage, visualSettings));
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
         var glowSlider = sliders[nameof(PianoVisualSettings.NoteGlow)]; var originalGlow = glowSlider.Value; glowSlider.Value = 127;
@@ -582,7 +582,7 @@ internal static class VerificationSuite
         visualSettings.ShowEmbers = false; stage.SetVisualSettings(visualSettings); stage.Impact(60);
         Assert(stage.SparkCount == 0, "Turning off the ember layer should stop new particle bursts.");
         visualSettings.ShowEmbers = wasShowingEmbers; stage.SetVisualSettings(visualSettings);
-        VerifyEmbersShell(window, visualSettings);
+        Run(nameof(VerifyEmbersShell), () => VerifyEmbersShell(window, visualSettings));
         var piano = (PianoAudioEngine)Field(window, "_audio"); var silentLabel = (TextBlock)window.FindName("SoundFontLabel");
         var midi = (MidiDeviceService)Field(window, "_midi"); var inputCombo = (ComboBox)window.FindName("InputDeviceCombo");
         Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
@@ -816,13 +816,13 @@ internal static class VerificationSuite
         Assert(concertVisual.Drawing.Bounds.Height > 200 && concertVisual.Drawing.Bounds.Width > 100, "The ambient layer should actually paint geometry into the stage.");
         visualSettings.ShowPetals = wasPetals; visualSettings.PetalAmount = wasAmount;
         stage.SetVisualSettings(visualSettings);
-        VerifyImpactFx(window, stage, visualSettings, choices);
-        VerifyFallingFx(window, stage, visualSettings, choices);
-        VerifyHoldFx(window, stage, visualSettings);
-        VerifyReleaseFx(window, stage, visualSettings, choices);
-        VerifyAmbientFx(window, stage, visualSettings, choices);
-        VerifySmartFx(window, stage, visualSettings);
-        VerifyThemes();
+        Run(nameof(VerifyImpactFx), () => VerifyImpactFx(window, stage, visualSettings, choices));
+        Run(nameof(VerifyFallingFx), () => VerifyFallingFx(window, stage, visualSettings, choices));
+        Run(nameof(VerifyHoldFx), () => VerifyHoldFx(window, stage, visualSettings));
+        Run(nameof(VerifyReleaseFx), () => VerifyReleaseFx(window, stage, visualSettings, choices));
+        Run(nameof(VerifyAmbientFx), () => VerifyAmbientFx(window, stage, visualSettings, choices));
+        Run(nameof(VerifySmartFx), () => VerifySmartFx(window, stage, visualSettings));
+        Run(nameof(VerifyThemes), () => VerifyThemes());
         var search = (TextBox)window.FindName("SettingsSearchBox");
         search.Text = "wisp";
         var rows = colorRows.Cast<object>().Select(r => (FrameworkElement)r.GetType().GetField("Element")!.GetValue(r)!).ToList();
@@ -851,7 +851,7 @@ internal static class VerificationSuite
             "Applying a preset should rewrite the live settings in place so the renderer keeps its reference.");
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
-        VerifyShadedStage(stage, choices);
+        Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices));
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         Results.Add("PASS settings dock: thirteen pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
     }
@@ -2996,5 +2996,15 @@ internal static class VerificationSuite
     private static object Field(object target, string name) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
     private static void SetField(object target, string name, object value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
     private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
+    /// <summary>
+    /// Runs one check and, when it throws, says which check it was: an exception from deep inside a check
+    /// (an index out of range in a grid, say) is otherwise reported without the context that names it.
+    /// </summary>
+    private static void Run(string name, Action action)
+    {
+        try { action(); }
+        catch (Exception ex) { throw new InvalidOperationException($"{name}: {ex.Message}", ex); }
+    }
+
     private static void Assert(bool condition, string message) { _assertions++; if (!condition) throw new InvalidOperationException(message); }
 }
