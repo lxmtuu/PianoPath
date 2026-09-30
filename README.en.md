@@ -154,6 +154,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # build (if needed) and
 | Switch | Effect |
 | --- | --- |
 | `--verify [--verify-log=<file>]` | Run the regression verification suite and exit (exit code `0` = passed). See [Testing](#testing). |
+| `--encode-take=<file.mp4>` | Write **one** short 64×48 MP4 take and exit, printing each step it took (exit code `0` = the take was written, `2` = this machine cannot write an MP4). It is the child process `--verify` starts to try the encoders: they are native code that can take a whole process down with it, which would cost the run its verdict — out of process it costs a SKIP line instead. |
 | `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|recording\|general]` | Open the settings dock on a given page (`general` = the language & application page). |
 | `--snapshot <file.png> [--compact] [--play-preview] [--menu]` | Capture the window and exit (`--compact` = 1080×700, `--play-preview` = pre-press a note, `--menu` = open the startup menu). |
 | `--play-dialog` / `--shortcuts` | Open the Play dialog / the shortcuts card so it can be captured (used together with `--snapshot`). |
@@ -476,7 +477,7 @@ Two workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | Static checks (`tools/check_sources.py`) → Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 8 README images, upload the `keyflow-previews` artifact and commit the new pictures into the branch being built (skipped for pull requests). |
+| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 8 README images, upload the `keyflow-previews` artifact and commit the new pictures into the branch being built (skipped for pull requests). |
 | `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish both kinds, smoke-test the published build, compile the `.exe` installer from that same publish folder, upload both ZIPs plus the installer as artifacts and (for a tag) attach them to the GitHub Release with generated notes. |
 
 ```powershell
@@ -509,6 +510,11 @@ application itself (it needs Windows, because it starts real WPF windows):
 dotnet run --project .\PianoPath.csproj -- --verify
 # optional: --verify-log=C:\some\path\result.log (defaults to %TEMP%\keyflow-verification.log)
 ```
+
+The log is written **as the run goes**, so a process that is taken down inside a native call still leaves the
+line naming what it was doing. The suite writes a real MP4 take too, and it has a **child process** do that
+writing (see `--encode-take`): a media stack that dies inside its encoders then costs the run a SKIP line
+instead of its verdict.
 
 Exit code `0` means passed, `1` means a failure; the log lists every PASS/FAIL item. The suite creates
 a small MIDI file, SoundFont SF2 and AVI in a temporary folder; it checks the MIDI parser (multiple
@@ -626,7 +632,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `docs/previews/`: the interface pictures rendered by the application in CI (the source for the README) — the workflow owns this folder, so do not hand-commit other images into it.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
 - `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
-- `.github/workflows/`: `build.yml` (static checks, Release build, `--verify`, README image rendering) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).
+- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, then a `build` job on Windows: Release build, `--verify`, README image rendering) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).
 
 ## Licence
 

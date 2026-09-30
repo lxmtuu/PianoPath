@@ -11,7 +11,21 @@ permissions:
   contents: write
 
 jobs:
+  # Fast lane: syntax, XAML resources, the settings-navigation catalogue, the theme tokens, the string tables,
+  # the installer translation and every README link are checked in about ten seconds on a Linux runner, so a typo
+  # turns red before the Windows job is even scheduled. The whole job is one script, which is why it can run on a
+  # machine that has nothing but Python.
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - name: Static source check
+        run: python3 tools/check_sources.py
+
   build:
+    needs: static
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -23,12 +37,6 @@ jobs:
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-
-      # Fast lane: syntax, XAML resources, the settings-navigation catalogue, the theme tokens and
-      # every README link are checked in seconds, before the Windows build can fail for a typo.
-      - name: Static source check
-        shell: pwsh
-        run: python tools/check_sources.py
 
       - name: Restore
         run: dotnet restore PianoPath.csproj
@@ -55,7 +63,16 @@ jobs:
             $text = $_ -replace '%', '%25'
             "::${level} title=Keyflow verification::$text"
           }
+          # The exit code and the very last line of the log are named whatever the log says: a run that is
+          # taken down inside a native call never reaches the suite's own verdict, and then the last line is the
+          # only thing that says where the process died.
+          $last = if ($lines) { $lines[-1] } else { '<the log was empty>' }
+          "::notice title=Keyflow verification::PianoPath.exe exited with code $($proc.ExitCode) after $($lines.Count) log line(s)."
           if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
+          elseif ($last -notlike 'Verification passed*' -and $last -notlike 'Verification failed*') {
+            $text = $last -replace '%', '%25'
+            "::error title=Keyflow verification::The log ends without a verdict, at: $text"
+          }
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
 

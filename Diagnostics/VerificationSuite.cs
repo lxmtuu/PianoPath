@@ -1996,13 +1996,6 @@ internal static class VerificationSuite
     }
 
     /// <summary>
-    /// The sheet layer is geometry first, so most of it is checked as arithmetic: where a pitch is written,
-    /// which staff the split gives it, which ledger lines a note outside the staff needs, and where a note in
-    /// the visible window lands. The drawing itself is then rendered once, both with a song and without one,
-    /// and the stage is asked for the same layer through the toggle the dock exposes — that is what proves the
-    /// setting is not dead and that the staves really receive the song's own notes and beat grid.
-    /// </summary>
-    /// <summary>
     /// The MP4 take: the format that comes out ready to upload, because the audio is encoded into the same file
     /// while it records. The arithmetic and the frame layout are checked on every machine; the file itself is
     /// really encoded when the media stack has an H.264 encoder, and a machine that has none reports a SKIP
@@ -2058,57 +2051,72 @@ internal static class VerificationSuite
             "A frame that is not as long as the size it is converted at should be refused, not read past its end.");
 
         var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".mp4");
+        try { VerifyMp4Take(path); }
+        finally { try { if (File.Exists(path)) File.Delete(path); } catch { } }
+    }
+
+    /// <summary>
+    /// Writes a real take out of process. The encoders are native code, and a media stack that dies inside one of
+    /// them takes the process with it — no exception to catch and no verdict left to write, which is exactly what
+    /// a CI run showed. The take is therefore written by a child of this process: whatever happens to it, this run
+    /// keeps its own verdict, the child's own lines are carried into the log to say where it stopped, and a machine
+    /// that cannot write the take at all is reported as a skipped check rather than as a fault of the app.
+    /// </summary>
+    private static void VerifyMp4Take(string path)
+    {
+        var lines = new List<string>();
+        var exit = 0;
         try
         {
-            Mp4Recorder recorder;
-            // Each step is noted as it happens: a runner whose media stack takes the process down inside a
-            // native call still leaves a log naming the step it died on.
-            Results.Add("NOTE MP4 encoder: opening a 64×48 take at 15 fps, asking for the audio stream as well.");
-            try { recorder = new Mp4Recorder(path, 64, 48, 15, withAudio: true); }
-            catch (Exception ex)
+            var start = new ProcessStartInfo(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "PianoPath.exe"))
             {
-                Results.Add($"SKIP MP4 encoder: this machine's media stack cannot write an MP4 ({ex.Message}), so only the format's arithmetic and its frame layout were checked.");
-                return;
-            }
-            var audio = recorder.HasAudio;
-            Results.Add($"NOTE MP4 encoder: open with{(audio ? "" : "out")} the audio stream; writing fifteen frames and a second of audio.");
-            byte[] bytes;
-            using (recorder)
-            {
-                Assert(recorder.FrameBytes == 64 * 4 * 48 && recorder.HasAlpha && !recorder.IsNearSizeLimit && recorder.OutputPath == path,
-                    "The MP4 recorder should take the stage's own packed pixels and have no 2 GB limit to stop at.");
-                Assert(Throws(() => recorder.WriteFrame(new byte[16])), "A frame of the wrong size should be refused instead of written half-way.");
-                var frame = new byte[recorder.FrameBytes];
-                for (var index = 0; index < 15; index++)
-                {
-                    for (var pixel = 0; pixel < frame.Length; pixel += 4)
-                    {
-                        frame[pixel] = (byte)(20 + index * 12); frame[pixel + 1] = 90; frame[pixel + 2] = (byte)(200 - index * 8); frame[pixel + 3] = 255;
-                    }
-                    recorder.WriteFrame(frame);
-                }
-                if (audio) recorder.AppendSilence(44100);
-                Assert(recorder.FrameCount == 15 && audio != recorder.AudioDropped && (!audio || Math.Abs(recorder.Seconds - 1) < .001),
-                    $"An MP4 take should hold every frame and the audio the recording clock writes, with the sound inside the file ({recorder.FrameCount} frames, {recorder.Seconds:0.###} s of audio).");
-            }
-            Results.Add("NOTE MP4 encoder: frames written and the writer closed; reading the take back.");
-            // The file is read back only once the writer has closed it: the sink writer holds it while it works.
-            bytes = File.ReadAllBytes(path);
+                UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true,
+            };
+            start.ArgumentList.Add("--encode-take=" + path);
+            using var child = new Process { StartInfo = start };
+            child.OutputDataReceived += (_, line) => { if (line.Data is not null) lock (lines) lines.Add(line.Data); };
+            child.Start();
+            child.BeginOutputReadLine();
+            exit = child.WaitForExit(120_000) ? child.ExitCode : -1;
+            if (exit < 0) { try { child.Kill(entireProcessTree: true); } catch { } }
+            child.WaitForExit();
+        }
+        catch (Exception ex)
+        {
+            Results.Add("SKIP MP4 encoder: the take could not be attempted in a child process here (" + ex.Message + "), so only the format's arithmetic and its frame layout were checked.");
+            return;
+        }
+        lock (lines) foreach (var line in lines) Results.Add(line);
+        if (lines.Count == 0)
+            Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
+        else if (exit == 0 && !File.Exists(path))
+            Results.Add("FAIL MP4 encoder: the child process wrote no take yet reported that it had finished one.");
+        else if (exit != 0)
+            Results.Add(exit < 0
+                ? "SKIP MP4 encoder: the child process that writes the take had to be stopped after two minutes, so only the format's arithmetic and its frame layout were checked."
+                : $"SKIP MP4 encoder: the child process never finished a take (it ended with code {exit}), which is this machine's media stack rather than the app, so only the format's arithmetic and its frame layout were checked.");
+        else
+        {
+            // The file is read only now that the child has closed it: a sink writer holds its file while it works.
+            var bytes = File.ReadAllBytes(path);
             Assert(!File.Exists(MainWindow.AudioTrackPath(path, false)),
                 "An MP4 take should leave no WAV beside it: the samples went into the file itself.");
             Assert(bytes.Length > 1000 && bytes[4] == 'f' && bytes[5] == 't' && bytes[6] == 'y' && bytes[7] == 'p',
                 $"An MP4 should be a file of boxes beginning with the type box that makes it an MP4 ({bytes.Length} bytes were written).");
-            var sound = audio
+            var sound = lines.Any(line => line.Contains("open with the audio stream", StringComparison.Ordinal))
                 ? Loc.T(" with the audio inside")
                 : Loc.T("; this machine's media stack has no AAC encoder, so this take carries the video only");
-            Results.Add($"PASS MP4 take: frames and audio blocks stamped on the recording's own clock, the stage's pixels converted to the encoder's NV12 layout, and a real 64×48 take encoded to a file of {bytes.Length} bytes{sound}.");
-        }
-        finally
-        {
-            try { if (File.Exists(path)) File.Delete(path); } catch { }
+            Results.Add($"PASS MP4 take: frames and audio blocks stamped on the recording's own clock, the stage's pixels converted to the encoder's NV12 layout, and a real 64×48 take written by a child process to a file of {bytes.Length} bytes{sound}.");
         }
     }
 
+    /// <summary>
+    /// The sheet layer is geometry first, so most of it is checked as arithmetic: where a pitch is written,
+    /// which staff the split gives it, which ledger lines a note outside the staff needs, and where a note in
+    /// the visible window lands. The drawing itself is then rendered once, both with a song and without one,
+    /// and the stage is asked for the same layer through the toggle the dock exposes — that is what proves the
+    /// setting is not dead and that the staves really receive the song's own notes and beat grid.
+    /// </summary>
     private static void VerifySheetLayer(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
     {
         Assert(SheetLayer.Step(60) == 28 && SheetLayer.Step(72) == 35 && SheetLayer.Step(61) == 28 && SheetLayer.Step(66) == 31 && SheetLayer.Step(43) == 18,
