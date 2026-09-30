@@ -20,12 +20,32 @@ namespace PianoPath;
 /// <summary>In-app smoke and regression checks, runnable with PianoPath.exe --verify.</summary>
 internal static class VerificationSuite
 {
-    private static readonly List<string> Results = [];
+    /// <summary>
+    /// The lines a run reports. Each one is appended to the log as it is recorded — not only at the end — so a
+    /// machine that dies inside a check (a native call that takes the process with it) still leaves the trail up
+    /// to the step that killed it, which is the only thing that can be diagnosed from a CI runner.
+    /// </summary>
+    private sealed class VerificationLog : List<string>
+    {
+        internal string? Path { get; set; }
+
+        /// <summary>Records one line: it joins the run's report and, when a log is open, the file itself.</summary>
+        internal new void Add(string line)
+        {
+            base.Add(line);
+            if (Path is null) return;
+            try { File.AppendAllText(Path, line + Environment.NewLine); } catch { }
+        }
+    }
+
+    private static readonly VerificationLog Results = new();
     private static int _assertions;
 
     public static void Run(string[] args, App app)
     {
         Results.Clear(); _assertions = 0;
+        var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
+        Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
             try { VerifyMidiImport(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
@@ -2041,6 +2061,9 @@ internal static class VerificationSuite
         try
         {
             Mp4Recorder recorder;
+            // Each step is noted as it happens: a runner whose media stack takes the process down inside a
+            // native call still leaves a log naming the step it died on.
+            Results.Add("NOTE MP4 encoder: opening a 64×48 take at 15 fps, asking for the audio stream as well.");
             try { recorder = new Mp4Recorder(path, 64, 48, 15, withAudio: true); }
             catch (Exception ex)
             {
@@ -2048,6 +2071,7 @@ internal static class VerificationSuite
                 return;
             }
             var audio = recorder.HasAudio;
+            Results.Add($"NOTE MP4 encoder: open with{(audio ? "" : "out")} the audio stream; writing fifteen frames and a second of audio.");
             byte[] bytes;
             using (recorder)
             {
@@ -2067,6 +2091,7 @@ internal static class VerificationSuite
                 Assert(recorder.FrameCount == 15 && audio != recorder.AudioDropped && (!audio || Math.Abs(recorder.Seconds - 1) < .001),
                     $"An MP4 take should hold every frame and the audio the recording clock writes, with the sound inside the file ({recorder.FrameCount} frames, {recorder.Seconds:0.###} s of audio).");
             }
+            Results.Add("NOTE MP4 encoder: frames written and the writer closed; reading the take back.");
             // The file is read back only once the writer has closed it: the sink writer holds it while it works.
             bytes = File.ReadAllBytes(path);
             Assert(!File.Exists(MainWindow.AudioTrackPath(path, false)),

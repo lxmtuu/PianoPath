@@ -965,7 +965,6 @@ internal static class StringsVietnamese
         ["The MIDI file declares a time division this reader cannot use."] = "Tệp MIDI khai báo độ chia thời gian mà trình đọc này không dùng được.",
         ["The MIDI file is truncated."] = "Tệp MIDI bị cắt cụt.",
         ["The MIDI header has an invalid length."] = "Phần đầu MIDI có độ dài không hợp lệ.",
-        ["The MP4 writer has no AAC encoder ({0})."] = "Bộ ghi MP4 không có bộ mã hoá AAC ({0}).",
         ["The MP4 writer has no H.264 encoder for this size ({0})."] = "Bộ ghi MP4 không có bộ mã hoá H.264 cho kích thước này ({0}).",
         ["The MP4 writer would not start writing ({0})."] = "Bộ ghi MP4 không bắt đầu ghi được ({0}).",
         ["The SoundFont contains no usable preset/sample zones."] = "SoundFont không có preset/zone mẫu dùng được.",
