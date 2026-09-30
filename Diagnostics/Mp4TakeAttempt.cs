@@ -16,6 +16,9 @@ internal static class Mp4TakeAttempt
     /// <summary>The take the verification writes: small enough for any encoder, long enough to close a file.</summary>
     internal const int Width = 64, Height = 48, FrameRate = 15, Frames = 15;
 
+    /// <summary>An HRESULT as the hex code the media documents use, spelled the way the sentence reads.</summary>
+    private static string Describe(int hr) => hr >= 0 ? " 0x00000000" : $" 0x{hr:X8}";
+
     /// <summary>What this process is doing. The parent copies these into the verification log.</summary>
     private static void Say(string line)
     {
@@ -29,6 +32,20 @@ internal static class Mp4TakeAttempt
     /// </summary>
     internal static int Run(string path)
     {
+        // Before a single frame is offered to an encoder, the same sample plumbing is asked to write an AVI,
+        // which needs no encoder at all: a machine whose media stack hangs on this has a plumbing problem, a
+        // machine that writes it and then hangs on the take has a codec problem, and the two read differently
+        // in the verification log.
+        var probe = Path.ChangeExtension(path, ".probe.avi");
+        Say("NOTE MP4 encoder: writing three pictures into an uncompressed AVI through the same sample plumbing.");
+        var probeResult = Mf.EncodeAviProbe(probe, new byte[Width * Height * 4], Width, Height, FrameRate, 3);
+        var probeBytes = 0L;
+        try { if (File.Exists(probe)) probeBytes = new FileInfo(probe).Length; } catch { }
+        try { File.Delete(probe); } catch { }
+        Say(probeResult >= 0 && probeBytes > 0
+            ? $"NOTE MP4 encoder: the sample plumbing works — the AVI probe wrote {probeBytes} bytes of uncompressed video (HRESULT{Describe(probeResult)})."
+            : $"NOTE MP4 encoder: the sample plumbing did not finish an AVI probe ({probeBytes} bytes, HRESULT{Describe(probeResult)}).");
+
         Say($"NOTE MP4 encoder: opening a {Width}×{Height} take at {FrameRate} fps, asking for the audio stream as well.");
         Mp4Recorder recorder;
         try { recorder = new Mp4Recorder(path, Width, Height, FrameRate, withAudio: true); }

@@ -2143,6 +2143,11 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
+        // The AVI probe is what tells this machine's codecs apart from this side's plumbing: it must run, and
+        // its verdict must be in the log, whether the take itself was written or not.
+        Assert(lines.Any(line => line.Contains("AVI probe wrote", StringComparison.Ordinal)
+                || line.Contains("did not finish an AVI probe", StringComparison.Ordinal)),
+            "The take attempt should report what the encoder-free AVI probe did, so a machine whose take hangs can be told apart from plumbing that hangs.");
         if (lines.Count == 0)
             Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
         else if (exit == 0 && !File.Exists(path))

@@ -51,6 +51,12 @@ internal static partial class Mf
     /// <summary>Uncompressed 16-bit PCM, the audio the engine renders.</summary>
     internal static readonly Guid Pcm = new("00000001-0000-0010-8000-00AA00389B71");
 
+    /// <summary>The AVI container's own uncompressed 32-bit picture sub-type, D3DFMT_X8R8G8B8.</summary>
+    internal static readonly Guid Rgb32 = new("00000016-0000-0010-8000-00AA00389B71");
+
+    /// <summary>MF_E_OUT_OF_MEMORY, the code a media type that could not be prepared reports as.</summary>
+    internal const int MF_E_OUT_OF_MEMORY = unchecked((int)0x8007000E);
+
     /// <summary>MFVideoInterlace_Progressive: the stage draws progressive frames and nothing else.</summary>
     internal const int InterlaceProgressive = 2;
 
@@ -81,6 +87,75 @@ internal static partial class Mf
     {
         var local = key;
         return attributes.SetUINT64(ref local, value);
+    }
+
+    /// <summary>
+    /// Writes a handful of pictures into an AVI through the very path a take uses — one media buffer, one
+    /// sample, one stamped call at a time — but with an uncompressed picture type, so no encoder is involved
+    /// anywhere. It answers the question a machine whose encoders misbehave cannot answer any other way:
+    /// whether this side's sample plumbing works and the codecs are at fault, or the plumbing itself is.
+    /// </summary>
+    /// <returns>The first step that failed, or <see cref="S_OK"/> when the file really was written.</returns>
+    internal static int EncodeAviProbe(string path, byte[] pixels, int width, int height, int frameRate, int frames)
+    {
+        var hr = MFStartup(MF_VERSION, 0);
+        if (hr != S_OK) return hr;
+        IMFSinkWriter? writer = null;
+        try
+        {
+            hr = MFCreateSinkWriterFromURL(path, IntPtr.Zero, null, out writer);
+            if (hr < 0) return hr;
+            if (MFCreateMediaType(out var target) != S_OK) return MF_E_OUT_OF_MEMORY;
+            target.SetGUIDKey(MajorType, VideoMajorType);
+            target.SetGUIDKey(SubType, Rgb32);
+            target.SetUINT64Key(FrameSize, Pack(height, width));
+            target.SetUINT64Key(FrameRateKey, Pack(frameRate, 1));
+            target.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
+            target.SetUINT32Key(InterlaceMode, InterlaceProgressive);
+            hr = writer.AddStream(target, out var index);
+            if (hr < 0) return hr;
+            if (MFCreateMediaType(out var input) != S_OK) return MF_E_OUT_OF_MEMORY;
+            input.SetGUIDKey(MajorType, VideoMajorType);
+            input.SetGUIDKey(SubType, Rgb32);
+            input.SetUINT64Key(FrameSize, Pack(height, width));
+            input.SetUINT64Key(FrameRateKey, Pack(frameRate, 1));
+            input.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
+            hr = writer.SetInputMediaType(index, input, null);
+            if (hr < 0) return hr;
+            hr = writer.BeginWriting();
+            if (hr < 0) return hr;
+            for (var frame = 0; frame < frames; frame++)
+            {
+                var (time, duration) = Mp4Recorder.FrameTime(frame, frameRate);
+                hr = WriteProbeSample(writer, index, pixels, time, duration);
+                if (hr < 0) return hr;
+            }
+            return writer.FinalizeFile();
+        }
+        catch { return MF_E_OUT_OF_MEMORY; }
+        finally
+        {
+            if (writer is not null) { try { Marshal.ReleaseComObject(writer); } catch { } }
+            try { MFShutdown(); } catch { }
+        }
+    }
+
+    /// <summary>One picture of the probe: buffer, copy, sample, stamp — the same steps a take takes.</summary>
+    private static int WriteProbeSample(IMFSinkWriter writer, int streamIndex, byte[] pixels, long time, long duration)
+    {
+        var hr = MFCreateMemoryBuffer(pixels.Length, out var buffer);
+        if (hr < 0) return hr;
+        hr = buffer.Lock(out var pointer, out _, out _);
+        if (hr < 0) return hr;
+        Marshal.Copy(pixels, 0, pointer, pixels.Length);
+        buffer.Unlock();
+        buffer.SetCurrentLength(pixels.Length);
+        hr = MFCreateSample(out var sample);
+        if (hr < 0) return hr;
+        sample.AddBuffer(buffer);
+        sample.SetSampleTime(time);
+        sample.SetSampleDuration(duration);
+        return writer.WriteSample(streamIndex, sample);
     }
 
     /// <summary>
