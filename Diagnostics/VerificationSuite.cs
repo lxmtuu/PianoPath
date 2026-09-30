@@ -2192,13 +2192,13 @@ internal static class VerificationSuite
                 && SheetLayer.Chords([], 60).Count == 0 && SheetLayer.Chords([Note(60, 0, .25), Note(62, .25, .25)], 60).Count == 2,
             "Two notes written at one moment belong to the same group only when they are in the same hand: a chord is per hand, and single notes are groups of one.");
         var streams = SheetLayer.Streams(chordNotes, 60);
-        Assert(streams.Count == 2 && streams[0].Count == 2 && streams[0][0].SequenceEqual([0, 1, 2]) && streams[0][1].SequenceEqual([3])
+        Assert(streams.Length == 2 && streams[0].Count == 2 && streams[0][0].SequenceEqual([0, 1, 2]) && streams[0][1].SequenceEqual([3])
                 && streams[1].Count == 0,
             "A hand's stream should read as one event per written moment, each event carrying the notes of its chord in pitch order.");
         var interleaved = SheetLayer.Streams([Note(60, 0, .5), Note(48, 0, .5), Note(64, 1, .5), Note(52, 1, .5)], 60);
         Assert(interleaved[0].Count == 2 && interleaved[1].Count == 2 && interleaved[0][1].SequenceEqual([2]) && interleaved[1][0].SequenceEqual([1]),
             "Two hands playing at once should be two streams: one event per hand, in the song's own order.");
-        Assert(chordGroups.SequenceEqual(SheetLayer.Plan(chordNotes, beats, 4, 60, MusicKey.CMajor).Chords),
+        Assert(chordGroups.SequenceEqual(SheetLayer.Plan(chordNotes, eighthGrid, 4, 60, MusicKey.CMajor).Chords),
             "The plan of a song should carry the same grouping a caller would compute for itself.");
 
         // A chord is beamed like one note: the run reaches into the chord after it, and a chord on its own is never
@@ -2353,7 +2353,7 @@ internal static class VerificationSuite
         // The chord is stemmed once: the same three heads carry more ink when the plan hands them over as three
         // separate groups, which is the drawing a sheet makes when it does not know they are a chord.
         var chordSong = new NoteEvent[] { Note(60, 0, .25), Note(64, 0, .25), Note(67, 0, .25), Note(72, .25, .25) };
-        var chordPlan = SheetLayer.Plan(chordSong, beats, 4, 60, MusicKey.CMajor);
+        var chordPlan = SheetLayer.Plan(chordSong, eighthGrid, 4, 60, MusicKey.CMajor);
         var ungrouped = chordPlan with { Chords = [.. Enumerable.Range(0, chordSong.Length).Select(index => (IReadOnlyList<int>)new[] { index })] };
         var chordInk = Ink(chordSong, chordPlan); var separateInk = Ink(chordSong, ungrouped);
         Assert(chordPlan.Chords.Count == 2 && chordInk < separateInk,

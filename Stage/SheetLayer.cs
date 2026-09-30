@@ -129,7 +129,7 @@ internal static class SheetLayer
     /// </summary>
     internal sealed record SheetPlan(
         NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests, IReadOnlyList<Tie> Ties,
-        IReadOnlyList<IReadOnlyList<int>> Chords, IReadOnlyList<IReadOnlyList<int>> Streams);
+        IReadOnlyList<IReadOnlyList<int>> Chords, IReadOnlyList<IReadOnlyList<int>>[] Streams);
 
     /// <summary>Works out the plan of a song: its accidentals, its beams, its rests and its ties.</summary>
     internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key)
@@ -473,7 +473,7 @@ internal static class SheetLayer
     /// marker per note head. The notes of one stream are the notes of one event, in pitch order.
     /// </para>
     /// </summary>
-    internal static IReadOnlyList<IReadOnlyList<int>> Streams(IReadOnlyList<NoteEvent> notes, double handSplit)
+    internal static IReadOnlyList<IReadOnlyList<int>>[] Streams(IReadOnlyList<NoteEvent> notes, double handSplit)
     {
         var streams = new List<IReadOnlyList<int>>[2] { [], [] };
         var run = new List<int>(); var runStaff = -1; var runStart = double.NaN;
@@ -493,7 +493,7 @@ internal static class SheetLayer
             run.Add(index);
         }
         Close();
-        return [streams[0], streams[1]];
+        return streams;
     }
 
     /// <summary>
