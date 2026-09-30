@@ -114,7 +114,7 @@ jobs:
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
           $out = 'docs/previews'
-          # Two sets of the same nine subjects, one per language: README.md reads docs/previews/vi and
+          # Two sets of the same eleven subjects, one per language: README.md reads docs/previews/vi and
           # README.en.md reads docs/previews/en, so each edition shows the interface in its own language.
           # --lang pins it either way, because a runner whose Windows display language happens to be
           # something else must still render the same pictures as every other machine.
