@@ -8,7 +8,7 @@ using System.Windows.Media.Imaging;
 namespace PianoPath;
 
 /// <summary>Immersive piano-roll renderer: live key trails, optional MIDI playback notes, sparks, wisps, flames and a lit keyboard.</summary>
-internal sealed class PianoStage : FrameworkElement
+internal sealed partial class PianoStage : FrameworkElement
 {
     internal const int FirstPitch = 21, KeyCount = 88, MaxParticles = 2600;
     private const double FallSpeed = 258;
@@ -149,6 +149,8 @@ internal sealed class PianoStage : FrameworkElement
                 catch (Exception ex) { _backgroundImage = null; BackgroundLoadError = ex.Message; }
             }
         }
+        PublishGpuBackground();
+        PublishGpuLook();
         InvalidateVisual();
     }
 
@@ -156,6 +158,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         if (ActualWidth < 1 || ActualHeight < 1) return;
         _pointerX = Math.Clamp(point.X / ActualWidth, 0, 1); _pointerY = Math.Clamp(point.Y / ActualHeight, 0, 1);
+        _gpu?.SetPointer(_pointerX, _pointerY);
         if (_visual.CameraParallax > 0) InvalidateVisual();
     }
 
@@ -190,6 +193,7 @@ internal sealed class PianoStage : FrameworkElement
         }
         _position = position; _playing = playing; _pressed = pressed;
         RefreshActiveKeys();
+        ForwardGpuState();
         InvalidateVisual();
     }
 
@@ -217,6 +221,7 @@ internal sealed class PianoStage : FrameworkElement
     public void AddLiveNote(int pitch, double strength = 1)
     {
         _liveTrails.Add(new LiveTrail { Pitch = pitch, Age = 0, HeldSeconds = 0, KeyDown = true, Strength = strength });
+        _gpu?.LiveNote(pitch, true, strength);
         InvalidateVisual();
     }
 
@@ -232,11 +237,13 @@ internal sealed class PianoStage : FrameworkElement
     public void PulseBeat(double strength)
     {
         _beatPulse = Math.Max(_beatPulse, Math.Clamp(strength, 0, 1.2));
+        _gpu?.PulseBeat(Math.Clamp(strength, 0, 1.2));
         InvalidateVisual();
     }
 
     public void ReleaseLiveNote(int pitch)
     {
+        _gpu?.LiveNote(pitch, false, 0);
         var trail = _liveTrails.LastOrDefault(note => note.Pitch == pitch && note.KeyDown);
         if (trail is null) return;
         trail.KeyDown = false;
@@ -247,10 +254,23 @@ internal sealed class PianoStage : FrameworkElement
 
     public void ClearTransient()
     {
-        _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false; InvalidateVisual();
+        _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
+        _gpu?.ClearTransient();
+        InvalidateVisual();
     }
 
     public void Impact(int pitch, double strength = 1)
+    {
+        _gpu?.Impact(pitch, strength);
+        ImpactLocal(pitch, strength);
+    }
+
+    /// <summary>
+    /// The software stage's own reaction to a hit. A live trail landing on the keys calls this directly:
+    /// the GPU stage simulates its own live trails and lands them itself, so forwarding that second hit
+    /// would double every burst on the GPU.
+    /// </summary>
+    private void ImpactLocal(int pitch, double strength)
     {
         var keyWidth = ActualWidth / KeyCount;
         var clamped = Math.Clamp(pitch, FirstPitch, FirstPitch + KeyCount - 1);
@@ -260,6 +280,8 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.VelocityColor && _visual.VelocityColorAmount > 0) // Velocity → Color on the burst, wave and flash.
             noteColor = Blend(noteColor, VelocityTint(strength), _visual.VelocityColorAmount / 100);
         _energyLevel = Math.Min(1.5, _energyLevel + .22 * strength); // Audio Reactive envelope attack.
+        // Nobody sees the software particles while the GPU frame covers the stage, so do not simulate them.
+        if (UsesGpuFrame) { InvalidateVisual(); return; }
         var burstStyle = _visual.ImpactBurst;
         if (_visual.ZoneSplit) // Zone Split: bass hits erupt fire, treble hits splash ice.
             burstStyle = clamped < _visual.ZoneSplitPitch ? "Embers" : "Splash";
@@ -585,7 +607,7 @@ internal sealed class PianoStage : FrameworkElement
             else
             {
                 var y = 28 + trail.Age * _visual.NoteFallSpeed;
-                if (!trail.Hit && y >= hitY) { trail.Hit = true; Impact(trail.Pitch, .8); }
+                if (!trail.Hit && y >= hitY) { trail.Hit = true; ImpactLocal(trail.Pitch, .8); }
                 var tailY = y - 28 - trail.HeldSeconds * _visual.NoteFallSpeed;
                 if (trail.Released && tailY > hitY + 32) _liveTrails.RemoveAt(i);
             }
@@ -626,6 +648,7 @@ internal sealed class PianoStage : FrameworkElement
         // element that is not attached to a window yet has no DPI to report on some systems.
         if (_pixelsPerDip <= 0) _pixelsPerDip = PixelsPerDip(this);
         var keyHeight = KeyboardHeight; var keyTop = height - keyHeight; var lane = width / KeyCount;
+        if (UsesGpuFrame && _gpuBitmap is not null) { RenderGpuFrame(dc, width, height, keyTop, lane); return; }
         var chroma = _visual.BackgroundMode == "ChromaGreen";
         var scale = _visual.CameraZoom / 100;
         var parallax = _visual.CameraParallax / 100;
@@ -705,6 +728,7 @@ internal sealed class PianoStage : FrameworkElement
     {
         _pixelsPerDip = newDpi.PixelsPerDip;
         base.OnDpiChanged(oldDpi, newDpi);
+        ReportGpuSize();
         InvalidateVisual();
     }
 
@@ -2691,7 +2715,12 @@ internal sealed class PianoStage : FrameworkElement
         var parts = new List<string>();
         // The readouts are stage text, so they follow the interface language like every label does.
         if (_visual.ShowCounter) parts.Add(Loc.F("{0:00} KEYS", _pressed.Count));
-        if (_visual.ShowFps) parts.Add(Loc.F("{0} FPS · {1} PARTICLES", _fps, _sparks.Count));
+        if (_visual.ShowFps)
+        {
+            // With the GPU engine the readout is the render thread's own rate and particle count.
+            var (fps, particles) = _gpu is not null && GpuStats is { } stats ? stats() : (_fps, _sparks.Count);
+            parts.Add(Loc.F("{0} FPS · {1} PARTICLES", Math.Round(fps), particles));
+        }
         var text = new FormattedText(string.Join("   ", parts), System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
             new Typeface("Segoe UI Semibold"), 12, Brush(Color.FromArgb(190, 243, 229, 255)), _pixelsPerDip);
         dc.DrawText(text, new Point(width - text.Width - 30, 28));
@@ -2747,8 +2776,12 @@ internal sealed class PianoStage : FrameworkElement
         }
         return whites[Math.Clamp((int)(point.X / keyWidth), 0, whites.Length - 1)];
     }
-    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); _petals.Clear(); _petalCount = -1; base.OnRenderSizeChanged(sizeInfo); InvalidateVisual(); }
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); _petals.Clear(); _petalCount = -1; base.OnRenderSizeChanged(sizeInfo); ReportGpuSize(); PublishGpuLook(); InvalidateVisual(); }
     private static bool IsBlack(int pitch) => pitch % 12 is 1 or 3 or 6 or 8 or 10;
+    /// <summary>Normalised centre (0..1 of the stage width) of a key; the GPU stage lays its lanes and keys out with the same numbers.</summary>
+    internal static double KeyCenterOf(int pitch) => KeyCenters[Math.Clamp(pitch, 0, 127)];
+    /// <summary>True for the five black keys of every octave.</summary>
+    internal static bool IsBlackKey(int pitch) => IsBlack(pitch);
     internal static double BlackKeyOffset(int pitch) => (pitch % 12) switch
     {
         1 => -0.08,

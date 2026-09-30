@@ -103,6 +103,8 @@ public partial class MainWindow : Window
         ApplyChromeTheme();
         StartChromeSweeps();
         SetChromeVisible(true); _chromeTimer.Start();
+        // The GPU engine starts only when the settings ask for it (General → Graphics engine).
+        ApplyRenderBackend();
         if (loadBuiltInSoundFont) Loaded += MainWindow_Loaded;
     }
     internal bool HasSoundFont => _audio.HasSoundFont;
@@ -1396,6 +1398,7 @@ public partial class MainWindow : Window
         foreach (var pedal in _pedalsDown.ToArray()) SetPedalState(pedal, false);
         StopSongFolderWatch();
         StopCameraOverlay();
+        ShutdownGpuStage();
         _midi.Dispose(); _audio.Dispose();
     }
 }

@@ -40,6 +40,8 @@ public partial class App : Application
 
         var window = new MainWindow();
         MainWindow = window;
+        // --gpu draws the stage with the Direct3D 11 engine for this run only (the settings file keeps its choice).
+        if (e.Args.Contains("--gpu")) window.UseGpuForSession();
         // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches
         // the settings file: MainWindow.PreviewBackgroundImage sets the stage directly instead of going
         // through the row handlers that arm the auto-save timer. CI uses it to render the README preview

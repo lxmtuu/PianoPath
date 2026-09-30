@@ -21,6 +21,15 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The GPU stage (Gpu/): Direct3D 11 through Vortice.Windows. The shaders are compiled at start-up
+         with the system's d3dcompiler_47.dll, which every supported Windows version ships. -->
+    <PackageReference Include="Vortice.Direct3D11" Version="3.8.3" />
+    <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
+    <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
+    <EmbeddedResource Include="Gpu/StageShaders.hlsl" LogicalName="PianoPath.Gpu.StageShaders.hlsl" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Content Include="Assets\ConcertGrand.sf2" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\ATTRIBUTION.txt" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

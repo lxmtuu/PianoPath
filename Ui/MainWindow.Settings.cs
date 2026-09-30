@@ -645,6 +645,18 @@ public partial class MainWindow
         RefreshLanguageChips();
         Note(language, "Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another.");
 
+        var graphics = Card(GeneralSettingsHost, "GRAPHICS ENGINE", "Software draws the stage with WPF on the interface thread. GPU renders it with Direct3D 11 on a thread of its own: HDR bloom, lit 3D keys with shadows, tens of thousands of particles and up to 240 frames per second, without ever holding up MIDI input.");
+        Choice(graphics, "Renderer", nameof(PianoVisualSettings.RenderBackend), "Which engine draws the stage. If Direct3D 11 cannot start, Keyflow stays on the software engine and says why.",
+            ("Software", "Software (WPF)"), ("Gpu", "GPU (Direct3D 11)"));
+        Choice(graphics, "GPU frame rate", nameof(PianoVisualSettings.GpuFrameRate), "Frames per second the GPU render thread aims for. Match your display (60, 120, 144 or 240 Hz); Unlimited renders as fast as the graphics card allows.",
+            ("60", "60 FPS"), ("120", "120 FPS"), ("144", "144 FPS"), ("240", "240 FPS"), ("Unlimited", "Unlimited"));
+        Toggle(graphics, "VSync in the GPU stage window", nameof(PianoVisualSettings.GpuVSync), "Present on the display's refresh. Turn it off for the lowest latency; the picture may tear.");
+        ButtonRow(graphics, ("OPEN GPU STAGE WINDOW", OpenGpuStage_Click));
+        Note(graphics, "The GPU stage window runs at the full frame rate on any monitor and suits a projector or OBS window capture. F11 toggles full screen, Esc leaves it. Graphics settings belong to this computer: applying a preset keeps them.");
+        _gpuStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
+        Register(graphics, _gpuStatusLabel, null, "gpu direct3d graphics engine renderer status adapter");
+        RefreshGpuStatus();
+
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click), ("IMPORT PROFILE…", ImportProfile_Click));
         Note(profile, "A profile is plain JSON: dropping one on the window applies it, a dropped MIDI file opens the song and a dropped image becomes the stage background.");
@@ -1253,6 +1265,7 @@ public partial class MainWindow
     {
         _visualSettings.Clamp();
         Stage.SetVisualSettings(_visualSettings, reloadBackground);
+        ApplyRenderBackend();
         SyncCameraOverlay();
         ApplyChromeTheme();
         RefreshHandStatus();
