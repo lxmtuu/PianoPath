@@ -87,6 +87,27 @@ internal static class Mp4TakeAttempt
         }
     }
 
+    /// <summary>
+    /// Builds the take's buffer and sample on a thread of their own, with three seconds to do it. A machine whose
+    /// media objects stall makes that a result rather than a lost run: the caller is told the last call reached
+    /// and carries on to the take, which is the only thing that can say whether a real file can be written.
+    /// </summary>
+    private static int ObjectsUnderWatchdog(out string? stopped)
+    {
+        var seen = new List<string>();
+        var result = 0;
+        void Note(string line) { lock (seen) seen.Add(line); Say(line); }
+        var thread = new Thread(() =>
+        {
+            try { result = Mf.MediaObjectProbe(Width * Height * 4, Note); }
+            catch { result = Mf.MF_E_OUT_OF_MEMORY; }
+        }) { IsBackground = true, Name = "take-objects" };
+        thread.Start();
+        if (thread.Join(3000)) { stopped = null; return result; }
+        lock (seen) stopped = seen.Count > 0 ? seen[^1] : null;
+        return unchecked((int)0x80004004);   // E_ABORT: the call did not come back, which is not a failure of the app
+    }
+
     /// <summary>The take itself, once the trace file is open. See <see cref="Run"/>.</summary>
     private static int Attempt(string path)
     {
@@ -105,14 +126,15 @@ internal static class Mp4TakeAttempt
             : $"NOTE MP4 encoder: the media stack would not take an H.264 stream (HRESULT {Mf.Describe(encoderResult)}), so there is no encoder here to write a take with, and nothing further is attempted.");
         if (encoderResult < 0) return 2;
 
-        // The buffer and the sample the take's first frame will go into, built once on their own: they need no
-        // writer and no encoder, so a machine that stalls while they come together stops here with the call named
-        // instead of inside a take, a minute later, with nothing said.
-        var objects = Mf.MediaObjectProbe(Width * Height * 4, Say);
+        // The buffer and the sample the take's first frame will go into, built once on their own and under a
+        // watchdog: they need no writer and no encoder, so a machine that stalls while they come together says so
+        // here, in three seconds, with the call named. The take then goes ahead regardless — the writing is the
+        // one thing this child exists for, and a probe may not stand in front of it, which is exactly what a run
+        // of this verification once showed when the probe was allowed to block the take.
+        var objects = ObjectsUnderWatchdog(out var objectStop);
         Say(objects >= 0
             ? "NOTE MP4 encoder: the take's media buffer and sample were built and stamped on their own, so the take can carry a frame."
-            : $"NOTE MP4 encoder: the take's media objects could not be built ({Mf.Describe(objects)}), so no frame can be carried.");
-        if (objects < 0) return 2;
+            : $"NOTE MP4 encoder: the take's media objects did not come back within three seconds — the last call reached was: {objectStop ?? "<it said nothing at all>"} — so the take is attempted anyway and its own trace will say where it stops.");
 
         Say($"NOTE MP4 encoder: opening a {Width}×{Height} take at {FrameRate} fps, asking for the audio stream as well.");
         Mp4Recorder recorder;

@@ -86,16 +86,53 @@ internal static class EncodeProbeAttempt
         }
     }
 
+    /// <summary>
+    /// One case on its own thread, with three seconds to finish. A case that does not finish is a result, not a
+    /// reason to lose the run: its last note is quoted, the stuck thread is left to its fate as a background
+    /// thread, and the next case gets its turn. Three seconds is many times what any of these calls takes on a
+    /// machine whose media stack works at all.
+    /// </summary>
+    private static bool Case(Mf.MediaObjectCase kind)
+    {
+        var seen = new List<string>();
+        var result = 0;
+        void Note(string line) { lock (seen) seen.Add(line); Say(line); }
+        var thread = new Thread(() =>
+        {
+            try { result = Mf.MediaObjectCaseRun(kind, Note); }
+            catch { result = Mf.MF_E_OUT_OF_MEMORY; }
+        }) { IsBackground = true, Name = "case-" + kind };
+        thread.Start();
+        if (thread.Join(3000))
+        {
+            Say($"PLUMBING case {kind}: every call came back ({Mf.Describe(result)}).");
+            return false;
+        }
+        string? stopped;
+        lock (seen) stopped = seen.Count > 0 ? seen[^1] : null;
+        Say($"PLUMBING case {kind}: a call never came back within three seconds; the last one it reached was: {stopped ?? "<it said nothing at all>"}");
+        return true;
+    }
+
     /// <summary>The probe itself, once the trace file is open. See <see cref="Run"/>.</summary>
     private static int Attempt(string path)
     {
-        // The media objects a take is made of, built on their own first: no file, no encoder, no writer, so a
-        // machine that stalls while they are handed over is named here rather than after a take has timed out.
-        var objects = Mf.MediaObjectProbe(Width * Height * 4, Say);
-        Say(objects >= 0
-            ? "NOTE MP4 encoder: a media buffer and a sample were built and stamped on their own, so the media objects themselves are not the trouble."
-            : $"NOTE MP4 encoder: the media objects stopped being built ({Mf.Describe(objects)}).");
-        if (objects < 0) return 2;
+        // The media objects a take is made of, one set of calls at a time, each under its own watchdog: no file,
+        // no encoder, no writer, and no way for one call that never comes back to hide the rest of the answers.
+        // Between them these cases say which part of the object works — a stamp after the buffer, a stamp before
+        // it, a stamp with no buffer, an attribute write, a read, and a media type for comparison.
+        var blocked = false;
+        foreach (var kind in new[]
+        {
+            Mf.MediaObjectCase.TimeAfterBuffer, Mf.MediaObjectCase.TimeBeforeBuffer, Mf.MediaObjectCase.TimeAlone,
+            Mf.MediaObjectCase.AttributeOnSample, Mf.MediaObjectCase.ReadTime, Mf.MediaObjectCase.AttributeOnMediaType,
+        })
+        {
+            if (Case(kind)) blocked = true;
+        }
+        Say(blocked
+            ? "NOTE MP4 encoder: at least one case above never came back; the AVI attempt follows anyway, since it is the writing this probe exists to explain."
+            : "NOTE MP4 encoder: every media-object case came back, so the objects themselves are not the trouble.");
 
         Say($"NOTE MP4 encoder: writing {Frames} pictures into an uncompressed AVI through the same sample plumbing.");
         var result = Mf.EncodeAviProbe(path, new byte[Width * Height * 4], Width, Height, FrameRate, Frames, Say);

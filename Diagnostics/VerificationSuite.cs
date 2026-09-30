@@ -2178,8 +2178,9 @@ internal static class VerificationSuite
         {
             Assert(lines.Any(line => line.Contains("found a way to make H.264", StringComparison.Ordinal)),
                 "A take attempt that opened the take should have said the machine's media stack took an H.264 stream, since a take asks for one.");
-            Assert(lines.Any(line => line.Contains("built and stamped on their own", StringComparison.Ordinal)),
-                "A take attempt that opened the take should have built the media buffer and sample the first frame goes into.");
+            Assert(lines.Any(line => line.Contains("built and stamped on their own", StringComparison.Ordinal)
+                    || line.Contains("did not come back within three seconds", StringComparison.Ordinal)),
+                "A take attempt that opened the take should have said what became of the media buffer and sample the first frame goes into.");
         }
         if (lines.Count == 0)
             Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
@@ -2222,7 +2223,10 @@ internal static class VerificationSuite
     /// </summary>
     private static void VerifyEncodePlumbingProbe()
     {
-        const int ProbeTimeoutSeconds = 20;
+        // The probe runs six guarded media-object cases (three seconds each at the very worst) and then tries the
+        // AVI, which is the part that can hang: a minute is room for the cases and for a machine that is merely
+        // slow, while still being quick enough that a stuck probe costs the run a line rather than the run.
+        const int ProbeTimeoutSeconds = 60;
         var probe = Path.Combine(Path.GetTempPath(), "keyflow-plumbing-probe-" + Guid.NewGuid().ToString("N") + ".avi");
         var lines = new List<string>();
         var exit = 0;

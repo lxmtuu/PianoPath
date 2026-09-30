@@ -86,6 +86,102 @@ internal static partial class Mf
         return attributes.SetUINT64(ref local, value);
     }
 
+    /// <summary>One experiment on the objects a take is made of; see <see cref="MediaObjectCaseRun"/>.</summary>
+    internal enum MediaObjectCase
+    {
+        /// <summary>The take's own order: buffer, sample, buffer into sample, then the time.</summary>
+        TimeAfterBuffer,
+        /// <summary>The stamps go on before the buffer is attached.</summary>
+        TimeBeforeBuffer,
+        /// <summary>A sample with no buffer at all.</summary>
+        TimeAlone,
+        /// <summary>An inherited attribute write — the kind media types already accept — on a sample.</summary>
+        AttributeOnSample,
+        /// <summary>Asking a fresh sample for its time, which writes nothing anywhere.</summary>
+        ReadTime,
+        /// <summary>The control: the same write on a media type, which the take performing at all proves works.</summary>
+        AttributeOnMediaType,
+    }
+
+    /// <summary>
+    /// Runs one of the small experiments a machine whose samples will not be stamped can be examined with. Every
+    /// case touches a different set of calls, so the one that comes back tells which part of the object works: a
+    /// stamp after the buffer, a stamp before it, a stamp with no buffer, an inherited attribute write, a plain
+    /// read, and a media type write for comparison. The caller runs these under a watchdog — the point of them is
+    /// that a call may not return — and prints what each said.
+    /// </summary>
+    internal static int MediaObjectCaseRun(MediaObjectCase kind, Action<string>? step = null)
+    {
+        var hr = MediaStartup();
+        if (hr < 0) return hr;
+        step?.Invoke("NOTE media objects: the media stack is up.");
+        if (kind == MediaObjectCase.AttributeOnMediaType)
+        {
+            hr = MFCreateMediaType(out var type);
+            if (hr < 0) return hr;
+            step?.Invoke("NOTE media objects: a media type is made; a GUID attribute is going on.");
+            hr = type.SetGUIDKey(SubType, H264);
+            step?.Invoke($"NOTE media objects: the media type took the attribute ({Describe(hr)}).");
+            return hr;
+        }
+        hr = MFCreateSample(out var sample);
+        if (hr < 0) return hr;
+        if (kind == MediaObjectCase.ReadTime)
+        {
+            step?.Invoke("NOTE media objects: a bare sample is made; its time is being read.");
+            hr = sample.GetSampleTime(out _);
+            step?.Invoke($"NOTE media objects: the bare sample answered the read ({Describe(hr)}).");
+            return hr;
+        }
+        if (kind == MediaObjectCase.AttributeOnSample)
+        {
+            step?.Invoke("NOTE media objects: a bare sample is made; a GUID attribute is going on.");
+            hr = sample.SetGUIDKey(MfSampleAttribute, H264);
+            step?.Invoke($"NOTE media objects: the sample took the attribute ({Describe(hr)}).");
+            return hr;
+        }
+        IMFMediaBuffer? attached = null;
+        if (kind == MediaObjectCase.TimeBeforeBuffer)
+        {
+            step?.Invoke("NOTE media objects: a bare sample is made; the time goes on before any buffer does.");
+            hr = sample.SetSampleTime(0);
+            step?.Invoke($"NOTE media objects: the sample's time is set with no buffer on it ({Describe(hr)}).");
+            if (hr < 0) return hr;
+            hr = sample.SetSampleDuration(1);
+            step?.Invoke($"NOTE media objects: its duration is set too ({Describe(hr)}).");
+            if (hr < 0) return hr;
+        }
+        if (kind != MediaObjectCase.TimeAlone)
+        {
+            hr = MFCreateMemoryBuffer(4096, out var buffer);
+            if (hr < 0) return hr;
+            step?.Invoke("NOTE media objects: a buffer is made and locked.");
+            hr = buffer.Lock(out var pointer, out _, out _);
+            if (hr < 0) return hr;
+            Marshal.Copy(new byte[4096], 0, pointer, 4096);
+            buffer.Unlock();
+            buffer.SetCurrentLength(4096);
+            step?.Invoke("NOTE media objects: the buffer is filled; it is going into the sample.");
+            hr = sample.AddBuffer(buffer);
+            if (hr < 0) return hr;
+            attached = buffer;
+        }
+        if (kind is MediaObjectCase.TimeAfterBuffer or MediaObjectCase.TimeAlone)
+        {
+            step?.Invoke("NOTE media objects: the sample's time is going on.");
+            hr = sample.SetSampleTime(0);
+            if (hr < 0) return hr;
+            step?.Invoke("NOTE media objects: the sample's time is set; its duration is going on.");
+            hr = sample.SetSampleDuration(1);
+            if (hr < 0) return hr;
+        }
+        step?.Invoke($"NOTE media objects: case {kind} finished with the object stamped ({Describe(hr)}, buffer {(attached is null ? "absent" : "attached")}).");
+        return S_OK;
+    }
+
+    /// <summary>A GUID attribute the sample's own attribute store can hold; the key is only ever used by the probe.</summary>
+    private static readonly Guid MfSampleAttribute = new("7BD72FDD-4A9A-4E4B-9C1C-6A4B2E6E0D30");
+
     /// <summary>
     /// Builds one media buffer and one sample out of it — make, lock, fill, release, size, carry, stamp — and
     /// writes nothing anywhere. That is the smallest set of Media Foundation objects a take is made of, and on a
