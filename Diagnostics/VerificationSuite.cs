@@ -1864,13 +1864,15 @@ internal static class VerificationSuite
             "A ghost row's caption should print the take's own hits, misses and accuracy.");
         Assert(days.Count == PracticeHistory.ChartDays && days[^1].Day == today && days[0].Day == today.AddDays(1 - PracticeHistory.ChartDays),
             "The chart should cover the requested number of days, oldest first and ending on today.");
-        Assert(days[^1] is { Runs: 2, Hits: 3, Misses: 3 } && Math.Abs(days[^1].Accuracy - 50) < .01,
+        // Today: 2 + 1 hits and 1 + 1 misses across its two runs.
+        Assert(days[^1] is { Runs: 2, Hits: 3, Misses: 2 } && Math.Abs(days[^1].Accuracy - 60) < .01,
             $"Today's row should add up every run of the day (got {days[^1]}).");
         Assert(days[^2] is { Runs: 1, Hits: 2, Misses: 2 } && days.Take(days.Count - 2).All(day => day.Runs == 0 && day.Accuracy == 0),
             "Days without a run should still be rows, with zero runs and no accuracy.");
         Assert(PracticeHistory.Runs.Count == 4 && days.Sum(day => day.Runs) == 3,
             "A run older than the window should stay out of the chart while the history file still keeps it.");
-        Assert(Math.Abs(PracticeHistory.AverageAccuracy(days) - 50) < .01
+        // The window holds 5 hits and 4 misses, so its average counts notes, not days.
+        Assert(Math.Abs(PracticeHistory.AverageAccuracy(days) - 5.0 / 9) < .01
                 && PracticeHistory.ChartCaption(days) == Loc.F("Accuracy by day: {0} runs · {1:0.#}% average", 3, PracticeHistory.AverageAccuracy(days)),
             $"The window's caption should name its runs and count every note graded in it once ({PracticeHistory.ChartCaption(days)}).");
 
@@ -1880,7 +1882,7 @@ internal static class VerificationSuite
         var accent = ((SolidColorBrush)window.FindResource("AccentBrush")).Color; var track = ((SolidColorBrush)window.FindResource("TrackBrush")).Color;
         Assert(bars.Count == PracticeHistory.ChartDays && chartLabel.Text == PracticeHistory.ChartCaption(days),
             $"The History page should draw one bar per day and print the caption of the window ({bars.Count} bars).");
-        Assert(Math.Abs(bars[^1].Height - PracticeChart.BarHeight(50, 52, 3)) < .001 && bars[0].Height == 0
+        Assert(Math.Abs(bars[^1].Height - PracticeChart.BarHeight(60, 52, 3)) < .001 && bars[0].Height == 0
                 && bars[^1].Fill is SolidColorBrush filled && filled.Color == accent && bars[0].Fill is SolidColorBrush blank && blank.Color == track,
             "Today's bar should be as tall as today's accuracy, and a day with nothing played should be a flat track-coloured sliver.");
 
