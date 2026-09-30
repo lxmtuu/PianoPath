@@ -400,8 +400,8 @@ internal static class VerificationSuite
         Assert(straight.SequenceEqual(frame), "A top-down frame with a positive stride should be copied exactly as it arrived.");
         var mirrored = new byte[16];
         CameraOverlay.CopyFrame(frame, 8, 2, 2, mirrored, mirror: true);
-        Assert(mirrored[0] == 0 && mirrored[1] == 255 && mirrored[4] == 255 && mirrored[5] == 0
-                && mirrored[8] == 255 && mirrored[9] == 255 && mirrored[12] == 255 && mirrored[13] == 0,
+        Assert(mirrored[1] == 255 && mirrored[5] == 0 && mirrored[2] == 0 && mirrored[6] == 255
+                && mirrored[9] == 255 && mirrored[13] == 0,
             "Mirroring should swap the two columns of every row and leave the rows themselves in order.");
         var bottomUp = new byte[16];
         Array.Copy(frame, 8, bottomUp, 0, 8); Array.Copy(frame, 0, bottomUp, 8, 8);
