@@ -213,7 +213,8 @@ def write_all(target: Path, quiet: bool = False) -> list[Path]:
     for preset in PRESETS:
         path = target / f"{preset['name']}.json"
         payload = json.dumps(build(preset, defaults), indent=2, ensure_ascii=False) + "\n"
-        path.write_text(payload, encoding="utf-8")
+        # Bytes, not text mode: write_text turns "\n" into "\r\n" on Windows, and the checker compares the files byte for byte.
+        path.write_bytes(payload.encode("utf-8"))
         written.append(path)
         if not quiet:
             print(f"wrote {path.relative_to(ROOT)} ({len(payload)} bytes)")
