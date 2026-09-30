@@ -1717,15 +1717,19 @@ internal static class VerificationSuite
             "The hand split should choose the staff: middle C is one ledger line below the treble staff and G2 sits on the bottom line of the bass staff.");
         Assert(SheetLayer.Place(59, 60).Staff == 1 && SheetLayer.Place(60, 60).Staff == 0 && SheetLayer.Place(21, 21).Staff == 0,
             "Every pitch at or above the split belongs to the right hand and everything below it to the left, down to the lowest key.");
+        // Every semitone either stays on the same staff and moves the written note up (never down, at most one
+        // line or space) or crosses the split onto the upper staff — where the bass leaves off the treble begins.
         var monotone = true; var widestJump = 0;
         for (var pitch = 21; pitch < 108; pitch++)
         {
             var (lowStaff, lowStep) = SheetLayer.Place(pitch, 60);
             var (highStaff, highStep) = SheetLayer.Place(pitch + 1, 60);
-            if (highStaff < lowStaff) monotone = false;
-            widestJump = Math.Max(widestJump, Math.Abs(highStep + highStaff * 40 - (lowStep + lowStaff * 40)));
+            // Staff 0 is the upper (treble) staff and staff 1 the bass one, so a rising pitch may step up from
+            // bass to treble but must never fall from treble to bass.
+            if (highStaff > lowStaff || (highStaff == lowStaff && highStep < lowStep)) monotone = false;
+            if (highStaff == lowStaff) widestJump = Math.Max(widestJump, highStep - lowStep);
         }
-        Assert(monotone && widestJump <= 1, $"A higher key must never be written lower on the sheet (widest step for one semitone was {widestJump}).");
+        Assert(monotone && widestJump <= 1, $"A higher key must never be written lower on the sheet, and a semitone must move it at most one step (widest was {widestJump}).");
 
         Assert(SheetLayer.LedgerLines(-1).Count == 0 && SheetLayer.LedgerLines(-2).SequenceEqual([-2]) && SheetLayer.LedgerLines(-4).SequenceEqual([-2, -4])
             && SheetLayer.LedgerLines(8).Count == 0 && SheetLayer.LedgerLines(9).Count == 0 && SheetLayer.LedgerLines(12).SequenceEqual([10, 12]),
