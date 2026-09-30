@@ -60,10 +60,12 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
             var hr = Mf.MFStartup(Mf.MF_VERSION, 0);
             if (hr != Mf.S_OK) throw new InvalidOperationException(Loc.F("The media stack would not start ({0}).", Mf.Describe(hr)));
             _mediaStarted = true;
-            // The file is opened once: a sink writer cannot give up a stream it has already been given, and
-            // reopening the path would need this writer to let go of the file first. So the audio stream is the
-            // one that may fail softly — a machine with no AAC encoder gets a take with the picture only.
-            Open(encodersForAudio: withAudio);
+            // Whether the sound can go in at all is asked of a throwaway writer first: a stream that is added
+            // and then refused would leave this writer unable to be told to drop it again, and the user's file
+            // would have to be opened a second time. The answer decides the shape of the take before it starts.
+            var wantsAudio = withAudio && CanEncodeAudio();
+            AudioDropped = withAudio && !wantsAudio;
+            Open(encodersForAudio: wantsAudio);
         }
         catch
         {
@@ -213,7 +215,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         }
     }
 
-    /// <summary>Lets go of the writer and the file it holds, so the same path can be opened again.</summary>
+    /// <summary>Lets go of the writer and of the file it holds, so the take is closed with the recording.</summary>
     private void Release()
     {
         var writer = _writer;
@@ -232,7 +234,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         if (hr < 0) throw new InvalidOperationException(Loc.F("No MP4 writer is available on this machine ({0}).", Mf.Describe(hr)));
         _writer = writer;
         _videoStream = AddVideoStream();
-        if (encodersForAudio && !TryAddAudioStream(out _audioStream)) AudioDropped = true;
+        if (encodersForAudio) _audioStream = AddAudioStream();
         hr = writer.BeginWriting();
         if (hr < 0) throw new InvalidOperationException(Loc.F("The MP4 writer would not start writing ({0}).", Mf.Describe(hr)));
     }
@@ -266,38 +268,71 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     }
 
     /// <summary>
-    /// Adds the AAC stream and declares the 16-bit stereo PCM this side hands it. Returns <c>false</c> when the
-    /// machine has no AAC encoder at all — nothing has been added to the writer in that case, so the same file
-    /// carries on with the picture alone — while a stream that was added but then refused the samples is a hard
-    /// failure, since a writer cannot be told to drop it again.
+    /// The AAC stream the writer is asked to produce. The encoder derives the block alignment and the byte rate
+    /// from these attributes.
     /// </summary>
-    private bool TryAddAudioStream(out int stream)
+    private static Mf.IMFMediaType? AudioTarget()
     {
-        stream = -1;
-        if (Mf.MFCreateMediaType(out var target) != Mf.S_OK) return false;
+        if (Mf.MFCreateMediaType(out var target) != Mf.S_OK) return null;
         target.SetGUIDKey(Mf.MajorType, Mf.AudioMajorType);
         target.SetGUIDKey(Mf.SubType, Mf.Aac);
         target.SetUINT32Key(Mf.AudioSamplesPerSecond, SampleRate);
         target.SetUINT32Key(Mf.AudioChannels, Channels);
-        target.SetUINT32Key(Mf.AudioAverageBytesPerSecond, AudioBytesPerSecond);
         target.SetUINT32Key(Mf.AudioBitsPerSample, 16);
+        target.SetUINT32Key(Mf.AudioAverageBytesPerSecond, AudioBytesPerSecond);
+        return target;
+    }
+
+    /// <summary>
+    /// The 16-bit stereo PCM this side hands the encoder, in the smallest set of attributes the AAC encoder
+    /// documents. Spelling out the block alignment, the byte rate or "all samples independent" on top of these
+    /// makes it refuse the type outright — a CI run came back with MF_E_INVALIDMEDIATYPE for exactly that.
+    /// </summary>
+    private static Mf.IMFMediaType? AudioSource()
+    {
+        if (Mf.MFCreateMediaType(out var source) != Mf.S_OK) return null;
+        source.SetGUIDKey(Mf.MajorType, Mf.AudioMajorType);
+        source.SetGUIDKey(Mf.SubType, Mf.Pcm);
+        source.SetUINT32Key(Mf.AudioSamplesPerSecond, SampleRate);
+        source.SetUINT32Key(Mf.AudioChannels, Channels);
+        source.SetUINT32Key(Mf.AudioBitsPerSample, 16);
+        return source;
+    }
+
+    /// <summary>
+    /// Whether this machine can put the engine's samples into an MP4 at all, asked on a throwaway file so the
+    /// user's own take is only ever opened once and only in a shape the machine has already accepted.
+    /// </summary>
+    private static bool CanEncodeAudio()
+    {
+        var probe = Path.Combine(Path.GetTempPath(), "keyflow-mp4-probe-" + Guid.NewGuid().ToString("N") + ".mp4");
+        Mf.IMFSinkWriter? writer = null;
+        try
+        {
+            if (Mf.MFCreateSinkWriterFromURL(probe, IntPtr.Zero, null, out writer) < 0) return false;
+            var target = AudioTarget(); var source = AudioSource();
+            if (target is null || source is null) return false;
+            if (writer.AddStream(target, out var index) < 0) return false;
+            return writer.SetInputMediaType(index, source, null) >= 0;
+        }
+        catch { return false; }
+        finally
+        {
+            if (writer is not null) { try { Marshal.ReleaseComObject(writer); } catch { } }
+            try { File.Delete(probe); } catch { }
+        }
+    }
+
+    /// <summary>Adds the AAC stream and declares the PCM this side hands it; the probe has already proved it fits.</summary>
+    private int AddAudioStream()
+    {
+        var target = AudioTarget() ?? throw new InvalidOperationException(Loc.T("A media type could not be prepared."));
         var hr = _writer!.AddStream(target, out var index);
-        if (hr < 0) return false;
-        if (Mf.MFCreateMediaType(out var input) != Mf.S_OK) throw new InvalidOperationException(Loc.T("A media type could not be prepared."));
-        input.SetGUIDKey(Mf.MajorType, Mf.AudioMajorType);
-        input.SetGUIDKey(Mf.SubType, Mf.Pcm);
-        input.SetUINT32Key(Mf.AudioSamplesPerSecond, SampleRate);
-        input.SetUINT32Key(Mf.AudioChannels, Channels);
-        input.SetUINT32Key(Mf.AudioBitsPerSample, 16);
-        input.SetUINT32Key(Mf.AudioBlockAlignment, Channels * 2);
-        input.SetUINT32Key(Mf.AudioAverageBytesPerSecond, SampleRate * Channels * 2);
-        // The AAC encoder insists that every block of PCM stands on its own; without the flag it refuses the
-        // media type outright (MF_E_INVALIDMEDIATYPE, as a CI run showed).
-        input.SetUINT32Key(Mf.AllSamplesIndependent, 1);
-        hr = _writer.SetInputMediaType(index, input, null);
+        if (hr < 0) throw new InvalidOperationException(Loc.F("The MP4 writer has no AAC encoder ({0}).", Mf.Describe(hr)));
+        var source = AudioSource() ?? throw new InvalidOperationException(Loc.T("A media type could not be prepared."));
+        hr = _writer.SetInputMediaType(index, source, null);
         if (hr < 0) throw new InvalidOperationException(Loc.F("The AAC encoder refused the engine's samples ({0}).", Mf.Describe(hr)));
-        stream = index;
-        return true;
+        return index;
     }
 
     /// <summary>Copies a block of bytes into a media buffer, stamps it and hands it to the writer.</summary>

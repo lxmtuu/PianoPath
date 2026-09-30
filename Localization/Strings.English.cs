@@ -965,6 +965,7 @@ internal static class StringsEnglish
         ["The MIDI file declares a time division this reader cannot use."] = "The MIDI file declares a time division this reader cannot use.",
         ["The MIDI file is truncated."] = "The MIDI file is truncated.",
         ["The MIDI header has an invalid length."] = "The MIDI header has an invalid length.",
+        ["The MP4 writer has no AAC encoder ({0})."] = "The MP4 writer has no AAC encoder ({0}).",
         ["The MP4 writer has no H.264 encoder for this size ({0})."] = "The MP4 writer has no H.264 encoder for this size ({0}).",
         ["The MP4 writer would not start writing ({0})."] = "The MP4 writer would not start writing ({0}).",
         ["The SoundFont contains no usable preset/sample zones."] = "The SoundFont contains no usable preset/sample zones.",
