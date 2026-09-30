@@ -33,6 +33,8 @@ internal sealed class GpuLook
     public float NoteRefraction { get; init; } = .35f;
     public float NoteTexture { get; init; } = .6f;
     public bool Notes3D { get; init; } = true;
+    /// <summary>Note names printed inside the bars when there is room (Style → SHAPE &amp; STYLE).</summary>
+    public bool ShowNoteLabels { get; init; }
     /// <summary>Song note speed in DIPs per second, identical to the software stage.</summary>
     public float SongFallSpeed { get; init; } = 258;
     /// <summary>Live trail speed in DIPs per second (the software stage uses NoteFallSpeed directly).</summary>
@@ -97,6 +99,8 @@ internal sealed class GpuLook
     public float ParticleSizeRandomness { get; init; } = .8f;
     public float ParticleGlow { get; init; } = .85f;
     public float EmitterSize { get; init; } = .24f;
+    /// <summary>Twists the burst direction over time (0..1), as the software stage's Spiral slider.</summary>
+    public float Spiral { get; init; } = .3f;
     public float Gravity { get; init; } = 290;
     public float Drag { get; init; } = .26f;
     public float VectorField { get; init; } = .36f;
@@ -117,6 +121,8 @@ internal sealed class GpuLook
     public bool ShowKeys { get; init; } = true;
     public bool AnimateKeys { get; init; } = true;
     public bool ShowKeyFelt { get; init; }
+    /// <summary>The fallboard's soft shadow across the top of the keys.</summary>
+    public bool ShowKeyShadow { get; init; } = true;
     public bool ShowHalo { get; init; } = true;
     public float HaloIntensity { get; init; } = .9f;
     public int KeyboardStyle { get; init; } = 1;
@@ -177,6 +183,9 @@ internal sealed class GpuLook
     public bool TempoSync { get; init; }
     public float TempoSyncAmount { get; init; }
     public bool PedalGlow { get; init; }
+    /// <summary>Audio reactive: note onsets pump the note glow and the hit line (0..1 amount).</summary>
+    public bool AudioReactive { get; init; }
+    public float AudioReactiveAmount { get; init; }
     public float PedalGlowIntensity { get; init; }
 
     // ---- colours (sRGB 0..1) ----
@@ -230,7 +239,7 @@ internal sealed class GpuLook
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
             NoteEdge = P(s.NoteEdge), NoteHeadGlow = P(s.NoteHeadGlow), NoteRefraction = P(s.NoteRefraction), NoteTexture = P(s.NoteTexture),
-            Notes3D = s.Notes3D,
+            Notes3D = s.Notes3D, ShowNoteLabels = s.ShowNoteLabels,
             SongFallSpeed = (float)(258 * s.NoteFallSpeed / 550), LiveFallSpeed = (float)s.NoteFallSpeed,
             Rising = s.NoteDirection == "Up",
             VelocityColor = s.VelocityColor, VelocityColorAmount = P(s.VelocityColorAmount),
@@ -253,14 +262,14 @@ internal sealed class GpuLook
             ParticleAmount = (float)s.ParticleAmount, ParticleResponse = (float)s.ParticleResponse, ParticleVelocity = (float)s.ParticleVelocity,
             ParticleSpeed = P(s.ParticleSpeed), ParticleRandomness = P(s.ParticleRandomness), ParticleSpread = P(s.ParticleSpread),
             ParticleLife = (float)s.ParticleLife, ParticleLifeRandomness = P(s.ParticleLifeRandomness), ParticleSize = (float)s.ParticleSize,
-            ParticleSizeRandomness = P(s.ParticleSizeRandomness), ParticleGlow = P(s.ParticleGlow), EmitterSize = P(s.EmitterSize),
+            ParticleSizeRandomness = P(s.ParticleSizeRandomness), ParticleGlow = P(s.ParticleGlow), EmitterSize = P(s.EmitterSize), Spiral = P(s.Spiral),
             Gravity = (float)s.Gravity, Drag = P(s.Drag), VectorField = P(s.VectorField), FieldScale = (float)Math.Max(1, s.FieldScale),
             EvolutionSpeed = P(s.EvolutionSpeed), PhysicsTimeFactor = P(s.PhysicsTimeFactor),
             WispAmount = (float)s.WispAmount, WispSpeed = (float)s.WispSpeed, WispHeight = P(s.WispHeight), WispWidth = P(s.WispWidth),
             WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",
 
-            ShowKeys = s.ShowKeys, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowHalo = s.ShowHalo, HaloIntensity = P(s.HaloIntensity),
+            ShowKeys = s.ShowKeys, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo, HaloIntensity = P(s.HaloIntensity),
             KeyboardStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.KeyboardStyles, s.KeyboardStyle)),
             KeyboardFraction = (float)keyboardFraction, KeyOverhang = P(s.KeyOverhang), KeyPressDepth = P(s.KeyPressDepth),
             KeyLighting = P(s.KeyLighting), KeyGlowRadius = P(s.KeyGlowRadius), PressedKeyFixed = s.PressedKeyColorMode == "Fixed",
@@ -281,6 +290,7 @@ internal sealed class GpuLook
             BloomIntensity = P(s.BloomIntensity), BloomSize = P(s.BloomSize),
             CameraZoom = P(s.CameraZoom), CameraOffset = P(s.CameraOffset), CameraParallax = P(s.CameraParallax),
             TempoSync = s.TempoSync, TempoSyncAmount = P(s.TempoSyncAmount), PedalGlow = s.PedalGlow, PedalGlowIntensity = P(s.PedalGlowIntensity),
+            AudioReactive = s.AudioReactive, AudioReactiveAmount = P(s.AudioReactiveAmount),
 
             BackgroundColor = ParseHex(s.BackgroundColor, Vector3.Zero),
             HaloColor = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f)),

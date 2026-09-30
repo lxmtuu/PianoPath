@@ -98,6 +98,11 @@ internal sealed partial class GpuStageSimulation
     private float _pedalBoost = 1;
     /// <summary>Pedal Glow: 1, or up to 2 while the sustain pedal is down (eased so the glow swells and settles).</summary>
     internal float PedalBoost => _pedalBoost;
+    private float _energy;
+    /// <summary>Audio reactive: 1, or more after a run of note onsets (the software stage's EnergyBoost envelope).</summary>
+    internal float EnergyBoost => _look.AudioReactive ? 1 + _energy * _look.AudioReactiveAmount : 1;
+    /// <summary>Pedal glow and audio reactive together, for everything the software stage lights with both.</summary>
+    internal float GlowBoost => _pedalBoost * EnergyBoost;
     internal float SimulationWidth => _simWidth;
     /// <summary>Linear note colour and activity (0..1) per pitch, uploaded for the hit line.</summary>
     internal readonly Vector4[] KeyColors = new Vector4[128];
@@ -198,6 +203,7 @@ internal sealed partial class GpuStageSimulation
         _activity = Math.Min(1, totalGlow / 4);
         var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity : 1;
         _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-dt * 10));
+        _energy *= MathF.Exp(-2.2f * dt);
         HorizonColor = totalGlow > .01f ? ToLinear(horizon / totalGlow) : ToLinear(look.HaloColor) * .5f;
         for (var pitch = 0; pitch < 128; pitch++)
         {
@@ -338,6 +344,7 @@ internal sealed partial class GpuStageSimulation
         var color = _active[clamped] ? _keyColor[clamped] : look.NoteColor(clamped, 0);
         if (look.VelocityColor && look.VelocityColorAmount > 0) color = Vector3.Lerp(color, VelocityTint(strength), look.VelocityColorAmount);
         _glow[clamped] = Math.Max(_glow[clamped], Math.Min(1, .6f + strength * .4f));
+        _energy = Math.Min(1.5f, _energy + .22f * strength); // audio reactive envelope attack
         // wave channel
         if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0 && _rings.Count < 96)
             _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }) });
@@ -367,6 +374,7 @@ internal sealed partial class GpuStageSimulation
             var needle = i % 3 != 0 && shape == Shape.Dot;
             if (needle) shape = Shape.Streak;
             var angle = -MathF.PI / 2 + (Rand() - .5f) * look.ParticleSpread * MathF.PI;
+            angle += MathF.Sin(i * .37f + (float)_time * look.EvolutionSpeed) * look.Spiral * .3f;
             if (style == "Fireworks") angle = Rand() * MathF.Tau;
             var multiplier = needle ? .65f + Rand() * .85f * look.ParticleRandomness : .35f + Rand() * .45f * look.ParticleRandomness;
             var speed = look.ParticleVelocity * multiplier * look.ParticleSpeed * strength * speedScale;
@@ -391,6 +399,7 @@ internal sealed partial class GpuStageSimulation
     {
         notes.Clear();
         _noteTrails.Clear();
+        _noteLabels.Clear();
         var look = input.Look;
         if (!look.ShowNotes) return;
         var noteWidth = layout.Lane * look.NoteWidth;
@@ -479,6 +488,7 @@ internal sealed partial class GpuStageSimulation
         var breath = sounding && look.HoldBreath ? .72f + .28f * MathF.Sin((float)_time * (1 + look.HoldBreathRate * 5)) : 1f;
         var holdBar = sounding && look.HoldBar ? look.HoldBarIntensity * opacity : 0;
         var shown = AddNote(notes, look, x, y, w, h, color, opacity, sounding, pitch, seed, direction, holdBar, breath);
+        if (look.ShowNoteLabels && w >= 11 && h >= 15) _noteLabels.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
         if (look.FallingTrail != "None" && look.FallingTrailIntensity > 0)
             _noteTrails.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
     }
@@ -653,15 +663,16 @@ internal sealed partial class GpuStageSimulation
             {
                 if (_glow[pitch] <= .02f) continue;
                 var flicker = .85f + .15f * MathF.Sin((float)_time * 23 + pitch * 1.7f);
-                var c = ToLinear(Vector3.Lerp(_keyColor[pitch], Vector3.One, .3f)) * 1.7f * _glow[pitch] * flicker * (.4f + look.HaloIntensity * .8f) * _pedalBoost;
+                var c = ToLinear(Vector3.Lerp(_keyColor[pitch], Vector3.One, .3f)) * 1.7f * _glow[pitch] * flicker * (.4f + look.HaloIntensity * .8f) * GlowBoost;
                 sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.X(pitch), hitY - 1, layout.Lane * (1.2f + .5f * _glow[pitch]), 4), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 0, 0) });
             }
         }
         if (look.ShowHalo)
         {
-            var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * _pedalBoost;
+            var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * GlowBoost;
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);
+        foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label);
     }
 }

@@ -20,7 +20,7 @@
 cbuffer Frame : register(b0)
 {
     float4 ScreenTime;   // x,y = output size px, z = time s, w = hit line y (scene units)
-    float4 SceneSize;    // x,y = scene size (stage DIPs), z = output pixels per scene unit, w = unused
+    float4 SceneSize;    // x,y = scene size (stage DIPs), z = output pixels per scene unit, w = 1 for the lid shadow
     float4 Camera;       // x,y = scale, z,w = offset px (scene -> screen)
     float4 Background;   // rgb = background colour (linear), w = 1 when chroma green
     float4 Aura;         // rgb = aura colour, w = gradient strength
@@ -527,6 +527,13 @@ float4 PsKey(KeyOut v) : SV_Target
     float ao = lerp(1.0, aoBack * (0.55 + 0.45 * aoGap), KeyA.z);
     if (n.z > 0.5) ao *= lerp(1.0, 0.55 + 0.45 * saturate(kp.y / max(v.Size.z, 1.0)), KeyA.z);
     color *= ao;
+    // lid shadow (Keyboard -> Lid shadow): the fallboard's soft shadow across the top of the keys, over the
+    // same depth the software stage shades (at most 18 DIPs, 16 percent of the keyboard)
+    if (SceneSize.w > 0.5 && n.y > 0.5)
+    {
+        float lid = max(min(18.0, KeyC.x * 0.16) * SceneB.y, 1.0);
+        color *= 1.0 - 0.45 * saturate(1.0 - kp.z / lid);
+    }
 
     // shadows the black keys cast on the white ones
     if (!black && n.y > 0.5)

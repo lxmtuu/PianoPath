@@ -19,6 +19,20 @@ internal sealed partial class GpuStageSimulation
 
     private readonly record struct NoteTrail(float X, float Y, float W, float H, Vector3 Color, float Opacity, int Pitch, bool Rising);
     private readonly List<NoteTrail> _noteTrails = [];
+    /// <summary>Notes wide and tall enough to carry their name this frame (Note names on bars).</summary>
+    private readonly List<NoteTrail> _noteLabels = [];
+
+    /// <summary>
+    /// The note name inside a bar, placed and coloured as the software stage does: near the bottom edge,
+    /// white on Neon and on dark notes, near-black on light ones; the full name when the bar is wide enough.
+    /// </summary>
+    private static void AddNoteLabel(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n)
+    {
+        var luminance = (.2126f * n.Color.X + .7152f * n.Color.Y + .0722f * n.Color.Z) * 255;
+        var text = look.NoteStyle == 1 || luminance <= 150 ? Vector3.One : ToLinear(new Vector3(12 / 255f, 8 / 255f, 20 / 255f));
+        var cell = n.W >= 20 ? AtlasNoteCell + n.Pitch : AtlasShortCell + n.Pitch;
+        Glyph(sprites, n.X + n.W / 2, n.Y + n.H - Math.Min(12, n.H / 2), Math.Min(11, n.W * .62f), cell, text, 230 / 255f * Math.Clamp(n.Opacity, 0, 1));
+    }
 
     private IReadOnlyList<NoteEvent>? _releaseNotes;
     private double _releaseScanPos;

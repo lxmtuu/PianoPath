@@ -377,7 +377,7 @@ internal sealed class GpuStageRenderer : IDisposable
         return new GpuFrameConstants
         {
             ScreenTime = new Vector4(target.Width, target.Height, (float)simulation.Time, layout.HitY),
-            SceneSize = new Vector4(layout.Width, layout.Height, pixelsPerUnit, 0),
+            SceneSize = new Vector4(layout.Width, layout.Height, pixelsPerUnit, look.ShowKeyShadow ? 1 : 0),
             Camera = new Vector4(zoom * scaleX, zoom * pixelsPerUnit, offsetX * scaleX, offsetY * pixelsPerUnit),
             Background = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundColor), look.Chroma ? 1 : 0),
             Aura = new Vector4(.19f, .03f, .42f, aura),
@@ -386,7 +386,7 @@ internal sealed class GpuStageRenderer : IDisposable
             SceneB = new Vector4(_backgroundAspect, 1, beat, .88f),
             NoteA = new Vector4(look.NoteStyle, 2 + look.NoteRoundness * 12, edge, 5 + look.BloomSize * 16),
             NoteB = new Vector4(look.NoteTint, look.NoteEdge * 1.15f, look.NoteHeadGlow, look.NoteRefraction),
-            NoteC = new Vector4(look.NoteTexture, look.Notes3D ? 1 : 0, look.NoteGlow * look.BloomIntensity / .65f * .75f * (1 + beat * .5f), 150),
+            NoteC = new Vector4(look.NoteTexture, look.Notes3D ? 1 : 0, look.NoteGlow * look.BloomIntensity / .65f * .75f * (1 + beat * .5f) * simulation.EnergyBoost, 150),
             KeyA = new Vector4(look.ShaderKeyLight, look.ShaderShadows, look.ShaderAmbientOcclusion, look.ShaderGloss),
             KeyB = new Vector4(look.ShaderRimLight, look.ShaderEmissive * 1.7f * simulation.PedalBoost, look.ShaderCameraTilt, look.KeyboardStyle),
             KeyC = new Vector4(layout.KeyboardHeight, blackLength, look.KeyLighting, frontHeight),
