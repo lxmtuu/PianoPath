@@ -55,9 +55,16 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
           $lines = if (Test-Path $log) { Get-Content $log } else { @() }
+          # A child process that reports every stage it reaches can print more NOTE lines than GitHub will
+          # show, and the ones that matter are the last ones — the step the machine stopped at. So only the
+          # tail of the NOTEs is surfaced: SKIP and FAIL lines always are, and the whole log is in the job
+          # summary and in the run's artifacts either way.
+          $notes = @($lines | Where-Object { $_ -like 'NOTE*' })
+          $tail = @($notes | Select-Object -Last 6)
           $lines | ForEach-Object {
             if ($_ -like 'FAIL*') { $level = 'error' }
-            elseif ($_ -like 'SKIP*' -or $_ -like 'NOTE*') { $level = 'warning' }
+            elseif ($_ -like 'SKIP*') { $level = 'warning' }
+            elseif ($_ -like 'NOTE*') { if ($_ -notin $tail) { return }; $level = 'warning' }
             elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
             else { return }
             $text = $_ -replace '%', '%25'
@@ -75,6 +82,19 @@ jobs:
           }
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
+
+      # GitHub shows at most ten annotations of one level, and a run whose child process reports its stages
+      # line by line has more NOTEs than that: the lines that matter are the ones near the end. So the step
+      # above leaves the older NOTEs to the job summary, and this one keeps the whole log as an artifact —
+      # the only way to read a run back later, since the annotations that overflowed cannot be recovered
+      # from the API.
+      - name: Publish the verification log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-verification-log
+          path: ${{ runner.temp }}/keyflow-verification.log
+          if-no-files-found: warn
 
       # The wizard is part of the product, so it is compiled on every push instead of only when a
       # release is cut: this is the only place the real ISCC runs, and tools/build_installer.ps1
