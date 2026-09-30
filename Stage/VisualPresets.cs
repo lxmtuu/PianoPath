@@ -61,6 +61,7 @@ internal static class VisualPresets
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 48; s.ShaderGloss = 72; s.ShaderShadows = 78; s.ShaderEmissive = 100; s.ShaderRimLight = 75;
         s.ShellTheme = ShellThemes.ConcertGrandId;
         s.ShowPetals = false;
+        s.HaloPulse = true; s.HaloPulseIntensity = 45; s.NoteShimmer = true; s.NoteShimmerAmount = 30;
         return s;
     }
 
@@ -94,6 +95,7 @@ internal static class VisualPresets
         s.ShowFlame = false; s.ParticleAmount = 10; s.ParticleVelocity = 90; s.Gravity = 60; s.ShowImpactRings = false; s.ShowLightBeams = true; s.BeamIntensity = 70;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 70; s.BloomIntensity = 70; s.Vignette = 35; s.HorizonGlow = 25;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 56; s.ShaderGloss = 88; s.ShaderShadows = 62; s.ShaderEmissive = 70;
+        s.ShootingStars = true; s.ShootingStarsAmount = 30;
         s.ShellTheme = ShellThemes.ConcertGrandId;
         return s;
     }
@@ -114,6 +116,7 @@ internal static class VisualPresets
         s.ImpactMorph = "Absorb"; s.ImpactMorphIntensity = 70; s.HoldVibration = true; s.HoldVibrationAmount = 25;
         s.ReleaseEffect = "Dissolve"; s.ReleaseIntensity = 60;
         s.AmbientNature = "Snow"; s.AmbientNatureAmount = 55; s.AmbientNatureSpeed = 45;
+        s.NoteShimmer = true; s.NoteShimmerAmount = 35;
         return s;
     }
 
@@ -135,6 +138,7 @@ internal static class VisualPresets
         s.NoteHeadGlow = 0; s.ShowEmbers = false; s.ShowFlame = false; s.ShowWisps = false; s.ShowImpactRings = false; s.ShowLightBeams = false; s.ShowHalo = true;
         s.HaloColor = "#FFFFFF"; s.HaloIntensity = 45; s.KeyboardStyle = "Classic"; s.KeyLighting = 20; s.KeyGlowRadius = 0; s.BloomIntensity = 0; s.Vignette = 0; s.HorizonGlow = 0;
         s.ShadingQuality = "Fast"; s.ShaderCameraTilt = 30; s.ShaderKeyLight = 104; s.ShaderGloss = 48; s.ShaderEmissive = 45;
+        s.NoteLandingGlow = false;
         s.ShellTheme = ShellThemes.ConcertNoirId;
         return s;
     }
@@ -145,7 +149,7 @@ internal static class VisualPresets
         s.BackgroundMode = "ChromaGreen"; s.NoteStyle = "Neon"; s.ColorMode = "Gradient"; s.Palette = "Violet"; s.NoteColorStart = "#7B5CFF"; s.NoteColorEnd = "#F05CFF";
         s.ShowHalo = false; s.ShowLightBeams = false; s.HorizonGlow = 0; s.Vignette = 0; s.ShowStars = false; s.BackgroundGradient = false; s.BackgroundGuide = false;
         s.BloomIntensity = 40; s.KeyGlowRadius = 0; s.ShowFlame = true; s.ShowImpactRings = false; s.KeyboardStyle = "Studio";
-        s.ShadingQuality = "Off";
+        s.ShadingQuality = "Off"; s.NoteLandingGlow = false;
         // A neutral studio shell keeps chroma-key work free of decorative colour.
         s.ShellTheme = ShellThemes.ConcertNoirId;
         return s;
@@ -168,6 +172,7 @@ internal static class VisualPresets
         s.AmbientNature = "Butterflies"; s.AmbientNatureAmount = 35; s.AmbientNatureSpeed = 40;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60; s.BloomIntensity = 72; s.BloomSize = 70; s.Vignette = 32; s.HorizonGlow = 42; s.StarDensity = 85;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 50; s.ShaderGloss = 80; s.ShaderShadows = 74; s.ShaderEmissive = 92; s.Saturation = 106;
+        s.NoteShimmer = true; s.NoteShimmerAmount = 25;
         return s;
     }
 
@@ -184,6 +189,8 @@ internal static class VisualPresets
         s.KeyboardStyle = "Studio"; s.ShowKeyFelt = true; s.KeyFeltColor = "#B0703C"; s.KeyLighting = 70; s.KeyGlowRadius = 70; s.PressedKeyColorMode = "Note";
         s.BloomIntensity = 92; s.BloomSize = 82; s.Vignette = 36; s.HorizonGlow = 55; s.Saturation = 112;
         s.ShadingQuality = "Cinematic"; s.ShaderKeyLight = 82; s.ShaderGloss = 70; s.ShaderShadows = 82; s.ShaderEmissive = 100; s.ShaderRimLight = 72;
+        s.AmbientLight = "Spotlights"; s.AmbientLightAmount = 40; s.AmbientLightSpeed = 30; s.AmbientLightColor = "#FFD98A";
+        s.HaloPulse = true; s.HaloPulseIntensity = 55;
         return s;
     }
 
@@ -200,6 +207,7 @@ internal static class VisualPresets
         s.KeyboardStyle = "Glass"; s.KeyGlowRadius = 45; s.PressedKeyColorMode = "Note";
         s.BloomIntensity = 55; s.BloomSize = 60; s.Vignette = 40; s.HorizonGlow = 30; s.StarDensity = 70; s.BackgroundDim = 25; s.Saturation = 85;
         s.ShadingQuality = "Cinematic"; s.ShaderCameraTilt = 58; s.ShaderGloss = 90; s.ShaderShadows = 60; s.ShaderExposure = 105; s.ShaderEmissive = 60; s.ShaderRimLight = 40;
+        s.ShootingStars = true; s.ShootingStarsAmount = 35;
         return s;
     }
 
@@ -214,7 +222,7 @@ internal static class VisualPresets
         s.ImpactBurst = "Fireworks"; s.ParticleAmount = 34; s.ShowImpactRings = true; s.ImpactWave = "Shockwave"; s.RingSize = 62; s.ImpactWaveIntensity = 115;
         s.ShowImpactFlash = true; s.ImpactFlashStyle = "Plasma"; s.ImpactFlashIntensity = 75;
         s.HoldBreath = true; s.HoldBreathRate = 30; s.ReleaseEffect = "Dissolve"; s.ReleaseIntensity = 60;
-        s.ShowStars = true; s.StarDensity = 90; s.AmbientCosmic = "Galaxy"; s.AmbientCosmicAmount = 65; s.AmbientCosmicSpeed = 40;
+        s.ShowStars = true; s.StarDensity = 90; s.ShootingStars = true; s.ShootingStarsAmount = 70; s.AmbientCosmic = "Galaxy"; s.AmbientCosmicAmount = 65; s.AmbientCosmicSpeed = 40;
         s.ShowFlame = false; s.ShowWisps = false;
         s.KeyboardStyle = "Glass"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 60;
         s.BloomIntensity = 95; s.Vignette = 38; s.HorizonGlow = 40; s.Saturation = 112;
@@ -239,6 +247,7 @@ internal static class VisualPresets
         s.KeyboardStyle = "Studio"; s.PressedKeyColorMode = "Note"; s.KeyGlowRadius = 75; s.KeyLighting = 55;
         s.BloomIntensity = 90; s.Vignette = 42; s.HorizonGlow = 35; s.Saturation = 108;
         s.ShadingQuality = "Balanced"; s.ShaderCameraTilt = 46; s.ShaderGloss = 78; s.ShaderShadows = 76; s.ShaderEmissive = 100;
+        s.HaloPulse = true; s.HaloPulseIntensity = 60;
         return s;
     }
 

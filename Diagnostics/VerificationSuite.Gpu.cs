@@ -13,12 +13,15 @@ internal static partial class VerificationSuite
     private static void VerifyGpuStage()
     {
         // ---- settings: a machine preference, never carried by a look --------------------------------
+        Assert(new PianoVisualSettings().RenderBackend == "Gpu", "The GPU stage is the main stage: a fresh install must default to the Direct3D 11 engine.");
+        var legacy = new PianoVisualSettings { RenderBackend = "Software" }; legacy.Clamp();
+        Assert(legacy.RenderBackend == "Gpu", "A settings file that still names the software renderer must migrate to the GPU engine on load.");
         var settings = new PianoVisualSettings { RenderBackend = "Gpu", GpuFrameRate = "240", GpuVSync = false };
         settings.CopyFrom(new PianoVisualSettings());
         Assert(settings.RenderBackend == "Gpu" && settings.GpuFrameRate == "240" && !settings.GpuVSync,
             "Applying a preset must keep the graphics engine, its frame rate and VSync: they belong to the computer.");
         var odd = new PianoVisualSettings { RenderBackend = "Vulkan", GpuFrameRate = "75" }; odd.Clamp();
-        Assert(odd.RenderBackend == "Software" && odd.GpuFrameRate == "144", "Unknown engine names and frame rates should fall back to the defaults.");
+        Assert(odd.RenderBackend == "Gpu" && odd.GpuFrameRate == "144", "Unknown engine names and frame rates should fall back to the defaults.");
         Assert(new PianoVisualSettings { GpuFrameRate = "Unlimited" }.GpuTargetFps == 0 && new PianoVisualSettings { GpuFrameRate = "120" }.GpuTargetFps == 120,
             "The frame-rate choice should map to the loop's target (0 = unlimited).");
 
@@ -26,6 +29,21 @@ internal static partial class VerificationSuite
         var look = GpuLook.From(new PianoVisualSettings(), (pitch, track) => Color.FromRgb((byte)(pitch * 2), 40, 200), .2);
         Assert(Math.Abs(look.NoteColor(60, 0).X - 120 / 255f) < .01 && look.KeyboardFraction == .2f,
             "The GPU look should carry the stage's own note colours and keyboard proportion.");
+
+        // ---- GPU-exclusive effects: the settings must reach the render look with their slider values ----
+        var gpuEffects = new PianoVisualSettings { NoteShimmer = true, NoteShimmerAmount = 60, HaloPulse = true, HaloPulseIntensity = 70, ShootingStars = true, ShootingStarsAmount = 30 };
+        var effectLook = GpuLook.From(gpuEffects, (pitch, track) => Color.FromRgb(255, 80, 220), .2);
+        Assert(effectLook.NoteShimmer && effectLook.HaloPulse && effectLook.ShootingStars
+            && Math.Abs(effectLook.NoteShimmerAmount - .6f) < .01f && Math.Abs(effectLook.HaloPulseIntensity - .7f) < .01f && Math.Abs(effectLook.ShootingStarsAmount - .3f) < .01f,
+            "Note shimmer, halo light pulses and shooting stars must flow into the GPU look with their slider values.");
+        Assert(Array.IndexOf(PianoVisualSettings.AmbientLights, "Spotlights") >= 0,
+            "The Spotlights light layer should be a choice the GPU stage draws.");
+        var landing = new PianoVisualSettings();
+        Assert(landing.NoteLandingGlow && Math.Abs(landing.NoteLandingGlowAmount - 45) < .01,
+            "The landing glow should gather where notes are about to land by default.");
+        var landingLook = GpuLook.From(new PianoVisualSettings { NoteLandingGlowAmount = 80 }, (pitch, track) => Color.FromRgb(255, 80, 220), .2);
+        Assert(landingLook.NoteLandingGlow && Math.Abs(landingLook.NoteLandingGlowAmount - .8f) < .01f,
+            "The landing glow must flow into the GPU look with its slider value.");
 
         // ---- feed: the render thread extrapolates the song clock between UI updates ---------------------
         var feed = new GpuStageFeed();

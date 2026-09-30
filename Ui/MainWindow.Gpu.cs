@@ -6,22 +6,27 @@ using System.Windows.Media.Imaging;
 namespace PianoPath;
 
 /// <summary>
-/// The GPU graphics engine as the main window sees it: one <see cref="GpuStageFeed"/> the stage writes
-/// into, one <see cref="GpuRenderLoop"/> (a render thread with its own Direct3D 11 device) started only
-/// while something shows GPU frames, and the optional full-rate <see cref="GpuStageWindow"/>.
+/// The GPU graphics engine as the main window sees it. The GPU stage <b>is</b> the main window's stage:
+/// one <see cref="GpuStageFeed"/> the stage writes into, one <see cref="GpuRenderLoop"/> (a render thread
+/// with its own Direct3D 11 device) started with the window — only a <c>--software</c> run or a failed
+/// start falls back to drawing with WPF — and the optional full-rate <see cref="GpuStageWindow"/> for a
+/// second screen or a projector.
 /// </summary>
 public partial class MainWindow
 {
     private readonly GpuStageFeed _gpuFeed = new();
     private GpuRenderLoop? _gpuLoop;
     private GpuStageWindow? _gpuWindow;
-    private bool _gpuSessionOverride, _gpuFailureShown, _gpuHooked;
+    private bool _softwareSessionOverride, _gpuFailureShown, _gpuHooked;
     private TextBlock? _gpuStatusLabel;
 
-    /// <summary><c>--gpu</c>: use the GPU engine for this run without touching the settings file.</summary>
-    internal void UseGpuForSession()
+    /// <summary><c>--gpu</c>: the GPU stage is the main stage anyway; the switch stays for older launch scripts and CI.</summary>
+    internal void UseGpuForSession() => _softwareSessionOverride = false;
+
+    /// <summary><c>--software</c>: draw this run with the WPF renderer (deterministic captures, CI's software column).</summary>
+    internal void UseSoftwareForSession()
     {
-        _gpuSessionOverride = true;
+        _softwareSessionOverride = true;
         ApplyRenderBackend();
     }
 
@@ -29,7 +34,8 @@ public partial class MainWindow
     internal bool GpuStageActive => Stage.UsesGpuFrame && _gpuLoop is { Error: null };
     internal GpuRenderLoop? GpuLoop => _gpuLoop;
 
-    private bool WantsEmbeddedGpu => _gpuSessionOverride || _visualSettings.RenderBackend == "Gpu";
+    /// <summary>The GPU stage replaced the software stage as the main window's look; only <c>--software</c> steps aside.</summary>
+    private bool WantsEmbeddedGpu => !_softwareSessionOverride;
 
     /// <summary>Starts, reconfigures or stops the GPU engine to match the settings; cheap when nothing changed.</summary>
     private void ApplyRenderBackend()
@@ -112,7 +118,7 @@ public partial class MainWindow
         Loc.Bind(_gpuStatusLabel, () =>
         {
             var loop = _gpuLoop;
-            if (loop is null) return Loc.T("Engine: software (WPF) · the GPU engine is idle.");
+            if (loop is null) return Loc.T("Engine: the software renderer (WPF) is drawing the stage.");
             if (loop.Error is { } error) return Loc.F("Engine: software (WPF) · the GPU engine failed: {0}", error);
             if (!loop.IsReady) return Loc.T("Engine: starting Direct3D 11…");
             var adapter = loop.IsWarp ? Loc.T("software rasterizer (WARP)") : loop.AdapterName;

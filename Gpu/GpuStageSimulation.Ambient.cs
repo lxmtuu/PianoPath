@@ -36,6 +36,7 @@ internal sealed partial class GpuStageSimulation
         {
             if (look.BackgroundGuide) AddLanes(list, layout);
             if (look.ShowPetals && look.PetalAmount > 0) AddPetals(list, look, width, height);
+            if (look.ShowBackground && look.ShootingStars && look.ShootingStarsAmount > 0) AddShootingStars(list, look, width, height);
             if (look.AmbientEnergy != "None" && look.AmbientEnergyAmount > .01f) AddAmbientEnergy(list, look, layout);
             if (look.AmbientNature != "None" && look.AmbientNatureAmount > .01f) AddAmbientNature(list, look, width, height);
             if (look.AmbientLight != "None" && look.AmbientLightAmount > .01f) AddAmbientLight(list, look, width, height);
@@ -82,6 +83,42 @@ internal sealed partial class GpuStageSimulation
             var (sin, cos) = MathF.SinCos(angle);
             var ox = petal.Size * .3f; var oy = petal.Size * .16f;
             Ellipse(list, x + ox * cos - oy * sin, y + ox * sin + oy * cos, petal.Size * .5f, petal.Size * .5f * squash, angle, tip, 205 / 255f, .2f);
+        }
+    }
+
+    /// <summary>
+    /// Shooting stars (Style → ATMOSPHERE): every so often a meteor crosses the sky above the keyboard —
+    /// a bright head with a soft skirt and a fading tail, on the same seeded schedule as the other
+    /// ambient layers so both engines show it at the same moment. Drawn behind the note roll.
+    /// </summary>
+    private void AddShootingStars(GpuInstanceList<GpuSpriteInstance> list, GpuLook look, float width, float height)
+    {
+        var count = 1 + (int)(look.ShootingStarsAmount * 4.99f);            // 1..5 meteors on their own clocks
+        var e = _time;
+        var visibility = .45f + .55f * look.ShootingStarsAmount;
+        for (var k = 0; k < count; k++)
+        {
+            var period = 3.5f + SeededRandom(k * 7 + 1) * 5.5f;
+            const float flight = .2f;                                        // the visible slice of each cycle
+            var f = Frac((float)(e / period) + SeededRandom(k * 11 + 2));
+            if (f >= flight) continue;
+            var t = f / flight;
+            var envelope = MathF.Sin(t * MathF.PI) * visibility;
+            var sign = SeededRandom(k * 13 + 3) < .5f ? -1 : 1;
+            var x0 = width * (.06f + SeededRandom(k * 17 + 4) * .88f);
+            var y0 = -12 + SeededRandom(k * 19 + 5) * height * .28f;
+            var len = height * (.1f + SeededRandom(k * 23 + 6) * .12f);
+            var dx = sign * len * (1.1f + SeededRandom(k * 29 + 7) * .8f);
+            var dy = len * (1f + SeededRandom(k * 31 + 8) * .5f);
+            const float travel = 1.7f;
+            var hx = x0 + dx * t * travel; var hy = y0 + dy * t * travel;
+            var norm = MathF.Sqrt(dx * dx + dy * dy);
+            var ux = dx / norm; var uy = dy / norm;
+            var tx = hx - ux * len; var ty = hy - uy * len;
+            var c = Rgb(225, 238, 255) * 1.5f;
+            Line(list, tx, ty, hx, hy, 2.8f, c * .7f, 80 / 255f * envelope, 0);          // the soft skirt of the tail
+            Line(list, tx + ux * len * .35f, ty + uy * len * .35f, hx, hy, .9f, c, 190 / 255f * envelope, 1);
+            Glow(list, hx, hy, 3.4f, 3.4f, Vector3.One * 2f, .8f * envelope);
         }
     }
 
@@ -280,6 +317,28 @@ internal sealed partial class GpuStageSimulation
         var tint = ToLinear(look.AmbientLightColor);
         switch (look.AmbientLight)
         {
+            case "Spotlights":
+            {
+                // three hanging stage lights whose soft shafts sway with the music; the warm white is
+                // pulled towards the layer tint so the look's colour still leads
+                var shaft = Vector3.Lerp(Rgb(255, 244, 224), tint, .45f);
+                var beat = look.TempoSync ? _beatPulse : _activity;   // with Tempo sync the rig rides the beat
+                for (var i = 0; i < 3; i++)
+                {
+                    var anchor = width * (.22f + .28f * i);
+                    var sway = MathF.Sin((float)(e * speed * .35) + i * 2.1f + beat * (1.4f + i * .3f));
+                    var target = anchor + sway * width * (.07f + beat * .05f) + MathF.Sin((float)(e * speed * .13) + i * 1.3f) * width * .03f;
+                    var flicker = .92f + .08f * MathF.Sin((float)(e * (9 + i * 2.3)) + i * 5) + beat * .12f;
+                    for (var layer = 0; layer < 3; layer++)
+                    {
+                        var halfWidth = width * (.028f + layer * .034f);
+                        var alpha = (.32f - layer * .09f) * amount * flicker;
+                        Line(list, anchor, -12, target, height * .97f, halfWidth, shaft * (1.5f - layer * .25f), alpha, 0);
+                    }
+                    Glow(list, target, height * .97f, width * .05f, 9, shaft * 1.8f, .3f * amount * flicker);
+                }
+                break;
+            }
             case "Gradient Wave":
             {
                 for (var i = 0; i < 5; i++)

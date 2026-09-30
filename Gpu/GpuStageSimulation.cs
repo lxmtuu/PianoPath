@@ -87,7 +87,7 @@ internal sealed partial class GpuStageSimulation
     private readonly Vector3[] _keyColor = new Vector3[128];
     private readonly Random _random = new(20260930);
     private double _time;
-    private float _simWidth = 1280, _activity;
+    private float _simWidth = 1280, _activity, _beatPulse;
     private GpuLook _look = new();
 
     internal double Time => _time;
@@ -141,6 +141,7 @@ internal sealed partial class GpuStageSimulation
         if (feed.TakeClearRequest()) Clear();
         var dt = (float)(Math.Clamp(seconds, 0, .05) * look.PhysicsTimeFactor);
         _time += dt;
+        _beatPulse = look.TempoSync ? input.BeatPulse : 0;
         _simWidth = Math.Max(1, sceneWidth);
         var layout = new GpuSceneLayout(_simWidth, (float)input.StageHeightDip, look.KeyboardFraction);
 
@@ -401,10 +402,13 @@ internal sealed partial class GpuStageSimulation
         notes.Clear();
         _noteTrails.Clear();
         _noteLabels.Clear();
+        _shimmerBars.Clear();
+        _landings.Clear();
         var look = input.Look;
         if (!look.ShowNotes) return;
         var noteWidth = layout.Lane * look.NoteWidth;
         var hitY = layout.HitY;
+        const float landingWindow = .55f;
         if (input.Playing && input.Notes.Count > 0)
         {
             var speed = look.SongFallSpeed;
@@ -439,6 +443,10 @@ internal sealed partial class GpuStageSimulation
                     }
                     if (bottom - top < 1) continue;
                     AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction);
+                    // landing glow: a gathering light where the note is about to strike (GPU-exclusive)
+                    var until = (float)(note.Start - input.Position);
+                    if (look.NoteLandingGlow && !look.Chroma && !played && !missed && until > 0 && until <= landingWindow)
+                        _landings.Add(new Landing(layout.X(note.Pitch), until / landingWindow, color));
                 }
             }
             catch (ArgumentOutOfRangeException) { }
@@ -490,6 +498,7 @@ internal sealed partial class GpuStageSimulation
         var holdBar = sounding && look.HoldBar ? look.HoldBarIntensity * opacity : 0;
         var shown = AddNote(notes, look, x, y, w, h, color, opacity, sounding, pitch, seed, direction, holdBar, breath);
         if (look.ShowNoteLabels && w >= 11 && h >= 15) _noteLabels.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
+        if (look.NoteShimmer && look.NoteShimmerAmount > 0) _shimmerBars.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
         if (look.FallingTrail != "None" && look.FallingTrailIntensity > 0)
             _noteTrails.Add(new NoteTrail(x, y, w, h, shown, opacity, pitch, rising));
     }
@@ -657,6 +666,7 @@ internal sealed partial class GpuStageSimulation
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(flash.X * scaleX, flash.Y, flash.Size * (.8f + u * .6f), 4), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 0, u) });
         }
         if (look.HoldElectricArc && look.HoldArcIntensity > .01f) AddElectricArcs(sprites, look, layout);
+        foreach (var landing in _landings) AddLandingGlow(sprites, look, landing, hitY);
         if (look.ShowHalo || look.ShowImpactFlash)
         {
             // steady white-hot glow where a held note meets its key
@@ -672,8 +682,76 @@ internal sealed partial class GpuStageSimulation
         {
             var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * GlowBoost;
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
+            if (look.HaloPulse && look.HaloPulseIntensity > 0) AddHaloPulses(sprites, look, layout);
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);
         foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label);
+        foreach (var bar in _shimmerBars) AddNoteShimmer(sprites, look, bar);
+    }
+
+    /// <summary>
+    /// The GPU stage's shimmer: a bright, narrow sheen that sweeps back and forth along every travelling
+    /// bar (Style → GLOW &amp; EDGES → Note shimmer), tinted by the bar's own colour so a rainbow or
+    /// colour-cycling look shimmers in its current hue. Two bands at different speeds give the surface
+    /// depth; the additive pass over the note turns them into moving gloss.
+    /// </summary>
+    private void AddNoteShimmer(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n)
+    {
+        var strength = look.NoteShimmerAmount * Math.Clamp(n.Opacity, 0, 1);
+        if (strength <= .01f || n.W < 5 || n.H < 6) return;
+        var e = (float)_time;
+        var center = n.Y + n.H * .5f;
+        var tint = Vector3.Lerp(ToLinear(n.Color), Vector3.One * 1.3f, .72f);
+        for (var k = 0; k < 2; k++)
+        {
+            var phase = SeededRandom(n.Pitch * 17 + k * 3 + 1) * MathF.Tau;
+            var sweep = .5f + .5f * MathF.Sin(e * (.5f + k * .27f) + phase);
+            var x = n.X + n.W * (.16f + .68f * sweep);
+            // the sheen brightens towards the middle of its sweep and fades at the bar's edges
+            var alpha = strength * (.1f + .2f * MathF.Pow(MathF.Sin(sweep * MathF.PI), 2)) * (1 - k * .45f);
+            Glow(sprites, x, center, MathF.Max(1.1f, n.W * .13f), MathF.Min(n.H * .72f, 26 + n.H * .18f), tint, alpha);
+        }
+    }
+
+    /// <summary>
+    /// Halo light pulses (Style → HIT LINE): three bright waves of the halo colour that travel across the
+    /// hit line, fading in and out so the stage keeps breathing even between notes. Pedal glow, audio
+    /// reactivity and Tempo sync swell them with the music.
+    /// </summary>
+    /// <param name="sprites">The additive instance list.</param>
+    /// <param name="look">The current look.</param>
+    /// <param name="layout">Scene layout of this output.</param>
+    private void AddHaloPulses(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, GpuSceneLayout layout)
+    {
+        var gain = look.HaloPulseIntensity * GlowBoost;
+        if (look.TempoSync) gain *= 1 + _beatPulse * look.TempoSyncAmount * .8f; // the pulses ride the beat
+        var width = layout.Width;
+        var color = ToLinear(look.HaloColor) * 2.2f;
+        for (var i = 0; i < 3; i++)
+        {
+            var f = Frac((float)(_time * .38) + i / 3f);
+            var x = f * width;
+            var envelope = MathF.Sin(f * MathF.PI);
+            Glow(sprites, x, layout.HitY, width * .05f, 10, color, .42f * envelope * gain);
+            Glow(sprites, x, layout.HitY, width * .018f, 4.5f, Vector3.One * 2.4f, .6f * envelope * gain);
+            Line(sprites, x - width * .028f, layout.HitY, x + width * .028f, layout.HitY, 1.1f, Vector3.One * 1.8f, .48f * envelope * gain, 1);
+        }
+    }
+
+    /// <summary>
+    /// The landing glow (Style → IMPACT · WAVE &amp; FLASH): a soft light gathers on the key a note is
+    /// about to strike, then hands over to the impact burst. Doubles as a practice aid — the lane that
+    /// is about to sound is lit before the sound arrives.
+    /// </summary>
+    private void AddLandingGlow(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, Landing landing, float hitY)
+    {
+        var t = Math.Clamp(landing.T, 0, 1);              // 1 = far away, 0 = striking now
+        var rise = 1 - t;                                 // grows as the note approaches
+        var strength = look.NoteLandingGlowAmount * rise * rise * (.7f + .3f * _activity);
+        if (strength <= .01f) return;
+        var c = ToLinear(landing.Color);
+        var radius = 5 + 15 * rise;
+        Glow(sprites, landing.X, hitY - 2, radius, radius * .34f, c * 1.7f, .5f * strength);
+        Glow(sprites, landing.X, hitY - 2, radius * .45f, radius * .18f, Vector3.One * 1.9f, .8f * strength);
     }
 }

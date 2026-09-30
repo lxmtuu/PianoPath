@@ -119,9 +119,10 @@ jobs:
           # --lang pins it either way, because a runner whose Windows display language happens to be
           # something else must still render the same pictures as every other machine.
           $shots = @(
+            # The stage every run shows is the Direct3D 11 engine now; on a runner without a graphics
+            # card this is WARP, Windows' software rasterizer: slower, but pixel-for-pixel the same shaders.
             @{ Name = 'stage-live.png';  Args = @('--play-preview') },
-            # The same moment drawn by the Direct3D 11 engine (Gpu/). Runners have no graphics card, so this
-            # is WARP, Windows' software rasterizer: slower, but pixel-for-pixel the same shaders.
+            # The same stage under the GPU engine's own name, the picture the README's GPU section embeds.
             @{ Name = 'stage-gpu.png';   Args = @('--play-preview', '--gpu') },
             # Two looks that exercise the effect families the GPU engine draws: trails, ambient layers,
             # arcs between held keys, impact morphs and key labels. A held chord shows the hold effects.
@@ -177,7 +178,9 @@ jobs:
               $target = Join-Path $work "$preset-$engine.png"
               $settings = Join-Path $work "settings-$preset-$engine"
               $args = @('--snapshot', $target, '--compact', '--lang=en', "--settings-dir=$settings", '--play-preview', '--play-chord', "--preset=$preset")
-              if ($engine -eq 'gpu') { $args += '--gpu' }
+              # The GPU engine is the stage of every run now; --software is the WPF renderer's one-run
+              # escape hatch, so the gallery still checks both engines against each other.
+              if ($engine -eq 'gpu') { $args += '--gpu' } else { $args += '--software' }
               Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait | Out-Null
               if (-not (Test-Path $target)) { "::warning title=Preset gallery::$preset ($engine) was not rendered" }
             }

@@ -55,6 +55,18 @@ internal sealed class GpuLook
     public float FallingTrailLength { get; init; } = .55f;
     public bool FallingGhost { get; init; }
     public float FallingGhostAmount { get; init; } = .4f;
+    /// <summary>A light sheen sweeping along every travelling bar (Style → GLOW &amp; EDGES).</summary>
+    public bool NoteShimmer { get; init; }
+    public float NoteShimmerAmount { get; init; } = .45f;
+    /// <summary>Bright pulses of the halo colour travelling along the hit line (Style → HIT LINE).</summary>
+    public bool HaloPulse { get; init; }
+    public float HaloPulseIntensity { get; init; } = .5f;
+    /// <summary>Occasional meteors crossing the sky behind the notes (Style → ATMOSPHERE).</summary>
+    public bool ShootingStars { get; init; }
+    public float ShootingStarsAmount { get; init; } = .5f;
+    /// <summary>A glow gathering where a note is about to land (Style → IMPACT; off for chroma keying).</summary>
+    public bool NoteLandingGlow { get; init; } = true;
+    public float NoteLandingGlowAmount { get; init; } = .45f;
     public bool HoldBar { get; init; }
     public float HoldBarIntensity { get; init; } = .6f;
     public bool HoldBreath { get; init; }
@@ -248,6 +260,10 @@ internal sealed class GpuLook
             RainbowTrail = s.FallingTrail == "Rainbow", RainbowHueSpeed = (float)(20 + s.FallingTrailIntensity * .8),
             FallingTrail = s.FallingTrail, FallingTrailIntensity = P(s.FallingTrailIntensity), FallingTrailLength = P(s.FallingTrailLength),
             FallingGhost = s.FallingGhost, FallingGhostAmount = P(s.FallingGhostAmount),
+            NoteShimmer = s.NoteShimmer, NoteShimmerAmount = P(s.NoteShimmerAmount),
+            HaloPulse = s.HaloPulse, HaloPulseIntensity = P(s.HaloPulseIntensity),
+            ShootingStars = s.ShootingStars, ShootingStarsAmount = P(s.ShootingStarsAmount),
+            NoteLandingGlow = s.NoteLandingGlow, NoteLandingGlowAmount = P(s.NoteLandingGlowAmount),
             HoldBar = s.HoldBar, HoldBarIntensity = P(s.HoldBarIntensity), HoldBreath = s.HoldBreath, HoldBreathRate = P(s.HoldBreathRate),
             HoldVibration = s.HoldVibration, HoldVibrationAmount = P(s.HoldVibrationAmount),
             HoldElectricArc = s.HoldElectricArc, HoldArcIntensity = P(s.HoldArcIntensity),
