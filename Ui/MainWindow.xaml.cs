@@ -29,7 +29,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, TextBox> _visualColorInputs = [];
     private readonly Dictionary<string, Button> _visualColorButtons = [];
     private PianoVisualSettings _visualSettings = new();
-    private AviVideoRecorder? _videoRecorder;
+    private IFrameRecorder? _videoRecorder;
     private DispatcherTimer? _recordTimer;
     private string? _recordingPath;
     private List<NoteEvent> _allNotes = [];
@@ -78,8 +78,11 @@ public partial class MainWindow : Window
         SettingsTabs.Loaded += (_, _) => RefreshSectionHeaders();
         Stage.SetVisualSettings(_visualSettings);
         _chromeTimer.Tick += (_, _) => CheckChromeIdle();
-        _settingsSaveTimer.Tick += (_, _) => { _settingsSaveTimer.Stop(); SaveVisualSettings(); };
+        // The same idle tick that writes the settings file closes the undo step in progress: one
+        // settled change (or one slider drag) is one history point.
+        _settingsSaveTimer.Tick += (_, _) => { _settingsSaveTimer.Stop(); CommitHistory(); SaveVisualSettings(); };
         _uiReady = true;
+        StartHistory();
         _notes = _allNotes;
         FrameClock.Shared.Tick += OnFrame;
         _midi.NoteChanged += (pitch, velocity, on) => Dispatcher.BeginInvoke(() =>
@@ -93,7 +96,10 @@ public partial class MainWindow : Window
             else ReleaseNote(pitch);
         });
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() => SetPedalState(pedal, down));
-        PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
+        PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
+        // A folder indexed in an earlier session is watched from the start, so the library is live whether or
+        // not the Play dialog has been opened yet.
+        RefreshLibrarySongs(); StartSongFolderWatch(SongFolderIndex.Folder);
         ApplyChromeTheme();
         StartChromeSweeps();
         SetChromeVisible(true); _chromeTimer.Start();
@@ -130,6 +136,7 @@ public partial class MainWindow : Window
     }
     private void Stop()
     {
+        RecordPracticeRunIfScored(); // a take that graded something is written before the transport resets
         StopStageFrames(); _playing = false; _processCurrentOnsets = false; _metronomeOffAt = -1;
         PlayButton.Tag = FindResource("IconPlay");
         foreach (var note in _outputHeld.ToArray()) SendOutput(note.Pitch, 0, false);
@@ -212,7 +219,7 @@ public partial class MainWindow : Window
             while (_missScanIndex < _notes.Count && _notes[_missScanIndex].Start < missLimit)
             {
                 var note = _notes[_missScanIndex++];
-                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; }
+                if (!note.Played && !note.Missed) { note.Missed = true; _misses++; _streak = 0; RecordPracticeNote(false, note.Pitch, note.Start); }
             }
             TickMetronome(previous, forceOnset);
         }
@@ -223,6 +230,9 @@ public partial class MainWindow : Window
     }
 
     private void UpdateStage() => Stage.SetState(_notes, _position, _playing, _pressed);
+
+    /// <summary>Hands the sheet layer the grid to draw bar lines on; called whenever a song is loaded.</summary>
+    private void UpdateSheet() => Stage.SetSheet(_beatTimes, _beatsPerBar);
     private NoteEvent? NextExpectedNote()
     {
         for (var i = _missScanIndex; i < _notes.Count; i++) { var note = _notes[i]; if (!note.Played && !note.Missed) return note; }
@@ -262,17 +272,57 @@ public partial class MainWindow : Window
 
     private void OpenMidi_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = Loc.T("MIDI files (*.mid;*.midi)|*.mid;*.midi|All files (*.*)|*.*") };
+        var dialog = new OpenFileDialog { Filter = Loc.T("Songs (*.mid;*.midi;*.musicxml;*.xml;*.mxl)|*.mid;*.midi;*.musicxml;*.xml;*.mxl|MIDI files (*.mid;*.midi)|*.mid;*.midi|MusicXML scores (*.musicxml;*.mxl)|*.musicxml;*.mxl|All files (*.*)|*.*") };
         if (dialog.ShowDialog(this) != true) return;
+        OpenSongFile(dialog.FileName);
+    }
+
+    /// <summary>True when the extension names a MusicXML score rather than a MIDI file.</summary>
+    internal static bool IsMusicXml(string path) =>
+        path.EndsWith(".musicxml", StringComparison.OrdinalIgnoreCase) || path.EndsWith(".mxl", StringComparison.OrdinalIgnoreCase)
+        || path.EndsWith(".xml", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Loads a song by extension: a MusicXML score (.musicxml, .xml, .mxl) or a Standard MIDI file. Both end
+    /// on the stage the same way; the score brings the staff of every note with it, which is the hand split
+    /// the file states rather than one measured from the pitches.
+    /// </summary>
+    internal void OpenSongFile(string path)
+    {
         try
         {
-            Stop(); var song = MidiReader.ReadSong(dialog.FileName); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
-            _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
-            _songLabel = Path.GetFileNameWithoutExtension(dialog.FileName);
-            Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
-            _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
+            if (!IsMusicXml(path)) { OpenMidiFile(path); return; }
+            var score = MusicXmlReader.ReadScore(path);
+            LoadSong(path, score.ToSong(), score);
+        }
+        catch (Exception ex) { ShowMessage(Loc.F("Could not read this MusicXML file.\n{0}", ex.Message), "MusicXML import"); }
+    }
+
+    /// <summary>Loads a Standard MIDI file — from the open dialog, the Play dialog or a drop on the window.</summary>
+    internal void OpenMidiFile(string path)
+    {
+        try
+        {
+            var song = MidiReader.ReadSong(path); if (song.Notes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MIDI file."));
+            LoadSong(path, song, null);
         }
         catch (Exception ex) { ShowMessage(Loc.F("Could not read this MIDI file.\n{0}", ex.Message), "MIDI import"); }
+    }
+
+    /// <summary>
+    /// Puts a parsed song on the stage: the notes, the metronome grid, the track list and the labels, then
+    /// the hand split and the recent list. The recent list is written only after the file really parsed, so
+    /// the Play dialog never offers a song that failed to open.
+    /// </summary>
+    private void LoadSong(string path, MidiSong song, MusicXmlScore? score)
+    {
+        Stop();
+        _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
+        _songLabel = Path.GetFileNameWithoutExtension(path); _songPath = path;
+        Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
+        _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateSheet(); UpdateStage();
+        ApplySongHandSplit(path, song, score);
+        RememberSong(path, song);
     }
 
     private async void LoadSoundFont_Click(object sender, RoutedEventArgs e)
@@ -382,6 +432,13 @@ public partial class MainWindow : Window
     {
         if (e.Key == Key.F11) { ToggleFullScreen(); e.Handled = true; return; }
         if (e.Key == Key.F1) { ToggleShortcuts(); e.Handled = true; return; }
+        // Ctrl+Z / Ctrl+Shift+Z (and Ctrl+Y) walk the design dock's history. A text box keeps its own
+        // undo, so the shortcut only takes over when the focus is not in one.
+        if (e.Key is Key.Z or Key.Y && Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && Keyboard.FocusedElement is not TextBox)
+        {
+            if (e.Key == Key.Y || Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) RedoVisualSettings(); else UndoVisualSettings();
+            e.Handled = true; return;
+        }
         if (e.Key == Key.Escape)
         {
             // Escape closes the help card first, then clears an active settings search, then toggles
@@ -554,31 +611,114 @@ public partial class MainWindow : Window
         return brush;
     }
 
+    /// <summary>
+    /// How long the MP4 writer gets to open before the machine is treated as one whose media stack stopped
+    /// answering. Opening a take is a handful of native calls and takes well under a second wherever it works at
+    /// all; ten seconds is generous for a slow machine and short enough that a wedged one never looks like a
+    /// window that has hung.
+    /// </summary>
+    private static readonly TimeSpan RecorderOpenLimit = TimeSpan.FromSeconds(10);
+
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
-        var dialog = new SaveFileDialog { Filter = Loc.T("AVI video (*.avi)|*.avi"), DefaultExt = ".avi", AddExtension = true, FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}.avi", Title = Loc.T("Record piano visualizer") };
-        if (dialog.ShowDialog(this) != true) return;
+        var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+        var mp4 = _visualSettings.RecordingFormat == RecordingFormatIds.Mp4;
+        var (width, height) = RecordingSize();
+        var frameRate = (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
+        // A folder for the frames, or a file for the video: one choice in the dock decides which recorder runs.
+        var target = sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile(mp4);
+        if (target is null) return;
         try
         {
-            var (width, height) = RecordingSize();
-            _videoRecorder = new AviVideoRecorder(dialog.FileName, width, height, (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60));
-            _recordingPath = dialog.FileName;
+            // The MP4 writer owns its audio stream, so it has to know before it opens the file whether the
+            // engine will hand it samples.
+            var withAudio = _visualSettings.RecordAudio && _audio.HasSoundFont;
+            var path = target!;
+            if (target.Length > 0 && sequence)
+            {
+                _videoRecorder = new PngSequenceRecorder(path, width, height, frameRate);
+            }
+            else if (mp4)
+            {
+                // The MP4 writer is native code that can stop answering rather than fail, so it is opened on a
+                // thread of its own with a few seconds to come back (see Mp4Recorder.TryOpen): a machine like
+                // that records an AVI instead of losing both the take and the window.
+                var take = Mp4Recorder.TryOpen(path, width, height, frameRate, withAudio, RecorderOpenLimit, out var failure, out var stopped);
+                if (take is not null) _videoRecorder = take;
+                else if (!stopped) throw failure ?? new InvalidOperationException(Loc.T("A media type could not be prepared."));
+                else
+                {
+                    path = Path.ChangeExtension(path, ".avi");
+                    _videoRecorder = new AviVideoRecorder(path, width, height, frameRate);
+                    ShowMessage(Loc.T("This machine's media stack stopped answering while the MP4 recorder was being opened, so this take is being recorded as AVI instead."), "Video recording", MessageBoxImage.Warning);
+                }
+            }
+            else
+            {
+                _videoRecorder = new AviVideoRecorder(path, width, height, frameRate);
+            }
+            _recordingPath = path;
+            // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
+            // the switch is the user's and is only honoured for that format.
+            Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;
+            _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
             _recordTimer.Tick += RecordTimer_Tick; _recordTimer.Start();
             Loc.Set(RecordButton, "REC 00:00"); RecordButton.Background = new SolidColorBrush(Color.FromRgb(104, 23, 42));
-            var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
-            if (_videoRecorder.UsesMjpeg) Loc.Set(RecordButton, "Recording MJPEG AVI · click to stop", FrameworkElement.ToolTipProperty);
-            else Loc.Format(RecordButton, "Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop", FrameworkElement.ToolTipProperty, rawSeconds);
-            if (_videoRecorder.UsesMjpeg) Loc.Set(SettingsSaveLabel, "Video recording started");
-            else Loc.Format(SettingsSaveLabel, "Recording raw AVI · about {0:0} s fit before the 2 GB limit", rawSeconds);
+            if (_videoRecorder is PngSequenceRecorder)
+            {
+                Loc.Set(RecordButton, "Recording PNG frames · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, "Recording a PNG sequence with alpha");
+            }
+            else if (_videoRecorder is Mp4Recorder mp4Recorder)
+            {
+                Loc.Set(RecordButton, "Recording MP4 with the audio inside · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, mp4Recorder.HasAudio ? "Recording MP4 (H.264 + AAC)" : "Recording MP4 (H.264, the sound stayed out)");
+            }
+            else if (((AviVideoRecorder)_videoRecorder).UsesMjpeg)
+            {
+                Loc.Set(RecordButton, "Recording MJPEG AVI · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, "Video recording started");
+            }
+            else
+            {
+                var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(_videoRecorder.Width) * _videoRecorder.Height * _videoRecorder.FrameRate);
+                Loc.Format(RecordButton, "Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop", FrameworkElement.ToolTipProperty, rawSeconds);
+                Loc.Format(SettingsSaveLabel, "Recording raw AVI · about {0:0} s fit before the 2 GB limit", rawSeconds);
+            }
         }
         catch (Exception ex)
         {
             StopVideoRecording(showMessage: false);
             ShowMessage(ex.Message, "Video recording");
         }
+    }
+
+    /// <summary>The video file the next recording goes into, or null when the user cancels.</summary>
+    private string? ChooseVideoFile(bool mp4)
+    {
+        var dialog = new SaveFileDialog
+        {
+            Filter = mp4 ? Loc.T("MP4 video (*.mp4)|*.mp4") : Loc.T("AVI video (*.avi)|*.avi"),
+            DefaultExt = mp4 ? ".mp4" : ".avi",
+            AddExtension = true,
+            FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}{(mp4 ? ".mp4" : ".avi")}",
+            Title = Loc.T("Record piano visualizer")
+        };
+        return dialog.ShowDialog(this) == true ? dialog.FileName : null;
+    }
+
+    /// <summary>
+    /// The folder the PNG frames go into: the user picks a parent, and the frames land in a timestamped
+    /// subfolder so two recordings never overwrite each other.
+    /// </summary>
+    private string? ChooseFrameFolder(int width, int height, int frameRate)
+    {
+        var dialog = new OpenFolderDialog { Title = Loc.T("Choose a folder for the PNG frames"), Multiselect = false };
+        if (dialog.ShowDialog(this) != true) return null;
+        return System.IO.Path.Combine(dialog.FolderName, $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}");
     }
 
     private void RecordTimer_Tick(object? sender, EventArgs e)
@@ -590,10 +730,15 @@ public partial class MainWindow : Window
             var due = (int)Math.Floor(_recordClock.Elapsed.TotalSeconds * _videoRecorder.FrameRate) + 1 - _videoRecorder.FrameCount;
             if (due > 0)
             {
-                _videoRecorder.WriteBgrFrame(CaptureStageBgr(_videoRecorder.Width, _videoRecorder.Height), Math.Min(due, _videoRecorder.FrameRate * 2));
+                var recorder = _videoRecorder;
+                // The recorder names the buffer it wants: stride-aligned BGR for AVI, tightly packed BGRA
+                // (with the stage's alpha) for the PNG sequence.
+                var frame = recorder.HasAlpha ? CaptureStageBgra(recorder.Width, recorder.Height) : CaptureStageBgr(recorder.Width, recorder.Height);
+                recorder.WriteFrame(frame, Math.Min(due, recorder.FrameRate * 2));
                 if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, Loc.T("The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically.")); return; }
             }
             var elapsed = _recordClock.Elapsed;
+            PumpAudioTrack(elapsed);
             Loc.Format(RecordButton, "REC {0:00}:{1:00}", elapsed.Minutes, elapsed.Seconds);
         }
         catch (Exception ex)
@@ -603,20 +748,299 @@ public partial class MainWindow : Window
         }
     }
 
+    // =====================================================================================================
+    // Webcam overlay: one reader on its own thread, the newest frame handed to the stage
+    // =====================================================================================================
+
+    private CameraFrameReader? _camera;
+    private Thread? _cameraThread;
+    private volatile bool _cameraStop;
+    private readonly Lock _cameraFrameLock = new();
+    private byte[] _cameraFrame = [];
+    private int _cameraFrameWidth, _cameraFrameHeight;
+    private bool _cameraFrameFresh;
+    private WriteableBitmap? _cameraBitmap;
+    private DispatcherTimer? _cameraUiTimer;
+    private string _cameraSignature = "";
+
+    /// <summary>
+    /// What the overlay is doing right now — the camera it opened, the file it is looping, or why neither
+    /// worked. Read by the Camera &amp; FX page, so the dock says the same thing the stage does.
+    /// </summary>
+    internal string CameraStatus { get; private set; } = "";
+
+    /// <summary>
+    /// What the hand tracker is seeing right now, in words: the key the hand is over and the fingers it holds
+    /// up, or that no hand was found. Filled by the same pump that feeds the stage, so the dock and the stage
+    /// always agree on what the tracker saw in the newest frame.
+    /// </summary>
+    internal string HandStatus { get; private set; } = "";
+
+    /// <summary>
+    /// Restarts the overlay when one of the settings that decide <em>what</em> it reads has changed; the corner,
+    /// the size, the opacity, the mirror flag and the key are applied while drawing or per frame, so they never
+    /// cost a camera reconnect.
+    /// </summary>
+    private void SyncCameraOverlay()
+    {
+        // The reader opens for either layer: the picture can stay hidden while the hand is still followed, so a
+        // user who wants only the key markers never has to put the camera on the stage to get them.
+        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking,
+            _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath);
+        if (wanted == _cameraSignature) return;
+        _cameraSignature = wanted;
+        StartCameraOverlay();
+    }
+
+    /// <summary>
+    /// Starts the overlay for the current settings: a live camera or a file, read on its own thread so looking
+    /// for a frame never blocks a drawing pass. Nothing is opened when the layer is off.
+    /// </summary>
+    private void StartCameraOverlay()
+    {
+        StopCameraOverlay();
+        if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking) { CameraStatus = ""; HandStatus = ""; return; }
+        var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
+        var reader = live
+            ? CameraFrameReader.OpenDevice(_visualSettings.CameraSourceLink, out var error)
+            : CameraFrameReader.OpenFile(_visualSettings.CameraVideoPath, out error);
+        if (reader is null)
+        {
+            CameraStatus = error ?? Loc.T("The camera overlay could not be opened.");
+            return;
+        }
+        _camera = reader;
+        CameraStatus = live
+            ? Loc.F("Live: {0}", reader.Label)
+            : Loc.F("Video: {0} · {1} × {2}", reader.Label, reader.Width, reader.Height);
+        // A reader that opened but had something to add (the stored camera is gone, say) is heard too.
+        if (error is { Length: > 0 } note) CameraStatus = $"{CameraStatus} {note}";
+        _cameraStop = false;
+        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        _cameraThread = new Thread(CameraLoop) { IsBackground = true, Name = "Keyflow camera overlay" };
+        _cameraThread.Start();
+        // The frames are turned into a bitmap on the UI thread, once per frame time at most.
+        if (_cameraUiTimer is null)
+        {
+            _cameraUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / CameraFrameReader.FrameRate) };
+            _cameraUiTimer.Tick += (_, _) => PumpCameraFrame();
+        }
+        _cameraUiTimer.Start();
+    }
+
+    /// <summary>Stops the overlay, closes the reader and clears the picture from the stage.</summary>
+    private void StopCameraOverlay()
+    {
+        _cameraStop = true;
+        _cameraUiTimer?.Stop();
+        var thread = _cameraThread;
+        _cameraThread = null;
+        // The reader is closed before the thread is joined: a read that is already waiting comes back at once,
+        // so closing never hangs on a camera that has stopped answering.
+        _camera?.Dispose();
+        _camera = null;
+        if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
+        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        Stage.SetCameraFrame(null);
+        Stage.SetHandReading(null);
+        HandStatus = "";
+    }
+
+    /// <summary>
+    /// The reading thread: one frame at a time into the shared buffer, paced to the overlay's frame rate, with
+    /// a file rewound when it ends and a reader that fails reported instead of spinning.
+    /// </summary>
+    private void CameraLoop()
+    {
+        var reader = _camera;
+        if (reader is null) return;
+        try
+        {
+            while (!_cameraStop && reader.Error is null)
+            {
+                var size = reader.Width * reader.Height * 4;
+                if (size <= 0) { Thread.Sleep(20); continue; }
+                byte[] buffer;
+                lock (_cameraFrameLock)
+                {
+                    if (_cameraFrame.Length < size) _cameraFrame = new byte[size];
+                    buffer = _cameraFrame;
+                }
+                if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror, out var width, out var height))
+                {
+                    if (reader.AtEnd) { reader.Rewind(); Thread.Sleep(20); continue; }
+                    if (reader.Error is null) { Thread.Sleep(5); continue; }
+                    break;
+                }
+                lock (_cameraFrameLock)
+                {
+                    _cameraFrameWidth = width; _cameraFrameHeight = height; _cameraFrameFresh = true;
+                }
+                Thread.Sleep((int)(CameraFrameReader.FrameSeconds * 1000));
+            }
+            if (reader.Error is { Length: > 0 } failure) CameraStatus = failure;
+        }
+        catch (Exception ex) { CameraStatus = ex.Message; }
+    }
+
+    /// <summary>
+    /// Turns the newest frame the reader produced into a bitmap for the stage, on the UI thread. The copy also
+    /// applies the key, so the stage receives pixels that are already see-through where the green was.
+    /// </summary>
+    private void PumpCameraFrame()
+    {
+        byte[] frame;
+        int width, height;
+        lock (_cameraFrameLock)
+        {
+            if (!_cameraFrameFresh || _cameraFrameWidth <= 0 || _cameraFrameHeight <= 0) return;
+            _cameraFrameFresh = false;
+            frame = _cameraFrame; width = _cameraFrameWidth; height = _cameraFrameHeight;
+        }
+        if (frame.Length < width * height * 4) return;
+        // The tracker reads the frame before the key is applied: it wants the colours the camera really saw, and
+        // making the green see-through would only take pixels away from the count. It runs whatever the picture
+        // layer is set to, because the key markers are a layer of their own.
+        if (_visualSettings.ShowHandTracking)
+        {
+            var reading = HandTracker.Track(frame, width, height, _visualSettings.HandTrackingSensitivity);
+            Stage.SetHandReading(reading);
+            HandStatus = reading.Found
+                ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, PianoStage.FirstPitch, PianoStage.KeyCount)), reading.Coverage * 100)
+                : Loc.T("Hand: nothing found in the newest frame.");
+        }
+        else if (Stage.HasHand)
+        {
+            Stage.SetHandReading(null);
+            HandStatus = "";
+        }
+        RefreshHandStatus();
+        CameraOverlay.ApplyKey(frame, width * height, _visualSettings.CameraKeyTolerance);
+        if (_cameraBitmap is null || _cameraBitmap.PixelWidth != width || _cameraBitmap.PixelHeight != height)
+            _cameraBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
+        _cameraBitmap.WritePixels(new Int32Rect(0, 0, width, height), frame, width * 4, 0);
+        Stage.SetCameraFrame(_cameraBitmap);
+    }
+
+    private IAudioTrack? _audioTrack;
+    private readonly Lock _audioTrackLock = new();
+    private bool _audioTrackStarted;
+    private double _audioTrackSeconds;
+
+    /// <summary>
+    /// Where the audio of a recording goes: a WAV beside the AVI, or <c>audio.wav</c> inside the PNG folder.
+    /// Pure so the side the user never sees is still checkable.
+    /// </summary>
+    internal static string AudioTrackPath(string target, bool sequence) =>
+        sequence ? Path.Combine(target, "audio.wav") : Path.ChangeExtension(target, ".wav");
+
+    /// <summary>The name a muxed copy gets, next to the recording.</summary>
+    internal static string MuxedName(string target) => Path.ChangeExtension(target, null) + ".mp4";
+
+    /// <summary>
+    /// Opens the WAV for this take and attaches the engine's tap to it. Returns false when there is nothing to
+    /// record — the setting is off, no SoundFont is loaded, or the file cannot be written — in which case the
+    /// video records alone, exactly as it did before the audio track existed.
+    /// </summary>
+    internal bool BeginAudioTrack()
+    {
+        EndAudioTrack();
+        if (!_visualSettings.RecordAudio || !_audio.HasSoundFont || _recordingPath is null) return false;
+        // An MP4 carries its own audio stream, so the same tap goes straight into the file being written;
+        // every other format gets a WAV beside the video to mux afterwards.
+        IAudioTrack? track = _videoRecorder is Mp4Recorder { HasAudio: true } mp4
+            ? mp4
+            : WavWriter.TryCreate(AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder));
+        if (track is null) return false;
+        _audioTrack = track; _audioTrackSeconds = 0;
+        // The tap runs on the audio thread, so the writer is only ever touched under its lock.
+        _audio.SetTap((samples, count) => { lock (_audioTrackLock) _audioTrack?.Append(samples, count); });
+        return true;
+    }
+
+    /// <summary>
+    /// Closes the audio track and returns its path, or <c>null</c> when this take had none. Detaching the tap
+    /// first means no block can arrive while the file is being finalized.
+    /// </summary>
+    internal string? EndAudioTrack()
+    {
+        _audio.SetTap(null);
+        IAudioTrack? track;
+        lock (_audioTrackLock) { track = _audioTrack; _audioTrack = null; }
+        if (track is null) return null;
+        _audioTrackSeconds = track.Seconds;
+        // The MP4's track is the recorder itself: it is closed with the file, not here, and there is no
+        // second file left to mux.
+        if (track is Mp4Recorder) return null;
+        var path = ((WavWriter)track).Path;
+        track.Dispose();
+        return path;
+    }
+
+    /// <summary>
+    /// Keeps the WAV as long as the video while no sound device is rendering: with no output device the pump
+    /// thread never runs, so the recording clock drives the synthesiser in step with the recording clock. With
+    /// a device the pump already fills the track, and this only remembers how long it has grown.
+    /// </summary>
+    private void PumpAudioTrack(TimeSpan elapsed)
+    {
+        if (!_audioTrackStarted) return;
+        if (_audio.HasAudioOutput)
+        {
+            // The pump thread is already rendering, so the track follows the clock on its own.
+            _audioTrackSeconds = AudioTrackSeconds();
+            return;
+        }
+        while (true)
+        {
+            var due = (long)(elapsed.TotalSeconds * 44100) - (long)(AudioTrackSeconds() * 44100);
+            if (due < AudioTrackBlockFrames) break;
+            if (!_audio.PumpTapBlock()) { lock (_audioTrackLock) _audioTrack?.AppendSilence(due); break; }
+        }
+        _audioTrackSeconds = AudioTrackSeconds();
+    }
+
+    /// <summary>Seconds of audio written so far, read under the lock the audio thread also holds.</summary>
+    private double AudioTrackSeconds()
+    {
+        lock (_audioTrackLock) return _audioTrack?.Seconds ?? _audioTrackSeconds;
+    }
+
+    /// <summary>Frames one rendered block holds; the same block size the engine's pump uses.</summary>
+    private const int AudioTrackBlockFrames = 512;
+
     private RenderTargetBitmap? _captureBitmap;
     private byte[]? _captureSource, _captureTarget;
-    private byte[] CaptureStageBgr(int width, int height)
+
+    /// <summary>
+    /// Draws the stage into the shared capture bitmap at the recording size and hands back the tightly
+    /// packed BGRA pixels. The bitmap and the buffers are reused between frames; at 1280×720 fresh arrays
+    /// would add roughly 130 MB/s of garbage while recording.
+    /// </summary>
+    private byte[] RenderStagePixels(int width, int height)
     {
         var visual = new DrawingVisual();
         using (var context = visual.RenderOpen()) context.DrawRectangle(new VisualBrush(Stage) { Stretch = Stretch.Uniform }, null, new Rect(0, 0, width, height));
-        // Reuse the capture bitmap and buffers between frames; at 1280×720 fresh arrays would add roughly 130 MB/s of garbage while recording.
         if (_captureBitmap is null || _captureBitmap.PixelWidth != width || _captureBitmap.PixelHeight != height)
         {
             _captureBitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             _captureSource = new byte[width * 4 * height]; _captureTarget = new byte[AviVideoRecorder.BgrStride(width) * height];
         }
         var bitmap = _captureBitmap; bitmap.Clear(); bitmap.Render(visual);
-        var sourceStride = width * 4; var source = _captureSource!; bitmap.CopyPixels(source, sourceStride, 0);
+        var source = _captureSource!; bitmap.CopyPixels(source, width * 4, 0);
+        return source;
+    }
+
+    /// <summary>
+    /// One frame as premultiplied BGRA, alpha included: what the PNG sequence writes (see
+    /// <see cref="PngSequenceRecorder"/>). The buffer belongs to the session and is reused every frame.
+    /// </summary>
+    internal byte[] CaptureStageBgra(int width, int height) => RenderStagePixels(width, height);
+
+    private byte[] CaptureStageBgr(int width, int height)
+    {
+        var source = RenderStagePixels(width, height);
+        var sourceStride = width * 4;
         var targetStride = AviVideoRecorder.BgrStride(width); var target = _captureTarget!;
         for (var y = 0; y < height; y++)
         {
@@ -636,11 +1060,30 @@ public partial class MainWindow : Window
         var recorder = _videoRecorder; _videoRecorder = null;
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;
+        var frames = recorder.FrameCount;
+        var audioPath = EndAudioTrack();
         try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) ShowMessage(ex.Message, "Video recording"); }
+        // The export is over: the stage goes back to painting its own background, whatever the framing was.
+        Stage.TransparentBackdrop = false;
         Loc.Set(RecordButton, "REC"); RecordButton.ClearValue(BackgroundProperty);
         Loc.Set(RecordButton, "Record the live piano visualizer", FrameworkElement.ToolTipProperty);
         if (showMessage && !_closing)
-            ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, note is null ? "" : note + "\n\n"), "Recording complete", MessageBoxImage.Information);
+        {
+            var noteText = note is null ? "" : note + "\n\n";
+            var audio = recorder is Mp4Recorder take
+                ? take.AudioDropped
+                    ? Loc.T(" The AAC encoder on this machine refused the audio stream, so this take has no sound.")
+                    : Loc.F("\n\nAudio: {0:0.#} s of 16-bit stereo AAC, written inside the file.", _audioTrackSeconds)
+                : audioPath is null
+                    ? Loc.T(" No audio track was written for this take.")
+                    : Loc.F("\n\nAudio: {0} ({1:0.#} s, 16-bit stereo WAV) — mux it with\nffmpeg -i \"{2}\" -i \"{0}\" -c:v copy -c:a aac \"{3}\"", audioPath, _audioTrackSeconds, audioPath, path, MuxedName(path));
+            if (recorder is Mp4Recorder)
+                ShowMessage(Loc.F("Video saved with its audio inside.\n{0}\n\n{1}This MP4 holds the piano visuals and the samples the engine played, encoded as H.264 and AAC, so it is ready to upload as it is.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
+            else if (recorder is PngSequenceRecorder)
+                ShowMessage(Loc.F("Frames saved.\n{0}\n\n{1}{2} PNG frames with an alpha channel. Import them at the frame rate you chose, or follow the ffmpeg line in sequence.json to turn them into alpha video; system audio is not mixed in.", path, noteText, frames) + audio, "Recording complete", MessageBoxImage.Information);
+            else
+                ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
+        }
     }
     internal static int MapComputerKey(Key key) { var index = Array.IndexOf(ComputerKeys, key); return index < 0 ? -1 : 48 + ComputerMap[index]; }
     private static string NoteLabel(int pitch) { string[] names = ["C", "C♯", "D", "D♯", "E", "F", "F♯", "G", "G♯", "A", "A♯", "B"]; return $"{names[pitch % 12]}{pitch / 12 - 1}"; }
@@ -666,11 +1109,12 @@ public partial class MainWindow : Window
             if (target != null)
             {
                 target.Played = true; var delta = Math.Abs(target.Start - _position);
-                if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); } else { _misses++; _streak = 0; }
+                if (delta <= .55) { _hits++; _streak++; _bestStreak = Math.Max(_bestStreak, _streak); RecordPracticeNote(true, target.Pitch, target.Start); } else { _misses++; _streak = 0; RecordPracticeNote(false, target.Pitch, target.Start); }
                 target.Timing = Math.Max(0, 100 - delta * 180); Loc.Set(NoteNameLabel, delta < .11 ? "PERFECT" : delta < .28 ? "GREAT" : "KEEP GOING");
                 if (ModeCombo.SelectedIndex == 1) _clock.Restart();
             }
-            else { _misses++; _streak = 0; NoteNameLabel.Text = NoteLabel(pitch); }
+            // A key pressed where the song has no note still happened at this moment, so the ghost keeps it.
+            else { _misses++; _streak = 0; RecordPracticeNote(false, pitch, _position); NoteNameLabel.Text = NoteLabel(pitch); }
         }
         else NoteNameLabel.Text = NoteLabel(pitch);
         UpdateStats(); UpdateStage();
@@ -751,6 +1195,8 @@ public partial class MainWindow : Window
     }
     /// <summary>English key of the song title: the MIDI file name, or "Live Piano" before one is open.</summary>
     private string _songLabel = "Live Piano";
+    /// <summary>Full path of the open MIDI file, or empty for the built-in demo song; the history keys its best take on it.</summary>
+    private string _songPath = "";
 
     private string _timeText = "";
 
@@ -907,7 +1353,7 @@ public partial class MainWindow : Window
     }
     private void ResetScore()
     {
-        _hits = _misses = _streak = _bestStreak = 0;
+        _hits = _misses = _streak = _bestStreak = 0; ResetPracticeTempoRuns();
         foreach (var note in _allNotes) { note.Played = false; note.Missed = false; note.Timing = 0; }
         // Notes already behind the playhead are skipped, not counted as misses, so seeking or changing filters never zeroes the accuracy.
         SyncPlayhead();
@@ -948,6 +1394,8 @@ public partial class MainWindow : Window
         try { SaveVisualSettings(); } catch { }
         Stop();
         foreach (var pedal in _pedalsDown.ToArray()) SetPedalState(pedal, false);
+        StopSongFolderWatch();
+        StopCameraOverlay();
         _midi.Dispose(); _audio.Dispose();
     }
 }

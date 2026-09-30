@@ -4,12 +4,52 @@ using System.Text.Json.Serialization;
 
 namespace PianoPath;
 
+/// <summary>The values <see cref="PianoVisualSettings.RecordingFormat"/> accepts; stored as written.</summary>
+internal static class RecordingFormatIds
+{
+    internal const string Avi = "Avi";
+    internal const string PngSequence = "PngSequence";
+    internal const string Mp4 = "Mp4";
+}
+
 /// <summary>Serializable, user-editable live-stage and note rendering controls.</summary>
 internal sealed class PianoVisualSettings
 {
     // ---- Layers -------------------------------------------------------------------------------------
     public bool ShowBackground { get; set; } = true;
     public bool ShowNotes { get; set; } = true;
+    /// <summary>The grand staff drawn above the roll, following the playhead (see <see cref="SheetLayer"/>).</summary>
+    public bool ShowSheet { get; set; } = false;
+    /// <summary>Record the piano's own audio next to the video, as a WAV beside the recording.</summary>
+    public bool RecordAudio { get; set; } = true;
+
+    // ---- Webcam overlay -----------------------------------------------------------------------------
+    /// <summary>Draw a live camera (or a video file) over the stage as a picture-in-picture.</summary>
+    public bool ShowCameraOverlay { get; set; } = false;
+    /// <summary>Symbolic link of the camera to open; empty means the first camera of the machine.</summary>
+    public string CameraSourceLink { get; set; } = "";
+    /// <summary>A video file to use instead of a live camera; empty means the camera.</summary>
+    public string CameraVideoPath { get; set; } = "";
+    /// <summary>Corner the overlay sits in, one of <see cref="CameraOverlay.Corners"/>.</summary>
+    public string CameraCorner { get; set; } = "Bottom left";
+    /// <summary>Width of the overlay as a percentage of the stage width.</summary>
+    public double CameraSize { get; set; } = 30;
+    /// <summary>Opacity of the overlay, percent.</summary>
+    public double CameraOpacity { get; set; } = 90;
+    /// <summary>Mirror the picture, the way a camera pointed at the player should look.</summary>
+    public bool CameraMirror { get; set; } = true;
+    /// <summary>Chroma-key tolerance against pure green; zero turns keying off.</summary>
+    public double CameraKeyTolerance { get; set; } = 30;
+    /// <summary>
+    /// Follow the hand the camera sees and mark the key it is over, with the fingers it holds up
+    /// (see <see cref="HandTracker"/>). Its own layer: the picture can stay hidden while the keys are marked.
+    /// </summary>
+    public bool ShowHandTracking { get; set; } = false;
+    /// <summary>
+    /// How much of the picture counts as skin, 0 to 100. Higher accepts more colours, which is what a warm light
+    /// or a dark room needs; lower keeps more of the background out of the count.
+    /// </summary>
+    public double HandTrackingSensitivity { get; set; } = 50;
     public bool ShowEmbers { get; set; } = true;
     public bool ShowHalo { get; set; } = true;
     public bool ShowFlame { get; set; } = true;
@@ -72,6 +112,14 @@ internal sealed class PianoVisualSettings
     public List<string> TrackColors { get; set; } = ["#43E6FF", "#FF6FD8", "#FFD166", "#7CFF6B", "#FF7A59", "#8C7BFF", "#5CF2E8", "#FF4D8D"];
     public double HandSplitPitch { get; set; } = 60;
     public double RainbowSpeed { get; set; } = 30;
+
+    // ---- Practice session ---------------------------------------------------------------------------
+    /// <summary>Slows the song down after a run of misses and speeds it back up as the run goes well.</summary>
+    /// <summary>Chooses the hand split point from the notes of each song when it opens.</summary>
+    public bool InferHandSplit { get; set; }
+    public bool PracticeAutoTempo { get; set; }
+    /// <summary>Misses in a row that trigger one slow-down step while <see cref="PracticeAutoTempo"/> is on.</summary>
+    public int PracticeMissThreshold { get; set; } = 3;
 
     // ---- Note shape ---------------------------------------------------------------------------------
     /// <summary>Solid, Neon (hollow glowing outline), Glass or Fire (burning texture).</summary>
@@ -278,6 +326,16 @@ internal sealed class PianoVisualSettings
     /// <summary>Window, 720p or 1080p.</summary>
     public string RecordingResolution { get; set; } = "Window";
     public double RecordingFrameRate { get; set; } = 30;
+    /// <summary>
+    /// What REC writes: <c>Avi</c> for a video file, <c>PngSequence</c> for a folder of 32-bit frames with
+    /// an alpha channel (see <see cref="IFrameRecorder"/>). An unknown value falls back to AVI.
+    /// </summary>
+    public string RecordingFormat { get; set; } = RecordingFormatIds.Avi;
+    /// <summary>
+    /// PNG sequence only: draw the stage without its opaque background so the frames keep their alpha.
+    /// Every layer the look enables is still drawn; what is skipped is the fill that would block it.
+    /// </summary>
+    public bool RecordingTransparent { get; set; } = true;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -301,6 +359,7 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] KeyLabelModes = ["None", "C", "All"];
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
+    internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
 
@@ -375,6 +434,7 @@ internal sealed class PianoVisualSettings
         ShaderRimLight = Math.Clamp(ShaderRimLight, 0, 150); ShaderEmissive = Math.Clamp(ShaderEmissive, 0, 200);
         ShaderExposure = Math.Clamp(ShaderExposure, 20, 250); ShaderCameraTilt = Math.Clamp(ShaderCameraTilt, 0, 100);
         HandSplitPitch = Math.Clamp(Math.Round(HandSplitPitch), 21, 108); RainbowSpeed = Math.Clamp(RainbowSpeed, 0, 100);
+        PracticeMissThreshold = Math.Clamp(PracticeMissThreshold, 1, 6);
         CameraParallax = Math.Clamp(CameraParallax, 0, 100); CameraZoom = Math.Clamp(CameraZoom, 65, 150);
         CameraOffset = Math.Clamp(CameraOffset, 0, 100); BackgroundDim = Math.Clamp(BackgroundDim, 0, 100); Saturation = Math.Clamp(Saturation, 0, 200);
         Contrast = Math.Clamp(Contrast, 0, 200); BloomIntensity = Math.Clamp(BloomIntensity, 0, 150); BloomSize = Math.Clamp(BloomSize, 0, 150);
@@ -401,6 +461,11 @@ internal sealed class PianoVisualSettings
         if (!KeyLabelModes.Contains(KeyLabels)) KeyLabels = "C";
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
+        if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Avi;
+        if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
+        CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
+        CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);
+        HandTrackingSensitivity = Math.Clamp(HandTrackingSensitivity, 0, 100);
         if (!ChromeMotions.Contains(ChromeMotion)) ChromeMotion = "Full";
         if (string.IsNullOrWhiteSpace(ShellTheme)) ShellTheme = ShellThemes.DefaultId;
         TrackColors ??= [];
@@ -459,6 +524,7 @@ internal static class PianoVisualSettingsStore
     {
         _directory = Path.GetFullPath(path);
         VisualPresetStore.InvalidateDefault();
+        UserThemeStore.InvalidateDefault();
     }
 
     internal static PianoVisualSettings Load()

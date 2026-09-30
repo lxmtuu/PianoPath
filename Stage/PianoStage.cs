@@ -10,7 +10,7 @@ namespace PianoPath;
 /// <summary>Immersive piano-roll renderer: live key trails, optional MIDI playback notes, sparks, wisps, flames and a lit keyboard.</summary>
 internal sealed class PianoStage : FrameworkElement
 {
-    private const int FirstPitch = 21, KeyCount = 88, MaxParticles = 2600;
+    internal const int FirstPitch = 21, KeyCount = 88, MaxParticles = 2600;
     private const double FallSpeed = 258;
     private const int FireMaskWidth = 96, FireMaskHeight = 384;
     /// <summary>MIDI pitches of the 52 white keys, in keyboard order.</summary>
@@ -70,8 +70,11 @@ internal sealed class PianoStage : FrameworkElement
     private string? _loadedBackgroundPath = "\0";
     private double _pointerX = .5, _pointerY = .5;
     private IReadOnlyList<NoteEvent> _notes = [];
+    private IReadOnlyList<double> _beats = [];
+    private int _beatsPerBar = 4;
     private IReadOnlySet<int> _pressed = new HashSet<int>();
     private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip, _fps;
+    private bool _transparentBackdrop;
     private int _releaseScanIndex;
     private double _releaseScanPos;
     private double _beatPulse, _energyLevel;
@@ -81,6 +84,18 @@ internal sealed class PianoStage : FrameworkElement
     private int _mousePitch = -1;
     public event Action<int, bool>? PianoKeyChanged;
     public double KeyboardHeight => Math.Max(80, Math.Min(300, Math.Max(110, Math.Min(228, ActualHeight * .205)) * _visual.KeyboardScale / 100));
+    /// <summary>
+    /// Renders the stage without its opaque background so an export can keep the alpha channel (the PNG
+    /// sequence; see <see cref="PngSequenceRecorder"/>). Every layer the look enables is still drawn — the
+    /// stars, the note roll, the keys and the effects — while the fills a viewer would otherwise see
+    /// through are skipped: the ink, the background colour, the image, the gradient and the vignette.
+    /// </summary>
+    internal bool TransparentBackdrop
+    {
+        get => _transparentBackdrop;
+        set { if (_transparentBackdrop == value) return; _transparentBackdrop = value; InvalidateVisual(); }
+    }
+
     public int SparkCount => _sparks.Count;
     public int RingCount => _rings.Count;
     public int FlashCount => _flashes.Count;
@@ -153,6 +168,16 @@ internal sealed class PianoStage : FrameworkElement
         MouseMove += Stage_MouseMove;
         MouseUp += Stage_MouseUp;
         LostMouseCapture += (_, _) => ReleaseMouseKey();
+    }
+
+    /// <summary>
+    /// The song's metronome grid, which the sheet layer draws its bar lines on. It is kept apart from
+    /// <see cref="SetState"/> because the grid changes when a song is loaded, not on every frame.
+    /// </summary>
+    public void SetSheet(IReadOnlyList<double> beats, int beatsPerBar)
+    {
+        _beats = beats; _beatsPerBar = Math.Max(1, beatsPerBar);
+        InvalidateVisual();
     }
 
     public void SetState(IReadOnlyList<NoteEvent> notes, double position, bool playing, IReadOnlySet<int> pressed)
@@ -596,27 +621,35 @@ internal sealed class PianoStage : FrameworkElement
     {
         base.OnRender(dc);
         var width = ActualWidth; var height = ActualHeight; if (width < 1 || height < 1) return;
-        if (_pixelsPerDip <= 0) _pixelsPerDip = VisualTreeHelper.GetDpi(this).PixelsPerDip; // read once; OnDpiChanged keeps it current
+        // Read once; OnDpiChanged keeps it current. The value is asked for defensively because the stage is
+        // also drawn off screen to make the picture a preset file carries (see PresetThumbnail), and an
+        // element that is not attached to a window yet has no DPI to report on some systems.
+        if (_pixelsPerDip <= 0) _pixelsPerDip = PixelsPerDip(this);
         var keyHeight = KeyboardHeight; var keyTop = height - keyHeight; var lane = width / KeyCount;
         var chroma = _visual.BackgroundMode == "ChromaGreen";
         var scale = _visual.CameraZoom / 100;
         var parallax = _visual.CameraParallax / 100;
         var offsetX = (width - width * scale) * _visual.CameraOffset / 100 + (_pointerX - .5) * parallax * 28;
         var offsetY = (height - height * scale) * .5 + (_pointerY - .5) * parallax * 20;
-        dc.DrawRectangle(chroma ? ChromaGreen : Ink, null, new Rect(0, 0, width, height));
+        if (!_transparentBackdrop) dc.DrawRectangle(chroma ? ChromaGreen : Ink, null, new Rect(0, 0, width, height));
         dc.PushTransform(new TranslateTransform(offsetX, offsetY)); dc.PushTransform(new ScaleTransform(scale, scale));
-        if (chroma) dc.DrawRectangle(ChromaGreen, null, new Rect(0, 0, width, height));
+        if (chroma)
+        {
+            if (!_transparentBackdrop) dc.DrawRectangle(ChromaGreen, null, new Rect(0, 0, width, height));
+        }
         else
         {
-            dc.DrawRectangle(Brush(ParseColor(_visual.BackgroundColor, Colors.Black)), null, new Rect(0, 0, width, height));
-            if (_visual.ShowBackground && _visual.BackgroundMode == "Image" && _backgroundImage is not null)
+            // A transparent export skips the fills that would cover the alpha channel; the layers the look
+            // enables (stars, lanes, horizon, beams, motes, ambient families) are drawn either way.
+            if (!_transparentBackdrop) dc.DrawRectangle(Brush(ParseColor(_visual.BackgroundColor, Colors.Black)), null, new Rect(0, 0, width, height));
+            if (!_transparentBackdrop && _visual.ShowBackground && _visual.BackgroundMode == "Image" && _backgroundImage is not null)
             {
                 var imageScale = Math.Max(width / _backgroundImage.Width, height / _backgroundImage.Height);
                 var imageWidth = _backgroundImage.Width * imageScale; var imageHeight = _backgroundImage.Height * imageScale;
                 dc.DrawImage(_backgroundImage, new Rect((width - imageWidth) / 2, (height - imageHeight) / 2, imageWidth, imageHeight));
                 if (_visual.BackgroundDim > 0) dc.DrawRectangle(Brush(Color.FromArgb((byte)(_visual.BackgroundDim * 2.1), 0, 0, 0)), null, new Rect(0, 0, width, height));
             }
-            if (_visual.ShowBackground && _visual.BackgroundGradient)
+            if (!_transparentBackdrop && _visual.ShowBackground && _visual.BackgroundGradient)
             {
                 var aura = new RadialGradientBrush { Center = new Point(.5, .24), GradientOrigin = new Point(.5, .24), RadiusX = .72, RadiusY = .88, MappingMode = BrushMappingMode.RelativeToBoundingBox };
                 aura.GradientStops.Add(new GradientStop(Color.FromArgb((byte)(40 * _visual.BloomIntensity / 65), 121, 48, 174), 0));
@@ -640,6 +673,8 @@ internal sealed class PianoStage : FrameworkElement
         dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, keyTop + 2)));
         DrawNotes(dc, width, keyTop, lane);
         DrawLiveTrails(dc, width, keyTop, lane);
+        // The sheet sits above the roll: it is a reading layer, and the roll keeps moving behind it.
+        if (_visual.ShowSheet) DrawSheet(dc, width, keyTop);
         dc.Pop();
         if (_visual.ShowFlame && _visual.FlameIntensity > 0) DrawFlames(dc, width, keyTop, lane);
         if (_visual.ShowImpactRings) DrawRings(dc);
@@ -647,14 +682,25 @@ internal sealed class PianoStage : FrameworkElement
         if (_visual.ShowEmbers || _visual.ShowWisps) DrawSparks(dc, width, keyTop);
         if (_visual.ShowHalo) DrawImpactLine(dc, width, keyTop);
         if (_visual.HoldElectricArc && _visual.HoldArcIntensity > 0) DrawElectricArcs(dc, width, keyTop);
-        if (!chroma && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
+        if (!chroma && !_transparentBackdrop && _visual.Vignette > 0) DrawVignette(dc, width, keyTop);
         if (_visual.ShowKeys) DrawKeyboard(dc, width, height, lane, keyTop);
+        // The hand marker belongs to the keyboard: it says which key the hand in the picture is over.
+        DrawHandMarker(dc, width, keyTop, lane);
+        // The camera overlay is drawn last: the player is in front of everything the stage paints.
+        DrawCameraOverlay(dc, width, height);
         if (_visual.ShowWatermark) DrawWatermark(dc, width, height);
         if (_visual.ShowCounter || _visual.ShowFps) DrawCounter(dc, width);
         dc.Pop(); dc.Pop();
     }
 
     /// <summary>Keeps the cached DPI current so per-frame text and shader scaling stay crisp after a display change.</summary>
+    /// <summary>Pixels per DIP of a visual, or 1 when the visual cannot report one yet.</summary>
+    private static double PixelsPerDip(Visual visual)
+    {
+        try { return VisualTreeHelper.GetDpi(visual).PixelsPerDip; }
+        catch { return 1; }
+    }
+
     protected override void OnDpiChanged(DpiScale oldDpi, DpiScale newDpi)
     {
         _pixelsPerDip = newDpi.PixelsPerDip;
@@ -772,6 +818,128 @@ internal sealed class PianoStage : FrameworkElement
                 Drift: .35 + _petalRandom.NextDouble() * .9,
                 Spin: (_petalRandom.NextDouble() - .5) * 1.6,
                 Phase: _petalRandom.NextDouble() * Math.PI * 2));
+    }
+
+    /// <summary>
+    /// The key the tracked hand is over: a soft band down the key it lands on, a disc at its centre, and one pip
+    /// per finger the tracker could count. Drawn only when the layer is switched on and a hand was really found,
+    /// so a machine without a camera shows the stage exactly as it always did.
+    /// </summary>
+    private void DrawHandMarker(DrawingContext dc, double width, double keyTop, double lane)
+    {
+        if (!_visual.ShowHandTracking || _hand is not { } hand || width < 80) return;
+        var pitch = HandTracker.KeyPitch(hand.CenterX, FirstPitch, KeyCount);
+        var centre = (pitch - FirstPitch + .5) * lane;
+        var accent = _visual.TrackColors.Count > 0 ? _visual.TrackColors[0] : "#43E6FF";
+        var colour = (Color)ColorConverter.ConvertFromString(accent);
+        var height = Math.Max(24, ActualHeight - keyTop);
+        // The band: a wash over the key, brightest at its edges so the key itself stays readable under it.
+        var bandWidth = Math.Max(6, lane * .9);
+        var left = Math.Max(0, Math.Min(width - bandWidth, centre - bandWidth / 2));
+        var wash = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(1, 0),
+        };
+        wash.GradientStops.Add(new GradientStop(Color.FromArgb(150, colour.R, colour.G, colour.B), 0));
+        wash.GradientStops.Add(new GradientStop(Color.FromArgb(40, colour.R, colour.G, colour.B), .5));
+        wash.GradientStops.Add(new GradientStop(Color.FromArgb(150, colour.R, colour.G, colour.B), 1));
+        dc.DrawRectangle(wash, null, new Rect(left, keyTop, bandWidth, height));
+        // The disc: where across the key the hand really is, and how high it is held.
+        var radius = Math.Max(3, Math.Min(lane * .3, 14));
+        var discY = keyTop + Math.Clamp(1 - hand.CenterY, 0, 1) * height;
+        dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(200, colour.R, colour.G, colour.B)), null, new Point(centre, keyTop + height * .5), radius, radius);
+        // One pip per finger along the bottom of the band, so a count can be read at a glance.
+        for (var finger = 0; finger < hand.Fingers && finger < 10; finger++)
+        {
+            var pipX = left + bandWidth * (finger + .5) / Math.Max(1, hand.Fingers);
+            dc.DrawEllipse(new SolidColorBrush(Color.FromArgb(230, colour.R, colour.G, colour.B)), null, new Point(pipX, keyTop + height - 6), 2.5, 2.5);
+        }
+    }
+
+    /// <summary>
+    /// The webcam overlay: the newest frame, placed by the corner and size settings and faded by the opacity,
+    /// on top of the keyboard. Nothing is drawn when the layer is off or no frame has arrived, so a machine
+    /// without a camera shows the stage exactly as it always did.
+    /// </summary>
+    private void DrawCameraOverlay(DrawingContext dc, double width, double height)
+    {
+        var frame = _cameraFrame;
+        if (!_visual.ShowCameraOverlay || frame is null || width < 80 || height < 80) return;
+        var aspect = frame.PixelHeight <= 0 ? 16.0 / 9 : frame.PixelWidth / (double)frame.PixelHeight;
+        var area = CameraOverlay.Place(_visual.CameraCorner, width, height, _visual.CameraSize, aspect);
+        if (area.Width < 8 || area.Height < 8) return;
+        dc.PushOpacity(CameraOverlay.OpacityFactor(_visual.CameraOpacity));
+        dc.DrawImage(frame, area);
+        dc.Pop();
+    }
+
+    /// <summary>The newest camera frame, or <c>null</c> when nothing has arrived; handed over by the window.</summary>
+    private BitmapSource? _cameraFrame;
+
+    /// <summary>The hand the tracker last saw, or null when it is not following one; handed over by the window.</summary>
+    private HandTracker.Reading? _hand;
+
+    /// <summary>
+    /// Publishes what the tracker saw, so the stage can mark the key the hand is over. Note that the reading
+    /// arrives whether or not the picture is shown: the keys are a layer of their own.
+    /// </summary>
+    public void SetHandReading(HandTracker.Reading? reading)
+    {
+        _hand = reading is { Found: true } ? reading : null;
+        InvalidateVisual();
+    }
+
+    /// <summary>True while a hand is being followed; the dock uses it to say what the tracker is seeing.</summary>
+    public bool HasHand => _hand is { Found: true };
+
+    /// <summary>
+    /// Publishes the newest frame of the overlay. The window builds it on the UI thread from the buffer the
+    /// reader thread fills, so the stage never touches a camera itself.
+    /// </summary>
+    public void SetCameraFrame(BitmapSource? frame)
+    {
+        _cameraFrame = frame;
+        InvalidateVisual();
+    }
+
+    /// <summary>True while a frame is available; the dock uses it to say whether the overlay is really drawing.</summary>
+    public bool HasCameraFrame => _cameraFrame is not null;
+
+    /// <summary>The key the open song is written in, plus the note list it was worked out from.</summary>
+    private MusicKey _sheetKey = MusicKey.CMajor;
+    private IReadOnlyList<NoteEvent>? _sheetKeyNotes;
+    private SheetCache? _sheetCache;
+
+    /// <summary>The sheet's working-out for the open song, kept until the notes, the grid, the split or the key change.</summary>
+    private sealed record SheetCache(IReadOnlyList<NoteEvent> Notes, IReadOnlyList<double> Beats, int PerBar, double Split, MusicKey Key, SheetLayer.SheetPlan Plan);
+
+    /// <summary>
+    /// The sheet's own arithmetic — which accidental every note is written with, which short notes share a beam and
+    /// where each hand rests — for the open song. It never depends on the playhead or on the practice state, so it
+    /// is worked out when the song, its grid, the hand split or the key changes and only read on every frame.
+    /// </summary>
+    private SheetLayer.SheetPlan SheetPlan()
+    {
+        var cache = _sheetCache;
+        if (cache is null || !ReferenceEquals(cache.Notes, _notes) || !ReferenceEquals(cache.Beats, _beats)
+            || cache.PerBar != _beatsPerBar || Math.Abs(cache.Split - _visual.HandSplitPitch) > .5 || cache.Key != _sheetKey)
+            _sheetCache = cache = new SheetCache(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey,
+                SheetLayer.Plan(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey));
+        return cache.Plan;
+    }
+
+    /// <summary>
+    /// The staff band: the same seconds-per-pixel the roll uses, so a written note and its falling bar always
+    /// line up under the playhead. Both the key and the sheet's plan are worked out once per song — the stage hands
+    /// the sheet a new note list whenever the song changes — rather than on every frame.
+    /// </summary>
+    private void DrawSheet(DrawingContext dc, double width, double hitY)
+    {
+        var noteSpeed = FallSpeed * _visual.NoteFallSpeed / 550;
+        if (!ReferenceEquals(_sheetKeyNotes, _notes)) { _sheetKeyNotes = _notes; _sheetKey = MusicKey.Infer(_notes); }
+        SheetLayer.Draw(dc, SheetLayer.Band(width, hitY, 34), _notes, _position, _visual.HandSplitPitch, _sheetKey,
+            _beats, _beatsPerBar, hitY / Math.Max(1, noteSpeed),
+            Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip, SheetPlan());
     }
 
     private void DrawNotes(DrawingContext dc, double width, double hitY, double lane)

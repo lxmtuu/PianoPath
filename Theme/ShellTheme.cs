@@ -71,6 +71,9 @@ internal static class ShellThemes
 
     internal const string DefaultId = ConcertGrandId;
 
+    /// <summary>The palette published while Windows runs in high-contrast mode; not a user choice.</summary>
+    internal const string HighContrastId = "high-contrast";
+
     /// <summary>Deprecated ids and display names from earlier releases, mapped to the current theme.</summary>
     internal static readonly Dictionary<string, string> LegacyIds = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -146,6 +149,12 @@ internal static class ShellThemes
     internal static ShellTheme Default => ConcertGrand;
 
     /// <summary>
+    /// Everything the pickers offer: the built-in themes first, then the ones the user made
+    /// (<see cref="UserThemeStore"/>), which is also exactly what <see cref="Find"/> resolves.
+    /// </summary>
+    internal static IEnumerable<ShellTheme> Everything => All.Concat(UserThemeStore.Default.Load());
+
+    /// <summary>
     /// Resolves a stored theme name: canonical or legacy id first, then the display name; unknown or
     /// empty values fall back to the default look.
     /// </summary>
@@ -154,13 +163,41 @@ internal static class ShellThemes
         var value = id?.Trim();
         if (string.IsNullOrEmpty(value)) return Default;
         if (LegacyIds.TryGetValue(value, out var canonical)) value = canonical;
-        return All.FirstOrDefault(theme => string.Equals(theme.Id, value, StringComparison.OrdinalIgnoreCase))
-            ?? All.FirstOrDefault(theme => string.Equals(theme.Name, value, StringComparison.OrdinalIgnoreCase))
+        var themes = Everything.ToList();
+        return themes.FirstOrDefault(theme => string.Equals(theme.Id, value, StringComparison.OrdinalIgnoreCase))
+            ?? themes.FirstOrDefault(theme => string.Equals(theme.Name, value, StringComparison.OrdinalIgnoreCase))
             ?? Default;
     }
 
     /// <summary>Canonical id for a stored value; what the settings file and presets are rewritten to.</summary>
     internal static string Normalize(string? id) => Find(id).Id;
+
+    /// <summary>
+    /// The palette used when Windows is in high-contrast mode. It is built from <see cref="SystemColors"/>
+    /// at call time (not cached) because those colours change with the system theme, and it deliberately
+    /// keeps the stage settings alone: high contrast restyles the chrome, never the user's piano.
+    /// </summary>
+    internal static ShellTheme HighContrast() => new(
+        HighContrastId, "High Contrast",
+        "Windows high-contrast colours: system window, text, control and highlight colours replace the concert palette.",
+        BackdropStyle.Obsidian,
+        Accent: SystemColors.HighlightColor,
+        AccentAlt: SystemColors.HotTrackColor,
+        AccentSoft: Color.FromArgb(0x40, SystemColors.HighlightColor.R, SystemColors.HighlightColor.G, SystemColors.HighlightColor.B),
+        Glow: SystemColors.HotTrackColor,
+        Window: SystemColors.WindowColor,
+        Panel: SystemColors.ControlColor,
+        PanelTop: SystemColors.ControlColor,
+        PanelBottom: SystemColors.ControlColor,
+        PanelAlt: SystemColors.ControlColor,
+        Control: SystemColors.ControlColor,
+        ControlHover: SystemColors.ControlLightColor,
+        Border: SystemColors.ControlDarkColor,
+        ControlBorder: SystemColors.ControlDarkDarkColor,
+        Track: SystemColors.ControlLightColor,
+        Popup: SystemColors.WindowColor,
+        Mote: SystemColors.GrayTextColor,
+        MoteAlt: SystemColors.WindowColor);
 }
 
 /// <summary>
@@ -178,39 +215,76 @@ internal static class ShellThemeManager
 
     internal static ShellTheme Current { get; private set; } = ShellThemes.Default;
 
+    /// <summary>
+    /// True while the chrome is painted from <see cref="ShellThemes.HighContrast"/> instead of the
+    /// chosen concert theme. It follows Windows automatically; <see cref="ForceHighContrast"/> lets
+    /// <c>--verify</c> exercise the branch on a runner that is not actually in high-contrast mode.
+    /// </summary>
+    internal static bool IsHighContrast => ForceHighContrast || SystemParameters.HighContrast;
+
+    /// <summary>Test hook for the high-contrast branch; never set outside <c>--verify</c>.</summary>
+    internal static bool ForceHighContrast { get; set; }
+
+    /// <summary>
+    /// Windows raises <see cref="SystemParameters.StaticPropertyChanged"/> when an accessibility setting
+    /// changes. High contrast decides which palette wins, and the chrome has to repaint while the user is
+    /// looking at it, so the manager subscribes once for the life of the process.
+    /// </summary>
+    static ShellThemeManager() => SystemParameters.StaticPropertyChanged += (_, e) => OnSystemParametersChanged(e.PropertyName);
+
+    /// <summary>
+    /// The body of that hook. Split out of the event handler so <c>--verify</c> can raise the
+    /// notification on a runner whose Windows never actually switches to high contrast.
+    /// </summary>
+    internal static void OnSystemParametersChanged(string? propertyName)
+    {
+        // A null name means "something changed, the exact property is unknown" and is treated as ours;
+        // every other name is only ours when it is the contrast switch, because repainting on each
+        // system-parameter change would rebuild the whole palette whenever Windows reports anything.
+        if (propertyName is not (null or nameof(SystemParameters.HighContrast))) return;
+        // The notification does not have to arrive on the interface thread, and the palette lives in the
+        // application resources, so the repaint is posted to the dispatcher when it did not.
+        var dispatcher = Application.Current?.Dispatcher;
+        if (dispatcher is not null && !dispatcher.CheckAccess()) { dispatcher.BeginInvoke(new Action(() => Apply(Current))); return; }
+        Apply(Current);
+    }
+
     /// <summary>Applies a theme by id or display name; returns the theme that ended up active.</summary>
     internal static ShellTheme Apply(string? id) => Apply(ShellThemes.Find(id));
 
     internal static ShellTheme Apply(ShellTheme theme)
     {
         Current = theme;
+        // High contrast wins over the concert palette while it is on, but the user's choice is kept in
+        // Current: turning the system setting off (and re-applying) brings the chosen theme straight back.
+        var published = IsHighContrast ? ShellThemes.HighContrast() : theme;
         var resources = Application.Current?.Resources;
         if (resources is not null)
         {
-            Set(resources, "AccentBrush", new SolidColorBrush(theme.Accent));
-            Set(resources, "Accent2Brush", new SolidColorBrush(theme.AccentAlt));
-            Set(resources, "AccentSoftBrush", new SolidColorBrush(theme.AccentSoft));
-            Set(resources, "GlowBrush", new SolidColorBrush(theme.Glow));
-            Set(resources, "MoteBrush", new SolidColorBrush(theme.Mote));
-            Set(resources, "AccentGradientBrush", Gradient(theme.Accent, theme.AccentAlt));
-            Set(resources, "CurtainGradientBrush", Gradient(theme.Accent, theme.Glow, horizontal: true));
-            Set(resources, "WindowBrush", new SolidColorBrush(theme.Window));
-            Set(resources, "PanelBrush", new SolidColorBrush(theme.Panel));
-            Set(resources, "PanelChromeBrush", Gradient(theme.PanelTop, theme.PanelBottom));
-            Set(resources, "PanelAltBrush", new SolidColorBrush(theme.PanelAlt));
-            Set(resources, "PanelBorderBrush", new SolidColorBrush(theme.Border));
-            Set(resources, "ControlBrush", new SolidColorBrush(theme.Control));
-            Set(resources, "ControlHoverBrush", new SolidColorBrush(theme.ControlHover));
-            Set(resources, "ControlBorderBrush", new SolidColorBrush(theme.ControlBorder));
-            Set(resources, "PopupBrush", new SolidColorBrush(theme.Popup));
-            Set(resources, "TrackBrush", new SolidColorBrush(theme.Track));
-            Set(resources, "HairlineBrush", new SolidColorBrush(Color.FromArgb(theme.DeepSurfaces ? (byte)0x1F : (byte)0x2E, 255, 255, 255)));
-            Set(resources, "TopSheenBrush", Sheen(theme));
-            Set(resources, "BackdropTopBrush", new SolidColorBrush(theme.PanelTop));
-            Set(resources, "AccentColor", theme.Accent);
-            Set(resources, "AccentColor2", theme.AccentAlt);
+            Set(resources, "AccentBrush", new SolidColorBrush(published.Accent));
+            Set(resources, "Accent2Brush", new SolidColorBrush(published.AccentAlt));
+            Set(resources, "AccentSoftBrush", new SolidColorBrush(published.AccentSoft));
+            Set(resources, "GlowBrush", new SolidColorBrush(published.Glow));
+            Set(resources, "MoteBrush", new SolidColorBrush(published.Mote));
+            Set(resources, "AccentGradientBrush", Gradient(published.Accent, published.AccentAlt));
+            Set(resources, "CurtainGradientBrush", Gradient(published.Accent, published.Glow, horizontal: true));
+            Set(resources, "WindowBrush", new SolidColorBrush(published.Window));
+            Set(resources, "PanelBrush", new SolidColorBrush(published.Panel));
+            Set(resources, "PanelChromeBrush", Gradient(published.PanelTop, published.PanelBottom));
+            Set(resources, "PanelAltBrush", new SolidColorBrush(published.PanelAlt));
+            Set(resources, "PanelBorderBrush", new SolidColorBrush(published.Border));
+            Set(resources, "ControlBrush", new SolidColorBrush(published.Control));
+            Set(resources, "ControlHoverBrush", new SolidColorBrush(published.ControlHover));
+            Set(resources, "ControlBorderBrush", new SolidColorBrush(published.ControlBorder));
+            Set(resources, "PopupBrush", new SolidColorBrush(published.Popup));
+            Set(resources, "TrackBrush", new SolidColorBrush(published.Track));
+            Set(resources, "HairlineBrush", new SolidColorBrush(Color.FromArgb(published.DeepSurfaces ? (byte)0x1F : (byte)0x2E, 255, 255, 255)));
+            Set(resources, "TopSheenBrush", Sheen(published));
+            Set(resources, "BackdropTopBrush", new SolidColorBrush(published.PanelTop));
+            Set(resources, "AccentColor", published.Accent);
+            Set(resources, "AccentColor2", published.AccentAlt);
         }
-        Changed?.Invoke(theme);
+        Changed?.Invoke(published);
         return theme;
     }
 

@@ -11,24 +11,32 @@ permissions:
   contents: write
 
 jobs:
+  # Fast lane: syntax, XAML resources, the settings-navigation catalogue, the theme tokens, the string tables,
+  # the installer translation and every README link are checked in about ten seconds on a Linux runner, so a typo
+  # turns red before the Windows job is even scheduled. The whole job is one script, which is why it can run on a
+  # machine that has nothing but Python.
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - name: Static source check
+        run: python3 tools/check_sources.py
+
   build:
+    needs: static
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           # The bundled SoundFont lives in Git LFS; the build itself only needs the pointer, so skip the 113 MiB download.
           # The verification suite detects the pointer and reports SKIP for the bundled-piano checks.
           lfs: false
 
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
-
-      # Fast lane: syntax, XAML resources, the settings-navigation catalogue, the theme tokens and
-      # every README link are checked in seconds, before the Windows build can fail for a typo.
-      - name: Static source check
-        shell: pwsh
-        run: python tools/check_sources.py
 
       - name: Restore
         run: dotnet restore PianoPath.csproj
@@ -47,66 +55,110 @@ jobs:
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
           $lines = if (Test-Path $log) { Get-Content $log } else { @() }
+          # A child process that reports every stage it reaches can print more NOTE lines than GitHub will
+          # show, and the ones that matter are the last ones — the step the machine stopped at. So only the
+          # tail of the NOTEs is surfaced: SKIP and FAIL lines always are, and the whole log is in the job
+          # summary and in the run's artifacts either way.
+          $notes = @($lines | Where-Object { $_ -like 'NOTE*' })
+          $tail = @($notes | Select-Object -Last 6)
           $lines | ForEach-Object {
             if ($_ -like 'FAIL*') { $level = 'error' }
-            elseif ($_ -like 'SKIP*' -or $_ -like 'NOTE*') { $level = 'warning' }
+            elseif ($_ -like 'SKIP*') { $level = 'warning' }
+            elseif ($_ -like 'NOTE*') { if ($_ -notin $tail) { return }; $level = 'warning' }
             elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
             else { return }
             $text = $_ -replace '%', '%25'
             "::${level} title=Keyflow verification::$text"
           }
+          # The exit code and the very last line of the log are named whatever the log says: a run that is
+          # taken down inside a native call never reaches the suite's own verdict, and then the last line is the
+          # only thing that says where the process died.
+          $last = if ($lines) { $lines[-1] } else { '<the log was empty>' }
+          "::notice title=Keyflow verification::PianoPath.exe exited with code $($proc.ExitCode) after $($lines.Count) log line(s)."
           if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
+          elseif ($last -notlike 'Verification passed*' -and $last -notlike 'Verification failed*') {
+            $text = $last -replace '%', '%25'
+            "::error title=Keyflow verification::The log ends without a verdict, at: $text"
+          }
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
+
+      # GitHub shows at most ten annotations of one level, and a run whose child process reports its stages
+      # line by line has more NOTEs than that: the lines that matter are the ones near the end. So the step
+      # above leaves the older NOTEs to the job summary, and this one keeps the whole log as an artifact —
+      # the only way to read a run back later, since the annotations that overflowed cannot be recovered
+      # from the API.
+      - name: Publish the verification log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-verification-log
+          path: ${{ runner.temp }}/keyflow-verification.log
+          if-no-files-found: warn
+
+      # The wizard is part of the product, so it is compiled on every push instead of only when a
+      # release is cut: this is the only place the real ISCC runs, and tools/build_installer.ps1
+      # refuses to let the compiler ignore a name or a placeholder the translation got wrong.
+      # -Stub writes placeholder files into publish\win-x64 so the job never needs the 113 MiB
+      # SoundFont, which the compiler only checks for existence anyway.
+      - name: Build the installer
+        shell: pwsh
+        run: pwsh tools/build_installer.ps1 -Stub -OutputDir (Join-Path $env:RUNNER_TEMP 'keyflow-installer')
 
       # The README shows the real application, so the screenshots are rendered by the same executable
       # that just passed the verification suite instead of being hand-made artwork that drifts out of
       # date. Refresh the committed copies with:
-      #   gh run download <run-id> -n keyflow-previews -D docs/previews
+      #   gh run download <run-id> -n keyflow-previews -D docs/previews   # both language sets
       - name: Render README previews
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
           $out = 'docs/previews'
-          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Two sets of the same eight subjects, one per language: README.md reads docs/previews/vi and
+          # README.en.md reads docs/previews/en, so each edition shows the interface in its own language.
+          # --lang pins it either way, because a runner whose Windows display language happens to be
+          # something else must still render the same pictures as every other machine.
           $shots = @(
-            # --lang=en pins the captions: a runner whose Windows display language happens to be
-            # something else must still render the same English README as every other machine.
-            @{ Name = 'stage-live.png';  Args = @('--play-preview', '--lang=en') },
+            @{ Name = 'stage-live.png';  Args = @('--play-preview') },
             # The background page draws a picture of your own behind the keys. The README shows that
             # feature with the generated sample from docs/samples, never with a visitor's screenshot: the
             # shot stays deterministic and the repo stays free of artwork somebody else holds the rights to.
-            @{ Name = 'background-image.png'; Args = @('--play-preview', '--lang=en', "--background-image=$(Join-Path $PWD 'docs/samples/stage-backdrop.png')") },
-            @{ Name = 'main-menu.png';   Args = @('--menu', '--lang=en') },
-            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style', '--lang=en') },
-            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme', '--lang=en') },
-            @{ Name = 'play-dialog.png'; Args = @('--play-dialog', '--lang=en') },
-            @{ Name = 'shortcuts.png';   Args = @('--shortcuts', '--lang=en') },
-            # One shot in Vietnamese, on the page that owns the setting: the interface language is a
-            # feature, and the README shows it instead of only describing it. docs/previews is owned by
-            # this step, so the file may be one commit behind the README line pointing at it.
-            @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general', '--lang=vi') }
+            @{ Name = 'background-image.png'; Args = @('--play-preview', "--background-image=$(Join-Path $PWD 'docs/samples/stage-backdrop.png')") },
+            @{ Name = 'main-menu.png';   Args = @('--menu') },
+            @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style') },
+            @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme') },
+            @{ Name = 'play-dialog.png'; Args = @('--play-dialog') },
+            @{ Name = 'shortcuts.png';   Args = @('--shortcuts') },
+            # The page that owns the interface language, so each set shows that language in the app itself.
+            @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general') }
           )
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
           $failed = @()
-          foreach ($shot in $shots) {
-            $target = Join-Path $out $shot.Name
-            # A private settings folder per shot: the README must show a pristine first run, never the
-            # leftovers of the verification suite that ran before it in this job.
-            $settings = Join-Path $env:TEMP "keyflow-preview-$([IO.Path]::GetFileNameWithoutExtension($shot.Name))"
-            Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
-            $args = @('--snapshot', $target, '--compact', "--settings-dir=$settings") + $shot.Args
-            $proc = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
-            if (Test-Path $target) { "rendered $($shot.Name) ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
-            else { $failed += "$($shot.Name) (exit $($proc.ExitCode))" }
+          foreach ($lang in @('en', 'vi')) {
+            foreach ($shot in $shots) {
+              $name = "$lang/$($shot.Name)"
+              $target = Join-Path $out $name
+              New-Item -ItemType Directory -Force -Path (Split-Path $target) | Out-Null
+              # A private settings folder per shot: the README must show a pristine first run, never the
+              # leftovers of the verification suite that ran before it in this job.
+              $settings = Join-Path $env:TEMP "keyflow-preview-$lang-$([IO.Path]::GetFileNameWithoutExtension($shot.Name))"
+              Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
+              $args = @('--snapshot', $target, '--compact', "--lang=$lang", "--settings-dir=$settings") + $shot.Args
+              $proc = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
+              # docs/previews is owned by this step, so a picture may be one commit behind the README
+              # line that introduces it.
+              if (Test-Path $target) { "rendered $name ($([math]::Round((Get-Item $target).Length / 1KB)) KB)" }
+              else { $failed += "$name (exit $($proc.ExitCode))" }
+            }
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
 
       - name: Upload README previews
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: keyflow-previews
-          path: docs/previews/*.png
+          path: docs/previews/**/*.png
           if-no-files-found: warn
 
       # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README

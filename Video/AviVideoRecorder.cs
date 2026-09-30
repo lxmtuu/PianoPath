@@ -4,7 +4,7 @@ using System.Runtime.InteropServices;
 namespace PianoPath;
 
 /// <summary>Small Windows AVI writer; prefers the installed MJPEG VFW codec and falls back to raw RGB frames.</summary>
-internal sealed class AviVideoRecorder : IDisposable
+internal sealed class AviVideoRecorder : IFrameRecorder
 {
     private const uint OfWrite = 1, OfCreate = 0x1000, AviIfKeyFrame = 0x10;
     private IntPtr _file, _rawStream, _compressedStream, _writeStream;
@@ -22,6 +22,12 @@ internal sealed class AviVideoRecorder : IDisposable
     /// <summary>Approximate payload written so far (uncompressed size of every frame handed to the stream).</summary>
     public long BytesWritten { get; private set; }
     public bool IsNearSizeLimit => BytesWritten >= SizeLimitBytes;
+    /// <summary>Where the AVI file is being written; part of <see cref="IFrameRecorder"/>.</summary>
+    public string OutputPath { get; }
+    /// <summary>Bytes of one stride-aligned BGR frame, the buffer <see cref="WriteFrame"/> expects.</summary>
+    public int FrameBytes => _stride * _height;
+    /// <summary>False: AVI in this build carries no alpha channel, which is why the PNG sequence exists.</summary>
+    public bool HasAlpha => false;
 
     public AviVideoRecorder(string path, int width, int height, int frameRate = 20)
     {
@@ -29,7 +35,7 @@ internal sealed class AviVideoRecorder : IDisposable
         if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
         if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
         if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
-        _width = width & ~1; _height = height & ~1; FrameRate = frameRate; _stride = ((_width * 3 + 3) / 4) * 4;
+        _width = width & ~1; _height = height & ~1; FrameRate = frameRate; _stride = ((_width * 3 + 3) / 4) * 4; OutputPath = path;
         AVIFileInit(); _initialized = true;
         try { Open(path); }
         catch { Dispose(); throw; }
@@ -66,6 +72,9 @@ internal sealed class AviVideoRecorder : IDisposable
     }
 
     /// <summary>Write one bottom-up, padded 24-bit BGR frame, optionally repeated so the stream keeps real-time pacing.</summary>
+    /// <summary>The session's entry point; see <see cref="IFrameRecorder.WriteFrame"/>.</summary>
+    public void WriteFrame(byte[] frame, int repeat = 1) => WriteBgrFrame(frame, repeat);
+
     public void WriteBgrFrame(byte[] pixels, int repeat = 1)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);

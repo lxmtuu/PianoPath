@@ -39,6 +39,23 @@ internal sealed class PianoAudioEngine : IDisposable
     public void ProcessMidi(int channel, int command, int data1, int data2) => Volatile.Read(ref _pump)?.Synth.ProcessMidi(channel, command, data1, data2);
     public void ControlChange(int controller, int value, int channel = 0) => ProcessMidi(channel, 0xB0, controller, value);
     public void AllNotesOff() => Volatile.Read(ref _pump)?.Synth.AllNotesOff();
+
+    /// <summary>
+    /// Attaches a receiver for every rendered block — <c>(pcm, sampleCount)</c>, called on the audio thread —
+    /// or <c>null</c> to detach. The recorder is the only caller: it writes the blocks into the WAV beside the
+    /// video, so the file holds exactly what the machine played.
+    /// </summary>
+    public void SetTap(Action<short[], int>? tap) => Volatile.Read(ref _pump)?.SetTap(tap);
+
+    /// <summary>True while a tap is attached; the recorder asks before pretending to capture audio.</summary>
+    public bool HasTap => Volatile.Read(ref _pump)?.HasTap ?? false;
+
+    /// <summary>
+    /// Renders one block through the synthesiser and hands it to the tap without touching the sound device.
+    /// The recorder drives this on machines with no audio output, so a silent session still records the piano;
+    /// it returns false when nothing is tapped or no SoundFont is loaded.
+    /// </summary>
+    public bool PumpTapBlock() => Volatile.Read(ref _pump)?.RenderTapBlock() ?? false;
     public void UnloadSoundFont() => Interlocked.Exchange(ref _pump, null)?.Dispose();
     public void Dispose() => UnloadSoundFont();
 
@@ -59,6 +76,7 @@ internal sealed class PianoAudioEngine : IDisposable
         private Thread? _thread;
         private IntPtr _device;
         private volatile bool _stopping;
+        private Action<short[], int>? _tap;
         private bool _disposed;
         public SoundFontSynthesizer Synth { get; }
         public SoundFontData Font => Synth.Font;
@@ -68,6 +86,22 @@ internal sealed class PianoAudioEngine : IDisposable
 
         public AudioPump(SoundFontSynthesizer synth, bool reverbEnabled) { Synth = synth; _reverb.Enabled = reverbEnabled; }
         public void SetReverbEnabled(bool enabled) => _reverb.Enabled = enabled;
+        internal bool HasTap => Volatile.Read(ref _tap) is not null;
+        internal void SetTap(Action<short[], int>? tap) => Volatile.Write(ref _tap, tap);
+
+        /// <summary>
+        /// Renders one block into the tap only: the synthesiser, the reverb and the receiver, with no waveOut
+        /// buffer involved. Whether the machine has an output device makes no difference to what is captured.
+        /// </summary>
+        internal bool RenderTapBlock()
+        {
+            var tap = Volatile.Read(ref _tap);
+            if (tap is null) return false;
+            Synth.Render(_pcm, FramesPerBuffer);
+            _reverb.Process(_pcm, FramesPerBuffer);
+            tap(_pcm, FramesPerBuffer * 2);
+            return true;
+        }
 
         public void Start()
         {
@@ -131,6 +165,9 @@ internal sealed class PianoAudioEngine : IDisposable
         {
             Synth.Render(_pcm, FramesPerBuffer);
             _reverb.Process(_pcm, FramesPerBuffer);
+            // The block the device is about to play is also the block the recording keeps, so the WAV cannot
+            // drift away from what was heard. The tap runs on this thread and must be quick; the recorder locks.
+            Volatile.Read(ref _tap)?.Invoke(_pcm, FramesPerBuffer * 2);
             Buffer.BlockCopy(_pcm, 0, buffer.Data, 0, BytesPerBuffer);
         }
 

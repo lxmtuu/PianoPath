@@ -147,15 +147,35 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 
 ## 9. Còn mở
 
-* Chip phím tắt trong thẻ F1 in nguyên văn — chấp nhận được với `F1`/`Space`, nhưng
-  `Click the keys`, `MIDI keyboard`, `Pointer idle`, `Drag the timeline`, `Practice modes` là nhãn mô
-  tả, nên về sau cho chúng qua `Loc.T` rồi thêm năm khoá vào inventory.
+* **Chuỗi lạ đã là lỗi, không còn là `NOTE`.** `VerifyLanguageSwitching` khẳng định
+  `Loc.UnknownKeys` rỗng: một câu mà giao diện in ra nhưng không phải khoá của inventory thì không
+  bảng nào dịch được, nên nó là lỗi hồi quy chứ không phải thông tin môi trường. Muốn thêm câu mới
+  thì thêm khoá vào `Strings.English.cs` + `Strings.Vietnamese.cs` (đúng thứ tự ordinal) — bộ kiểm
+  tĩnh và `--verify` sẽ cùng báo nếu quên. Tên do người dùng đặt (thiết bị, tệp, preset tự lưu) đi
+  thẳng ra màn hình nguyên văn chứ không đi qua `Loc`, nên không bị tính là chuỗi lạ.
+* Chip phím tắt trong thẻ F1: nhãn mô tả (`Click the keys`, `MIDI keyboard`, `Pointer idle`,
+  `Drag the timeline`, `Practice modes`) **đã** đi qua `Loc.Set` và có khoá trong inventory; chỉ cột
+  phím (`A W S …`, `Space`, `A · B · ×`) là in nguyên văn theo đúng quy ước "phím thật không dịch".
 * `VisualPresets.SanitizeName` trả `"My preset"` làm **tên tệp** khi người dùng lưu mà không đặt tên;
   nhãn hiển thị của nó thì đã dịch (`Preset của tôi`) vì `DisplayName` đi qua bảng. Hệ quả phụ: một preset
   do người dùng tự đặt tên trùng hẳn một khoá của bảng (ví dụ `Custom`) sẽ bị dịch khi in — vô hại nhưng
   nên giới hạn `DisplayName` cho đúng các preset có sẵn (hiện đã làm vậy).
 * Mô tả preset *do người dùng lưu* là một chuỗi ghép (`User preset · x.json`); nó đã theo ngôn ngữ
   lúc dựng danh sách, nhưng một preset tự đặt tên tiếng Việt thì không nên bị `T()` chạm vào.
+* Tài liệu có hai bản: `README.md` (tiếng Việt, bản gốc) và `README.en.md` (tiếng Anh). `scan_readme`
+  trong `tools/check_sources.py` quét **cả hai** (ảnh, anchor, liên kết nội bộ) và bắt buộc mỗi bản
+  phải trỏ sang bản kia; `scan_cli_and_samples` kiểm bảng tham số dòng lệnh của từng bản, nên bản
+  tiếng Anh không thể thiếu một switch mà bản tiếng Việt đã có.
+* **Bộ cài (`installer/`)** là mặt thứ ba có chữ hiển thị, và nó không đi qua `Loc`: Inno Setup đọc
+  `installer/Languages/Vietnamese.isl` (UTF-8 **có BOM** để trình biên dịch biết ngay là Unicode),
+  liệt kê **sau** `compiler:Default.isl` trong `MessagesFile` nên tệp chỉ *ghi đè* 108 câu mà trình
+  cài đặt thật sự hiện — phần còn lại theo tiếng Anh của `Default.isl`. Ba thứ dễ sai đều bị chặn:
+  tên câu không tồn tại (Inno Setup chỉ **cảnh báo** rồi bỏ dòng, tức là âm thầm hiện tiếng Anh),
+  câu đặt nhầm `[Messages]`/`[CustomMessages]`, và placeholder bị rơi mất. `tools/inno_messages.py`
+  sinh `installer/Languages/messages.txt` (tên hợp lệ + placeholder, lấy từ `Default.isl` của ba mốc
+  Inno 6.3.3/6.7.3/7.1.0), `scan_installer` trong `tools/check_sources.py` đối chiếu bản dịch với tệp
+  đó, và `tools/build_installer.ps1` (chạy trong cả hai workflow) biến mọi cảnh báo khác của ISCC
+  thành lỗi build. Quy ước dịch vẫn theo §5 (`Huỷ`, `tệp`, `thư mục`, `shortcut`, `Start Menu`).
 * RTL (Ả Rập, Do Thái, Ba Tư) cần thêm `FlowDirection`, đảo `Margin`/`Grid` cột và đường rơi của nốt;
   bảng cho một ngôn ngữ RTL phải đi kèm đợt việc đó, không nên thêm bảng suông.
 * `installer/Keyflow.iss` vẫn dùng một tệp ngôn ngữ Inno; bản dịch installer tiếng Việt là việc riêng
@@ -163,8 +183,9 @@ danh sách việc cho dịch giả (chính `Strings.English.cs`).
 
 ## 10. Ảnh giao diện: chỉ ảnh do ứng dụng render
 
-`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`): bảy ảnh
-`--lang=en` và một ảnh `--lang=vi` của trang General. Screenshot của người dùng — kể cả ảnh rất đẹp có
+`docs/previews/` **chỉ chứa ảnh do chính `PianoPath.exe` render trong CI** (`--snapshot`), chia làm hai bộ:
+`docs/previews/vi/` cho `README.md` và `docs/previews/en/` cho `README.en.md`, mỗi bộ tám ảnh chụp cùng
+tám chủ đề bằng đúng ngôn ngữ của bản README đọc nó. Screenshot của người dùng — kể cả ảnh rất đẹp có
 ảnh nền tự chọn — không commit vào đây, vì hai lý do: ảnh sẽ lệch khỏi UI thật ngay lần sửa giao diện
 kế tiếp, và ảnh nền trong screenshot hầu như luôn là artwork của bên thứ ba, không kèm giấy phép cho repo MIT.
 
@@ -180,7 +201,9 @@ kiểm đúng hợp đồng đó, nên hành vi "chỉ xem, không ghi" không t
 `tools/check_sources.py` giữ ba đầu mối thẳng hàng:
 
 * mọi `![...]()` trỏ vào `docs/previews/` phải hoặc đã tồn tại, hoặc có tên trong `$shots` của workflow —
-  được phép chậm hơn README đúng một commit, vì chính commit render ảnh sẽ bắt kịp;
+  được phép chậm hơn README đúng một commit, vì chính commit render ảnh sẽ bắt kịp — **và** bản `README.md`
+  chỉ được trỏ vào `docs/previews/vi/`, bản `README.en.md` chỉ được trỏ vào `docs/previews/en/`, còn
+  workflow phải thật sự render cả hai ngôn ngữ (vòng `foreach ($lang in @('en', 'vi'))`);
 * mọi tham số dòng lệnh mà `App.xaml.cs` hoặc `VerificationSuite` đọc phải có trong bảng *Tham số dòng
   lệnh* của README và ngược lại, còn mọi tham số + đường dẫn `build.yml` truyền cho `PianoPath.exe` phải
   thật sự tồn tại — một cờ gõ sai không làm hỏng build, nó chỉ im lặng cho ra một ảnh xấu;
