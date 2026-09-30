@@ -61,14 +61,15 @@ internal static class SheetLayer
     }
 
     /// <summary>
-    /// The diatonic step of a pitch: C0 is 0, D0 is 1 … so an octave is seven steps. A black key is spelled as
-    /// the white key below it (C♯ sits on the C line), which is how a piano-roll's worth of pitches can be
-    /// written without a key signature and still land on the right line.
+    /// The diatonic step of a pitch in scientific notation: C-1 is 0, so middle C is 28 (four octaves of seven
+    /// steps) and B4 is 35. A black key is spelled as the white key below it (C♯ sits on the C line), which is
+    /// how a piano-roll's worth of pitches can be written without a key signature and still land on the right
+    /// line. The constants above are this function's values for the bottom lines of the two staves.
     /// </summary>
     internal static int Step(int pitch)
     {
         var clamped = Math.Clamp(pitch, 0, 127);
-        return clamped / 12 * 7 + Spelling[clamped % 12].Letter;
+        return (clamped / 12 - 1) * 7 + Spelling[clamped % 12].Letter;
     }
 
     /// <summary>True when the written note needs a sharp sign beside its head.</summary>
