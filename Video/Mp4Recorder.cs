@@ -363,7 +363,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
 
     /// <summary>Copies a block of bytes into a media buffer, stamps it and hands it to the writer.</summary>
     private int WriteSample(int streamIndex, byte[] bytes, int count, long time, long duration)
-        => WriteSampleTo(_writer!, streamIndex, bytes, count, time, duration);
+        => WriteSampleTo(_writer!, streamIndex, bytes, count, time, duration, _step);
 
     /// <summary>
     /// The step every sample goes through: one media buffer, one copy, one sample, stamped, written. The
@@ -371,12 +371,15 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// cannot finish the probe cannot finish a take either, and a machine that writes the probe but hangs on
     /// the take has a codec to blame rather than this side's sample plumbing.
     /// </summary>
-    internal static int WriteSampleTo(Mf.IMFSinkWriter writer, int streamIndex, byte[] bytes, int count, long time, long duration)
+    internal static int WriteSampleTo(Mf.IMFSinkWriter writer, int streamIndex, byte[] bytes, int count, long time, long duration,
+        Action<string>? step = null)
     {
+        step?.Invoke($"NOTE MP4 encoder: a media buffer is being made for {count} bytes.");
         var hr = Mf.MFCreateMemoryBuffer(count, out var buffer);
         if (hr < 0) return hr;
         hr = buffer.Lock(out var pointer, out _, out _);
         if (hr < 0) return hr;
+        step?.Invoke("NOTE MP4 encoder: the media buffer is locked; the bytes go in.");
         Marshal.Copy(bytes, 0, pointer, count);
         buffer.Unlock();
         buffer.SetCurrentLength(count);
@@ -385,6 +388,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         sample.AddBuffer(buffer);
         sample.SetSampleTime(time);
         sample.SetSampleDuration(duration);
+        step?.Invoke("NOTE MP4 encoder: the sample is stamped; handing it to the writer.");
         return writer.WriteSample(streamIndex, sample);
     }
 }

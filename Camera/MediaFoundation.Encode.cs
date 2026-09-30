@@ -154,10 +154,11 @@ internal static partial class Mf
             step?.Invoke("NOTE MP4 encoder: the AVI sink writer took the uncompressed stream as it is.");
             hr = writer.BeginWriting();
             if (hr < 0) return hr;
+            step?.Invoke("NOTE MP4 encoder: the AVI writer began writing.");
             for (var frame = 0; frame < frames; frame++)
             {
                 var (time, duration) = Mp4Recorder.FrameTime(frame, frameRate);
-                hr = Mp4Recorder.WriteSampleTo(writer, index, pixels, pixels.Length, time, duration);
+                hr = Mp4Recorder.WriteSampleTo(writer, index, pixels, pixels.Length, time, duration, step);
                 if (hr < 0) return hr;
             }
             step?.Invoke($"NOTE MP4 encoder: {frames} uncompressed pictures went in; closing the probe file.");
