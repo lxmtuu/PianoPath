@@ -2198,7 +2198,9 @@ internal static class VerificationSuite
         var interleaved = SheetLayer.Streams([Note(60, 0, .5), Note(48, 0, .5), Note(64, 1, .5), Note(52, 1, .5)], 60);
         Assert(interleaved[0].Count == 2 && interleaved[1].Count == 2 && interleaved[0][1].SequenceEqual([2]) && interleaved[1][0].SequenceEqual([1]),
             "Two hands playing at once should be two streams: one event per hand, in the song's own order.");
-        Assert(chordGroups.SequenceEqual(SheetLayer.Plan(chordNotes, eighthGrid, 4, 60, MusicKey.CMajor).Chords),
+        var plannedGroups = SheetLayer.Plan(chordNotes, eighthGrid, 4, 60, MusicKey.CMajor).Chords;
+        Assert(plannedGroups.Count == chordGroups.Count
+                && plannedGroups.Zip(chordGroups).All(matched => matched.First.SequenceEqual(matched.Second)),
             "The plan of a song should carry the same grouping a caller would compute for itself.");
 
         // A chord is beamed like one note: the run reaches into the chord after it, and a chord on its own is never
