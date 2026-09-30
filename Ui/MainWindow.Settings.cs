@@ -207,6 +207,14 @@ public partial class MainWindow
         Note(looks, "Every preset can be edited afterwards; the pages next to this one keep the piano roll, keyboard and camera in sync with the new theme.");
     }
 
+    /// <summary>Applies a built-in preset named on the command line; spaces and case do not matter.</summary>
+    internal void PreviewPreset(string name)
+    {
+        static string Key(string value) => value.Replace(" ", "", StringComparison.Ordinal).ToLowerInvariant();
+        var preset = VisualPresets.BuiltIn.FirstOrDefault(candidate => Key(candidate.Name) == Key(name));
+        if (preset is not null) ApplyBuiltInPreset(preset.Name);
+    }
+
     /// <summary>Applies a built-in preset by name (used by the Theme page quick looks).</summary>
     private void ApplyBuiltInPreset(string name)
     {

@@ -123,6 +123,10 @@ jobs:
             # The same moment drawn by the Direct3D 11 engine (Gpu/). Runners have no graphics card, so this
             # is WARP, Windows' software rasterizer: slower, but pixel-for-pixel the same shaders.
             @{ Name = 'stage-gpu.png';   Args = @('--play-preview', '--gpu') },
+            # Two looks that exercise the effect families the GPU engine draws: trails, ambient layers,
+            # arcs between held keys, impact morphs and key labels. A held chord shows the hold effects.
+            @{ Name = 'stage-gpu-galaxy.png'; Args = @('--play-preview', '--play-chord', '--gpu', '--preset=GalaxyVoyage') },
+            @{ Name = 'stage-gpu-storm.png';  Args = @('--play-preview', '--play-chord', '--gpu', '--preset=ElectricStorm') },
             # The background page draws a picture of your own behind the keys. The README shows that
             # feature with the generated sample from docs/samples, never with a visitor's screenshot: the
             # shot stays deterministic and the repo stays free of artwork somebody else holds the rights to.
