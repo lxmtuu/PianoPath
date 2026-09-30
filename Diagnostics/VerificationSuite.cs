@@ -2153,7 +2153,8 @@ internal static class VerificationSuite
             Assert(BitConverter.ToInt16(bytes, 22) == 2 && BitConverter.ToInt32(bytes, 24) == 44100 && BitConverter.ToInt16(bytes, 34) == 16,
                 "The patched header should still describe the format the samples are in.");
             // Frame 5 is where the silence starts (four frames of signal, then the whole frame of the short block).
-            Assert(BitConverter.ToInt16(bytes, WavWriter.HeaderBytes) == 100 && BitConverter.ToInt16(bytes, WavWriter.HeaderBytes + 6) == 200
+            Assert(BitConverter.ToInt16(bytes, WavWriter.HeaderBytes) == 100 && BitConverter.ToInt16(bytes, WavWriter.HeaderBytes + 2) == -100
+                    && BitConverter.ToInt16(bytes, WavWriter.HeaderBytes + 4) == 200 && BitConverter.ToInt16(bytes, WavWriter.HeaderBytes + 6) == -200
                     && bytes.Skip(WavWriter.HeaderBytes + 5 * 4).All(value => value == 0),
                 "The samples should be written little-endian and in the order they were appended, with the silence left silent.");
 
