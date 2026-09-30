@@ -403,9 +403,11 @@ GPU stage, two GPU presets (Galaxy Voyage and Electric Storm), the background im
 Style dock, the Theme dock, the Play dialog, the shortcuts card and the General page. A separate step of the
 same workflow renders the **preset gallery** `docs/previews/presets.jpg` (every built-in preset drawn twice,
 software | GPU, in one JPEG shared by both READMEs). Finally the workflow **commits them straight into the
-branch** (`Refresh the README previews from CI [skip ci]`). After a UI change there is nothing else to do: the
-README pictures match that commit. The PNGs are also uploaded as the `keyflow-previews` artifact if you want
-them separately (the `presets.jpg` gallery lives only in the commit, not in the artifact):
+branch** (`Refresh the README previews from CI [skip ci]`), so after a UI change there is nothing else to do:
+the README pictures match that commit. If the branch only accepts pull requests (a repository rule the
+workflow's own token cannot bypass) the push is declined; the step then only warns (`Previews not committed`)
+instead of turning the build red, and the new pictures are in the `keyflow-previews` artifact of that very
+run — download them and commit them by hand. The artifact holds both PNG sets and the `presets.jpg` gallery:
 
 ```powershell
 gh run list --workflow build.yml --limit 5          # find the newest run
@@ -514,7 +516,7 @@ Two workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 22 README images (11 subjects × 2 languages) and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (PNGs only) and commit the new pictures into the branch being built (skipped for pull requests). |
+| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 22 README images (11 subjects × 2 languages) and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact). |
 | `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish both kinds, smoke-test the published build, compile the `.exe` installer from that same publish folder, upload both ZIPs plus the installer as artifacts and (for a tag) attach them to the GitHub Release with generated notes. |
 
 ```powershell
@@ -689,7 +691,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `docs/previews/`: the interface pictures rendered by the application in CI — `en/` for this edition, `vi/` for `README.md` (11 pictures each), plus `presets.jpg` (the gallery of 14 presets × software | GPU engine, shared by both editions); the workflow owns all of it, so do not hand-commit other images into these folders.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
 - `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `Properties/AssemblyInfo.cs`: WPF's `ThemeInfo` attribute (where theme resource dictionaries are looked up); `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
-- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, then a `build` job on Windows: Release build, `--verify`, a trial installer build, rendering the 22 README pictures and the preset gallery, then committing them back to the branch) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).
+- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, then a `build` job on Windows: Release build, `--verify`, a trial installer build, rendering the 22 README pictures and the preset gallery, then committing them back to the branch when it accepts the push) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).
 
 ## Licence
 
