@@ -227,6 +227,9 @@ public partial class MainWindow : Window
     }
 
     private void UpdateStage() => Stage.SetState(_notes, _position, _playing, _pressed);
+
+    /// <summary>Hands the sheet layer the grid to draw bar lines on; called whenever a song is loaded.</summary>
+    private void UpdateSheet() => Stage.SetSheet(_beatTimes, _beatsPerBar);
     private NoteEvent? NextExpectedNote()
     {
         for (var i = _missScanIndex; i < _notes.Count; i++) { var note = _notes[i]; if (!note.Played && !note.Missed) return note; }
@@ -314,7 +317,7 @@ public partial class MainWindow : Window
         _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
         _songLabel = Path.GetFileNameWithoutExtension(path); _songPath = path;
         Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
-        _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateStage();
+        _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateSheet(); UpdateStage();
         ApplySongHandSplit(path, song, score);
         RememberSong(path, song);
     }

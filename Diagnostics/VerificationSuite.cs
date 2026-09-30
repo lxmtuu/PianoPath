@@ -563,6 +563,7 @@ internal static class VerificationSuite
         VerifyCommunityPresets(window);
         VerifyUserShellThemes(window);
         VerifyPngSequenceRecorder(window);
+        VerifySheetLayer(window, stage, visualSettings);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1695,6 +1696,103 @@ internal static class VerificationSuite
             Results.Add("PASS PNG sequence: 32-bit frames of the chosen size, repeated frames written once per copy, a manifest with the pattern and the ffmpeg line, bad sizes refused, and a transparent stage that really produces clear pixels.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
+    }
+
+    /// <summary>
+    /// The sheet layer is geometry first, so most of it is checked as arithmetic: where a pitch is written,
+    /// which staff the split gives it, which ledger lines a note outside the staff needs, and where a note in
+    /// the visible window lands. The drawing itself is then rendered once, both with a song and without one,
+    /// and the stage is asked for the same layer through the toggle the dock exposes — that is what proves the
+    /// setting is not dead and that the staves really receive the song's own notes and beat grid.
+    /// </summary>
+    private static void VerifySheetLayer(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        Assert(SheetLayer.Step(60) == 28 && SheetLayer.Step(72) == 35 && SheetLayer.Step(61) == 28 && SheetLayer.Step(66) == 31 && SheetLayer.Step(43) == 18,
+            "Written pitch should follow scientific notation and spell a black key on the line of the letter below it (C4 = 28, B4 = 35, F#4 = 31).");
+        Assert(SheetLayer.NeedsSharp(61) && SheetLayer.NeedsSharp(66) && !SheetLayer.NeedsSharp(60) && !SheetLayer.NeedsSharp(64),
+            "Only the five black keys of an octave should be written with a sharp sign.");
+        var (trebleStaff, trebleStep) = SheetLayer.Place(60, 60);
+        var (leftStaff, leftStep) = SheetLayer.Place(43, 60);
+        Assert(trebleStaff == 0 && trebleStep == -2 && leftStaff == 1 && leftStep == 0,
+            "The hand split should choose the staff: middle C is one ledger line below the treble staff and G2 sits on the bottom line of the bass staff.");
+        Assert(SheetLayer.Place(59, 60).Staff == 1 && SheetLayer.Place(60, 60).Staff == 0 && SheetLayer.Place(21, 21).Staff == 0,
+            "Every pitch at or above the split belongs to the right hand and everything below it to the left, down to the lowest key.");
+        var monotone = true; var widestJump = 0;
+        for (var pitch = 21; pitch < 108; pitch++)
+        {
+            var (lowStaff, lowStep) = SheetLayer.Place(pitch, 60);
+            var (highStaff, highStep) = SheetLayer.Place(pitch + 1, 60);
+            if (highStaff < lowStaff) monotone = false;
+            widestJump = Math.Max(widestJump, Math.Abs(highStep + highStaff * 40 - (lowStep + lowStaff * 40)));
+        }
+        Assert(monotone && widestJump <= 1, $"A higher key must never be written lower on the sheet (widest step for one semitone was {widestJump}).");
+
+        Assert(SheetLayer.LedgerLines(-1).Count == 0 && SheetLayer.LedgerLines(-2).SequenceEqual([-2]) && SheetLayer.LedgerLines(-4).SequenceEqual([-2, -4])
+            && SheetLayer.LedgerLines(8).Count == 0 && SheetLayer.LedgerLines(9).Count == 0 && SheetLayer.LedgerLines(12).SequenceEqual([10, 12]),
+            "A note in the space outside a staff needs no ledger line, one on a line outside needs that line, and a note two lines out needs both.");
+
+        var area = SheetLayer.Band(1280, 480, 34);
+        Assert(Math.Abs(area.Height - 163.2) < .01 && area.Width > 1100 && area.X > 0 && area.Bottom < 240,
+            $"The staff band should stay in the upper part of the stage and scale with it (got {area}).");
+        Assert(Math.Abs(SheetLayer.WindowStart(10, 8) - 8) < .001 && Math.Abs(SheetLayer.NoteX(8, 8, 8, area) - area.X) < .001
+            && Math.Abs(SheetLayer.NoteX(12, 8, 8, area) - (area.X + area.Width / 2)) < .001,
+            "The playhead should sit a quarter of the window in from the left, so eight seconds of music fill the band from its own start.");
+        Assert(SheetLayer.StaffBottom(area, 6, 1) > SheetLayer.StaffBottom(area, 6, 0) + 60, "The bass staff should be drawn below the treble staff, not over it.");
+        Assert(SheetLayer.HollowHead(1.5) && !SheetLayer.HollowHead(.5) && SheetLayer.HasStem(.5) && !SheetLayer.HasStem(1.5)
+            && SheetLayer.StemUp(3) && !SheetLayer.StemUp(6),
+            "Half notes are written hollow without a stem, shorter notes filled with a stem that points away from the middle of the staff.");
+
+        var clefTreble = SheetLayer.ClefText(0); var clefBass = SheetLayer.ClefText(1);
+        Assert(clefTreble != clefBass && SheetLayer.MusicGlyphsAvailable == (clefTreble.Length == 2 && char.ConvertToUtf32(clefTreble, 0) == 0x1D11E),
+            $"A staff should be labelled with its clef: the musical glyph when the font has it, otherwise the staff's letter (drew “{clefTreble}”/“{clefBass}”).");
+
+        var note = new NoteEvent { Pitch = 60, Start = 1, Duration = .5 };
+        var ink = Color.FromRgb(243, 229, 255); var accent = Color.FromRgb(198, 110, 255); var dim = Color.FromRgb(150, 150, 150);
+        Assert(SheetLayer.NoteColour(note, .2, dim, ink, accent) == ink && SheetLayer.NoteColour(note, 1.2, dim, ink, accent) == accent,
+            "A written note should use the plain ink of the staff until the playhead reaches it, then the accent while it sounds.");
+        note.Played = true;
+        Assert(SheetLayer.NoteColour(note, 4, dim, ink, accent) == dim, "A note already played should be written in the dimmed ink so the sheet can be read back.");
+        note.Missed = true;
+        Assert(SheetLayer.NoteColour(note, 4, dim, ink, accent) == Color.FromRgb(255, 118, 130), "A missed note should be marked in the miss colour.");
+
+        // The layer rendered once with a song and once without: what a live performance sees, where there is no
+        // beat grid and therefore no bar lines, still has to produce both staves.
+        var song = new List<NoteEvent>
+        {
+            new() { Pitch = 72, Start = .5, Duration = 1.5 }, new() { Pitch = 67, Start = 1, Duration = .5 },
+            new() { Pitch = 48, Start = 1, Duration = 1 }, new() { Pitch = 43, Start = 1.5, Duration = .25 }
+        };
+        var beats = new List<double> { 0, .5, 1, 1.5, 2, 2.5, 3, 3.5 };
+        var withSong = new DrawingVisual();
+        using (var dc = withSong.RenderOpen())
+            SheetLayer.Draw(dc, area, song, 1.2, 60, beats, 4, 8, ink, accent, 1, 1);
+        var empty = new DrawingVisual();
+        using (var dc = empty.RenderOpen())
+            SheetLayer.Draw(dc, area, [], 0, 60, [], 4, 8, ink, accent, 1, 1);
+        Assert(withSong.Drawing.Bounds.Height > 120 && withSong.Drawing.Bounds.Width > area.Width * .8 && empty.Drawing.Bounds.Height > 120,
+            $"The sheet should paint both staves with and without a song to read ({withSong.Drawing.Bounds}, {empty.Drawing.Bounds}).");
+
+        // The dock row the user flips, then the same layer through the stage's own song state.
+        var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        Assert(toggles.TryGetValue(nameof(PianoVisualSettings.ShowSheet), out var sheetToggle),
+            "The Layers card should expose the sheet as a layer the user can switch on.");
+        var wasShowing = visualSettings.ShowSheet;
+        sheetToggle!.IsChecked = true;
+        Assert(visualSettings.ShowSheet, "Switching the sheet layer on should reach the renderer settings, not only the checkbox.");
+        stage.SetSheet(beats, 4);
+        stage.SetState(song, 1.2, true, new HashSet<int>());
+        // The song's own split decides the staves here, as it does for a MusicXML score.
+        var previousSplit = visualSettings.HandSplitPitch;
+        visualSettings.HandSplitPitch = 60; stage.SetVisualSettings(visualSettings);
+        var stageSheet = new DrawingVisual();
+        using (var dc = stageSheet.RenderOpen()) Invoke(stage, "DrawSheet", dc, 1280d, 480d);
+        Assert(stageSheet.Drawing.Bounds.Height > 100, $"The stage should draw the sheet from its own notes and beat grid (bounds {stageSheet.Drawing.Bounds}).");
+        Assert(ReferenceEquals(Field(stage, "_beats"), beats), "The stage should keep the grid the song was loaded with for the sheet's bar lines.");
+        visualSettings.HandSplitPitch = previousSplit; stage.SetVisualSettings(visualSettings);
+        sheetToggle.IsChecked = wasShowing;
+        stage.SetSheet([], 4);
+        stage.ClearTransient();
+        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>

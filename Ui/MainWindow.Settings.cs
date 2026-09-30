@@ -150,6 +150,7 @@ public partial class MainWindow
     {
         var body = Card(StyleSettingsHost, "LAYERS", "Quick switches for every layer of the stage. Detailed controls live on the other pages.");
         Toggle(body, "Falling notes", nameof(PianoVisualSettings.ShowNotes), "Draw the piano-roll bars for MIDI playback and live playing.");
+        Toggle(body, "Sheet music", nameof(PianoVisualSettings.ShowSheet), "Grand staff above the roll, following the playhead: MusicXML and MIDI notes written on the staff their hand split puts them on.");
         Toggle(body, "Sparks", nameof(PianoVisualSettings.ShowEmbers), "Particle burst when a note reaches the keyboard.");
         Toggle(body, "Wisps", nameof(PianoVisualSettings.ShowWisps), "Smoke-like plasma streams rising from held keys (Embers style).");
         Toggle(body, "Flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts at the impact point.");

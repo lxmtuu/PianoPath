@@ -17,6 +17,8 @@ internal sealed class PianoVisualSettings
     // ---- Layers -------------------------------------------------------------------------------------
     public bool ShowBackground { get; set; } = true;
     public bool ShowNotes { get; set; } = true;
+    /// <summary>The grand staff drawn above the roll, following the playhead (see <see cref="SheetLayer"/>).</summary>
+    public bool ShowSheet { get; set; } = false;
     public bool ShowEmbers { get; set; } = true;
     public bool ShowHalo { get; set; } = true;
     public bool ShowFlame { get; set; } = true;

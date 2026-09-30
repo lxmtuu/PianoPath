@@ -5,6 +5,7 @@
   "Settings": {
     "ShowBackground": true,
     "ShowNotes": true,
+    "ShowSheet": false,
     "ShowEmbers": true,
     "ShowHalo": true,
     "ShowFlame": false,

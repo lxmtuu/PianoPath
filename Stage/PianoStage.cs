@@ -70,6 +70,8 @@ internal sealed class PianoStage : FrameworkElement
     private string? _loadedBackgroundPath = "\0";
     private double _pointerX = .5, _pointerY = .5;
     private IReadOnlyList<NoteEvent> _notes = [];
+    private IReadOnlyList<double> _beats = [];
+    private int _beatsPerBar = 4;
     private IReadOnlySet<int> _pressed = new HashSet<int>();
     private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip, _fps;
     private bool _transparentBackdrop;
@@ -166,6 +168,16 @@ internal sealed class PianoStage : FrameworkElement
         MouseMove += Stage_MouseMove;
         MouseUp += Stage_MouseUp;
         LostMouseCapture += (_, _) => ReleaseMouseKey();
+    }
+
+    /// <summary>
+    /// The song's metronome grid, which the sheet layer draws its bar lines on. It is kept apart from
+    /// <see cref="SetState"/> because the grid changes when a song is loaded, not on every frame.
+    /// </summary>
+    public void SetSheet(IReadOnlyList<double> beats, int beatsPerBar)
+    {
+        _beats = beats; _beatsPerBar = Math.Max(1, beatsPerBar);
+        InvalidateVisual();
     }
 
     public void SetState(IReadOnlyList<NoteEvent> notes, double position, bool playing, IReadOnlySet<int> pressed)
@@ -661,6 +673,8 @@ internal sealed class PianoStage : FrameworkElement
         dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, keyTop + 2)));
         DrawNotes(dc, width, keyTop, lane);
         DrawLiveTrails(dc, width, keyTop, lane);
+        // The sheet sits above the roll: it is a reading layer, and the roll keeps moving behind it.
+        if (_visual.ShowSheet) DrawSheet(dc, width, keyTop);
         dc.Pop();
         if (_visual.ShowFlame && _visual.FlameIntensity > 0) DrawFlames(dc, width, keyTop, lane);
         if (_visual.ShowImpactRings) DrawRings(dc);
@@ -800,6 +814,18 @@ internal sealed class PianoStage : FrameworkElement
                 Drift: .35 + _petalRandom.NextDouble() * .9,
                 Spin: (_petalRandom.NextDouble() - .5) * 1.6,
                 Phase: _petalRandom.NextDouble() * Math.PI * 2));
+    }
+
+    /// <summary>
+    /// The staff band: the same seconds-per-pixel the roll uses, so a written note and its falling bar always
+    /// line up under the playhead.
+    /// </summary>
+    private void DrawSheet(DrawingContext dc, double width, double hitY)
+    {
+        var noteSpeed = FallSpeed * _visual.NoteFallSpeed / 550;
+        SheetLayer.Draw(dc, SheetLayer.Band(width, hitY, 34), _notes, _position, _visual.HandSplitPitch,
+            _beats, _beatsPerBar, hitY / Math.Max(1, noteSpeed),
+            Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip);
     }
 
     private void DrawNotes(DrawingContext dc, double width, double hitY, double lane)
