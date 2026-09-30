@@ -87,6 +87,45 @@ internal static partial class Mf
     }
 
     /// <summary>
+    /// Builds one media buffer and one sample out of it — make, lock, fill, release, size, carry, stamp — and
+    /// writes nothing anywhere. That is the smallest set of Media Foundation objects a take is made of, and on a
+    /// machine whose media stack stalls in the middle of handing them over it names the call instead of leaving a
+    /// take to time out: a run that stops here has stopped before any encoder, file or sink writer was involved.
+    /// </summary>
+    /// <returns>The first call that failed, or <see cref="S_OK"/> when the objects were built and stamped.</returns>
+    internal static int MediaObjectProbe(int bytes, Action<string>? step = null)
+    {
+        var hr = MediaStartup();
+        if (hr < 0) return hr;
+        step?.Invoke("NOTE media objects: the media stack is up.");
+        step?.Invoke($"NOTE media objects: a {bytes}-byte buffer is being made.");
+        hr = MFCreateMemoryBuffer(bytes, out var buffer);
+        if (hr < 0) return hr;
+        step?.Invoke("NOTE media objects: the buffer is being locked.");
+        hr = buffer.Lock(out var pointer, out _, out _);
+        if (hr < 0) return hr;
+        step?.Invoke("NOTE media objects: the buffer is locked; the bytes go in.");
+        var pattern = new byte[Math.Min(bytes, 64)];
+        for (var i = 0; i < pattern.Length; i++) pattern[i] = (byte)(i * 7);
+        for (var offset = 0; offset < bytes; offset += pattern.Length)
+            Marshal.Copy(pattern, 0, pointer + offset, Math.Min(pattern.Length, bytes - offset));
+        step?.Invoke("NOTE media objects: the bytes are in; the buffer is being released.");
+        buffer.Unlock();
+        step?.Invoke("NOTE media objects: the buffer is released; saying how much of it is filled.");
+        buffer.SetCurrentLength(bytes);
+        step?.Invoke("NOTE media objects: a sample is being made to carry the buffer.");
+        hr = MFCreateSample(out var sample);
+        if (hr < 0) return hr;
+        step?.Invoke("NOTE media objects: the buffer is being put into the sample.");
+        sample.AddBuffer(buffer);
+        step?.Invoke("NOTE media objects: the sample is being stamped.");
+        sample.SetSampleTime(0);
+        sample.SetSampleDuration(1);
+        step?.Invoke("NOTE media objects: the buffer and the sample came together and were stamped.");
+        return S_OK;
+    }
+
+    /// <summary>
     /// Asks the media stack whether it can hold an H.264 stream of the given description, and writes nothing at
     /// all: before a sink writer will take a stream it has to find an encoder for the target type, so a machine
     /// that answers yes has an H.264 encoder a take can use, while a machine that answers no can be told about

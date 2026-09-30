@@ -32,6 +32,14 @@ internal static class EncodeProbeAttempt
     /// </summary>
     internal static int Run(string path)
     {
+        // The media objects a take is made of, built on their own first: no file, no encoder, no writer, so a
+        // machine that stalls while they are handed over is named here rather than after a take has timed out.
+        var objects = Mf.MediaObjectProbe(Width * Height * 4, Say);
+        Say(objects >= 0
+            ? "NOTE MP4 encoder: a media buffer and a sample were built and stamped on their own, so the media objects themselves are not the trouble."
+            : $"NOTE MP4 encoder: the media objects stopped being built ({Mf.Describe(objects)}).");
+        if (objects < 0) return 2;
+
         Say($"NOTE MP4 encoder: writing {Frames} pictures into an uncompressed AVI through the same sample plumbing.");
         var result = Mf.EncodeAviProbe(path, new byte[Width * Height * 4], Width, Height, FrameRate, Frames, Say);
         var bytes = 0L;

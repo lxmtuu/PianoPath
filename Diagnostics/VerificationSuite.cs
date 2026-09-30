@@ -2148,8 +2148,12 @@ internal static class VerificationSuite
         // word on how the machine got there. A child that died inside the check never did — its last line names
         // the step it died at, and that stays a SKIP like every other stop inside native code.
         if (lines.Any(line => line.Contains("opening a", StringComparison.Ordinal)))
+        {
             Assert(lines.Any(line => line.Contains("found a way to make H.264", StringComparison.Ordinal)),
                 "A take attempt that opened the take should have said the machine's media stack took an H.264 stream, since a take asks for one.");
+            Assert(lines.Any(line => line.Contains("built and stamped on their own", StringComparison.Ordinal)),
+                "A take attempt that opened the take should have built the media buffer and sample the first frame goes into.");
+        }
         if (lines.Count == 0)
             Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
         else if (exit == 0 && !File.Exists(path))

@@ -46,6 +46,15 @@ internal static class Mp4TakeAttempt
             : $"NOTE MP4 encoder: the media stack would not take an H.264 stream (HRESULT {Mf.Describe(encoderResult)}), so there is no encoder here to write a take with, and nothing further is attempted.");
         if (encoderResult < 0) return 2;
 
+        // The buffer and the sample the take's first frame will go into, built once on their own: they need no
+        // writer and no encoder, so a machine that stalls while they come together stops here with the call named
+        // instead of inside a take, a minute later, with nothing said.
+        var objects = Mf.MediaObjectProbe(Width * Height * 4, Say);
+        Say(objects >= 0
+            ? "NOTE MP4 encoder: the take's media buffer and sample were built and stamped on their own, so the take can carry a frame."
+            : $"NOTE MP4 encoder: the take's media objects could not be built ({Mf.Describe(objects)}), so no frame can be carried.");
+        if (objects < 0) return 2;
+
         Say($"NOTE MP4 encoder: opening a {Width}×{Height} take at {FrameRate} fps, asking for the audio stream as well.");
         Mp4Recorder recorder;
         try { recorder = new Mp4Recorder(path, Width, Height, FrameRate, withAudio: true, step: Say); }
