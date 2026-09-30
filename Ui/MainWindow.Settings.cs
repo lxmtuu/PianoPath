@@ -433,24 +433,21 @@ public partial class MainWindow
 
         var shader = Card(KeyboardSettingsHost, "RAY-TRACED SHADING",
             "Every pixel of the keyboard is shaded with a real light transport model: a GGX specular lobe, a softbox with true penumbra shadows, contact occlusion in the gaps, colored lights from every sounding key and an ACES filmic tonemapper.");
-        // the GPU engine always draws lit 3D keys, and it reads these same sliders
-        var gpuKeys = () => _visualSettings.RenderBackend == "Gpu";
-        var shadingOn = () => _visualSettings.ShadingQuality != "Off" || gpuKeys();
+        // The GPU stage shades the keys in real time and reads the same sliders every frame; the picker
+        // shapes the software renderer, which transparent PNG takes and the automatic fallback still draw.
         Choice(shader, "Shading engine", nameof(PianoVisualSettings.ShadingQuality),
-            "Off draws the flat vector keys. Fast, Balanced and Cinematic trade bake time for shadow and occlusion samples.",
-            ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"))
-            .VisibleWhen = () => !gpuKeys();
-        Note(shader, "The GPU engine is on: it renders the keys in 3D with real-time lights and shadows every frame, and the sliders below shape them. The shading engine picker applies to the software renderer only.").VisibleWhen = gpuKeys;
-        SliderRow(shader, "Camera tilt", nameof(PianoVisualSettings.ShaderCameraTilt), 0, 100, "Low camera exaggerates the perspective and lengthens the black key shadows; high camera flattens the bed.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Key light", nameof(PianoVisualSettings.ShaderKeyLight), 0, 200, "Intensity of the softbox above the keyboard.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Shadow strength", nameof(PianoVisualSettings.ShaderShadows), 0, 100, "How dark the shadows are; also widens the penumbra.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Contact occlusion", nameof(PianoVisualSettings.ShaderAmbientOcclusion), 0, 100, "Ambient light lost in the gaps between keys and under the fallboard.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Gloss", nameof(PianoVisualSettings.ShaderGloss), 0, 100, "Polish of the ivory and ebony; higher means tighter highlights.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Rim light", nameof(PianoVisualSettings.ShaderRimLight), 0, 150, "Accent light rising from behind the fallboard, tinted by the hit-line color.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Key emission", nameof(PianoVisualSettings.ShaderEmissive), 0, 200, "How strongly a sounding key glows and lights the bed around it.").VisibleWhen = shadingOn;
-        SliderRow(shader, "Exposure", nameof(PianoVisualSettings.ShaderExposure), 20, 250, "Applied before the filmic tonemapper.").VisibleWhen = shadingOn;
-        Toggle(shader, "ACES filmic tonemapper", nameof(PianoVisualSettings.ShaderFilmic), "Unreal's default filmic curve; off clips highlights linearly instead.").VisibleWhen = shadingOn;
-        Note(shader, "The keyboard is baked once and cached, then only the sounding keys are re-shaded, so the shader stays inside the frame budget. Green-screen recording always uses the flat keys.").VisibleWhen = () => _visualSettings.ShadingQuality != "Off" && !gpuKeys();
+            "The GPU stage always renders the keys in 3D with real-time lights and shadows every frame, and the sliders below shape it. This picker shapes the software renderer, which transparent PNG takes and the automatic fallback still draw: Off is flat vector keys, Fast, Balanced and Cinematic trade bake time for shadow and occlusion samples.",
+            ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"));
+        SliderRow(shader, "Camera tilt", nameof(PianoVisualSettings.ShaderCameraTilt), 0, 100, "Low camera exaggerates the perspective and lengthens the black key shadows; high camera flattens the bed.");
+        SliderRow(shader, "Key light", nameof(PianoVisualSettings.ShaderKeyLight), 0, 200, "Intensity of the softbox above the keyboard.");
+        SliderRow(shader, "Shadow strength", nameof(PianoVisualSettings.ShaderShadows), 0, 100, "How dark the shadows are; also widens the penumbra.");
+        SliderRow(shader, "Contact occlusion", nameof(PianoVisualSettings.ShaderAmbientOcclusion), 0, 100, "Ambient light lost in the gaps between keys and under the fallboard.");
+        SliderRow(shader, "Gloss", nameof(PianoVisualSettings.ShaderGloss), 0, 100, "Polish of the ivory and ebony; higher means tighter highlights.");
+        SliderRow(shader, "Rim light", nameof(PianoVisualSettings.ShaderRimLight), 0, 150, "Accent light rising from behind the fallboard, tinted by the hit-line color.");
+        SliderRow(shader, "Key emission", nameof(PianoVisualSettings.ShaderEmissive), 0, 200, "How strongly a sounding key glows and lights the bed around it.");
+        SliderRow(shader, "Exposure", nameof(PianoVisualSettings.ShaderExposure), 20, 250, "Applied before the filmic tonemapper.");
+        Toggle(shader, "ACES filmic tonemapper", nameof(PianoVisualSettings.ShaderFilmic), "Unreal's default filmic curve; off clips highlights linearly instead.");
+        Note(shader, "On the GPU stage these sliders act per frame. The software renderer bakes the keyboard once and caches it, re-shading only the sounding keys; green-screen recording always uses the flat keys.").VisibleWhen = () => _visualSettings.ShadingQuality != "Off";
     }
 
     private void BuildBackgroundPage()
@@ -663,9 +660,7 @@ public partial class MainWindow
         RefreshLanguageChips();
         Note(language, "Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another.");
 
-        var graphics = Card(GeneralSettingsHost, "GRAPHICS ENGINE", "Software draws the stage with WPF on the interface thread. GPU renders it with Direct3D 11 on a thread of its own: HDR bloom, lit 3D keys with shadows, tens of thousands of particles and up to 240 frames per second, without ever holding up MIDI input.");
-        Choice(graphics, "Renderer", nameof(PianoVisualSettings.RenderBackend), "Which engine draws the stage. If Direct3D 11 cannot start, Keyflow stays on the software engine and says why.",
-            ("Software", "Software (WPF)"), ("Gpu", "GPU (Direct3D 11)"));
+        var graphics = Card(GeneralSettingsHost, "GRAPHICS ENGINE", "The stage is drawn by the GPU engine: Direct3D 11 on a render thread of its own — HDR bloom, lit 3D keys with shadows, tens of thousands of particles and up to 240 frames per second, without ever holding up MIDI input. If Direct3D 11 cannot start, Keyflow falls back to the software renderer and says why.");
         Choice(graphics, "GPU frame rate", nameof(PianoVisualSettings.GpuFrameRate), "Frames per second the GPU render thread aims for. Match your display (60, 120, 144 or 240 Hz); Unlimited renders as fast as the graphics card allows.",
             ("60", "60 FPS"), ("120", "120 FPS"), ("144", "144 FPS"), ("240", "240 FPS"), ("Unlimited", "Unlimited"));
         Toggle(graphics, "VSync in the GPU stage window", nameof(PianoVisualSettings.GpuVSync), "Present on the display's refresh. Turn it off for the lowest latency; the picture may tear.");

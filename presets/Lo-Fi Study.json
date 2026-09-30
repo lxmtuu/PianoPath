@@ -203,7 +203,7 @@
     "RecordingFrameRate": 30.0,
     "RecordingFormat": "Avi",
     "RecordingTransparent": true,
-    "RenderBackend": "Software",
+    "RenderBackend": "Gpu",
     "GpuFrameRate": "144",
     "GpuVSync": true
   }

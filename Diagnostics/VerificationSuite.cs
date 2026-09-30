@@ -60,6 +60,11 @@ internal static partial class VerificationSuite
         // A real ~113 MiB bank needs a few seconds to decode; a checkout without Git LFS settles at once.
         var deadline = DateTime.UtcNow.Add(bundledPianoAvailable ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(1.5));
         var startupWindow = new MainWindow { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+        // The suite pins the culture and uses a private settings folder for the same reason: its checks read
+        // state, not pixels, so the windows run on the deterministic software renderer instead of keeping a
+        // WARP render thread busy for the whole run. The real embedded GPU stage is exercised for picture by
+        // CI's --gpu preview captures and for parts by VerifyGpuStage.
+        startupWindow.UseSoftwareForSession();
         startupWindow.ContentRendered += (_, _) =>
         {
             var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
@@ -107,6 +112,7 @@ internal static partial class VerificationSuite
     private static void VerifyPracticeWindow(string[] args, App app)
     {
         var window = new MainWindow(loadBuiltInSoundFont: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+        window.UseSoftwareForSession(); // same determinism as the startup window above
         // The checks below read the layout right after a change. With Windows animations on (every normal desktop)
         // the chrome rows are still easing towards their target at that moment, so the checks failed there while a CI
         // server, which runs with animations off, passed. Screenshot runs already switch the motion off for this reason.

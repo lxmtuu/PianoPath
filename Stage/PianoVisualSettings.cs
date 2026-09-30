@@ -337,11 +337,14 @@ internal sealed class PianoVisualSettings
     /// </summary>
     public bool RecordingTransparent { get; set; } = true;
     /// <summary>
-    /// Which engine draws the stage: <c>Software</c> (WPF drawing on the UI thread, the default) or
-    /// <c>Gpu</c> (Direct3D 11 on a render thread of its own; see <see cref="GpuRenderLoop"/>). It belongs
-    /// to the machine, not to a look, so applying a preset keeps it.
+    /// Which engine draws the stage: <c>Gpu</c> (Direct3D 11 on a render thread of its own; see
+    /// <see cref="GpuRenderLoop"/>) replaced <c>Software</c> as the stage of the main window. The WPF
+    /// renderer is no longer a choice — it only steps in automatically when Direct3D cannot start and
+    /// for transparent PNG takes. The property stays in the file format so older settings files load;
+    /// <see cref="Clamp"/> migrates any stored value to <c>Gpu</c>. It belongs to the machine, not to a
+    /// look, so applying a preset keeps it.
     /// </summary>
-    public string RenderBackend { get; set; } = "Software";
+    public string RenderBackend { get; set; } = "Gpu";
     /// <summary>GPU engine: frames per second the render thread aims for (<c>Unlimited</c> renders as fast as the GPU allows).</summary>
     public string GpuFrameRate { get; set; } = "144";
     /// <summary>GPU stage window: present on the display's vertical blank (off allows tearing for the lowest latency).</summary>
@@ -369,7 +372,6 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] KeyLabelModes = ["None", "C", "All"];
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
-    internal static readonly string[] RenderBackends = ["Software", "Gpu"];
     internal static readonly string[] GpuFrameRates = ["60", "120", "144", "240", "Unlimited"];
     internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
 
@@ -479,7 +481,9 @@ internal sealed class PianoVisualSettings
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
         if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Avi;
-        if (!RenderBackends.Contains(RenderBackend)) RenderBackend = "Software";
+        // The GPU stage replaced the software stage as the main window's look: a stored "Software"
+        // (or anything else a file may name) migrates to the GPU engine on load.
+        RenderBackend = "Gpu";
         if (!GpuFrameRates.Contains(GpuFrameRate)) GpuFrameRate = "144";
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);

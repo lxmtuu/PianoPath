@@ -40,8 +40,11 @@ public partial class App : Application
 
         var window = new MainWindow();
         MainWindow = window;
-        // --gpu draws the stage with the Direct3D 11 engine for this run only (the settings file keeps its choice).
+        // The GPU stage is the main stage by default now. --gpu stays for older launch scripts and CI;
+        // --software draws one run with the WPF renderer instead (deterministic captures, the software
+        // column of the preset gallery) without touching the settings file.
         if (e.Args.Contains("--gpu")) window.UseGpuForSession();
+        if (e.Args.Contains("--software")) window.UseSoftwareForSession();
         // --preset=<name> applies a built-in look (spaces optional: --preset=GalaxyVoyage); CI renders the
         // GPU effect previews with it, each from a private settings folder.
         var presetName = e.Args.FirstOrDefault(argument => argument.StartsWith("--preset=", StringComparison.Ordinal))?["--preset=".Length..];

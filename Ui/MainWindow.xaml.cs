@@ -128,7 +128,8 @@ public partial class MainWindow : Window
         ApplyChromeTheme();
         StartChromeSweeps();
         SetChromeVisible(true); _chromeTimer.Start();
-        // The GPU engine starts only when the settings ask for it (General → Graphics engine).
+        // The GPU stage is the main stage: the render loop starts with the window and the software
+        // renderer only steps in if Direct3D cannot start (or for a --software run).
         ApplyRenderBackend();
         if (loadBuiltInSoundFont) Loaded += MainWindow_Loaded;
     }
