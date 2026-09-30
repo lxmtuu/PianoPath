@@ -61,10 +61,12 @@ internal static class Mf
     [DllImport("mfplat.dll", ExactSpelling = true)]
     internal static extern int MFCreateMediaType(out IMFMediaType mediaType);
 
-    [DllImport("mfplat.dll", ExactSpelling = true)]
+    // The device functions live in mf.dll, not in the platform DLL the rest of the platform calls come from:
+    // asking mfplat.dll for them fails with "entry point not found" on a machine that has no camera at all.
+    [DllImport("mf.dll", ExactSpelling = true)]
     internal static extern int MFEnumDeviceSources(IMFAttributes attributes, out IntPtr activates, out int count);
 
-    [DllImport("mfplat.dll", ExactSpelling = true)]
+    [DllImport("mf.dll", ExactSpelling = true)]
     internal static extern int MFCreateDeviceSource([MarshalAs(UnmanagedType.Interface)] IMFActivate activate, out IntPtr source);
 
     [DllImport("mfreadwrite.dll", ExactSpelling = true)]
