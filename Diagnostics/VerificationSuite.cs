@@ -1305,27 +1305,28 @@ internal static class VerificationSuite
         var hadTempo = tempo.Value;
         tempo.Value = 100;
 
-        for (var index = 0; index < 10; index++) Invoke(window, "RecordPracticeNote", false);
+        // The tempo curve only reads the hit/miss flag; the place each note sat is what the ghost keeps.
+        for (var index = 0; index < 10; index++) Invoke(window, "RecordPracticeNote", false, 60, 1);
         Assert(Math.Abs(tempo.Value - 100) < .01 && window.PracticeMissRun == 0,
             "With auto practice tempo off, misses must not touch the playback tempo.");
 
         toggle.IsChecked = true; threshold.Value = 2; tempo.Value = 100;
         Assert(settings.PracticeAutoTempo && threshold.IsEnabled, "Turning the switch on should store the flag and enable the threshold slider.");
-        Invoke(window, "RecordPracticeNote", false); Invoke(window, "RecordPracticeNote", false);
+        Invoke(window, "RecordPracticeNote", false, 60, 1); Invoke(window, "RecordPracticeNote", false, 60, 1);
         Assert(Math.Abs(tempo.Value - 100) < .01, "Two misses with a threshold of two must not slow the song down yet.");
-        Invoke(window, "RecordPracticeNote", false);
+        Invoke(window, "RecordPracticeNote", false, 60, 1);
         Assert(Math.Abs(tempo.Value - 95) < .01, "The miss past the threshold should drop the playback tempo by five percent.");
-        for (var index = 0; index < 35; index++) Invoke(window, "RecordPracticeNote", false);
+        for (var index = 0; index < 35; index++) Invoke(window, "RecordPracticeNote", false, 60, 1);
         Assert(Math.Abs(tempo.Value - 50) < .01, "Auto practice tempo must stop at the slow floor instead of dropping below it.");
 
-        Invoke(window, "RecordPracticeNote", true);
+        Invoke(window, "RecordPracticeNote", true, 60, 1);
         Assert(Math.Abs(tempo.Value - 50) < .01 && window.PracticeHitRun == 1, "One correct note only starts the recovery run; it must not move the tempo.");
-        for (var index = 0; index < 3; index++) Invoke(window, "RecordPracticeNote", true);
+        for (var index = 0; index < 3; index++) Invoke(window, "RecordPracticeNote", true, 60, 1);
         Assert(Math.Abs(tempo.Value - 52) < .01, "Four correct notes in a row should give two percent back.");
-        for (var index = 0; index < 4 * 30; index++) Invoke(window, "RecordPracticeNote", true);
+        for (var index = 0; index < 4 * 30; index++) Invoke(window, "RecordPracticeNote", true, 60, 1);
         Assert(Math.Abs(tempo.Value - 100) < .01, "Correct playing should bring the tempo back to normal and stop there.");
 
-        Invoke(window, "RecordPracticeNote", true); Invoke(window, "RecordPracticeNote", false);
+        Invoke(window, "RecordPracticeNote", true, 60, 1); Invoke(window, "RecordPracticeNote", false, 60, 1);
         Assert(window.PracticeHitRun == 0 && window.PracticeMissRun == 1, "A miss should clear the correct-note run, and the other way round.");
         Invoke(window, "ResetPracticeTempoRuns");
         Assert(window.PracticeMissRun == 0 && window.PracticeHitRun == 0, "Restarting the score should forget both practice runs.");
