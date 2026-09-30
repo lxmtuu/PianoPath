@@ -2332,11 +2332,11 @@ internal static class VerificationSuite
         Assert(barred.Count == 4 && barred.All(rest => rest.Staff == 1 && rest.Whole && Math.Abs(rest.Seconds - 1) < 1e-9)
                 && barred.Select(rest => rest.Start).SequenceEqual(new double[] { 0, 1, 2, 3 }),
             $"A hand quiet for four one-second bars should be written as four whole rests, one a bar ({string.Join(" · ", barred.Select(rest => $"{rest.Start}+{rest.Seconds}{(rest.Whole ? "w" : "")}"))}).");
-        var mixed = SheetLayer.Bars([new SheetLayer.RestGap(0, .5, 3)], new double[] { 0, 1, 2, 3 });
-        Assert(mixed.Count == 4 && !mixed[0].Whole && mixed[0] == new SheetLayer.RestGap(0, .5, .5)
-                && mixed[1].Whole && mixed[1] == new SheetLayer.RestGap(0, 1, 1, Whole: true)
-                && mixed[2] == new SheetLayer.RestGap(0, 2, 1, Whole: true) && !mixed[3].Whole && mixed[3] == new SheetLayer.RestGap(0, 3, .5),
-            $"A silence that starts and ends in the middle of a bar should keep a partial rest at each end and a whole rest for the bars it fills ({string.Join(" · ", mixed.Select(rest => $"{rest.Start}+{rest.Seconds}{(rest.Whole ? "w" : "")}"))}).");
+        var spanning = SheetLayer.Bars([new SheetLayer.RestGap(0, .5, 3)], new double[] { 0, 1, 2, 3 });
+        Assert(spanning.Count == 4 && !spanning[0].Whole && spanning[0] == new SheetLayer.RestGap(0, .5, .5)
+                && spanning[1].Whole && spanning[1] == new SheetLayer.RestGap(0, 1, 1, Whole: true)
+                && spanning[2] == new SheetLayer.RestGap(0, 2, 1, Whole: true) && !spanning[3].Whole && spanning[3] == new SheetLayer.RestGap(0, 3, .5),
+            $"A silence that starts and ends in the middle of a bar should keep a partial rest at each end and a whole rest for the bars it fills ({string.Join(" · ", spanning.Select(rest => $"{rest.Start}+{rest.Seconds}{(rest.Whole ? "w" : "")}"))}).");
         Assert(SheetLayer.Bars([new SheetLayer.RestGap(1, .25, .5)], new double[] { 0, 1, 2 }).Count == 1
                 && SheetLayer.Bars([], new double[] { 0, 1 }).Count == 0
                 && SheetLayer.Bars([new SheetLayer.RestGap(1, 0, 4)], new double[] { 0 }).Count == 1,
