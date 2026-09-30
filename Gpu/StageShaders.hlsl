@@ -473,13 +473,14 @@ float4 PsKey(KeyOut v) : SV_Target
     }
 
     bool black = kind > 0.5;
-    float3 albedo = black ? float3(0.018, 0.018, 0.022) : float3(0.86, 0.84, 0.8);
+    // Ebony lacquer reflects well under 1% diffusely; its look comes from the specular band below.
+    float3 albedo = black ? float3(0.0035, 0.0035, 0.0045) : float3(0.86, 0.84, 0.8);
     float roughness = black ? lerp(0.5, 0.14, KeyA.w) : lerp(0.65, 0.3, KeyA.w);
     float3 f0 = black ? float3(0.05, 0.05, 0.05) : float3(0.035, 0.035, 0.035);
     if (style < 0.5) { roughness = min(1.0, roughness + 0.25); }
     else if (style > 1.5)
     {
-        albedo = black ? float3(0.03, 0.035, 0.05) : float3(0.55, 0.62, 0.72);
+        albedo = black ? float3(0.008, 0.01, 0.016) : float3(0.55, 0.62, 0.72);
         roughness = 0.08;
         f0 = float3(0.08, 0.08, 0.09);
     }
@@ -500,6 +501,8 @@ float4 PsKey(KeyOut v) : SV_Target
         color = max(color, 0.0);
     }
     color += albedo * (0.16 + 0.12 * n.y) * (0.6 + 0.4 * KeyA.x);
+    // the black keys' side walls catch a faint cool edge so their outline still reads against the gaps
+    if (black && n.y < 0.5) color += float3(0.004, 0.0045, 0.006);
     float3 rimDir = normalize(float3(0.0, 0.45, -1.0));
     float rim = pow(saturate(1.0 - dot(n, view)), 3.0) * saturate(dot(n, rimDir) * 0.5 + 0.6);
     color += RimColor.rgb * rim * KeyB.x * (black ? 0.9 : 0.45);
