@@ -239,19 +239,31 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         if (hr < 0) throw new InvalidOperationException(Loc.F("The MP4 writer would not start writing ({0}).", Mf.Describe(hr)));
     }
 
-    /// <summary>Adds the H.264 stream and declares the NV12 frames this side hands it.</summary>
-    private int AddVideoStream()
+    /// <summary>
+    /// The H.264 stream the writer is asked to produce, described exactly as a take asks for it. The
+    /// verification builds this same description and hands it to a writer without writing a frame: the sink
+    /// writer has to find an encoder for it before it will take the stream, so the answer is also the answer to
+    /// whether this machine can make a take at all.
+    /// </summary>
+    internal static Mf.IMFMediaType? VideoTarget(int width, int height, int frameRate)
     {
-        var output = Mf.MFCreateMediaType(out var target);
-        if (output != Mf.S_OK) throw new InvalidOperationException(Loc.F("A media type could not be prepared ({0}).", Mf.Describe(output)));
+        if (Mf.MFCreateMediaType(out var target) != Mf.S_OK) return null;
         target.SetGUIDKey(Mf.MajorType, Mf.VideoMajorType);
         target.SetGUIDKey(Mf.SubType, Mf.H264);
-        target.SetUINT32Key(Mf.AverageBitrate, BitrateFor(Width, Height, FrameRate));
-        target.SetUINT64Key(Mf.FrameSize, Mf.Pack(Height, Width));
-        target.SetUINT64Key(Mf.FrameRateKey, Mf.Pack(FrameRate, 1));
+        target.SetUINT32Key(Mf.AverageBitrate, BitrateFor(width, height, frameRate));
+        target.SetUINT64Key(Mf.FrameSize, Mf.Pack(height, width));
+        target.SetUINT64Key(Mf.FrameRateKey, Mf.Pack(frameRate, 1));
         target.SetUINT64Key(Mf.PixelAspectRatio, Mf.Pack(1, 1));
         target.SetUINT32Key(Mf.InterlaceMode, Mf.InterlaceProgressive);
         target.SetUINT32Key(Mf.AllSamplesIndependent, 1);
+        return target;
+    }
+
+    /// <summary>Adds the H.264 stream and declares the NV12 frames this side hands it.</summary>
+    private int AddVideoStream()
+    {
+        var target = VideoTarget(Width, Height, FrameRate)
+            ?? throw new InvalidOperationException(Loc.F("A media type could not be prepared ({0}).", Mf.Describe(Mf.MF_E_OUT_OF_MEMORY)));
         var hr = _writer!.AddStream(target, out var index);
         if (hr < 0) throw new InvalidOperationException(Loc.F("The MP4 writer has no H.264 encoder for this size ({0}).", Mf.Describe(hr)));
         var input = Mf.MFCreateMediaType(out var video);

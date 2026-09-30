@@ -2143,15 +2143,19 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
-        // The probe is what tells this machine's codecs apart from this side's plumbing. It runs before the take
-        // is opened, so a child that got as far as the take must also have said how the probe went: a run where
-        // the verdict is missing would be reading the take without the one line that explains it. A child that
-        // died inside the probe itself never did — its last line names the probe, and the verdict stays a SKIP
-        // like every other native-code stop.
+        // The two probes are what tell this machine's codecs apart from this side's plumbing, and both run before
+        // the take is opened: a child that got as far as the take must therefore have reported both verdicts, and
+        // a run without them would be reading a take with no line that explains how this machine got there. A
+        // child that died inside a probe never did — its last line names the step it died at, and that stays a
+        // SKIP like every other stop inside native code.
         if (lines.Any(line => line.Contains("opening a", StringComparison.Ordinal)))
+        {
+            Assert(lines.Any(line => line.Contains("found a way to make H.264", StringComparison.Ordinal)),
+                "A take attempt that opened the take should have said the machine's media stack took an H.264 stream, since a take asks for one.");
             Assert(lines.Any(line => line.Contains("AVI probe wrote", StringComparison.Ordinal)
                     || line.Contains("did not finish an AVI probe", StringComparison.Ordinal)),
                 "A take attempt that opened the take should also have reported what the encoder-free AVI probe did, so a machine whose take hangs can be told apart from plumbing that hangs.");
+        }
         if (lines.Count == 0)
             Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
         else if (exit == 0 && !File.Exists(path))

@@ -87,21 +87,54 @@ internal static partial class Mf
     }
 
     /// <summary>
+    /// Asks the media stack whether it can hold an H.264 stream of the given description, and writes nothing at
+    /// all: before a sink writer will take a stream it has to find an encoder for the target type, so a machine
+    /// that answers yes has an H.264 encoder a take can use, while a machine that answers no can be told about
+    /// in one sentence instead of being left to hang inside a take that was never going to be written.
+    /// </summary>
+    /// <returns>The first step that failed, or <see cref="S_OK"/> when the stream was taken.</returns>
+    internal static int EncodeSinkProbe(string path, IMFMediaType target, Action<string>? step = null)
+    {
+        var hr = MFStartup(MF_VERSION, 0);
+        if (hr < 0) return hr;
+        step?.Invoke("NOTE MP4 encoder: the media stack started for the encoder check.");
+        IMFSinkWriter? writer = null;
+        try
+        {
+            hr = MFCreateSinkWriterFromURL(path, IntPtr.Zero, null, out writer);
+            if (hr < 0) return hr;
+            step?.Invoke("NOTE MP4 encoder: the MP4 sink writer is open.");
+            hr = writer!.AddStream(target, out _);
+            if (hr >= 0) step?.Invoke("NOTE MP4 encoder: the MP4 sink writer took the stream.");
+            return hr;
+        }
+        catch { return MF_E_OUT_OF_MEMORY; }
+        finally
+        {
+            if (writer is not null) { try { Marshal.ReleaseComObject(writer); } catch { } }
+            try { MFShutdown(); } catch { }
+        }
+    }
+
+    /// <summary>
     /// Writes a handful of pictures into an AVI through the very path a take uses — one media buffer, one
     /// sample, one stamped call at a time — but with an uncompressed picture type, so no encoder is involved
     /// anywhere. It answers the question a machine whose encoders misbehave cannot answer any other way:
     /// whether this side's sample plumbing works and the codecs are at fault, or the plumbing itself is.
     /// </summary>
     /// <returns>The first step that failed, or <see cref="S_OK"/> when the file really was written.</returns>
-    internal static int EncodeAviProbe(string path, byte[] pixels, int width, int height, int frameRate, int frames)
+    internal static int EncodeAviProbe(string path, byte[] pixels, int width, int height, int frameRate, int frames,
+        Action<string>? step = null)
     {
         var hr = MFStartup(MF_VERSION, 0);
-        if (hr != S_OK) return hr;
+        if (hr < 0) return hr;
         IMFSinkWriter? writer = null;
         try
         {
+            step?.Invoke("NOTE MP4 encoder: the media stack started for the encoder-free probe.");
             hr = MFCreateSinkWriterFromURL(path, IntPtr.Zero, null, out writer);
             if (hr < 0) return hr;
+            step?.Invoke("NOTE MP4 encoder: the AVI sink writer is open.");
             if (MFCreateMediaType(out var target) != S_OK) return MF_E_OUT_OF_MEMORY;
             target.SetGUIDKey(MajorType, VideoMajorType);
             target.SetGUIDKey(SubType, Rgb32); // the uncompressed 32-bit type the AVI container takes as it is
@@ -119,6 +152,7 @@ internal static partial class Mf
             input.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
             hr = writer.SetInputMediaType(index, input, null);
             if (hr < 0) return hr;
+            step?.Invoke("NOTE MP4 encoder: the AVI sink writer took the uncompressed stream as it is.");
             hr = writer.BeginWriting();
             if (hr < 0) return hr;
             for (var frame = 0; frame < frames; frame++)
@@ -127,6 +161,7 @@ internal static partial class Mf
                 hr = Mp4Recorder.WriteSampleTo(writer, index, pixels, pixels.Length, time, duration);
                 if (hr < 0) return hr;
             }
+            step?.Invoke($"NOTE MP4 encoder: {frames} uncompressed pictures went in; closing the probe file.");
             return writer.FinalizeFile();
         }
         catch { return MF_E_OUT_OF_MEMORY; }
