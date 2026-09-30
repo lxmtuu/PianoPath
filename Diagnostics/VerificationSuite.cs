@@ -1999,13 +1999,14 @@ internal static class VerificationSuite
                 "A file the reader refuses, and a file that is not a song at all, should stay out of the library.");
 
             // The cache: an unchanged file is not read again, a changed one is, and the tags survive both.
-            var cached = SongFolderIndex.Scan(folder);
-            Assert(ReferenceEquals(cached[0], songs[0]) && ReferenceEquals(cached[1], songs[1]),
-                "Scanning again should reuse the entries of files that did not change instead of re-reading them.");
-            // The scan returns the library's own list, so what is compared has to be captured first: an entry
-            // read after the edit would otherwise be compared with itself.
+            // The scan refills the library's own list, so what is compared has to be captured first — an entry
+            // read after a later scan would otherwise be compared with itself.
             var etudeBefore = SongFolderIndex.Songs.Single(song => string.Equals(song.Path, etude, StringComparison.OrdinalIgnoreCase));
             var nocturneBefore = SongFolderIndex.Songs.Single(song => song.Title == "Nocturne");
+            var cached = SongFolderIndex.Scan(folder);
+            Assert(ReferenceEquals(cached.Single(song => song.Title == "Etude"), etudeBefore)
+                    && ReferenceEquals(cached.Single(song => song.Title == "Nocturne"), nocturneBefore),
+                "Scanning again should reuse the entries of files that did not change instead of re-reading them.");
             SongFolderIndex.Tag(etude, "Chopin");
             File.WriteAllBytes(etude, [.. CreateFormatOneMidi(), .. new byte[16]]);
             File.SetLastWriteTimeUtc(etude, DateTime.UtcNow.AddMinutes(1));
@@ -2042,8 +2043,10 @@ internal static class VerificationSuite
             Assert(SongFolderIndex.Scan(Path.Combine(folder, "does-not-exist")).Count == 0 && SongFolderIndex.Tag(etude, "x") is null,
                 "Scanning a folder that is not there should yield an empty library instead of throwing.");
 
-            // The Play dialog: the same list, the search box and the tagged chips.
+            // The Play dialog: the same list, the search box and the tagged chips. The experiments above
+            // emptied the index (the damaged-file part is meant to), so the folder is scanned and tagged again.
             SongFolderIndex.Scan(folder);
+            SongFolderIndex.Tag(etude, "Chopin");
             Invoke(window, "RefreshLibrarySongs");
             var host = (StackPanel)window.FindName("LibrarySongHost");
             var label = (TextBlock)window.FindName("LibraryFolderLabel");
@@ -2058,6 +2061,7 @@ internal static class VerificationSuite
             Assert(host.Children.Count == 0 && empty.Text == Loc.T("No song in this folder matches what you typed. Tags and the file name are searched too."),
                 "A query that matches nothing should say so instead of leaving an empty list.");
             search.Text = "chopin";
+            Assert(host.Children.Count == 1, $"The tag the song carries should be found by the search box (matched {host.Children.Count}).");
             var row = (Grid)host.Children[0];
             var chips = ((StackPanel)((StackPanel)row.Children[0]).Children[2]).Children.OfType<Button>().ToList();
             Assert(chips.Any(chip => (chip.Content as string) == "#chopin"), "A tagged song should show its tag as a chip in the library row.");
