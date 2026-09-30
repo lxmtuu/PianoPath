@@ -560,6 +560,7 @@ internal static class VerificationSuite
         VerifySettingsProfile(window);
         VerifyPresetSharing(window);
         VerifyPresetThumbnails(window);
+        VerifyCommunityPresets(window);
         VerifyBackgroundImageLoad(window, stage, visualSettings);
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
@@ -1475,6 +1476,82 @@ internal static class VerificationSuite
         Assert(Math.Abs(settings.NoteGlow - hadGlow) < .01 && settings.NoteStyle == hadStyle && settings.PresetName == hadName,
             "The sharing check should hand the window back in the look it found.");
         Results.Add("PASS look sharing in the app: COPY fills the box, a pasted code carries a look in, a foreign code is refused with its reason in the dock and nothing is changed.");
+    }
+
+    /// <summary>
+    /// The community shelf: every file embedded in the build is a complete preset (the same keys the
+    /// settings class declares, in range, no migration left to run), the shelf names do not collide with a
+    /// built-in or with each other, a broken file or a repeated name is skipped instead of emptying the
+    /// shelf, the list shows the entries marked COMMUNITY, a shelf look applies like any other, and its
+    /// name is refused when saving so the badge keeps meaning something.
+    /// </summary>
+    private static void VerifyCommunityPresets(MainWindow window)
+    {
+        var shelf = CommunityPresets.All;
+        var sources = CommunityPresets.EmbeddedSources();
+        Assert(sources.Count > 0 && sources.Count == shelf.Count,
+            $"The build should carry the community shelf (found {sources.Count} embedded file(s) and loaded {shelf.Count}).");
+        Assert(shelf.All(preset => preset.Community && !preset.BuiltIn && preset.FilePath is null),
+            "A shelf preset is read-only: it is marked as community and it has no file of its own.");
+        Assert(shelf.All(preset => !string.IsNullOrWhiteSpace(preset.Description) && preset.Settings.PresetName == preset.Name),
+            "Every shelf preset should describe itself and be named after its file.");
+
+        var propertyNames = typeof(PianoVisualSettings).GetProperties().Select(property => property.Name).ToList();
+        foreach (var (name, json) in sources)
+        {
+            using var document = System.Text.Json.JsonDocument.Parse(json);
+            var root = document.RootElement;
+            Assert(root.ValueKind == System.Text.Json.JsonValueKind.Object && root.TryGetProperty("Settings", out var element) && element.ValueKind == System.Text.Json.JsonValueKind.Object,
+                $"presets/{name}.json should be a preset envelope with a Settings object.");
+            var keys = element.EnumerateObject().Select(property => property.Name).ToList();
+            var missing = propertyNames.Except(keys).ToList();
+            var unknown = keys.Except(propertyNames).ToList();
+            Assert(missing.Count == 0 && unknown.Count == 0,
+                $"presets/{name}.json should name every setting and nothing else (missing: {string.Join(", ", missing)}; unknown: {string.Join(", ", unknown)}).");
+            var settings = PianoVisualSettings.FromJson(json);
+            Assert(settings.ToJson() == PianoVisualSettings.FromJson(settings.ToJson()).ToJson() && settings.BackgroundAppearanceVersion >= 2,
+                $"presets/{name}.json should already hold final values: loading it twice must not change it again (no migration or clamping left to do).");
+        }
+        Assert(shelf.Select(preset => preset.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == shelf.Count
+                && !shelf.Any(preset => VisualPresets.FindBuiltIn(preset.Name) is not null),
+            "Shelf names should be unique and should not shadow a built-in preset.");
+
+        // A contribution that is broken, or that repeats a name, must not take the shelf down with it.
+        var crowded = CommunityPresets.Load([(sources[0].Name, sources[0].Json), (sources[0].Name.ToLowerInvariant(), sources[0].Json), ("Broken", "{ not json at all")]);
+        Assert(crowded.Count == 1 && crowded[0].Name == shelf[0].Name && crowded[0].Description == shelf[0].Description,
+            "A shelf with a repeated name and a broken file should still load the one good preset, with its description.");
+
+        // In the window: the list carries them, the badge says where they come from, applying one works.
+        Invoke(window, "LoadPresetList", shelf[0].Name);
+        var list = (ListBox)window.FindName("PresetList");
+        var item = list.Items.OfType<ListBoxItem>().FirstOrDefault(entry => entry.Tag is VisualPreset { Community: true });
+        Assert(item?.Content is FrameworkElement content && Texts(content).Contains("COMMUNITY") && Texts(content).Contains(shelf[0].Name),
+            "The preset list should offer the community shelf and mark it COMMUNITY.");
+        var settings = (PianoVisualSettings)Field(window, "_visualSettings")!;
+        var hadLook = settings.ToJson();
+        Invoke(window, "ApplyPreset", shelf[0]);
+        var wanted = shelf[0].Settings;
+        Assert(settings.PresetName == shelf[0].Name && settings.NoteStyle == wanted.NoteStyle && settings.AmbientNature == wanted.AmbientNature
+                && settings.ImpactBurst == wanted.ImpactBurst && settings.ShellTheme == wanted.ShellTheme && !settings.PresetModified,
+            "Applying a shelf preset should carry its whole look over, theme included, and leave it unmodified.");
+        settings.CopyFrom(PianoVisualSettings.FromJson(hadLook));
+        Invoke(window, "RefreshSettingControls");
+
+        Assert(CommunityPresets.NameConflict(shelf[0].Name) is not null
+                && CommunityPresets.NameConflict(VisualPresets.DefaultPresetName) is not null
+                && CommunityPresets.NameConflict("My Very Own Look") is null,
+            "Saving over a built-in or community name should be refused, while a fresh name stays free.");
+        Assert(!VisualPresetStore.Default.Delete(shelf[0]), "A shelf preset cannot be deleted: it has no file in the user's folder.");
+        Results.Add($"PASS community shelf: {shelf.Count} preset(s) ship with the build, every file names all {propertyNames.Count} settings and loads unchanged, the list marks them COMMUNITY, they apply like any look and cannot be overwritten.");
+    }
+
+    /// <summary>Every string a piece of preset list content prints, in tree order.</summary>
+    private static List<string> Texts(DependencyObject root)
+    {
+        var texts = new List<string>();
+        if (root is TextBlock block) texts.Add(block.Text);
+        foreach (var child in LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>()) texts.AddRange(Texts(child));
+        return texts;
     }
 
     /// <summary>

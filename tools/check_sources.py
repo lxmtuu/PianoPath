@@ -902,6 +902,85 @@ def scan_generated_assets():
     return errors
 
 
+def scan_preset_shelf():
+    """``presets/`` is the community shelf: preset files that ship inside the application.
+
+    A shelf file is an ordinary preset file, so the checks here are the ones a contributor cannot see:
+    every settings key of ``PianoVisualSettings`` must be present exactly once (a new setting added in
+    code would otherwise quietly fall back to its default in a stale file), the values must already be
+    final (``--verify`` loads the shelf in the app and asserts the same thing), the name must match the
+    file and must not shadow a built-in look, and the committed file must still be what
+    ``tools/make_presets.py`` writes, which is the recipe and the licence for the folder.
+    """
+    import importlib.util
+    import tempfile
+
+    errors = []
+    directory = ROOT / "presets"
+    files = sorted(directory.glob("*.json")) if directory.exists() else []
+    if not files:
+        return ["presets/ is empty; the community shelf ships preset files there (tools/make_presets.py writes them)"]
+    properties = re.findall(r"^    public [\w<>\[\]]+ (\w+) \{ get; set; \}", (ROOT / "Stage" / "PianoVisualSettings.cs").read_text(encoding="utf-8"), re.M)
+    if len(properties) < 100:
+        return ["Stage/PianoVisualSettings.cs no longer looks like the settings class; cannot check presets/"]
+    built_in = set(re.findall(r'new\("([^"]+)", "', (ROOT / "Stage" / "VisualPresets.cs").read_text(encoding="utf-8")))
+    seen = set()
+    for path in files:
+        label = f"presets/{path.name}"
+        try:
+            document = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError as error:
+            errors.append(f"{label} is not valid JSON: {error}")
+            continue
+        if not isinstance(document, dict) or set(document) != {"Version", "Thumbnail", "Description", "Settings"}:
+            errors.append(f"{label} should hold exactly Version, Thumbnail, Description and Settings — the envelope the app writes")
+            continue
+        if not isinstance(document["Version"], int) or document["Version"] < 1:
+            errors.append(f"{label} should carry a version number")
+        for field in ("Thumbnail", "Description"):
+            if not isinstance(document[field], str):
+                errors.append(f"{label} should hold {field} as a string, empty when there is none")
+        if not document["Description"].strip():
+            errors.append(f"{label} needs a description: it is the second line of the preset in the list")
+        settings = document["Settings"]
+        if not isinstance(settings, dict):
+            errors.append(f"{label} should hold a Settings object")
+            continue
+        missing = [name for name in properties if name not in settings]
+        unknown = [name for name in settings if name not in properties]
+        if missing:
+            errors.append(f"{label} is missing {len(missing)} setting(s) ({', '.join(missing[:6])}) — regenerate it with `python3 tools/make_presets.py`")
+        if unknown:
+            errors.append(f"{label} sets {', '.join(unknown[:6])}, which is not a setting of PianoVisualSettings")
+        if settings.get("PresetName") != path.stem:
+            errors.append(f'{label} is named {settings.get("PresetName")!r}; the shelf uses the file name so the list, the badge and the file agree')
+        if settings.get("BackgroundAppearanceVersion", 0) < 2:
+            errors.append(f"{label} would be migrated on load; regenerate it with `python3 tools/make_presets.py`")
+        if path.stem.lower() in (name.lower() for name in built_in):
+            errors.append(f"{label} shadows the built-in preset {path.stem!r}")
+        if path.stem.lower() in seen:
+            errors.append(f"{label} repeats a shelf name")
+        seen.add(path.stem.lower())
+
+    generator = ROOT / "tools" / "make_presets.py"
+    if not files or not generator.exists():
+        return errors
+    spec = importlib.util.spec_from_file_location("make_presets", generator)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as scratch:
+            module.write_all(Path(scratch), quiet=True)
+            for path in files:
+                built = Path(scratch) / path.name
+                if not built.exists():
+                    errors.append(f"presets/{path.name} is not one of the presets tools/make_presets.py writes")
+                elif built.read_bytes() != path.read_bytes():
+                    errors.append(f"presets/{path.name} does not match tools/make_presets.py — regenerate it with `python3 tools/make_presets.py` instead of editing it by hand")
+    except SystemExit as error:
+        errors.append(f"tools/make_presets.py refuses to run: {error}")
+    return errors
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -919,11 +998,13 @@ def main():
     errors.extend(scan_readme())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
+    errors.extend(scan_preset_shelf())
     localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
     errors.extend(localization_errors)
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
+    print("checked the community preset shelf against the settings class and against tools/make_presets.py, the script that writes it")
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
     print(f"checked the string tables against one another and against the {keys_used} keys the sources print ({keys_inventory} in the inventory)")
     if errors:

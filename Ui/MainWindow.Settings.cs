@@ -1212,7 +1212,10 @@ public partial class MainWindow
         _presetListLoading = true;
         try
         {
-            _presets.Clear(); _presets.AddRange(VisualPresets.BuiltIn); _presets.AddRange(VisualPresetStore.Default.LoadUserPresets());
+            _presets.Clear();
+            _presets.AddRange(VisualPresets.BuiltIn);
+            _presets.AddRange(CommunityPresets.All);
+            _presets.AddRange(VisualPresetStore.Default.LoadUserPresets());
             PresetList.Items.Clear();
             foreach (var preset in _presets) PresetList.Items.Add(new ListBoxItem { Content = PresetListContent(preset), Tag = preset });
             var wanted = selectName ?? _visualSettings.PresetName;
@@ -1238,7 +1241,7 @@ public partial class MainWindow
         text.Children.Add(description);
         var kind = new Border { CornerRadius = new CornerRadius(6), Padding = new Thickness(7, 2, 7, 2), VerticalAlignment = VerticalAlignment.Center, Background = (Brush)FindResource(preset.BuiltIn ? "AccentSoftBrush" : "ControlHoverBrush"), Margin = new Thickness(10, 0, 0, 0) };
         var kindLabel = new TextBlock { FontSize = 8, FontWeight = FontWeights.Bold, Foreground = (Brush)FindResource("MutedTextBrush") };
-        Loc.Set(kindLabel, preset.BuiltIn ? "BUILT-IN" : "USER");
+        Loc.Set(kindLabel, preset.Community ? "COMMUNITY" : preset.BuiltIn ? "BUILT-IN" : "USER");
         kind.Child = kindLabel;
         Grid.SetColumn(text, 1); Grid.SetColumn(kind, 2);
         grid.Children.Add(strip); grid.Children.Add(text); grid.Children.Add(kind);
@@ -1309,7 +1312,7 @@ public partial class MainWindow
     {
         var preset = SelectedPreset;
         if (preset is null) Loc.Set(PresetDescriptionLabel, "Select a preset to preview its description.");
-        else Loc.Bind(PresetDescriptionLabel, () => (preset.BuiltIn ? Loc.T(preset.Description) : preset.Description) + (preset.BuiltIn ? "" : $"  ·  {preset.FilePath}"));
+        else Loc.Bind(PresetDescriptionLabel, () => (preset.BuiltIn ? Loc.T(preset.Description) : preset.Description) + (preset.FilePath is { Length: > 0 } ? $"  ·  {preset.FilePath}" : ""));
         DeletePresetButton.IsEnabled = preset is { BuiltIn: false };
         ApplyPresetButton.IsEnabled = preset is not null;
     }
@@ -1345,7 +1348,7 @@ public partial class MainWindow
         if (prompt.ShowDialog() != true || prompt.Result is not { } name) return;
         try
         {
-            if (VisualPresets.FindBuiltIn(name) is not null) { ShowMessage(Loc.F("“{0}” is a built-in preset. Choose another name.", name), "Save preset", MessageBoxImage.Information); return; }
+            if (CommunityPresets.NameConflict(name) is { } conflict) { ShowMessage(Loc.F(conflict, name), "Save preset", MessageBoxImage.Information); return; }
             var saved = VisualPresetStore.Default.Save(name, _visualSettings, PianoPath.PresetThumbnail.Encode(_visualSettings));
             _visualSettings.PresetName = saved.Name; _visualSettings.PresetModified = false;
             LoadPresetList(saved.Name); UpdatePresetLabels();
@@ -1370,7 +1373,9 @@ public partial class MainWindow
         try
         {
             var imported = VisualPresetStore.Import(dialog.FileName);
-            var saved = VisualPresetStore.Default.Save(imported.Name, imported.Settings);
+            // The picture and the description travel with the file, so importing one keeps both.
+            var saved = VisualPresetStore.Default.Save(imported.Name, imported.Settings, imported.Thumbnail);
+            if (!string.IsNullOrWhiteSpace(imported.Description)) saved = saved with { Description = imported.Description };
             LoadPresetList(saved.Name);
             ApplyPreset(saved);
         }
