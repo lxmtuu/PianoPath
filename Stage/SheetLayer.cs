@@ -9,7 +9,8 @@ namespace PianoPath;
 /// playhead. Each note is written on the staff its hand split assigns it to, at the place the song's key spells
 /// it, with a key signature at the head of both staves, the accidentals the bars really need, ledger lines where
 /// a note leaves the staff, bar lines on the beat grid, short notes beamed within their beat (or flagged when
-/// they stand alone) and a ring on whatever is sounding.
+/// they stand alone), a rest wherever one hand is silent while the other plays, and a ring on whatever is
+/// sounding.
 ///
 /// <para>
 /// The geometry is plain arithmetic (<see cref="Step"/>, <see cref="Place"/>, <see cref="LedgerLines"/>,
@@ -86,10 +87,13 @@ internal static class SheetLayer
     /// </summary>
     internal static (int Staff, int RelativeStep) Place(int pitch, double handSplit) => Place(pitch, handSplit, MusicKey.CMajor);
 
+    /// <summary>Which staff a pitch belongs to: 0 treble, 1 bass, <paramref name="handSplit"/> deciding.</summary>
+    internal static int StaffOf(int pitch, double handSplit) => pitch >= handSplit ? 0 : 1;
+
     /// <summary>Where a pitch is written on which staff, as this key spells it.</summary>
     internal static (int Staff, int RelativeStep) Place(int pitch, double handSplit, MusicKey key)
     {
-        var staff = pitch >= handSplit ? 0 : 1;
+        var staff = StaffOf(pitch, handSplit);
         return (staff, Step(pitch, key) - (staff == 0 ? TrebleBottomStep : BassBottomStep));
     }
 
@@ -115,6 +119,24 @@ internal static class SheetLayer
 
     /// <summary>Everything written in time starts after this much of the band: the clef and the signature.</summary>
     internal static double LeftInset(Rect area, MusicKey key) => ClefSpace(area) + SignatureWidth(key, StaffGap(area));
+
+    /// <summary>
+    /// Everything the sheet works out for a song before it draws anything: the accidental each note is written
+    /// with, the beams its short notes share and the silences of both hands. None of it depends on the practice
+    /// state or on where the playhead is, so a renderer can work it out once per song instead of once per frame.
+    /// </summary>
+    internal sealed record SheetPlan(NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests);
+
+    /// <summary>Works out the plan of a song: its accidentals, its beams and its rests.</summary>
+    internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key)
+    {
+        var beatSeconds = BeatSeconds(beats);
+        var downbeats = Downbeats(beats, beatsPerBar);
+        return new SheetPlan(
+            AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit),
+            Beams(notes, beats, handSplit, key, beatSeconds),
+            Rests(notes, handSplit));
+    }
 
     /// <summary>What is written beside a note head: nothing, a sharp, a flat or a natural.</summary>
     internal enum NoteAccidental { None, Sharp, Flat, Natural }
@@ -211,6 +233,88 @@ internal static class SheetLayer
         return flags;
     }
 
+    /// <summary>The shapes a written rest takes, longest first: a whole rest hangs under a line, a half rest sits on one.</summary>
+    internal enum RestShape { Whole, Half, Quarter, Eighth, Sixteenth }
+
+    /// <summary>
+    /// The shape that writes a silence of this length, counted in beats of the song's own grid: a quarter rest
+    /// lasts a beat, a half two and a whole four, an eighth half a beat and a sixteenth a quarter of one. A
+    /// silence longer than a whole rest is still drawn as one, the way a score writes a whole rest for a bar it
+    /// cannot fill, and a silence with no beat to measure it — a live take — reads as a quarter rest.
+    /// </summary>
+    internal static RestShape Rest(double seconds, double beatSeconds)
+    {
+        if (beatSeconds <= 0 || seconds <= 0) return RestShape.Quarter;
+        var beats = seconds / beatSeconds;
+        if (beats <= .25) return RestShape.Sixteenth;
+        if (beats <= .5) return RestShape.Eighth;
+        if (beats <= 1) return RestShape.Quarter;
+        if (beats <= 2) return RestShape.Half;
+        return RestShape.Whole;
+    }
+
+    /// <summary>What is written for a rest: the musical glyph when the font has it, otherwise the shape's own initial.</summary>
+    internal static string RestText(RestShape shape, bool glyphs) => shape switch
+    {
+        RestShape.Whole => glyphs ? "\uD834\uDD3B" : "W",
+        RestShape.Half => glyphs ? "\uD834\uDD3C" : "H",
+        RestShape.Quarter => glyphs ? "\uD834\uDD3D" : "Q",
+        RestShape.Eighth => glyphs ? "\uD834\uDD3E" : "E",
+        _ => glyphs ? "\uD834\uDD3F" : "S",
+    };
+
+    /// <summary>A silence written on one staff: where it starts and how long it lasts.</summary>
+    internal readonly record struct RestGap(int Staff, double Start, double Seconds);
+
+    /// <summary>
+    /// The silences the staves are written with: a grand staff has a voice per hand and each voice accounts for
+    /// its whole span, so wherever one hand is not sounding while the other is, that hand rests. The span runs
+    /// from the first moment either hand plays to the last, and it is swept once with a running count per staff,
+    /// so a piece with thousands of notes costs a sort rather than a scan per note.
+    /// </summary>
+    internal static IReadOnlyList<RestGap> Rests(IReadOnlyList<NoteEvent> notes, double handSplit)
+    {
+        var gaps = new List<RestGap>();
+        if (notes.Count == 0) return gaps;
+        // Each hand's sounding time as a list of +1/-1 edges, so one sweep reads both hands at once.
+        var edges = new List<(double Time, int Delta)>[2] { [], [] };
+        foreach (var note in notes)
+        {
+            var staff = StaffOf(note.Pitch, handSplit);
+            edges[staff].Add((note.Start, 1));
+            edges[staff].Add((note.End, -1));
+        }
+        for (var staff = 0; staff < 2; staff++) edges[staff].Sort((left, right) => left.Time.CompareTo(right.Time));
+        int[] cursor = [0, 0], playing = [0, 0];
+        var time = double.MaxValue;
+        for (var staff = 0; staff < 2; staff++)
+            if (edges[staff].Count > 0) time = Math.Min(time, edges[staff][0].Time);
+        while (time < double.MaxValue)
+        {
+            // Take every edge written at this moment, then read what the two hands play until the next one.
+            for (var staff = 0; staff < 2; staff++)
+                while (cursor[staff] < edges[staff].Count && Math.Abs(edges[staff][cursor[staff]].Time - time) < 1e-9)
+                    playing[staff] += edges[staff][cursor[staff]++].Delta;
+            var next = double.MaxValue;
+            for (var staff = 0; staff < 2; staff++)
+                if (cursor[staff] < edges[staff].Count) next = Math.Min(next, edges[staff][cursor[staff]].Time);
+            if (next == double.MaxValue) break;
+            if (next - time > 1e-6)
+                for (var staff = 0; staff < 2; staff++)
+                    if (playing[staff] == 0)
+                    {
+                        // Silence that carries on from one moment of the other hand's music to the next is one
+                        // rest, not one per note that hand plays.
+                        var contiguous = gaps.Count > 0 && gaps[^1].Staff == staff
+                            && Math.Abs(gaps[^1].Start + gaps[^1].Seconds - time) < 1e-6;
+                        if (contiguous) gaps[^1] = gaps[^1] with { Seconds = next - gaps[^1].Start };
+                        else gaps.Add(new RestGap(staff, time, next - time));
+                    }
+            time = next;
+        }
+        return gaps;
+    }
+
     /// <summary>
     /// The runs of notes that are joined by a beam instead of each carrying its own flags. Two neighbouring notes
     /// share a beam when both are short enough to carry one, sit on the same staff (one beam never crosses from
@@ -240,10 +344,10 @@ internal static class SheetLayer
             // A note written hollow is a half note or longer and never carries a beam, however short the song's
             // beat makes its seconds look.
             var joins = flags > 0 && !HollowHead(note.Duration);
-            var (staff, _) = Place(note.Pitch, handSplit, key);
+            var staff = StaffOf(note.Pitch, handSplit);
             var beat = BarOf(note.Start, beats);
             var continues = joins && run.Count > 0
-                && staff == Place(notes[run[^1]].Pitch, handSplit, key).Staff
+                && staff == StaffOf(notes[run[^1]].Pitch, handSplit)
                 && beat == BarOf(notes[run[^1]].Start, beats)
                 && note.Start - notes[run[^1]].Start > 1e-6;
             if (!continues) Close();
@@ -321,9 +425,15 @@ internal static class SheetLayer
     /// performance, in which case the staves are drawn without bar lines) and <paramref name="beatsPerBar"/>
     /// says which beats start a measure.
     /// </summary>
+    /// <summary>
+    /// Draws one frame. <paramref name="plan"/> is the working-out <see cref="Plan"/> returns, which a renderer
+    /// that draws on every frame should hand back in so the arithmetic runs once per song; left out, the layer
+    /// works it out itself.
+    /// </summary>
     internal static void Draw(
         DrawingContext dc, Rect area, IReadOnlyList<NoteEvent> notes, double position, double handSplit, MusicKey key,
-        IReadOnlyList<double> beats, int beatsPerBar, double secondsVisible, Color ink, Color accent, double opacity, double pixelsPerDip)
+        IReadOnlyList<double> beats, int beatsPerBar, double secondsVisible, Color ink, Color accent, double opacity, double pixelsPerDip,
+        SheetPlan? plan = null)
     {
         if (area.Width < 40 || area.Height < 24) return;
         dc.DrawRoundedRectangle(
@@ -342,7 +452,8 @@ internal static class SheetLayer
         var lineLeft = area.X + inset;
         var lineRight = area.Right - 8;
         var downbeats = Downbeats(beats, beatsPerBar);
-        var plan = AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit);
+        var sheet = plan ?? Plan(notes, beats, beatsPerBar, handSplit, key);
+        var accidentals = sheet.Accidentals;
 
         for (var staff = 0; staff < 2; staff++)
         {
@@ -386,11 +497,26 @@ internal static class SheetLayer
         dc.DrawLine(new Pen(new SolidColorBrush(Color.FromArgb((byte)Math.Clamp(200 * opacity, 0, 240), accent.R, accent.G, accent.B)), 1.6),
             new Point(playheadX, area.Y + 4), new Point(playheadX, area.Bottom - 4));
 
+        // The silences: each hand that is not playing rests on its own staff, written with the shape that lasts
+        // as long as the gap does. A gap that started before the window is written where the staff begins, the
+        // way a scrolled score shows a rest that is already under way.
+        var restGlyphs = MusicGlyphsAvailable;
+        foreach (var rest in sheet.Rests)
+        {
+            if (rest.Start + rest.Seconds < windowStart || rest.Start > windowStart + secondsVisible) continue;
+            var bottom = StaffBottom(area, gap, rest.Staff);
+            var shape = Rest(rest.Seconds, beatSeconds);
+            var anchor = bottom - (shape == RestShape.Whole ? StaffSteps : 4) * half;
+            var text = Text(RestText(shape, restGlyphs), gap * 2.6, dim, pixelsPerDip);
+            var x = Math.Max(NoteX(rest.Start, windowStart, secondsVisible, area, inset), lineLeft);
+            dc.DrawText(text, new Point(x + gap * .4, anchor - text.Height * .5));
+        }
+
         var headWidth = Math.Clamp(gap * 1.35, 3.5, 12);
         // Which notes share a beam, and where the stem ends of each run sit: a run's stems all reach one line, so
         // the beam that joins them is straight.
         var beatSeconds = BeatSeconds(beats);
-        var beams = Beams(notes, beats, handSplit, key, beatSeconds);
+        var beams = sheet.Beams;
         var beamEnds = new double[notes.Count];
         for (var index = 0; index < beamEnds.Length; index++) beamEnds[index] = double.NaN;
         foreach (var beam in beams)
@@ -428,7 +554,7 @@ internal static class SheetLayer
             // The sign this bar really needs: nothing when the signature already writes the note that way, a
             // sharp or a flat when the note leaves the key, and a natural when an earlier note of the same bar
             // altered it.
-            var accidental = plan[index];
+            var accidental = accidentals[index];
             if (accidental != NoteAccidental.None)
                 dc.DrawText(Text(AccidentalText(accidental), gap * 1.7, colour, pixelsPerDip), new Point(x - headWidth * 2.1, y - gap * .8));
             if (HasStem(note.Duration))

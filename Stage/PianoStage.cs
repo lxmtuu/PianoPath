@@ -854,20 +854,38 @@ internal sealed class PianoStage : FrameworkElement
     /// <summary>The key the open song is written in, plus the note list it was worked out from.</summary>
     private MusicKey _sheetKey = MusicKey.CMajor;
     private IReadOnlyList<NoteEvent>? _sheetKeyNotes;
+    private SheetCache? _sheetCache;
+
+    /// <summary>The sheet's working-out for the open song, kept until the notes, the grid, the split or the key change.</summary>
+    private sealed record SheetCache(IReadOnlyList<NoteEvent> Notes, IReadOnlyList<double> Beats, int PerBar, double Split, MusicKey Key, SheetLayer.SheetPlan Plan);
+
+    /// <summary>
+    /// The sheet's own arithmetic — which accidental every note is written with, which short notes share a beam and
+    /// where each hand rests — for the open song. It never depends on the playhead or on the practice state, so it
+    /// is worked out when the song, its grid, the hand split or the key changes and only read on every frame.
+    /// </summary>
+    private SheetLayer.SheetPlan SheetPlan()
+    {
+        var cache = _sheetCache;
+        if (cache is null || !ReferenceEquals(cache.Notes, _notes) || !ReferenceEquals(cache.Beats, _beats)
+            || cache.PerBar != _beatsPerBar || Math.Abs(cache.Split - _visual.HandSplitPitch) > .5 || cache.Key != _sheetKey)
+            _sheetCache = cache = new SheetCache(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey,
+                SheetLayer.Plan(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey));
+        return cache.Plan;
+    }
 
     /// <summary>
     /// The staff band: the same seconds-per-pixel the roll uses, so a written note and its falling bar always
-    /// line up under the playhead. The key is worked out once per song — the stage hands the sheet a new note
-    /// list whenever the song changes — rather than on every frame.
+    /// line up under the playhead. Both the key and the sheet's plan are worked out once per song — the stage hands
+    /// the sheet a new note list whenever the song changes — rather than on every frame.
     /// </summary>
-
     private void DrawSheet(DrawingContext dc, double width, double hitY)
     {
         var noteSpeed = FallSpeed * _visual.NoteFallSpeed / 550;
         if (!ReferenceEquals(_sheetKeyNotes, _notes)) { _sheetKeyNotes = _notes; _sheetKey = MusicKey.Infer(_notes); }
         SheetLayer.Draw(dc, SheetLayer.Band(width, hitY, 34), _notes, _position, _visual.HandSplitPitch, _sheetKey,
             _beats, _beatsPerBar, hitY / Math.Max(1, noteSpeed),
-            Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip);
+            Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip, SheetPlan());
     }
 
     private void DrawNotes(DrawingContext dc, double width, double hitY, double lane)

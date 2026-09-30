@@ -2113,6 +2113,35 @@ internal static class VerificationSuite
         Assert(SheetLayer.Beams([Note(60, 0, .25)], eighthGrid, 60, MusicKey.CMajor, .5).Count == 0,
             "A lone eighth note is not a beam: it keeps its own flag.");
 
+        // ---- Rests: a grand staff keeps a voice per hand, so wherever one hand is silent the other hand's staff
+        // is written with a rest — one rest for a silence that carries on across the other hand's notes.
+        var quietBass = SheetLayer.Rests([Note(60, 0, .5), Note(64, .5, .5)], 60);
+        Assert(quietBass.Count == 1 && quietBass[0] == new SheetLayer.RestGap(1, 0, 1),
+            $"A melody in the right hand should rest the left hand for as long as it plays ({string.Join(" · ", quietBass.Select(rest => $"{rest.Staff}@{rest.Start}+{rest.Seconds}"))}).");
+        var taking = SheetLayer.Rests([Note(60, 0, .5), Note(60, 1, .5), Note(40, .5, .5), Note(40, 1.5, .5)], 60);
+        Assert(taking.Count == 4 && taking[0] == new SheetLayer.RestGap(1, 0, .5) && taking[1] == new SheetLayer.RestGap(0, .5, .5)
+                && taking[2] == new SheetLayer.RestGap(1, 1, .5) && taking[3] == new SheetLayer.RestGap(0, 1.5, .5),
+            "Two hands taking turns should rest whichever one is quiet, each on its own staff.");
+        var soloBass = SheetLayer.Rests([Note(48, 0, .5)], 60);
+        Assert(SheetLayer.Rests([], 60).Count == 0 && soloBass.Count == 1 && soloBass[0] == new SheetLayer.RestGap(0, 0, .5),
+            "A sheet with nothing played writes no rests, and a note in one hand rests the other one over exactly its own length.");
+        var heldChord = SheetLayer.Rests([Note(60, 0, 1), Note(64, 0, 1), Note(48, 0, 1), Note(72, 1, .5)], 60);
+        Assert(heldChord.Count == 1 && heldChord[0] == new SheetLayer.RestGap(1, 1, .5),
+            $"A hand that plays a chord and then stops should rest only after the chord ends ({string.Join(" · ", heldChord.Select(rest => $"{rest.Staff}@{rest.Start}+{rest.Seconds}"))}).");
+
+        Assert(SheetLayer.Rest(.1, .5) == SheetLayer.RestShape.Sixteenth && SheetLayer.Rest(.25, .5) == SheetLayer.RestShape.Eighth
+                && SheetLayer.Rest(.5, .5) == SheetLayer.RestShape.Quarter && SheetLayer.Rest(1, .5) == SheetLayer.RestShape.Half
+                && SheetLayer.Rest(2, .5) == SheetLayer.RestShape.Whole && SheetLayer.Rest(9, .5) == SheetLayer.RestShape.Whole
+                && SheetLayer.Rest(.25, 0) == SheetLayer.RestShape.Quarter,
+            "A rest is counted in beats of the song's grid — a sixteenth up to a quarter of a beat, an eighth up to half, a quarter up to one, a half up to two and a whole rest beyond that — and a live take with no beat to count reads as a quarter rest.");
+        Assert(SheetLayer.RestText(SheetLayer.RestShape.Quarter, true) != SheetLayer.RestText(SheetLayer.RestShape.Quarter, false)
+                && char.ConvertToUtf32(SheetLayer.RestText(SheetLayer.RestShape.Quarter, true), 0) == 0x1D13D
+                && SheetLayer.RestText(SheetLayer.RestShape.Whole, false) == "W" && SheetLayer.RestText(SheetLayer.RestShape.Eighth, false) == "E",
+            "A rest is written with the musical glyph when the font has it and with the shape's own initial when it does not.");
+        var plan = SheetLayer.Plan([Note(60, 0, .25), Note(62, .25, .25)], eighthGrid, 4, 60, MusicKey.CMajor);
+        Assert(plan.Accidentals.Length == 2 && plan.Beams.Count == 1 && plan.Rests.Count == 1,
+            "The plan of a song should gather the accidentals, the beams and the rests in one working-out a renderer can keep for the whole song.");
+
         var area = SheetLayer.Band(1280, 480, 34);
         Assert(Math.Abs(area.Height - 163.2) < .01 && area.Width > 1100 && area.X > 0 && area.Bottom < 240,
             $"The staff band should stay in the upper part of the stage and scale with it (got {area}).");
@@ -2177,6 +2206,19 @@ internal static class VerificationSuite
         Assert(((MusicKey)Field(stage, "_sheetKey")) == sentinel && ReferenceEquals(Field(stage, "_sheetKeyNotes"), Field(stage, "_notes")),
             "The key of a song should be worked out once per song rather than once per frame, so another render keeps the key it already has.");
         SetField(stage, "_sheetKey", cachedKey);
+        // The working-out behind the drawing — accidentals, beams and rests — is kept between frames and rebuilt
+        // only when the song, its grid, the hand split or the key changes. The key the sentinel replaced has to be
+        // rendered once before the plan below is the one being kept.
+        using (var dc = stageSheet.RenderOpen()) Invoke(stage, "DrawSheet", dc, 1280d, 480d);
+        var cachedPlan = Field(stage, "_sheetCache");
+        using (var dc = stageSheet.RenderOpen()) Invoke(stage, "DrawSheet", dc, 1280d, 480d);
+        Assert(cachedPlan is not null && ReferenceEquals(Field(stage, "_sheetCache"), cachedPlan),
+            "The sheet's working-out should be kept between frames rather than rebuilt for every one of them.");
+        visualSettings.HandSplitPitch = 72; stage.SetVisualSettings(visualSettings);
+        using (var dc = stageSheet.RenderOpen()) Invoke(stage, "DrawSheet", dc, 1280d, 480d);
+        Assert(!ReferenceEquals(Field(stage, "_sheetCache"), cachedPlan),
+            "Moving the hand split should rebuild the sheet's working-out, because the beams and the rests follow the hands.");
+        visualSettings.HandSplitPitch = 60; stage.SetVisualSettings(visualSettings);
         // The signature really takes ink: draw an empty band in both keys and count the pixels inside the strip
         // between the clef and the first room the music could use, where nothing but the signature can land.
         // The band paints its own translucent background, so "not transparent" would count every pixel of the
@@ -2203,10 +2245,10 @@ internal static class VerificationSuite
             $"A key signature should put ink between the clef and the music: C major writes nothing there, D major writes two sharps on each staff (counted {plainInk} and {signedInk} inked pixels).");
         // The beam is really drawn: a pair of eighths inside one beat carries a beam across both stems, while the
         // same pair written either side of a beat carries two flags instead — and the beam is far more ink.
-        int Ink(IReadOnlyList<NoteEvent> content)
+        int Ink(IReadOnlyList<NoteEvent> content, SheetLayer.SheetPlan? painting = null)
         {
             var visual = new DrawingVisual();
-            using (var dc = visual.RenderOpen()) SheetLayer.Draw(dc, area, content, 0, 60, MusicKey.CMajor, beats, 4, 8, ink, accent, 1, 1);
+            using (var dc = visual.RenderOpen()) SheetLayer.Draw(dc, area, content, 0, 60, MusicKey.CMajor, beats, 4, 8, ink, accent, 1, 1, painting);
             var bitmap = new RenderTargetBitmap((int)Math.Ceiling(area.Width), (int)Math.Ceiling(area.Height), 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(visual);
             var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
@@ -2220,6 +2262,15 @@ internal static class VerificationSuite
         Assert(beamedInk > flaggedInk,
             $"A beamed pair should draw a beam across its stems rather than two flags ({beamedInk} inked pixels beamed, {flaggedInk} flagged).");
 
+        // The rests are really drawn, and only where they belong: the same drawing with the silences taken out of
+        // its plan carries less ink, all of it on the staff of the hand that does not play.
+        var soloSong = new NoteEvent[] { Note(72, 1, .5) };
+        var soloPlan = SheetLayer.Plan(soloSong, beats, 4, 60, MusicKey.CMajor);
+        Assert(soloPlan.Rests.Count == 1 && soloPlan.Rests[0] == new SheetLayer.RestGap(1, 1, .5),
+            "The plan of a single right-hand note should rest the left hand for exactly as long as the note sounds.");
+        var restInk = Ink(soloSong, soloPlan) - Ink(soloSong, soloPlan with { Rests = Array.Empty<SheetLayer.RestGap>() });
+        Assert(restInk > 0, $"A rest should put ink on the staff of the quiet hand ({restInk} inked pixels came from the rest).");
+
         Assert(SheetLayer.SignatureWidth(MusicKey.CMajor, SheetLayer.StaffGap(area)) == 0
                 && Math.Abs(SheetLayer.LeftInset(area, dMajor) - SheetLayer.LeftInset(area, MusicKey.CMajor) - SheetLayer.SignatureWidth(dMajor, SheetLayer.StaffGap(area))) < .001
                 && SheetLayer.LeftInset(area, dMajor) > SheetLayer.ClefSpace(area),
@@ -2229,7 +2280,7 @@ internal static class VerificationSuite
         sheetToggle.IsChecked = wasShowing;
         stage.SetSheet([], 4);
         stage.ClearTransient();
-        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
+        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
     }
 
     /// <summary>
