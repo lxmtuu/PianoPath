@@ -1497,12 +1497,15 @@ internal static class VerificationSuite
         Assert(built.Id == "user-sunset-glow" && built.Name == "Sunset Glow" && built.Backdrop == BackdropStyle.Imperial && built.Blurb == UserShellThemes.BlurbKey(BackdropStyle.Imperial),
             "A theme the user made should take its id from its name and describe itself with a translatable key.");
         static int Peak(Color colour) => Math.Max(colour.R, Math.Max(colour.G, colour.B));
+        // Lightening raises every channel, so the brightness of the whole colour is what stacks; comparing the
+        // single brightest channel would call two colours equal once one of them already sits at 255.
+        static int Brightness(Color colour) => colour.R + colour.G + colour.B;
         Assert(Peak(built.Control) <= UserShellThemes.MaxSurface && Peak(built.Control) >= UserShellThemes.MinSurface,
             $"A user theme keeps its base surface inside the dark band ({UserShellThemes.MinSurface:X2}-{UserShellThemes.MaxSurface:X2}) so the light chrome text stays readable.");
-        Assert(UserShellThemes.HasContrast(built.Accent, built.Control) && Peak(built.ControlHover) > Peak(built.Control)
-                && Peak(built.Border) > Peak(built.Control) && Peak(built.ControlBorder) > Peak(built.Border)
-                && Peak(built.Track) > Peak(built.Control) && Peak(built.Window) < Peak(built.Control)
-                && Peak(built.PanelTop) > Peak(built.PanelBottom) && Peak(built.MoteAlt) > Peak(built.Mote),
+        Assert(UserShellThemes.HasContrast(built.Accent, built.Control) && Brightness(built.ControlHover) > Brightness(built.Control)
+                && Brightness(built.Border) > Brightness(built.Control) && Brightness(built.ControlBorder) > Brightness(built.Border)
+                && Brightness(built.Track) > Brightness(built.Control) && Brightness(built.Window) < Brightness(built.Control)
+                && Brightness(built.PanelTop) > Brightness(built.PanelBottom) && Brightness(built.MoteAlt) > Brightness(built.Mote),
             "The derived chrome should keep the accent visible and stack the surfaces: window below control, hover, border and track above it.");
         var clampedLight = UserShellThemes.Build(new UserShellTheme { Name = "Too Light", Surface = "#FFFFFF" });
         var clampedDark = UserShellThemes.Build(new UserShellTheme { Name = "Too Dark", Surface = "#000000" });
