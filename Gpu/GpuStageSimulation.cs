@@ -204,7 +204,8 @@ internal sealed partial class GpuStageSimulation
         var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity : 1;
         _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-dt * 10));
         _energy *= MathF.Exp(-2.2f * dt);
-        HorizonColor = totalGlow > .01f ? ToLinear(horizon / totalGlow) : ToLinear(look.HaloColor) * .5f;
+        // the theme's halo colour, as the software stage paints it, warmed a little by the keys that sound
+        HorizonColor = ToLinear(totalGlow > .01f ? Vector3.Lerp(look.HaloColor, horizon / totalGlow, .35f * Math.Min(1, totalGlow)) : look.HaloColor);
         for (var pitch = 0; pitch < 128; pitch++)
         {
             var c = ToLinear(_keyColor[pitch]);

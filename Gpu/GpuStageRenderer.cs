@@ -381,7 +381,8 @@ internal sealed class GpuStageRenderer : IDisposable
             Camera = new Vector4(zoom * scaleX, zoom * pixelsPerUnit, offsetX * scaleX, offsetY * pixelsPerUnit),
             Background = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundColor), look.Chroma ? 1 : 0),
             Aura = new Vector4(.19f, .03f, .42f, aura),
-            Horizon = new Vector4(simulation.HorizonColor, look.HorizonGlow * (.18f + simulation.Activity * .9f) * (1 + beat)),
+            // the software stage's horizon: peak alpha glow x 1.7 / 255 in sRGB (0.667 at full), a little brighter while keys sound
+            Horizon = new Vector4(simulation.HorizonColor, MathF.Pow(look.HorizonGlow * .667f, 2.2f) * (1 + simulation.Activity * .5f) * (1 + beat)),
             SceneA = new Vector4(stars, 1.4f, _backgroundView is not null && look.ShowBackground && !look.Chroma ? 1 : 0, look.BackgroundDim),
             SceneB = new Vector4(_backgroundAspect, 1, beat, .88f),
             NoteA = new Vector4(look.NoteStyle, 2 + look.NoteRoundness * 12, edge, 5 + look.BloomSize * 16),
@@ -391,7 +392,7 @@ internal sealed class GpuStageRenderer : IDisposable
             KeyB = new Vector4(look.ShaderRimLight, look.ShaderEmissive * 1.7f * simulation.PedalBoost, look.ShaderCameraTilt, look.KeyboardStyle),
             KeyC = new Vector4(layout.KeyboardHeight, blackLength, look.KeyLighting, frontHeight),
             KeyD = new Vector4(whiteWidth, blackWidth, blackHeight, .22f),
-            RimColor = new Vector4(GpuStageSimulation.ToLinear(look.HaloColor), 0),
+            RimColor = new Vector4(GpuStageSimulation.ToLinear(look.HaloColor), 40 + look.HorizonGlow * 260),
             Post = new Vector4(look.ShaderExposure, look.ShaderFilmic ? 1 : 0, 1, 1),
             // threshold 1.8: the lit white keys reach about 1.4 and must not bloom (their blur greys the
             // black keys); notes, sparks, flares and pressed keys are emissive and sit well above it

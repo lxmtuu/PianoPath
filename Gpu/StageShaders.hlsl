@@ -34,7 +34,7 @@ cbuffer Frame : register(b0)
     float4 KeyB;         // x = rim light, y = emissive, z = camera tilt, w = keyboard style (0 classic, 1 studio, 2 glass)
     float4 KeyC;         // x = keyboard height px, y = black key length px, z = key lighting spill, w = front face height px
     float4 KeyD;         // x = white key width px, y = black key width px, z = black key height px, w = perspective
-    float4 RimColor;     // rgb = rim light colour, w = unused
+    float4 RimColor;     // rgb = rim light colour, w = horizon glow height (scene units)
     float4 Post;         // x = exposure, y = filmic (1/0), z = saturation, w = contrast
     float4 Post2;        // x = vignette, y = bloom intensity, z = bloom threshold, w = dither amplitude
 };
@@ -204,9 +204,10 @@ float4 PsBackground(FullscreenOut i) : SV_Target
     if (p.y < hitY)
     {
         c += Stars(p);
-        // horizon: light rising off the keyboard, coloured by the keys that sound
-        float rise = saturate(1.0 - (hitY - p.y) / (SceneSize.y * 0.42));
-        c += Horizon.rgb * Horizon.w * rise * rise * rise;
+        // horizon: light rising off the keyboard, coloured by the keys that sound. The software stage's
+        // gradient: 40 + glow x 2.6 DIPs tall (RimColor.w), linear in sRGB, so about rise^2.2 in linear light
+        float rise = saturate(1.0 - (hitY - p.y) / max(RimColor.w, 1.0));
+        c += Horizon.rgb * Horizon.w * pow(rise, 2.2);
     }
     else
     {
@@ -288,11 +289,13 @@ float4 PsNote(NoteOut v) : SV_Target
     }
     else if (style < 1.5)
     {
-        // Neon: a hollow glass tube - white-hot core line, saturated gas glow, faint inner fill
-        float ringD = d + edgeW * 0.55;
-        float tube = exp(-(ringD * ringD) / (edgeW * edgeW * 0.55));
-        float core = exp(-(ringD * ringD) / (edgeW * edgeW * 0.06));
-        float fill = inside * (0.05 + 0.18 * NoteB.x) * (0.7 + 0.3 * sounding);
+        // Neon: a hollow glass tube - white-hot core line, saturated gas glow, faint inner fill. The tube
+        // stays a fraction of the bar's half width, so a narrow bar still shows its dark hollow middle.
+        float tubeW = min(edgeW, max(hb.x * 0.3, 0.9));
+        float ringD = d + tubeW * 0.55;
+        float tube = exp(-(ringD * ringD) / (tubeW * tubeW * 0.55));
+        float core = exp(-(ringD * ringD) / (tubeW * tubeW * 0.06));
+        float fill = inside * (0.03 + 0.12 * NoteB.x) * (0.7 + 0.3 * sounding);
         emit += col * tube * (1.9 + 1.6 * sounding) * NoteB.y;
         emit += lerp(col, 1.0, 0.75) * core * (1.3 + sounding) * NoteB.y;
         emit += col * fill;
@@ -320,13 +323,15 @@ float4 PsNote(NoteOut v) : SV_Target
         float veins = 1.0 - exp(-pow((n - 0.42) * 14.0, 2.0));
         float heat = saturate(1.0 - (ScreenTime.w - v.SceneY) / max(NoteC.w, 1.0));
         float3 hot = lerp(float3(1.0, 0.93, 0.72), col, 0.22);
-        float3 crust = float3(0.42, 0.04, 0.015);
+        float3 crust = float3(0.3, 0.02, 0.008);
         float3 body = lerp(crust, hot, saturate(cracks * veins));
         body = lerp(body, body * float3(1.0, 0.38, 0.2) + float3(0.25, 0.0, 0.0), heat * 0.75);
         float rim = exp(-abs(d + edgeW * 0.4) / (edgeW * 0.7));
-        emit += (body * (1.1 + 0.6 * NoteB.x) + float3(1.0, 0.36, 0.06) * rim * 1.8 * NoteB.y) * inside;
-        emit += float3(1.0, 0.3, 0.05) * exp(-outsideD / (glowR * 0.25)) * 1.2 * NoteC.z * (1.0 - inside);
-        emit += float3(1.0, 0.55, 0.2) * sounding * 0.5 * inside;
+        // kept under the bloom threshold (1.8) so the cream body and its dark cracks read instead of
+        // blooming into one white column; the orange rim and the halo carry the heat
+        emit += (body * (0.62 + 0.36 * NoteB.x) + float3(1.0, 0.36, 0.06) * rim * 1.1 * NoteB.y) * inside;
+        emit += float3(1.0, 0.3, 0.05) * exp(-outsideD / (glowR * 0.25)) * 0.55 * NoteC.z * (1.0 - inside);
+        emit += float3(1.0, 0.55, 0.2) * sounding * 0.25 * inside;
         alpha = inside;
     }
 
@@ -552,8 +557,11 @@ float4 PsKey(KeyOut v) : SV_Target
     float strength = v.Emit.a;
     float grad = lerp(1.35, 0.55, saturate(kp.z / max(v.Size.y, 1.0)));
     float3 emissive = v.Emit.rgb * strength * KeyB.y * grad * (black ? 1.4 : 1.0);
-    if (!black) color = lerp(color, color * 0.4, saturate(strength) * 0.6);
-    color += emissive * (n.z > 0.5 ? 0.7 : 1.0);
+    // a pressed white key takes the note colour the way the software stage fills it: the lit ivory is
+    // tinted (hue kept, shading kept) rather than washed with added light, which tonemaps back to white
+    float3 tint = v.Emit.rgb / max(max(v.Emit.r, max(v.Emit.g, v.Emit.b)), 1e-3);
+    if (!black) color = lerp(color, color * tint * 0.85, saturate(strength));
+    color += emissive * (n.z > 0.5 ? 0.7 : 1.0) * (black ? 1.0 : 0.55);
     // spill: neighbouring keys catch some of the light
     color += v.Emit.rgb * v.Spill * KeyC.z * (black ? 0.25 : 0.5);
     if (style > 1.5) color += v.Emit.rgb * strength * 0.8 + float3(0.02, 0.03, 0.05);
