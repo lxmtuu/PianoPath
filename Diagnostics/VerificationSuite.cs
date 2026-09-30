@@ -1511,6 +1511,7 @@ internal static class VerificationSuite
     <measure number="2">
       <direction><sound tempo="120"/></direction>
       <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration><staff>1</staff></note>
+      <backup><duration>2</duration></backup>
       <note><pitch><step>C</step><octave>3</octave></pitch><duration>2</duration><staff>2</staff></note>
       <note><rest/><duration>2</duration></note>
     </measure>

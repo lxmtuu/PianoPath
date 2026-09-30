@@ -185,10 +185,12 @@ internal static class MusicXmlReader
                             var start = isChord ? lastStart : cursor; // a chord member shares the onset of the note it is stacked on
                             if (!isGrace && element.Element(element.Name.Namespace + "rest") is null && Pitch(element) is { } pitch && duration > 0)
                             {
+                                // The measure's own start plus the offset inside it: a cursor is measured from
+                                // the beginning of the part, so the second measure does not restart at zero.
                                 notes.Add(new NoteEvent
                                 {
                                     Pitch = pitch, Track = track,
-                                    Start = Seconds(start, divisions, tempo),
+                                    Start = partSeconds + Seconds(start, divisions, tempo),
                                     Duration = Seconds(duration, divisions, tempo)
                                 });
                                 hands.Add(twoStaves ? (staff >= 2 ? 1 : 0) : (track == 0 ? 0 : 1));
