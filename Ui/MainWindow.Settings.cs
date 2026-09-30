@@ -500,6 +500,8 @@ public partial class MainWindow
             (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"));
         Choice(output, "Resolution", nameof(PianoVisualSettings.RecordingResolution), "Match the window, or render to a fixed 16:9 size.", ("Window", "Match window"), ("720p", "1280 × 720"), ("1080p", "1920 × 1080"));
         SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the recording.");
+        Toggle(output, "Record audio", nameof(PianoVisualSettings.RecordAudio),
+            "Write the piano's own audio beside the video as a 16-bit stereo WAV, exactly the blocks the engine renders. Mux the two with the ffmpeg line shown below the button; a machine with no SoundFont records video only.");
         Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
             "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
     }
@@ -811,6 +813,10 @@ public partial class MainWindow
         }
         finally { _loadingVisualSettings = false; }
         MarkModified(property); RefreshDependentRows();
+        // The recording rows describe what the next take will be, so they are written again when one changes.
+        if (property is nameof(PianoVisualSettings.RecordAudio) or nameof(PianoVisualSettings.RecordingFormat)
+            or nameof(PianoVisualSettings.RecordingResolution) or nameof(PianoVisualSettings.RecordingFrameRate)
+            or nameof(PianoVisualSettings.RecordingTransparent)) UpdateRecordingInfo();
         var label = check.Content as string ?? check.Tag as string ?? Loc.T("Setting");
         ApplyVisualSettings(check.IsChecked == true ? "{0} on" : "{0} off", false, label);
     }
@@ -1517,7 +1523,12 @@ public partial class MainWindow
         var format = sequence
             ? (_visualSettings.RecordingTransparent ? Loc.T("PNG frames (32-bit alpha)") : Loc.T("PNG frames (opaque)"))
             : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
-        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · audio is not captured.", width, height, _visualSettings.RecordingFrameRate, format);
+        var audio = _visualSettings.RecordAudio
+            ? _audio.HasSoundFont
+                ? Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
+                : Loc.T("no SoundFont is loaded, so this recording will have no audio")
+            : Loc.T("audio is not captured");
+        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}.", width, height, _visualSettings.RecordingFrameRate, format, audio);
     }
 
     private (int Width, int Height) RecordingSize()

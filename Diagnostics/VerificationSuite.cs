@@ -567,6 +567,7 @@ internal static class VerificationSuite
         Run(nameof(VerifyCommunityPresets), () => VerifyCommunityPresets(window));
         Run(nameof(VerifyUserShellThemes), () => VerifyUserShellThemes(window));
         Run(nameof(VerifyPngSequenceRecorder), () => VerifyPngSequenceRecorder(window));
+        Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
         Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
         Run(nameof(VerifyBackgroundImageLoad), () => VerifyBackgroundImageLoad(window, stage, visualSettings));
@@ -2099,6 +2100,132 @@ internal static class VerificationSuite
             Invoke(window, "RefreshLibrarySongs");
         }
         Results.Add("PASS Song library: a folder scan that indexes MIDI and MusicXML under it, facts read from the files, a cache that only re-reads what changed and keeps tags, tag limits and search over titles, file names and tags, an index that survives a reload and forgives a damaged file, the Play dialog list and its search box, and a watcher that notices a song added to the folder.");
+    }
+
+    /// <summary>
+    /// The audio track of a recording: the bytes of the WAV header against the specification, sizes that are
+    /// only known at the end, silence and signal, a file that cannot be written, and then the real path — the
+    /// engine's tap rendering the loaded SoundFont into a writer, which is exactly what the recorder attaches
+    /// when the REC button starts, plus where the recorder puts the file and what the dock promises it will do.
+    /// </summary>
+    private static void VerifyRecordingAudioTrack(MainWindow window)
+    {
+        // The header, byte for byte: 44 bytes, PCM, the channel count and the rate the engine renders.
+        var header = WavWriter.Header(44100, 2, 8);
+        var expected = new byte[WavWriter.HeaderBytes];
+        using (var stream = new MemoryStream(expected))
+        using (var writer = new BinaryWriter(stream))
+        {
+            writer.Write(Encoding.ASCII.GetBytes("RIFF")); writer.Write(44u); writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+            writer.Write(Encoding.ASCII.GetBytes("fmt ")); writer.Write(16u); writer.Write((short)1); writer.Write((short)2);
+            writer.Write(44100u); writer.Write(176400u); writer.Write((short)4); writer.Write((short)16);
+            writer.Write(Encoding.ASCII.GetBytes("data")); writer.Write(8u);
+        }
+        Assert(header.SequenceEqual(expected), "A recording's WAV header should be the canonical 44-byte PCM header of the engine's own format.");
+
+        var folder = Path.Combine(Path.GetTempPath(), "keyflow-verify-wav-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(folder);
+        long frames = 0;
+        try
+        {
+            var path = Path.Combine(folder, "take.wav");
+            using (var wav = WavWriter.TryCreate(path))
+            {
+                Assert(wav is not null && wav.SampleRate == 44100 && wav.Channels == 2 && wav.Frames == 0 && !wav.IsClosed,
+                    "Opening a track should leave an empty file with the header already in place.");
+                var samples = new short[] { 100, -100, 200, -200, 300, -300, 400, -400 };
+                wav!.Append(samples, samples.Length);
+                Assert(wav.Frames == 4 && wav.DataBytes == 16 && Math.Abs(wav.Seconds - 4.0 / 44100) < 1e-9,
+                    $"Appending interleaved samples should count frames, not values ({wav.Frames} frames, {wav.DataBytes} bytes).");
+                wav.Append(samples, 3);          // one and a half frames: the whole frame is kept, the half is not
+                Assert(wav.Frames == 5, $"A block that ends inside a frame should keep whole frames only ({wav.Frames}).");
+                wav.AppendSilence(6);
+                Assert(wav.Frames == 11 && wav.DataBytes == 44, "Silence should advance the track by the frames it writes.");
+                wav.Append(new short[8192], 8192);
+                Assert(wav.Frames == 11 + 4096, "A block larger than the writer's own buffer should still land whole.");
+                frames = wav.Frames;
+            }
+            var bytes = File.ReadAllBytes(path);
+            Assert(bytes.Length == WavWriter.HeaderBytes + frames * 4, $"The file should hold exactly the frames that were appended (wrote {bytes.Length} bytes for {frames} frames).");
+            Assert(bytes.Take(4).SequenceEqual("RIFF"u8.ToArray()) && bytes.Skip(8).Take(4).SequenceEqual("WAVE"u8.ToArray())
+                    && BitConverter.ToInt32(bytes, 4) == bytes.Length - 8 && BitConverter.ToInt32(bytes, 40) == bytes.Length - WavWriter.HeaderBytes,
+                "Closing the file should patch the two sizes that can only be known at the end.");
+            Assert(BitConverter.ToInt16(bytes, 22) == 2 && BitConverter.ToInt32(bytes, 24) == 44100 && BitConverter.ToInt16(bytes, 34) == 16,
+                "The patched header should still describe the format the samples are in.");
+            // Frame 5 is where the silence starts (four frames of signal, then the whole frame of the short block).
+            Assert(BitConverter.ToInt16(bytes, WavWriter.HeaderBytes) == 100 && BitConverter.ToInt16(bytes, WavWriter.HeaderBytes + 6) == 200
+                    && bytes.Skip(WavWriter.HeaderBytes + 5 * 4).All(value => value == 0),
+                "The samples should be written little-endian and in the order they were appended, with the silence left silent.");
+
+            // A path the writer cannot use, and a closed writer that keeps receiving blocks.
+            Assert(WavWriter.TryCreate(folder) is null && WavWriter.TryCreate("") is null,
+                "A recording that cannot open its audio file should report it instead of throwing on a folder name.");
+            var late = WavWriter.TryCreate(Path.Combine(folder, "late.wav"))!;
+            late.Dispose();
+            late.Append([1, 2, 3, 4], 4);
+            late.Dispose();
+            Assert(late.IsClosed && File.ReadAllBytes(Path.Combine(folder, "late.wav")).Length == WavWriter.HeaderBytes,
+                "A block arriving after the take ended must be ignored rather than throwing on the audio thread.");
+
+            // Where the recorder puts the track, next to the video or inside the frame folder.
+            Assert(MainWindow.AudioTrackPath(@"C:\clips\take.avi", false).EndsWith("take.wav", StringComparison.Ordinal)
+                    && MainWindow.AudioTrackPath(@"C:\clips\frames", true).EndsWith(Path.Combine("frames", "audio.wav"), StringComparison.Ordinal)
+                    && MainWindow.MuxedName(@"C:\clips\take.avi").EndsWith("take.mp4", StringComparison.Ordinal),
+                "The audio track should land beside an AVI (and inside the PNG folder), and the muxed copy should be named next to it.");
+
+            // The real path: the engine renders the loaded SoundFont into the writer, block by block.
+            var font = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(font, CreateTestSoundFont());
+            using (var engine = new PianoAudioEngine())
+            {
+                Assert(!engine.PumpTapBlock() && !engine.HasTap, "Nothing should be rendered while no track is attached.");
+                engine.LoadSoundFont(font);
+                engine.NoteOn(69, 110);
+                using var wav = WavWriter.TryCreate(Path.Combine(folder, "engine.wav"))!;
+                var blocks = 0;
+                engine.SetTap((samples, count) => { wav!.Append(samples, count); blocks++; });
+                Assert(engine.HasTap, "Attaching a tap should be visible on the engine, which is what the recorder asks before it promises audio.");
+                for (var i = 0; i < 8; i++) Assert(engine.PumpTapBlock(), "A block should render into the attached tap whether or not the machine has an audio device.");
+                var energy = 0L;
+                {
+                    var probe = new short[512 * 2];
+                    var synthesizer = new SoundFontSynthesizer(SoundFontReader.Read(font), 44100);
+                    synthesizer.NoteOn(0, 69, 110); synthesizer.Render(probe, 512);
+                    foreach (var sample in probe) energy += Math.Abs((int)sample);
+                }
+                Assert(blocks == 8 && wav!.Frames == 8 * 512 && energy > 0,
+                    $"Eight rendered blocks should become eight blocks of frames in the file ({blocks} blocks, {wav!.Frames} frames).");
+                engine.SetTap(null);
+                Assert(!engine.HasTap && !engine.PumpTapBlock(), "Detaching the tap should stop the rendering that only existed for the recording.");
+                engine.UnloadSoundFont();
+            }
+            var engineBytes = File.ReadAllBytes(Path.Combine(folder, "engine.wav"));
+            Assert(engineBytes.Length == WavWriter.HeaderBytes + 8 * 512 * 4 && BitConverter.ToInt32(engineBytes, 40) == 8 * 512 * 4
+                    && engineBytes.Skip(WavWriter.HeaderBytes).Any(value => value != 0),
+                $"The engine's own blocks should be in the file, with the size patched on close ({engineBytes.Length} bytes).");
+
+            // The dock: the switch, what it promises, and the window's own side of the wiring.
+            var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+            Assert(toggles.TryGetValue(nameof(PianoVisualSettings.RecordAudio), out var audioToggle) && audioToggle.IsChecked == true,
+                "The Recording page should offer the audio track as a switch, on by default.");
+            var settings = (PianoVisualSettings)Field(window, "_visualSettings");
+            audioToggle.IsChecked = false;
+            Assert(!settings.RecordAudio && ReferenceEquals(Field(window, "_audioTrack"), null),
+                "Switching the audio track off should reach the settings the recorder reads.");
+            var info = (TextBlock)window.FindName("RecordingInfoLabel");
+            Assert(info.Text.Contains(Loc.T("audio is not captured"), StringComparison.Ordinal),
+                $"With the switch off the recording line should say so ({info.Text}).");
+            audioToggle.IsChecked = true;
+            var hadPath = Field(window, "_recordingPath");
+            SetField(window, "_recordingPath", Path.Combine(folder, "app-take.avi"));
+            var started = (bool)window.GetType().GetMethod("BeginAudioTrack", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.Invoke(window, null)!;
+            var audio = (PianoAudioEngine)Field(window, "_audio");
+            Assert(!started && !audio.HasTap && Field(window, "_audioTrack") is null,
+                "A machine with no SoundFont loaded should record video only instead of writing an empty WAV.");
+            SetField(window, "_recordingPath", hadPath);
+            Invoke(window, "UpdateRecordingInfo");
+        }
+        finally { try { Directory.Delete(folder, true); } catch { } }
+        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine with no SoundFont.");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>

@@ -6,6 +6,7 @@
     "ShowBackground": true,
     "ShowNotes": true,
     "ShowSheet": false,
+    "RecordAudio": true,
     "ShowEmbers": true,
     "ShowHalo": true,
     "ShowFlame": false,

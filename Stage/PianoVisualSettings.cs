@@ -19,6 +19,8 @@ internal sealed class PianoVisualSettings
     public bool ShowNotes { get; set; } = true;
     /// <summary>The grand staff drawn above the roll, following the playhead (see <see cref="SheetLayer"/>).</summary>
     public bool ShowSheet { get; set; } = false;
+    /// <summary>Record the piano's own audio next to the video, as a WAV beside the recording.</summary>
+    public bool RecordAudio { get; set; } = true;
     public bool ShowEmbers { get; set; } = true;
     public bool ShowHalo { get; set; } = true;
     public bool ShowFlame { get; set; } = true;

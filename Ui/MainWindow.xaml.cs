@@ -629,6 +629,7 @@ public partial class MainWindow : Window
             // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
             // the switch is the user's and is only honoured for that format.
             Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;
+            _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
             _recordTimer.Tick += RecordTimer_Tick; _recordTimer.Start();
@@ -692,6 +693,7 @@ public partial class MainWindow : Window
                 if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, Loc.T("The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically.")); return; }
             }
             var elapsed = _recordClock.Elapsed;
+            PumpAudioTrack(elapsed);
             Loc.Format(RecordButton, "REC {0:00}:{1:00}", elapsed.Minutes, elapsed.Seconds);
         }
         catch (Exception ex)
@@ -700,6 +702,87 @@ public partial class MainWindow : Window
             ShowMessage(ex.Message, "Video recording stopped");
         }
     }
+
+    private WavWriter? _audioTrack;
+    private readonly Lock _audioTrackLock = new();
+    private bool _audioTrackStarted;
+    private double _audioTrackSeconds;
+
+    /// <summary>
+    /// Where the audio of a recording goes: a WAV beside the AVI, or <c>audio.wav</c> inside the PNG folder.
+    /// Pure so the side the user never sees is still checkable.
+    /// </summary>
+    internal static string AudioTrackPath(string target, bool sequence) =>
+        sequence ? Path.Combine(target, "audio.wav") : Path.ChangeExtension(target, ".wav");
+
+    /// <summary>The name a muxed copy gets, next to the recording.</summary>
+    internal static string MuxedName(string target) => Path.ChangeExtension(target, null) + ".mp4";
+
+    /// <summary>
+    /// Opens the WAV for this take and attaches the engine's tap to it. Returns false when there is nothing to
+    /// record — the setting is off, no SoundFont is loaded, or the file cannot be written — in which case the
+    /// video records alone, exactly as it did before the audio track existed.
+    /// </summary>
+    internal bool BeginAudioTrack()
+    {
+        EndAudioTrack();
+        if (!_visualSettings.RecordAudio || !_audio.HasSoundFont || _recordingPath is null) return false;
+        var path = AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder);
+        var writer = WavWriter.TryCreate(path);
+        if (writer is null) return false;
+        _audioTrack = writer; _audioTrackSeconds = 0;
+        // The tap runs on the audio thread, so the writer is only ever touched under its lock.
+        _audio.SetTap((samples, count) => { lock (_audioTrackLock) _audioTrack?.Append(samples, count); });
+        return true;
+    }
+
+    /// <summary>
+    /// Closes the audio track and returns its path, or <c>null</c> when this take had none. Detaching the tap
+    /// first means no block can arrive while the file is being finalized.
+    /// </summary>
+    internal string? EndAudioTrack()
+    {
+        _audio.SetTap(null);
+        WavWriter? writer;
+        lock (_audioTrackLock) { writer = _audioTrack; _audioTrack = null; }
+        if (writer is null) return null;
+        _audioTrackSeconds = writer.Seconds;
+        var path = writer.Path;
+        writer.Dispose();
+        return path;
+    }
+
+    /// <summary>
+    /// Keeps the WAV as long as the video while no sound device is rendering: with no output device the pump
+    /// thread never runs, so the recording clock drives the synthesiser in step with the recording clock. With
+    /// a device the pump already fills the track, and this only remembers how long it has grown.
+    /// </summary>
+    private void PumpAudioTrack(TimeSpan elapsed)
+    {
+        if (!_audioTrackStarted) return;
+        if (_audio.HasAudioOutput)
+        {
+            // The pump thread is already rendering, so the track follows the clock on its own.
+            _audioTrackSeconds = AudioTrackSeconds();
+            return;
+        }
+        while (true)
+        {
+            var due = (long)(elapsed.TotalSeconds * 44100) - (long)(AudioTrackSeconds() * 44100);
+            if (due < AudioTrackBlockFrames) break;
+            if (!_audio.PumpTapBlock()) { lock (_audioTrackLock) _audioTrack?.AppendSilence(due); break; }
+        }
+        _audioTrackSeconds = AudioTrackSeconds();
+    }
+
+    /// <summary>Seconds of audio written so far, read under the lock the audio thread also holds.</summary>
+    private double AudioTrackSeconds()
+    {
+        lock (_audioTrackLock) return _audioTrack?.Seconds ?? _audioTrackSeconds;
+    }
+
+    /// <summary>Frames one rendered block holds; the same block size the engine's pump uses.</summary>
+    private const int AudioTrackBlockFrames = 512;
 
     private RenderTargetBitmap? _captureBitmap;
     private byte[]? _captureSource, _captureTarget;
@@ -753,6 +836,7 @@ public partial class MainWindow : Window
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;
         var frames = recorder.FrameCount;
+        var audioPath = EndAudioTrack();
         try { recorder.Dispose(); } catch (Exception ex) { if (showMessage && !_closing) ShowMessage(ex.Message, "Video recording"); }
         // The export is over: the stage goes back to painting its own background, whatever the framing was.
         Stage.TransparentBackdrop = false;
@@ -761,10 +845,13 @@ public partial class MainWindow : Window
         if (showMessage && !_closing)
         {
             var noteText = note is null ? "" : note + "\n\n";
+            var audio = audioPath is null
+                ? Loc.T(" No audio track was written for this take.")
+                : Loc.F("\n\nAudio: {0} ({1:0.#} s, 16-bit stereo WAV) — mux it with\nffmpeg -i \"{2}\" -i \"{0}\" -c:v copy -c:a aac \"{3}\"", audioPath, _audioTrackSeconds, audioPath, path, MuxedName(path));
             if (recorder is PngSequenceRecorder)
-                ShowMessage(Loc.F("Frames saved.\n{0}\n\n{1}{2} PNG frames with an alpha channel. Import them at the frame rate you chose, or follow the ffmpeg line in sequence.json to turn them into alpha video; system audio is not mixed in.", path, noteText, frames), "Recording complete", MessageBoxImage.Information);
+                ShowMessage(Loc.F("Frames saved.\n{0}\n\n{1}{2} PNG frames with an alpha channel. Import them at the frame rate you chose, or follow the ffmpeg line in sequence.json to turn them into alpha video; system audio is not mixed in.", path, noteText, frames) + audio, "Recording complete", MessageBoxImage.Information);
             else
-                ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, noteText), "Recording complete", MessageBoxImage.Information);
+                ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This AVI contains the piano visuals; system audio is not mixed into the recording.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
         }
     }
     internal static int MapComputerKey(Key key) { var index = Array.IndexOf(ComputerKeys, key); return index < 0 ? -1 : 48 + ComputerMap[index]; }
