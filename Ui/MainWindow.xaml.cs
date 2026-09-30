@@ -675,6 +675,7 @@ public partial class MainWindow : Window
             // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
             // the switch is the user's and is only honoured for that format.
             Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;
+            StartGpuRecording(_videoRecorder);
             _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };
@@ -746,7 +747,8 @@ public partial class MainWindow : Window
                 var recorder = _videoRecorder;
                 // The recorder names the buffer it wants: stride-aligned BGR for AVI, tightly packed BGRA
                 // (with the stage's alpha) for the PNG sequence.
-                var frame = recorder.HasAlpha ? CaptureStageBgra(recorder.Width, recorder.Height) : CaptureStageBgr(recorder.Width, recorder.Height);
+                var frame = TryCaptureGpuFrame(recorder)
+                    ?? (recorder.HasAlpha ? CaptureStageBgra(recorder.Width, recorder.Height) : CaptureStageBgr(recorder.Width, recorder.Height));
                 recorder.WriteFrame(frame, Math.Min(due, recorder.FrameRate * 2));
                 if (_videoRecorder.IsNearSizeLimit) { StopVideoRecording(showMessage: true, Loc.T("The AVI file reached the 2 GB limit of the AVI format, so recording stopped automatically.")); return; }
             }
@@ -1050,9 +1052,12 @@ public partial class MainWindow : Window
     /// </summary>
     internal byte[] CaptureStageBgra(int width, int height) => RenderStagePixels(width, height);
 
-    private byte[] CaptureStageBgr(int width, int height)
+    private byte[] CaptureStageBgr(int width, int height) => ToBottomUpBgr(RenderStagePixels(width, height), width, height);
+
+    /// <summary>Repacks tightly packed BGRA into the bottom-up, stride-aligned BGR rows an AVI frame is made of.</summary>
+    private byte[] ToBottomUpBgr(byte[] source, int width, int height)
     {
-        var source = RenderStagePixels(width, height);
+        if (_captureTarget is null || _captureTarget.Length != AviVideoRecorder.BgrStride(width) * height) _captureTarget = new byte[AviVideoRecorder.BgrStride(width) * height];
         var sourceStride = width * 4;
         var targetStride = AviVideoRecorder.BgrStride(width); var target = _captureTarget!;
         for (var y = 0; y < height; y++)
@@ -1070,6 +1075,7 @@ public partial class MainWindow : Window
     private void StopVideoRecording(bool showMessage, string? note = null)
     {
         _recordTimer?.Stop(); _recordTimer = null; _recordClock.Stop();
+        StopGpuRecording();
         var recorder = _videoRecorder; _videoRecorder = null;
         if (recorder is null) return;
         var path = _recordingPath; _recordingPath = null;

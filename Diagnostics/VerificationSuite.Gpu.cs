@@ -95,6 +95,31 @@ internal static partial class VerificationSuite
         var fxSky = FxAverage((int)(height * .2), (int)(height * .5));
         var plainSky = Average((int)(height * .2), (int)(height * .5));
         Assert(fxSky > plainSky + 1.5, $"The galaxy should light the sky of the GPU frame (with {fxSky:0.0}, without {plainSky:0.0}).");
+        // ---- recording: the render thread alone renders exact-size frames for a take ----------------------
+        var recordFeed = new GpuStageFeed { LabelAtlas = atlas };
+        recordFeed.SetStageHeight(360);
+        recordFeed.SetLook(fxLook);
+        recordFeed.SetState(notes, 2.0, false, new HashSet<int> { 60 });
+        var tap = new GpuRecordingTap(320, 180, 30);
+        long recorded;
+        double recordedKeys = 0;
+        using (var loop = new GpuRenderLoop(recordFeed, forceWarp: true))
+        {
+            recordFeed.Recording = tap;
+            var wait = Stopwatch.StartNew();
+            while (tap.Serial < 3 && loop.Error is null && wait.Elapsed.TotalSeconds < 20) Thread.Sleep(20);
+            recorded = tap.Serial;
+            Assert(loop.Error is null, $"The GPU render loop should run for a recording ({loop.Error}).");
+            tap.TryRead(frame =>
+            {
+                var sum = 0.0; var count = 0;
+                for (var y = 160; y < 176; y++) for (var x = 0; x < 320; x += 2) { var i = (y * 320 + x) * 4; sum += .0722 * frame[i] + .7152 * frame[i + 1] + .2126 * frame[i + 2]; count++; }
+                recordedKeys = sum / count;
+            });
+            recordFeed.Recording = null;
+        }
+        Assert(recorded >= 3 && recordedKeys > 60, $"A take on the GPU stage should receive exact-size frames with the keyboard in them ({recorded} frames, keys {recordedKeys:0}).");
+        Results.Add($"PASS gpu recording: {recorded} frames of 320×180 rendered by the loop with no window and no preview (keys {recordedKeys:0}).");
         Results.Add($"PASS gpu stage effects: {ambient.Count} ambient shapes, a {atlas.Width}×{atlas.Height} glyph atlas ({inked} inked px), sky {plainSky:0.0} → {fxSky:0.0} with the galaxy on.");
     }
 }

@@ -1,5 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace PianoPath;
 
@@ -105,6 +107,7 @@ public partial class MainWindow
 
     private void RefreshGpuStatus()
     {
+        UpdateRecordingInfo(); // the next take's engine follows the GPU engine's state
         if (_gpuStatusLabel is null) return;
         Loc.Bind(_gpuStatusLabel, () =>
         {
@@ -141,5 +144,94 @@ public partial class MainWindow
         _gpuWindow = null;
         Stage.AttachGpu(null, false);
         StopGpuLoop();
+    }
+
+    // =====================================================================================================
+    // Recording from the GPU stage: exact-size frames rendered by the render thread
+    // =====================================================================================================
+
+    private GpuRecordingTap? _gpuRecording;
+    private byte[]? _gpuRecordingFrame;
+
+    /// <summary>True while the take is being rendered by the GPU stage rather than rasterized from WPF.</summary>
+    internal bool RecordingFromGpu => _gpuRecording is not null;
+
+    /// <summary>
+    /// Points the GPU render thread at the new take when the GPU stage is what the user is looking at
+    /// (in the main window or in the stage window). A transparent PNG sequence stays on the software
+    /// stage: the GPU frame is composited opaque.
+    /// </summary>
+    private void StartGpuRecording(IFrameRecorder recorder)
+    {
+        StopGpuRecording();
+        if (_gpuLoop is not { Error: null }) return;
+        if (!Stage.UsesGpuFrame && _gpuWindow is null) return;
+        if (recorder.HasAlpha && Stage.TransparentBackdrop) return;
+        _gpuRecording = new GpuRecordingTap(recorder.Width, recorder.Height, recorder.FrameRate);
+        _gpuFeed.Recording = _gpuRecording;
+    }
+
+    private void StopGpuRecording()
+    {
+        _gpuFeed.Recording = null;
+        _gpuRecording = null;
+        _gpuRecordingFrame = null;
+    }
+
+    /// <summary>
+    /// The newest GPU-rendered frame in the layout <paramref name="recorder"/> expects, or null while the
+    /// render thread has not delivered one yet (the session then rasterizes the WPF stage for that frame).
+    /// </summary>
+    private byte[]? TryCaptureGpuFrame(IFrameRecorder recorder)
+    {
+        var tap = _gpuRecording;
+        if (tap is null || tap.Width != recorder.Width || tap.Height != recorder.Height) return null;
+        // the engine stopped or failed mid-take (e.g. the stage window closed): the rest is drawn by the software stage
+        if (_gpuLoop is null or { Error: not null } || !Stage.UsesGpuFrame && _gpuWindow is null) { StopGpuRecording(); return null; }
+        var size = tap.Width * tap.Height * 4;
+        if (_gpuRecordingFrame is null || _gpuRecordingFrame.Length != size) _gpuRecordingFrame = new byte[size];
+        var frame = _gpuRecordingFrame;
+        if (!tap.TryRead(pixels => Buffer.BlockCopy(pixels, 0, frame, 0, size))) return null;
+        if (Stage.HasGpuOverlays) BlendStageOverlays(frame, tap.Width, tap.Height);
+        return recorder.HasAlpha ? frame : ToBottomUpBgr(frame, tap.Width, tap.Height);
+    }
+
+    private RenderTargetBitmap? _gpuOverlayBitmap;
+    private byte[]? _gpuOverlayPixels;
+
+    /// <summary>
+    /// Rasterizes the stage's WPF overlays (sheet, camera, hand marker, watermark, counter) at the
+    /// recording size and blends them over the GPU frame. The overlay is stretched with the frame, so the
+    /// sheet and the hand marker stay over the keys they belong to at any recording aspect.
+    /// </summary>
+    private void BlendStageOverlays(byte[] frame, int width, int height)
+    {
+        if (Stage.ActualWidth < 1 || Stage.ActualHeight < 1) return;
+        if (_gpuOverlayBitmap is null || _gpuOverlayBitmap.PixelWidth != width || _gpuOverlayBitmap.PixelHeight != height)
+        {
+            _gpuOverlayBitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            _gpuOverlayPixels = new byte[width * height * 4];
+        }
+        var visual = new DrawingVisual();
+        using (var dc = visual.RenderOpen())
+        {
+            dc.PushTransform(new ScaleTransform(width / Stage.ActualWidth, height / Stage.ActualHeight));
+            Stage.DrawGpuOverlays(dc);
+            dc.Pop();
+        }
+        var bitmap = _gpuOverlayBitmap; bitmap.Clear(); bitmap.Render(visual);
+        var overlay = _gpuOverlayPixels!;
+        bitmap.CopyPixels(overlay, width * 4, 0);
+        // premultiplied "over": frame = overlay + frame × (1 − overlay alpha)
+        for (var i = 0; i < overlay.Length; i += 4)
+        {
+            var a = overlay[i + 3];
+            if (a == 0) continue;
+            var keep = 255 - a;
+            frame[i] = (byte)(overlay[i] + frame[i] * keep / 255);
+            frame[i + 1] = (byte)(overlay[i + 1] + frame[i + 1] * keep / 255);
+            frame[i + 2] = (byte)(overlay[i + 2] + frame[i + 2] * keep / 255);
+            frame[i + 3] = 255;
+        }
     }
 }

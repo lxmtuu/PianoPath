@@ -96,6 +96,10 @@ internal sealed class GpuRenderLoop : IDisposable
         var embeddedTarget = new GpuRenderTarget();
         var windowTarget = new GpuRenderTarget();
         var readback = new ReadbackRing();
+        var recordTarget = new GpuRenderTarget();
+        var recordReadback = new ReadbackRing();
+        GpuRecordingTap? recording = null;
+        var nextRecordFrame = 0.0;
         try
         {
             renderer = GpuStageRenderer.Create(ForceWarp);
@@ -145,7 +149,14 @@ internal sealed class GpuRenderLoop : IDisposable
                     else window.Resize(ww, wh);
                 }
                 var hasWindow = window is not null && ww >= 16 && wh >= 16;
-                if (!hasEmbedded && !hasWindow) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
+                var tap = _feed.Recording;
+                if (!ReferenceEquals(tap, recording))
+                {
+                    // a new take (or the end of one): start its clock now, and free the old frame's memory
+                    recording = tap; nextRecordFrame = clock.Elapsed.TotalSeconds;
+                    recordReadback.Dispose(); recordTarget.Dispose();
+                }
+                if (!hasEmbedded && !hasWindow && tap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
 
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
@@ -153,7 +164,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
-                var primaryAspect = hasWindow ? ww / (float)wh : ew / (float)eh;
+                var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
                 simulation.Step(dt, input, _feed, sceneHeight * primaryAspect);
 
@@ -176,6 +187,18 @@ internal sealed class GpuRenderLoop : IDisposable
                     readback.Submit(gpu.Context);
                     readback.CollectInto(gpu.Context, _feed);
                 }
+                // ---- recording: an exact-size frame at the take's own rate ----
+                if (tap is not null && now >= nextRecordFrame)
+                {
+                    var interval = 1.0 / tap.FrameRate;
+                    nextRecordFrame = Math.Max(nextRecordFrame + interval, now - interval);
+                    recordTarget.Ensure(gpu.Device, tap.Width, tap.Height);
+                    recordReadback.Ensure(gpu.Device, tap.Width, tap.Height);
+                    var layout = new GpuSceneLayout(sceneHeight * tap.Width / (float)tap.Height, sceneHeight, input.Look.KeyboardFraction);
+                    gpu.Render(recordTarget, recordReadback.CurrentView, simulation, input, layout, notes, keys, sprites);
+                    recordReadback.Submit(gpu.Context);
+                    recordReadback.Collect(gpu.Context, tap.BackBuffer, tap.Publish);
+                }
                 ParticleCount = simulation.ParticleCount;
                 Interlocked.Increment(ref _frames);
 
@@ -188,6 +211,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 var target = _targetFps;
                 if (hasWindow && _vsync && target == 0) continue;
                 if (!hasWindow && target == 0) target = 240; // the embedded preview is shown at the WPF composition rate anyway
+                if (tap is not null && target > 0 && target < tap.FrameRate) target = tap.FrameRate; // a take never drops below its own rate
                 if (target > 0) SleepUntil(clock, frameStart + 1.0 / target);
             }
         }
@@ -201,6 +225,8 @@ internal sealed class GpuRenderLoop : IDisposable
         {
             TimerResolution.End();
             readback.Dispose();
+            recordReadback.Dispose();
+            recordTarget.Dispose();
             window?.Dispose();
             embeddedTarget.Dispose();
             windowTarget.Dispose();
@@ -301,7 +327,10 @@ internal sealed class GpuRenderLoop : IDisposable
         }
 
         /// <summary>Maps the oldest submitted frame (usually finished by now) and publishes it to the feed.</summary>
-        internal void CollectInto(ID3D11DeviceContext context, GpuStageFeed feed)
+        internal void CollectInto(ID3D11DeviceContext context, GpuStageFeed feed) => Collect(context, feed.BackBuffer, feed.PublishBackBuffer);
+
+        /// <summary>Maps the oldest submitted frame and copies it into the buffer <paramref name="buffer"/> hands out, then calls <paramref name="publish"/>.</summary>
+        internal void Collect(ID3D11DeviceContext context, Func<int, int, byte[]> buffer, Action publish)
         {
             // _index now points at the oldest slot in the ring
             var slot = -1;
@@ -317,14 +346,14 @@ internal sealed class GpuRenderLoop : IDisposable
             catch (SharpGenException) { return; }
             try
             {
-                var buffer = feed.BackBuffer(_width, _height);
+                var target = buffer(_width, _height);
                 var row = _width * 4;
                 for (var y = 0; y < _height; y++)
-                    Marshal.Copy(mapped.DataPointer + (nint)(y * mapped.RowPitch), buffer, y * row, row);
+                    Marshal.Copy(mapped.DataPointer + (nint)(y * mapped.RowPitch), target, y * row, row);
             }
             finally { context.Unmap(staging, 0); }
             _pending[slot] = false;
-            feed.PublishBackBuffer();
+            publish();
         }
 
         public void Dispose()

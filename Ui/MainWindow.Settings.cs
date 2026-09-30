@@ -1680,7 +1680,14 @@ public partial class MainWindow
                     : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
                 : Loc.T("no SoundFont is loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
-        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}.", width, height, _visualSettings.RecordingFrameRate, format, audio);
+        // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
+        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null) && !(sequence && _visualSettings.RecordingTransparent);
+        var engine = gpuTake
+            ? Loc.T("Frames are rendered by the GPU stage at exactly this size.")
+            : sequence && _visualSettings.RecordingTransparent && _gpuLoop is not null
+                ? Loc.T("Transparent frames are drawn by the software stage (the GPU frame is opaque).")
+                : Loc.T("Frames are drawn by the software stage.");
+        Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}. {5}", width, height, _visualSettings.RecordingFrameRate, format, audio, engine);
     }
 
     private (int Width, int Height) RecordingSize()

@@ -201,6 +201,27 @@ internal sealed partial class PianoStage
     private void RenderGpuFrame(DrawingContext dc, double width, double height, double keyTop, double lane)
     {
         dc.DrawImage(_gpuBitmap, new Rect(0, 0, width, height));
+        DrawGpuOverlayLayers(dc, width, height, keyTop, lane);
+    }
+
+    /// <summary>True when WPF layers sit on top of the GPU frame (sheet, hand marker, camera, watermark, counter).</summary>
+    internal bool HasGpuOverlays => _visual.ShowSheet || _visual.ShowWatermark || _visual.ShowCounter || _visual.ShowFps
+        || _visual.ShowHandTracking && _hand is not null || _visual.ShowCameraOverlay && _cameraFrame is not null;
+
+    /// <summary>
+    /// Draws only the layers that sit on top of the GPU frame, in stage DIPs, onto a transparent context:
+    /// the GPU recording blends them over its own exact-size frame.
+    /// </summary>
+    internal void DrawGpuOverlays(DrawingContext dc)
+    {
+        var width = ActualWidth; var height = ActualHeight;
+        if (width < 1 || height < 1) return;
+        if (_pixelsPerDip <= 0) _pixelsPerDip = PixelsPerDip(this);
+        DrawGpuOverlayLayers(dc, width, height, height - KeyboardHeight, width / KeyCount);
+    }
+
+    private void DrawGpuOverlayLayers(DrawingContext dc, double width, double height, double keyTop, double lane)
+    {
         var scale = _visual.CameraZoom / 100;
         var parallax = _visual.CameraParallax / 100;
         var offsetX = (width - width * scale) * _visual.CameraOffset / 100 + (_pointerX - .5) * parallax * 28;
