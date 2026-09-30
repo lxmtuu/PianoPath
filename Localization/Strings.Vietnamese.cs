@@ -825,7 +825,7 @@ internal static class StringsVietnamese
         ["Record audio"] = "Ghi âm thanh",
         ["Record piano visualizer"] = "Ghi hình sân khấu piano",
         ["Record the live piano visualizer"] = "Ghi hình sân khấu piano trực tiếp",
-        ["Record the stage to AVI at the resolution and frame rate chosen on the Recording page."] = "Quay sân khấu ra tệp AVI với độ phân giải và tốc độ khung hình đã chọn ở trang Recording.",
+        ["Record the stage as AVI, a PNG sequence or MP4; the format, size and frame rate are set on the Recording page."] = "Quay sân khấu ra tệp AVI, chuỗi PNG hoặc MP4; định dạng, độ phân giải và tốc độ khung hình chọn ở trang Recording.",
         ["Recording"] = "Ghi hình",
         ["Recording MJPEG AVI · click to stop"] = "Đang ghi AVI MJPEG · nhấp để dừng",
         ["Recording MP4 (H.264 + AAC)"] = "Đang ghi MP4 (H.264 + AAC)",
