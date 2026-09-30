@@ -2002,14 +2002,19 @@ internal static class VerificationSuite
             var cached = SongFolderIndex.Scan(folder);
             Assert(ReferenceEquals(cached[0], songs[0]) && ReferenceEquals(cached[1], songs[1]),
                 "Scanning again should reuse the entries of files that did not change instead of re-reading them.");
+            // The scan returns the library's own list, so what is compared has to be captured first: an entry
+            // read after the edit would otherwise be compared with itself.
+            var etudeBefore = SongFolderIndex.Songs.Single(song => string.Equals(song.Path, etude, StringComparison.OrdinalIgnoreCase));
+            var nocturneBefore = SongFolderIndex.Songs.Single(song => song.Title == "Nocturne");
             SongFolderIndex.Tag(etude, "Chopin");
             File.WriteAllBytes(etude, [.. CreateFormatOneMidi(), .. new byte[16]]);
             File.SetLastWriteTimeUtc(etude, DateTime.UtcNow.AddMinutes(1));
             var rescanned = SongFolderIndex.Scan(folder);
             var etudeEntry = rescanned.Single(song => string.Equals(song.Path, etude, StringComparison.OrdinalIgnoreCase));
-            Assert(etudeEntry.Size != songs[0].Size && etudeEntry.Tags.SequenceEqual(["chopin"]),
-                "Editing a file should make the next scan re-read it while its tags stay with it.");
-            Assert(!ReferenceEquals(SongFolderIndex.Scan(folder, force: true)[1], rescanned[1]),
+            Assert(ReferenceEquals(etudeEntry, etudeBefore) == false && etudeEntry.Size == etudeBefore.Size + 16 && etudeEntry.Tags.SequenceEqual(["chopin"]),
+                $"Editing a file should make the next scan re-read it while its tags stay with it (size {etudeBefore.Size} → {etudeEntry.Size}, tags {string.Join("/", etudeEntry.Tags)}).");
+            var forced = SongFolderIndex.Scan(folder, force: true);
+            Assert(!ReferenceEquals(forced.Single(song => song.Title == "Nocturne"), nocturneBefore),
                 "RESCAN should read every file again, changed or not.");
 
             // Tags and search.
@@ -2061,7 +2066,9 @@ internal static class VerificationSuite
             // The watcher: the list follows the disk, and a file added while it watches is indexed.
             Invoke(window, "StartSongFolderWatch", folder);
             var watcher = (SongFolderWatcher)Field(window, "_songWatcher")!;
-            Assert(watcher.IsWatching && watcher.WatchedFolder == folder, "Choosing a folder should start watching it for changes.");
+            static string Clean(string path) => Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar);
+            Assert(watcher.IsWatching && string.Equals(Clean(watcher.WatchedFolder), Clean(folder), StringComparison.OrdinalIgnoreCase),
+                $"Choosing a folder should start watching it for changes (watching “{watcher.WatchedFolder}”).");
             var added = Path.Combine(folder, "Late.mid");
             File.WriteAllBytes(added, CreateFormatOneMidi());
             // The watcher runs on its own thread and only raises the flag; the window's timer would do the
