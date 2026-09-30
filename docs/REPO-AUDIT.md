@@ -13,8 +13,7 @@ Rà soát chạy bằng ba lớp đã có của repo, không thêm công cụ m�
 |---|---|---|
 | `tools/check_sources.py` | mọi máy, ~2 s (`build.yml` chạy nó ở job `static` trên `ubuntu-latest` **trước** khi job Windows được xếp lịch) | Cân bằng ngoặc/chuỗi C#, XML hợp lệ, tham chiếu resource, khoá chuỗi in ra, bảng tham số dòng lệnh, ảnh/anchor của **cả hai** README, tên trợ năng của nút chỉ có glyph |
 | `--verify` (`Diagnostics/VerificationSuite.cs`) | Windows (CI) | Toán shader, MIDI, SoundFont, AVI, **MP4**, cài đặt, dock, ngôn ngữ, lịch sử, hồ sơ, trợ năng, high contrast, các lớp hiệu ứng |
-| Ảnh CI render | `build.yml` | **Hai bộ mười một ảnh** do chính `PianoPath.exe` chụp: `docs/previews/vi/` (bản README này, `--lang=vi`) và `docs/previews/en/` (`README.en.md`, `--lang=en`), cộng gallery preset `docs/previews/presets.jpg` (một bước riêng của workflow) và ảnh mẫu `docs/samples/stage-backdrop.png` do script Python sinh |
-
+| Ảnh CI render | `build.yml` | **Hai bộ ảnh** (danh sách chủ đề ở `$shots`) do chính `PianoPath.exe` chụp: `docs/previews/vi/` (bản README này, `--lang=vi`) và `docs/previews/en/` (`README.en.md`, `--lang=en`), cộng gallery preset `docs/previews/presets.jpg` (một bước riêng của workflow) và ảnh mẫu `docs/samples/stage-backdrop.png` do script Python sinh |
 Một việc chỉ được coi là "xong" khi **cả ba** lớp nhìn thấy nó (luật 0 của `docs/ROADMAP.md`).
 
 ## 2. Đã sửa trong đợt này
@@ -86,3 +85,50 @@ pwsh tools/build_installer.ps1 -Stub   # cần Inno Setup; biên dịch installe
 
 `--verify` trả mã thoát 0/1, ghi log ra `%TEMP%\keyflow-verification.log` (hoặc `--verify-log=`), và
 đếm cả `SKIP` (ví dụ SF2 là con trỏ LFS) để không ai nhầm "bỏ qua" với "đã kiểm".
+
+## 5. Đợt rà soát lần hai — 2026‑09‑30
+
+Lần thứ hai đọc toàn kho theo đúng ba lớp ở §1, lần này **kiểm cả chính bộ kiểm**: các luật tĩnh được
+tiêm lỗi thật vào một bản sao repo để xem chúng có bắt không (11/11 mutation bị bắt, xem bảng dưới),
+rồi soi những chỗ mà ba lớp không nhìn tới.
+
+### 5.1 Đã sửa
+
+| Việc | Bằng chứng kiểm chứng |
+|---|---|
+| **Chín khoá chết trong hai bảng chuỗi**: `STAGE ATMOSPHERE` (bản mới là `ATMOSPHERE`), ba dạng `Next recording: …` mà chỉ dạng `… · {4}. {5}` còn được in (`Ui/MainWindow.Settings.cs:1746`), khoá bộ lọc `MIDI files (*.mid;*.midi)…` (bộ lọc thật nay có cả MusicXML), `Frames per second of the AVI file.` (nay là `… of the recording.`), `Optional recital layer…`, `Quick switches… Detailed controls live on the other pages.` và câu ghi chú "keyboard is baked once…" — tất cả là dấu vết của những lần đổi chữ: khoá mới được thêm, khoá cũ không ai xoá, và mỗi khoá như vậy vẫn bắt dịch giả mang theo một bản dịch vô ích. Đã xoá khỏi **cả hai** bảng (mỗi bảng 1246 → 1237 dòng, inventory 1225 → 1216 khoá) | đối chiếu từng khoá: văn bản thô của nó không xuất hiện ở bất kỳ tệp nào ngoài hai bảng (grep + script so khớp chính xác sau khi giải mã `\n`/`&amp;`), và bản chữ mới của mỗi câu đều đã là khoá sống |
+| **Luật checker mới `scan_dead_keys(cs_files, xaml_files)`** trong `tools/check_sources.py`: mọi khoá của inventory phải khớp **chính xác** một literal trong nguồn ngoài `Localization/` (đã giải mã escape C# và entity XML) — nếu không thì báo lỗi kèm hướng xử lý; ba khoá đi qua giá trị chứ không qua literal (`Acoustic`, `Imperial`, `Obsidian` — `BackdropStyle` được tra bằng `ToString()` ở `Ui/ThemeStudioWindow.cs:72`) nằm trong danh sách miễn có tên trong hàm. So khớp chính xác chứ không phải "chứa": `Next recording: … · {4}.` là tiền tố của khoá sống `… · {4}. {5}` nên phép thử chuỗi con sẽ để nó sống mãi | `python3 tools/check_sources.py` xanh sau khi thêm (inventory 1216, "…and against the sources that hold them"); mutation test: chèn lại khoá chết vào **đúng vị trí ordinal trong cả hai bảng** → bị bắt; chèn một khoá chết là **tiền tố** của khoá sống → bị bắt; khoá tra qua tên enum → không báo nhầm |
+| **`Audio/WavWriter.cs` giữ handle khi ghi lỗi**: `Append` đặt `_closed = true` khi đĩa đầy, và `Dispose` cũ thoát ngay theo cờ đó — nên tệp WAV không bao giờ được đóng, handle (và khoá ghi) nằm lại trong tiến trình tới lúc thoát. Nay `Dispose` luôn đóng stream (cờ `_disposed`), còn `_sizesUnreliable` nói rằng khối lỗi có thể đã vào đĩa một phần nên hai trường kích thước giữ nguyên như đã ghi thay vì khai thừa mẫu | `VerifyRecordingAudioTrack` giữ nguyên hợp đồng (mở xong `IsClosed == false`, `Dispose` vá đủ hai trường, ghi sau khi đóng bị bỏ qua); `IsClosed` nay đúng nghĩa "file đã đóng" |
+| **`tools/build_installer.ps1` không nối `-SourceDir` tới ISCC**: tham số này chỉ dùng cho `Test-Path` và các tệp stub, còn ISCC luôn biên dịch theo mặc định `..\publish\win-x64` của `installer/Keyflow.iss` — chạy `-SourceDir ..\publish\win-arm64` thì kiểm một nơi, đóng gói một nẻo, mà vẫn "thành công". Nay đường dẫn được giải thành tuyệt đối và truyền bằng `/DSourceDir=`, nên nơi kiểm và nơi biên dịch là một. Phép kiểm "ISCC có ghi tệp không" cũng không còn bị một `Keyflow-Setup-*.exe` cũ trong `installer\Output` đánh lừa: nó so với danh sách tệp có trước khi chạy | không chạy được pwsh/Inno Setup trong sandbox này, nên phần PowerShell được soát tay (cân bằng ngoặc/chuỗi bằng script, đọc lại toàn bộ) và sẽ do bước *Build the installer* của `build.yml` chạy trên Windows xác nhận |
+| **Tài liệu lệch về ảnh preview**: `README.md`, `README.en.md`, `docs/LOCALIZATION.md` §10, `docs/REPO-AUDIT.md` §1 và `docs/ROADMAP.md` §4 đều còn nói CI render **8 ảnh**/**"nine subjects"**, trong khi `$shots` và hai thư mục `docs/previews/{vi,en}` đã có **11** mục mỗi bộ (thêm `theme-dock`/`language-dock`/`stage-gpu-storm`… theo thời gian). Đã sửa thành mô tả đúng — hai bộ, mỗi bộ ghim `--lang` của chính nó — và các câu mô tả quy trình nay **không mang con số dẫn xuất** ("22 ảnh", "11 cảnh") nữa, để lần thêm một cảnh sau không phải sửa lại lần nữa; bản gộp với PR #26 giữ phần nội dung mới hơn của main (bước **gallery preset** `presets.jpg`, hành vi nhánh chỉ nhận pull request → `Previews not committed`) và liệt kê các cảnh theo tên. | `tools/check_sources.py` (anchor + liên kết ảnh của cả hai README) vẫn xanh; `ls docs/previews/{en,vi} \| wc -l` = 11 và `grep -c "Name = '" build.yml` = 11 |
+
+### 5.2 Đã kiểm, không thấy vấn đề
+
+* **Bộ kiểm tĩnh thật sự bắt lỗi** (mutation test trên bản sao repo): xoá một dòng dịch tiếng Việt, đổi
+  placeholder, in một chuỗi không có trong bảng, gãy anchor README, đổi tên một switch dòng lệnh chỉ ở
+  mã nguồn, thêm `{StaticResource}` trỏ vào khoá không tồn tại, gỡ tooltip của nút chỉ có glyph, sửa một
+  khoá trong `presets/*.json`, thêm token theme không có mặc định trong `App.xaml`, làm mất một dấu xuống
+  dòng trong bản dịch — **tất cả đều đỏ**, mỗi lần kèm đúng thông báo chỉ vào chỗ sai.
+* **Không có TODO/FIXME/HACK**, không có bí mật/credential nào trong kho, không có tệp nhị phân bị
+  commit ngoài con trỏ LFS 134 byte của `Assets/ConcertGrand.sf2` (đúng như thiết kế: app tự phát hiện
+  con trỏ LFS và chuyển sang chế độ im lặng).
+* **JSON preset hợp lệ** cả ba tệp và đúng mọi khoá của `PianoVisualSettings`; `python3 tools/*.py` biên
+  dịch sạch; các phiên bản action trong workflow (`checkout@v7`, `setup-dotnet@v6`, `upload-artifact@v7`,
+  `action-gh-release@v3`) đều là bản mới nhất hiện có.
+* **I/O không ném vào mặt người dùng**: `SongFolderIndex`/`SongLibrary`/`PracticeHistory`/`SettingsProfile`/
+  `UserThemeStore` đều ghi kiểu "tmp rồi move", bỏ qua dòng hỏng, coi tệp hỏng là dữ liệu rỗng; `MidiFileReader`
+  kiểm độ dài header/khối trước khi đọc, `MusicXmlReader` từ chối tệp không có nốt.
+
+### 5.3 Ghi nhận, chưa sửa (nhỏ, có chủ đích)
+
+* **`HangGuard` để lại luồng chạy mãi**: thiết kế đã ghi rõ (không giết luồng đang trong lời gọi gốc), và
+  `ManualResetEventSlim.Set()` sau `Dispose()` là an toàn theo tài liệu .NET (đã đối chiếu mã nguồn
+  runtime), nên luồng đến muộn không làm sập tiến trình — đúng như tài liệu của repo nói.
+* **`CameraStatus`** (`Ui/MainWindow.xaml.cs:800`) được luồng camera ghi (`:911`, `:913`) và luồng UI đọc:
+  ghi chuỗi là nguyên tử nên chỉ có thể thấy giá trị cũ trong tích tắc, không hỏng dữ liệu. Muốn tuyệt
+  đối thì cho nó chạy qua dispatcher, nhưng `CameraStatus` chỉ là dòng trạng thái.
+* **`UserThemeStore.Save`** sửa `Name` trên chính đối tượng người gọi truyền vào (không copy trước); hiện
+  mọi lời gọi đều dùng giá trị trả về nên chưa thành lỗi.
+* **Script PowerShell không có lớp kiểm tĩnh**: `publish.ps1` chỉ chạy khi cắt bản phát hành, và
+  `tools/build_installer.ps1` chỉ được CI biên dịch chứ không được "đọc" bằng công cụ nào — đây là vùng
+  mù duy nhất còn lại của bộ kiểm.

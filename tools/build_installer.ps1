@@ -20,8 +20,10 @@ installer on every push without the 113 MiB SoundFont.
 #>
 [CmdletBinding()]
 param(
-    # Folder the script's Source: patterns resolve against (installer\Keyflow.iss defaults to
-    # ..\publish\win-x64, relative to the script).
+    # Folder the script's Source: patterns resolve against, as typed from the current directory (the
+    # default matches installer\Keyflow.iss's own ..\publish\win-x64 when this runs from the repo root).
+    # It is passed to the compiler as an absolute /DSourceDir, so the folder that is checked is the
+    # folder that is compiled.
     [string]$SourceDir = 'publish/win-x64',
 
     # Where ISCC writes Keyflow-Setup-<version>.exe. Defaults to a temporary folder so a check never
@@ -62,16 +64,29 @@ if (-not (Test-Path (Join-Path $compiler 'ISPP.dll'))) {
 }
 Write-Host "compiling with $iscc"
 
+# The Source: patterns in installer\Keyflow.iss resolve against the folder the script lives in, while this
+# parameter is whatever the caller typed — so it is resolved once, here, and handed to the compiler as an
+# absolute /DSourceDir: the folder that is checked for files, filled with stubs and compiled is then the
+# same one, whichever way the caller named it. (Without that pass-through the compiler would quietly build
+# the default ..\publish\win-x64 while the checks ran somewhere else.)
+$sourceFull = [IO.Path]::GetFullPath($SourceDir)
+
 if ($Stub) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $SourceDir 'Assets') | Out-Null
+    New-Item -ItemType Directory -Force -Path (Join-Path $sourceFull 'Assets') | Out-Null
     foreach ($file in 'PianoPath.exe', 'Assets/ConcertGrand.sf2', 'Assets/ATTRIBUTION.txt') {
-        Set-Content -Path (Join-Path $SourceDir $file) -Value 'stub for the installer check'
+        Set-Content -Path (Join-Path $sourceFull $file) -Value 'stub for the installer check'
     }
 }
-if (-not (Test-Path $SourceDir)) { throw "$SourceDir does not exist — run .\publish.ps1 first" }
+if (-not (Test-Path $sourceFull)) { throw "$sourceFull does not exist — run .\publish.ps1 first" }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
-$arguments = @("/O$OutputDir")
+# What the output folder already holds, so the check below can tell a freshly written installer from one
+# an earlier run left behind (a release folder is not emptied between builds).
+$before = @{}
+Get-ChildItem -Path $OutputDir -Filter 'Keyflow-Setup-*.exe' -ErrorAction SilentlyContinue |
+    ForEach-Object { $before[$_.Name] = $_.LastWriteTimeUtc }
+
+$arguments = @("/O$OutputDir", "/DSourceDir=$sourceFull")
 if ($Version) { $arguments += "/DAppVersion=$Version" }
 $arguments += 'installer\Keyflow.iss'
 
@@ -89,7 +104,9 @@ $unexpected = @($warnings | Where-Object { "$_" -notmatch [regex]::Escape($expec
 foreach ($warning in $unexpected) { Write-Host "::error title=Inno Setup warning::$warning" }
 if ($unexpected.Count) { throw "$($unexpected.Count) unexpected Inno Setup warning(s)" }
 
-$setup = Get-ChildItem -Path $OutputDir -Filter 'Keyflow-Setup-*.exe' | Select-Object -First 1
-if (-not $setup) { throw "ISCC reported success but wrote no Keyflow-Setup-*.exe into $OutputDir" }
+$setup = Get-ChildItem -Path $OutputDir -Filter 'Keyflow-Setup-*.exe' |
+    Where-Object { -not $before.ContainsKey($_.Name) -or $before[$_.Name] -ne $_.LastWriteTimeUtc } |
+    Sort-Object LastWriteTimeUtc -Descending | Select-Object -First 1
+if (-not $setup) { throw "ISCC reported success but wrote no new Keyflow-Setup-*.exe into $OutputDir" }
 Write-Host "built $($setup.Name) ($([math]::Round($setup.Length / 1KB)) KB); $($warnings.Count) message(s) keep the English Default.isl text of the partial Vietnamese translation"
 $setup.FullName

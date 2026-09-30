@@ -326,8 +326,7 @@ startup menu and even error messages repaint within the current frame.
 | Command line | `--lang=vi` (or `en`) runs once in that language **without** writing to `visual-settings.json`. CI uses this switch to render the Vietnamese pictures. |
 | Dock search | A row matches English *and* translated words: typing `speed` or `tốc độ` finds the same *Fall speed* slider. Beyond its captions, every row also answers to **synonyms** (`tempo` → *Fall speed*, `fps` → *Frame rate*, `brighter` → the brightness sliders) and to the **name of the setting** (`NoteFallSpeed` → `fall`+`speed`), so you do not have to remember the exact wording. Several words are an **AND**: `speed fall` narrows to that one row. The matched part is **painted in the accent colour** inside the caption, and the search box jumps to the first page with a hit. |
 
-The General page in English — every picture in this edition comes from CI with `--lang=en`; the Vietnamese README carries the same eleven subjects with the interface in Vietnamese:
-
+The General page in English — every picture in this edition comes from CI with `--lang=en`; the Vietnamese README carries the same subjects with the interface in Vietnamese:
 ![Keyflow General page](docs/previews/en/language-dock.png)
 
 *The language picker, the GRAPHICS ENGINE card (GPU frame rate, VSync and the button that opens the GPU stage
@@ -394,21 +393,20 @@ The rest of the interface:
 The pictures in the README (and in `docs/previews/en/`) are rendered by the application, not staged.
 
 **Automatic:** on every push to `main` or a working branch (`arena/**`), the `build.yml` workflow
-builds the app and then re-renders **22 images** with the very `PianoPath.exe` that just passed
-`--verify`: 11 subjects (the `$shots` list in the workflow) × 2 languages. Each set pins its own `--lang` —
-`docs/previews/en/` for this edition, `docs/previews/vi/` for `README.md` — so the captions always match the
-language of the README that shows them whatever the runner's display language is, and every picture gets a
-settings folder of its own, so it is always a pristine first run. The eleven subjects are: the live stage, the
-GPU stage, two GPU presets (Galaxy Voyage and Electric Storm), the background image, the startup menu, the
-Style dock, the Theme dock, the Play dialog, the shortcuts card and the General page. A separate step of the
-same workflow renders the **preset gallery** `docs/previews/presets.jpg` (every built-in preset drawn twice,
-software | GPU, in one JPEG shared by both READMEs). Finally the workflow **commits them straight into the
-branch** (`Refresh the README previews from CI [skip ci]`), so after a UI change there is nothing else to do:
-the README pictures match that commit. If the branch only accepts pull requests (a repository rule the
+builds the app and then re-renders **two sets of pictures** — every subject in the workflow's `$shots` list, once per language — with the very `PianoPath.exe` that just passed
+`--verify`. Each set pins its own `--lang` — `docs/previews/en/` for this edition, `docs/previews/vi/` for
+`README.md` — so the captions always match the language of the README that shows them whatever the runner's
+display language is, and every picture gets a settings folder of its own, so it is always a pristine first
+run. The subjects are: the live stage, the GPU stage, two GPU presets (Galaxy Voyage and Electric Storm),
+the background image, the startup menu, the Style dock, the Theme dock, the Play dialog, the shortcuts card
+and the General page. A separate step of the same workflow renders the **preset gallery**
+`docs/previews/presets.jpg` (every built-in preset drawn twice, software | GPU, in one JPEG shared by both
+READMEs). Finally the workflow **commits them straight into the branch**
+(`Refresh the README previews from CI [skip ci]`), so after a UI change there is nothing else to do: the
+README pictures match that commit. If the branch only accepts pull requests (a repository rule the
 workflow's own token cannot bypass) the push is declined; the step then only warns (`Previews not committed`)
 instead of turning the build red, and the new pictures are in the `keyflow-previews` artifact of that very
 run — download them and commit them by hand. The artifact holds both PNG sets and the `presets.jpg` gallery:
-
 ```powershell
 gh run list --workflow build.yml --limit 5          # find the newest run
 gh run download <run-id> -n keyflow-previews -D docs/previews

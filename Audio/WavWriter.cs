@@ -22,7 +22,16 @@ internal sealed class WavWriter : IAudioTrack
 
     private readonly FileStream _stream;
     private readonly byte[] _buffer = new byte[8192];
+    /// <summary>No more samples are accepted: the take was closed, or a write failed.</summary>
     private bool _closed;
+    /// <summary>The stream is gone; <see cref="Dispose"/> is a no-op from here on.</summary>
+    private bool _disposed;
+    /// <summary>
+    /// A block failed on the way to disk, so <see cref="DataBytes"/> no longer describes what the file
+    /// holds and the sizes are left as they were written: a header that promises samples which are not
+    /// there is worse than a header of zeroes.
+    /// </summary>
+    private bool _sizesUnreliable;
 
     private WavWriter(string path, int sampleRate, int channels)
     {
@@ -46,7 +55,7 @@ internal sealed class WavWriter : IAudioTrack
     internal long DataBytes => Frames * Channels * 2;
 
     /// <summary>True once the file has been closed and its sizes patched.</summary>
-    internal bool IsClosed => _closed;
+    internal bool IsClosed => _disposed;
 
     /// <summary>
     /// Opens a file for recording, or returns <c>null</c> when it cannot be written (the folder is gone, the
@@ -125,8 +134,13 @@ internal sealed class WavWriter : IAudioTrack
         }
         catch
         {
-            // A disk that filled up mid-recording ends the audio track, not the session.
+            // A disk that filled up mid-recording ends the audio track, not the session: the blocks that
+            // already landed stay in the file, and this one stops the track rather than throwing on the
+            // audio thread. Dispose closes the file on the way out and leaves the two sizes as they were
+            // written — a block that failed may have landed in part, so "how many bytes are in there" is
+            // no longer something this writer knows.
             _closed = true;
+            _sizesUnreliable = true;
         }
     }
 
@@ -141,18 +155,28 @@ internal sealed class WavWriter : IAudioTrack
     }
 
     /// <summary>Writes the final sizes, flushes and closes; safe to call more than once.</summary>
+    /// <remarks>
+    /// The close happens on every path, a failed write included: a take that ended early because the disk
+    /// filled up must not keep its file handle (and the lock on the file) for the rest of the process, which
+    /// is what a guard on <see cref="_closed"/> alone would do — that flag says "no more samples", not
+    /// "the file is gone".
+    /// </remarks>
     public void Dispose()
     {
-        if (_closed) return;
+        if (_disposed) return;
+        _disposed = true;
         _closed = true;
         try
         {
-            var sizes = Header(SampleRate, Channels, DataBytes);
-            _stream.Seek(4, SeekOrigin.Begin);
-            _stream.Write(sizes, 4, 4);                        // RIFF chunk size
-            _stream.Seek(HeaderBytes - 4, SeekOrigin.Begin);
-            _stream.Write(sizes, HeaderBytes - 4, 4);          // data chunk size
-            _stream.Flush();
+            if (!_sizesUnreliable)
+            {
+                var sizes = Header(SampleRate, Channels, DataBytes);
+                _stream.Seek(4, SeekOrigin.Begin);
+                _stream.Write(sizes, 4, 4);                        // RIFF chunk size
+                _stream.Seek(HeaderBytes - 4, SeekOrigin.Begin);
+                _stream.Write(sizes, HeaderBytes - 4, 4);          // data chunk size
+                _stream.Flush();
+            }
         }
         catch
         {

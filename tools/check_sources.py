@@ -11,8 +11,9 @@ checks that do not need a compiler:
     target resolves to something that actually exists;
   * every event handler named in XAML exists in the C# sources;
   * the localization tables: every language translates exactly the keys of the English inventory,
-    placeholders and line breaks survive a translation, and every literal the sources can print is a
-    key of that inventory (see ``docs/LOCALIZATION.md``);
+    placeholders and line breaks survive a translation, every literal the sources can print is a key
+    of that inventory, and every key of the inventory is still held by a source file — a key that
+    nothing prints is a sentence a translator carries for nothing (see ``docs/LOCALIZATION.md``);
   * the command line: every switch the app parses is in the README table and vice versa, and every
     switch and path the preview workflow passes to the executable really exists;
   * the installer: every message name the Vietnamese wizard text overrides exists in the Inno Setup
@@ -638,6 +639,54 @@ def scan_localization(cs_files):
     return errors, len(used), len(inventory)
 
 
+def scan_dead_keys(cs_files, xaml_files):
+    """Every key of the inventory has to be held by a source file.
+
+    A key nothing holds is a sentence no screen can ever show, and the two tables become the only
+    place it lives: a translator still carries it, the checklist diff still shows it, and the next
+    reword leaves a second copy of the same sentence beside it (that is how the nine keys this rule
+    was written for came to be — "STAGE ATMOSPHERE" next to "ATMOSPHERE", three shapes of "Next
+    recording…" where one row prints, and so on).
+
+    The lookup text is compared exactly, not as a substring: "Next recording: … · {4}." is a prefix
+    of the live "… · {4}. {5}", so a substring test would let a dead key stay for ever. A key can
+    also reach a surface through a value rather than a literal (``BackdropStyle.Acoustic`` arrives
+    at the picker through ``ToString()``), which is what ``runtime`` names. A key a source assembles
+    at run time out of pieces would read as dead here; none does today, and the message says what to
+    do if one ever appears.
+    """
+    rows, _order = read_table(ROOT / "Localization" / "Strings.English.cs")
+    if rows is None:
+        return []
+
+    # Keys a surface looks up through a value, so no source file spells them out.
+    runtime = {
+        "Acoustic", "Imperial", "Obsidian",     # BackdropStyle names, looked up as style.ToString()
+    }
+
+    def decoded(literal: str):
+        """The strings a source literal can mean: as written, and with C#/XML escapes resolved."""
+        xml = literal.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", '"')
+        try:
+            return {xml, json.loads(f'"{literal}"')}
+        except ValueError:
+            return {xml}
+
+    held = set()
+    for path in list(cs_files) + list(xaml_files):
+        if path.parent.name == "Localization":
+            continue
+        for inner in re.findall(r'"((?:[^"\\]|\\.)*)"', path.read_text(encoding="utf-8")):
+            held |= decoded(inner)
+
+    errors = []
+    for key in sorted(set(rows) - held - runtime, key=lambda key: [ord(c) for c in key]):
+        errors.append(f"Strings.English.cs: '{key}' is a key no source file holds, so nothing can print it — "
+                      "delete it from both tables, or name it in scan_dead_keys when a surface looks it up "
+                      "through a value instead of a literal")
+    return errors
+
+
 def readme_slug(heading):
     """GitHub's heading anchor: lower-case, drop punctuation, spaces to dashes."""
     text = heading.strip().lower()
@@ -1066,12 +1115,13 @@ def main():
     errors.extend(scan_preset_shelf())
     localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
     errors.extend(localization_errors)
+    errors.extend(scan_dead_keys(cs_files, xaml_files))
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
     print("checked the community preset shelf against the settings class and against tools/make_presets.py, the script that writes it")
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
-    print(f"checked the string tables against one another and against the {keys_used} keys the sources print ({keys_inventory} in the inventory)")
+    print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:
