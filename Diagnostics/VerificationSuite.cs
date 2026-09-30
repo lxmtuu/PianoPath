@@ -2143,11 +2143,15 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
-        // The AVI probe is what tells this machine's codecs apart from this side's plumbing: it must run, and
-        // its verdict must be in the log, whether the take itself was written or not.
-        Assert(lines.Any(line => line.Contains("AVI probe wrote", StringComparison.Ordinal)
-                || line.Contains("did not finish an AVI probe", StringComparison.Ordinal)),
-            "The take attempt should report what the encoder-free AVI probe did, so a machine whose take hangs can be told apart from plumbing that hangs.");
+        // The probe is what tells this machine's codecs apart from this side's plumbing. It runs before the take
+        // is opened, so a child that got as far as the take must also have said how the probe went: a run where
+        // the verdict is missing would be reading the take without the one line that explains it. A child that
+        // died inside the probe itself never did — its last line names the probe, and the verdict stays a SKIP
+        // like every other native-code stop.
+        if (lines.Any(line => line.Contains("opening a", StringComparison.Ordinal)))
+            Assert(lines.Any(line => line.Contains("AVI probe wrote", StringComparison.Ordinal)
+                    || line.Contains("did not finish an AVI probe", StringComparison.Ordinal)),
+                "A take attempt that opened the take should also have reported what the encoder-free AVI probe did, so a machine whose take hangs can be told apart from plumbing that hangs.");
         if (lines.Count == 0)
             Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
         else if (exit == 0 && !File.Exists(path))

@@ -51,9 +51,6 @@ internal static partial class Mf
     /// <summary>Uncompressed 16-bit PCM, the audio the engine renders.</summary>
     internal static readonly Guid Pcm = new("00000001-0000-0010-8000-00AA00389B71");
 
-    /// <summary>The AVI container's own uncompressed 32-bit picture sub-type, D3DFMT_X8R8G8B8.</summary>
-    internal static readonly Guid Rgb32 = new("00000016-0000-0010-8000-00AA00389B71");
-
     /// <summary>MF_E_OUT_OF_MEMORY, the code a media type that could not be prepared reports as.</summary>
     internal const int MF_E_OUT_OF_MEMORY = unchecked((int)0x8007000E);
 
@@ -107,7 +104,7 @@ internal static partial class Mf
             if (hr < 0) return hr;
             if (MFCreateMediaType(out var target) != S_OK) return MF_E_OUT_OF_MEMORY;
             target.SetGUIDKey(MajorType, VideoMajorType);
-            target.SetGUIDKey(SubType, Rgb32);
+            target.SetGUIDKey(SubType, Rgb32); // the uncompressed 32-bit type the AVI container takes as it is
             target.SetUINT64Key(FrameSize, Pack(height, width));
             target.SetUINT64Key(FrameRateKey, Pack(frameRate, 1));
             target.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
@@ -127,7 +124,7 @@ internal static partial class Mf
             for (var frame = 0; frame < frames; frame++)
             {
                 var (time, duration) = Mp4Recorder.FrameTime(frame, frameRate);
-                hr = WriteProbeSample(writer, index, pixels, time, duration);
+                hr = Mp4Recorder.WriteSampleTo(writer, index, pixels, pixels.Length, time, duration);
                 if (hr < 0) return hr;
             }
             return writer.FinalizeFile();
@@ -138,24 +135,6 @@ internal static partial class Mf
             if (writer is not null) { try { Marshal.ReleaseComObject(writer); } catch { } }
             try { MFShutdown(); } catch { }
         }
-    }
-
-    /// <summary>One picture of the probe: buffer, copy, sample, stamp — the same steps a take takes.</summary>
-    private static int WriteProbeSample(IMFSinkWriter writer, int streamIndex, byte[] pixels, long time, long duration)
-    {
-        var hr = MFCreateMemoryBuffer(pixels.Length, out var buffer);
-        if (hr < 0) return hr;
-        hr = buffer.Lock(out var pointer, out _, out _);
-        if (hr < 0) return hr;
-        Marshal.Copy(pixels, 0, pointer, pixels.Length);
-        buffer.Unlock();
-        buffer.SetCurrentLength(pixels.Length);
-        hr = MFCreateSample(out var sample);
-        if (hr < 0) return hr;
-        sample.AddBuffer(buffer);
-        sample.SetSampleTime(time);
-        sample.SetSampleDuration(duration);
-        return writer.WriteSample(streamIndex, sample);
     }
 
     /// <summary>

@@ -337,6 +337,15 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
 
     /// <summary>Copies a block of bytes into a media buffer, stamps it and hands it to the writer.</summary>
     private int WriteSample(int streamIndex, byte[] bytes, int count, long time, long duration)
+        => WriteSampleTo(_writer!, streamIndex, bytes, count, time, duration);
+
+    /// <summary>
+    /// The step every sample goes through: one media buffer, one copy, one sample, stamped, written. The
+    /// encoder-free AVI probe in <see cref="Mf.EncodeAviProbe"/> calls this very method, so a machine that
+    /// cannot finish the probe cannot finish a take either, and a machine that writes the probe but hangs on
+    /// the take has a codec to blame rather than this side's sample plumbing.
+    /// </summary>
+    internal static int WriteSampleTo(IMFSinkWriter writer, int streamIndex, byte[] bytes, int count, long time, long duration)
     {
         var hr = Mf.MFCreateMemoryBuffer(count, out var buffer);
         if (hr < 0) return hr;
@@ -350,6 +359,6 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         sample.AddBuffer(buffer);
         sample.SetSampleTime(time);
         sample.SetSampleDuration(duration);
-        return _writer!.WriteSample(streamIndex, sample);
+        return writer.WriteSample(streamIndex, sample);
     }
 }
