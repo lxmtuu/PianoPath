@@ -1501,15 +1501,18 @@ internal static class VerificationSuite
         {
             using var document = System.Text.Json.JsonDocument.Parse(json);
             var root = document.RootElement;
-            Assert(root.ValueKind == System.Text.Json.JsonValueKind.Object && root.TryGetProperty("Settings", out var element) && element.ValueKind == System.Text.Json.JsonValueKind.Object,
+            // An explicit local: `out var` inside the condition of an && would be "unassigned" on the short path.
+            System.Text.Json.JsonElement element = default;
+            if (root.ValueKind == System.Text.Json.JsonValueKind.Object) root.TryGetProperty("Settings", out element);
+            Assert(element.ValueKind == System.Text.Json.JsonValueKind.Object,
                 $"presets/{name}.json should be a preset envelope with a Settings object.");
             var keys = element.EnumerateObject().Select(property => property.Name).ToList();
             var missing = propertyNames.Except(keys).ToList();
             var unknown = keys.Except(propertyNames).ToList();
             Assert(missing.Count == 0 && unknown.Count == 0,
                 $"presets/{name}.json should name every setting and nothing else (missing: {string.Join(", ", missing)}; unknown: {string.Join(", ", unknown)}).");
-            var settings = PianoVisualSettings.FromJson(json);
-            Assert(settings.ToJson() == PianoVisualSettings.FromJson(settings.ToJson()).ToJson() && settings.BackgroundAppearanceVersion >= 2,
+            var loaded = PianoVisualSettings.FromJson(json);
+            Assert(loaded.ToJson() == PianoVisualSettings.FromJson(loaded.ToJson()).ToJson() && loaded.BackgroundAppearanceVersion >= 2,
                 $"presets/{name}.json should already hold final values: loading it twice must not change it again (no migration or clamping left to do).");
         }
         Assert(shelf.Select(preset => preset.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == shelf.Count
