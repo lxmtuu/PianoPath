@@ -573,11 +573,6 @@
             <Setter Property="Foreground" Value="#FFB3C4"/>
         </Style>
 
-        <!-- Search field with room for the leading magnifier. -->
-        <Style x:Key="SearchBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
-            <Setter Property="Padding" Value="28,4,8,4"/>
-        </Style>
-
         <!-- Raised chrome panel: layered surface, hairline top edge and a soft drop shadow. -->
         <Style x:Key="PanelChromeStyle" TargetType="Border">
             <Setter Property="Background" Value="{StaticResource PanelChromeBrush}"/>
@@ -804,6 +799,13 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Search field with room for the leading magnifier. Declared after the TextBox style on purpose:
+             BasedOn={x:Type TextBox} is a static lookup, so a style placed above it silently falls back to
+             the system TextBox (a white box on the dark dock). -->
+        <Style x:Key="SearchBoxStyle" TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+            <Setter Property="Padding" Value="28,4,8,4"/>
         </Style>
 
         <!-- ===== ComboBox ===== -->

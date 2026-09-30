@@ -595,7 +595,7 @@ public partial class MainWindow
         var swatch = new Button { Tag = property, Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)) };
         Loc.Set(swatch, "Open color picker", FrameworkElement.ToolTipProperty);
         swatch.Click += VisualColorButton_Click; SetColorSwatch(swatch, current);
-        var box = new TextBox { Text = current, Tag = property, Width = 92, Height = 26, FontSize = 10.5, CharacterCasing = CharacterCasing.Upper, MaxLength = 9 };
+        var box = new TextBox { Text = current, Tag = property, Width = 92, Height = 26, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, CharacterCasing = CharacterCasing.Upper, MaxLength = 9 };
         box.LostFocus += VisualColor_LostFocus; box.KeyDown += (s, e) => { if (e.Key == Key.Enter) { VisualColor_LostFocus(s, e); e.Handled = true; } };
         Grid.SetColumn(swatch, 1); Grid.SetColumn(box, 2);
         row.Children.Add(text); row.Children.Add(swatch); row.Children.Add(box);
