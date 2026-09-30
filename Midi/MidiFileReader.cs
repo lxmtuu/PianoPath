@@ -223,6 +223,8 @@ internal static class MidiReader
         // tempo written into a playing track applies to the whole piece) and their notes share one timeline.
         var notes = new List<NoteEvent>();
         var beats = new List<double>();
+        var (feltBeats, unitsPerBeat) = Meter.Of(timeSignatureNumerator, timeSignatureDenominator);
+        var beatQuarters = Meter.BeatInQuarters(unitsPerBeat, timeSignatureDenominator);
         if (format == 2)
         {
             var offset = 0.0;
@@ -230,7 +232,7 @@ internal static class MidiReader
             {
                 var clock = new Clock(track.Tempos, division, ticksPerSecond);
                 AddTrack(notes, track, clock, offset);
-                AddGrid(beats, track.EndTick, clock, offset, smpte, division, timeSignatureDenominator, pattern: true);
+                AddGrid(beats, track.EndTick, clock, offset, smpte, division, beatQuarters, pattern: true);
                 offset += clock.Seconds(track.EndTick);
             }
         }
@@ -241,10 +243,12 @@ internal static class MidiReader
             var clock = new Clock(tempos, division, ticksPerSecond);
             foreach (var track in tracks) AddTrack(notes, track, clock, 0);
             // One grid for the whole arrangement, reaching two beats past the last note wherever that is.
-            AddGrid(beats, tracks.Count == 0 ? 0 : tracks.Max(track => track.EndTick), clock, 0, smpte, division, timeSignatureDenominator, pattern: false);
+            AddGrid(beats, tracks.Count == 0 ? 0 : tracks.Max(track => track.EndTick), clock, 0, smpte, division, beatQuarters, pattern: false);
         }
         notes.Sort((left, right) => left.Start.CompareTo(right.Start));
-        return new MidiSong { Notes = notes, BeatTimes = beats, BeatsPerBar = timeSignatureNumerator, TrackNames = trackNames };
+        // The bar holds the felt beats, not the written numerator: 6/8 holds two, so the bar lines the sheet
+        // draws every `BeatsPerBar` grid entries land once a bar, and in the right place.
+        return new MidiSong { Notes = notes, BeatTimes = beats, BeatsPerBar = feltBeats, TrackNames = trackNames };
     }
 
     /// <summary>Puts one track's notes onto the timeline, shifted by <paramref name="offset"/> seconds.</summary>
@@ -268,11 +272,16 @@ internal static class MidiReader
     /// beats past its last note, which is what keeps the metronome going to the end of the piece.
     /// </para>
     /// </summary>
-    private static void AddGrid(List<double> beats, long endTick, Clock clock, double offset, bool smpte, int division, int denominator, bool pattern)
+    /// <summary>
+    /// Lays one beat after another over the whole file. <paramref name="beatQuarters"/> is how long a felt beat
+    /// is in quarter notes — one for a simple meter's beat-type, one and a half for the dotted quarter a 6/8 bar
+    /// is felt in — so a compound meter gives the sheet the grouping a score writes and not one beat per eighth.
+    /// </summary>
+    private static void AddGrid(List<double> beats, long endTick, Clock clock, double offset, bool smpte, int division, double beatQuarters, bool pattern)
     {
         if (!smpte)
         {
-            var beatTicks = Math.Max(1, division * 4 / denominator);
+            var beatTicks = Math.Max(1, (long)Math.Round(division * beatQuarters));
             var count = pattern
                 ? (endTick + beatTicks - 1) / beatTicks                  // a pattern's grid covers the pattern, no more
                 : endTick / beatTicks + 2;                               // an arrangement keeps the metronome past its last note
@@ -285,7 +294,7 @@ internal static class MidiReader
         {
             if (beats.Count >= MaxBeats) break;
             beats.Add(time);
-            time += clock.QuarterSeconds(time - offset);
+            time += clock.QuarterSeconds(time - offset) * beatQuarters;
         }
     }
 

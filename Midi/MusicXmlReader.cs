@@ -203,14 +203,18 @@ internal static class MusicXmlReader
                 // the grid follows a tempo or a time-signature change instead of assuming one tempo throughout.
                 if (track == 0)
                 {
-                    var beatSeconds = (60 / tempo) * 4.0 / beatType;
-                    for (var beat = 0; beat < beats; beat++) beatTimes.Add(partSeconds + beat * beatSeconds);
+                    // One beat per beat-type unit of a simple meter and one per group of three of a compound one,
+                    // which is what the sheet beams and counts its rests by; the tempo in force here is the one
+                    // the grid is laid down at, so the metronome follows a tempo or signature change.
+                    var (feltBeats, unitsPerBeat) = Meter.Of(beats, beatType);
+                    var beatSeconds = (60 / tempo) * Meter.BeatInQuarters(unitsPerBeat, beatType);
+                    for (var beat = 0; beat < feltBeats; beat++) beatTimes.Add(partSeconds + beat * beatSeconds);
                 }
                 // The next measure starts where this one's cursor ended; the grid already has every beat of
                 // it, so nothing has to be patched up here.
                 partSeconds += Seconds(cursor, divisions, tempo);
             }
-            if (track == 0) beatsPerBar = beats;
+            if (track == 0) beatsPerBar = Meter.Of(beats, beatType).Beats;
             track++;
         }
 

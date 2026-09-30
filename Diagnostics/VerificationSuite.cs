@@ -122,6 +122,22 @@ internal static class VerificationSuite
         Assert(notes.Count == 3 && notes.All(n => n.Pitch != 36), "MIDI format 1 should read notes from multiple tracks and skip the percussion channel.");
         Assert(song.BeatsPerBar == 4 && song.BeatTimes.Count >= 3 && Math.Abs(song.BeatTimes[1] - .5) < .001 && Math.Abs(song.BeatTimes[2] - .75) < .001, "The beat grid should follow the tempo map for the metronome.");
         Assert(song.TrackNames.TryGetValue(0, out var trackName) && trackName == "Lead", "Track name meta events should be exposed for the track picker.");
+        // How a signature is felt: a simple meter beats on its beat-type, a compound one in threes.
+        Assert(Meter.Of(4, 4) == (4, 1) && Meter.Of(3, 4) == (3, 1) && Meter.Of(2, 2) == (2, 1) && Meter.Of(3, 8) == (3, 1)
+                && Meter.Of(6, 8) == (2, 3) && Meter.Of(9, 8) == (3, 3) && Meter.Of(12, 8) == (4, 3) && Meter.Of(6, 4) == (2, 3)
+                && Meter.Of(5, 4) == (5, 1) && Meter.Of(7, 8) == (7, 1)
+                && Math.Abs(Meter.BeatInQuarters(3, 8) - 1.5) < 1e-9 && Math.Abs(Meter.BeatInQuarters(1, 4) - 1) < 1e-9,
+            "A simple meter should beat on its written beat-type while a compound one (six, nine or twelve) is felt in threes, which is the grouping a score beams by.");
+        File.WriteAllBytes(path, CreateSignatureMidi(6, 8)); var compound = MidiReader.ReadSong(path);
+        Assert(compound.BeatsPerBar == 2 && compound.BeatTimes.Count == 2
+                && Math.Abs(compound.BeatTimes[0]) < 1e-9 && Math.Abs(compound.BeatTimes[1] - .75) < 1e-6,
+            $"A 6/8 bar should beat twice on dotted quarters rather than six times on eighths (found {compound.BeatsPerBar} beat(s) at {string.Join(", ", compound.BeatTimes.Select(time => time.ToString("0.###")))}).");
+        File.WriteAllBytes(path, CreateSignatureMidi(3, 4)); var triple = MidiReader.ReadSong(path);
+        Assert(triple.BeatsPerBar == 3 && triple.BeatTimes.Count == 3 && Math.Abs(triple.BeatTimes[1] - .5) < 1e-6,
+            $"A 3/4 bar should keep three quarter beats (found {triple.BeatsPerBar} beat(s)).");
+        File.WriteAllBytes(path, CreateSignatureMidi(12, 8)); var twelve = MidiReader.ReadSong(path);
+        Assert(twelve.BeatsPerBar == 4 && Math.Abs(twelve.BeatTimes[1] - .75) < 1e-6,
+            $"A 12/8 bar should be four dotted-quarter beats, the way a score groups it (found {twelve.BeatsPerBar}).");
         Assert(NoteTimeline.FirstIndexAtOrAfter(notes, .5) == 2 && NoteTimeline.FirstIndexAtOrAfter(notes, 9) == 3 && NoteTimeline.FirstIndexAtOrAfter(notes, -1) == 0, "Binary search over sorted note starts should find the first note at or after a time.");
         Assert(MidiReader.Read(path).Count == 3, "The note-only reader should stay compatible.");
         var middleC = notes.Single(n => n.Pitch == 60);
@@ -1831,6 +1847,27 @@ internal static class VerificationSuite
             $"The beat grid should follow the time signature and the tempo of each measure (found {string.Join(", ", score.BeatTimes.Take(4).Select(time => time.ToString("0.###")))}).");
         Assert(score.TrackNames[0] == "Piano" && score.ToSong().Notes.Count == score.Notes.Count && score.ToSong().BeatsPerBar == 2,
             "The part list should name the track a note carries, and the score should hand itself over as a song.");
+
+        // A compound signature beats in threes here too: three quarters of music written in 6/8 are two beats,
+        // and the sheet's beams, rests and bar lines follow that grouping rather than one beat per eighth.
+        var compoundScore = """
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>2</divisions><time><beats>6</beats><beat-type>8</beat-type></time></attributes>
+    <direction><sound tempo="60"/></direction>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration></note>
+    <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration></note>
+    <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration></note>
+  </measure></part>
+</score-partwise>
+""";
+        var compoundXml = MusicXmlReader.Parse(compoundScore);
+        Assert(compoundXml.BeatsPerBar == 2 && compoundXml.BeatTimes.Count == 2
+                && Math.Abs(compoundXml.BeatTimes[0]) < 1e-9 && Math.Abs(compoundXml.BeatTimes[1] - 1.5) < 1e-9,
+            $"A 6/8 score should beat twice on dotted quarters at the measure's tempo (found {compoundXml.BeatsPerBar} beat(s) at {string.Join(", ", compoundXml.BeatTimes.Select(time => time.ToString("0.###")))}).");
+        Assert(compoundXml.Notes.Count == 3 && Math.Abs(compoundXml.Notes[^1].Start - 2) < 1e-9,
+            "Reading the grid of a compound signature should not move the notes themselves.");
 
         // Two parts instead of two staves: the first part is the right hand, the second the left.
         var twoParts = """
@@ -3865,6 +3902,22 @@ internal static class VerificationSuite
     /// A format 2 file: two independent patterns, each one bar of one quarter note at 120 BPM. Playing them one
     /// after another puts the second note half a second in; playing them together would put both at zero.
     /// </summary>
+    /// <summary>
+    /// One track, one time signature and one held middle C: enough to read the beat grid a signature produces.
+    /// The note lasts a quarter, so the grid is asked about a signature rather than about the music under it.
+    /// </summary>
+    private static byte[] CreateSignatureMidi(int numerator, int denominator)
+    {
+        using var track = new MemoryStream(); using var t = new BinaryWriter(track);
+        t.Write(new byte[] { 0, 0xFF, 0x58, 4, (byte)numerator, (byte)(Math.Log2(denominator)), 24, 8 });
+        t.Write(new byte[] { 0, 0x90, 60, 100 });
+        t.Write(new byte[] { 0x83, 0x60, 0x80, 60, 0 });
+        t.Write(new byte[] { 0, 0xFF, 0x2F, 0 });
+        using var s = new MemoryStream(); using var w = new BinaryWriter(s);
+        w.Write(Encoding.ASCII.GetBytes("MThd")); Write32(w, 6); Write16(w, 0); Write16(w, 1); Write16(w, 480);
+        WriteTrack(w, track.ToArray()); return s.ToArray();
+    }
+
     private static byte[] CreateFormatTwoMidi()
     {
         var patternA = new byte[] { 0, 0xFF, 0x03, 4, 0x42, 0x61, 0x73, 0x73, 0, 0x90, 60, 100, 0x83, 0x60, 0x80, 60, 0, 0, 0xFF, 0x2F, 0 };
