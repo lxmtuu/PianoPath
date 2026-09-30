@@ -2096,6 +2096,8 @@ internal static class VerificationSuite
         SetField(stage, "_sheetKey", cachedKey);
         // The signature really takes ink: draw an empty band in both keys and count the pixels inside the strip
         // between the clef and the first room the music could use, where nothing but the signature can land.
+        // The band paints its own translucent background, so "not transparent" would count every pixel of the
+        // strip in both keys; the count is of pixels dark opaquely enough to be ink on top of that background.
         var stripLeft = (int)Math.Ceiling(area.X + SheetLayer.ClefSpace(area) + 3);
         var stripRight = (int)Math.Ceiling(area.X + SheetLayer.LeftInset(area, dMajor) - 3);
         int LitPixels(MusicKey key)
@@ -2110,12 +2112,12 @@ internal static class VerificationSuite
             var lit = 0;
             for (var y = 0; y < height; y++)
                 for (var x = stripLeft; x < stripRight; x++)
-                    if (pixels[(y * width + x) * 4 + 3] != 0) lit++;
+                    if (pixels[(y * width + x) * 4 + 3] > 200) lit++;
             return lit;
         }
         var plainInk = LitPixels(MusicKey.CMajor); var signedInk = LitPixels(dMajor);
         Assert(plainInk == 0 && signedInk > 0,
-            $"A key signature should put ink between the clef and the music: C major writes nothing there, D major writes two sharps on each staff (counted {plainInk} and {signedInk} pixels).");
+            $"A key signature should put ink between the clef and the music: C major writes nothing there, D major writes two sharps on each staff (counted {plainInk} and {signedInk} inked pixels).");
         Assert(SheetLayer.SignatureWidth(MusicKey.CMajor, SheetLayer.StaffGap(area)) == 0
                 && Math.Abs(SheetLayer.LeftInset(area, dMajor) - SheetLayer.LeftInset(area, MusicKey.CMajor) - SheetLayer.SignatureWidth(dMajor, SheetLayer.StaffGap(area))) < .001
                 && SheetLayer.LeftInset(area, dMajor) > SheetLayer.ClefSpace(area),
