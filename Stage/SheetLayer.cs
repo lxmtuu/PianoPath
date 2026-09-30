@@ -8,7 +8,8 @@ namespace PianoPath;
 /// The sheet layer: a grand staff drawn across the top of the stage, above the piano roll and following the
 /// playhead. Each note is written on the staff its hand split assigns it to, at the place the song's key spells
 /// it, with a key signature at the head of both staves, the accidentals the bars really need, ledger lines where
-/// a note leaves the staff, bar lines on the beat grid and a ring on whatever is sounding.
+/// a note leaves the staff, bar lines on the beat grid, short notes beamed within their beat (or flagged when
+/// they stand alone) and a ring on whatever is sounding.
 ///
 /// <para>
 /// The geometry is plain arithmetic (<see cref="Step"/>, <see cref="Place"/>, <see cref="LedgerLines"/>,
@@ -177,6 +178,82 @@ internal static class SheetLayer
         return downbeats;
     }
 
+    /// <summary>One note joined to the notes beside it by a beam: the run of note indices it covers, its stems' direction and how many beams it carries.</summary>
+    internal readonly record struct Beam(int First, int Last, bool Up, int Beams);
+
+    /// <summary>
+    /// How long one beat of the song lasts: the middle gap between the beats of its own grid. A grid with fewer
+    /// than two beats — a live performance — has no beat to measure against, so half a second stands in.
+    /// </summary>
+    internal static double BeatSeconds(IReadOnlyList<double> beats)
+    {
+        var gaps = new List<double>();
+        for (var index = 1; index < beats.Count; index++)
+        {
+            var gap = beats[index] - beats[index - 1];
+            if (gap > 1e-6) gaps.Add(gap);
+        }
+        if (gaps.Count == 0) return .5;
+        gaps.Sort();
+        return gaps[gaps.Count / 2];
+    }
+
+    /// <summary>
+    /// How many flags a note carries: none for a quarter note or anything longer, then one for an eighth, two for
+    /// a sixteenth and three for a shorter note still. The note's own length is compared with the beat the song's
+    /// grid gives, so the same seconds are an eighth in a slow song and a quarter in a fast one.
+    /// </summary>
+    internal static int Flags(double durationSeconds, double beatSeconds)
+    {
+        if (beatSeconds <= 0 || durationSeconds <= 0) return 0;
+        var flags = 0; var slot = beatSeconds;
+        while (flags < 3 && durationSeconds <= slot * .7) { flags++; slot /= 2; }
+        return flags;
+    }
+
+    /// <summary>
+    /// The runs of notes that are joined by a beam instead of each carrying its own flags. Two neighbouring notes
+    /// share a beam when both are short enough to carry one, sit on the same staff (one beam never crosses from
+    /// one hand to the other), start at different moments inside the same beat of the song's grid, and are
+    /// neighbours in time — anything written between them ends the run. A run of one note is not a beam, so it is
+    /// left out and the note keeps its own flags.
+    /// </summary>
+    internal static IReadOnlyList<Beam> Beams(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, double handSplit, MusicKey key, double beatSeconds)
+    {
+        var beams = new List<Beam>();
+        var run = new List<int>();
+        void Close()
+        {
+            if (run.Count >= 2)
+            {
+                var up = StemUp(Place(notes[run[0]].Pitch, handSplit, key).RelativeStep);
+                var count = int.MaxValue;
+                foreach (var index in run) count = Math.Min(count, Flags(notes[index].Duration, beatSeconds));
+                beams.Add(new Beam(run[0], run[^1], up, count));
+            }
+            run.Clear();
+        }
+        for (var index = 0; index < notes.Count; index++)
+        {
+            var note = notes[index];
+            var flags = Flags(note.Duration, beatSeconds);
+            // A note written hollow is a half note or longer and never carries a beam, however short the song's
+            // beat makes its seconds look.
+            var joins = flags > 0 && !HollowHead(note.Duration);
+            var (staff, _) = Place(note.Pitch, handSplit, key);
+            var beat = BarOf(note.Start, beats);
+            var continues = joins && run.Count > 0
+                && staff == Place(notes[run[^1]].Pitch, handSplit, key).Staff
+                && beat == BarOf(notes[run[^1]].Start, beats)
+                && note.Start - notes[run[^1]].Start > 1e-6;
+            if (!continues) Close();
+            if (!joins) continue;
+            run.Add(index);
+        }
+        Close();
+        return beams;
+    }
+
     /// <summary>
     /// The ledger lines a note needs, as step offsets from the bottom line of its staff: even offsets are
     /// lines, so a note in the space above the staff needs none while one on the line above needs one through
@@ -310,6 +387,23 @@ internal static class SheetLayer
             new Point(playheadX, area.Y + 4), new Point(playheadX, area.Bottom - 4));
 
         var headWidth = Math.Clamp(gap * 1.35, 3.5, 12);
+        // Which notes share a beam, and where the stem ends of each run sit: a run's stems all reach one line, so
+        // the beam that joins them is straight.
+        var beatSeconds = BeatSeconds(beats);
+        var beams = Beams(notes, beats, handSplit, key, beatSeconds);
+        var beamEnds = new double[notes.Count];
+        for (var index = 0; index < beamEnds.Length; index++) beamEnds[index] = double.NaN;
+        foreach (var beam in beams)
+        {
+            var end = beam.Up ? double.MaxValue : double.MinValue;
+            for (var index = beam.First; index <= beam.Last; index++)
+            {
+                var (staff, relative) = Place(notes[index].Pitch, handSplit, key);
+                var y = StaffBottom(area, gap, staff) - relative * half;
+                end = beam.Up ? Math.Min(end, y - gap * 3.2) : Math.Max(end, y + gap * 3.2);
+            }
+            for (var index = beam.First; index <= beam.Last; index++) beamEnds[index] = end;
+        }
         var first = NoteTimeline.FirstIndexAtOrAfter(notes, windowStart);
         for (var index = first; index < notes.Count; index++)
         {
@@ -341,7 +435,30 @@ internal static class SheetLayer
             {
                 var up = StemUp(relative);
                 var stemX = x + (up ? headWidth * .55 : -headWidth * .55);
-                dc.DrawLine(new Pen(brush, 1.2), new Point(stemX, y), new Point(stemX, up ? y - gap * 3.2 : y + gap * 3.2));
+                // A note inside a beam reaches the run's own stem end; every other note keeps the standard
+                // length, and a short one carries its flags at that end.
+                var beamed = !double.IsNaN(beamEnds[index]);
+                var end = beamed ? beamEnds[index] : up ? y - gap * 3.2 : y + gap * 3.2;
+                dc.DrawLine(new Pen(brush, 1.2), new Point(stemX, y), new Point(stemX, end));
+                var flags = beamed ? 0 : Flags(note.Duration, beatSeconds);
+                for (var flag = 0; flag < flags; flag++)
+                {
+                    var root = up ? end + flag * gap * .38 : end - flag * gap * .38;
+                    dc.DrawLine(new Pen(brush, 1.2), new Point(stemX, root),
+                        new Point(stemX + (up ? -headWidth * 1.5 : headWidth * 1.5), root + (up ? gap * 1.1 : -gap * 1.1)));
+                }
+            }
+        }
+        // The beams themselves, drawn last so they sit on top of the stems they join.
+        foreach (var beam in beams)
+        {
+            var left = NoteX(notes[beam.First].Start, windowStart, secondsVisible, area, inset) + headWidth * .55;
+            var right = NoteX(notes[beam.Last].Start, windowStart, secondsVisible, area, inset) + headWidth * .55;
+            var beamBrush = new SolidColorBrush(NoteColour(notes[beam.First], position, dim, ink, accent));
+            for (var line = 0; line < beam.Beams; line++)
+            {
+                var y = beam.Up ? beamEnds[beam.First] + line * gap * .38 : beamEnds[beam.First] - line * gap * .38;
+                dc.DrawLine(new Pen(beamBrush, Math.Max(1.5, gap * .34)), new Point(left, y), new Point(right, y));
             }
         }
     }

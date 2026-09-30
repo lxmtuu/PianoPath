@@ -2066,6 +2066,53 @@ internal static class VerificationSuite
                 && SheetLayer.Downbeats([0, .5, 1, 1.5, 2], 4).SequenceEqual([0, 2]) && SheetLayer.Downbeats([0, .5], 0).SequenceEqual([0, .5]),
             "A note belongs to the last downbeat at or before it, with nothing before the first one, and the downbeats of a grid are every fourth beat.");
 
+        // ---- Beams and flags: how long a beat is, which notes are short enough to carry a flag, and which of
+        // them are joined by a beam instead. All arithmetic over the note list and the song's own beat grid.
+        var eighthGrid = new double[] { 0, .5, 1, 1.5, 2 };
+        Assert(Math.Abs(SheetLayer.BeatSeconds(eighthGrid) - .5) < .001
+                && Math.Abs(SheetLayer.BeatSeconds([0, 1, 2, 4]) - 1) < .001
+                && Math.Abs(SheetLayer.BeatSeconds([0, .5, 1, 4]) - .5) < .001
+                && Math.Abs(SheetLayer.BeatSeconds([0]) - .5) < .001 && Math.Abs(SheetLayer.BeatSeconds([]) - .5) < .001,
+            "The beat of a song is the middle gap of its own grid, and a grid with no gap to measure falls back to half a second.");
+        Assert(SheetLayer.Flags(.5, .5) == 0 && SheetLayer.Flags(.25, .5) == 1 && SheetLayer.Flags(.1, .5) == 2 && SheetLayer.Flags(.05, .5) == 3
+                && SheetLayer.Flags(.25, 0) == 0 && SheetLayer.Flags(0, .5) == 0,
+            $"A quarter note carries no flag, an eighth one, a sixteenth two and anything shorter three, while a song with no beat or a note with no length carries none (got {SheetLayer.Flags(.5, .5)}, {SheetLayer.Flags(.25, .5)}, {SheetLayer.Flags(.1, .5)}, {SheetLayer.Flags(.05, .5)}).");
+
+        // Two eighths inside one beat are one beam; four eighths over two beats are two beams, because a run
+        // never leaves the beat it started in.
+        var pair = SheetLayer.Beams([Note(60, 0, .25), Note(62, .25, .25)], eighthGrid, 60, MusicKey.CMajor, .5);
+        Assert(pair.Count == 1 && pair[0] == new SheetLayer.Beam(0, 1, true, 1),
+            $"Two eighth notes in the same beat should share one beam with their stems up (got {pair.Count} run(s)).");
+        var four = SheetLayer.Beams([Note(60, 0, .25), Note(62, .25, .25), Note(64, .5, .25), Note(65, .75, .25)], eighthGrid, 60, MusicKey.CMajor, .5);
+        Assert(four.Count == 2 && four[0] == new SheetLayer.Beam(0, 1, true, 1) && four[1] == new SheetLayer.Beam(2, 3, true, 1),
+            $"Four eighths over two beats should be two beams, not one run across the bar line of the beat (got {four.Count} run(s)).");
+        // The shortest note decides how many beams a run carries, so a sixteenth inside a run of eighths still
+        // reads as a sixteenth.
+        var mixed = SheetLayer.Beams([Note(60, 0, .25), Note(62, .25, .1)], eighthGrid, 60, MusicKey.CMajor, .5);
+        Assert(mixed.Count == 1 && mixed[0] == new SheetLayer.Beam(0, 1, true, 1)
+                && SheetLayer.Beams([Note(60, 0, .1), Note(62, .25, .1)], eighthGrid, 60, MusicKey.CMajor, .5) is [{ Beams: 2 }],
+            "A beam carries as many lines as its shortest note needs, and a run of sixteenths carries two.");
+        // Notes low on the bass staff lean their stems the other way.
+        var lowPair = SheetLayer.Beams([Note(55, 0, .25), Note(57, .25, .25)], eighthGrid, 60, MusicKey.CMajor, .5);
+        Assert(lowPair.Count == 1 && lowPair[0] == new SheetLayer.Beam(0, 1, false, 1),
+            $"A beam written high in the bass staff should point its stems down like the notes' own heads (got up={lowPair.FirstOrDefault().Up}).");
+
+        // What breaks a run: a quarter note written between two eighths, a note of the other hand, a note in the
+        // next beat, a chord written at the same moment, and a half note however fast the beat looks.
+        var broken = new (string What, NoteEvent[] Notes, double Beat, IReadOnlyList<double> Grid)[]
+        {
+            ("a quarter between two eighths", [Note(60, 0, .25), Note(62, .25, .5), Note(64, .4, .25)], .5, eighthGrid),
+            ("a note of the other hand", [Note(72, 0, .25), Note(48, .25, .25)], .5, eighthGrid),
+            ("a note in the next beat", [Note(60, .25, .25), Note(62, .5, .25)], .5, eighthGrid),
+            ("a chord written at one moment", [Note(60, 0, .25), Note(62, 0, .25)], .5, eighthGrid),
+            ("a half note in a slow song", [Note(60, 0, .25), Note(62, .25, 1.5)], 3, new double[] { 0, 3, 6, 9 }),
+        };
+        foreach (var (what, group, beat, grid) in broken)
+            Assert(SheetLayer.Beams(group, grid, 60, MusicKey.CMajor, beat).Count == 0,
+                $"A beam has to be broken by {what}: nothing short enough to beam is next to anything else there.");
+        Assert(SheetLayer.Beams([Note(60, 0, .25)], eighthGrid, 60, MusicKey.CMajor, .5).Count == 0,
+            "A lone eighth note is not a beam: it keeps its own flag.");
+
         var area = SheetLayer.Band(1280, 480, 34);
         Assert(Math.Abs(area.Height - 163.2) < .01 && area.Width > 1100 && area.X > 0 && area.Bottom < 240,
             $"The staff band should stay in the upper part of the stage and scale with it (got {area}).");
@@ -2154,6 +2201,25 @@ internal static class VerificationSuite
         var plainInk = LitPixels(MusicKey.CMajor); var signedInk = LitPixels(dMajor);
         Assert(plainInk == 0 && signedInk > 0,
             $"A key signature should put ink between the clef and the music: C major writes nothing there, D major writes two sharps on each staff (counted {plainInk} and {signedInk} inked pixels).");
+        // The beam is really drawn: a pair of eighths inside one beat carries a beam across both stems, while the
+        // same pair written either side of a beat carries two flags instead — and the beam is far more ink.
+        int Ink(IReadOnlyList<NoteEvent> content)
+        {
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) SheetLayer.Draw(dc, area, content, 0, 60, MusicKey.CMajor, beats, 4, 8, ink, accent, 1, 1);
+            var bitmap = new RenderTargetBitmap((int)Math.Ceiling(area.Width), (int)Math.Ceiling(area.Height), 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+            bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+            var lit = 0;
+            for (var index = 3; index < pixels.Length; index += 4) if (pixels[index] > 200) lit++;
+            return lit;
+        }
+        var beamedInk = Ink([Note(60, 0, .25), Note(62, .25, .25)]);
+        var flaggedInk = Ink([Note(60, .25, .25), Note(62, .5, .25)]);
+        Assert(beamedInk > flaggedInk,
+            $"A beamed pair should draw a beam across its stems rather than two flags ({beamedInk} inked pixels beamed, {flaggedInk} flagged).");
+
         Assert(SheetLayer.SignatureWidth(MusicKey.CMajor, SheetLayer.StaffGap(area)) == 0
                 && Math.Abs(SheetLayer.LeftInset(area, dMajor) - SheetLayer.LeftInset(area, MusicKey.CMajor) - SheetLayer.SignatureWidth(dMajor, SheetLayer.StaffGap(area))) < .001
                 && SheetLayer.LeftInset(area, dMajor) > SheetLayer.ClefSpace(area),
