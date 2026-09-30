@@ -31,10 +31,11 @@ internal static class Mp4TakeAttempt
     /// </summary>
     internal static int Run(string path)
     {
-        // The first question belongs to the machine, not to the app: can this media stack hold an H.264 stream
-        // at all? Asking a sink writer for one writes no frame and finds the encoder behind the mux, so a
-        // machine that says no is told so in one sentence instead of being left to hang inside a take that was
-        // never going to be written.
+        // The machine gets asked one question before the take, and only one: can this media stack hold an
+        // H.264 stream at all? Asking a sink writer for one writes no frame and finds the encoder behind the
+        // mux, so a machine that says no is told so in one sentence instead of being left to hang inside a take
+        // that was never going to be written. Everything else the run may want to know about this machine — the
+        // encoder-free plumbing probe — is asked afterwards and elsewhere, so it can never hold up the take.
         var streamProbe = Path.ChangeExtension(path, ".probe.mp4");
         Say("NOTE MP4 encoder: asking the media stack whether it can hold an H.264 stream for this size.");
         var encoder = Mp4Recorder.VideoTarget(Width, Height, FrameRate);
@@ -44,19 +45,6 @@ internal static class Mp4TakeAttempt
             ? "NOTE MP4 encoder: the sink writer found a way to make H.264 at this size, so there is an encoder here to write a take with."
             : $"NOTE MP4 encoder: the media stack would not take an H.264 stream (HRESULT {Mf.Describe(encoderResult)}), so there is no encoder here to write a take with, and nothing further is attempted.");
         if (encoderResult < 0) return 2;
-
-        // The second question is the app's own: does the sample plumbing work? Three pictures into an AVI need
-        // no encoder at all, so a machine that cannot finish that has plumbing trouble rather than codec
-        // trouble, and the two read differently in the verification log.
-        var probe = Path.ChangeExtension(path, ".probe.avi");
-        Say("NOTE MP4 encoder: writing three pictures into an uncompressed AVI through the same sample plumbing.");
-        var probeResult = Mf.EncodeAviProbe(probe, new byte[Width * Height * 4], Width, Height, FrameRate, 3, Say);
-        var probeBytes = 0L;
-        try { if (File.Exists(probe)) probeBytes = new FileInfo(probe).Length; } catch { }
-        try { File.Delete(probe); } catch { }
-        Say(probeResult >= 0 && probeBytes > 0
-            ? $"NOTE MP4 encoder: the sample plumbing works — the AVI probe wrote {probeBytes} bytes of uncompressed video (HRESULT {Mf.Describe(probeResult)})."
-            : $"NOTE MP4 encoder: the sample plumbing did not finish an AVI probe ({probeBytes} bytes, HRESULT {Mf.Describe(probeResult)}).");
 
         Say($"NOTE MP4 encoder: opening a {Width}×{Height} take at {FrameRate} fps, asking for the audio stream as well.");
         Mp4Recorder recorder;

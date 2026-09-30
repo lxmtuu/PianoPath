@@ -2143,19 +2143,13 @@ internal static class VerificationSuite
             return;
         }
         lock (lines) foreach (var line in lines) Results.Add(line);
-        // The two probes are what tell this machine's codecs apart from this side's plumbing, and both run before
-        // the take is opened: a child that got as far as the take must therefore have reported both verdicts, and
-        // a run without them would be reading a take with no line that explains how this machine got there. A
-        // child that died inside a probe never did — its last line names the step it died at, and that stays a
-        // SKIP like every other stop inside native code.
+        // The encoder check runs before the take is opened, so a child that got as far as the take must also have
+        // said whether this machine holds an H.264 stream: without that line the run is reading a take with no
+        // word on how the machine got there. A child that died inside the check never did — its last line names
+        // the step it died at, and that stays a SKIP like every other stop inside native code.
         if (lines.Any(line => line.Contains("opening a", StringComparison.Ordinal)))
-        {
             Assert(lines.Any(line => line.Contains("found a way to make H.264", StringComparison.Ordinal)),
                 "A take attempt that opened the take should have said the machine's media stack took an H.264 stream, since a take asks for one.");
-            Assert(lines.Any(line => line.Contains("AVI probe wrote", StringComparison.Ordinal)
-                    || line.Contains("did not finish an AVI probe", StringComparison.Ordinal)),
-                "A take attempt that opened the take should also have reported what the encoder-free AVI probe did, so a machine whose take hangs can be told apart from plumbing that hangs.");
-        }
         if (lines.Count == 0)
             Results.Add("SKIP MP4 encoder: the child process that writes the take said nothing at all, so only the format's arithmetic and its frame layout were checked.");
         else if (exit == 0 && !File.Exists(path))
@@ -2182,6 +2176,53 @@ internal static class VerificationSuite
                 : Loc.T("; this machine's media stack has no AAC encoder, so this take carries the video only");
             Results.Add($"PASS MP4 take: frames and audio blocks stamped on the recording's own clock, the stage's pixels converted to the encoder's NV12 layout, and a real 64×48 take written by a child process to a file of {bytes.Length} bytes{sound}.");
         }
+        // A run that produced no take gets the second question asked, and only then: what does this machine make
+        // of the part of recording that needs no encoder anywhere?
+        if (exit != 0 || !File.Exists(path)) VerifyEncodePlumbingProbe();
+    }
+
+    /// <summary>
+    /// Can this machine write a file through the sample plumbing at all? Three uncompressed pictures into an AVI
+    /// need no encoder anywhere, so the answer is what tells a machine whose file handling or buffers are the
+    /// trouble apart from one whose encoder would not cooperate — and it is asked out of process, with a short
+    /// timeout, because the AVI sink either opens promptly or not at all. It runs after the take, never before
+    /// it: a diagnostic that hangs must not stand in front of the thing it exists to explain, which is exactly
+    /// what a CI run showed when the probe was tried first.
+    /// </summary>
+    private static void VerifyEncodePlumbingProbe()
+    {
+        const int ProbeTimeoutSeconds = 20;
+        var probe = Path.Combine(Path.GetTempPath(), "keyflow-plumbing-probe-" + Guid.NewGuid().ToString("N") + ".avi");
+        var lines = new List<string>();
+        var exit = 0;
+        try
+        {
+            var start = new ProcessStartInfo(Environment.ProcessPath ?? Path.Combine(AppContext.BaseDirectory, "PianoPath.exe"))
+            {
+                UseShellExecute = false, RedirectStandardOutput = true, CreateNoWindow = true,
+            };
+            start.ArgumentList.Add("--encode-probe=" + probe);
+            using var child = new Process { StartInfo = start };
+            child.OutputDataReceived += (_, line) => { if (line.Data is not null) lock (lines) lines.Add(line.Data); };
+            child.Start();
+            child.BeginOutputReadLine();
+            exit = child.WaitForExit(ProbeTimeoutSeconds * 1000) ? child.ExitCode : -1;
+            if (exit < 0) { try { child.Kill(entireProcessTree: true); } catch { } }
+            child.WaitForExit();
+        }
+        catch (Exception ex)
+        {
+            Results.Add("SKIP MP4 encoder plumbing: the encoder-free AVI probe could not be attempted in a child process here (" + ex.Message + ").");
+            return;
+        }
+        lock (lines) foreach (var line in lines) Results.Add(line);
+        var last = lines.Count > 0 ? lines[^1] : "<the probe reported nothing at all>";
+        Results.Add(exit == 0
+            ? "PASS MP4 encoder plumbing: with no take written, a child process wrote three uncompressed pictures into an AVI through the take's own sample step, so this machine's media stack and this side's buffers both work and the take got stuck at the encoder."
+            : exit < 0
+                ? $"SKIP MP4 encoder plumbing: the encoder-free AVI probe never came back and was stopped after {ProbeTimeoutSeconds} seconds; the last step it reported was: {last}"
+                : $"SKIP MP4 encoder plumbing: the encoder-free AVI probe stopped without writing a file (it ended with code {exit} at: {last}).");
+        try { File.Delete(probe); } catch { }
     }
 
     /// <summary>
