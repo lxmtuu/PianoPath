@@ -2181,6 +2181,38 @@ internal static class VerificationSuite
                 && unsignedPlan.SequenceEqual([SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.Natural, SheetLayer.NoteAccidental.Sharp]),
             $"A tie should carry its sign into the bar it reaches rather than signing the note again, while the note after it is still signed ({string.Join(", ", carriedPlan)}).");
 
+        // ---- Chords: the notes written at one moment in one hand are one event, so a chord is one column of heads
+        // with one stem, and the sheet's own reading of the song is kept in the plan for whoever draws it.
+        var chordNotes = new[] { Note(60, 0, .5), Note(64, 0, .5), Note(67, 0, .5), Note(72, .5, .5) };
+        var chordGroups = SheetLayer.Chords(chordNotes, 60);
+        Assert(chordGroups.Count == 2 && chordGroups[0].SequenceEqual([0, 1, 2]) && chordGroups[1].SequenceEqual([3]),
+            $"The three notes of a chord should be one group and the melody note after it its own ({string.Join(" · ", chordGroups.Select(group => "[" + string.Join(",", group) + "]"))}).");
+        var splitHands = new[] { Note(72, 0, .5), Note(48, 0, .5) };
+        Assert(SheetLayer.Chords(splitHands, 60).Count == 2 && SheetLayer.Chords(splitHands, 60)[0].SequenceEqual([0])
+                && SheetLayer.Chords([], 60).Count == 0 && SheetLayer.Chords([Note(60, 0, .25), Note(62, .25, .25)], 60).Count == 2,
+            "Two notes written at one moment belong to the same group only when they are in the same hand: a chord is per hand, and single notes are groups of one.");
+        var streams = SheetLayer.Streams(chordNotes, 60);
+        Assert(streams.Count == 2 && streams[0].Count == 2 && streams[0][0].SequenceEqual([0, 1, 2]) && streams[0][1].SequenceEqual([3])
+                && streams[1].Count == 0,
+            "A hand's stream should read as one event per written moment, each event carrying the notes of its chord in pitch order.");
+        var interleaved = SheetLayer.Streams([Note(60, 0, .5), Note(48, 0, .5), Note(64, 1, .5), Note(52, 1, .5)], 60);
+        Assert(interleaved[0].Count == 2 && interleaved[1].Count == 2 && interleaved[0][1].SequenceEqual([2]) && interleaved[1][0].SequenceEqual([1]),
+            "Two hands playing at once should be two streams: one event per hand, in the song's own order.");
+        Assert(chordGroups.SequenceEqual(SheetLayer.Plan(chordNotes, beats, 4, 60, MusicKey.CMajor).Chords),
+            "The plan of a song should carry the same grouping a caller would compute for itself.");
+
+        // A chord is beamed like one note: the run reaches into the chord after it, and a chord on its own is never
+        // a beam across itself.
+        var chordBeam = SheetLayer.Beams([Note(60, 0, .25), Note(64, 0, .25), Note(62, .25, .25)], eighthGrid, 60, MusicKey.CMajor, .5);
+        Assert(chordBeam.Count == 1 && chordBeam[0] == new SheetLayer.Beam(0, 2, true, 1),
+            $"A beamed chord should join the next note with a single run reaching the note it ends on (got {chordBeam.Count} run(s), last {chordBeam.FirstOrDefault().Last}).");
+        var twoChords = SheetLayer.Beams([Note(60, 0, .25), Note(64, 0, .25), Note(62, .25, .25), Note(65, .25, .25)], eighthGrid, 60, MusicKey.CMajor, .5);
+        Assert(twoChords.Count == 1 && twoChords[0] == new SheetLayer.Beam(0, 3, true, 1) && twoChords[0].Beams == 1,
+            "Two chords of eighths in one beat should share one beam, and a run of sixteenths should carry two lines.");
+        Assert(SheetLayer.Beams([Note(48, 0, .25), Note(52, 0, .25)], eighthGrid, 60, MusicKey.CMajor, .5).Count == 0
+                && SheetLayer.Beams([Note(60, 0, .25), Note(64, 0, .25), Note(62, .25, .5)], eighthGrid, 60, MusicKey.CMajor, .5).Count == 0,
+            "A chord on its own is one column of heads, not a beam across itself, and a quarter note after a chord still breaks the run.");
+
         var area = SheetLayer.Band(1280, 480, 34);
         Assert(Math.Abs(area.Height - 163.2) < .01 && area.Width > 1100 && area.X > 0 && area.Bottom < 240,
             $"The staff band should stay in the upper part of the stage and scale with it (got {area}).");
@@ -2318,6 +2350,15 @@ internal static class VerificationSuite
         Assert(tiePlan.Ties.Count == 1 && tieInk > 0,
             $"A tie should draw a curve between the two heads, and nothing else about the drawing should change ({tieInk} inked pixels came from the tie).");
 
+        // The chord is stemmed once: the same three heads carry more ink when the plan hands them over as three
+        // separate groups, which is the drawing a sheet makes when it does not know they are a chord.
+        var chordSong = new NoteEvent[] { Note(60, 0, .25), Note(64, 0, .25), Note(67, 0, .25), Note(72, .25, .25) };
+        var chordPlan = SheetLayer.Plan(chordSong, beats, 4, 60, MusicKey.CMajor);
+        var ungrouped = chordPlan with { Chords = [.. Enumerable.Range(0, chordSong.Length).Select(index => (IReadOnlyList<int>)new[] { index })] };
+        var chordInk = Ink(chordSong, chordPlan); var separateInk = Ink(chordSong, ungrouped);
+        Assert(chordPlan.Chords.Count == 2 && chordInk < separateInk,
+            $"A chord should be drawn with one stem for the whole column of heads ({chordInk} inked pixels) rather than one stem per head ({separateInk}).");
+
         Assert(SheetLayer.SignatureWidth(MusicKey.CMajor, SheetLayer.StaffGap(area)) == 0
                 && Math.Abs(SheetLayer.LeftInset(area, dMajor) - SheetLayer.LeftInset(area, MusicKey.CMajor) - SheetLayer.SignatureWidth(dMajor, SheetLayer.StaffGap(area))) < .001
                 && SheetLayer.LeftInset(area, dMajor) > SheetLayer.ClefSpace(area),
@@ -2327,7 +2368,7 @@ internal static class VerificationSuite
         sheetToggle.IsChecked = wasShowing;
         stage.SetSheet([], 4);
         stage.ClearTransient();
-        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the ties that carry a note on, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
+        Results.Add($"PASS Sheet layer: written pitch and staff placement from the hand split, ledger lines outside the staff, hollow and stemmed heads, the playhead window, the clef by font, the note colours, the key and its signature, beams and flags, the rests of the quiet hand, the ties that carry a note on, the chords stemmed once, the streams a hand reads as, the plan kept between frames, and both staves drawn from the stage's own song and grid (glyphs: {(SheetLayer.MusicGlyphsAvailable ? "musical" : "letters")}).");
     }
 
     /// <summary>

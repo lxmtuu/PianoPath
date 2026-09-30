@@ -122,10 +122,14 @@ internal static class SheetLayer
 
     /// <summary>
     /// Everything the sheet works out for a song before it draws anything: the accidental each note is written
-    /// with, the beams its short notes share and the silences of both hands. None of it depends on the practice
-    /// state or on where the playhead is, so a renderer can work it out once per song instead of once per frame.
+    /// with, the beams its short notes share, the silences of both hands, the notes carried on by ties, and the
+    /// way the reader groups the notes — the chords and the live notes — into single streams. None of it depends
+    /// on the practice state or on where the playhead is, so a renderer can work it out once per song instead of
+    /// once per frame.
     /// </summary>
-    internal sealed record SheetPlan(NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests, IReadOnlyList<Tie> Ties);
+    internal sealed record SheetPlan(
+        NoteAccidental[] Accidentals, IReadOnlyList<Beam> Beams, IReadOnlyList<RestGap> Rests, IReadOnlyList<Tie> Ties,
+        IReadOnlyList<IReadOnlyList<int>> Chords, IReadOnlyList<IReadOnlyList<int>> Streams);
 
     /// <summary>Works out the plan of a song: its accidentals, its beams, its rests and its ties.</summary>
     internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key)
@@ -140,7 +144,9 @@ internal static class SheetLayer
             AccidentalPlan(notes, key, index => BarOf(notes[index].Start, downbeats), handSplit, carried),
             Beams(notes, beats, handSplit, key, beatSeconds),
             Rests(notes, handSplit),
-            ties);
+            ties,
+            Chords(notes, handSplit),
+            Streams(notes, handSplit));
     }
 
     /// <summary>What is written beside a note head: nothing, a sharp, a flat or a natural.</summary>
@@ -388,7 +394,9 @@ internal static class SheetLayer
         var run = new List<int>();
         void Close()
         {
-            if (run.Count >= 2)
+            // A run has to join notes written at two different moments: a chord on its own is one column of heads
+            // and gets one stem, never a beam across itself.
+            if (run.Count >= 2 && notes[run[^1]].Start - notes[run[0]].Start > 1e-6)
             {
                 var up = StemUp(Place(notes[run[0]].Pitch, handSplit, key).RelativeStep);
                 var count = int.MaxValue;
@@ -397,25 +405,95 @@ internal static class SheetLayer
             }
             run.Clear();
         }
-        for (var index = 0; index < notes.Count; index++)
+        var chords = Chords(notes, handSplit);
+        for (var group = 0; group < chords.Count; group++)
         {
-            var note = notes[index];
-            var flags = Flags(note.Duration, beatSeconds);
-            // A note written hollow is a half note or longer and never carries a beam, however short the song's
-            // beat makes its seconds look.
-            var joins = flags > 0 && !HollowHead(note.Duration);
-            var staff = StaffOf(note.Pitch, handSplit);
-            var beat = BarOf(note.Start, beats);
+            // One stem per chord: the notes written together join the run together, and the notes of the chord
+            // after them are the ones that decide whether the run carries on.
+            var joins = true;
+            var staff = -1;
+            foreach (var index in chords[group])
+            {
+                // A note written hollow is a half note or longer and never carries a beam, however short the
+                // song's beat makes its seconds look.
+                staff = StaffOf(notes[index].Pitch, handSplit);
+                if (Flags(notes[index].Duration, beatSeconds) == 0 || HollowHead(notes[index].Duration)) joins = false;
+            }
+            var beat = BarOf(notes[chords[group][0]].Start, beats);
             var continues = joins && run.Count > 0
                 && staff == StaffOf(notes[run[^1]].Pitch, handSplit)
                 && beat == BarOf(notes[run[^1]].Start, beats)
-                && note.Start - notes[run[^1]].Start > 1e-6;
+                && notes[chords[group][0]].Start - notes[run[^1]].Start > 1e-6;
             if (!continues) Close();
             if (!joins) continue;
-            run.Add(index);
+            foreach (var index in chords[group]) run.Add(index);
         }
         Close();
         return beams;
+    }
+
+    /// <summary>
+    /// The notes of the song gathered as they are written: the notes sounding at one moment in one hand. A chord
+    /// is written with one head per pitch and one stem for the whole chord, so the sheet needs to know which notes
+    /// belong together. The song's own order is kept — its notes are sorted by start, and the list is not
+    /// reordered, so index-based checks keep working — and a group stands for a run of notes that start together.
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<int>> Chords(IReadOnlyList<NoteEvent> notes, double handSplit)
+    {
+        var groups = new List<IReadOnlyList<int>>();
+        var run = new List<int>();
+        void Close()
+        {
+            if (run.Count > 0) groups.Add([.. run]);
+            run.Clear();
+        }
+        for (var index = 0; index < notes.Count; index++)
+        {
+            var note = notes[index];
+            if (run.Count > 0)
+            {
+                var head = notes[run[0]];
+                var together = Math.Abs(note.Start - head.Start) < 1e-6
+                    && StaffOf(note.Pitch, handSplit) == StaffOf(head.Pitch, handSplit);
+                if (!together) Close();
+            }
+            run.Add(index);
+        }
+        Close();
+        return groups;
+    }
+
+    /// <summary>
+    /// The song split the way a reader's eyes split it: the notes that are sounding together are one event, and
+    /// the events of one hand are one stream even when they overlap the other hand's.
+    ///
+    /// <para>
+    /// One list per hand, in the song's own order, with every note of a chord in the same event, so a renderer can
+    /// draw a hand event by event — one grouped head sitting on the fingers that are pressed, rather than one
+    /// marker per note head. The notes of one stream are the notes of one event, in pitch order.
+    /// </para>
+    /// </summary>
+    internal static IReadOnlyList<IReadOnlyList<int>> Streams(IReadOnlyList<NoteEvent> notes, double handSplit)
+    {
+        var streams = new List<IReadOnlyList<int>>[2] { [], [] };
+        var run = new List<int>(); var runStaff = -1; var runStart = double.NaN;
+        void Close()
+        {
+            if (run.Count == 0) return;
+            run.Sort((left, right) => notes[left].Pitch.CompareTo(notes[right].Pitch));
+            streams[runStaff].Add([.. run]);
+            run.Clear();
+        }
+        for (var index = 0; index < notes.Count; index++)
+        {
+            var note = notes[index];
+            var staff = StaffOf(note.Pitch, handSplit);
+            var sameEvent = run.Count > 0 && staff == runStaff && Math.Abs(note.Start - runStart) < 1e-6;
+            if (!sameEvent) { Close(); runStaff = staff; runStart = note.Start; }
+            run.Add(index);
+        }
+        Close();
+        return [streams[0], streams[1]];
     }
 
     /// <summary>
@@ -590,6 +668,11 @@ internal static class SheetLayer
             }
             for (var index = beam.First; index <= beam.Last; index++) beamEnds[index] = end;
         }
+        // Which chord each note belongs to, so a head knows whether it is the one that carries the group's stem.
+        var groupOf = new int[notes.Count];
+        for (var index = 0; index < groupOf.Length; index++) groupOf[index] = -1;
+        for (var group = 0; group < sheet.Chords.Count; group++)
+            foreach (var member in sheet.Chords[group]) groupOf[member] = group;
         var first = NoteTimeline.FirstIndexAtOrAfter(notes, windowStart);
         for (var index = first; index < notes.Count; index++)
         {
@@ -617,7 +700,10 @@ internal static class SheetLayer
             var accidental = accidentals[index];
             if (accidental != NoteAccidental.None)
                 dc.DrawText(Text(AccidentalText(accidental), gap * 1.7, colour, pixelsPerDip), new Point(x - headWidth * 2.1, y - gap * .8));
-            if (HasStem(note.Duration))
+            // A chord is stemmed once, by the chord pass below; here only a note standing on its own gets one — and
+            // a plan handed over without a grouping falls back to every head carrying its own stem.
+            var chord = groupOf[index] >= 0 ? sheet.Chords[groupOf[index]] : null;
+            if (HasStem(note.Duration) && (chord is null || chord.Count == 1 || chord[0] != index))
             {
                 var up = StemUp(relative);
                 var stemX = x + (up ? headWidth * .55 : -headWidth * .55);
@@ -633,6 +719,41 @@ internal static class SheetLayer
                     dc.DrawLine(new Pen(brush, 1.2), new Point(stemX, root),
                         new Point(stemX + (up ? -headWidth * 1.5 : headWidth * 1.5), root + (up ? gap * 1.1 : -gap * 1.1)));
                 }
+            }
+        }
+
+        // The stems of a chord: one stem for the whole chord, from its far head through the middle of the group to
+        // the standard length — or to the run's shared stem end when the chord is inside a beam — with the flags of
+        // the shortest note of the chord at its end. A group of one head draws exactly the stem it always did.
+        foreach (var group in sheet.Chords)
+        {
+            if (group.Count < 2) continue;
+            var opening = notes[group[0]];
+            var (staff, openingStep) = Place(opening.Pitch, handSplit, key);
+            var bottom = StaffBottom(area, gap, staff);
+            var up = StemUp(openingStep);
+            var beamed = !double.IsNaN(beamEnds[group[0]]);
+            double far = up ? double.MaxValue : double.MinValue; var middle = 0.0;
+            foreach (var index in group)
+            {
+                var (_, relative) = Place(notes[index].Pitch, handSplit, key);
+                var y = bottom - relative * half;
+                far = up ? Math.Min(far, y) : Math.Max(far, y);
+                middle += y;
+            }
+            middle /= group.Count;
+            var end = beamed ? beamEnds[group[0]] : up ? far - gap * 3.2 : far + gap * 3.2;
+            var x = NoteX(opening.Start, windowStart, secondsVisible, area, inset) + (up ? headWidth * .55 : -headWidth * .55);
+            var brush = new SolidColorBrush(NoteColour(opening, position, dim, ink, accent));
+            dc.DrawLine(new Pen(brush, 1.2), new Point(x, middle), new Point(x, end));
+            if (beamed) continue;
+            var flags = 0;
+            foreach (var index in group) flags = Math.Max(flags, Flags(notes[index].Duration, beatSeconds));
+            for (var flag = 0; flag < flags; flag++)
+            {
+                var root = up ? end + flag * gap * .38 : end - flag * gap * .38;
+                dc.DrawLine(new Pen(brush, 1.2), new Point(x, root),
+                    new Point(x + (up ? -headWidth * 1.5 : headWidth * 1.5), root + (up ? gap * 1.1 : -gap * 1.1)));
             }
         }
         // The ties: a curve from the head of the note a tie starts at to the head of the note it carries on into,
