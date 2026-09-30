@@ -64,9 +64,11 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
             try { Open(encodersForAudio: true); }
             catch (Exception)
             {
-                // The video is worth more than the sound: the writer is opened again without the audio stream.
+                // The video is worth more than the sound: the writer — which is holding the file it just
+                // created — is let go of before the same path is opened again for the picture alone.
                 AudioDropped = true;
-                _writer = null; _videoStream = -1; _audioStream = -1;
+                Release();
+                try { File.Delete(OutputPath); } catch { }
                 Open(encodersForAudio: false);
             }
         }
@@ -210,9 +212,21 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
             {
                 _finalized = true;
                 try { if (FrameCount > 0 || _audioFrames > 0) _writer?.FinalizeFile(); } catch { }
+                // The collector would release the writer at some later point; the file has to be closed now,
+                // both for the user who wants to open it and for anyone reading the take back.
+                Release();
             }
             if (_mediaStarted) { try { Mf.MFShutdown(); } catch { } _mediaStarted = false; }
         }
+    }
+
+    /// <summary>Lets go of the writer and the file it holds, so the same path can be opened again.</summary>
+    private void Release()
+    {
+        var writer = _writer;
+        _writer = null; _videoStream = -1; _audioStream = -1;
+        if (writer is null) return;
+        try { Marshal.FinalReleaseComObject(writer); } catch { }
     }
 
     /// <summary>
