@@ -423,6 +423,8 @@ To make the README show one more subject, add a line to `$shots` in `build.yml`,
 catches up, but it fails when the README points at an image that does not exist and is not named in `$shots`
 either, so pictures and documentation cannot drift apart silently.
 
+The screenshots are rendered **deterministically**: both clocks (the WPF frame clock and the GPU render thread) run on a fixed step, every animator is put back at frame zero before the counting starts, and the picture is taken after exactly **45 counted frames** instead of after a wall-clock delay. Without that the previews cannot be compared between builds: every animator integrates the frame delta, so the phase of the petals, wisps, arcs and backdrop motes depends on how fast the runner happened to draw — two renders of the same interface once produced 23 PNGs that differed byte for byte, which left the drift check unable to tell "the interface changed" from "the frame count differed". `--verify` holds that property with `VerifyDeterministicPreview`: the same frame count must produce the same pixels, and a different count different ones.
+
 ## Packaging and shipping the .exe
 
 A build inside `bin\` only runs on a machine with the .NET SDK installed and consists of many files.

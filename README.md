@@ -378,6 +378,8 @@ gh run download <run-id> -n keyflow-previews -D docs/previews
 
 Muốn README chiếu thêm một cảnh: thêm một dòng vào `$shots` của `build.yml`, rồi trỏ README tới `docs/previews/vi/<tên>.png` (và `docs/previews/en/<tên>.png` cho bản tiếng Anh). `tools/check_sources.py` cho phép README đi trước ảnh đúng một commit vì chính commit render ảnh sẽ bắt kịp, nhưng báo lỗi nếu README trỏ tới một ảnh không tồn tại và cũng không có tên trong `$shots`, nên ảnh và tài liệu không thể lệch nhau im lặng.
 
+Ảnh chụp được render **tất định**: cả hai đồng hồ (khung hình WPF và luồng dựng hình GPU) chạy theo bước cố định, mọi animator được đưa về khung 0 trước khi đếm, và ảnh được chụp sau đúng **45 khung hình đếm được** thay vì sau một khoảng chờ theo giây. Không có điều đó thì ảnh không so sánh được giữa hai lượt build: mọi animator tích phân delta khung hình, nên pha của cánh hoa, wisps, hồ quang và mote phụ thuộc tốc độ runner — hai lượt render cùng một giao diện từng cho ra 23 tệp PNG khác nhau từng byte, khiến bước đối chiếu không phân biệt được "giao diện đổi" với "số khung hình khác". `--verify` giữ tính chất này bằng `VerifyDeterministicPreview`: cùng số khung hình phải ra cùng pixel, và khác số khung hình phải ra ảnh khác.
+
 ## Đóng gói và xuất file .exe
 
 Bản build trong `bin\` chỉ chạy trên máy đã cài .NET SDK và gồm nhiều tệp. Để gửi cho người khác hoặc phát hành, hãy **publish**. Có hai kiểu:

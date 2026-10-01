@@ -325,3 +325,21 @@ Hai chi tiết dễ sai, đều bắt được khi đọc lại chính code mìn
 **Kiểm chứng chứ không tin:** `--verify` thêm `VerifyDeterministicPreview` — cùng số khung hình phải ra **cùng pixel** (SHA-256 của ảnh render), và khác số khung hình phải ra ảnh khác (nếu không thì khẳng định đầu vô nghĩa). `Verification passed: 1406 → **1408** assertions` ở run `36847748821`, `static`/`test`/`build` đều xanh, `CS8602: 0`.
 
 **Cách biết nó thật sự có tác dụng:** run `36847748821` **vẫn** commit previews (`0bb502e`) — đúng, vì ảnh trong repo lúc đó do code cũ render. Phép thử thật là lượt chạy **kế tiếp** phải thấy ảnh giống hệt và **không** commit gì.
+
+### 6.14 Lần sửa hụt, và mắt xích GPU (2026-10-01)
+
+§6.13 ghim bước khung hình và đếm 45 khung. **Kết quả đo được: vẫn khác nhau ở 23/23 tệp** (`0bb502e` so với `78ec813`, cả hai đều render bằng code mới). Kết luận "ghim số khung hình là đủ" **sai**.
+
+**Bằng chứng chỉ ra chỗ sai.** `VerifyDeterministicPreview` **đạt** ngay từ lượt đầu — tức sân khấu WPF, khi được tự `Advance()` từng bước, thật sự tất định. Vậy phần lệch không nằm ở đó. Hai manh mối còn lại: `RenderBackend` mặc định là **`"Gpu"`** (`Stage/PianoVisualSettings.cs:372`), nên hình trong ảnh đến từ `GpuStageSimulation`; và lớp ấy có `_time` **tích luỹ từ lúc luồng render khởi động** (`Gpu/GpuStageSimulation.cs:146`) mà **không có hàm reset nào**. Ghim bước chỉ sửa *tốc độ*, không sửa *điểm bắt đầu*.
+
+**Sửa:**
+
+| Chỗ | Sửa |
+| --- | --- |
+| `Gpu/GpuStageSimulation.cs` | `Reset()`: `_time`, hạt, ring, flash, trail, các bao tuyến theo phím, seed lại `Random` (thành hằng `RandomSeed`) |
+| `Gpu/GpuRenderLoop.cs` | `RequestSimulationReset()` — mô phỏng nằm trên luồng render nên chỉ có thể *yêu cầu* qua cờ `Volatile`; kèm `FramesSinceReset` |
+| `App.xaml.cs` | chờ `FramesSinceReset` thay vì `FramesRendered` — bộ đếm cũ tính cả những khung vẽ ra trong lúc window đang settle |
+
+**Cách biết lần này có thật không** (đừng lặp lại lỗi của §6.13 là tin vào một lượt chạy): lượt chạy ngay sau commit sửa **vẫn** commit previews, vì ảnh trong repo do code cũ render — điều đó **không** nói lên gì. Chỉ lượt chạy **kế tiếp**, khi ảnh trong repo đã do chính code mới render, mới là phép thử: nó phải thấy ảnh giống hệt và **không** commit gì.
+
+**Bài học chung cho cả hai lượt:** một thay đổi về tính tất định chỉ được chứng minh bằng **hai lượt render liên tiếp cho ra cùng kết quả**, không phải bằng một lượt chạy xanh.
