@@ -225,6 +225,12 @@ jobs:
             }
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
+          # Each screenshot writes a one-line report of how it was taken. Publishing them as annotations is
+          # the only way to read them later: a finished run's job log is not retrievable through the API,
+          # and two attempts at making these previews reproducible were judged on reasoning alone.
+          Get-ChildItem -Path $out -Recurse -Filter '*.report.txt' | ForEach-Object {
+            "::notice title=Preview capture::$((Get-Content $_.FullName -Raw).Trim())"
+          }
 
       # Every built-in look, drawn by both engines side by side (software | Direct3D 11), in one picture:
       # docs/previews/presets.jpg. It is how a change to the GPU engine is checked against the look each

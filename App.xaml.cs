@@ -115,8 +115,11 @@ public partial class App : Application
             }
             // The SoundFont scan and the first render both settle over a few seconds; the timer waits
             // for the instrument (bounded, so a silent CI runner still gets its screenshot) and the
-            // watchdog guarantees a file even in a session that never raises ContentRendered.
+            // watchdog guarantees a file even in a session that never raises ContentRendered. Both timers
+            // are declared before the local functions so nothing below reaches forward for a local.
             var settle = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+            var watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
+            var watchdogArmed = false;
             void TryCapture()
             {
                 if (captured || (!window.HasSoundFont && loadedWait.Elapsed < TimeSpan.FromSeconds(8))) return;
@@ -128,25 +131,44 @@ public partial class App : Application
                 // wait until it has stepped as far as the WPF side has *since its own reset* — FramesRendered
                 // counts the whole session, which includes the frames drawn while the window was settling.
                 if (window.GpuLoop is { } loop && loop.FramesSinceReset < previewFrames) return;
-                captured = true; settle.Stop();
-                VerificationSuite.Capture(window, target); Shutdown(0);
+                Shoot("counted");
+            }
+            // Two attempts at making the previews reproducible went out on reasoning alone and both were
+            // wrong, so the capture now reports how it actually got its picture. The build turns these into
+            // annotations: a finished CI run's job log cannot be read afterwards, and the annotations can.
+            void Shoot(string how)
+            {
+                if (captured) return;
+                captured = true; settle.Stop(); watchdog.Stop();
+                VerificationSuite.Capture(window, target);
+                try
+                {
+                    var loop = window.GpuLoop;
+                    File.WriteAllText(target + ".report.txt", string.Join(' ',
+                        Path.GetFileName(target),
+                        $"how={how}",
+                        $"started={previewStarted}",
+                        $"wpfFrames={FrameClock.Shared.FrameCount}",
+                        $"gpuFrames={(loop is null ? -1 : loop.FramesSinceReset)}",
+                        $"gpuBackend={(loop is null ? "none" : loop.AdapterName)}",
+                        $"soundfont={window.HasSoundFont}",
+                        $"seconds={loadedWait.Elapsed.TotalSeconds:F1}"));
+                }
+                catch (Exception) { /* a missing report must never cost the screenshot */ }
+                Shutdown(0);
             }
             settle.Tick += (_, _) => TryCapture();
             // ContentRendered only arms the polling timer. The preview note is pressed by TryCapture, once the
             // counted sequence starts: pressing it here instead would put the note onset at whatever frame the
             // window happened to finish loading on, and the hold effects would differ from run to run.
             window.ContentRendered += (_, _) => { loadedWait.Restart(); settle.Start(); };
-            var watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
-            var watchdogArmed = false;
             watchdog.Tick += (_, _) =>
             {
                 if (captured) { watchdog.Stop(); return; }
                 // No ContentRendered yet (a headless or wedged session). Start the counted sequence anyway and
                 // keep polling, so this path is reproducible too; only the second tick gives up and shoots.
                 if (!watchdogArmed) { watchdogArmed = true; watchdog.Interval = TimeSpan.FromSeconds(6); settle.Start(); TryCapture(); return; }
-                watchdog.Stop(); settle.Stop();
-                if (captured) return;
-                captured = true; VerificationSuite.Capture(window, target); Shutdown(0);
+                Shoot("watchdog");
             };
             watchdog.Start();
         }
