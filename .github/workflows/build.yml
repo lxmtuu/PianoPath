@@ -252,6 +252,7 @@ jobs:
       # meanwhile) still fails the step. bash rather than pwsh because the decision needs git's exit code
       # and its message side by side.
       - name: Commit refreshed previews
+        id: commit-previews
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         shell: bash
         run: |
@@ -260,12 +261,17 @@ jobs:
           git add docs/previews
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
+            echo 'landed=true' >>"$GITHUB_OUTPUT"
             exit 0
           fi
           git commit -m "Refresh the README previews from CI [skip ci]"
           log="$RUNNER_TEMP/previews-push.log"
           if git push >"$log" 2>&1; then
             cat "$log"
+            # 'landed' means the pictures are on the branch, not merely committed on this runner: the
+            # drift check below reads it, and a local commit whose push was declined has to count as
+            # not landed or the drift goes quiet while it is still there.
+            echo 'landed=true' >>"$GITHUB_OUTPUT"
             exit 0
           fi
           cat "$log"
@@ -277,37 +283,45 @@ jobs:
 
       # Freshness is the one thing the static checker cannot see: `scan_readme` only proves a preview
       # exists and is named in $shots, so a screenshot that still shows last month's interface keeps the
-      # build green. That is exactly what happened between de75f93 and the Quick Adjust / GPU atmosphere
-      # changes — the branch rules stopped the preview push above, and nothing in the repo said so.
+      # build green. That is what happened between de75f93 and the Quick Adjust / GPU atmosphere changes
+      # — the branch rules stopped the preview push above, and nothing in the repo said so.
       #
-      # The two render steps overwrote every committed preview with what this build produces, so
-      # `git status` on docs/previews is the drift report itself. It runs *after* the commit step on
-      # purpose, and that ordering is the whole check: when the refresh lands, the working tree is clean
-      # again and this says so; when the push is declined (GH013) or the step is skipped (a pull
-      # request), the files are still dirty and the drift is real and unresolved. Running it before the
-      # commit instead would cry wolf on every run — the renders are not byte-stable between runners,
-      # so all 23 files differ on a clean checkout even when no interface moved (run 36834861621 named
-      # all 23, and 106 of this repo's 349 commits are preview refreshes).
+      # Two traps, both found by running this in CI rather than by reasoning about it:
       #
-      # A warning, not an error: with the branch rules in place the workflow's own token cannot push the
-      # refresh, so making it red would paint every pull request red for a thing only a human — or a
-      # bypass rule — can settle.
+      #   * The renders are not byte-stable between runners, so every file under docs/previews differs
+      #     from the checkout even when no interface moved: run 36834861621 named all 23, and 106 of this
+      #     repo's 349 commits are preview refreshes. So "did this build re-render anything" is not the
+      #     question — nearly always yes — and asking it warns on every run.
+      #   * `git status` is not the drift report either, because the step above commits before it pushes.
+      #     A declined push (GH013) leaves the tree clean while the branch still carries the old pictures,
+      #     and the check went quiet on run 36836190788 with the drift exactly as unresolved as before.
+      #
+      # So: diff the working tree against $GITHUB_SHA, the commit this run started from, to see what the
+      # build re-rendered, and ask the commit step whether that refresh actually *landed* on the branch.
+      # Only "re-rendered and not landed" is drift worth reporting; a landed refresh and an untouched
+      # folder both get a plain line. A warning rather than an error on purpose: with the branch rules in
+      # place the workflow's own token cannot push, so making it red would paint every pull request red
+      # for a thing only a human — or a bypass rule — can settle.
       - name: Report preview drift
         if: always() && steps.render-previews.outcome == 'success' && steps.render-gallery.outcome == 'success'
         shell: bash
         run: |
-          drifted=$(git status --porcelain -- docs/previews | cut -c4-)
+          drifted=$(git diff --name-only "$GITHUB_SHA" -- docs/previews)
           if [ -z "$drifted" ]; then
-            echo "docs/previews matches what this build rendered, or the refresh above just committed it."
+            echo "This build rendered the same pictures the branch already carries."
             exit 0
           fi
           count=$(printf '%s\n' "$drifted" | wc -l | tr -d ' ')
           names=$(printf '%s\n' "$drifted" | sed 's|^docs/previews/||' | paste -sd, - | sed 's/,/, /g')
+          if [ '${{ steps.commit-previews.outputs.landed }}' = 'true' ]; then
+            echo "This build re-rendered $count file(s) and the step above committed them to the branch."
+            exit 0
+          fi
           {
             echo '## docs/previews does not match this build'
             echo
-            echo "These $count committed screenshot(s) still differ from what this run rendered and were not committed, so the README is showing an older interface:"
+            echo "This build re-rendered $count screenshot(s) and none of them reached the branch, so the README is still showing the older interface:"
             echo
             printf '%s\n' "$drifted" | sed 's|^|- `|; s|$|`|'
           } >>"$GITHUB_STEP_SUMMARY"
-          echo "::warning title=Previews are stale::$count file(s) under docs/previews differ from what this build rendered and were not committed ($names). Refresh them from the keyflow-previews artifact of this run."
+          echo "::warning title=Previews are stale::$count file(s) under docs/previews were re-rendered by this build and not committed ($names). Refresh them from the keyflow-previews artifact of this run."

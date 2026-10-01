@@ -240,3 +240,28 @@ commit bị bỏ qua (pull request) thì tệp vẫn bẩn và độ lệch là 
 chạy đúng đoạn script trong repo git tạm: cây sạch → `docs/previews matches what this build rendered, or the
 refresh above just committed it.`; hai tệp bẩn → `::warning title=Previews are stale::2 file(s) … and were not
 committed`. `python3 tools/check_sources.py`: exit 0.
+
+### 6.10 §6.9 sai, và lần CI thứ hai đã chỉ ra chỗ sai
+
+§6.9 kết luận rằng chỉ cần **chuyển bước drift xuống sau bước commit** là phép kiểm đúng, với lý do
+"refresh mà ghi được thì cây làm việc sạch". **Lý do đó sai.** Bước commit `git commit` **trước** rồi mới
+`git push`; khi push bị từ chối (GH013) thì commit vẫn đã xảy ra trên runner, cây làm việc **vẫn sạch**,
+và bước drift — vốn đọc `git status` — im lặng. Đúng như vậy ở run **36836190788**: 13 bước xanh,
+`Verification passed: 1406 assertions`, **0 cảnh báo CS8602**, nhưng annotation `Previews are stale`
+**biến mất** trong khi độ lệch vẫn nguyên đó (chính commit ấy bị runner vứt đi). Một phép kiểm im lặng
+đúng lúc có chuyện là tệ hơn không có phép kiểm.
+
+Chữa lại theo hai tín hiệu tách bạch, vì chúng là hai câu hỏi khác nhau:
+
+| Câu hỏi | Cách trả lời |
+|---|---|
+| Build này có render lại ảnh không? | `git diff --name-only "$GITHUB_SHA" -- docs/previews` — so với **commit mà lần chạy bắt đầu**, không phải với cây làm việc, nên một commit cục bộ không che được |
+| Bản refresh có **lên nhánh** thật không? | bước commit đặt `id: commit-previews` và chỉ ghi `landed=true` vào `$GITHUB_OUTPUT` khi `git push` **thành công** (hoặc không có gì để ghi); nhánh GH013 không ghi gì |
+
+Chỉ "**có render lại và không lên nhánh**" mới là độ lệch đáng báo; refresh đã lên nhánh và thư mục không
+đổi đều in một dòng thường. Kiểm lại bằng cách chạy đúng đoạn script (trích từ YAML, thế biểu thức
+`${{ steps.commit-previews.outputs.landed }}` bằng từng giá trị) trong repo git tạm: **(A)** push bị từ chối
+→ `::warning title=Previews are stale::2 file(s) … were re-rendered by this build and not committed` +
+summary liệt kê đúng hai tệp; **(B)** `landed=true` → `This build re-rendered 2 file(s) and the step above
+committed them to the branch.`; **(C)** không render lại gì → `This build rendered the same pictures the
+branch already carries.`. Cả ba exit 0. `python3 tools/check_sources.py`: exit 0.
