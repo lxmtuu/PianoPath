@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Reflection;
+using System.Text;
 
 namespace PianoPath;
 
@@ -34,6 +35,14 @@ internal static class FrameBenchmark
     /// <summary>Runs the gate and returns the process exit code.</summary>
     internal static int Run(string[] args)
     {
+        // The lines this prints carry ×, · and — . Written to a redirected stdout (which is how CI reads
+        // them) or to a terminal on a legacy code page, each of those came out as '?': the first CI run of
+        // this gate printed "1920?1080". The gate therefore says which encoding it writes in.
+        try { Console.OutputEncoding = new UTF8Encoding(false); }
+        catch (Exception exception) when (exception is IOException or PlatformNotSupportedException)
+        {
+            // No console to configure. The numbers still print, in whatever encoding the host picked.
+        }
         var frames = FrameBudget.DefaultFrames;
         var framesArgument = args.FirstOrDefault(argument => argument.StartsWith("--bench=", StringComparison.Ordinal));
         if (framesArgument is not null

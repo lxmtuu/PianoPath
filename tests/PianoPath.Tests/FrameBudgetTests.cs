@@ -303,6 +303,10 @@ public class FrameBudgetTests
         Assert.Contains(lines, line => line.Contains("p95 60.00 ms", StringComparison.Ordinal));
         Assert.DoesNotContain(lines, line => line.Contains("60,00", StringComparison.Ordinal));
         Assert.Contains(lines, line => line.StartsWith("NOTE perf: the frame was drawn by ", StringComparison.Ordinal));
+        // This gate's first CI run printed "NOTE perf: perf: the scene 'default' has no previous measurement
+        // to compare with": the comparison sentence carried a prefix of its own on top of the one above.
+        Assert.DoesNotContain(lines, line => line.Contains("perf: perf:", StringComparison.Ordinal));
+        Assert.Contains(lines, line => line.StartsWith("NOTE perf: the scene 'default' has no previous measurement to compare with", StringComparison.Ordinal));
     }
 
     [Fact]

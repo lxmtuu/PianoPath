@@ -215,33 +215,36 @@ internal sealed class FrameBenchRun
     /// that run's p95. This is the whole of CI's gate: frames per second on a runner says nothing absolute
     /// (the runners have no graphics card, so the stage is drawn by WARP), but the same kind of machine
     /// drawing the same scene slower than last time is a regression in the code between the two commits.
+    /// The third element is the sentence on its own, with no <c>NOTE</c>/<c>WARN perf: </c> in front of it:
+    /// <see cref="LogLines"/> is what decides which category a line gets, so the two cannot drift into
+    /// printing <c>NOTE perf: perf: …</c> — which is exactly what this gate's first CI run printed.
     /// </summary>
     internal (FrameTrend Trend, double DeltaPercent, string Line) Compare(FrameBenchRun? previous, FrameBenchReport scene)
     {
-        if (!scene.Measured) return (FrameTrend.Unknown, 0, $"perf: the scene '{scene.Scene}' measured no frames, so there is nothing to compare");
+        if (!scene.Measured) return (FrameTrend.Unknown, 0, $"the scene '{scene.Scene}' measured no frames, so there is nothing to compare");
         // The null test comes first and on its own, so every use below is provably not null: an "is not null"
         // buried inside a larger condition leaves the compiler unsure and costs the build a CS8602 warning.
-        if (previous is null) return (FrameTrend.Unknown, 0, $"perf: the scene '{scene.Scene}' has no previous measurement to compare with");
+        if (previous is null) return (FrameTrend.Unknown, 0, $"the scene '{scene.Scene}' has no previous measurement to compare with");
         var before = previous.Scene(scene.Scene);
         if (before is null || !before.Measured)
-            return (FrameTrend.Unknown, 0, $"perf: the scene '{scene.Scene}' has no previous measurement to compare with");
+            return (FrameTrend.Unknown, 0, $"the scene '{scene.Scene}' has no previous measurement to compare with");
         // Comparing a WARP number with a graphics-card one, or 1080p with 4K, would produce a percentage that
         // describes the two machines rather than the code between them.
         if (previous.SoftwareAdapter != SoftwareAdapter || before.Width != scene.Width || before.Height != scene.Height)
             return (FrameTrend.Unknown, 0,
-                $"perf: the scene '{scene.Scene}' was measured at {before.Width}×{before.Height} on {(previous.SoftwareAdapter ? "a software rasterizer" : "a graphics card")} last time " +
+                $"the scene '{scene.Scene}' was measured at {before.Width}×{before.Height} on {(previous.SoftwareAdapter ? "a software rasterizer" : "a graphics card")} last time " +
                 $"and at {scene.Width}×{scene.Height} on {(SoftwareAdapter ? "a software rasterizer" : "a graphics card")} this time, so the two runs are not comparable");
         var then = before.Stats.P95Ms;
         var now = scene.Stats.P95Ms;
-        if (then <= 0) return (FrameTrend.Unknown, 0, $"perf: the previous report for the scene '{scene.Scene}' has no usable p95, so there is nothing to compare");
+        if (then <= 0) return (FrameTrend.Unknown, 0, $"the previous report for the scene '{scene.Scene}' has no usable p95, so there is nothing to compare");
         var delta = (now - then) / then * 100;
         var shape = $"previous run p95 {FrameBudget.Ms(then)} ms → this run {FrameBudget.Ms(now)} ms ({Sign(delta)}{Percent(delta)}%)";
         if (delta >= (FrameBudget.RegressionFactor - 1) * 100)
             return (FrameTrend.Regression, delta,
-                $"perf: the scene '{scene.Scene}' got slower on the same kind of adapter — {shape}; a jump past {Percent((FrameBudget.RegressionFactor - 1) * 100)}% " +
+                $"the scene '{scene.Scene}' got slower on the same kind of adapter — {shape}; a jump past {Percent((FrameBudget.RegressionFactor - 1) * 100)}% " +
                 "is read as a regression in the code between the two commits");
         return (delta <= -5 ? FrameTrend.Faster : FrameTrend.Steady, delta,
-            $"perf: the scene '{scene.Scene}' held its frame time on the same kind of adapter — {shape}");
+            $"the scene '{scene.Scene}' held its frame time on the same kind of adapter — {shape}");
     }
 
     /// <summary>
