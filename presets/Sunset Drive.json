@@ -1,7 +1,7 @@
 {
   "Version": 1,
   "Thumbnail": "",
-  "Description": "Synthwave neon in magenta and amber: speed-line trails, shattering hits, echo rings and laser beams over a purple horizon.",
+  "Description": "Synthwave neon in magenta and amber: speed-line trails, shattering hits, echo rings and lasers racing over a moving retro grid.",
   "Settings": {
     "ShowBackground": true,
     "ShowNotes": true,
@@ -28,6 +28,10 @@
     "Notes3D": true,
     "BackgroundGuide": false,
     "BackgroundGradient": true,
+    "BackgroundMotion": "Retro Grid",
+    "BackgroundMotionAmount": 48,
+    "BackgroundMotionSpeed": 54,
+    "BackgroundMotionColor": "#FF4C93",
     "ShowStars": true,
     "ShowWisps": false,
     "ShowImpactRings": true,
@@ -55,6 +59,8 @@
     "HaloIntensity": 110,
     "HaloPulse": true,
     "HaloPulseIntensity": 60,
+    "HaloPulseStyle": "Sweep",
+    "HaloPulseSpeed": 58,
     "NoteLandingGlow": true,
     "NoteLandingGlowAmount": 45.0,
     "PressedKeyColor": "#F782FF",

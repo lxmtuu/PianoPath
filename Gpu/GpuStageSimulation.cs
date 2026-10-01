@@ -139,8 +139,11 @@ internal sealed partial class GpuStageSimulation
     {
         var look = _look = input.Look;
         if (feed.TakeClearRequest()) Clear();
-        var dt = (float)(Math.Clamp(seconds, 0, .05) * look.PhysicsTimeFactor);
-        _time += dt;
+        var frameDt = (float)Math.Clamp(seconds, 0, .05);
+        var particleDt = frameDt * look.PhysicsTimeFactor;
+        // The physics slow-motion control belongs to particles; the stage clock, notes and ambient layers
+        // must keep their real tempo so changing it cannot slow the whole composition.
+        _time += frameDt;
         _beatPulse = look.TempoSync ? input.BeatPulse : 0;
         _simWidth = Math.Max(1, sceneWidth);
         var layout = new GpuSceneLayout(_simWidth, (float)input.StageHeightDip, look.KeyboardFraction);
@@ -187,9 +190,9 @@ internal sealed partial class GpuStageSimulation
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var target = _active[pitch] ? 1f : 0f;
-            _press[pitch] += (target - _press[pitch]) * (1 - MathF.Exp(-dt * (target > _press[pitch] ? 38 : 16)));
-            _glow[pitch] = _active[pitch] ? Math.Max(_glow[pitch], Math.Min(1, _glow[pitch] + dt * 12)) : Math.Max(0, _glow[pitch] - dt * 3.2f);
-            _heat[pitch] = _active[pitch] ? Math.Min(1, _heat[pitch] + dt * 7) : Math.Max(0, _heat[pitch] - dt * 2.4f);
+            _press[pitch] += (target - _press[pitch]) * (1 - MathF.Exp(-frameDt * (target > _press[pitch] ? 38 : 16)));
+            _glow[pitch] = _active[pitch] ? Math.Max(_glow[pitch], Math.Min(1, _glow[pitch] + frameDt * 12)) : Math.Max(0, _glow[pitch] - frameDt * 3.2f);
+            _heat[pitch] = _active[pitch] ? Math.Min(1, _heat[pitch] + frameDt * 7) : Math.Max(0, _heat[pitch] - frameDt * 2.4f);
             totalGlow += _glow[pitch];
             horizon += _keyColor[pitch] * _glow[pitch];
         }
@@ -203,8 +206,8 @@ internal sealed partial class GpuStageSimulation
         }
         _activity = Math.Min(1, totalGlow / 4);
         var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity : 1;
-        _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-dt * 10));
-        _energy *= MathF.Exp(-2.2f * dt);
+        _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-frameDt * 10));
+        _energy *= MathF.Exp(-2.2f * frameDt);
         // the theme's halo colour, as the software stage paints it, warmed a little by the keys that sound
         HorizonColor = ToLinear(totalGlow > .01f ? Vector3.Lerp(look.HaloColor, horizon / totalGlow, .35f * Math.Min(1, totalGlow)) : look.HaloColor);
         for (var pitch = 0; pitch < 128; pitch++)
@@ -221,29 +224,61 @@ internal sealed partial class GpuStageSimulation
             var color = _keyColor[pitch];
             if (_active[pitch] && look.ShowEmbers && look.ParticleAmount > 0)
             {
-                // a fountain of fine sparks while the key is held (the reference captures' rising glitter)
-                _sparkBudget[pitch] += look.ParticleAmount * 1.3f * dt;
+                // The held-key emitter follows the selected burst family, so a water or confetti preset
+                // stays coherent between the initial hit and the note's sustain.
+                _sparkBudget[pitch] += look.ParticleAmount * 1.3f * frameDt;
+                var emitterStyle = look.ImpactBurst == "Zone"
+                    ? pitch < look.ZoneSplitPitch ? "Embers" : "Splash"
+                    : look.ImpactBurst;
                 while (_sparkBudget[pitch] >= 1 && _count < MaxParticles)
                 {
                     _sparkBudget[pitch] -= 1;
-                    var angle = -MathF.PI / 2 + (Rand() - .5f) * look.ParticleSpread * .9f;
-                    var speed = look.ParticleVelocity * (.35f + Rand() * .6f) * look.ParticleSpeed;
+                    var angle = -MathF.PI / 2 + (Rand() - .5f) * look.ParticleSpread * MathF.PI;
+                    var speedScale = 1f; var lifeScale = 1f; var sizeScale = 1f;
+                    var grav = .55f; var drag = 1.2f; var glow = 1f;
+                    var shape = Shape.Streak;
+                    var particleColor = Vector3.Lerp(color, Vector3.One, .24f);
+                    switch (emitterStyle)
+                    {
+                        case "Splash":
+                            shape = Shape.Droplet; grav = 1.35f; drag = .85f; speedScale = .86f; lifeScale = 1.08f;
+                            particleColor = Vector3.Lerp(color, new Vector3(.58f, .82f, 1f), .48f);
+                            break;
+                        case "Fireworks":
+                            angle = Rand() * MathF.Tau; speedScale = 1.15f; lifeScale = 1.22f; sizeScale = .9f;
+                            particleColor = Vector3.Lerp(color, Hue(Rand() * 360), .56f);
+                            break;
+                        case "Confetti":
+                            shape = Shape.Confetti; grav = .38f; drag = 2.8f; speedScale = .68f; lifeScale = 1.75f; sizeScale = 1.25f; glow = .72f;
+                            particleColor = Vector3.Lerp(color, Hue(Rand() * 360), .52f);
+                            break;
+                        case "Dust":
+                            shape = Shape.Dust; grav = -.1f; drag = 2.2f; speedScale = .3f; lifeScale = 1.65f; sizeScale = 1.8f; glow = .38f;
+                            particleColor = Vector3.Lerp(new Vector3(.72f, .67f, .6f), color, .38f);
+                            break;
+                        default:
+                            particleColor = Rand() < .22f ? Vector3.One : particleColor;
+                            if (Rand() < .3f) shape = Shape.Dot;
+                            break;
+                    }
+                    var speedVariation = 1 + (Rand() - .5f) * 2 * look.ParticleRandomness;
+                    var lifeVariation = 1 + (Rand() - .5f) * 2 * look.ParticleLifeRandomness;
+                    var sizeVariation = 1 + (Rand() - .5f) * 2 * look.ParticleSizeRandomness;
+                    var speed = look.ParticleVelocity * Math.Max(.08f, speedVariation) * look.ParticleSpeed * speedScale;
                     Spawn(new Particle
                     {
                         X = x + (Rand() - .5f) * layout.Lane * (.3f + look.EmitterSize), Y = layout.HitY - 1,
                         Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed,
-                        Life = look.ParticleLife * (.5f + Rand() * .7f * (.3f + look.ParticleLifeRandomness)),
-                        Size = look.ParticleSize * (.35f + Rand() * .55f), Mass = .6f, Grav = .55f, DragK = 1.2f,
-                        Phase = Rand() * MathF.Tau, Glow = 1.1f,
-                        Color = Rand() < .3f ? Vector3.One : Vector3.Lerp(color, Vector3.One, .25f),
-                        Shape = Rand() < .55f ? Shape.Streak : Shape.Dot
+                        Life = Math.Max(.05f, look.ParticleLife * lifeVariation * lifeScale),
+                        Size = Math.Max(.2f, look.ParticleSize * sizeVariation * sizeScale), Mass = .7f, Grav = grav, DragK = drag,
+                        Phase = Rand() * MathF.Tau, Glow = glow, Color = particleColor, Shape = shape
                     });
                 }
             }
             if (_active[pitch] && look.ShowWisps && look.WispAmount > 0)
             {
                 // two strands per key that twist around each other as they climb (the rainbow capture's smoke ribbons)
-                _wispBudget[pitch] += look.WispAmount * 4f * dt;
+                _wispBudget[pitch] += look.WispAmount * 4f * frameDt;
                 var life = .35f + look.WispHeight * 1.9f;
                 while (_wispBudget[pitch] >= 1 && _count < MaxParticles)
                 {
@@ -261,7 +296,7 @@ internal sealed partial class GpuStageSimulation
             }
             if (look.ShowFlame && _heat[pitch] > .01f)
             {
-                _flameBudget[pitch] += 70 * look.FlameIntensity * _heat[pitch] * dt;
+                _flameBudget[pitch] += 70 * look.FlameIntensity * _heat[pitch] * frameDt;
                 while (_flameBudget[pitch] >= 1 && _count < MaxParticles)
                 {
                     _flameBudget[pitch] -= 1;
@@ -284,36 +319,36 @@ internal sealed partial class GpuStageSimulation
         for (var i = _count - 1; i >= 0; i--)
         {
             ref var p = ref _particles[i];
-            p.Age += dt;
+            p.Age += particleDt;
             if (p.Age >= p.Life) { _particles[i] = _particles[--_count]; continue; }
             if (p.Wisp)
             {
-                p.Y += p.Vy * dt;
-                p.X += (p.Vx + look.VectorField * MathF.Sin(p.Y / look.FieldScale + evolution) * 6) * dt;
-                p.Vy *= MathF.Exp(-.35f * dt);
+                p.Y += p.Vy * particleDt;
+                p.X += (p.Vx + look.VectorField * MathF.Sin(p.Y / look.FieldScale + evolution) * 6) * particleDt;
+                p.Vy *= MathF.Exp(-.35f * particleDt);
                 continue;
             }
             if (p.Shape == Shape.Flame)
             {
-                p.X += p.Vx * dt; p.Y += p.Vy * dt;
-                p.Vx += MathF.Sin(p.Age * 11 + p.Phase) * 40 * dt;
+                p.X += p.Vx * particleDt; p.Y += p.Vy * particleDt;
+                p.Vx += MathF.Sin(p.Age * 11 + p.Phase) * 40 * particleDt;
                 continue;
             }
-            p.X += p.Vx * dt; p.Y += p.Vy * dt;
-            p.Vx += look.VectorField * MathF.Sin(p.Y / look.FieldScale + evolution) * 14 * dt;
+            p.X += p.Vx * particleDt; p.Y += p.Vy * particleDt;
+            p.Vx += look.VectorField * MathF.Sin(p.Y / look.FieldScale + evolution) * 14 * particleDt;
             var heatRatio = Math.Clamp(1 - p.Age / p.Life, 0, 1);
-            p.Vy += (look.Gravity * p.Grav - 38 * heatRatio / Math.Max(.2f, p.Mass)) * dt;
-            if (p.Shape == Shape.Confetti) p.Vx += MathF.Sin(p.Age * 9 + p.Phase) * 60 * dt;
-            p.Vx += MathF.Sin(p.Y * .04f + p.Phase + (float)_time * 3.2f) * 14 * heatRatio * dt;
-            var d = MathF.Exp(-damping * p.DragK * dt); p.Vx *= d; p.Vy *= d;
+            p.Vy += (look.Gravity * p.Grav - 38 * heatRatio / Math.Max(.2f, p.Mass)) * particleDt;
+            if (p.Shape == Shape.Confetti) p.Vx += MathF.Sin(p.Age * 9 + p.Phase) * 60 * particleDt;
+            p.Vx += MathF.Sin(p.Y * .04f + p.Phase + (float)_time * 3.2f) * 14 * heatRatio * particleDt;
+            var d = MathF.Exp(-damping * p.DragK * particleDt); p.Vx *= d; p.Vy *= d;
         }
-        for (var i = _rings.Count - 1; i >= 0; i--) { var r = _rings[i]; r.Age += dt; if (r.Age >= r.Life) _rings.RemoveAt(i); else _rings[i] = r; }
-        for (var i = _flashes.Count - 1; i >= 0; i--) { var f = _flashes[i]; f.Age += dt; if (f.Age >= f.Life) _flashes.RemoveAt(i); else _flashes[i] = f; }
+        for (var i = _rings.Count - 1; i >= 0; i--) { var r = _rings[i]; r.Age += frameDt; if (r.Age >= r.Life) _rings.RemoveAt(i); else _rings[i] = r; }
+        for (var i = _flashes.Count - 1; i >= 0; i--) { var f = _flashes[i]; f.Age += frameDt; if (f.Age >= f.Life) _flashes.RemoveAt(i); else _flashes[i] = f; }
         for (var i = _trails.Count - 1; i >= 0; i--)
         {
             var trail = _trails[i];
-            trail.Age += dt;
-            if (trail.KeyDown) trail.Held += dt;
+            trail.Age += frameDt;
+            if (trail.KeyDown) trail.Held += frameDt;
             if (look.Rising)
             {
                 trail.Hit = true;
@@ -365,28 +400,37 @@ internal sealed partial class GpuStageSimulation
         for (var i = 0; i < amount && _count < MaxParticles; i++)
         {
             var shape = Shape.Dot; var grav = 1f; var drag = 1f; var speedScale = 1f; var lifeScale = 1f; var sizeScale = 1f;
-            var c = i % 4 == 0 ? Vector3.One : Vector3.Lerp(color, Hue(clamped * 4.1 + (Rand() - .5f) * 28), .2f);
+            var c = i % 4 == 0 ? Vector3.Lerp(color, Vector3.One, .72f) : Vector3.Lerp(color, Hue(clamped * 4.1 + (Rand() - .5f) * 28), .18f);
             switch (style)
             {
-                case "Splash": shape = Shape.Droplet; grav = 1.6f; c = Vector3.Lerp(new Vector3(.55f, .78f, 1f), Vector3.One, Rand() * .5f); speedScale = .8f; lifeScale = 1.1f; break;
-                case "Fireworks": speedScale = 1.25f; lifeScale = 1.5f; sizeScale = .9f; c = Hue(Rand() * 360); break;
-                case "Confetti": shape = Shape.Confetti; grav = .32f; drag = 3.2f; c = Rand() < .2f ? Vector3.One : Hue(Rand() * 360); speedScale = .7f; lifeScale = 2.2f; sizeScale = 1.3f; break;
-                case "Dust": shape = Shape.Dust; grav = -.12f; drag = 2.4f; c = Vector3.Lerp(new Vector3(.59f, .55f, .51f), color, .25f); speedScale = .35f; lifeScale = 2.4f; sizeScale = 2.2f; break;
+                case "Splash":
+                    shape = Shape.Droplet; grav = 1.6f; c = Vector3.Lerp(color, new Vector3(.58f, .82f, 1f), .46f);
+                    c = Vector3.Lerp(c, Vector3.One, Rand() * .24f); speedScale = .82f; lifeScale = 1.1f; break;
+                case "Fireworks":
+                    speedScale = 1.25f; lifeScale = 1.5f; sizeScale = .9f; c = Vector3.Lerp(color, Hue(Rand() * 360), .64f); break;
+                case "Confetti":
+                    shape = Shape.Confetti; grav = .32f; drag = 3.2f; c = Rand() < .2f ? Vector3.One : Vector3.Lerp(color, Hue(Rand() * 360), .54f);
+                    speedScale = .7f; lifeScale = 2.2f; sizeScale = 1.3f; break;
+                case "Dust":
+                    shape = Shape.Dust; grav = -.12f; drag = 2.4f; c = Vector3.Lerp(new Vector3(.66f, .61f, .55f), color, .34f);
+                    speedScale = .35f; lifeScale = 2.4f; sizeScale = 2.2f; break;
             }
             var needle = i % 3 != 0 && shape == Shape.Dot;
             if (needle) shape = Shape.Streak;
             var angle = -MathF.PI / 2 + (Rand() - .5f) * look.ParticleSpread * MathF.PI;
             angle += MathF.Sin(i * .37f + (float)_time * look.EvolutionSpeed) * look.Spiral * .3f;
             if (style == "Fireworks") angle = Rand() * MathF.Tau;
-            var multiplier = needle ? .65f + Rand() * .85f * look.ParticleRandomness : .35f + Rand() * .45f * look.ParticleRandomness;
-            var speed = look.ParticleVelocity * multiplier * look.ParticleSpeed * strength * speedScale;
-            var life = (needle ? look.ParticleLife * (.45f + Rand() * .55f * look.ParticleLifeRandomness) : look.ParticleLife * (.85f + Rand() * .75f * look.ParticleLifeRandomness)) * lifeScale;
+            var speedVariation = 1 + (Rand() - .5f) * 2 * look.ParticleRandomness;
+            var lifeVariation = 1 + (Rand() - .5f) * 2 * look.ParticleLifeRandomness;
+            var sizeVariation = 1 + (Rand() - .5f) * 2 * look.ParticleSizeRandomness;
+            var speed = look.ParticleVelocity * Math.Max(.08f, speedVariation) * look.ParticleSpeed * strength * speedScale;
+            var life = Math.Max(.05f, look.ParticleLife * lifeVariation * lifeScale);
             Spawn(new Particle
             {
                 X = x + (Rand() - .5f) * look.EmitterSize * layout.Lane * 2, Y = y,
                 Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed - (needle ? 35 : 15),
                 Life = life, Mass = needle ? .6f : 1.5f, Phase = Rand() * MathF.Tau,
-                Size = look.ParticleSize * (needle ? .4f + Rand() * .6f : .7f + Rand() * .8f * (.2f + look.ParticleSizeRandomness)) * sizeScale,
+                Size = Math.Max(.2f, look.ParticleSize * sizeVariation * sizeScale),
                 Color = c, Shape = shape, Grav = grav, DragK = drag, Glow = 1
             });
         }
@@ -714,9 +758,8 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>
-    /// Halo light pulses (Style → HIT LINE): three bright waves of the halo colour that travel across the
-    /// hit line, fading in and out so the stage keeps breathing even between notes. Pedal glow, audio
-    /// reactivity and Tempo sync swell them with the music.
+    /// Halo motion accents (Style → HIT LINE): compact, style-specific sprite geometry complements the
+    /// note-aware HLSL filament. Pedal glow, audio reactivity and Tempo sync modulate its brightness.
     /// </summary>
     /// <param name="sprites">The additive instance list.</param>
     /// <param name="look">The current look.</param>
@@ -724,17 +767,88 @@ internal sealed partial class GpuStageSimulation
     private void AddHaloPulses(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, GpuSceneLayout layout)
     {
         var gain = look.HaloPulseIntensity * GlowBoost;
-        if (look.TempoSync) gain *= 1 + _beatPulse * look.TempoSyncAmount * .8f; // the pulses ride the beat
+        if (look.TempoSync) gain *= 1 + _beatPulse * look.TempoSyncAmount * .8f;
+        gain = Math.Clamp(gain, 0, 2);
         var width = layout.Width;
+        var y = layout.HitY;
         var color = ToLinear(look.HaloColor) * 2.2f;
-        for (var i = 0; i < 3; i++)
+        var time = (float)_time * look.HaloPulseSpeed;
+        switch (look.HaloPulseStyle)
         {
-            var f = Frac((float)(_time * .38) + i / 3f);
-            var x = f * width;
-            var envelope = MathF.Sin(f * MathF.PI);
-            Glow(sprites, x, layout.HitY, width * .05f, 10, color, .42f * envelope * gain);
-            Glow(sprites, x, layout.HitY, width * .018f, 4.5f, Vector3.One * 2.4f, .6f * envelope * gain);
-            Line(sprites, x - width * .028f, layout.HitY, x + width * .028f, layout.HitY, 1.1f, Vector3.One * 1.8f, .48f * envelope * gain, 1);
+            case "Sweep":
+            {
+                var f = Frac(time * .19f);
+                var x = f * width;
+                var tail = Math.Max(0, x - width * .24f);
+                Line(sprites, tail, y, x, y, 2.2f, color, .42f * gain, 1.2f);
+                Glow(sprites, x, y, width * .045f, 8, color, .56f * gain);
+                Glow(sprites, x, y, width * .015f, 3.5f, Vector3.One * 2.3f, .75f * gain);
+                break;
+            }
+            case "Twin Comets":
+                for (var i = 0; i < 2; i++)
+                {
+                    var f = i == 0 ? Frac(time * .145f) : Frac(.5f - time * .145f);
+                    var x = f * width;
+                    var tailX = i == 0 ? Math.Max(0, x - width * .14f) : Math.Min(width, x + width * .14f);
+                    var cometColor = i == 0 ? color : ToLinear(new Vector3(.25f, .62f, 1f)) * 2.1f;
+                    Line(sprites, tailX, y, x, y, 1.8f, cometColor, .48f * gain, 1.1f);
+                    Glow(sprites, x, y, width * .026f, 6, cometColor, .66f * gain);
+                    Glow(sprites, x, y, width * .009f, 3, Vector3.One * 2.2f, .8f * gain);
+                }
+                break;
+            case "Spectrum":
+                for (var i = 0; i < 12; i++)
+                {
+                    var left = width * i / 12f;
+                    var right = width * (i + 1) / 12f;
+                    var segmentColor = ToLinear(ColorFromHue(time * 36 + i * 30)) * 1.9f;
+                    var pulse = .62f + .38f * MathF.Sin(time * 1.4f - i * .48f);
+                    Line(sprites, left, y, right, y, 1.5f, segmentColor, .55f * gain * pulse, 1.1f);
+                    Glow(sprites, (left + right) * .5f, y, width / 18f, 4, segmentColor, .16f * gain * pulse);
+                }
+                break;
+            case "Electric Arc":
+            {
+                const int segments = 28;
+                var px = 0f;
+                var py = y + MathF.Sin(time * 8) * 1.5f;
+                for (var i = 1; i <= segments; i++)
+                {
+                    var f = i / (float)segments;
+                    var nx = f * width;
+                    var ny = y + MathF.Sin(f * 51 + time * 5.2f) * 3.2f + MathF.Sin(f * 117 - time * 7.1f) * 1.4f;
+                    var arcColor = i % 4 == 0 ? Vector3.One * 1.8f : ToLinear(new Vector3(.42f, .78f, 1f)) * 1.8f;
+                    Line(sprites, px, py, nx, ny, 1.05f, arcColor, .7f * gain, 1.25f);
+                    if (i % 4 == 0) Glow(sprites, nx, ny, 4, 4, arcColor, .22f * gain);
+                    px = nx; py = ny;
+                }
+                break;
+            }
+            case "Ripple":
+                for (var i = 0; i < 3; i++)
+                {
+                    var phase = Frac(time * .16f + i / 3f);
+                    var rx = width * (.035f + phase * .23f);
+                    var alpha = MathF.Sin(phase * MathF.PI) * .76f * gain;
+                    RingShape(sprites, width * .5f, y, rx, Math.Max(2, rx * .11f), 2.2f, color, alpha);
+                }
+                break;
+            default: // Pulse: a slow, even breath across the entire key bed
+            {
+                var breath = .72f + .28f * MathF.Sin(time * 1.55f) + _activity * .12f;
+                Line(sprites, 0, y, width, y, 1.5f, color, .22f * gain * breath, 1.05f);
+                Glow(sprites, width * .5f, y, width * .5f, 7, color, .18f * gain * breath);
+                for (var i = 0; i < 3; i++)
+                {
+                    var f = Frac(time * .1f + i / 3f);
+                    var x = f * width;
+                    var envelope = MathF.Sin(f * MathF.PI);
+                    Glow(sprites, x, y, width * .035f, 7, color, .34f * envelope * gain);
+                    Glow(sprites, x, y, width * .012f, 3.5f, Vector3.One * 2.4f, .48f * envelope * gain);
+                }
+                break;
+            }
         }
     }
 

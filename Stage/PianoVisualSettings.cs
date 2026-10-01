@@ -61,6 +61,11 @@ internal sealed class PianoVisualSettings
     public bool Notes3D { get; set; } = true;
     public bool BackgroundGuide { get; set; }
     public bool BackgroundGradient { get; set; }
+    /// <summary>GPU-only procedural motion layered into the sky: None, Aurora, Nebula, Prism, Ember Haze, Ocean Flow or Retro Grid.</summary>
+    public string BackgroundMotion { get; set; } = "None";
+    public double BackgroundMotionAmount { get; set; } = 45;
+    public double BackgroundMotionSpeed { get; set; } = 35;
+    public string BackgroundMotionColor { get; set; } = "#7B5CFF";
     public bool ShowStars { get; set; }
     public bool ShowWisps { get; set; } = false;
     public bool ShowImpactRings { get; set; } = true;
@@ -110,6 +115,10 @@ internal sealed class PianoVisualSettings
     public bool HaloPulse { get; set; } = false;
     /// <summary>Brightness of the travelling halo pulses (0-100).</summary>
     public double HaloPulseIntensity { get; set; } = 50;
+    /// <summary>GPU hit-line animation: Pulse, Sweep, Twin Comets, Spectrum, Electric Arc or Ripple.</summary>
+    public string HaloPulseStyle { get; set; } = "Pulse";
+    /// <summary>Travel speed of the hit-line animation (0-100).</summary>
+    public double HaloPulseSpeed { get; set; } = 42;
     /// <summary>GPU stage: a soft glow gathers where a note is about to land (also a practice aid).</summary>
     public bool NoteLandingGlow { get; set; } = true;
     /// <summary>Brightness of the anticipation glow (0-100).</summary>
@@ -381,6 +390,8 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] ImpactBursts = ["Embers", "Splash", "Fireworks", "Confetti", "Dust"];
     internal static readonly string[] ImpactMorphs = ["None", "Shatter", "Melt", "Absorb", "Bounce", "Morph"];
     internal static readonly string[] ImpactFlashStyles = ["Flash", "Lightning", "Plasma"];
+    internal static readonly string[] HaloPulseStyles = ["Pulse", "Sweep", "Twin Comets", "Spectrum", "Electric Arc", "Ripple"];
+    internal static readonly string[] BackgroundMotions = ["None", "Aurora", "Nebula", "Prism", "Ember Haze", "Ocean Flow", "Retro Grid"];
     internal static readonly string[] ReleaseEffects = ["Fade", "Float Up", "Dissolve", "Smoke", "Snap Back", "Echo Rings"];
     internal static readonly string[] KeyboardStyles = ["Classic", "Studio", "Glass"];
     internal static readonly string[] ShadingQualities = ["Off", "Fast", "Balanced", "Cinematic"];
@@ -447,6 +458,8 @@ internal sealed class PianoVisualSettings
         FallingTrailIntensity = Math.Clamp(FallingTrailIntensity, 0, 100); FallingTrailLength = Math.Clamp(FallingTrailLength, 0, 100);
         FallingPulseRate = Math.Clamp(FallingPulseRate, 0, 100); FallingGhostAmount = Math.Clamp(FallingGhostAmount, 0, 100);
         NoteShimmerAmount = Math.Clamp(NoteShimmerAmount, 0, 100); HaloPulseIntensity = Math.Clamp(HaloPulseIntensity, 0, 100);
+        HaloPulseSpeed = Math.Clamp(HaloPulseSpeed, 0, 100);
+        BackgroundMotionAmount = Math.Clamp(BackgroundMotionAmount, 0, 100); BackgroundMotionSpeed = Math.Clamp(BackgroundMotionSpeed, 0, 100);
         ShootingStarsAmount = Math.Clamp(ShootingStarsAmount, 0, 100); NoteLandingGlowAmount = Math.Clamp(NoteLandingGlowAmount, 0, 100);
         ImpactMorphIntensity = Math.Clamp(ImpactMorphIntensity, 0, 100);
         HoldBarIntensity = Math.Clamp(HoldBarIntensity, 0, 100); HoldBreathRate = Math.Clamp(HoldBreathRate, 0, 100);
@@ -487,6 +500,8 @@ internal sealed class PianoVisualSettings
         if (!ImpactBursts.Contains(ImpactBurst)) ImpactBurst = "Embers";
         if (!ImpactMorphs.Contains(ImpactMorph)) ImpactMorph = "None";
         if (!ImpactFlashStyles.Contains(ImpactFlashStyle)) ImpactFlashStyle = "Flash";
+        if (!HaloPulseStyles.Contains(HaloPulseStyle)) HaloPulseStyle = "Pulse";
+        if (!BackgroundMotions.Contains(BackgroundMotion)) BackgroundMotion = "None";
         if (!ReleaseEffects.Contains(ReleaseEffect)) ReleaseEffect = "Fade";
         if (!AmbientEnergies.Contains(AmbientEnergy)) AmbientEnergy = "None";
         if (!AmbientNatures.Contains(AmbientNature)) AmbientNature = "None";

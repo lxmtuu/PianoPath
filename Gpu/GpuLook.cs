@@ -61,6 +61,8 @@ internal sealed class GpuLook
     /// <summary>Bright pulses of the halo colour travelling along the hit line (Style → HIT LINE).</summary>
     public bool HaloPulse { get; init; }
     public float HaloPulseIntensity { get; init; } = .5f;
+    public string HaloPulseStyle { get; init; } = "Pulse";
+    public float HaloPulseSpeed { get; init; } = 1.0f;
     /// <summary>Occasional meteors crossing the sky behind the notes (Style → ATMOSPHERE).</summary>
     public bool ShootingStars { get; init; }
     public float ShootingStarsAmount { get; init; } = .5f;
@@ -160,6 +162,9 @@ internal sealed class GpuLook
     // ---- scene ----
     public bool ShowBackground { get; init; } = true;
     public bool BackgroundGradient { get; init; }
+    public string BackgroundMotion { get; init; } = "None";
+    public float BackgroundMotionAmount { get; init; } = .45f;
+    public float BackgroundMotionSpeed { get; init; } = 1.0f;
     public bool ShowStars { get; init; }
     public float StarDensity { get; init; } = .5f;
     public bool Chroma { get; init; }
@@ -206,6 +211,7 @@ internal sealed class GpuLook
     public Vector3 PressedKeyColor { get; init; } = new(.97f, .51f, 1f);
     public Vector3 KeyFeltColor { get; init; } = new(.77f, .11f, .29f);
     public Vector3 PetalColor { get; init; } = new(1f, .7f, .81f);
+    public Vector3 BackgroundMotionColor { get; init; } = new(.48f, .36f, 1f);
     public Vector3 AmbientLightColor { get; init; } = new(.48f, .36f, 1f);
     /// <summary>Note colour per pitch (0..127) and track slot (0..7), sRGB, already graded by saturation/contrast on the stage.</summary>
     public Vector3[] NoteColors { get; init; } = new Vector3[128 * TrackSlots];
@@ -261,7 +267,7 @@ internal sealed class GpuLook
             FallingTrail = s.FallingTrail, FallingTrailIntensity = P(s.FallingTrailIntensity), FallingTrailLength = P(s.FallingTrailLength),
             FallingGhost = s.FallingGhost, FallingGhostAmount = P(s.FallingGhostAmount),
             NoteShimmer = s.NoteShimmer, NoteShimmerAmount = P(s.NoteShimmerAmount),
-            HaloPulse = s.HaloPulse, HaloPulseIntensity = P(s.HaloPulseIntensity),
+            HaloPulse = s.HaloPulse, HaloPulseIntensity = P(s.HaloPulseIntensity), HaloPulseStyle = s.HaloPulseStyle, HaloPulseSpeed = Speed(s.HaloPulseSpeed),
             ShootingStars = s.ShootingStars, ShootingStarsAmount = P(s.ShootingStarsAmount),
             NoteLandingGlow = s.NoteLandingGlow, NoteLandingGlowAmount = P(s.NoteLandingGlowAmount),
             HoldBar = s.HoldBar, HoldBarIntensity = P(s.HoldBarIntensity), HoldBreath = s.HoldBreath, HoldBreathRate = P(s.HoldBreathRate),
@@ -294,7 +300,8 @@ internal sealed class GpuLook
             ShaderGloss = P(s.ShaderGloss), ShaderRimLight = P(s.ShaderRimLight), ShaderEmissive = P(s.ShaderEmissive),
             ShaderExposure = P(s.ShaderExposure), ShaderCameraTilt = P(s.ShaderCameraTilt), ShaderFilmic = s.ShaderFilmic,
 
-            ShowBackground = s.ShowBackground, BackgroundGradient = s.BackgroundGradient, ShowStars = s.ShowStars, StarDensity = P(s.StarDensity),
+            ShowBackground = s.ShowBackground, BackgroundGradient = s.BackgroundGradient, BackgroundMotion = s.BackgroundMotion,
+            BackgroundMotionAmount = P(s.BackgroundMotionAmount), BackgroundMotionSpeed = Speed(s.BackgroundMotionSpeed), ShowStars = s.ShowStars, StarDensity = P(s.StarDensity),
             Chroma = s.BackgroundMode == "ChromaGreen", BackgroundDim = P(s.BackgroundDim),
             HorizonGlow = P(s.HorizonGlow), ShowLightBeams = s.ShowLightBeams, BeamIntensity = P(s.BeamIntensity),
             BackgroundGuide = s.ShowBackground && s.BackgroundGuide, ShowPetals = s.ShowPetals, PetalAmount = (float)s.PetalAmount,
@@ -312,8 +319,9 @@ internal sealed class GpuLook
             HaloColor = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f)),
             PressedKeyColor = ParseHex(s.PressedKeyColor, new Vector3(.97f, .51f, 1f)),
             KeyFeltColor = ParseHex(s.KeyFeltColor, new Vector3(.77f, .11f, .29f)),
-            // the software stage grades these through AdjustColor as well, so they go through the stage's colour function
+            // Atmospheric tints use the same colour grade as the rest of the stage.
             PetalColor = ToVector(grade(ParseWpf(s.PetalColor, WpfColor.FromRgb(255, 179, 207)))),
+            BackgroundMotionColor = ToVector(grade(ParseWpf(s.BackgroundMotionColor, WpfColor.FromRgb(123, 92, 255)))),
             AmbientLightColor = ToVector(grade(ParseWpf(s.AmbientLightColor, WpfColor.FromRgb(123, 92, 255)))),
             NoteColors = colors
         };

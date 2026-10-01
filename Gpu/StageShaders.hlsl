@@ -3,7 +3,7 @@
 // One file, many entry points; Gpu/GpuStageRenderer.cs compiles every entry point once at start-up
 // with D3DCompile (vs_5_0 / ps_5_0). The pipeline is:
 //
-//   1. VsFullscreen + PsBackground   - background colour/image, aura, stars, horizon glow, key bed
+//   1. VsFullscreen + PsBackground   - background colour/image, procedural atmosphere, stars, horizon glow, key bed
 //   2. VsNote       + PsNote         - instanced SDF note capsules: Solid, Neon, Glass, Fire (lava)
 //   3. VsKey        + PsKey          - instanced 3D key boxes, GGX + Lambert, rim, emissive, AO, shadows
 //   4. VsSprite     + PsSprite       - instanced additive particles, rings, flares, beams, hit line
@@ -37,6 +37,9 @@ cbuffer Frame : register(b0)
     float4 RimColor;     // rgb = rim light colour, w = horizon glow height (scene units)
     float4 Post;         // x = exposure, y = filmic (1/0), z = saturation, w = contrast
     float4 Post2;        // x = vignette, y = bloom intensity, z = bloom threshold, w = dither amplitude
+    float4 SceneFx;      // x = GPU background-motion id, y = amount, z = speed, w = key activity
+    float4 SceneFxColor; // rgb = background-motion tint
+    float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
 };
 
 cbuffer PassConstants : register(b1)
@@ -178,6 +181,85 @@ float3 Stars(float2 p)
     return tint * star * SceneA.y;
 }
 
+float3 SpectrumRgb(float hue)
+{
+    float3 k = frac(hue + float3(0.0, 0.6666667, 0.3333333)) * 6.0;
+    return saturate(abs(k - 3.0) - 1.0);
+}
+
+// Full-screen procedural atmosphere: no particle allocation or CPU-generated geometry is needed for
+// these slow, broad colour fields. The mode is uniform for the draw, so only one branch runs per pixel.
+float3 BackgroundMotion(float2 uv)
+{
+    float mode = SceneFx.x;
+    float amount = saturate(SceneFx.y);
+    if (mode < 0.5 || amount <= 0.001) return 0.0;
+    float speed = max(SceneFx.z, 0.05);
+    float t = ScreenTime.z * speed;
+    float activity = SceneFx.w;
+    float3 tint = SceneFxColor.rgb;
+
+    if (mode < 1.5) // aurora: two silk curtains with a noisy, travelling edge
+    {
+        float n = ValueNoise(uv * float2(3.0, 5.5) + float2(t * 0.055, -t * 0.11));
+        float wave = 0.26 + 0.075 * sin(uv.x * 8.0 + t * 0.65) + 0.035 * sin(uv.x * 19.0 - t * 0.42);
+        float edge = wave + (n - 0.5) * 0.16;
+        float curtain = exp(-abs(uv.y - edge) * 15.0) * (1.0 - smoothstep(0.32, 0.98, uv.y));
+        float fold = exp(-abs(uv.y - edge - 0.105) * 22.0) * 0.52;
+        float rays = 0.72 + 0.28 * sin(uv.x * 48.0 + n * 6.0 + t * 1.1);
+        float3 aurora = lerp(tint, float3(0.08, 0.62, 0.48), 0.42 + 0.14 * sin(uv.x * 4.0 + t * 0.24));
+        return aurora * (curtain + fold) * rays * amount * (0.42 + activity * 0.12);
+    }
+    if (mode < 2.5) // nebula: softly domain-warped indigo and rose clouds
+    {
+        float2 q = (uv - float2(0.5, 0.42)) * float2(3.0, 4.1);
+        float warp = ValueNoise(q * 0.8 + float2(t * 0.035, -t * 0.025));
+        float cloud = ValueNoise(q * 1.45 + float2(warp * 1.8 - t * 0.025, warp * 1.1 + t * 0.02));
+        float radial = saturate(1.0 - length((uv - float2(0.5, 0.39)) * float2(1.35, 1.8)));
+        float mask = smoothstep(0.39, 0.73, cloud + radial * 0.18) * radial;
+        float3 nebula = lerp(tint, Aura.rgb + float3(0.12, 0.015, 0.16), saturate(warp * 0.75));
+        float roseCloud = smoothstep(0.55, 0.82, cloud * 0.68 + warp * 0.32);
+        float3 rose = float3(0.42, 0.035, 0.19) * roseCloud;
+        return (nebula * 0.62 + rose) * mask * amount * (0.56 + activity * 0.12);
+    }
+    if (mode < 3.5) // prism: restrained chromatic bands that drift across the sky
+    {
+        float phase = uv.x * 0.72 + uv.y * 0.22 + t * 0.035;
+        float band = 0.5 + 0.5 * sin(phase * 6.2831853);
+        float prismDistance = (band - 0.52) * 2.1;
+        float veil = exp(-prismDistance * prismDistance) * (0.35 + 0.65 * uv.y);
+        float3 spectral = lerp(tint, SpectrumRgb(phase + tint.r * 0.12), 0.72);
+        return spectral * veil * amount * 0.22;
+    }
+    if (mode < 4.5) // ember haze: heat shimmer and a molten horizon, not a full-screen orange wash
+    {
+        float heat = ValueNoise(uv * float2(4.0, 6.0) + float2(t * 0.035, -t * 0.1));
+        float wave = 0.64 + 0.045 * sin(uv.x * 10.0 + t * 0.48) + (heat - 0.5) * 0.08;
+        float mask = smoothstep(wave - 0.07, wave + 0.08, uv.y) * (1.0 - smoothstep(0.78, 0.94, uv.y));
+        float flicker = 0.82 + 0.18 * sin(t * 2.1 + heat * 7.0 + activity * 1.5);
+        return lerp(float3(0.72, 0.075, 0.012), tint, 0.48) * mask * flicker * amount * 0.46;
+    }
+    if (mode < 5.5) // ocean flow: overlapping caustic ribbons, brighter near the surface
+    {
+        float phase = uv.x * 10.0 + sin(uv.y * 9.0 - t * 0.38) * 1.3 - t * 0.62;
+        float wave = 0.5 + 0.5 * sin(phase);
+        float caustic = pow(saturate(wave * (0.62 + 0.38 * sin(uv.x * 5.0 + t * 0.3))), 7.0);
+        float depth = saturate(1.0 - uv.y * 0.9);
+        float3 water = lerp(float3(0.018, 0.18, 0.34), tint, 0.62);
+        return water * (0.14 + caustic * 0.9) * depth * amount * 0.5;
+    }
+    // retro grid: a low-perspective neon floor and slow scan line, confined to the lower sky
+    float horizonY = 0.43 + 0.012 * sin(t * 0.42);
+    float depth01 = saturate((uv.y - horizonY) / max(1.0 - horizonY, 0.05));
+    float verticalGrid = 1.0 - smoothstep(0.025, 0.075, abs(frac(uv.x * 18.0 + 0.5) - 0.5));
+    float perspectiveY = log2(1.0 + depth01 * 25.0) * 3.1 - t * 0.32;
+    float horizontalGrid = 1.0 - smoothstep(0.035, 0.12, abs(frac(perspectiveY) - 0.5));
+    float floorMask = smoothstep(horizonY - 0.015, horizonY + 0.035, uv.y);
+    float grid = (verticalGrid * 0.22 + horizontalGrid * 0.48) * floorMask;
+    float scan = 0.88 + 0.12 * sin((uv.y * ScreenTime.y) * 0.18 - t * 2.0);
+    return tint * grid * scan * amount * 0.72;
+}
+
 float4 PsBackground(FullscreenOut i) : SV_Target
 {
     float2 screenPx = i.Uv * ScreenTime.xy;
@@ -203,6 +285,7 @@ float4 PsBackground(FullscreenOut i) : SV_Target
 
     if (p.y < hitY)
     {
+        c += BackgroundMotion(i.Uv);
         c += Stars(p);
         // horizon: light rising off the keyboard, coloured by the keys that sound. The software stage's
         // gradient: 40 + glow x 2.6 DIPs tall (RimColor.w), linear in sRGB, so about rise^2.2 in linear light
@@ -821,11 +904,73 @@ float4 PsSprite(SpriteOut v) : SV_Target
         float fade = pow(saturate(1.0 - up), 1.6);
         return float4(c * across * fade * a, 0.0);
     }
-    // hit line: a thin bright filament across the keyboard, tinted by the notes under it
+    // The hit line keeps its note-aware filament, with six GPU-animated variants layered on top.
     float3 tint = lerp(c, HitLineColor(v.Params.w), 0.75);
     float core = exp(-p.y * p.y * 60.0);
     float glow = exp(-p.y * p.y * 5.0) * 0.45;
-    return float4(tint * (core * 1.6 + glow) * a + core * 0.25 * a, 0.0);
+    float3 result = tint * (core * 1.6 + glow) * a + core * 0.25 * a;
+    if (HitFx.x > 0.5 && HitFx.y > 0.001)
+    {
+        float q = saturate(v.Params.w / max(SceneSize.x, 1.0));
+        float speed = max(HitFx.z, 0.05);
+        float time = ScreenTime.z * speed;
+        float gain = min(HitFx.y, 2.5);
+        float3 accent = tint;
+        float energy = 0.0;
+        if (HitFx.x < 1.5) // breathing pulse: note energy brightens the line without strobing
+        {
+            float breath = 0.5 + 0.5 * sin(time * 1.7);
+            energy = 0.22 + breath * 0.48 + HitFx.w * 0.22;
+            accent = lerp(tint, 1.0, 0.18 + breath * 0.22);
+        }
+        else if (HitFx.x < 2.5) // a single travelling scan with a soft, short tail
+        {
+            float head = frac(time * 0.16);
+            float d = q - head;
+            float beam = exp(-d * d * 190.0);
+            float tail = exp(-max(-d, 0.0) * 12.0) * step(0.0, -d);
+            energy = beam * 1.15 + tail * 0.26;
+            accent = lerp(tint, 1.0, beam * 0.72);
+        }
+        else if (HitFx.x < 3.5) // twin comets orbit in opposite directions
+        {
+            float headA = frac(time * 0.13);
+            float headB = frac(0.5 - time * 0.13);
+            float dA = q - headA;
+            float dB = q - headB;
+            float cometA = exp(-dA * dA * 240.0) + exp(-max(-dA, 0.0) * 15.0) * step(0.0, -dA) * 0.2;
+            float cometB = exp(-dB * dB * 240.0) + exp(-max(dB, 0.0) * 15.0) * step(0.0, dB) * 0.2;
+            energy = (cometA + cometB) * 0.72;
+            accent = lerp(float3(0.12, 0.62, 1.1), float3(1.1, 0.22, 0.62), saturate(cometB / max(cometA + cometB, 1e-3)));
+        }
+        else if (HitFx.x < 4.5) // note-coloured spectrum drifting along the full line
+        {
+            float hue = q + time * 0.035;
+            float3 spectral = SpectrumRgb(hue);
+            energy = 0.2 + 0.32 * (0.5 + 0.5 * sin(q * 37.0 - time * 2.0));
+            accent = lerp(tint, spectral, 0.82);
+        }
+        else if (HitFx.x < 5.5) // branching electric filament, jittering at musical speed
+        {
+            float jag = sin(q * 41.0 + time * 7.0) * 0.16 + sin(q * 97.0 - time * 11.0) * 0.075;
+            float fork = sin(q * 17.0 - time * 3.0) * 0.08;
+            float arc = exp(-pow((p.y - jag - fork) / 0.21, 2.0));
+            float branch = exp(-pow((p.y + jag * 0.55 + fork - 0.22) / 0.14, 2.0)) * (0.35 + 0.65 * abs(sin(q * 19.0 + time * 4.0)));
+            energy = (arc + branch * 0.42) * (0.78 + 0.22 * sin(time * 8.0 + q * 23.0));
+            accent = lerp(tint, float3(0.48, 0.8, 1.3), 0.54);
+        }
+        else // concentric-looking ripples race outward from the centre of the keyboard
+        {
+            float distance = abs(q - 0.5);
+            float phase = frac(time * 0.18 - distance * 1.45);
+            float wave = exp(-pow((phase - 0.36) / 0.09, 2.0));
+            float envelope = exp(-distance * 1.25);
+            energy = wave * envelope * 1.25;
+            accent = lerp(tint, float3(0.52, 0.82, 1.2), 0.38 + 0.24 * wave);
+        }
+        result += accent * (energy * gain) * (core * 1.5 + glow * 0.7) * a;
+    }
+    return float4(result, 0.0);
 }
 
 // ---------------------------------------------------------------------------------------------------
