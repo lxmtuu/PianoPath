@@ -19,7 +19,7 @@ public class WavWriterTests : IDisposable
     }
 
     [Fact]
-    public void Opening_a_track_leaves_an_empty_file_with_the_header_already_in_place()
+    public void Opening_a_track_starts_empty_with_the_format_already_chosen()
     {
         using var wav = WavWriter.TryCreate(_path);
 
@@ -29,7 +29,19 @@ public class WavWriterTests : IDisposable
         Assert.Equal(0, wav.Frames);
         Assert.Equal(0, wav.DataBytes);
         Assert.False(wav.IsClosed);
-        Assert.Equal(WavWriter.HeaderBytes, new FileInfo(_path).Length);
+    }
+
+    [Fact]
+    public void An_empty_track_that_is_closed_leaves_a_header_only_file_with_zero_sizes()
+    {
+        // The header is written to a buffered stream, so the file on disk only appears once the track is
+        // closed - which is also when the two size fields get their final values.
+        WavWriter.TryCreate(_path)!.Dispose();
+
+        var bytes = File.ReadAllBytes(_path);
+        Assert.Equal(WavWriter.HeaderBytes, bytes.Length);
+        Assert.Equal(36u, BitConverter.ToUInt32(bytes, 4));
+        Assert.Equal(0u, BitConverter.ToUInt32(bytes, WavWriter.HeaderBytes - 4));
     }
 
     [Fact]
