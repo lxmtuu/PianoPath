@@ -283,6 +283,7 @@ internal sealed class GpuRenderLoop : IDisposable
     /// </summary>
     internal static byte[] RenderOnce(GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, out string adapter, bool forceWarp = true, bool renderWarmup = true)
     {
+        var timer = Stopwatch.StartNew();
         using var renderer = GpuStageRenderer.Create(forceWarp);
         adapter = renderer.AdapterName;
         var simulation = new GpuStageSimulation();
@@ -295,19 +296,25 @@ internal sealed class GpuRenderLoop : IDisposable
         using var output = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.RenderTarget);
         using var view = renderer.Device.CreateRenderTargetView(output);
         using var staging = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.None, usage: ResourceUsage.Staging, cpuAccessFlags: CpuAccessFlags.Read);
+        var created = timer.Elapsed.TotalMilliseconds; double simulated = 0, drawn = 0;
         for (var frame = 0; frame <= warmupFrames; frame++)
         {
+            var started = timer.Elapsed.TotalMilliseconds;
             feed.Capture(input, GpuStageFeed.Now);
             var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
             var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
             simulation.Step(frameSeconds, input, feed, layout.Width);
+            simulated += timer.Elapsed.TotalMilliseconds - started;
             // Every frame is drawn from scratch out of the simulation and the input, so the frames before the last
             // only matter through the simulation, which the step above already advanced.
             if (!renderWarmup && frame < warmupFrames) continue;
+            started = timer.Elapsed.TotalMilliseconds;
             renderer.UpdateBackground(feed.Background);
             renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
+            drawn += timer.Elapsed.TotalMilliseconds - started;
         }
+        var readStarted = timer.Elapsed.TotalMilliseconds;
         renderer.Context.CopyResource(staging, output);
         var pixels = new byte[width * height * 4];
         var mapped = renderer.Context.Map(staging, 0, MapMode.Read, MapFlags.None);
@@ -317,8 +324,16 @@ internal sealed class GpuRenderLoop : IDisposable
                 Marshal.Copy(mapped.DataPointer + (nint)(y * mapped.RowPitch), pixels, y * width * 4, width * 4);
         }
         finally { renderer.Context.Unmap(staging, 0); }
+        LastRenderTimings = $"create:{created:0}(compile:{renderer.ShaderCompileMilliseconds:0}) sim:{simulated:0} draw:{drawn:0} readback:{timer.Elapsed.TotalMilliseconds - readStarted:0}";
         return pixels;
     }
+
+    /// <summary>
+    /// Where the time of the last <see cref="RenderOnce"/> went, in milliseconds. The capture report carries it:
+    /// a preview that costs twenty seconds more than it should is found by looking, not by guessing, and the
+    /// last four guesses about this code were wrong.
+    /// </summary>
+    internal static string LastRenderTimings { get; private set; } = "";
 
     /// <summary>The embedded preview's output textures plus a staging ring read back one frame late.</summary>
     private sealed class ReadbackRing : IDisposable

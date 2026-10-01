@@ -218,12 +218,22 @@ public partial class MainWindow : Window
         // The thread would otherwise take the preview note's events off the feed before the synchronous frame
         // saw them, and publish frames of its own over it. A loop that is still starting cannot be parked, so
         // wait for its device first (it answers on failure too, so this never waits out the full ten seconds).
+        var timer = Stopwatch.StartNew();
         _gpuLoop?.WaitUntilStarted(TimeSpan.FromSeconds(10));
-        if (_gpuLoop is { Error: null, IsReady: true } loop) loop.Park(TimeSpan.FromSeconds(3));
+        var waited = timer.ElapsedMilliseconds;
+        var parked = _gpuLoop is { Error: null, IsReady: true } loop && loop.Park(TimeSpan.FromSeconds(3));
+        var parkedAt = timer.ElapsedMilliseconds;
         Stage.ResetAnimation();
         DockBackdrop.ResetAnimation();
         MenuBackdrop.ResetAnimation();
+        PreviewTimings = $"begin[wait:{waited} park:{parkedAt - waited}({(parked ? "ok" : "none")}) reset:{timer.ElapsedMilliseconds - parkedAt}]";
     }
+
+    /// <summary>
+    /// Where the time of the last deterministic preview went, in milliseconds, for the capture report. A
+    /// preview that costs twenty seconds more than it should is found by looking, not by guessing.
+    /// </summary>
+    internal string PreviewTimings { get; private set; } = "";
 
     /// <summary>
     /// Advances the stage <paramref name="frames"/> steps of <paramref name="stepSeconds"/>, builds the GPU frame
@@ -237,11 +247,15 @@ public partial class MainWindow : Window
     /// </summary>
     internal void RunDeterministicPreviewFrames(int frames, double stepSeconds)
     {
+        var timer = Stopwatch.StartNew();
         for (var i = 0; i < frames; i++) Stage.Advance(stepSeconds);
-        if (GpuStageActive) ShowDeterministicGpuFrame(frames, stepSeconds);
+        var advanced = timer.ElapsedMilliseconds;
+        var gpu = GpuStageActive ? ShowDeterministicGpuFrame(frames, stepSeconds) : "";
+        var drawn = timer.ElapsedMilliseconds;
         FrameClock.Shared.Freeze();
         Stage.InvalidateVisual();
         FlushRenderPass();
+        PreviewTimings += $" run[advance:{advanced} gpu:{drawn - advanced}{gpu} flush:{timer.ElapsedMilliseconds - drawn}]";
     }
 
     /// <summary>
@@ -249,19 +263,21 @@ public partial class MainWindow : Window
     /// calling thread (<see cref="GpuRenderLoop.RenderOnce"/>, the same path <c>--gpu-snapshot</c> and the
     /// verification suite use) and shown in place of whatever the parked render thread last produced.
     /// </summary>
-    private void ShowDeterministicGpuFrame(int frames, double stepSeconds)
+    private string ShowDeterministicGpuFrame(int frames, double stepSeconds)
     {
         var (width, height) = Stage.GpuPixelSize;
-        if (width < 16 || height < 16) return;
+        if (width < 16 || height < 16) return "{too small}";
         try
         {
             var pixels = GpuRenderLoop.RenderOnce(_gpuFeed, width, height, frames - 1, stepSeconds, out _);
             Stage.ShowGpuFrame(pixels, width, height);
+            return "{" + GpuRenderLoop.LastRenderTimings + "}";
         }
         catch (Exception ex)
         {
             // The screenshot is still taken, with whatever frame the stage already shows.
             Trace.WriteLine($"Keyflow: the deterministic GPU frame could not be built: {ex.Message}");
+            return "{failed}";
         }
     }
 

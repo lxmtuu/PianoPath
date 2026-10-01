@@ -127,10 +127,14 @@ public partial class App : Application
             {
                 if (captured) return;
                 captured = true; settle.Stop(); watchdog.Stop();
+                var timer = Stopwatch.StartNew();
+                long pressMs = 0;
                 try
                 {
                     window.BeginDeterministicPreview();
+                    var begunAt = timer.ElapsedMilliseconds;
                     PressPreview();
+                    pressMs = timer.ElapsedMilliseconds - begunAt;
                     window.RunDeterministicPreviewFrames(previewFrames, previewStepSeconds);
                 }
                 catch (Exception ex)
@@ -140,8 +144,10 @@ public partial class App : Application
                     Trace.WriteLine($"Keyflow: the deterministic preview sequence failed: {ex}");
                     how += "-unprepared";
                 }
+                var preparedAt = timer.ElapsedMilliseconds;
                 VerificationSuite.Capture(window, target);
-                ReportPreview(window, target, how, loadedWait.Elapsed.TotalSeconds);
+                var timings = $"{window.PreviewTimings} press:{pressMs} capture:{timer.ElapsedMilliseconds - preparedAt} sequence:{timer.ElapsedMilliseconds} liveCompile:{(window.GpuLoop?.ShaderCompileMilliseconds ?? 0):0}";
+                ReportPreview(window, target, how, loadedWait.Elapsed.TotalSeconds, timings);
                 Shutdown(0);
             }
             void TryCapture()
@@ -162,7 +168,7 @@ public partial class App : Application
     /// <summary>
     /// When the build asks for it (<c>KEYFLOW_PREVIEW_REPORTS</c> names a folder outside the repository),
     /// writes one line about a finished screenshot: a short hash of the PNG that was just written, how the
-    /// capture was reached, and what drew the stage.
+    /// capture was reached, what drew the stage, and where the time went (milliseconds per phase).
     ///
     /// The hash is the point. A finished run's job log cannot be read afterwards, the committed pictures are
     /// only visible one commit later, and the question that keeps coming up is whether two renders of the
@@ -170,7 +176,7 @@ public partial class App : Application
     /// eye. The folder is outside <c>docs/previews</c> because everything inside it is committed, and a line
     /// that carries a measured duration would otherwise change the commit on every run.
     /// </summary>
-    private static void ReportPreview(MainWindow window, string target, string how, double seconds)
+    private static void ReportPreview(MainWindow window, string target, string how, double seconds, string timings)
     {
         var folder = Environment.GetEnvironmentVariable("KEYFLOW_PREVIEW_REPORTS");
         if (string.IsNullOrEmpty(folder)) return;
@@ -181,7 +187,7 @@ public partial class App : Application
             var name = $"{Path.GetFileName(Path.GetDirectoryName(full))}-{Path.GetFileName(full)}";
             var engine = window.GpuStageActive ? (window.GpuLoop?.AdapterName ?? "gpu") : "software";
             Directory.CreateDirectory(folder);
-            File.WriteAllText(Path.Combine(folder, name + ".txt"), $"{name} sha={hash} how={how} engine={engine} soundfont={window.HasSoundFont} seconds={seconds:F1}");
+            File.WriteAllText(Path.Combine(folder, name + ".txt"), $"{name} sha={hash} how={how} engine={engine} soundfont={window.HasSoundFont} seconds={seconds:F1} timings={timings}");
         }
         catch (Exception)
         {
