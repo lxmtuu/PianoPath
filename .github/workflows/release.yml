@@ -1,8 +1,12 @@
 name: release
 
-# Builds distributable packages: the portable zips and the .exe installer. Runs when a version tag
-# such as v0.3.0 is pushed (the packages are attached to a GitHub Release) or manually from the
-# Actions tab (they are available as workflow artifacts).
+# Builds the distributable packages: three portable zips, the .exe installer and a SHA-256 list of all of
+# them. Runs when a version tag such as v1.0.0 is pushed (the packages are attached to a GitHub Release) or
+# manually from the Actions tab (they are available as workflow artifacts, and no release is created).
+#
+# build.yml already publishes the small framework-dependent kind on every push, so what is new here is the
+# part that needs the real 113 MiB SoundFont: two self-contained packages, an installer compiled from the
+# folder a user actually downloads, and a --verify run against the published executable.
 on:
   push:
     tags: ["v*"]
@@ -32,6 +36,15 @@ jobs:
         shell: pwsh
         run: .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64 -Zip
 
+      # Windows on ARM gets a portable package and no installer: Keyflow.iss sets
+      # ArchitecturesAllowed=x64compatible, and an ARM wizard would need its own script and an ARM machine
+      # to be checked on. ReadyToRun is switched off for this one leg on purpose — the runner is x64, so
+      # compiling it would mean cross-generating ARM code no run of this repository has ever measured, and
+      # this package is for a machine nobody here has run it on yet. The two x64 legs keep ReadyToRun.
+      - name: Publish self-contained single file (win-arm64)
+        shell: pwsh
+        run: .\publish.ps1 -Mode SelfContained -Runtime win-arm64 -Zip -NoReadyToRun
+
       - name: Smoke test the published executable
         # Left non-blocking on purpose: a release must not be held hostage by a headless smoke test.
         # The log is printed, annotated and attached to the job summary so a failure is still visible.
@@ -59,15 +72,39 @@ jobs:
       - name: Build the .exe installer
         shell: pwsh
         run: |
-          $version = (dotnet msbuild PianoPath.csproj -getProperty:Version).Trim()
+          # The version is read the way publish.ps1 reads it — out of the project file — rather than by
+          # asking MSBuild to evaluate it: MSBuild prints warnings beside the value it prints, and an
+          # installer named after a warning would be found by whoever downloaded it.
+          $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
+          $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
+          if (-not $version) { throw 'PianoPath.csproj has no <Version> to name the installer with' }
           pwsh tools/build_installer.ps1 -Version $version -OutputDir installer\Output
+
+      # Nothing here is code-signed, so the hashes are what a downloader has to go on: they are the proof
+      # that the file which arrived is the file this run attached. Written in the format `sha256sum -c`
+      # reads (lowercase hash, two spaces, file name), into publish/ because that folder is git-ignored
+      # and already holds the packages — the checkout stays clean either way.
+      - name: Hash the packages
+        shell: pwsh
+        run: |
+          $packages = @(Get-ChildItem publish -Filter '*.zip' -ErrorAction SilentlyContinue) +
+                      @(Get-ChildItem 'installer/Output' -Filter 'Keyflow-Setup-*.exe' -ErrorAction SilentlyContinue)
+          if ($packages.Count -eq 0) { throw 'no package was published, so there is nothing to hash' }
+          $sums = 'publish/SHA256SUMS.txt'
+          $lines = @(foreach ($package in ($packages | Sort-Object Name)) {
+            '{0}  {1}' -f (Get-FileHash $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $package.Name
+          })
+          Set-Content -Path $sums -Value $lines -Encoding utf8
+          $lines | ForEach-Object { $_ }
+          "::notice title=Packages::$($packages.Count) package(s) hashed into $sums"
 
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Keyflow-win-x64
+          name: Keyflow-packages
           path: |
             publish/*.zip
+            publish/SHA256SUMS.txt
             installer/Output/Keyflow-Setup-*.exe
           if-no-files-found: error
 
@@ -77,5 +114,29 @@ jobs:
         with:
           files: |
             publish/*.zip
+            publish/SHA256SUMS.txt
             installer/Output/Keyflow-Setup-*.exe
+          # What to download is the one thing a reader of a release page needs and the one thing generated
+          # notes cannot know: four packages that differ in what they need on the target PC, and no
+          # signature on any of them. GitHub appends its own generated notes to this body.
+          body: |
+            **Keyflow ${{ github.ref_name }}** for Windows 10/11 (64-bit). Pick one package:
+
+            | File | What it is |
+            | --- | --- |
+            | `Keyflow-…-win-x64.zip` | Portable and self-contained: unzip and run `PianoPath.exe`. Nothing else to install. |
+            | `Keyflow-Setup-….exe` | Installer for Windows x64: Start Menu and Desktop shortcuts, an uninstall entry, and a wizard in English or Tiếng Việt. |
+            | `Keyflow-…-win-x64-fd.zip` | Smaller download; that PC needs the [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0). |
+            | `Keyflow-…-win-arm64.zip` | Windows on ARM, self-contained. Published by CI; no ARM machine has run it yet. |
+            | `SHA256SUMS.txt` | The SHA-256 of every file above: `Get-FileHash .\Keyflow-…-win-x64.zip -Algorithm SHA256`. |
+
+            Keep `Assets\` next to the executable, and keep the `LICENSE.txt` (MIT) and
+            `Assets\ATTRIBUTION.txt` that ship in every package: the bundled piano is FreePats' YDP Grand
+            Piano under CC BY 3.0.
+
+            The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC"
+            on the first launch — choose *More info → Run anyway*.
+
+            What changed: [CHANGELOG.en.md](https://github.com/lxmtuu/PianoPath/blob/${{ github.ref_name }}/CHANGELOG.en.md) ·
+            [CHANGELOG.md — tiếng Việt](https://github.com/lxmtuu/PianoPath/blob/${{ github.ref_name }}/CHANGELOG.md)
           generate_release_notes: true

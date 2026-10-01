@@ -177,4 +177,32 @@ public class LocalizationTests : IDisposable
 
         Assert.Equal(1, applied);
     }
+
+    /// <summary>
+    /// The About box is the one place a reader looks when a download seems to be the wrong build, and it
+    /// used to carry a typed "Keyflow 0.4.0" inside its own string-table key while <c>&lt;Version&gt;</c>
+    /// said something else — so a release could open a start-up menu naming one version above an About box
+    /// naming another, and nothing in the repository would have noticed. The sentence is a template now,
+    /// filled from <c>AppInfo.Version</c>; what this proves is that both tables can actually be filled,
+    /// because a stray brace in either translation would throw <c>FormatException</c> at the moment
+    /// somebody opens the dialog rather than at the moment somebody wrote it.
+    /// </summary>
+    [Fact]
+    public void The_about_box_is_a_template_both_languages_can_fill()
+    {
+        const string version = "9.9.9";
+        var key = StringsEnglish.Table.Keys.Single(candidate => candidate.StartsWith("Keyflow · Piano Performance", StringComparison.Ordinal));
+
+        Assert.DoesNotMatch(@"Keyflow \d+\.\d+", key);
+        Assert.Contains("{0}", key);
+
+        var english = Loc.F(key, version);
+        Assert.Contains($"{version} · shipped languages", english);
+        Assert.DoesNotContain("{0}", english);
+
+        Loc.Apply("vi");
+        var vietnamese = Loc.F(key, version);
+        Assert.Contains($"{version} · ngôn ngữ có sẵn", vietnamese);
+        Assert.DoesNotContain("{0}", vietnamese);
+    }
 }

@@ -6,12 +6,12 @@
 ;   2. iscc installer\Keyflow.iss          (or open this file in the Inno Setup Compiler and press F9)
 ;   → installer\Output\Keyflow-Setup-<version>.exe
 ;
-; Pass /DAppVersion=0.4.0 to override the version, /DSourceDir=..\publish\win-arm64 for another build.
+; Pass /DAppVersion=1.0.0 to override the version, /DSourceDir=..\publish\win-arm64 for another build.
 ; Keep the fallback below in sync with <Version> in PianoPath.csproj when bumping the release version.
 ; Every relative path in this file is relative to the folder this script lives in.
 
 #ifndef AppVersion
-  #define AppVersion "0.4.0"
+  #define AppVersion "1.0.0"
 #endif
 #ifndef SourceDir
   #define SourceDir "..\publish\win-x64"
@@ -37,6 +37,11 @@ ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequiredOverridesAllowed=dialog
 WizardStyle=modern
 LicenseFile=..\LICENSE
+; The setup program's own file properties, so a downloaded Keyflow-Setup-<version>.exe says which
+; release it is before anybody runs it — worth having while the packages carry no signature.
+VersionInfoVersion={#AppVersion}
+VersionInfoProductVersion={#AppVersion}
+VersionInfoProductName=Keyflow
 
 [Languages]
 ; Every language listed here is compiled into the one setup program; Setup then picks the language

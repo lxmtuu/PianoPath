@@ -1118,6 +1118,152 @@ def scan_preset_shelf():
         errors.append(f"tools/make_presets.py refuses to run: {error}")
     return errors
 
+PROJECT_FILES = ("*.csproj", "*.pubxml", "*.props", "*.targets")
+
+
+def scan_project_files():
+    """Every MSBuild file has to parse, because MSBuild refuses to load one that does not.
+
+    The XAML files have been parsed here since the first version of this checker and the C# files are
+    scanned for balance, but the project files were read only through regular expressions — and an XML
+    comment may not contain a double hyphen, so a comment in ``PianoPath.csproj`` that names a
+    command-line switch (``--bench``, ``--verify``) makes the file unparseable: no build, no publish, no
+    test project, and this checker still green because nothing in it looked. Found by writing exactly
+    that comment while pinning the release version.
+    """
+    errors = []
+    files = sorted({path for pattern in PROJECT_FILES for path in ROOT.glob(f"**/{pattern}")
+                    if "obj" not in path.parts and "bin" not in path.parts})
+    if not files:
+        return ["no MSBuild file was found; PianoPath.csproj is the project"]
+    for path in files:
+        try:
+            ET.parse(path)
+        except ET.ParseError as ex:
+            errors.append(f"{path.relative_to(ROOT)}: MSBuild cannot load this file — {ex} "
+                          "(an XML comment may not contain '--', which is what naming a command-line "
+                          "switch inside one does)")
+    return errors
+
+
+RELEASE_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?")
+# A changelog entry is "## <version> — <date>"; an "## Unreleased" section is allowed on top and is not
+# a version, so it is skipped rather than compared.
+CHANGELOG_ENTRY = re.compile(r"^## (?:(Unreleased)|(" + RELEASE_VERSION.pattern + r") — (\d{4}-\d{2}-\d{2}))\s*$")
+
+
+def scan_release_version(cs_files):
+    """One release, one number, and the number has one home.
+
+    ``<Version>`` in ``PianoPath.csproj`` is that home: the SDK stamps it into the assembly, ``AppInfo``
+    reads it back for the start-up menu's version label, the About box and the ``--bench`` report. What
+    this rule pins are the mirrors that cannot read an assembly — the installer's ``#define AppVersion``
+    fallback, the ``git tag`` and ``/DAppVersion=`` examples in both READMEs, and the newest entry of
+    both changelogs.
+
+    It exists because the number used to be typed into eight places, the About box being one of them:
+    a bump could ship a start-up menu saying one version above an About box saying another, and nothing
+    in the repository would have noticed. Two directions, because each one fails differently — every
+    mirror has to agree with the project file (a stale mirror prints an old number to exactly the person
+    who is checking a download), and no source file may type the number at all (a hardcoded one is a
+    mirror no list above would ever name).
+    """
+    errors = []
+    project = ROOT / "PianoPath.csproj"
+    if not project.exists():
+        return ["PianoPath.csproj is missing; there is no release version to compare anything with"]
+    declared = re.search(r"<Version>([^<]+)</Version>", project.read_text(encoding="utf-8"))
+    if not declared:
+        return ["PianoPath.csproj has no <Version>; publish.ps1, the installer, the About box and both "
+                "changelogs all read that one value"]
+    version = declared.group(1).strip()
+    if not RELEASE_VERSION.fullmatch(version):
+        errors.append(f"PianoPath.csproj: <Version>{version}</Version> is not a release number "
+                      "(expected MAJOR.MINOR.PATCH, the value git tags as v…)")
+
+    def mirrors(path, pattern, what, flags=0):
+        """Every match of ``pattern`` in ``path`` has to be the release version, and there has to be one."""
+        if not path.exists():
+            errors.append(f"{path.relative_to(ROOT)} is missing; it carries {what}")
+            return
+        hits = re.findall(pattern, path.read_text(encoding="utf-8"), flags)
+        if not hits:
+            errors.append(f"{path.relative_to(ROOT)} no longer carries {what}; a reader of that file "
+                          f"would have to guess the release number")
+            return
+        for hit in hits:
+            if hit != version:
+                errors.append(f"{path.relative_to(ROOT)}: {what} says {hit}, but PianoPath.csproj "
+                              f"declares <Version>{version}</Version>")
+
+    script = ROOT / "installer" / "Keyflow.iss"
+    mirrors(script, r'#define AppVersion "([^"]+)"', "the installer's AppVersion fallback")
+    mirrors(script, r"/DAppVersion=(\S+)", "the /DAppVersion example in the installer's header comment")
+    for name, changelog in (("README.md", "CHANGELOG.md"), ("README.en.md", "CHANGELOG.en.md")):
+        readme = ROOT / name
+        mirrors(readme, r"^git tag v(\S+)$", "the `git tag` example of the release section", re.M)
+        mirrors(readme, r"^git push origin v(\S+)$", "the `git push origin` example of the release section", re.M)
+        mirrors(readme, r"/DAppVersion=(\S+)", "the /DAppVersion example of the packaging section")
+        # A link, not a mention: the point is that a reader who lands on a README can reach the edition's
+        # own changelog in one click, and prose naming the file would satisfy a substring test.
+        if readme.exists() and f"]({changelog})" not in readme.read_text(encoding="utf-8"):
+            errors.append(f"{name} never links to {changelog}; the two language editions each carry their "
+                          "own changelog, and a reader who lands on a README has to be able to reach it")
+
+    lists = {}
+    for name in ("CHANGELOG.md", "CHANGELOG.en.md"):
+        path = ROOT / name
+        if not path.exists():
+            errors.append(f"{name} is missing; a release has to say what it ships, in both languages")
+            continue
+        entries = []
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if not line.startswith("## "):
+                continue
+            entry = CHANGELOG_ENTRY.match(line)
+            if not entry:
+                errors.append(f"{name}:{number}: “{line}” is not “## <version> — <YYYY-MM-DD>” (or "
+                              "“## Unreleased”), so the release number cannot be read out of it")
+                continue
+            if entry.group(1):
+                continue
+            entries.append(entry.group(2))
+        if not entries:
+            errors.append(f"{name} lists no released version")
+        elif entries[0] != version:
+            errors.append(f"{name}: the newest entry is {entries[0]}, but PianoPath.csproj declares "
+                          f"<Version>{version}</Version> — the release and its notes are not the same release")
+        lists[name] = entries
+    if len(lists) == 2:
+        left, right = lists["CHANGELOG.md"], lists["CHANGELOG.en.md"]
+        if left != right:
+            errors.append(f"CHANGELOG.md lists {left} while CHANGELOG.en.md lists {right}; the two "
+                          "editions document the same product, so they list the same releases")
+
+    # No source file types the number. "Keyflow 1.0.0" in a sentence is the About box's old shape: the
+    # sentence is a string-table key, so it is printed through Loc.F with {0} and filled from AppInfo.
+    # Comments are blanked out first, because the rule is about what the application can print and a
+    # doc comment is allowed to name the version a defect used to carry.
+    for path in cs_files:
+        text = _code(path.read_text(encoding="utf-8"))
+        for hit in re.findall(r"Keyflow \d+\.\d+[\d.]*", text):
+            errors.append(f"{path.relative_to(ROOT)}: “{hit}” types the release number into a source file; "
+                          "print it through AppInfo.Version (a {0} in the string-table key) so the number "
+                          "keeps one home")
+    info = ROOT / "AppInfo.cs"
+    if not info.exists():
+        errors.append("AppInfo.cs is missing; it is the one place the running build reads its version from")
+    elif "internal static string Version" not in info.read_text(encoding="utf-8"):
+        errors.append("AppInfo.cs no longer exposes Version; the start-up menu, the About box and the "
+                      "--bench report read the release version from it")
+    for name in ("Ui/MainWindow.Menu.cs", "Diagnostics/FrameBenchmark.cs"):
+        path = ROOT / name
+        if path.exists() and "AppInfo.Version" not in path.read_text(encoding="utf-8"):
+            errors.append(f"{name} does not read AppInfo.Version; it is one of the surfaces that print the "
+                          "release version, and a version typed here goes stale at the next bump")
+    return errors
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -1140,12 +1286,16 @@ def main():
     localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
     errors.extend(localization_errors)
     errors.extend(scan_dead_keys(cs_files, xaml_files))
+    errors.extend(scan_release_version(cs_files))
+    errors.extend(scan_project_files())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
     print("checked the community preset shelf against the settings class and against tools/make_presets.py, the script that writes it")
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
+    print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
+    print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

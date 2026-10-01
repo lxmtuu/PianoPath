@@ -11,7 +11,12 @@
     <Authors>Yami, Neyu</Authors>
     <Copyright>© 2026 Yami · Neyu. Contributor: Jin.</Copyright>
     <Description>Piano practice and visualizer for Windows: MIDI playback, SoundFont synthesis and a concert-themed piano-roll stage.</Description>
-    <Version>0.4.0</Version>
+    <!-- The one place the release number is written down in code: AppInfo.Version reads it back out of
+         the stamped assembly for the start-up menu, the About box and the perf gate's report, and
+         tools/check_sources.py (scan_release_version) pins every mirror of it — the installer fallback,
+         both README examples, both CHANGELOGs — to this value. (An XML comment may not contain a double
+         hyphen, which is why this one says "the perf gate" instead of naming its switch.) -->
+    <Version>1.0.0</Version>
   </PropertyGroup>
 
   <ItemGroup>
@@ -40,6 +45,15 @@
   <ItemGroup>
     <Content Include="Assets\ConcertGrand.sf2" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="Assets\ATTRIBUTION.txt" CopyToOutputDirectory="PreserveNewest" />
+    <!-- MIT asks that the licence travel with copies, and the bundled SoundFont's CC BY 3.0 asks for its
+         attribution: both therefore ship inside the folder that is zipped and inside the installer, not
+         only in the repository. TargetPath gives the licence an extension, because a distributed file
+         with none reads like a mistake next to ATTRIBUTION.txt. The installer's [Files] section globs
+         the publish folder, so this lands in the wizard's target directory with no change to Keyflow.iss.
+         The Remove is because the SDK's default glob already lists the file as None, and a file in two
+         item lists is a file that shows up twice in an IDE for no reason. -->
+    <None Remove="LICENSE" />
+    <Content Include="LICENSE" CopyToOutputDirectory="PreserveNewest" TargetPath="LICENSE.txt" />
   </ItemGroup>
 
 </Project>
