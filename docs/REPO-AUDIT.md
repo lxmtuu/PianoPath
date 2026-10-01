@@ -369,3 +369,32 @@ Cách sửa là để chính luồng render đã đỗ dựng khung cuối trên
 **Kết quả (run `36878012766`, `4fbbfa0`):** mọi ảnh đi đường `parked` với `warp=True`; **`readback` còn 45 – 60 ms** (trước 15 – 20,5 s); cả chuỗi mỗi ảnh tốn khoảng 0,3 s trên tám giây chờ cổng; bước previews 921 s → **263 s**, gallery 680 s → **311 s**, cả job **29,4 → 12,2 phút**. Quan trọng hơn: CI **không commit gì**, tức ảnh dựng bằng thiết bị nóng của vòng lặp giống hệt từng byte với ảnh đã commit từ thiết bị mới. Đổi thiết bị dựng không làm đổi một byte nào.
 
 **Bài học, từ cả đợt này:** năm lần sửa, ba lần đầu hụt và lần thứ tư đúng nhưng chậm gấp ba, đều do cùng một thói quen: kết luận từ việc đọc code rồi đưa lên CI để xem. Hai thứ thực sự có tác dụng đều là **đo thứ có sẵn**: so từng pixel hai ảnh cùng code (đã nằm sẵn trong git), và thêm thời gian từng pha vào báo cáo chụp. Cả hai tốn vài phút, còn mỗi lượt đoán sai tốn từ mười đến ba mươi phút CI.
+
+### 6.14 Mục P3 #3: cổng hiệu năng `--bench` (2026-10-01, **CI xanh**)
+
+Dòng #3 của §6.3 đo tại chỗ rằng "không có `--bench` ở bất kỳ đâu" và số đo duy nhất là `GpuRenderLoop.Fps` (trung bình cửa sổ 0,5 s). Nay đã có số đo **từng khung**: `StartFrameSampling`/`SampledFrames`/`FrameSamples` trên chính vòng lặp đó (và bỏ nhịp pacing khi đang lấy mẫu, vì một khung kết thúc bằng `Sleep` là đo nhịp chứ không đo giá), `Diagnostics/FrameBudget.cs` (**409** dòng, nửa thuần — không WPF/D3D, được link vào `tests/PianoPath.Tests`), `Diagnostics/FrameBenchmark.cs` (**253** dòng, nửa chạy `GpuRenderLoop` thật), và `tests/PianoPath.Tests/FrameBudgetTests.cs` (**393** dòng, **27** hàm test — cả project từ 65 lên **92** hàm, tệp nguồn link từ 9 lên **10**).
+
+**Ngân sách cũ sai về loại đối tượng, nên viết lại chứ không dịch lại.** Roadmap nói "p95 < 8 ms ở 1080p *Classic Roll*, < 16 ms *Cinematic*": *Classic Roll* là một **preset**, còn *Cinematic* là một mức **`ShadingQuality`** của bàn phím — hai thứ khác loại, và cả hai đều là khái niệm của sân khấu WPF, không phải của engine Direct3D đang dựng mọi khung hiện nay. Một ngân sách nay là **một look ở một cỡ**, và giữ đúng hai con số 8/16 ms:
+
+| Cảnh | Look | Cỡ | Ngân sách |
+| --- | --- | --- | --- |
+| `default` | cài đặt của lần chạy đầu (không preset, để cổng không đổi theo `visual-settings.json` của ai đó) | 1920×1080 | p95 < 8 ms |
+| `heavy` | preset nặng nhất có sẵn: **Galaxy Voyage** (`--verify` kiểm preset đó thật sự có trong `VisualPresets`) | 1920×1080 | p95 < 16 ms |
+
+**Máy nào bị xử theo ngưỡng.** `FrameBudget.IsSoftwareAdapter(bool loopSaysWarp, string? adapterName)` — hai tham số, vì vòng lặp **không** trả lời đủ: §6.13 đã đo rằng runner báo `IsWarp = false` do Windows trình bày "Microsoft Basic Render Driver" như adapter *phần cứng*. Tên adapter quyết định (`warp` / `basic render` / `basic display` / `software` / `microsoft basic`), tên rỗng cũng coi là phần mềm. `Judge` nhận **câu trả lời đã quyết** (một `bool`), không nhận chuỗi: nó chỉ so p95 với ngân sách, còn "chuỗi nào nghĩa là phần mềm" là việc của hàm kia.
+
+**Cổng tương đối cho CI, và luật "không đo được ≠ nhanh".** `Compare` chỉ so khi cùng loại adapter **và** cùng cỡ cảnh (so WARP với card, hay 4K với 1080p, là báo cáo hai cái máy chứ không phải code giữa hai commit); ngưỡng: ≥ +50 % = `Regression` (`WARN`), ≤ −5 % = `Faster`, còn lại `Steady`. Ba chỗ "không đo được" đều bị chặn, vì p95 của không khung nào là 0 ms và 0 ms nằm **trong** mọi ngân sách: cảnh không có khung → `FAIL perf:` trong `LogLines` và `Verdict = Fail` khi cảnh đó có ngân sách; `FrameBenchReport.Measured` đòi `Stats.Count > 0 && Width > 0 && Height > 0`; cả lượt không đo được gì → mã thoát **2** (còn **3** là vượt ngân sách, chỉ xảy ra trên máy có card thật). `SceneTimeoutSeconds` 120 → **60**, và `FrameSamples` trả về **phần đã vẽ** khi lượt đo dừng giữa chừng thay vì trả rỗng — máy chậm báo số khung nó vẽ được, không báo "cảnh không vẽ gì".
+
+**Ba lần CI/sửa và hai khẳng định sai của chính tôi.** Run `36893094261` (`4bb2038`) đỏ ở **cả hai** job, và cả hai lỗi đều là **bài kiểm không khớp code nó kiểm**, không phải code sai:
+
+| # | Chỗ sai | Số liệu CI / cách sửa |
+| --- | --- | --- |
+| 1 | Bộ kiểm khẳng định `Judge(false, 400, "Microsoft Basic Render Driver")` **bỏ qua** ngân sách vì tên adapter nghe như phần mềm | Annotation job `build`: `FAIL: … A frame drawn by a software rasterizer is measured and compared …`, sau **17** dòng log. `Judge` được trao `bool` đã quyết nên nó xử đúng: 400 ms > 8 ms ⇒ `Fail`. Sửa thành ghép hai hàm (`Judge(IsSoftwareAdapter(false, "Microsoft Basic Render Driver"), …)`) — đúng trường hợp runner mà khẳng định đó viết cho |
+| 2 | Test đòi một lượt 4K so với một cảnh 4K là `Unknown` | Annotation job `test`: `Expected: Unknown, Actual: Steady` ở `FrameBudgetTests.cs:378`. Hai vế **cùng cỡ** nên `Steady` là đúng; cỡ nằm ở **cảnh được so**, và tôi đã truyền cảnh 4K làm vế "hiện tại". Sửa: so baseline 1080p với lượt 4K theo **cả hai chiều** |
+| 3 | (Đọc ra, CI chưa kịp tới) `measuredScene.Samples.Count == 24` cứng | Khẳng định ngay trên nó cho phép lượt đo **dừng sớm** (`Frames > 0 && Frames <= 24`); hai câu mâu thuẫn nhau. Sửa thành `== measured.Samples.Count` |
+
+Cùng lượt đó gỡ một câu README tiếng Việt còn sót từ lần sửa trước: `--bench` được mô tả là chạy "ở **1080×1920 → 1920×1080**" (bản tiếng Anh nói đúng `1920×1080`).
+
+**Kết quả CI: run `36894248202` (`bdbf22c`) xanh** — `gh run watch --exit-status` trả **0**, và annotation chỉ còn hai notice `ubuntu-latest label will migrate to Ubuntu 26`. Job `build` xanh **suy ra** bước `Measure the frame budget` thoát **0** (bước đó `exit $proc.ExitCode`), tức WARP đo được ít nhất một khung và không ngân sách nào bị xử trên runner. Số khung/p95 cụ thể của lượt đó **tôi không đọc được**: token GitHub hết hạn ngay sau khi lượt chạy kết thúc, nên không lấy được kết luận từng job, dòng `Verification passed: N assertions`, lẫn artifact `keyflow-bench-report`; còn `gh run view --log` chết ở `results-receiver.actions.githubusercontent.com` (EOF) đúng như §6.7 đã ghi. Đây là lần đầu cổng này chạy thật, nên lượt kế tiếp mới là lượt đầu có baseline trong cache để so.
+
+**Bài học.** Cả hai lỗi CI bắt được đều cùng một loại: tôi viết khẳng định cho **hành vi tôi định làm** rồi tin rằng code đã làm đúng như vậy, thay vì đọc xem hàm được trao tham số gì. `Judge` nhận `bool` chứ không nhận tên adapter, và `Compare` lấy cỡ từ **cảnh** chứ không từ lượt chạy — hai chi tiết đó đều nằm trong chữ ký hàm, đọc mười giây là thấy, và mỗi lượt CI để phát hiện ra tốn gần mười phút.

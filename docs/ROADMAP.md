@@ -58,6 +58,10 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 > (ruleset qua API, annotation của lần CI mới nhất, `git tag`, grep toàn kho); bảng đối chiếu và số liệu
 > nằm ở `docs/REPO-AUDIT.md` §6.3. Kết luận: **#1 đúng như mô tả (phần còn mở vẫn mở, đã đo được nguyên
 > nhân), #2–#4 và #6–#7 vẫn chưa làm, #5 vẫn một phần.**
+>
+> **Cập nhật sau lần đối chiếu đó (cùng ngày)**: đoạn trên là ảnh chụp **trước khi vào P3** và giữ nguyên
+> để đối chiếu được; bảng dưới đây mới là trạng thái hiện tại. **#1** ✅ xong, **#2** ✅ đã làm phần lõi
+> (§6.11), **#3** ✅ xong (§6.14); còn lại **#4, #6, #7** chưa làm và **#5** vẫn một phần.
 
 | # | Việc | Ghi chú |
 |---|---|---|
