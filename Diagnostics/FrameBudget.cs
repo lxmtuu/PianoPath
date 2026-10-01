@@ -349,7 +349,8 @@ internal sealed class FrameBenchRun
 
     /// <summary>
     /// Reads back a run this app wrote. A baseline that cannot be read is not an error — the run then simply
-    /// has nothing to compare with — so this answers false instead of throwing on a truncated or foreign file.
+    /// has nothing to compare with — so this answers false instead of throwing on a truncated or foreign file,
+    /// and on one written under a different <see cref="Schema"/>.
     /// </summary>
     internal static bool TryParse(string? json, out FrameBenchRun run)
     {
@@ -360,6 +361,11 @@ internal sealed class FrameBenchRun
             using var document = JsonDocument.Parse(json);
             var root = document.RootElement;
             if (root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("scenes", out var scenes) || scenes.ValueKind != JsonValueKind.Array) return false;
+            // The schema is the version of this contract, and it was written but never read: a report from a
+            // build whose fields meant something else would have been compared with this one's numbers as if
+            // they agreed. A mismatch — or a file with no schema at all — reads as "no baseline", not as data.
+            if (!root.TryGetProperty("schema", out var schema) || schema.ValueKind != JsonValueKind.Number
+                || !schema.TryGetInt32(out var version) || version != Schema) return false;
             var measured = new List<FrameBenchReport>();
             foreach (var element in scenes.EnumerateArray())
             {

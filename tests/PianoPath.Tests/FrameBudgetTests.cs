@@ -284,6 +284,18 @@ public class FrameBudgetTests
     }
 
     [Fact]
+    public void A_report_written_under_another_schema_is_not_read_as_this_one()
+    {
+        var json = Run(true, Scene("default", 60)).ToJson();
+        var other = json.Replace("\"schema\": 1", "\"schema\": 99");
+
+        Assert.NotEqual(json, other); // if the writer's layout ever changes this test has to fail, not pass vacuously
+        Assert.True(FrameBenchRun.TryParse(json, out _));
+        Assert.False(FrameBenchRun.TryParse(other, out _));
+        Assert.False(FrameBenchRun.TryParse(json.Replace("\"schema\": 1", "\"schema\": \"1\""), out _));
+    }
+
+    [Fact]
     public void A_run_whose_budget_was_exceeded_says_so()
     {
         var failing = new FrameBenchReport { Scene = "default", Width = 1920, Height = 1080, Verdict = FrameVerdict.Fail, Stats = FrameStats.From([9]) };

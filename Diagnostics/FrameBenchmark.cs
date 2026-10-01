@@ -222,7 +222,7 @@ internal static class FrameBenchmark
         {
             if (!File.Exists(path)) { Console.WriteLine($"NOTE perf: no previous report at {path}, so this run has nothing to compare with"); return null; }
             if (FrameBenchRun.TryParse(File.ReadAllText(path), out var previous)) return previous;
-            Console.WriteLine($"NOTE perf: the previous report at {path} could not be read as a Keyflow bench report, so this run has nothing to compare with");
+            Console.WriteLine($"NOTE perf: the previous report at {path} could not be read as a Keyflow bench report this build understands (truncated, or written under another schema), so this run has nothing to compare with");
             return null;
         }
         catch (IOException exception)

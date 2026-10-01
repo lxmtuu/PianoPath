@@ -357,6 +357,8 @@ internal static partial class VerificationSuite
         Assert(!FrameBenchRun.TryParse("", out _) && !FrameBenchRun.TryParse("not json at all", out _) && !FrameBenchRun.TryParse("{\"schema\":1}", out _)
             && !FrameBenchRun.TryParse("[1,2,3]", out _) && !FrameBenchRun.TryParse("{\"scenes\":[]}", out _),
             "A baseline that is missing, truncated or somebody else's file leaves the run with nothing to compare against, not with a crash.");
+        Assert(!FrameBenchRun.TryParse(run.ToJson().Replace("\"schema\": 1", "\"schema\": 2"), out _),
+            "A report written under another schema is not this report's numbers: fields that changed meaning must not be compared as if they agreed.");
 
         // ---- the lines the run prints -----------------------------------------------------------------
         var lines = run.LogLines(null);

@@ -416,4 +416,13 @@ Cũng từ hai lượt đo cạnh nhau, đo được **độ nhiễu của WARP*
 
 **Xác nhận cuối: hai chỗ sửa hoạt động đúng ngoài đời.** Run `36907277572` (`11b89b4` — một commit **chỉ sửa tài liệu**) xanh cả ba job, và các dòng bench của nó cho thấy đúng hai điều đã sửa: baseline được khôi phục thật (`previous run p95 877.41 ms → this run 2800.42 ms`), và mức chênh **+219.2 %** / **+141.2 %** vẫn chỉ là `NOTE` kèm câu "a software rasterizer's own frame time varies by more than this between two runs of the same code, so the number is reported, not judged" — theo luật cũ thì một commit chỉ sửa tài liệu đã bị kết tội là hồi quy. Cũng lượt này, cảnh `heavy` chỉ đo được **86/90** khung vì chạm trần 60 s và báo cáo nói đúng con số 86, tức đường "trả về phần đã vẽ" chạy thật chứ không chỉ nằm trong test.
 
+**Đợt rà toàn nhánh trước khi mở PR: hai lỗi nữa, không cái nào CI thấy được.** Đọc lại toàn bộ diff so với `main` (14 tệp, +1538/−12) thay vì chỉ đọc phần vừa sửa:
+
+| # | Lỗi | Vì sao các lớp kiểm chứng không bắt được |
+| --- | --- | --- |
+| 1 | `GpuRenderLoop` dùng **một bộ đếm mẫu chung** cho mọi lượt đo (`_sampled` nằm cạnh `_samples`). Luồng render còn đang giữ lượt cũ có thể tăng bộ đếm ngay sau khi lượt mới được công bố, và ô đầu tiên của lượt mới — chưa ai ghi, tức `0.00 ms` — bị báo cáo như một khung đã đo | Không phải lỗi biên dịch, không sai số học, và cửa sổ xảy ra chỉ một khung hình nên `--verify` gần như luôn trượt qua. Sửa: bộ đếm **nằm trong** đối tượng lượt đo (`SampleRun`), lượt cũ bị bỏ luôn chứ không dùng chung ô nào |
+| 2 | `FrameBenchRun.Schema` **ghi ra JSON mà không ai đọc**: một báo cáo do bản build có ý nghĩa trường khác sẽ được so như thể hai bên cùng nói một thứ | `check_sources.py` không soi ngữ nghĩa JSON, `--verify` chỉ đọc ngược báo cáo do chính nó ghi. Sửa: `TryParse` đòi `schema` khớp, lệch thì coi như "không có baseline" — kèm test đổi `1` → `99` và `1` → `"1"` |
+
+Cả hai đều có test/khẳng định mới để không quay lại. Đây cũng là chỗ đáng ghi về phương pháp: hai lỗi này **không** nằm trong phần CI vừa báo đỏ, nên "CI xanh" không thay được một lượt đọc hết diff.
+
 **Bài học.** Cả hai lỗi CI bắt được đều cùng một loại: tôi viết khẳng định cho **hành vi tôi định làm** rồi tin rằng code đã làm đúng như vậy, thay vì đọc xem hàm được trao tham số gì. `Judge` nhận `bool` chứ không nhận tên adapter, và `Compare` lấy cỡ từ **cảnh** chứ không từ lượt chạy — hai chi tiết đó đều nằm trong chữ ký hàm, đọc mười giây là thấy, và mỗi lượt CI để phát hiện ra tốn gần mười phút.
