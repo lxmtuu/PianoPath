@@ -304,3 +304,24 @@ git push -q origin arena/01a0f671-pianopath 2>/dev/null; echo pushed
 Hai chỗ sai chồng nhau: `;` in `pushed` **bất kể** push thành công hay không, và `2>/dev/null` vứt đi đúng dòng `! [rejected] … (non-fast-forward)` cần đọc. Kết quả là tôi báo "đã push" cho một commit **không hề lên remote** (`git ls-remote` cho `07cfe64` trong khi local là `58dc733`). Chỉ `git ls-remote origin refs/heads/<branch>` đối chiếu với `git rev-parse HEAD` mới lật ra được. Push lại sau khi `git rebase 07cfe64` thì lên thật: `1533e1c`. **Bài học: sau mỗi push phải đối chiếu SHA remote, không đọc lời nhắn của chính lệnh push.**
 
 Cũng vì commit `07cfe64` mang `[skip ci]`, nó không tự tạo lượt chạy — nên run kế tiếp chỉ xuất hiện khi commit tài liệu được đẩy lên.
+
+### 6.13 Làm ảnh preview tất định (2026-10-01, **CI xanh**)
+
+§6.12 để lại một câu hỏi chưa trả lời: run `36845212582` báo **0 cảnh báo drift**, vậy mà CI vẫn commit lại 23 ảnh. Đo ra thì hai lần render liên tiếp khác nhau ở **23/23 tệp** (`vi/stage-gpu.png` 251 566 → 254 255 byte) — tức ảnh render **không tất định theo byte**, và bộ phát hiện drift không phân biệt được "giao diện đổi" với "số khung hình khác". Người dùng chọn **sửa gốc**.
+
+**Ngẫu nhiên không phải nguyên nhân.** Mọi luồng số đều có seed cố định (`ChromeBackdrop` 20240831, `PianoStage` 20240616/7331, `new Random(4242)`) và phần còn lại là `SeededRandom(int)` — một hàm băm sin, không trạng thái. Nguyên nhân là **thời gian**: mọi animator tích phân delta khung hình (`PianoStage.Advance` → `_elapsed`, `ChromeBackdrop.OnFrame` → `_time`, `GpuRenderLoop` → `dt = now - last`), còn ảnh thì chụp sau **một khoảng chờ theo giây tường** (8 s), nên số khung hình đã chạy — và do đó pha của cánh hoa, wisps, hồ quang, mote — phụ thuộc tốc độ runner.
+
+**Sửa ở bốn chỗ:**
+
+| Chỗ | Sửa |
+| --- | --- |
+| `Ui/FrameClock.cs` | `UseFixedStep(seconds)` ghim delta và đếm khung hình (`FrameCount`) |
+| `Gpu/GpuRenderLoop.cs` | `FixedFrameSeconds` thay `dt` đo được; `FramesRendered` (đã có sẵn) dùng để chờ |
+| `Stage/PianoStage.cs`, `Theme/ChromeBackdrop.cs` | `ResetAnimation()` đưa về khung 0: xoá `_elapsed`/`_time`, dọn hạt, **seed lại** luồng số (seed thành hằng `PetalSeed`/`ParticleSeed`/`FieldSeed`, trường `Random` bỏ `readonly`) |
+| `App.xaml.cs` | chụp sau **45 khung hình đếm được** thay vì chờ giây; chuỗi đếm **bắt đầu sau khi instrument đã settle**, và nốt preview cũng bấm ở đó |
+
+Hai chi tiết dễ sai, đều bắt được khi đọc lại chính code mình vừa viết: (1) `ContentRendered` đang bấm nốt preview **trước** khi chuỗi đếm bắt đầu → onset rơi vào khung ngẫu nhiên, nên dời `PressPreview()` vào `TryCapture()`; (2) watchdog chụp thẳng khi chưa đếm đủ khung → nay nó khởi động chuỗi đếm rồi mới chịu chụp ở lần tick thứ hai.
+
+**Kiểm chứng chứ không tin:** `--verify` thêm `VerifyDeterministicPreview` — cùng số khung hình phải ra **cùng pixel** (SHA-256 của ảnh render), và khác số khung hình phải ra ảnh khác (nếu không thì khẳng định đầu vô nghĩa). `Verification passed: 1406 → **1408** assertions` ở run `36847748821`, `static`/`test`/`build` đều xanh, `CS8602: 0`.
+
+**Cách biết nó thật sự có tác dụng:** run `36847748821` **vẫn** commit previews (`0bb502e`) — đúng, vì ảnh trong repo lúc đó do code cũ render. Phép thử thật là lượt chạy **kế tiếp** phải thấy ảnh giống hệt và **không** commit gì.
