@@ -370,11 +370,20 @@ internal static partial class VerificationSuite
             "A budget that is not applied has to say so out loud, in the line a reader of the log meets first.");
 
         // ---- the relative gate: same scene, same size, same kind of adapter ---------------------------
-        FrameBenchReport SceneAt(string id, double p95, int width = 1920, int height = 1080)
+        FrameBenchReport SceneAt(string id, double p95, int width = 1920, int height = 1080, bool software = true)
         {
             var values = new List<double>();
             for (var i = 1; i <= 100; i++) values.Add(p95 * i / 95);
-            return new FrameBenchReport { Scene = id, Width = width, Height = height, Frames = 100, Stats = FrameStats.From(values), Samples = values };
+            // The verdict and its sentence come from the gate itself, so the lines these fixtures print are
+            // the lines the app would print. A fixture that left Verdict at its default of Pass printed
+            // "PASS perf: " with an empty sentence behind it, and broke the "every line is a NOTE" check.
+            var (verdict, note) = FrameBudget.DefaultLook.Judge(software, p95,
+                software ? "Microsoft Basic Render Driver" : "NVIDIA GeForce RTX 4070");
+            return new FrameBenchReport
+            {
+                Scene = id, Width = width, Height = height, Frames = 100, Stats = FrameStats.From(values), Samples = values,
+                BudgetP95LimitMs = FrameBudget.DefaultLook.P95LimitMs, Verdict = verdict, VerdictNote = note
+            };
         }
         FrameBenchRun RunOf(bool software, FrameBenchReport measured) => new()
         {
@@ -390,7 +399,7 @@ internal static partial class VerificationSuite
             && baseline.Compare(new FrameBenchRun { SoftwareAdapter = true, Scenes = [] }, baseline.Scene("default")!).Trend == FrameTrend.Unknown,
             "A run with no baseline, a scene the previous run did not measure and a previous run with no scenes at all are all simply not comparable.");
         Assert(baseline.Compare(RunOf(true, SceneAt("default", 60, 3840, 2160)), baseline.Scene("default")!).Trend == FrameTrend.Unknown
-            && baseline.Compare(RunOf(false, SceneAt("default", 60)), baseline.Scene("default")!).Trend == FrameTrend.Unknown,
+            && baseline.Compare(RunOf(false, SceneAt("default", 60, software: false)), baseline.Scene("default")!).Trend == FrameTrend.Unknown,
             "Comparing 4K with 1080p, or a graphics card with a software rasterizer, would report the two machines instead of the code between them.");
         var held = RunOf(true, SceneAt("default", 62));
         var quicker = RunOf(true, SceneAt("default", 50));
@@ -404,8 +413,8 @@ internal static partial class VerificationSuite
         Assert(slower.LogLines(baseline).All(line => line.StartsWith("NOTE perf: ", StringComparison.Ordinal))
             && slower.LogLines(baseline).Any(line => line.Contains("reported, not judged", StringComparison.Ordinal)),
             "On a software rasterizer that movement is a number to read, not a verdict: two runs of the same code gave one scene p95 307 ms and then 788 ms, so a WARN there would be a claim the data disproves.");
-        var slowerOnHardware = RunOf(false, SceneAt("default", 96));
-        Assert(slowerOnHardware.LogLines(RunOf(false, SceneAt("default", 60))).Any(line => line.StartsWith("WARN perf: ", StringComparison.Ordinal)),
+        var slowerOnHardware = RunOf(false, SceneAt("default", 96, software: false));
+        Assert(slowerOnHardware.LogLines(RunOf(false, SceneAt("default", 60, software: false))).Any(line => line.StartsWith("WARN perf: ", StringComparison.Ordinal)),
             "On a machine the budgets were written for, half again as slow IS read as a regression in the code between the two commits, and the line says so as a warning.");
         Assert(reread.Compare(run, reread.Scene("default")!).Trend == FrameTrend.Steady,
             "A report read back from its own JSON compares steady against the run that wrote it, which is what CI does every time a baseline is fresh.");

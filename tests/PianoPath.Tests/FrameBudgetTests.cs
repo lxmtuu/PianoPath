@@ -217,14 +217,15 @@ public class FrameBudgetTests
     // the report CI reads back
     // ---------------------------------------------------------------------------------------------
 
-    private static FrameBenchReport Scene(string id, double p95, int width = 1920, int height = 1080)
+    private static FrameBenchReport Scene(string id, double p95, int width = 1920, int height = 1080, bool software = true)
     {
         // 100 ascending samples whose 95th is exactly p95, so a comparison is judged by the number it names.
         var samples = new List<double>();
         for (var i = 1; i <= 100; i++) samples.Add(p95 * i / 95);
         // The verdict and its sentence come from the gate itself, so the printed lines below are the lines the
         // app would print rather than something a fixture invented.
-        var (verdict, note) = FrameBudget.DefaultLook.Judge(true, p95, "Microsoft Basic Render Driver");
+        var (verdict, note) = FrameBudget.DefaultLook.Judge(software, p95,
+            software ? "Microsoft Basic Render Driver" : "NVIDIA GeForce RTX 4070");
         return new FrameBenchReport
         {
             Scene = id, Preset = "", Description = id, Width = width, Height = height, Frames = 100, WarmupFrames = 24,
@@ -350,8 +351,8 @@ public class FrameBudgetTests
         Assert.All(slower.LogLines(baseline), printed => Assert.StartsWith("NOTE perf: ", printed));
 
         // On a machine the budgets were written for, the same movement is a verdict, and it is a warning.
-        var hardware = Run(false, Scene("default", 96));
-        var hardwareBaseline = Run(false, Scene("default", 60));
+        var hardware = Run(false, Scene("default", 96, software: false));
+        var hardwareBaseline = Run(false, Scene("default", 60, software: false));
         Assert.Contains("regression in the code between the two commits",
             hardware.Compare(hardwareBaseline, hardware.Scene("default")!).Line, StringComparison.Ordinal);
         Assert.Contains(hardware.LogLines(hardwareBaseline), printed => printed.StartsWith("WARN perf: ", StringComparison.Ordinal));
@@ -391,8 +392,8 @@ public class FrameBudgetTests
         // The percentage would describe the two machines rather than the code between the two commits.
         var baseline = Run(true, Scene("default", 60));
 
-        Assert.Equal(FrameTrend.Unknown, baseline.Compare(Run(false, Scene("default", 60)), Scene("default", 60)).Trend);
-        Assert.Equal(FrameTrend.Unknown, Run(false, Scene("default", 60)).Compare(baseline, Scene("default", 60)).Trend);
+        Assert.Equal(FrameTrend.Unknown, baseline.Compare(Run(false, Scene("default", 60, software: false)), Scene("default", 60)).Trend);
+        Assert.Equal(FrameTrend.Unknown, Run(false, Scene("default", 60, software: false)).Compare(baseline, Scene("default", 60)).Trend);
         // The size lives in the scene being compared, so both halves of this pair have to be spelled out:
         // a 4K run compared with a 4K scene is comparable, and only 4K against 1080p is not.
         var fourK = Run(true, Scene("default", 60, 3840, 2160));
