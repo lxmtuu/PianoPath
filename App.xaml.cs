@@ -38,6 +38,10 @@ public partial class App : Application
         Loc.Apply(string.IsNullOrWhiteSpace(languageOverride) ? stored.Language : languageOverride);
         ShellThemeManager.Apply(stored.ShellTheme);
 
+        // An automated screenshot must not depend on the graphics card of the machine that takes it, so the GPU
+        // stage draws with WARP for this run. It has to be set before the window exists: the render loop starts
+        // inside the window's constructor.
+        if (e.Args.Contains("--snapshot")) GpuRenderLoop.ForceWarpForSession = true;
         var window = new MainWindow();
         MainWindow = window;
         // The GPU stage is the main stage by default now. --gpu stays for older launch scripts and CI;
@@ -185,7 +189,7 @@ public partial class App : Application
             var full = Path.GetFullPath(target);
             var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(full)))[..12].ToLowerInvariant();
             var name = $"{Path.GetFileName(Path.GetDirectoryName(full))}-{Path.GetFileName(full)}";
-            var engine = window.GpuStageActive ? (window.GpuLoop?.AdapterName ?? "gpu") : "software";
+            var engine = window.GpuStageActive ? $"{window.GpuLoop?.AdapterName ?? "gpu"} warp={window.GpuLoop?.IsWarp}" : "software";
             Directory.CreateDirectory(folder);
             File.WriteAllText(Path.Combine(folder, name + ".txt"), $"{name} sha={hash} how={how} engine={engine} soundfont={window.HasSoundFont} seconds={seconds:F1} timings={timings}");
         }

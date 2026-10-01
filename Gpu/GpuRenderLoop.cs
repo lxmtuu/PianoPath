@@ -43,10 +43,19 @@ internal sealed class GpuRenderLoop : IDisposable
     private volatile int _targetFps = 60;
     private volatile bool _vsync = true;
 
+    /// <summary>
+    /// Makes every loop created afterwards draw with WARP, Windows' software rasterizer, whatever graphics card
+    /// the machine has. Automated screenshot runs set it before the window exists: a card changes the picture
+    /// from one machine to the next, the README previews have to be the same on every one, and the loop must be
+    /// the kind of device <see cref="RenderParked"/> is allowed to reuse. (On a machine with no card Windows
+    /// presents its software adapter as a "hardware" one, so without this the loop would not even say it is WARP.)
+    /// </summary>
+    internal static bool ForceWarpForSession { get; set; }
+
     internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false)
     {
         _feed = feed;
-        ForceWarp = forceWarp;
+        ForceWarp = forceWarp || ForceWarpForSession;
         _thread = new Thread(Run) { IsBackground = true, Name = "Keyflow GPU stage", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
     }
