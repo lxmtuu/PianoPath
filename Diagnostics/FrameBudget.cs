@@ -243,7 +243,13 @@ internal sealed class FrameBenchRun
             return (FrameTrend.Regression, delta,
                 $"the scene '{scene.Scene}' got slower on the same kind of adapter — {shape}; a jump past {Percent((FrameBudget.RegressionFactor - 1) * 100)}% " +
                 "is read as a regression in the code between the two commits");
-        return (delta <= -5 ? FrameTrend.Faster : FrameTrend.Steady, delta,
+        // Two sentences, not one: the gate's second CI run read a 62.8% drop and still called it "held its
+        // frame time", because Faster and Steady shared a line. A number and a sentence that disagree about
+        // each other are worse than either on its own.
+        if (delta <= -5)
+            return (FrameTrend.Faster, delta,
+                $"the scene '{scene.Scene}' got quicker on the same kind of adapter — {shape}");
+        return (FrameTrend.Steady, delta,
             $"the scene '{scene.Scene}' held its frame time on the same kind of adapter — {shape}");
     }
 

@@ -358,6 +358,11 @@ public class FrameBudgetTests
         Assert.Equal(FrameTrend.Steady, held.Compare(baseline, held.Scene("default")!).Trend);
         Assert.Equal(FrameTrend.Faster, quicker.Compare(baseline, quicker.Scene("default")!).Trend);
         Assert.DoesNotContain(quicker.LogLines(baseline), line => line.StartsWith("WARN", StringComparison.Ordinal));
+        // The sentence has to agree with the number beside it: the gate's second CI run read a 62.8% drop and
+        // printed "held its frame time", because Faster and Steady shared one line.
+        Assert.Contains(held.LogLines(baseline), line => line.Contains("held its frame time", StringComparison.Ordinal));
+        Assert.Contains(quicker.LogLines(baseline), line => line.Contains("got quicker", StringComparison.Ordinal));
+        Assert.DoesNotContain(quicker.LogLines(baseline), line => line.Contains("held its frame time", StringComparison.Ordinal));
     }
 
     [Fact]
