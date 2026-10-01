@@ -160,6 +160,88 @@ jobs:
           path: ${{ runner.temp }}/keyflow-verification.log
           if-no-files-found: warn
 
+      # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes and
+      # writes how long every frame took. A runner has no graphics card, so the stage is drawn by WARP and the
+      # absolute budgets (p95 < 8 ms for the default look, < 16 ms for the busiest one) do not apply there — the
+      # app says so itself instead of failing. What a runner can still judge is the change against the previous
+      # run on the same kind of machine, which is what the cache carries from one run to the next.
+      - name: Restore the previous frame-time report
+        id: perf-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: ${{ runner.temp }}/perf-baseline
+          key: keyflow-perf-${{ github.run_id }}
+          restore-keys: keyflow-perf-
+
+      - name: Measure the frame budget
+        id: bench
+        shell: pwsh
+        run: |
+          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $out = Join-Path $env:RUNNER_TEMP 'keyflow-bench.json'
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-bench.log'
+          $previous = Join-Path $env:RUNNER_TEMP 'perf-baseline/keyflow-bench.json'
+          $arguments = @('--bench=90', "--bench-out=$out")
+          if (Test-Path $previous) { $arguments += "--bench-baseline=$previous" }
+          # The gate prints its own lines (NOTE/PASS/WARN/FAIL perf: …) and the report is the JSON beside them.
+          # A window app has no console of its own, so stdout is redirected to read those lines back.
+          $proc = Start-Process -FilePath $exe -ArgumentList $arguments -PassThru -Wait -NoNewWindow -RedirectStandardOutput $log
+          $lines = if (Test-Path $log) { @(Get-Content $log | Where-Object { $_.Trim() }) } else { @() }
+          if (-not $lines) { $lines = @("the benchmark printed nothing and exited with code $($proc.ExitCode)") }
+          foreach ($line in $lines) {
+            $text = $line -replace '%', '%25'
+            if ($line -like 'FAIL*') { "::error title=Keyflow frame budget::$text" }
+            elseif ($line -like 'WARN*') { "::warning title=Keyflow frame budget::$text" }
+            else { "::notice title=Keyflow frame budget::$text" }
+          }
+          @('# Keyflow frame budget', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          # Exit 3 is a budget exceeded, which the app only answers on a machine with a real graphics card; a
+          # runner draws with WARP and gets NOTE lines instead. Exit 2 means no Direct3D device was found at
+          # all, which no step after this one could survive either.
+          exit $proc.ExitCode
+
+      - name: Publish the frame-time report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-bench-report
+          path: ${{ runner.temp }}/keyflow-bench.json
+          if-no-files-found: warn
+
+      # The baseline the next run compares with. It lives in the Actions cache rather than in the tree: a
+      # measurement committed into the repository would change on every run (and docs/previews holds pictures
+      # only, precisely because CI commits whatever is inside it). The key carries the run id rather than the
+      # commit sha, so building one commit twice cannot collide with itself, and `restore-keys` above picks the
+      # most recent entry — which is what "the previous run on the same kind of runner" means.
+      - name: Keep this run as the next baseline
+        id: perf-keep
+        if: always()
+        shell: pwsh
+        run: |
+          $folder = Join-Path $env:RUNNER_TEMP 'perf-baseline'
+          $report = Join-Path $env:RUNNER_TEMP 'keyflow-bench.json'
+          # A run that wrote no report must not save a baseline at all. The cache is read back by prefix and the
+          # most recent entry wins, so an empty one hides the last real measurement from every run after it:
+          # that is what happened when a failed run left the next one reporting "no previous measurement to
+          # compare with" even though two earlier runs had measured the same scenes.
+          if (Test-Path $report) {
+            New-Item -ItemType Directory -Force -Path $folder | Out-Null
+            Copy-Item -Force $report (Join-Path $folder 'keyflow-bench.json')
+            'have_report=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            '::warning title=Keyflow frame budget::No report was written, so the previous baseline stays the one the next run compares with.'
+          }
+
+      # Saving is best effort: a pull request from a fork gets a read-only cache scope and cannot write one,
+      # which costs that run its baseline and nothing else.
+      - name: Save the frame-time baseline
+        if: always() && steps.perf-keep.outputs.have_report == 'true'
+        uses: actions/cache/save@v4
+        continue-on-error: true
+        with:
+          path: ${{ runner.temp }}/perf-baseline
+          key: keyflow-perf-${{ github.run_id }}
+
       # The wizard is part of the product, so it is compiled on every push instead of only when a
       # release is cut: this is the only place the real ISCC runs, and tools/build_installer.ps1
       # refuses to let the compiler ignore a name or a placeholder the translation got wrong.

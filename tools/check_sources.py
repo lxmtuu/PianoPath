@@ -795,7 +795,9 @@ def scan_cli_and_samples():
     """
     errors = []
     parsed = set()
-    for name in ("App.xaml.cs", "Diagnostics/VerificationSuite.cs"):
+    # The files that read the command line. A switch parsed in a file this list does not name is invisible to
+    # the check, and a switch documented in a README but parsed nowhere is a trap, so both directions compare.
+    for name in ("App.xaml.cs", "Diagnostics/VerificationSuite.cs", "Diagnostics/FrameBenchmark.cs"):
         parsed |= set(re.findall(r'"(--[a-z][a-z-]*)', (ROOT / name).read_text(encoding="utf-8")))
     # Both language editions carry their own command-line table, and each one has to stand on its own:
     # a reader of ``README.en.md`` must never have to open the Vietnamese file for a switch name.

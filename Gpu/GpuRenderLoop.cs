@@ -71,6 +71,8 @@ internal sealed class GpuRenderLoop : IDisposable
     /// <summary>Smoothed frames per second actually rendered.</summary>
     internal double Fps { get; private set; }
     internal double FrameMilliseconds { get; private set; }
+    /// <summary>How many frames the loop has drawn since sampling started (see <see cref="StartFrameSampling"/>).</summary>
+    internal int SampledFrames => Volatile.Read(ref _sampleRun) is { } run ? Volatile.Read(ref run.Count) : 0;
     internal int ParticleCount { get; private set; }
     internal long FramesRendered => Interlocked.Read(ref _frames);
     private long _frames;
@@ -81,6 +83,53 @@ internal sealed class GpuRenderLoop : IDisposable
     internal int TargetFps { get => _targetFps; set => _targetFps = Math.Clamp(value, 0, 1000); }
     /// <summary>Wait for the display's vertical blank when presenting the stage window.</summary>
     internal bool VSync { get => _vsync; set => _vsync = value; }
+
+    // ---- frame sampling: the perf gate's only source of per-frame times ----
+    // Fps and FrameMilliseconds are smoothed for a human eye on a HUD, and a smoothed number cannot answer
+    // "was one frame in twenty slow", which is what a player feels. Sampling keeps every frame's own length
+    // so the caller can take percentiles of it. Only the render thread writes a run's slots and its counter;
+    // the caller only reads them, and publishing a new run leaves the old one to be collected.
+    // Every access goes through Volatile.Read/Write, so the fields must not be marked volatile themselves:
+    // taking a ref to a volatile field warns (CS0420) that the ref is not treated as volatile.
+    private SampleRun? _sampleRun;
+
+    /// <summary>
+    /// One sampling run: the slots the render thread fills, and how many it has filled.
+    /// </summary>
+    /// <remarks>
+    /// The counter lives <em>inside</em> the run on purpose. Beside it, a render thread still holding the
+    /// previous run could bump the shared counter just after a new run was published, and the new run's first
+    /// slot — never written, so 0.00 ms — would be reported as a measured frame: one stale frame length would
+    /// quietly become the fastest frame in the report.
+    /// </remarks>
+    private sealed class SampleRun(int frames)
+    {
+        internal readonly double[] Slots = new double[Math.Max(1, frames)];
+        internal int Count; // the render thread's alone
+    }
+
+    /// <summary>
+    /// Starts recording the wall-clock length of the next <paramref name="frames"/> frames the loop draws.
+    /// While a sample run is in progress the loop does not pace itself: a measured frame that ends with a
+    /// sleep to the target rate would report the rate instead of the cost.
+    /// </summary>
+    internal void StartFrameSampling(int frames) => Volatile.Write(ref _sampleRun, new SampleRun(frames));
+
+    /// <summary>
+    /// The frame lengths sampled so far, in milliseconds. Whatever the render thread has finished is handed
+    /// over, not only a completed run: a machine too slow to draw the frames it was asked for still gets to
+    /// report the ones it did draw, and a report that says "62 frames" is honest where an empty one would
+    /// claim the stage drew nothing at all.
+    /// </summary>
+    internal IReadOnlyList<double> FrameSamples
+    {
+        get
+        {
+            if (Volatile.Read(ref _sampleRun) is not { } run) return [];
+            var count = Math.Clamp(Volatile.Read(ref run.Count), 0, run.Slots.Length);
+            return count == run.Slots.Length ? run.Slots : run.Slots.AsSpan(0, count).ToArray();
+        }
+    }
 
     private volatile bool _parked;
     private readonly ManualResetEventSlim _parkedAck = new(false);
@@ -297,11 +346,19 @@ internal sealed class GpuRenderLoop : IDisposable
                 Interlocked.Increment(ref _frames);
 
                 var end = clock.Elapsed.TotalSeconds;
-                FrameMilliseconds += ((end - frameStart) * 1000 - FrameMilliseconds) * .1;
+                var frameMs = (end - frameStart) * 1000;
+                FrameMilliseconds += (frameMs - FrameMilliseconds) * .1;
                 fpsFrames++;
                 if (end - fpsWindowStart >= .5) { Fps = fpsFrames / (end - fpsWindowStart); fpsFrames = 0; fpsWindowStart = end; }
+                // A sample run takes this frame's own length and skips the pacing below, so what is measured
+                // is the frame and never the sleep that would follow it.
+                var sampleRun = Volatile.Read(ref _sampleRun);
+                var sampled = sampleRun is null ? 0 : Volatile.Read(ref sampleRun.Count);
+                var sampling = sampleRun is not null && sampled < sampleRun.Slots.Length;
+                if (sampling) { sampleRun!.Slots[sampled] = frameMs; Volatile.Write(ref sampleRun.Count, sampled + 1); }
 
                 // ---- pacing: the swap chain paces itself with VSync; otherwise sleep to the target rate ----
+                if (sampling) continue;
                 var target = _targetFps;
                 if (hasWindow && _vsync && target == 0) continue;
                 if (!hasWindow && target == 0) target = 240; // the embedded preview is shown at the WPF composition rate anyway

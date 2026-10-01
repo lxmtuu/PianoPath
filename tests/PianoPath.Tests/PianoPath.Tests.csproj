@@ -25,6 +25,9 @@
          Localization/Localizer.cs   - the live-label half of Loc: DependencyObject, AutomationProperties
          Midi/MidiDeviceService.cs   - WinMM P/Invoke
          Audio/PianoAudioEngine.cs   - WinMM P/Invoke
+         Diagnostics/FrameBenchmark.cs - the half of the perf gate that runs the Direct3D render loop; its
+                                       arithmetic, budgets and report live in Diagnostics/FrameBudget.cs,
+                                       which is linked below and needs nothing but the base class library
          Stage/, Theme/, Library/, Profile/, Practice/
                                      - all bottom out in ShellThemes, whose record is declared in terms
                                        of System.Windows.Media.Color, or in PianoVisualSettingsStore
@@ -40,6 +43,7 @@
     <Compile Include="..\..\Midi\Meter.cs" Link="Product\Midi\Meter.cs" />
     <Compile Include="..\..\Audio\IAudioTrack.cs" Link="Product\Audio\IAudioTrack.cs" />
     <Compile Include="..\..\Audio\WavWriter.cs" Link="Product\Audio\WavWriter.cs" />
+    <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
   </ItemGroup>
 
 </Project>
