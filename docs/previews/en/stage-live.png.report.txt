@@ -1,1 +1,1 @@
-stage-live.png how=watchdog started=True wpfFrames=19 gpuFrames=194 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.5
+stage-live.png how=stepped started=True wpfFrames=0 gpuFrames=4 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.3

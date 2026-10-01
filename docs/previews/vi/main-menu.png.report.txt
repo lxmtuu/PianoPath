@@ -1,1 +1,1 @@
-main-menu.png how=watchdog started=True wpfFrames=11 gpuFrames=165 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.8
+main-menu.png how=stepped started=True wpfFrames=0 gpuFrames=8 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.7

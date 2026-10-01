@@ -1,1 +1,1 @@
-stage-gpu-galaxy.png how=watchdog started=True wpfFrames=17 gpuFrames=164 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.6
+stage-gpu-galaxy.png how=stepped started=True wpfFrames=0 gpuFrames=4 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.3

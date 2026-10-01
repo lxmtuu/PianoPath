@@ -1,1 +1,1 @@
-shortcuts.png how=watchdog started=True wpfFrames=12 gpuFrames=179 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.9
+shortcuts.png how=stepped started=True wpfFrames=0 gpuFrames=12 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.8

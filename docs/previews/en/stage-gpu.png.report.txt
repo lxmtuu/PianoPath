@@ -1,1 +1,1 @@
-stage-gpu.png how=watchdog started=True wpfFrames=17 gpuFrames=200 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.7
+stage-gpu.png how=stepped started=True wpfFrames=0 gpuFrames=4 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.3
