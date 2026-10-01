@@ -473,11 +473,13 @@ public partial class MainWindow : Window
         }
         if (e.Key == Key.Escape)
         {
-            // Escape unwinds the visible surface first: help → Play setup → its settings dock → menu → stage.
+            // Escape unwinds the visible surface first: help → quick adjustments → hand presets → Play → dock → menu → stage.
             if (ShortcutsVisible) { HideShortcuts(); e.Handled = true; return; }
+            if (QuickAdjustOverlay.Visibility == Visibility.Visible) { CloseQuickAdjust(); e.Handled = true; return; }
             if (PlayDialogOverlay.Visibility == Visibility.Visible)
             {
-                if (LibrarySearchBox.IsKeyboardFocused && LibrarySearchBox.Text.Length > 0) LibrarySearchBox.Text = "";
+                if (HandPresetPanel.Visibility == Visibility.Visible) HideHandPresetPanel(restoreFocus: true);
+                else if (LibrarySearchBox.IsKeyboardFocused && LibrarySearchBox.Text.Length > 0) LibrarySearchBox.Text = "";
                 else PlayDialogBack_Click(this, new RoutedEventArgs());
                 e.Handled = true; return;
             }
@@ -487,8 +489,23 @@ public partial class MainWindow : Window
             else OpenSettingsPanel();
             e.Handled = true; return;
         }
+        // Tab is the fast path back to session setup from the live stage. Modal surfaces and the
+        // settings dock keep their normal focus-navigation behaviour (including Shift+Tab).
+        if (e.Key == Key.Tab && Keyboard.Modifiers == ModifierKeys.None
+            && PlayDialogOverlay.Visibility != Visibility.Visible
+            && QuickAdjustOverlay.Visibility != Visibility.Visible
+            && MainMenuOverlay.Visibility != Visibility.Visible
+            && SettingsPanel.Visibility != Visibility.Visible
+            && !_settingsHiddenByIdle
+            && !ShortcutsVisible)
+        {
+            OpenPlayDialog();
+            e.Handled = true;
+            return;
+        }
         // Modal surfaces own keyboard focus: never let a piano-mapped key or Space start playback behind them.
-        if (PlayDialogOverlay.Visibility == Visibility.Visible || MainMenuOverlay.Visibility == Visibility.Visible) return;
+        if (PlayDialogOverlay.Visibility == Visibility.Visible || QuickAdjustOverlay.Visibility == Visibility.Visible
+            || MainMenuOverlay.Visibility == Visibility.Visible || ShortcutsVisible) return;
         // Typing inside the settings panel (hex colors, combo boxes) counts as activity and must not play piano keys.
         if (SettingsPanel.IsKeyboardFocusWithin || Keyboard.FocusedElement is TextBox) { _lastPointerActivity = DateTime.UtcNow; return; }
         var pitch = MapComputerKey(e.Key);
@@ -506,7 +523,8 @@ public partial class MainWindow : Window
         if (_lastPointerPoint is { } last && Math.Abs(last.X - point.X) < .5 && Math.Abs(last.Y - point.Y) < .5) return;
         _lastPointerPoint = point;
         _lastPointerActivity = DateTime.UtcNow;
-        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible || ShortcutsVisible) return;
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible
+            || QuickAdjustOverlay?.Visibility == Visibility.Visible || ShortcutsVisible) return;
         if (_settingsHiddenByIdle) { _settingsHiddenByIdle = false; SettingsPanel.Visibility = Visibility.Visible; }
         SetChromeVisible(true, showRecordButton: true);
         if (Stage is not null) Stage.SetPointerPosition(e.GetPosition(Stage));
