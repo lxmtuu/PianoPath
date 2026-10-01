@@ -205,7 +205,7 @@ Ba nhóm SKIP của `--verify` đều là `Assets/ConcertGrand.sf2` còn là con
 
 Cả hai đều do mạng của sandbox, không phải do repo — ghi lại để lần sau không thử lại vô ích:
 
-* **Tải artifact `keyflow-previews` để commit ảnh mới**: artifact vẫn còn (`id 11148505196`, 7 052 863 byte, `expired=false`) nhưng API trả 302 sang `productionresultssa10.blob.core.windows.net`, và host đó **không nối được** — `gh run download` ba lần đều `EOF`, `curl -sSL` báo `OpenSSL SSL_connect: SSL_ERROR_SYSCALL`. `raw.githubusercontent.com` và `objects.githubusercontent.com` cũng 000; chỉ `api.github.com`, `pypi.org` và `registry.npmjs.org` là thông. **Hệ quả: `docs/previews/` vẫn lệch ba merge** — ảnh chỉ render được trên Windows nên không có đường nào làm mới chúng từ đây.
+* **Tải artifact `keyflow-previews` để commit ảnh mới**: artifact vẫn còn (`id 11148505196`, 7 052 863 byte, `expired=false`) nhưng API trả 302 sang `productionresultssa10.blob.core.windows.net`, và host đó **không nối được** — `gh run download` ba lần đều `EOF`, `curl -sSL` báo `OpenSSL SSL_connect: SSL_ERROR_SYSCALL`. `raw.githubusercontent.com` và `objects.githubusercontent.com` cũng 000; chỉ `api.github.com`, `pypi.org` và `registry.npmjs.org` là thông. **Việc này hoá ra không cần làm tay — xem §6.12**: bước `Commit refreshed previews` của chính workflow đã đẩy 23 ảnh mới lên nhánh (`07cfe64`) ở lượt chạy trên push event, và run `36845212582` sau đó báo **0 cảnh báo drift**. Câu "`docs/previews/` vẫn lệch" ở đây từng đúng và **nay không còn đúng**.
 * **Cài .NET 10 SDK**: `dot.net`, `builds.dotnet.microsoft.com`, `dotnetcli.azureedge.net` và `api.nuget.org` đều trả `000`. Không có SDK thì không build được project test `net10.0` của P3 #2 tại đây, dù về nguyên tắc nó chạy được trên Linux.
 
 Hai lệnh để làm mới ảnh từ máy của bạn (artifact của run 36831576802 vẫn còn):
@@ -290,3 +290,17 @@ Cái bẫy #4 là thứ đáng ghi nhất: **kết luận của một lượt CI
 **Đường biên tiếp theo** (để test settings JSON / hồ sơ / thư viện bài / lịch sử luyện tập): cả bốn đều chạm đáy ở `PianoVisualSettingsStore` → `ShellThemes`, mà record `ShellTheme` khai báo bằng `System.Windows.Media.Color`. `Practice/PracticeChart.cs` là hình học thuần nhưng dùng `System.Windows.Point`/`Rect`.
 
 **Kết quả CI (run `36843377088`)**: `static` ✅ `test` ✅ `build` ✅ · `Verification passed: 1406 assertions, 3 skipped` · `CS8602: 0` · job Windows xanh là xác nhận quan trọng nhất, vì tách `Loc` thành `partial` chạm vào bản build của app.
+
+### 6.12 Previews tự được commit, và một lệnh `git push` đã che mất lỗi (2026-10-01)
+
+**Việc từng nói là "người dùng phải làm tay trên Windows" hoá ra không cần.** Commit `07cfe64` trên nhánh này — tác giả `keyflow previews <actions@users.noreply.github.com>`, thông điệp `Refresh the README previews from CI [skip ci]` — thay đổi **đúng 23 tệp** dưới `docs/previews/` (11 `vi/` + 11 `en/` + `presets.jpg`), ví dụ `vi/stage-gpu-galaxy.png` 377 137 → 517 665 byte. Đó là bước `Commit refreshed previews` của chính workflow: nó chỉ bị bỏ qua ở **pull request**, còn ở **push event lên `arena/**`** thì nó đẩy được vì workflow có `permissions: contents: write`. Run `36845212582` chạy trên commit kế tiếp báo **0 cảnh báo `Previews are stale`** (trước đó là 23 tệp) — tức ảnh trong repo giờ khớp đúng thứ engine render.
+
+**Lỗi của tôi, đáng ghi vì nó là lỗi kiểm chứng chứ không phải lỗi code.** Tôi đã push bằng:
+
+```bash
+git push -q origin arena/01a0f671-pianopath 2>/dev/null; echo pushed
+```
+
+Hai chỗ sai chồng nhau: `;` in `pushed` **bất kể** push thành công hay không, và `2>/dev/null` vứt đi đúng dòng `! [rejected] … (non-fast-forward)` cần đọc. Kết quả là tôi báo "đã push" cho một commit **không hề lên remote** (`git ls-remote` cho `07cfe64` trong khi local là `58dc733`). Chỉ `git ls-remote origin refs/heads/<branch>` đối chiếu với `git rev-parse HEAD` mới lật ra được. Push lại sau khi `git rebase 07cfe64` thì lên thật: `1533e1c`. **Bài học: sau mỗi push phải đối chiếu SHA remote, không đọc lời nhắn của chính lệnh push.**
+
+Cũng vì commit `07cfe64` mang `[skip ci]`, nó không tự tạo lượt chạy — nên run kế tiếp chỉ xuất hiện khi commit tài liệu được đẩy lên.
