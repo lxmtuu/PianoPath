@@ -218,7 +218,13 @@ public partial class MainWindow : Window
         Stage.ResetAnimation();
         DockBackdrop.ResetAnimation();
         MenuBackdrop.ResetAnimation();
-        if (_gpuLoop is not null) _gpuLoop.FixedFrameSeconds = stepSeconds;
+        if (_gpuLoop is not null)
+        {
+            // The main window's stage is drawn by the GPU simulation by default, so its state has to go back
+            // to frame zero too; pinning the step alone leaves however long the loop already ran baked in.
+            _gpuLoop.FixedFrameSeconds = stepSeconds;
+            _gpuLoop.RequestSimulationReset();
+        }
         FrameClock.Shared.UseFixedStep(stepSeconds);
         // Nothing may be playing yet, so ask for frames explicitly: the capture counts them.
         FrameClock.Shared.Acquire();

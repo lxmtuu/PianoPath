@@ -81,6 +81,19 @@ internal sealed class GpuRenderLoop : IDisposable
     /// </summary>
     internal double? FixedFrameSeconds { get; set; }
 
+    private int _resetRequested;
+
+    /// <summary>
+    /// Asks the render thread to put its simulation back at frame zero. The simulation lives on that
+    /// thread, so the deterministic preview capture can only request the reset, not perform it.
+    /// </summary>
+    internal void RequestSimulationReset() => Volatile.Write(ref _resetRequested, 1);
+
+    /// <summary>Frames the render thread has stepped since the last simulation reset.</summary>
+    internal long FramesSinceReset => Interlocked.Read(ref _framesSinceReset);
+
+    private long _framesSinceReset;
+
     internal void SetEmbedded(bool enabled, int width, int height)
     {
         lock (_outputGate) { _embeddedEnabled = enabled; _embeddedWidth = Math.Clamp(width, 0, 3840); _embeddedHeight = Math.Clamp(height, 0, 2160); }
@@ -171,6 +184,13 @@ internal sealed class GpuRenderLoop : IDisposable
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = FixedFrameSeconds ?? (now - last); last = now;
+                if (Volatile.Read(ref _resetRequested) == 1)
+                {
+                    Interlocked.Exchange(ref _resetRequested, 0);
+                    simulation.Reset();
+                    Interlocked.Exchange(ref _framesSinceReset, 0);
+                }
+                Interlocked.Increment(ref _framesSinceReset);
                 // the simulation runs in the layout of the primary output (the window when it is open)
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);

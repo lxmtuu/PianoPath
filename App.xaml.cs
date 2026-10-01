@@ -125,8 +125,9 @@ public partial class App : Application
                 if (!previewStarted) { previewStarted = true; window.BeginDeterministicPreview(previewStepSeconds); PressPreview(); }
                 if (FrameClock.Shared.FrameCount < previewFrames) return;
                 // The GPU thread simulates on its own clock; the stage shows whatever it last presented, so
-                // wait for it to have stepped as far as the WPF side has.
-                if (window.GpuLoop is { } loop && loop.FramesRendered < previewFrames) return;
+                // wait until it has stepped as far as the WPF side has *since its own reset* — FramesRendered
+                // counts the whole session, which includes the frames drawn while the window was settling.
+                if (window.GpuLoop is { } loop && loop.FramesSinceReset < previewFrames) return;
                 captured = true; settle.Stop();
                 VerificationSuite.Capture(window, target); Shutdown(0);
             }
