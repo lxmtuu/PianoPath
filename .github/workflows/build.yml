@@ -231,12 +231,15 @@ jobs:
             }
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
-          # One annotation with a line per picture. The hash of each PNG is what lets two runs be compared
-          # without waiting for the commit step, and it is a single annotation because GitHub shows only the
-          # first ten of a kind per step. A finished run's job log cannot be read afterwards; annotations can.
+          # One annotation per language with a line per picture. The hash of each PNG is what lets two runs be
+          # compared without waiting for the commit step. Per language, not one for all: GitHub cuts an annotation
+          # at exactly 4096 characters, and 22 lines of about 300 do not fit (the first run lost eight of them).
+          # A finished run's job log cannot be read afterwards; annotations can.
           # (A diagnostic must not fail the step, and pwsh stops on the first error here: hence SilentlyContinue.)
-          $lines = Get-ChildItem -Path $reports -Filter '*.txt' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }
-          "::notice title=Preview capture::$($lines -join '%0A')"
+          foreach ($lang in @('en', 'vi')) {
+            $lines = Get-ChildItem -Path $reports -Filter "$lang-*.txt" -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }
+            "::notice title=Preview capture ($lang)::$($lines -join '%0A')"
+          }
           Remove-Item Env:KEYFLOW_PREVIEW_REPORTS
 
           # The property everything above depends on, checked where it can be seen: render three of the pictures

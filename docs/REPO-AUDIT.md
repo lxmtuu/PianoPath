@@ -348,6 +348,24 @@ Từ đó ra hai nguyên nhân thật, không cái nào là thứ ba lần trư�
 
 1. `--verify`. `VerifyDeterministicPreview` (sân khấu WPF: cùng số bước ra cùng SHA-256, khác số bước ra khác) và `VerifyDeterministicGpuFrame` (GPU: hai lần render giống hệt từng byte; chỉ vẽ khung cuối bằng vẽ mọi khung; thêm bước ra ảnh khác). Khẳng định thứ hai là bằng chứng cho giả định "bỏ qua các khung trung gian".
 2. Trong chính lượt build: render lại 3 ảnh (GPU với hợp âm, dock, menu) và so SHA-256; lệch thì cảnh báo `Previews are not reproducible` kèm hai mã băm, và đính cả hai ảnh vào artifact `keyflow-preview-recheck` để định vị chỗ lệch từng pixel thay vì đoán.
-3. Mỗi ảnh ghi một dòng `sha=…` vào **một** annotation (GitHub chỉ hiện 10 annotation mỗi loại cho mỗi bước), để so hai lượt chạy bằng mắt.
+3. Mỗi ảnh ghi một dòng `sha=…` kèm thời gian từng pha vào annotation `Preview capture (en)` và `(vi)`, để so hai lượt chạy bằng mắt. Chia theo ngôn ngữ vì GitHub cắt một annotation ở đúng **4096 ký tự**: lần đầu gom cả 22 dòng vào một cái và mất tám dòng cuối.
 
-**Trạng thái khi viết mục này: chưa có kết quả CI cho cách sửa cuối.** Sandbox không có .NET SDK, và token GitHub hết hạn nên chưa push được. Phép thử thật vẫn là: lượt chạy **sau** lượt đầu tiên dùng code này phải thấy ảnh giống hệt và không commit gì. Một lượt chạy xanh không chứng minh điều đó, đây là bài học của cả ba lần hụt ở trên. Còn một rủi ro không do code này điều khiển: nếu hai runner có CPU khác đời, WARP có thể ra sai số cuối khác nhau; khi đó bước tự kiểm trong lượt build vẫn báo "reproducible" còn hai lượt chạy lại lệch nhau, và dòng `sha=` sẽ cho thấy chính xác ảnh nào.
+**Kết quả CI: tái lập đã được chứng minh.** Run `36863155317` (`b553a82`) xanh với `Verification passed: 1411 assertions` (tức 3 khẳng định mới của `VerifyDeterministicGpuFrame` đều đạt), phép tự kiểm báo `Previews are reproducible`, và CI commit bộ ảnh mới `9991d66`. Hai lượt sau đó, run `36867655720` (`b105a48`) và run `36873989640` (`de18ad3`), **không commit gì**: CI render lại toàn bộ 23 ảnh (22 PNG và `presets.jpg`) trên runner khác, vào lúc khác, và mọi tệp giống hệt từng byte với bản đã commit. Có thêm hai bằng chứng cùng lượt: `stage-live` và `stage-gpu` là **hai tiến trình riêng** nhưng ra cùng `sha` (`94a3975f1047` ở bản `en`), và hai lượt render lại của phép tự kiểm khớp từng byte. Đây là phép thử mà ba lần hụt trước đều không qua được.
+
+**Chi phí, và lần đo thứ năm.** Cách dựng đồng bộ làm một lượt build tăng từ 10,3 lên 29,4 phút (bước previews 240 s → 921 s, gallery 299 s → 680 s). Đọc code không chỉ ra pha nào gây ra điều đó: ảnh dock đứng yên tốn bằng ảnh có hợp âm, và bước mô phỏng rẻ khi không có nốt. Sau bốn lần đoán trật, báo cáo chụp được thêm thời gian từng pha (mili giây), và số đo trả lời ngay:
+
+| Pha (mỗi ảnh GPU) | Thời gian |
+| --- | --- |
+| `Stage.Advance` × 480 (phía WPF) | 2 ms |
+| 480 bước mô phỏng GPU | 5 – 27 ms |
+| tạo thiết bị WARP và biên dịch 12 shader | 0,5 – 0,75 s |
+| render pass của WPF, rồi chụp | 3 ms; 0,1 – 0,3 s |
+| **một khung trên thiết bị WARP mới tạo** (1,6 s nộp lệnh, 15,5 – 20,5 s đến khi đọc ngược trả về) | **17 – 22 s** |
+
+Toàn bộ chi phí là **khung đầu tiên trên một thiết bị WARP mới**: đó là lúc WARP sinh mã cho từng shader. Vòng lặp thật cũng trả khoản đó, nhưng ngay lúc khởi động, bị giấu sau tám giây chờ; cách đồng bộ ban đầu tạo một thiết bị mới cho mỗi ảnh nên trả lại khoản đó 25 lần. Bước 480 và đường WPF gần như miễn phí, nên không phải chỗ cần tiết kiệm.
+
+Cách sửa là để chính luồng render đã đỗ dựng khung cuối trên thiết bị đã nóng suốt tám giây (`GpuRenderLoop.RenderParked` giao việc, `RenderFrames` là phần của `RenderOnce` chạy sau khi thiết bị đã có). Lần thử đầu **không có tác dụng** và lại do một giả định sai: vòng lặp thật báo `IsWarp = false` trên runner, vì máy không có card nên Windows trình bày bộ điều hợp phần mềm "Microsoft Basic Render Driver" như một adapter *phần cứng*, điều kiện "chỉ dùng lại thiết bị WARP" đã từ chối nó, và mọi ảnh rơi về đường thiết bị mới như cũ (cột `fresh` trong báo cáo cho thấy ngay). Lần sau `--snapshot` đặt `GpuRenderLoop.ForceWarpForSession` trước khi cửa sổ tồn tại (vòng lặp khởi động ngay trong constructor), nên ảnh chụp luôn dùng WARP trên mọi máy: không còn phụ thuộc card đồ hoạ của máy chụp, và vòng lặp là thiết bị `RenderParked` được phép dùng lại.
+
+**Kết quả (run `36878012766`, `4fbbfa0`):** mọi ảnh đi đường `parked` với `warp=True`; **`readback` còn 45 – 60 ms** (trước 15 – 20,5 s); cả chuỗi mỗi ảnh tốn khoảng 0,3 s trên tám giây chờ cổng; bước previews 921 s → **263 s**, gallery 680 s → **311 s**, cả job **29,4 → 12,2 phút**. Quan trọng hơn: CI **không commit gì**, tức ảnh dựng bằng thiết bị nóng của vòng lặp giống hệt từng byte với ảnh đã commit từ thiết bị mới. Đổi thiết bị dựng không làm đổi một byte nào, và đây là lượt thứ tư liên tiếp cho ra cùng một đầu ra.
+
+**Bài học, từ cả đợt này:** năm lần sửa, ba lần đầu hụt và lần thứ tư đúng nhưng chậm gấp ba, đều do cùng một thói quen: kết luận từ việc đọc code rồi đưa lên CI để xem. Hai thứ thực sự có tác dụng đều là **đo thứ có sẵn**: so từng pixel hai ảnh cùng code (đã nằm sẵn trong git), và thêm thời gian từng pha vào báo cáo chụp. Cả hai tốn vài phút, còn mỗi lượt đoán sai tốn từ mười đến ba mươi phút CI.
