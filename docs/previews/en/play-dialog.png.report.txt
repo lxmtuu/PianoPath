@@ -1,0 +1,1 @@
+play-dialog.png how=watchdog started=True wpfFrames=9 gpuFrames=194 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.9

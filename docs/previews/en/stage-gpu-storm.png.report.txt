@@ -1,0 +1,1 @@
+stage-gpu-storm.png how=watchdog started=True wpfFrames=15 gpuFrames=166 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.7

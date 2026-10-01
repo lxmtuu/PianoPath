@@ -1,0 +1,1 @@
+theme-dock.png how=watchdog started=True wpfFrames=10 gpuFrames=181 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=17.5
