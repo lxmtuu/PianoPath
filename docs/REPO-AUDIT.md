@@ -265,3 +265,28 @@ Chỉ "**có render lại và không lên nhánh**" mới là độ lệch đán
 summary liệt kê đúng hai tệp; **(B)** `landed=true` → `This build re-rendered 2 file(s) and the step above
 committed them to the branch.`; **(C)** không render lại gì → `This build rendered the same pictures the
 branch already carries.`. Cả ba exit 0. `python3 tools/check_sources.py`: exit 0.
+
+### 6.11 Mục P3 #2: bộ test tách ra `tests/PianoPath.Tests` (2026-10-01, **CI xanh**)
+
+Roadmap gọi đúng thứ bị thiếu: cả repo chỉ có một project là exe WPF, nên **không có cách nào chạy lẻ một bài kiểm**. Nay `tests/PianoPath.Tests` là project xUnit trên `net10.0` thường và job **`test`** trên `ubuntu-latest` chạy nó.
+
+**86 test case / 65 hàm test / 1 010 dòng**, link 9 tệp nguồn của app: `MidiReader` (format 1/2, kênh percussion, tempo map, SMPTE, từ chối tệp không dùng được), `NoteTimeline`, `MusicXmlReader` (divisions/chord/backup/forward, 6/8, hai part, từ chối văn bản không phải score), `HandSplit`, `Meter`, `WavWriter`, nửa thuần của `Loc`. Chưa link: `Localizer.cs` (WPF), `MidiDeviceService.cs` + `PianoAudioEngine.cs` (WinMM), `SoundFontSynthesizer.cs` (bộ dựng `.sf2` fixture là ~10 helper riêng, vẫn ở `VerifySoundFontEngine`).
+
+**Mối nối `Loc`.** Các reader báo lỗi qua `Loc.T`/`Loc.F`, mà `Localizer` gán nhãn lên phần tử WPF → link nguyên tệp là đòi WindowsBase. `Loc` nay là `partial`: `Loc.cs` là bảng + tra cứu, `Localizer.cs` là nhãn sống, nối bằng `static partial void RefreshLiveLabels();` — bản build không link nửa WPF **biên dịch mất lời gọi**. Đối chiếu 42 thành viên trước/sau: không mất, không trùng. `tools/check_sources.py` đọc bảng đăng ký ngôn ngữ theo **thư mục** thay vì tên tệp cứng (`Localization/*.cs` trừ `Strings.*`) — nó vốn hardcode `Localizer.cs`.
+
+**Bốn cái bẫy, chỉ CI mới thấy được** (sandbox không có .NET SDK nên CI là trình biên dịch duy nhất):
+
+| # | Cái bẫy | Bằng chứng / cách sửa |
+| --- | --- | --- |
+| 1 | `PianoPath.csproj` nằm ở **gốc repo** nên glob mặc định `**/*.cs` **sẽ biên dịch cả `tests/` vào app** | Bắt được bằng đọc csproj *trước* khi push. Thêm `<Compile Remove="tests/**/*.cs" />` (+ `None`/`EmbeddedResource Remove="tests/**/*"`, đặt trước nhóm `presets/*.json` vì thứ tự ItemGroup có ý nghĩa) |
+| 2 | Quên `using Xunit;` ở cả 5 tệp test | Run `36842181232`: `CS0246 'Fact' could not be found` — `ImplicitUsings` không kéo namespace của package |
+| 3 | `WavWriterTests` khẳng định tệp 44 byte **ngay sau `TryCreate`** | Run `36843377088` nói **0**: constructor ghi header vào `FileStream` có buffer mặc định nên chưa chạm đĩa. **Test sai, sản phẩm đúng** — tách thành hai bài: trạng thái đối tượng khi đang mở, và tệp header-only sau khi đóng |
+| 4 | Job đỏ chỉ báo `Process completed with exit code 1` | Run `36842680108`: annotations **không có lỗi biên dịch nào** ⇒ biên dịch được, test trượt lúc chạy — nhưng **không biết bài nào**. Job log chỉ đọc được khi có người đang mở nó; `gh run view --log` và `…/actions/jobs/{id}/logs` đều chết ở `productionresultssa14.blob.core.windows.net` |
+
+Cái bẫy #4 là thứ đáng ghi nhất: **kết luận của một lượt CI đã qua phải lấy từ annotation, không phải từ log.** Job `test` nay ghi `.trx` và có bước `if: always()` đọc nó thành annotation nêu **tên từng bài kèm lý do** + một khối `GITHUB_STEP_SUMMARY`. Bước đó chính là thứ đọc ra được tên `Opening_a_track_leaves_an_empty_file_with_the_header_already_in_place` ở cái bẫy #3.
+
+**Không link `PianoPath.csproj` mà link tệp nguồn** là cố ý: giữ được mọi kiểu `internal` (tất cả model của app đều `internal`) mà không cần `InternalsVisibleTo`, và chưa phải tách thư viện. Đổi lại là một ràng buộc phải nói rõ trong README: **mọi tệp trong `<Compile Include>` của csproj test phải biên dịch được không có WPF/`System.Drawing`/Vortice/WinMM** — thêm tệp kéo WPF là job Linux đỏ, đó là tín hiệu chứ không phải lỗi.
+
+**Đường biên tiếp theo** (để test settings JSON / hồ sơ / thư viện bài / lịch sử luyện tập): cả bốn đều chạm đáy ở `PianoVisualSettingsStore` → `ShellThemes`, mà record `ShellTheme` khai báo bằng `System.Windows.Media.Color`. `Practice/PracticeChart.cs` là hình học thuần nhưng dùng `System.Windows.Point`/`Rect`.
+
+**Kết quả CI (run `36843377088`)**: `static` ✅ `test` ✅ `build` ✅ · `Verification passed: 1406 assertions, 3 skipped` · `CS8602: 0` · job Windows xanh là xác nhận quan trọng nhất, vì tách `Loc` thành `partial` chạm vào bản build của app.
