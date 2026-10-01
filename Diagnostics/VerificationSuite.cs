@@ -4078,19 +4078,21 @@ internal static partial class VerificationSuite
 
     private static void VerifyEmbersShell(MainWindow window, PianoVisualSettings visualSettings)
     {
-        var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
-        var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
-        var quickAdjust = (FrameworkElement)window.FindName("QuickAdjustOverlay")!;
-        var settings = (FrameworkElement)window.FindName("SettingsPanel")!;
-        var tabs = (TabControl)window.FindName("SettingsTabs")!;
-        var quickControlsHost = (StackPanel)window.FindName("QuickAdjustControlsHost")!;
-        var quickLayerHost = (WrapPanel)window.FindName("QuickAdjustLayerHost")!;
-        var quickHandColorsCard = (FrameworkElement)window.FindName("QuickAdjustHandColorsCard")!;
-        Assert(menu is not null && play is not null && quickAdjust is not null, "The concert shell should provide a main menu, a pre-flight Play dialog and shared quick adjustments.");
-        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        var menu = Element<FrameworkElement>(window, "MainMenuOverlay");
+        var play = Element<FrameworkElement>(window, "PlayDialogOverlay");
+        var quickAdjust = Element<FrameworkElement>(window, "QuickAdjustOverlay");
+        var settings = Element<FrameworkElement>(window, "SettingsPanel");
+        var tabs = Element<TabControl>(window, "SettingsTabs");
+        var quickControlsHost = Element<StackPanel>(window, "QuickAdjustControlsHost");
+        var quickLayerHost = Element<WrapPanel>(window, "QuickAdjustLayerHost");
+        var quickHandColorsCard = Element<FrameworkElement>(window, "QuickAdjustHandColorsCard");
+        // No null test for the eight elements above: Element<T> has already failed the run, naming the
+        // missing element, if one was not there — and re-testing them here is what used to make the
+        // compiler treat every later `menu.Visibility` in this method as a possible null dereference.
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
 
         window.ShowStartupMenu();
-        Assert(menu!.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
+        Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
 
         // The startup-menu quick-adjust entry and Play-dialog settings action share live controls,
         // while Advanced settings remains a one-click route to the full Style dock.
@@ -4158,7 +4160,7 @@ internal static partial class VerificationSuite
             "Returning from quick-adjust advanced settings should restore the startup menu.");
 
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
-        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
         Assert(((TextBlock)window.FindName("PlayDialogPrimaryLabel")!).Text == Loc.T("Choose a MIDI file"),
             "With no loaded score, the compact session action should clearly offer to choose a MIDI file.");
         var liveAction = (Button)window.FindName("PlayDialogLiveButton")!;
@@ -4640,6 +4642,19 @@ internal static partial class VerificationSuite
     private static object Field(object target, string name) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
     private static void SetField(object target, string name, object value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
     private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
+    /// <summary>
+    /// Looks up a named element of the window under test, and hands it back non-nullable — which is the
+    /// whole point. A <c>(T)window.FindName(…)!</c> local followed by a stand-alone
+    /// <c>Assert(x is not null, …)</c> leaves the compiler holding x as maybe-null for the rest of the
+    /// method (the assert could have been false, and nothing tells it that a false assert throws), so
+    /// every later <c>x.Visibility</c> is reported as a possible null dereference: that is what the ten
+    /// CS8602 warnings in this file were. Guarding inside the same expression, as
+    /// <c>Assert(piano is not null &amp;&amp; piano.Regions.Count &gt; 0, …)</c> does, narrows correctly and
+    /// never warned. Failing at the lookup also beats a null test further down: the message names the
+    /// element that is missing instead of pointing at the twentieth line that used it.
+    /// </summary>
+    private static T Element<T>(FrameworkElement root, string name) where T : FrameworkElement
+        => (T)(root.FindName(name) ?? throw new InvalidOperationException($"The window under test has no element named '{name}'."));
     /// <summary>
     /// Runs one check and, when it throws, says which check it was: an exception from deep inside a check
     /// (an index out of range in a grid, say) is otherwise reported without the context that names it.

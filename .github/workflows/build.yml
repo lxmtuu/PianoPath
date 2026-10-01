@@ -120,6 +120,7 @@ jobs:
       # date. Refresh the committed copies with:
       #   gh run download <run-id> -n keyflow-previews -D docs/previews   # both language sets
       - name: Render README previews
+        id: render-previews
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
@@ -176,6 +177,7 @@ jobs:
       # preset was designed with, and the list of names is checked against Stage/VisualPresets.cs by
       # tools/check_sources.py so a new preset cannot be left out.
       - name: Render the preset gallery
+        id: render-gallery
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
@@ -235,6 +237,38 @@ jobs:
             docs/previews/**/*.png
             docs/previews/presets.jpg
           if-no-files-found: warn
+
+      # Freshness is the one thing the static checker cannot see. `scan_readme` only proves a preview
+      # exists and is named in $shots, so a screenshot that still shows last month's interface keeps the
+      # build green — which is exactly what happened between de75f93 and the Quick Adjust / GPU atmosphere
+      # changes: the rulesets below stopped the preview push, and nothing in the repo said so.
+      #
+      # The two render steps have just overwritten every committed preview with what this build produces,
+      # so `git status` on docs/previews is the drift report itself: an empty list means the committed
+      # pictures are this build's pictures, and every path listed is a README image that no longer matches
+      # the code beside it. It runs on pull requests too, where the commit step is skipped and nothing
+      # else would ever say. A warning rather than an error on purpose: with the branch rules in place the
+      # workflow's own token cannot push the refresh, so making it red would paint every pull request red
+      # for a thing only a human (or a bypass rule) can settle.
+      - name: Report preview drift
+        if: always() && steps.render-previews.outcome == 'success' && steps.render-gallery.outcome == 'success'
+        shell: bash
+        run: |
+          drifted=$(git status --porcelain -- docs/previews | cut -c4-)
+          if [ -z "$drifted" ]; then
+            echo "docs/previews matches what this build rendered."
+            exit 0
+          fi
+          count=$(printf '%s\n' "$drifted" | wc -l | tr -d ' ')
+          names=$(printf '%s\n' "$drifted" | sed 's|^docs/previews/||' | paste -sd, - | sed 's/,/, /g')
+          {
+            echo '## docs/previews does not match this build'
+            echo
+            echo "These $count committed screenshot(s) differ from what this run rendered, so the README is showing an older interface:"
+            echo
+            printf '%s\n' "$drifted" | sed 's|^|- `|; s|$|`|'
+          } >>"$GITHUB_STEP_SUMMARY"
+          echo "::warning title=Previews are stale::$count file(s) under docs/previews differ from what this build rendered ($names). Refresh them from the keyflow-previews artifact of this run."
 
       # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README
       # reference a preview that this commit has not rendered yet (see scan_readme).

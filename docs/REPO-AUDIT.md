@@ -133,3 +133,84 @@ rồi soi những chỗ mà ba lớp không nhìn tới.
 * **Script PowerShell không có lớp kiểm tĩnh**: `publish.ps1` chỉ chạy khi cắt bản phát hành, và
   `tools/build_installer.ps1` chỉ được CI biên dịch chứ không được "đọc" bằng công cụ nào — đây là vùng
   mù duy nhất còn lại của bộ kiểm.
+
+## 6. Đợt rà soát lần ba — 2026‑10‑01 (trước khi vào P3)
+
+Lần này đọc lại toàn kho **để xác nhận trạng thái trước khi bắt đầu `docs/ROADMAP.md` §4 (P3)**, nên
+trọng tâm là đối chiếu từng câu "đã xong / chưa làm" trong roadmap với bằng chứng lấy được ngay lúc rà
+soát — không sửa tính năng nào. Sandbox này **không có .NET SDK** (`dotnet: command not found`), nên
+lớp biên dịch/`--verify` được đọc từ lần chạy CI mới nhất chứ không chạy lại tại đây.
+
+### 6.1 Ba lớp kiểm chứng, số liệu đo được
+
+| Lớp | Kết quả lần này |
+|---|---|
+| `python3 tools/check_sources.py` | **xanh**, exit 0, ~4 s: "checked 79 C# files and 2 XAML files, 99 resource keys, 149 named elements … 1166 keys the sources print (1266 in the inventory)" |
+| `--verify` (CI, lần chạy `build` mới nhất trên `main`: run **36831576802**, 2026‑10‑01T07:39Z) | **xanh**: `static` ✅ + `build` ✅ cả 15 bước; nhật ký 300 dòng, mã thoát 0, **"Verification passed: 1407 assertions, 3 skipped check group(s)"** |
+| Ảnh CI render | ⚠️ **lệch 3 merge** — xem §6.2 |
+
+Ba nhóm SKIP của `--verify` đều là `Assets/ConcertGrand.sf2` còn là con trỏ Git LFS (workflow checkout
+`lfs: false`), đúng như thiết kế.
+
+### 6.2 Vấn đề thật tìm thấy (chưa sửa)
+
+| Vấn đề | Bằng chứng |
+|---|---|
+| **Ảnh `docs/previews/` đã lệch giao diện 3 merge.** Commit cuối cùng chạm `docs/previews` là `de75f93` (2026‑09‑30T23:13:17Z, "Refresh the README previews from CI"); sau đó `main` đã nhận `1a5d50a` *Add contextual quick adjustment flow*, `0503ec2` *Close dock before opening quick adjustments* và `9b7fb57` *Redesign GPU atmosphere and hit-line effects (#31)* — cả ba đều đổi những thứ README đang chụp (menu/Play có Quick Adjust, preset Galaxy Voyage + Electric Storm). Ảnh trong README vì thế **vẫn xanh ở checker** nhưng không còn là ảnh của build hiện tại | `gh api repos/…/commits?path=docs/previews` → mục mới nhất là `de75f93`; `gh api repos/…/commits?sha=main&per_page=6` → ba commit kể trên nằm sau nó; `scan_readme` (`tools/check_sources.py:703`) chỉ kiểm **tồn tại** + **có tên trong `$shots`**, không có phép kiểm nào so ngày của ảnh với ngày của nguồn |
+| **CI không còn tự commit ảnh được nữa.** Annotation của chính lần chạy xanh ở trên: `warning :: Previews not committed :: The branch only accepts pull requests…`. Nguyên nhân đã đo được: repo có **hai ruleset áp cho `~ALL`** — `24265624` *Protect Branch* (deletion, non_fast_forward) và `24233546` *Protect Main Branch* (deletion, non_fast_forward, **pull_request** với `require_code_owner_review: true` + `require_extra_approval_for_unattributed_changes: true`) — và **cả hai có `bypass_actors: null`**, tức không có ai được vượt, kể cả `GITHUB_TOKEN` của workflow. Đây chính là mục "còn mở" của P3 #1, nay đã xác nhận là nguyên nhân trực tiếp của §6.2 dòng trên | `gh api repos/lxmtuu/PianoPath/rulesets/{24265624,24233546}`; `gh api repos/…/check-runs/110269233500/annotations` |
+| **10 cảnh báo nullable trong bản build Release.** Tất cả là `Dereference of a possibly null reference.` (CS8602) và tất cả nằm trong **`Diagnostics/VerificationSuite.cs`** — dòng 4100, 4101, 4148, 4153, 4199, 4275, 4279, 4288, 4348, tức khối kiểm Quick Adjust mới của `VerifyEmbersShell` (4079–4372). Kiểu mẫu giống nhau: `(Dictionary<string, ComboBox>)Field(window, "_quickAdjustChoices")` rồi giải tham chiếu kết quả. GitHub chỉ hiện tối đa 10 annotation mỗi mức nên **số thật ≥ 10**; đây là lần đầu một đợt rà soát ghi nhận cảnh báo biên dịch (các đợt trước chỉ soi TODO/FIXME) | `gh api repos/…/check-runs/110269233500/annotations` → 10 mục cùng một thông báo; đọc `sed -n 4096,4104p Diagnostics/VerificationSuite.cs` |
+| **`docs/previews/presets.jpg` cũng cũ theo.** Gallery dựng từ chính `$shots`-era preset look; `9b7fb57` đổi atmosphere + hit-line của GPU nên cột "GPU (WARP)" của Galaxy Voyage / Electric Storm trong ảnh không còn là look hiện tại | cùng bằng chứng ngày commit ở dòng 1 của bảng này; `presets.jpg` nằm trong `docs/previews/` nên cùng một commit `de75f93` |
+
+### 6.3 Đối chiếu roadmap P3 — từng dòng, bằng chứng lấy tại chỗ
+
+| P3 | Roadmap nói | Đo lại lần này |
+|---|---|---|
+| #1 CI phân lớp | ✅ xong, còn mở việc commit ảnh | **đúng**: `build.yml` có job `static` (`ubuntu-latest`, chỉ `check_sources.py`) và job `build` đặt `needs: static`. Phần "còn mở" vẫn mở và đã đo được nguyên nhân (§6.2) |
+| #2 Tách project test | ⬜ chưa làm | **đúng**: không có `tests/`, không `*.sln`, không tham chiếu xUnit/NUnit/MSTest nào. Số liệu roadmap hơi cũ: `VerificationSuite` nay là **56** hàm `Verify*` trong **4 888** dòng (`VerificationSuite.cs` 4 654 + `.Gpu.cs` 234), không phải "55 hàm trong ~4 400 dòng". Bốn thư mục **không** tham chiếu WPF/`System.Drawing`/Vortice — `Audio/`, `Library/`, `Midi/`, `Profile/` — tổng **2 474** dòng, đủ để link nguồn vào một project `net10.0` thường. Ghi chú thêm cho việc tách: `Practice/PracticeChart.cs` dùng `System.Windows.Point`/`Rect` (WindowsBase) nên **không** nằm trong nhóm đó dù là hình học thuần |
+| #3 Perf gate | ⬜ chưa làm | **đúng**: không có `--bench` ở bất kỳ đâu; 19 switch dòng lệnh đang có là `--background-image= --compact --encode-probe= --encode-take= --gpu --lang= --menu --play-chord --play-dialog --play-preview --preset= --settings-dir= --settings-tab= --shortcuts --show-settings --snapshot --software --verify --verify-log=`. `GpuRenderLoop.Fps` (`Gpu/GpuRenderLoop.cs:63`, tính ở `:208` theo cửa sổ 0,5 s) là số đo duy nhất, đúng như roadmap mô tả — không có thời gian từng khung, không có phân vị |
+| #4 Giảm cỡ bản tải | ⬜ chưa làm | **đúng**: `release.yml` checkout `lfs: true` và đóng gói nguyên thư mục publish; `publish.ps1` không có chế độ *lite* (chỉ `SelfContained`/`FrameworkDependent`), và nó **từ chối** publish khi SF2 còn là con trỏ LFS trừ khi có `-AllowLfsPointer` |
+| #5 Cập nhật & đóng gói | 🟡 một phần | **đúng**: `release.yml` đính `publish/*.zip` + `Keyflow-Setup-*.exe`, không có `SHA256SUMS`/`GetFileHash` ở workflow hay script nào, không `CHANGELOG*`, không `Microsoft.WindowsAppSDK`/MSIX/winget manifest |
+| #6 Nhánh portability | ⬜ chưa làm | **đúng**: interface tự viết trong repo chỉ có `Audio/IAudioTrack.cs:15` và `Video/IFrameRecorder.cs:17` (phần còn lại là interface COM của Media Foundation); không có `IStageRenderer`, không `IAudioSink` |
+| #7 Kiểm chứng đường phát hành | ⬜ chưa làm | **đúng**: `git tag -l` rỗng, `gh release list` rỗng → `release.yml` chưa từng chạy; `<Version>0.4.0</Version>` vẫn ở `PianoPath.csproj` trong khi phạm vi v0.5–v0.8 đã vào |
+
+### 6.4 Đã kiểm, không thấy vấn đề
+
+* Không có `TODO`/`FIXME`/`HACK`/`XXX` trong bất kỳ tệp `.cs`/`.py`/`.ps1`/`.xaml`/`.yml` nào.
+* `catch { }` rỗng có tồn tại nhưng **đều có chủ đích** và đều là best‑effort dọn dẹp: `Marshal.ReleaseComObject`
+  (`Camera/CameraFrameReader.cs:405`, `Camera/MediaFoundation.Encode.cs:252,308`), `Flush` của source reader
+  (`CameraFrameReader.cs:213,226`), `_stream.Dispose()` trong `finally` của `Audio/WavWriter.cs:185`, và ghi
+  log trong tiến trình con (`Diagnostics/EncodeProbeAttempt.cs:32,33,52,61`). Không chỗ nào nuốt lỗi nghiệp vụ.
+* Bộ kiểm tĩnh vẫn là lớp duy nhất chạy được trên sandbox không có .NET, và nó vẫn xanh — nên mọi thay đổi
+  ở đợt P3 sắp tới đều có ít nhất một lớp kiểm chứng chạy được tại đây.
+
+### 6.5 Không kiểm được tại sandbox này (nói rõ, không đoán)
+
+* **Không biên dịch được C#**: `dotnet: command not found`. Mọi kết luận về build/`--verify` ở trên là đọc
+  từ lần chạy CI 36831576802, không phải chạy lại.
+* **Không tải được artifact/log của lần chạy**: `gh run view --log` và `gh run download` đều đứt ở bước tải
+  blob (`…blob.core.windows.net… EOF`), nên 300 dòng nhật ký `--verify` chỉ đọc được qua annotation của
+  check-run, không đọc được toàn văn.
+* **Không chạy được PowerShell/Inno Setup** (`publish.ps1`, `tools/build_installer.ps1`) — đúng như ghi nhận
+  ở §5.3, đây vẫn là vùng mù duy nhất của bộ kiểm.
+
+### 6.6 Đã sửa trong đợt này
+
+| Việc | Bằng chứng kiểm chứng |
+|---|---|
+| **Bước `Report preview drift` trong `build.yml`** — vá đúng lỗ hổng ở §6.2 dòng 1: `scan_readme` chỉ chứng minh ảnh *tồn tại* và *có tên trong `$shots`*, nên ảnh còn đúng hay không thì không lớp nào nhìn thấy. Hai bước render vốn đã ghi đè `docs/previews` bằng ảnh của chính build đó, nên `git status --porcelain -- docs/previews` **chính là** bảng đối chiếu: danh sách rỗng nghĩa là ảnh đã commit là ảnh của build này, còn mỗi đường dẫn listed là một ảnh README không còn khớp với code bên cạnh nó. Bước chạy `if: always()` **và** chỉ khi cả `steps.render-previews` lẫn `steps.render-gallery` đều `success` (hai `id` mới thêm), để một lần render hỏng không bị đọc nhầm thành "ảnh vẫn đúng"; nó chạy cả ở pull request, nơi bước commit bị bỏ qua và trước đây không có tín hiệu nào. Cảnh báo chứ không phải lỗi, có chủ đích: ruleset đang chặn token của workflow nên biến nó thành đỏ sẽ sơn đỏ mọi pull request vì một việc chỉ người (hoặc một luật bypass) giải quyết được | `bash -n` sạch; **chạy thật đoạn script** (trích từ YAML bằng `yaml.safe_load`) trong một repo git tạm ở ba trạng thái: (1) không lệch → in `docs/previews matches what this build rendered.`, exit 0, summary rỗng; (2) hai tệp đã commit bị ghi đè → `::warning title=Previews are stale::2 file(s)…` và summary liệt kê đúng hai đường dẫn; (3) thêm một tệp chưa có trong repo và một tên **có khoảng trắng** → bắt đủ 4 tệp, danh sách phân tách `, ` đúng (lỗi `paste -sd', '` luân phiên dấu phẩy/dấu cách đã sửa thành `paste -sd, - \| sed 's/,/, /g'`). `python3 tools/check_sources.py` chạy lại sau khi sửa workflow: exit 0 |
+| **Hai bản README** (`README.md` + `README.en.md`) mô tả thêm bước mới trong bảng workflow, giữ hai bản 1‑1 | `tools/check_sources.py` xanh (bảng tham số/ảnh/anchor của cả hai bản) |
+| **Mười cảnh báo CS8602 trong `Diagnostics/VerificationSuite.cs`** — nguyên nhân gốc không phải từng chỗ giải tham chiếu mà là **một câu `Assert` thừa**: `Assert(menu is not null && play is not null && quickAdjust is not null, …)` ở đầu `VerifyEmbersShell`. Tám biến cục bộ vừa được lấy bằng `(T)window.FindName(…)!` (đã not-null), nhưng câu null-test đứng **một mình** khiến trình biên dịch gộp cả nhánh "điều kiện sai" — vì không có gì nói với nó rằng `Assert` sai thì ném — nên từ đó về sau `menu`/`play`/`quickAdjust` là maybe-null. Hai dòng kế tiếp chữa bằng `menu!`/`play!`; từ dòng 4100 thì quên → cảnh báo. Cách chữa: thêm helper **`Element<T>(root, name)`** trả về **not-null** và ném ngay tại chỗ tra cứu kèm tên phần tử bị thiếu, thay cho cả `FindName(…)!` lẫn câu `Assert` thừa; nhờ vậy trạng thái dòng không bao giờ bị hạ xuống maybe-null và không cần `!` nào nữa. Số assertion của `--verify` giảm đúng **một** (1407 → 1406) vì bỏ câu `Assert` thừa; phần kiểm "phần tử có tồn tại" vẫn còn, và còn rõ hơn (báo tên phần tử thay vì trỏ vào dòng thứ hai mươi dùng nó) | bằng chứng cho chẩn đoán, đọc ngay trong tệp: (a) dòng 366 tác giả **đã gặp đúng lỗi này** và chữa bằng `if (baked is null) return;` kèm ghi chú *"Non-Nullable copy so the local helper below does not have to re-prove the null state"*; (b) dòng 957 và 3714 viết `Assert(x is not null && x.Foo)` — dereference **trong cùng biểu thức** nên được thu hẹp đúng, và **không** lần chạy CI nào báo cảnh báo ở đó; (c) dòng 3322 dùng `wav!.Append(…)` để thu hẹp lại sau một câu `Assert(wav is not null && …)` — cùng một mẹo `!`, xác nhận chẩn đoán. Đã quét tự động toàn tệp (script tìm mọi `Assert(<var> is not null…)` rồi dò chỗ `<var>.` ở các câu sau trong cùng hàm): đúng **3** ứng viên, và cả ba đều đã được giải thích — `wav` (đã có `wav!`), `chips` (báo nhầm vì khớp chữ trong chuỗi của câu `Assert` khác), và chính dòng chú thích XML mới thêm. `python3 tools/check_sources.py`: exit 0. **Phần biên dịch thật do CI Windows xác nhận** — sandbox không có .NET SDK nên không tự chạy được |
+
+### 6.7 Hai việc người dùng đã chọn nhưng sandbox này **không làm được**
+
+Cả hai đều do mạng của sandbox, không phải do repo — ghi lại để lần sau không thử lại vô ích:
+
+* **Tải artifact `keyflow-previews` để commit ảnh mới**: artifact vẫn còn (`id 11148505196`, 7 052 863 byte, `expired=false`) nhưng API trả 302 sang `productionresultssa10.blob.core.windows.net`, và host đó **không nối được** — `gh run download` ba lần đều `EOF`, `curl -sSL` báo `OpenSSL SSL_connect: SSL_ERROR_SYSCALL`. `raw.githubusercontent.com` và `objects.githubusercontent.com` cũng 000; chỉ `api.github.com`, `pypi.org` và `registry.npmjs.org` là thông. **Hệ quả: `docs/previews/` vẫn lệch ba merge** — ảnh chỉ render được trên Windows nên không có đường nào làm mới chúng từ đây.
+* **Cài .NET 10 SDK**: `dot.net`, `builds.dotnet.microsoft.com`, `dotnetcli.azureedge.net` và `api.nuget.org` đều trả `000`. Không có SDK thì không build được project test `net10.0` của P3 #2 tại đây, dù về nguyên tắc nó chạy được trên Linux.
+
+Hai lệnh để làm mới ảnh từ máy của bạn (artifact của run 36831576802 vẫn còn):
+
+```powershell
+gh run download 36831576802 -n keyflow-previews -D docs/previews   # hai bộ vi/ + en/ và presets.jpg
+git add docs/previews; git commit -m "Refresh the README previews from CI artifact 36831576802"
+```
