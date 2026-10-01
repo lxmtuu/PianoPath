@@ -214,20 +214,28 @@ jobs:
       # commit sha, so building one commit twice cannot collide with itself, and `restore-keys` above picks the
       # most recent entry — which is what "the previous run on the same kind of runner" means.
       - name: Keep this run as the next baseline
+        id: perf-keep
         if: always()
         shell: pwsh
         run: |
           $folder = Join-Path $env:RUNNER_TEMP 'perf-baseline'
-          New-Item -ItemType Directory -Force -Path $folder | Out-Null
-          Copy-Item -Force (Join-Path $env:RUNNER_TEMP 'keyflow-bench.json') (Join-Path $folder 'keyflow-bench.json') -ErrorAction SilentlyContinue
-          if (-not (Test-Path (Join-Path $folder 'keyflow-bench.json'))) {
-            '::warning title=Keyflow frame budget::No report was written, so the next run has no baseline to compare with.'
+          $report = Join-Path $env:RUNNER_TEMP 'keyflow-bench.json'
+          # A run that wrote no report must not save a baseline at all. The cache is read back by prefix and the
+          # most recent entry wins, so an empty one hides the last real measurement from every run after it:
+          # that is what happened when a failed run left the next one reporting "no previous measurement to
+          # compare with" even though two earlier runs had measured the same scenes.
+          if (Test-Path $report) {
+            New-Item -ItemType Directory -Force -Path $folder | Out-Null
+            Copy-Item -Force $report (Join-Path $folder 'keyflow-bench.json')
+            'have_report=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          } else {
+            '::warning title=Keyflow frame budget::No report was written, so the previous baseline stays the one the next run compares with.'
           }
 
       # Saving is best effort: a pull request from a fork gets a read-only cache scope and cannot write one,
       # which costs that run its baseline and nothing else.
       - name: Save the frame-time baseline
-        if: always()
+        if: always() && steps.perf-keep.outputs.have_report == 'true'
         uses: actions/cache/save@v4
         continue-on-error: true
         with:
