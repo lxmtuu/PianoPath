@@ -214,3 +214,29 @@ Hai lệnh để làm mới ảnh từ máy của bạn (artifact của run 3683
 gh run download 36831576802 -n keyflow-previews -D docs/previews   # hai bộ vi/ + en/ và presets.jpg
 git add docs/previews; git commit -m "Refresh the README previews from CI artifact 36831576802"
 ```
+
+### 6.8 CI đã xác nhận (run 36834861621, nhánh `arena/01a0f671-pianopath`, commit `dcc943c`)
+
+Sandbox không có .NET SDK nên **chính runner Windows của repo là lớp kiểm chứng** cho hai thay đổi trên:
+
+| Đo trên CI | Kết quả |
+|---|---|
+| **Mười cảnh báo CS8602** | **còn 0**. `gh api …/check-runs/110279800651/annotations` không còn mục nào khớp "null reference" (trước đó: 10, và bị GitHub cắt ở 10). Chẩn đoán "một câu `Assert` thừa là nguyên nhân gốc" vậy là đúng — không phải sửa từng chỗ giải tham chiếu |
+| **`Element<T>` chạy thật** | `Verification passed: **1406** assertions, 3 skipped check group(s)`, `PianoPath.exe exited with code 0 after 300 log line(s)`. Đúng **1407 → 1406** như đã tính (bỏ một câu `Assert` thừa); `VerifyEmbersShell` vẫn chạy qua nên cả tám lần tra cứu phần tử đều tìm thấy phần tử của chúng |
+| **Bước `Report preview drift` chạy thật** | `! 23 file(s) under docs/previews differ from what this build rendered (…)` — nêu đủ tên 23 tệp (11 `en/` + 11 `vi/` + `presets.jpg`) |
+
+### 6.9 Một lỗi thiết kế do chính lần CI đó lộ ra, đã sửa
+
+Con số **23/23** là manh mối: cả `shortcuts.png` lẫn `language-dock.png` — hai cảnh mà ba commit gần đây
+không đụng tới — cũng khác bản đã commit. Đối chiếu lịch sử: repo có **349 commit thì 106 là preview
+refresh**, tức gần như lần push nào cũng ra diff. Kết luận: **ảnh render không ổn định theo byte giữa các
+lần chạy**, nên `git status` trên `docs/previews` *luôn* khác rỗng ngay sau khi render. Bước drift vì thế
+**không được đứng trước** bước commit — nếu không nó sẽ kêu oan ở mọi lần chạy, kể cả lần mà bước commit
+vừa ghi ảnh mới thành công ngay sau đó (đúng cái bệnh "cảnh báo mà không ai đọc" mà nó sinh ra để chữa).
+
+Đã chuyển `Report preview drift` xuống **sau** `Commit refreshed previews`; thứ tự đó *chính là* phép kiểm:
+refresh mà ghi được thì cây làm việc sạch và bước này nói "khớp", còn push bị từ chối (GH013) hoặc bước
+commit bị bỏ qua (pull request) thì tệp vẫn bẩn và độ lệch là thật, chưa ai giải quyết. Kiểm lại bằng cách
+chạy đúng đoạn script trong repo git tạm: cây sạch → `docs/previews matches what this build rendered, or the
+refresh above just committed it.`; hai tệp bẩn → `::warning title=Previews are stale::2 file(s) … and were not
+committed`. `python3 tools/check_sources.py`: exit 0.
