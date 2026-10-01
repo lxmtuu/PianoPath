@@ -44,7 +44,40 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Run the portable test project
-        run: dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release --logger "console;verbosity=normal"
+        run: >-
+          dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj
+          --configuration Release
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=tests.trx"
+          --results-directory "$RUNNER_TEMP/test-results"
+
+      # A red run has to name the test that went red. The console logger prints that, but a job log is
+      # only readable while somebody is watching it, and this project exists precisely so a regression
+      # can be diagnosed from a phone. So the failures are read back out of the TRX and published as
+      # annotations, which stay queryable through the API long after the log is awkward to reach.
+      - name: Name the tests that failed
+        if: always()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'test-results') -Filter *.trx -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+          if (-not $trx) { 'No test results were written.'; exit 0 }
+          [xml]$run = Get-Content $trx.FullName
+          $summary = $run.TestRun.ResultSummary
+          $counters = $summary.Counters
+          "outcome $($summary.outcome): $($counters.passed) passed, $($counters.failed) failed, $($counters.notExecuted) not executed, $($counters.total) total"
+          @(
+            '# Portable test project'
+            ''
+            "Outcome **$($summary.outcome)** — $($counters.passed) passed, $($counters.failed) failed, $($counters.notExecuted) not executed of $($counters.total)."
+          ) | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          foreach ($test in @($run.TestRun.Results.UnitTestResult)) {
+            if ($test.outcome -ne 'Failed') { continue }
+            $detail = "$($test.Output.ErrorInfo.Message) $($test.Output.ErrorInfo.StackTrace)" -replace '\s+', ' '
+            if ($detail.Length -gt 800) { $detail = $detail.Substring(0, 800) + '…' }
+            $text = "$($test.testName) — $detail" -replace '%', '%25'
+            "::error title=Test failed::$text"
+          }
 
   build:
     needs: static
