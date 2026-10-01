@@ -31,9 +31,17 @@ internal sealed class FrameClock
     private double _lastFrameSeconds = -1;
     private double _delta, _fps;
     private int _demands;
-    private bool _hooked;
+    private bool _hooked, _frozen;
 
     private FrameClock() { }
+
+    /// <summary>
+    /// Stops delivering frames for good. A screenshot run steps every animator by hand and then lets WPF
+    /// repaint before it captures; a composition frame that slipped in during that repaint would advance
+    /// them once more by however long the machine happened to take, and the picture would stop being a
+    /// function of the step count.
+    /// </summary>
+    internal void Freeze() => _frozen = true;
 
     /// <summary>Raised once per real composition frame with the seconds elapsed since the previous one.</summary>
     internal event Action<double>? Tick;
@@ -71,6 +79,7 @@ internal sealed class FrameClock
 
     private void OnRendering(object? sender, EventArgs e)
     {
+        if (_frozen) return;
         var now = e is RenderingEventArgs args ? args.RenderingTime.TotalSeconds : _watch.Elapsed.TotalSeconds;
         // A repeated composition time is not a new frame. Skipping it keeps the motion smooth; feeding
         // it forward would double-report the previous frame as a zero-length one.

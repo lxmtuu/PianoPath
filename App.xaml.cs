@@ -38,6 +38,10 @@ public partial class App : Application
         Loc.Apply(string.IsNullOrWhiteSpace(languageOverride) ? stored.Language : languageOverride);
         ShellThemeManager.Apply(stored.ShellTheme);
 
+        // An automated screenshot must not depend on the graphics card of the machine that takes it, so the GPU
+        // stage draws with WARP for this run. It has to be set before the window exists: the render loop starts
+        // inside the window's constructor.
+        if (e.Args.Contains("--snapshot")) GpuRenderLoop.ForceWarpForSession = true;
         var window = new MainWindow();
         MainWindow = window;
         // The GPU stage is the main stage by default now. --gpu stays for older launch scripts and CI;
@@ -100,6 +104,13 @@ public partial class App : Application
             if (e.Args.Contains("--compact")) { window.WindowState = WindowState.Normal; window.Width = 1080; window.Height = 700; }
             var target = e.Args[snapshotIndex + 1];
             var captured = false; var previewPressed = false; var loadedWait = Stopwatch.StartNew();
+            // The previews have to come out byte for byte the same from one build to the next, or the drift check
+            // cannot tell "the interface changed" from "the machine was a little slower". The picture is therefore
+            // taken a fixed number of fixed-length steps after a reset, not a number of seconds after the window
+            // opened: 480 steps of 1/60 s is the eight seconds a held note used to have by the time the old
+            // wall-clock delay ran out, so the stage shows the same steady state, only reproducibly.
+            const double previewStepSeconds = 1.0 / 60;
+            const int previewFrames = 480;
             void PressPreview()
             {
                 if (previewPressed) return;
@@ -108,22 +119,83 @@ public partial class App : Application
                 // --play-chord holds a spread chord as well, so the hold effects that link keys (electric arcs) show
                 if (e.Args.Contains("--play-chord")) foreach (var pitch in new[] { 48, 55, 64, 67, 72 }) VerificationSuite.PressPreviewNote(window, pitch);
             }
-            // The SoundFont scan and the first render both settle over a few seconds; the timer waits
-            // for the instrument (bounded, so a silent CI runner still gets its screenshot) and the
-            // watchdog guarantees a file even in a session that never raises ContentRendered.
+            // The SoundFont scan and the first render both settle over a few seconds; the timer waits for the
+            // instrument (bounded, so a silent CI runner still gets its screenshot) and the watchdog guarantees a
+            // file even in a session that never raises ContentRendered.
             var settle = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+            var watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
+            // One synchronous sequence, so nothing can slip in between its steps: stop the render thread, reset the
+            // animators, press the preview note, step the stage and build the GPU frame for that same moment,
+            // capture. Both the settled path and the watchdog run it, so even the fallback is reproducible.
+            void Shoot(string how)
+            {
+                if (captured) return;
+                captured = true; settle.Stop(); watchdog.Stop();
+                var timer = Stopwatch.StartNew();
+                long pressMs = 0;
+                try
+                {
+                    window.BeginDeterministicPreview();
+                    var begunAt = timer.ElapsedMilliseconds;
+                    PressPreview();
+                    pressMs = timer.ElapsedMilliseconds - begunAt;
+                    window.RunDeterministicPreviewFrames(previewFrames, previewStepSeconds);
+                }
+                catch (Exception ex)
+                {
+                    // The picture is still taken, only not reproducibly: losing it would fail the whole build
+                    // for the sake of a property the report line and the build's second render will flag.
+                    Trace.WriteLine($"Keyflow: the deterministic preview sequence failed: {ex}");
+                    how += "-unprepared";
+                }
+                var preparedAt = timer.ElapsedMilliseconds;
+                VerificationSuite.Capture(window, target);
+                var timings = $"{window.PreviewTimings} press:{pressMs} capture:{timer.ElapsedMilliseconds - preparedAt} sequence:{timer.ElapsedMilliseconds} liveCompile:{(window.GpuLoop?.ShaderCompileMilliseconds ?? 0):0}";
+                ReportPreview(window, target, how, loadedWait.Elapsed.TotalSeconds, timings);
+                Shutdown(0);
+            }
             void TryCapture()
             {
                 if (captured || (!window.HasSoundFont && loadedWait.Elapsed < TimeSpan.FromSeconds(8))) return;
-                captured = true; settle.Stop();
-                VerificationSuite.Capture(window, target); Shutdown(0);
+                Shoot("settled");
             }
             settle.Tick += (_, _) => TryCapture();
-            window.ContentRendered += (_, _) => { PressPreview(); loadedWait.Restart(); settle.Start(); };
-            var watchdog = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
-            watchdog.Tick += (_, _) => { watchdog.Stop(); if (captured) return; PressPreview(); TryCapture(); if (!captured) { captured = true; VerificationSuite.Capture(window, target); Shutdown(0); } };
+            // ContentRendered only arms the polling timer. The preview note is pressed inside Shoot, after the
+            // reset: pressed here instead, its onset would land at whatever moment the window finished loading.
+            window.ContentRendered += (_, _) => { loadedWait.Restart(); settle.Start(); };
+            watchdog.Tick += (_, _) => Shoot("watchdog");
             watchdog.Start();
         }
         window.Show();
+    }
+
+    /// <summary>
+    /// When the build asks for it (<c>KEYFLOW_PREVIEW_REPORTS</c> names a folder outside the repository),
+    /// writes one line about a finished screenshot: a short hash of the PNG that was just written, how the
+    /// capture was reached, what drew the stage, and where the time went (milliseconds per phase).
+    ///
+    /// The hash is the point. A finished run's job log cannot be read afterwards, the committed pictures are
+    /// only visible one commit later, and the question that keeps coming up is whether two renders of the
+    /// same code agree. The build publishes these lines as one annotation, so two runs can be compared by
+    /// eye. The folder is outside <c>docs/previews</c> because everything inside it is committed, and a line
+    /// that carries a measured duration would otherwise change the commit on every run.
+    /// </summary>
+    private static void ReportPreview(MainWindow window, string target, string how, double seconds, string timings)
+    {
+        var folder = Environment.GetEnvironmentVariable("KEYFLOW_PREVIEW_REPORTS");
+        if (string.IsNullOrEmpty(folder)) return;
+        try
+        {
+            var full = Path.GetFullPath(target);
+            var hash = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(File.ReadAllBytes(full)))[..12].ToLowerInvariant();
+            var name = $"{Path.GetFileName(Path.GetDirectoryName(full))}-{Path.GetFileName(full)}";
+            var engine = window.GpuStageActive ? $"{window.GpuLoop?.AdapterName ?? "gpu"} warp={window.GpuLoop?.IsWarp}" : "software";
+            Directory.CreateDirectory(folder);
+            File.WriteAllText(Path.Combine(folder, name + ".txt"), $"{name} sha={hash} how={how} engine={engine} soundfont={window.HasSoundFont} seconds={seconds:F1} timings={timings}");
+        }
+        catch (Exception)
+        {
+            // a diagnostic must never cost the screenshot
+        }
     }
 }

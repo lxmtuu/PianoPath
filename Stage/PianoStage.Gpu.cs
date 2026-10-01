@@ -17,6 +17,7 @@ internal sealed partial class PianoStage
     private WriteableBitmap? _gpuBitmap;
     private long _gpuSerial = -1;
     private bool _gpuRenderingHooked;
+    private bool _gpuFrameHeld;
     private double _gpuLookElapsed = double.NegativeInfinity;
     private static long s_gpuBackgroundVersion;
     private BitmapSource? _gpuBackgroundSource;
@@ -176,7 +177,7 @@ internal sealed partial class PianoStage
     private void OnGpuRendering(object? sender, EventArgs e)
     {
         var feed = _gpu;
-        if (feed is null || !_gpuEmbedded) return;
+        if (feed is null || !_gpuEmbedded || _gpuFrameHeld) return;
         // the rainbow clock also ticks while nothing else calls SetState
         if (_visual.ColorMode == "RainbowTime" && !_playing) { _elapsed += 1 / 60.0; ForwardGpuState(); }
         var serial = feed.FrameSerial;
@@ -193,6 +194,26 @@ internal sealed partial class PianoStage
             _gpuBitmap.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0);
         });
         if (resized) InvalidateVisual();
+    }
+
+    /// <summary>
+    /// Shows <paramref name="pixels"/> (BGRA, tightly packed, <paramref name="width"/> × <paramref name="height"/>)
+    /// as the GPU frame and keeps it there: later frames from the render thread are ignored.
+    ///
+    /// A screenshot run builds its frame synchronously instead of letting the render thread free-run, because
+    /// that thread's output cannot be reproduced: the picture depends on the simulation's clock (the final
+    /// pass even dithers with it) and on how many frames the thread had stepped when the capture happened to
+    /// land. Going through the feed's own buffers would let a late frame from that thread replace this one,
+    /// so the pixels are written straight into the bitmap the stage draws.
+    /// </summary>
+    internal void ShowGpuFrame(byte[] pixels, int width, int height)
+    {
+        if (!_gpuEmbedded || width < 1 || height < 1 || pixels.Length < width * height * 4) return;
+        if (_gpuBitmap is null || _gpuBitmap.PixelWidth != width || _gpuBitmap.PixelHeight != height)
+            _gpuBitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Pbgra32, null);
+        _gpuBitmap.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        _gpuFrameHeld = true;
+        InvalidateVisual();
     }
 
     /// <summary>

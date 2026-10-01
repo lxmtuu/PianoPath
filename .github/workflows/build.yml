@@ -25,6 +25,60 @@ jobs:
       - name: Static source check
         run: python3 tools/check_sources.py
 
+  # Second lane: the checks that used to live only inside `--verify`, which means they could only run on
+  # a Windows runner and could not be run one at a time. tests/PianoPath.Tests links the sources that
+  # need neither WPF nor WinMM (MIDI, MusicXML, the hand-split guess, the meter table, the WAV writer,
+  # the string table) and runs them under xUnit on plain net10.0, so a MIDI regression goes red here in
+  # about a minute without waiting for a Windows runner to be free. It runs beside `build` rather than
+  # in front of it: both only need `static`, and neither is a prerequisite for the other.
+  test:
+    needs: static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run the portable test project
+        run: >-
+          dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj
+          --configuration Release
+          --logger "console;verbosity=normal"
+          --logger "trx;LogFileName=tests.trx"
+          --results-directory "$RUNNER_TEMP/test-results"
+
+      # A red run has to name the test that went red. The console logger prints that, but a job log is
+      # only readable while somebody is watching it, and this project exists precisely so a regression
+      # can be diagnosed from a phone. So the failures are read back out of the TRX and published as
+      # annotations, which stay queryable through the API long after the log is awkward to reach.
+      - name: Name the tests that failed
+        if: always()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'test-results') -Filter *.trx -ErrorAction SilentlyContinue |
+                 Select-Object -First 1
+          if (-not $trx) { 'No test results were written.'; exit 0 }
+          [xml]$run = Get-Content $trx.FullName
+          $summary = $run.TestRun.ResultSummary
+          $counters = $summary.Counters
+          "outcome $($summary.outcome): $($counters.passed) passed, $($counters.failed) failed, $($counters.notExecuted) not executed, $($counters.total) total"
+          @(
+            '# Portable test project'
+            ''
+            "Outcome **$($summary.outcome)** — $($counters.passed) passed, $($counters.failed) failed, $($counters.notExecuted) not executed of $($counters.total)."
+          ) | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          foreach ($test in @($run.TestRun.Results.UnitTestResult)) {
+            if ($test.outcome -ne 'Failed') { continue }
+            $detail = "$($test.Output.ErrorInfo.Message) $($test.Output.ErrorInfo.StackTrace)" -replace '\s+', ' '
+            if ($detail.Length -gt 800) { $detail = $detail.Substring(0, 800) + '…' }
+            $text = "$($test.testName) — $detail" -replace '%', '%25'
+            "::error title=Test failed::$text"
+          }
+
   build:
     needs: static
     runs-on: windows-latest
@@ -120,6 +174,7 @@ jobs:
       # date. Refresh the committed copies with:
       #   gh run download <run-id> -n keyflow-previews -D docs/previews   # both language sets
       - name: Render README previews
+        id: render-previews
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
@@ -151,6 +206,12 @@ jobs:
             @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general') }
           )
           New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Where the app writes one line per picture (App.ReportPreview): a hash of the PNG, how the capture
+          # was reached and what drew the stage. Outside docs/previews on purpose. Everything inside that
+          # folder is committed, and a line holding a measured duration would change the commit on every run.
+          $reports = Join-Path $env:RUNNER_TEMP 'preview-reports'
+          Remove-Item -Recurse -Force $reports -ErrorAction SilentlyContinue
+          $env:KEYFLOW_PREVIEW_REPORTS = $reports
           $failed = @()
           foreach ($lang in @('en', 'vi')) {
             foreach ($shot in $shots) {
@@ -170,12 +231,55 @@ jobs:
             }
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
+          # One annotation per language with a line per picture. The hash of each PNG is what lets two runs be
+          # compared without waiting for the commit step. Per language, not one for all: GitHub cuts an annotation
+          # at exactly 4096 characters, and 22 lines of about 300 do not fit (the first run lost eight of them).
+          # A finished run's job log cannot be read afterwards; annotations can.
+          # (A diagnostic must not fail the step, and pwsh stops on the first error here: hence SilentlyContinue.)
+          foreach ($lang in @('en', 'vi')) {
+            $lines = Get-ChildItem -Path $reports -Filter "$lang-*.txt" -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }
+            "::notice title=Preview capture ($lang)::$($lines -join '%0A')"
+          }
+          Remove-Item Env:KEYFLOW_PREVIEW_REPORTS
+
+          # The property everything above depends on, checked where it can be seen: render three of the pictures
+          # a second time, from the same executable and a fresh settings folder, and compare the bytes. Two
+          # renders of the same code that disagree mean the committed pictures will keep changing and the drift
+          # check below cannot be trusted. A warning, not a failure: it says the renderer is noisy, which is not
+          # something the author of a pull request can act on. One picture of each kind: the GPU stage with a held
+          # chord, the settings dock over the stage, and the main menu with its backdrop.
+          $unstable = @()
+          $recheck = Join-Path $env:RUNNER_TEMP 'preview-recheck'
+          Remove-Item -Recurse -Force $recheck -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $recheck | Out-Null
+          foreach ($name in @('stage-gpu-galaxy.png', 'theme-dock.png', 'main-menu.png')) {
+            $shot = $shots | Where-Object { $_.Name -eq $name }
+            $first = Join-Path $out "en/$name"
+            $again = Join-Path $recheck "again-$name"
+            $settings = Join-Path $env:TEMP "keyflow-preview-again-$([IO.Path]::GetFileNameWithoutExtension($name))"
+            Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
+            $args = @('--snapshot', $again, '--compact', '--lang=en', "--settings-dir=$settings") + $shot.Args
+            Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait | Out-Null
+            if (-not (Test-Path $again)) { $unstable += "$name (no second picture)"; continue }
+            $hashFirst = (Get-FileHash $first).Hash.Substring(0, 12).ToLower()
+            $hashAgain = (Get-FileHash $again).Hash.Substring(0, 12).ToLower()
+            if ($hashFirst -ne $hashAgain) {
+              $unstable += "$name (sha $hashFirst, then $hashAgain)"
+              Copy-Item -Force $first (Join-Path $recheck "first-$name")
+            }
+          }
+          if ($unstable.Count) {
+            "::warning title=Previews are not reproducible::A second render of $($unstable -join '; ') differs from the first byte for byte, so the committed pictures will keep changing and the drift check cannot be trusted. Both renders are in the keyflow-preview-recheck artifact."
+            "unstable=true" >> $env:GITHUB_OUTPUT
+          }
+          else { "::notice title=Previews are reproducible::A second render of three pictures matched the first byte for byte." }
 
       # Every built-in look, drawn by both engines side by side (software | Direct3D 11), in one picture:
       # docs/previews/presets.jpg. It is how a change to the GPU engine is checked against the look each
       # preset was designed with, and the list of names is checked against Stage/VisualPresets.cs by
       # tools/check_sources.py so a new preset cannot be left out.
       - name: Render the preset gallery
+        id: render-gallery
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
@@ -236,6 +340,16 @@ jobs:
             docs/previews/presets.jpg
           if-no-files-found: warn
 
+      # Only when the second render disagreed with the first: both pictures, so the difference can be
+      # located pixel by pixel instead of guessed at.
+      - name: Upload the pictures that did not reproduce
+        if: steps.render-previews.outputs.unstable == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-preview-recheck
+          path: ${{ runner.temp }}/preview-recheck/*.png
+          if-no-files-found: warn
+
       # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README
       # reference a preview that this commit has not rendered yet (see scan_readme).
       #
@@ -250,6 +364,7 @@ jobs:
       # meanwhile) still fails the step. bash rather than pwsh because the decision needs git's exit code
       # and its message side by side.
       - name: Commit refreshed previews
+        id: commit-previews
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         shell: bash
         run: |
@@ -258,12 +373,17 @@ jobs:
           git add docs/previews
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
+            echo 'landed=true' >>"$GITHUB_OUTPUT"
             exit 0
           fi
           git commit -m "Refresh the README previews from CI [skip ci]"
           log="$RUNNER_TEMP/previews-push.log"
           if git push >"$log" 2>&1; then
             cat "$log"
+            # 'landed' means the pictures are on the branch, not merely committed on this runner: the
+            # drift check below reads it, and a local commit whose push was declined has to count as
+            # not landed or the drift goes quiet while it is still there.
+            echo 'landed=true' >>"$GITHUB_OUTPUT"
             exit 0
           fi
           cat "$log"
@@ -272,3 +392,48 @@ jobs:
             exit 0
           fi
           exit 1
+
+      # Freshness is the one thing the static checker cannot see: `scan_readme` only proves a preview
+      # exists and is named in $shots, so a screenshot that still shows last month's interface keeps the
+      # build green. That is what happened between de75f93 and the Quick Adjust / GPU atmosphere changes
+      # — the branch rules stopped the preview push above, and nothing in the repo said so.
+      #
+      # Two traps, both found by running this in CI rather than by reasoning about it:
+      #
+      #   * The renders are not byte-stable between runners, so every file under docs/previews differs
+      #     from the checkout even when no interface moved: run 36834861621 named all 23, and 106 of this
+      #     repo's 349 commits are preview refreshes. So "did this build re-render anything" is not the
+      #     question — nearly always yes — and asking it warns on every run.
+      #   * `git status` is not the drift report either, because the step above commits before it pushes.
+      #     A declined push (GH013) leaves the tree clean while the branch still carries the old pictures,
+      #     and the check went quiet on run 36836190788 with the drift exactly as unresolved as before.
+      #
+      # So: diff the working tree against $GITHUB_SHA, the commit this run started from, to see what the
+      # build re-rendered, and ask the commit step whether that refresh actually *landed* on the branch.
+      # Only "re-rendered and not landed" is drift worth reporting; a landed refresh and an untouched
+      # folder both get a plain line. A warning rather than an error on purpose: with the branch rules in
+      # place the workflow's own token cannot push, so making it red would paint every pull request red
+      # for a thing only a human — or a bypass rule — can settle.
+      - name: Report preview drift
+        if: always() && steps.render-previews.outcome == 'success' && steps.render-gallery.outcome == 'success'
+        shell: bash
+        run: |
+          drifted=$(git diff --name-only "$GITHUB_SHA" -- docs/previews)
+          if [ -z "$drifted" ]; then
+            echo "This build rendered the same pictures the branch already carries."
+            exit 0
+          fi
+          count=$(printf '%s\n' "$drifted" | wc -l | tr -d ' ')
+          names=$(printf '%s\n' "$drifted" | sed 's|^docs/previews/||' | paste -sd, - | sed 's/,/, /g')
+          if [ '${{ steps.commit-previews.outputs.landed }}' = 'true' ]; then
+            echo "This build re-rendered $count file(s) and the step above committed them to the branch."
+            exit 0
+          fi
+          {
+            echo '## docs/previews does not match this build'
+            echo
+            echo "This build re-rendered $count screenshot(s) and none of them reached the branch, so the README is still showing the older interface:"
+            echo
+            printf '%s\n' "$drifted" | sed 's|^|- `|; s|$|`|'
+          } >>"$GITHUB_STEP_SUMMARY"
+          echo "::warning title=Previews are stale::$count file(s) under docs/previews were re-rendered by this build and not committed ($names). Refresh them from the keyflow-previews artifact of this run."

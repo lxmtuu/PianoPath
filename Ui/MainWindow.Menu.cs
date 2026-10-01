@@ -50,7 +50,11 @@ public partial class MainWindow
         RefreshMenuThemeChips();
         RefreshMenuStageLook();
         MainMenuOverlay.Visibility = Visibility.Visible;
-        MenuBackdrop.Configure(ShellThemeManager.Current, _visualSettings.ChromeMotion, _visualSettings.BackdropDensity);
+        // A locked chrome (automated captures) keeps the backdrop parked on its one static frame, exactly as
+        // ConfigureBackdrops does. Configuring it with the setting alone started it moving again right after
+        // DisableChromeMotion had stopped it, so the menu screenshot differed from run to run: the one
+        // picture whose chrome, and not only the GPU stage, was not reproducible.
+        MenuBackdrop.Configure(ShellThemeManager.Current, _chromeMotionLocked ? "Off" : _visualSettings.ChromeMotion, _visualSettings.BackdropDensity);
         MenuPlayButton.Focus();
         // Choreography: the two primary actions arrive first, then the links and the side card.
         ChromeMotion.FadeIn(MainMenuOverlay, 260);

@@ -423,6 +423,8 @@ To make the README show one more subject, add a line to `$shots` in `build.yml`,
 catches up, but it fails when the README points at an image that does not exist and is not named in `$shots`
 either, so pictures and documentation cannot drift apart silently.
 
+The screenshots are rendered **deterministically**: two renders of the same code must agree byte for byte, or the drift check cannot tell "the interface changed" from "the machine was a little slower". The GPU stage in each picture is built **synchronously** (a fresh simulation, exactly 480 steps of 1/60 s, drawn by `GpuRenderLoop.RenderParked` on the warm device of the parked render thread, with `RenderOnce` as the fallback) instead of taking the frame of the free-running render thread, because that frame depends on the simulation's clock even when the scene is still: the last pass mixes in dither noise that follows it. The real render thread is parked before anything is pressed, the menu backdrop obeys the chrome lock, and every animator is put back at frame zero. `--verify` holds the property (`VerifyDeterministicPreview` for the WPF stage, `VerifyDeterministicGpuFrame` for the GPU frame), the build renders three pictures a second time and warns if they differ, and every picture leaves a `sha=…` line in the `Preview capture (en)` / `(vi)` annotation. The full story, three failed fixes included, is in `docs/REPO-AUDIT.md` §6.13.
+
 ## Packaging and shipping the .exe
 
 A build inside `bin\` only runs on a machine with the .NET SDK installed and consists of many files.
@@ -515,7 +517,7 @@ Two workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 22 README images (11 subjects × 2 languages) and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact). |
+| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 22 README images (11 subjects × 2 languages) and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so `git status` on that folder is the comparison itself — any file that differs is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact). |
 | `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish both kinds, smoke-test the published build, compile the `.exe` installer from that same publish folder, upload both ZIPs plus the installer as artifacts and (for a tag) attach them to the GitHub Release with generated notes. |
 
 ```powershell
@@ -608,6 +610,24 @@ fades; `VerifyShadedStage` toggles `ShadingQuality` in the dock and asserts that
 between the vector keyboard and the shader keyboard while the bake is reused across frames.
 
 The Direct3D 11 engine has a part of its own, `VerifyGpuStage` (`Diagnostics/VerificationSuite.Gpu.cs`), and it needs no real graphics card: the test frame is drawn on WARP, which every CI runner has. It checks: the **settings** (a fresh install defaults to `RenderBackend = Gpu`; an old file that names `Software` is moved to the GPU on load; an unknown engine name or frame rate falls back to the default; applying a preset keeps the engine, the FPS and VSync because they belong to the computer); the **look** (`GpuLook` carries the exact note colours, the keyboard proportion, the slider values of Note shimmer / Halo light pulses / Shooting stars / Landing glow and the Spotlights choice); the **thread bridge** (`GpuStageFeed` hands the render thread the running song, the held keys and a clock extrapolated by never more than 50 ms; hits and live notes queue without loss and a clear request is taken exactly once); the **embedded shaders** (all 12 HLSL entry points); **one real frame** of 640×360 drawn on WARP and read back for measuring (the keyboard must be lit along the bottom, stand out from the dark stage above it, and the picture must hold many colours rather than one flat fill); the **effect families** (the look carries the ambient, trail, key-label, flash, arc and petal settings; Galaxy, guide lanes and petals put hundreds of shapes behind the notes; the 1024×768 glyph atlas holds real ink; and the sky of the GPU frame brightens when the galaxy layer is on); and finally **recording** (`GpuRecordingTap`: the render loop alone, with no window and no preview, still hands over exact-size 320×180 frames with the keyboard in them).
+
+### The test suite that runs on any machine (`tests/PianoPath.Tests`)
+
+`--verify` needs Windows because it starts real WPF. The parts that do **not** need a window — the MIDI parser, the MusicXML parser, hand-split inference, the meter table, the WAV writer and the string table — now live in an xUnit project on plain `net10.0`, which runs on Linux/macOS and one test at a time:
+
+```powershell
+dotnet test tests/PianoPath.Tests --configuration Release
+dotnet test tests/PianoPath.Tests --filter MeterTests        # one class
+dotnet test tests/PianoPath.Tests --filter "FullyQualifiedName~Format2"   # one test
+```
+
+CI runs it in the **`test`** job on `ubuntu-latest`, **beside** the Windows job (both only wait for `static`), so a broken MIDI read goes red in about a minute instead of waiting for a Windows runner.
+
+The project **links the source files** instead of referencing `PianoPath.csproj`, so every `internal` type of the app is usable without `InternalsVisibleTo` and no library has been split out yet. That imposes one rule: **every file listed under `<Compile Include>` in `tests/PianoPath.Tests/PianoPath.Tests.csproj` must compile without WPF, `System.Drawing`, Vortice or WinMM** — adding a file that drags WPF along turns the Linux job red, and that is the signal working, not a defect.
+
+Making that possible took one seam: `Loc` was split into two `partial` halves — `Localization/Loc.cs` is the string table and the look-ups (pure computation), `Localization/Localizer.cs` is the half that writes live labels onto WPF elements. They meet through a **partial method**, so a build that does not link the WPF half has the call **removed by the compiler** instead of needing WindowsBase.
+
+Not in this suite yet: SoundFont (its test `.sf2` builder is a block of helpers of its own, still in `VerifySoundFontEngine`), plus the settings JSON, the settings profile, the song library and the practice history — the last four all bottom out at `PianoVisualSettingsStore` → `ShellThemes`, whose `ShellTheme` record is declared in `System.Windows.Media.Color` (see `docs/ROADMAP.md` §4 item 2).
 
 ### Static checks (run anywhere, even without the .NET SDK)
 

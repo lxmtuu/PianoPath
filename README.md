@@ -378,6 +378,8 @@ gh run download <run-id> -n keyflow-previews -D docs/previews
 
 Muốn README chiếu thêm một cảnh: thêm một dòng vào `$shots` của `build.yml`, rồi trỏ README tới `docs/previews/vi/<tên>.png` (và `docs/previews/en/<tên>.png` cho bản tiếng Anh). `tools/check_sources.py` cho phép README đi trước ảnh đúng một commit vì chính commit render ảnh sẽ bắt kịp, nhưng báo lỗi nếu README trỏ tới một ảnh không tồn tại và cũng không có tên trong `$shots`, nên ảnh và tài liệu không thể lệch nhau im lặng.
 
+Ảnh chụp được render **tất định**: hai lượt render cùng một code phải ra cùng từng byte, nếu không bước đối chiếu không phân biệt được "giao diện đổi" với "máy chậm hơn một chút". Sân khấu GPU của mỗi ảnh được dựng **đồng bộ** (một mô phỏng mới, đúng 480 bước 1/60 s, vẽ bằng `GpuRenderLoop.RenderParked` trên thiết bị đã nóng của luồng render đã đỗ; `RenderOnce` là đường dự phòng) thay vì lấy khung của luồng render chạy tự do, vì khung đó phụ thuộc đồng hồ của mô phỏng ngay cả khi cảnh đứng yên: bước cuối trộn nhiễu dither theo thời gian. Luồng render thật được đỗ lại trước khi nhấn phím, backdrop của menu theo đúng khoá chrome, và mọi animator được đưa về khung 0. `--verify` giữ tính chất này (`VerifyDeterministicPreview` cho sân khấu WPF, `VerifyDeterministicGpuFrame` cho khung GPU), lượt build render lại ba ảnh và cảnh báo nếu chúng lệch, và mỗi ảnh để lại một dòng `sha=…` trong annotation `Preview capture (en)` / `(vi)`. Câu chuyện đầy đủ, kể cả ba lần sửa hụt, nằm ở `docs/REPO-AUDIT.md` §6.13.
+
 ## Đóng gói và xuất file .exe
 
 Bản build trong `bin\` chỉ chạy trên máy đã cài .NET SDK và gồm nhiều tệp. Để gửi cho người khác hoặc phát hành, hãy **publish**. Có hai kiểu:
@@ -460,7 +462,7 @@ Hai workflow trong `.github/workflows/`:
 
 | Workflow | Kích hoạt | Nội dung |
 | --- | --- | --- |
-| `build.yml` | push lên `main`/`arena/**`, mọi pull request | **job `static` trên `ubuntu-latest`** chạy kiểm tra tĩnh (`tools/check_sources.py`, ~10 s) → **job `build` trên `windows-latest`** (chỉ được xếp lịch khi `static` xanh): build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render 22 ảnh README (11 cảnh × 2 ngôn ngữ) cùng gallery preset `presets.jpg`, upload artifact `keyflow-previews` (hai bộ PNG và `presets.jpg`) và commit ảnh mới vào nhánh đang build (bỏ qua với pull request; nhánh chỉ nhận pull request thì bước này chỉ cảnh báo, ảnh vẫn nằm trong artifact). |
+| `build.yml` | push lên `main`/`arena/**`, mọi pull request | **job `static` trên `ubuntu-latest`** chạy kiểm tra tĩnh (`tools/check_sources.py`, ~10 s) → **job `test` trên `ubuntu-latest`** (project xUnit `tests/PianoPath.Tests`, chạy **song song** với nhánh Windows) và **job `build` trên `windows-latest`** (chỉ được xếp lịch khi `static` xanh): build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render 22 ảnh README (11 cảnh × 2 ngôn ngữ) cùng gallery preset `presets.jpg`, upload artifact `keyflow-previews` (hai bộ PNG và `presets.jpg`), **báo cáo ảnh lệch** (`Report preview drift`: hai bước render vừa ghi đè `docs/previews` bằng ảnh của chính build này, nên `git status` trên thư mục đó chính là bảng đối chiếu — lệch tệp nào là cảnh báo nêu tên tệp đó, kể cả ở pull request nơi bước commit bị bỏ qua) và commit ảnh mới vào nhánh đang build (bỏ qua với pull request; nhánh chỉ nhận pull request thì bước này chỉ cảnh báo, ảnh vẫn nằm trong artifact). |
 | `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish cả hai kiểu, smoke test bản vừa publish, biên dịch bộ cài `.exe` từ chính thư mục vừa publish, tải hai file ZIP + bộ cài lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. |
 
 ```powershell
@@ -496,6 +498,24 @@ Mã thoát `0` là đạt, `1` là có lỗi; nhật ký ghi từng mục PASS/F
 Bộ kiểm thử shader có hai mục riêng: `VerifyShaderPipeline` (không cần WPF layout) kiểm tra toán sRGB/ACES/GGX, jitter tất định, **chữ ký cache bake** (slider không liên quan không gây bake lại), bake nền phải opaque và trải sáng thật, cột phím đen phải tối hơn cột ngà, và tile overlay của một phím kêu phải che đúng phím rồi mờ ra; `VerifyShadedStage` bật/tắt `ShadingQuality` trong dock và khẳng định stage thật sự đổi giữa bàn phím vector và bàn phím shader, đồng thời bake được tái sử dụng giữa các khung hình.
 
 Engine GPU có một mục riêng, `VerifyGpuStage` (`Diagnostics/VerificationSuite.Gpu.cs`), và không đòi card đồ hoạ thật vì khung hình thử dựng trên WARP — có sẵn ở mọi runner CI. Mục này kiểm: **cài đặt** (bản cài mới mặc định `RenderBackend = Gpu`; tệp cũ ghi `Software` được nâng lên GPU khi nạp; tên engine hay tốc độ khung hình lạ rơi về mặc định; áp preset giữ nguyên engine, FPS và VSync vì chúng thuộc về máy); **look** (`GpuLook` mang đúng màu nốt, tỉ lệ bàn phím và giá trị các slider Note shimmer / Halo light pulses / Shooting stars / Landing glow, cùng lựa chọn Spotlights); **cầu nối luồng** (`GpuStageFeed` đưa cho luồng dựng hình bài đang chạy, các phím đang giữ và một đồng hồ ngoại suy không bao giờ quá 50 ms; hit và nốt live xếp hàng không mất, yêu cầu xoá chỉ được nhận đúng một lần); **shader nhúng** (đủ 12 entry point HLSL); **một khung thật** 640×360 dựng trên WARP rồi đọc ngược để đo (bàn phím phải sáng ở đáy, nổi hơn nền tối phía trên, và ảnh phải nhiều màu chứ không phải một mảng phẳng); **các họ hiệu ứng** (look mang đủ cài đặt ambient, vệt rơi, nhãn phím, chớp, hồ quang và cánh hoa; Galaxy, guide lanes và cánh hoa dựng ra hàng trăm hình sau nốt; atlas chữ 1024×768 có mực thật; và bầu trời của khung GPU sáng lên khi bật lớp thiên hà); cuối cùng là **ghi hình** (`GpuRecordingTap`: vòng dựng hình chạy một mình, không cửa sổ, không xem trước, vẫn giao đủ khung 320×180 có bàn phím trong đó).
+
+### Bộ test chạy trên mọi máy (`tests/PianoPath.Tests`)
+
+`--verify` cần Windows vì nó khởi động WPF thật. Những phần **không** cần cửa sổ — parser MIDI, parser MusicXML, suy luận chia tay, bảng nhóm phách, bộ ghi WAV và bảng chuỗi — đã được tách ra một project xUnit trên `net10.0` thường, chạy được trên Linux/macOS và chạy lẻ được từng bài:
+
+```powershell
+dotnet test tests/PianoPath.Tests --configuration Release
+dotnet test tests/PianoPath.Tests --filter MeterTests        # một lớp
+dotnet test tests/PianoPath.Tests --filter "FullyQualifiedName~Format2"   # một bài
+```
+
+CI chạy nó ở job **`test`** trên `ubuntu-latest`, **song song** với job Windows (cả hai chỉ chờ job `static`), nên một lỗi MIDI đỏ trong khoảng một phút mà không phải đợi runner Windows rảnh.
+
+Project này **liên kết tệp nguồn** thay vì tham chiếu `PianoPath.csproj`, nên mọi kiểu `internal` của ứng dụng dùng được mà không cần `InternalsVisibleTo`, và chưa phải tách thư viện. Điều đó đặt ra một ràng buộc: **mọi tệp trong danh sách `<Compile Include>` của `tests/PianoPath.Tests/PianoPath.Tests.csproj` phải biên dịch được mà không có WPF, `System.Drawing`, Vortice hay WinMM** — thêm một tệp kéo WPF theo là job Linux đỏ ngay, và đó là tín hiệu chứ không phải lỗi.
+
+Để nối được như vậy, `Loc` đã tách làm hai nửa `partial`: `Localization/Loc.cs` là bảng chuỗi và phép tra cứu (thuần tính toán), `Localization/Localizer.cs` là nửa gán nhãn sống lên phần tử WPF. Hai nửa nối bằng một **partial method**, nên bản build nào không link nửa WPF thì lời gọi **được trình biên dịch gỡ bỏ** thay vì đòi WindowsBase.
+
+Chưa vào bộ test này: SoundFont (bộ dựng tệp `.sf2` thử nghiệm là một khối helper riêng, vẫn nằm ở `VerifySoundFontEngine`), cùng settings JSON, hồ sơ cài đặt, thư viện bài và lịch sử luyện tập — bốn thứ sau đều chạm đáy ở `PianoVisualSettingsStore` → `ShellThemes`, mà record `ShellTheme` khai báo bằng `System.Windows.Media.Color` (xem `docs/ROADMAP.md` §4 mục 2).
 
 ### Kiểm tra tĩnh (chạy được trên mọi máy, kể cả không có .NET SDK)
 

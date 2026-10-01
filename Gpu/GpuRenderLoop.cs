@@ -43,10 +43,19 @@ internal sealed class GpuRenderLoop : IDisposable
     private volatile int _targetFps = 60;
     private volatile bool _vsync = true;
 
+    /// <summary>
+    /// Makes every loop created afterwards draw with WARP, Windows' software rasterizer, whatever graphics card
+    /// the machine has. Automated screenshot runs set it before the window exists: a card changes the picture
+    /// from one machine to the next, the README previews have to be the same on every one, and the loop must be
+    /// the kind of device <see cref="RenderParked"/> is allowed to reuse. (On a machine with no card Windows
+    /// presents its software adapter as a "hardware" one, so without this the loop would not even say it is WARP.)
+    /// </summary>
+    internal static bool ForceWarpForSession { get; set; }
+
     internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false)
     {
         _feed = feed;
-        ForceWarp = forceWarp;
+        ForceWarp = forceWarp || ForceWarpForSession;
         _thread = new Thread(Run) { IsBackground = true, Name = "Keyflow GPU stage", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
     }
@@ -72,6 +81,74 @@ internal sealed class GpuRenderLoop : IDisposable
     internal int TargetFps { get => _targetFps; set => _targetFps = Math.Clamp(value, 0, 1000); }
     /// <summary>Wait for the display's vertical blank when presenting the stage window.</summary>
     internal bool VSync { get => _vsync; set => _vsync = value; }
+
+    private volatile bool _parked;
+    private readonly ManualResetEventSlim _parkedAck = new(false);
+
+    /// <summary>
+    /// Stops the render thread from stepping the simulation or publishing frames, and returns once it has
+    /// acknowledged, so nothing is in flight afterwards.
+    ///
+    /// A screenshot run parks the loop before it presses anything and builds its own frame synchronously
+    /// (see <see cref="RenderOnce"/>). Left running, the thread would take the preview note's events off the
+    /// feed before that frame ever saw them, and it would publish frames of its own on top of it.
+    /// </summary>
+    internal bool Park(TimeSpan timeout)
+    {
+        _parkedAck.Reset();
+        _parked = true;
+        return _parkedAck.Wait(timeout);
+    }
+
+    /// <summary>One deterministic frame handed to the parked render thread (see <see cref="RenderParked"/>).</summary>
+    private sealed class FrameJob
+    {
+        internal FrameJob(int width, int height, int warmupFrames, double frameSeconds)
+        {
+            Width = width; Height = height; WarmupFrames = warmupFrames; FrameSeconds = frameSeconds;
+        }
+
+        internal int Width { get; }
+        internal int Height { get; }
+        internal int WarmupFrames { get; }
+        internal double FrameSeconds { get; }
+        internal byte[]? Pixels { get; set; }
+        internal string Timings { get; set; } = "";
+        internal Exception? Error { get; set; }
+        internal ManualResetEventSlim Done { get; } = new(false);
+    }
+
+    private FrameJob? _frameJob;
+
+    /// <summary>
+    /// Draws a deterministic frame (see <see cref="RenderFrames"/>) on this loop's own render thread and its own
+    /// device, while the loop is parked. Returns null when the loop is not parked, is not running, or could
+    /// not build the frame, and the caller falls back to <see cref="RenderOnce"/>.
+    ///
+    /// Why not simply <see cref="RenderOnce"/>: the first frame on a brand-new software (WARP) device costs
+    /// about seventeen seconds, which is when WARP generates the code for every shader. Measured over one
+    /// build, that was the whole cost of a preview: the 480 simulation steps took 16 ms. This loop's device has
+    /// been drawing since the window opened, so the same frame costs it a fraction of a second.
+    /// </summary>
+    internal byte[]? RenderParked(int width, int height, int warmupFrames, double frameSeconds, TimeSpan timeout)
+    {
+        if (!_parked || !IsReady || !_thread.IsAlive) return null;
+        var job = new FrameJob(width, height, warmupFrames, frameSeconds);
+        Volatile.Write(ref _frameJob, job);
+        if (!job.Done.Wait(timeout))
+        {
+            // Take the job back if the thread has not started it, so it is not drawn for nobody later.
+            Interlocked.CompareExchange(ref _frameJob, null, job);
+            return null;
+        }
+        if (job.Error is not null || job.Pixels is null)
+        {
+            Trace.WriteLine($"Keyflow: the parked GPU frame could not be built: {job.Error?.Message}");
+            return null;
+        }
+        LastRenderTimings = "create:0(reused device) " + job.Timings;
+        return job.Pixels;
+    }
 
     internal void SetEmbedded(bool enabled, int width, int height)
     {
@@ -132,6 +209,23 @@ internal sealed class GpuRenderLoop : IDisposable
         {
             while (_running)
             {
+                // Parked: acknowledge before touching the feed or the device, so Park() returning means no frame is in flight.
+                if (_parked)
+                {
+                    // A frame asked for while parked is drawn here, on the device that has been warm since startup.
+                    var job = Interlocked.Exchange(ref _frameJob, null);
+                    if (job is not null)
+                    {
+                        try
+                        {
+                            job.Pixels = RenderFrames(gpu, _feed, job.Width, job.Height, job.WarmupFrames, job.FrameSeconds, false, out var jobTimings);
+                            job.Timings = jobTimings;
+                        }
+                        catch (Exception ex) { job.Error = ex; }
+                        finally { job.Done.Set(); }
+                    }
+                    _parkedAck.Set(); Thread.Sleep(5); last = clock.Elapsed.TotalSeconds; continue;
+                }
                 var frameStart = clock.Elapsed.TotalSeconds;
                 bool embeddedEnabled; int ew, eh; IntPtr hwnd; int ww, wh; bool windowChanged;
                 lock (_outputGate)
@@ -250,17 +344,35 @@ internal sealed class GpuRenderLoop : IDisposable
         _running = false;
         if (!_thread.Join(TimeSpan.FromSeconds(2))) Trace.WriteLine("Keyflow: the GPU stage thread did not stop within 2 s.");
         _started.Dispose();
+        _parkedAck.Dispose();
     }
 
     /// <summary>
     /// Renders one frame synchronously on a private WARP device and returns it as BGRA pixels. Used by
     /// the verification suite and <c>--gpu-snapshot</c>, where a deterministic software rasterizer
     /// matters more than speed.
+    ///
+    /// <paramref name="renderWarmup"/> false steps the simulation through the warm-up frames without drawing
+    /// them, so a long run (the README previews step 480 frames) costs one draw instead of 480.
     /// </summary>
-    internal static byte[] RenderOnce(GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, out string adapter, bool forceWarp = true)
+    internal static byte[] RenderOnce(GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, out string adapter, bool forceWarp = true, bool renderWarmup = true)
     {
+        var timer = Stopwatch.StartNew();
         using var renderer = GpuStageRenderer.Create(forceWarp);
         adapter = renderer.AdapterName;
+        var created = timer.Elapsed.TotalMilliseconds;
+        var pixels = RenderFrames(renderer, feed, width, height, warmupFrames, frameSeconds, renderWarmup, out var timings);
+        LastRenderTimings = $"create:{created:0}(compile:{renderer.ShaderCompileMilliseconds:0}) {timings}";
+        return pixels;
+    }
+
+    /// <summary>
+    /// The frames of <see cref="RenderOnce"/> on a device that already exists: a fresh simulation stepped
+    /// <paramref name="warmupFrames"/> + 1 times from the feed, the last step drawn and read back.
+    /// </summary>
+    private static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings)
+    {
+        var timer = Stopwatch.StartNew();
         var simulation = new GpuStageSimulation();
         var input = new GpuFrameInput();
         var notes = new GpuInstanceList<GpuNoteInstance>(256);
@@ -271,16 +383,25 @@ internal sealed class GpuRenderLoop : IDisposable
         using var output = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.RenderTarget);
         using var view = renderer.Device.CreateRenderTargetView(output);
         using var staging = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.None, usage: ResourceUsage.Staging, cpuAccessFlags: CpuAccessFlags.Read);
+        double simulated = 0, drawn = 0;
         for (var frame = 0; frame <= warmupFrames; frame++)
         {
+            var started = timer.Elapsed.TotalMilliseconds;
             feed.Capture(input, GpuStageFeed.Now);
             var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
             var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
             simulation.Step(frameSeconds, input, feed, layout.Width);
+            simulated += timer.Elapsed.TotalMilliseconds - started;
+            // Every frame is drawn from scratch out of the simulation and the input, so the frames before the last
+            // only matter through the simulation, which the step above already advanced.
+            if (!renderWarmup && frame < warmupFrames) continue;
+            started = timer.Elapsed.TotalMilliseconds;
             renderer.UpdateBackground(feed.Background);
             renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
+            drawn += timer.Elapsed.TotalMilliseconds - started;
         }
+        var readStarted = timer.Elapsed.TotalMilliseconds;
         renderer.Context.CopyResource(staging, output);
         var pixels = new byte[width * height * 4];
         var mapped = renderer.Context.Map(staging, 0, MapMode.Read, MapFlags.None);
@@ -290,8 +411,17 @@ internal sealed class GpuRenderLoop : IDisposable
                 Marshal.Copy(mapped.DataPointer + (nint)(y * mapped.RowPitch), pixels, y * width * 4, width * 4);
         }
         finally { renderer.Context.Unmap(staging, 0); }
+        timings = $"sim:{simulated:0} draw:{drawn:0} readback:{timer.Elapsed.TotalMilliseconds - readStarted:0}";
         return pixels;
     }
+
+    /// <summary>
+    /// Where the time of the last frame went, in milliseconds. The capture report carries it: a preview that
+    /// costs twenty seconds more than it should is found by looking, not by guessing, and four guesses about
+    /// this code were wrong before the numbers showed that one frame on a brand-new software device costs
+    /// about seventeen seconds (a device that has been drawing since startup draws the same frame in a blink).
+    /// </summary>
+    internal static string LastRenderTimings { get; private set; } = "";
 
     /// <summary>The embedded preview's output textures plus a staging ring read back one frame late.</summary>
     private sealed class ReadbackRing : IDisposable

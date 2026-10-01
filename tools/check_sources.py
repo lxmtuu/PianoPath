@@ -491,10 +491,15 @@ def scan_localization(cs_files):
     """
     errors = []
     root = ROOT / "Localization"
-    localizer = (root / "Localizer.cs").read_text(encoding="utf-8")
-    registered = re.findall(r'new\("([a-z]{2}(?:-[A-Za-z]{2})?)", "([^"]*)", "([^"]*)", Strings(\w+)\.Table\)', localizer)
+    # The registry lives with the string table, not with the WPF label binder: Loc.cs holds Languages
+    # and the look-up, Localizer.cs only the half that paints live labels. Reading the folder rather
+    # than one hard-coded name keeps this check pointing at whichever file carries the registry.
+    registry_files = sorted(p for p in root.glob("*.cs") if not p.name.startswith("Strings."))
+    registry = "\n".join(path.read_text(encoding="utf-8") for path in registry_files)
+    registered = re.findall(r'new\("([a-z]{2}(?:-[A-Za-z]{2})?)", "([^"]*)", "([^"]*)", Strings(\w+)\.Table\)', registry)
     if not registered:
-        return [f"{root / 'Localizer.cs'}: no language is registered in Languages"], 0, 0
+        names = ", ".join(p.name for p in registry_files) or "no file"
+        return [f"Localization/ ({names}): no language is registered in Languages"], 0, 0
 
     tables, sheet = {}, {}
     for code, _english, _native, table in registered:
@@ -761,6 +766,22 @@ def scan_readme():
         if (ROOT / name).exists() and (ROOT / other).exists() and other not in (ROOT / name).read_text(encoding="utf-8"):
             errors.append(f"{name} never links to {other}; the two language editions have to reference each other")
     return errors
+
+
+# docs/previews belongs to CI: the build runs ``git add docs/previews`` and commits whatever is there. A
+# diagnostic written into it (a capture report with a measured duration, a hash, a log) changes on every run
+# and so guarantees a fresh commit forever, which is exactly what happened once with ``*.report.txt``. The
+# folder may hold pictures only; diagnostics go outside the repository (see ``App.ReportPreview``).
+PREVIEW_PICTURES = {".png", ".jpg", ".jpeg"}
+
+
+def scan_previews_folder():
+    folder = ROOT / "docs" / "previews"
+    if not folder.exists():
+        return []
+    return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures only, because CI commits everything in it on every run; "
+            "write diagnostics outside the repository (see App.ReportPreview)"
+            for path in sorted(folder.rglob("*")) if path.is_file() and path.suffix.lower() not in PREVIEW_PICTURES]
 
 
 def scan_cli_and_samples():
@@ -1110,6 +1131,7 @@ def main():
     errors.extend(scan_theme_tokens())
     errors.extend(scan_installer())
     errors.extend(scan_readme())
+    errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
     errors.extend(scan_preset_shelf())

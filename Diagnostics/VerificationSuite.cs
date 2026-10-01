@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -1069,6 +1069,7 @@ internal static partial class VerificationSuite
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
         Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
+        Run(nameof(VerifyDeterministicPreview), () => VerifyDeterministicPreview(stage));
         Run(nameof(VerifySettingsDock), () => VerifySettingsDock(window, stage, visualSettings));
         Run(nameof(VerifyLanguageSwitching), () => VerifyLanguageSwitching(window));
         Run(nameof(VerifyAccessibility), () => VerifyAccessibility(window));
@@ -4029,6 +4030,42 @@ internal static partial class VerificationSuite
             "The Retro theme should graph square pixels + confetti + bounce + snap.");
     }
 
+    /// <summary>
+    /// The README previews are committed by CI and compared byte for byte with the next build, so the stage
+    /// has to draw the same picture for the same frame count. This asserts the property the capture relies
+    /// on: a reset followed by a fixed number of fixed-size steps always lands on the same pixels, while a
+    /// different number of steps lands somewhere else — so the frame count, not the wall clock, is what
+    /// decides the picture. Before the capture was pinned to a frame count, two builds of the same
+    /// interface produced 23 differing PNGs and the drift check could not tell the two cases apart.
+    /// </summary>
+    private static void VerifyDeterministicPreview(PianoStage stage)
+    {
+        const double step = 1.0 / 60;
+        const int frames = 45;
+        var width = Math.Max(160, (int)stage.ActualWidth);
+        var height = Math.Max(90, (int)stage.ActualHeight);
+
+        string Shot(int framesToRun)
+        {
+            stage.ResetAnimation();
+            for (var i = 0; i < framesToRun; i++) stage.Advance(step);
+            ForceStageRender(stage);
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(stage);
+            var pixels = new byte[width * height * 4];
+            bitmap.CopyPixels(pixels, width * 4, 0);
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(pixels));
+        }
+
+        var first = Shot(frames);
+        Assert(Shot(frames) == first,
+            "The same frame count must draw the same stage picture, or the README previews cannot be compared byte for byte between builds.");
+        Assert(Shot(frames + 30) != first,
+            "A different frame count should draw a different picture: if every frame were identical, the assertion above would pass even without the pinned clock.");
+        stage.ResetAnimation();
+        ForceStageRender(stage);
+    }
+
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>
     private static void ForceStageRender(PianoStage stage)
     {
@@ -4078,19 +4115,21 @@ internal static partial class VerificationSuite
 
     private static void VerifyEmbersShell(MainWindow window, PianoVisualSettings visualSettings)
     {
-        var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
-        var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
-        var quickAdjust = (FrameworkElement)window.FindName("QuickAdjustOverlay")!;
-        var settings = (FrameworkElement)window.FindName("SettingsPanel")!;
-        var tabs = (TabControl)window.FindName("SettingsTabs")!;
-        var quickControlsHost = (StackPanel)window.FindName("QuickAdjustControlsHost")!;
-        var quickLayerHost = (WrapPanel)window.FindName("QuickAdjustLayerHost")!;
-        var quickHandColorsCard = (FrameworkElement)window.FindName("QuickAdjustHandColorsCard")!;
-        Assert(menu is not null && play is not null && quickAdjust is not null, "The concert shell should provide a main menu, a pre-flight Play dialog and shared quick adjustments.");
-        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
+        var menu = Element<FrameworkElement>(window, "MainMenuOverlay");
+        var play = Element<FrameworkElement>(window, "PlayDialogOverlay");
+        var quickAdjust = Element<FrameworkElement>(window, "QuickAdjustOverlay");
+        var settings = Element<FrameworkElement>(window, "SettingsPanel");
+        var tabs = Element<TabControl>(window, "SettingsTabs");
+        var quickControlsHost = Element<StackPanel>(window, "QuickAdjustControlsHost");
+        var quickLayerHost = Element<WrapPanel>(window, "QuickAdjustLayerHost");
+        var quickHandColorsCard = Element<FrameworkElement>(window, "QuickAdjustHandColorsCard");
+        // No null test for the eight elements above: Element<T> has already failed the run, naming the
+        // missing element, if one was not there — and re-testing them here is what used to make the
+        // compiler treat every later `menu.Visibility` in this method as a possible null dereference.
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
 
         window.ShowStartupMenu();
-        Assert(menu!.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
+        Assert(menu.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
 
         // The startup-menu quick-adjust entry and Play-dialog settings action share live controls,
         // while Advanced settings remains a one-click route to the full Style dock.
@@ -4158,7 +4197,7 @@ internal static partial class VerificationSuite
             "Returning from quick-adjust advanced settings should restore the startup menu.");
 
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
-        Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
+        Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
         Assert(((TextBlock)window.FindName("PlayDialogPrimaryLabel")!).Text == Loc.T("Choose a MIDI file"),
             "With no loaded score, the compact session action should clearly offer to choose a MIDI file.");
         var liveAction = (Button)window.FindName("PlayDialogLiveButton")!;
@@ -4640,6 +4679,19 @@ internal static partial class VerificationSuite
     private static object Field(object target, string name) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(target)!;
     private static void SetField(object target, string name, object value) => target.GetType().GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(target, value);
     private static void Invoke(object target, string name, params object[] args) => target.GetType().GetMethod(name, BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(target, args);
+    /// <summary>
+    /// Looks up a named element of the window under test, and hands it back non-nullable — which is the
+    /// whole point. A <c>(T)window.FindName(…)!</c> local followed by a stand-alone
+    /// <c>Assert(x is not null, …)</c> leaves the compiler holding x as maybe-null for the rest of the
+    /// method (the assert could have been false, and nothing tells it that a false assert throws), so
+    /// every later <c>x.Visibility</c> is reported as a possible null dereference: that is what the ten
+    /// CS8602 warnings in this file were. Guarding inside the same expression, as
+    /// <c>Assert(piano is not null &amp;&amp; piano.Regions.Count &gt; 0, …)</c> does, narrows correctly and
+    /// never warned. Failing at the lookup also beats a null test further down: the message names the
+    /// element that is missing instead of pointing at the twentieth line that used it.
+    /// </summary>
+    private static T Element<T>(FrameworkElement root, string name) where T : FrameworkElement
+        => (T)(root.FindName(name) ?? throw new InvalidOperationException($"The window under test has no element named '{name}'."));
     /// <summary>
     /// Runs one check and, when it throws, says which check it was: an exception from deep inside a check
     /// (an index out of range in a grid, say) is otherwise reported without the context that names it.

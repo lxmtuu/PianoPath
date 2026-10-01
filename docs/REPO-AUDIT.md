@@ -133,3 +133,239 @@ rồi soi những chỗ mà ba lớp không nhìn tới.
 * **Script PowerShell không có lớp kiểm tĩnh**: `publish.ps1` chỉ chạy khi cắt bản phát hành, và
   `tools/build_installer.ps1` chỉ được CI biên dịch chứ không được "đọc" bằng công cụ nào — đây là vùng
   mù duy nhất còn lại của bộ kiểm.
+
+## 6. Đợt rà soát lần ba — 2026‑10‑01 (trước khi vào P3)
+
+Lần này đọc lại toàn kho **để xác nhận trạng thái trước khi bắt đầu `docs/ROADMAP.md` §4 (P3)**, nên
+trọng tâm là đối chiếu từng câu "đã xong / chưa làm" trong roadmap với bằng chứng lấy được ngay lúc rà
+soát — không sửa tính năng nào. Sandbox này **không có .NET SDK** (`dotnet: command not found`), nên
+lớp biên dịch/`--verify` được đọc từ lần chạy CI mới nhất chứ không chạy lại tại đây.
+
+### 6.1 Ba lớp kiểm chứng, số liệu đo được
+
+| Lớp | Kết quả lần này |
+|---|---|
+| `python3 tools/check_sources.py` | **xanh**, exit 0, ~4 s: "checked 79 C# files and 2 XAML files, 99 resource keys, 149 named elements … 1166 keys the sources print (1266 in the inventory)" |
+| `--verify` (CI, lần chạy `build` mới nhất trên `main`: run **36831576802**, 2026‑10‑01T07:39Z) | **xanh**: `static` ✅ + `build` ✅ cả 15 bước; nhật ký 300 dòng, mã thoát 0, **"Verification passed: 1407 assertions, 3 skipped check group(s)"** |
+| Ảnh CI render | ⚠️ **lệch 3 merge** — xem §6.2 |
+
+Ba nhóm SKIP của `--verify` đều là `Assets/ConcertGrand.sf2` còn là con trỏ Git LFS (workflow checkout
+`lfs: false`), đúng như thiết kế.
+
+### 6.2 Vấn đề thật tìm thấy (chưa sửa)
+
+| Vấn đề | Bằng chứng |
+|---|---|
+| **Ảnh `docs/previews/` đã lệch giao diện 3 merge.** Commit cuối cùng chạm `docs/previews` là `de75f93` (2026‑09‑30T23:13:17Z, "Refresh the README previews from CI"); sau đó `main` đã nhận `1a5d50a` *Add contextual quick adjustment flow*, `0503ec2` *Close dock before opening quick adjustments* và `9b7fb57` *Redesign GPU atmosphere and hit-line effects (#31)* — cả ba đều đổi những thứ README đang chụp (menu/Play có Quick Adjust, preset Galaxy Voyage + Electric Storm). Ảnh trong README vì thế **vẫn xanh ở checker** nhưng không còn là ảnh của build hiện tại | `gh api repos/…/commits?path=docs/previews` → mục mới nhất là `de75f93`; `gh api repos/…/commits?sha=main&per_page=6` → ba commit kể trên nằm sau nó; `scan_readme` (`tools/check_sources.py:703`) chỉ kiểm **tồn tại** + **có tên trong `$shots`**, không có phép kiểm nào so ngày của ảnh với ngày của nguồn |
+| **CI không còn tự commit ảnh được nữa.** Annotation của chính lần chạy xanh ở trên: `warning :: Previews not committed :: The branch only accepts pull requests…`. Nguyên nhân đã đo được: repo có **hai ruleset áp cho `~ALL`** — `24265624` *Protect Branch* (deletion, non_fast_forward) và `24233546` *Protect Main Branch* (deletion, non_fast_forward, **pull_request** với `require_code_owner_review: true` + `require_extra_approval_for_unattributed_changes: true`) — và **cả hai có `bypass_actors: null`**, tức không có ai được vượt, kể cả `GITHUB_TOKEN` của workflow. Đây chính là mục "còn mở" của P3 #1, nay đã xác nhận là nguyên nhân trực tiếp của §6.2 dòng trên | `gh api repos/lxmtuu/PianoPath/rulesets/{24265624,24233546}`; `gh api repos/…/check-runs/110269233500/annotations` |
+| **10 cảnh báo nullable trong bản build Release.** Tất cả là `Dereference of a possibly null reference.` (CS8602) và tất cả nằm trong **`Diagnostics/VerificationSuite.cs`** — dòng 4100, 4101, 4148, 4153, 4199, 4275, 4279, 4288, 4348, tức khối kiểm Quick Adjust mới của `VerifyEmbersShell` (4079–4372). Kiểu mẫu giống nhau: `(Dictionary<string, ComboBox>)Field(window, "_quickAdjustChoices")` rồi giải tham chiếu kết quả. GitHub chỉ hiện tối đa 10 annotation mỗi mức nên **số thật ≥ 10**; đây là lần đầu một đợt rà soát ghi nhận cảnh báo biên dịch (các đợt trước chỉ soi TODO/FIXME) | `gh api repos/…/check-runs/110269233500/annotations` → 10 mục cùng một thông báo; đọc `sed -n 4096,4104p Diagnostics/VerificationSuite.cs` |
+| **`docs/previews/presets.jpg` cũng cũ theo.** Gallery dựng từ chính `$shots`-era preset look; `9b7fb57` đổi atmosphere + hit-line của GPU nên cột "GPU (WARP)" của Galaxy Voyage / Electric Storm trong ảnh không còn là look hiện tại | cùng bằng chứng ngày commit ở dòng 1 của bảng này; `presets.jpg` nằm trong `docs/previews/` nên cùng một commit `de75f93` |
+
+### 6.3 Đối chiếu roadmap P3 — từng dòng, bằng chứng lấy tại chỗ
+
+| P3 | Roadmap nói | Đo lại lần này |
+|---|---|---|
+| #1 CI phân lớp | ✅ xong, còn mở việc commit ảnh | **đúng**: `build.yml` có job `static` (`ubuntu-latest`, chỉ `check_sources.py`) và job `build` đặt `needs: static`. Phần "còn mở" vẫn mở và đã đo được nguyên nhân (§6.2) |
+| #2 Tách project test | ⬜ chưa làm | **đúng**: không có `tests/`, không `*.sln`, không tham chiếu xUnit/NUnit/MSTest nào. Số liệu roadmap hơi cũ: `VerificationSuite` nay là **56** hàm `Verify*` trong **4 888** dòng (`VerificationSuite.cs` 4 654 + `.Gpu.cs` 234), không phải "55 hàm trong ~4 400 dòng". Bốn thư mục **không** tham chiếu WPF/`System.Drawing`/Vortice — `Audio/`, `Library/`, `Midi/`, `Profile/` — tổng **2 474** dòng, đủ để link nguồn vào một project `net10.0` thường. Ghi chú thêm cho việc tách: `Practice/PracticeChart.cs` dùng `System.Windows.Point`/`Rect` (WindowsBase) nên **không** nằm trong nhóm đó dù là hình học thuần |
+| #3 Perf gate | ⬜ chưa làm | **đúng**: không có `--bench` ở bất kỳ đâu; 19 switch dòng lệnh đang có là `--background-image= --compact --encode-probe= --encode-take= --gpu --lang= --menu --play-chord --play-dialog --play-preview --preset= --settings-dir= --settings-tab= --shortcuts --show-settings --snapshot --software --verify --verify-log=`. `GpuRenderLoop.Fps` (`Gpu/GpuRenderLoop.cs:63`, tính ở `:208` theo cửa sổ 0,5 s) là số đo duy nhất, đúng như roadmap mô tả — không có thời gian từng khung, không có phân vị |
+| #4 Giảm cỡ bản tải | ⬜ chưa làm | **đúng**: `release.yml` checkout `lfs: true` và đóng gói nguyên thư mục publish; `publish.ps1` không có chế độ *lite* (chỉ `SelfContained`/`FrameworkDependent`), và nó **từ chối** publish khi SF2 còn là con trỏ LFS trừ khi có `-AllowLfsPointer` |
+| #5 Cập nhật & đóng gói | 🟡 một phần | **đúng**: `release.yml` đính `publish/*.zip` + `Keyflow-Setup-*.exe`, không có `SHA256SUMS`/`GetFileHash` ở workflow hay script nào, không `CHANGELOG*`, không `Microsoft.WindowsAppSDK`/MSIX/winget manifest |
+| #6 Nhánh portability | ⬜ chưa làm | **đúng**: interface tự viết trong repo chỉ có `Audio/IAudioTrack.cs:15` và `Video/IFrameRecorder.cs:17` (phần còn lại là interface COM của Media Foundation); không có `IStageRenderer`, không `IAudioSink` |
+| #7 Kiểm chứng đường phát hành | ⬜ chưa làm | **đúng**: `git tag -l` rỗng, `gh release list` rỗng → `release.yml` chưa từng chạy; `<Version>0.4.0</Version>` vẫn ở `PianoPath.csproj` trong khi phạm vi v0.5–v0.8 đã vào |
+
+### 6.4 Đã kiểm, không thấy vấn đề
+
+* Không có `TODO`/`FIXME`/`HACK`/`XXX` trong bất kỳ tệp `.cs`/`.py`/`.ps1`/`.xaml`/`.yml` nào.
+* `catch { }` rỗng có tồn tại nhưng **đều có chủ đích** và đều là best‑effort dọn dẹp: `Marshal.ReleaseComObject`
+  (`Camera/CameraFrameReader.cs:405`, `Camera/MediaFoundation.Encode.cs:252,308`), `Flush` của source reader
+  (`CameraFrameReader.cs:213,226`), `_stream.Dispose()` trong `finally` của `Audio/WavWriter.cs:185`, và ghi
+  log trong tiến trình con (`Diagnostics/EncodeProbeAttempt.cs:32,33,52,61`). Không chỗ nào nuốt lỗi nghiệp vụ.
+* Bộ kiểm tĩnh vẫn là lớp duy nhất chạy được trên sandbox không có .NET, và nó vẫn xanh — nên mọi thay đổi
+  ở đợt P3 sắp tới đều có ít nhất một lớp kiểm chứng chạy được tại đây.
+
+### 6.5 Không kiểm được tại sandbox này (nói rõ, không đoán)
+
+* **Không biên dịch được C#**: `dotnet: command not found`. Mọi kết luận về build/`--verify` ở trên là đọc
+  từ lần chạy CI 36831576802, không phải chạy lại.
+* **Không tải được artifact/log của lần chạy**: `gh run view --log` và `gh run download` đều đứt ở bước tải
+  blob (`…blob.core.windows.net… EOF`), nên 300 dòng nhật ký `--verify` chỉ đọc được qua annotation của
+  check-run, không đọc được toàn văn.
+* **Không chạy được PowerShell/Inno Setup** (`publish.ps1`, `tools/build_installer.ps1`) — đúng như ghi nhận
+  ở §5.3, đây vẫn là vùng mù duy nhất của bộ kiểm.
+
+### 6.6 Đã sửa trong đợt này
+
+| Việc | Bằng chứng kiểm chứng |
+|---|---|
+| **Bước `Report preview drift` trong `build.yml`** — vá đúng lỗ hổng ở §6.2 dòng 1: `scan_readme` chỉ chứng minh ảnh *tồn tại* và *có tên trong `$shots`*, nên ảnh còn đúng hay không thì không lớp nào nhìn thấy. Hai bước render vốn đã ghi đè `docs/previews` bằng ảnh của chính build đó, nên `git status --porcelain -- docs/previews` **chính là** bảng đối chiếu: danh sách rỗng nghĩa là ảnh đã commit là ảnh của build này, còn mỗi đường dẫn listed là một ảnh README không còn khớp với code bên cạnh nó. Bước chạy `if: always()` **và** chỉ khi cả `steps.render-previews` lẫn `steps.render-gallery` đều `success` (hai `id` mới thêm), để một lần render hỏng không bị đọc nhầm thành "ảnh vẫn đúng"; nó chạy cả ở pull request, nơi bước commit bị bỏ qua và trước đây không có tín hiệu nào. Cảnh báo chứ không phải lỗi, có chủ đích: ruleset đang chặn token của workflow nên biến nó thành đỏ sẽ sơn đỏ mọi pull request vì một việc chỉ người (hoặc một luật bypass) giải quyết được | `bash -n` sạch; **chạy thật đoạn script** (trích từ YAML bằng `yaml.safe_load`) trong một repo git tạm ở ba trạng thái: (1) không lệch → in `docs/previews matches what this build rendered.`, exit 0, summary rỗng; (2) hai tệp đã commit bị ghi đè → `::warning title=Previews are stale::2 file(s)…` và summary liệt kê đúng hai đường dẫn; (3) thêm một tệp chưa có trong repo và một tên **có khoảng trắng** → bắt đủ 4 tệp, danh sách phân tách `, ` đúng (lỗi `paste -sd', '` luân phiên dấu phẩy/dấu cách đã sửa thành `paste -sd, - \| sed 's/,/, /g'`). `python3 tools/check_sources.py` chạy lại sau khi sửa workflow: exit 0 |
+| **Hai bản README** (`README.md` + `README.en.md`) mô tả thêm bước mới trong bảng workflow, giữ hai bản 1‑1 | `tools/check_sources.py` xanh (bảng tham số/ảnh/anchor của cả hai bản) |
+| **Mười cảnh báo CS8602 trong `Diagnostics/VerificationSuite.cs`** — nguyên nhân gốc không phải từng chỗ giải tham chiếu mà là **một câu `Assert` thừa**: `Assert(menu is not null && play is not null && quickAdjust is not null, …)` ở đầu `VerifyEmbersShell`. Tám biến cục bộ vừa được lấy bằng `(T)window.FindName(…)!` (đã not-null), nhưng câu null-test đứng **một mình** khiến trình biên dịch gộp cả nhánh "điều kiện sai" — vì không có gì nói với nó rằng `Assert` sai thì ném — nên từ đó về sau `menu`/`play`/`quickAdjust` là maybe-null. Hai dòng kế tiếp chữa bằng `menu!`/`play!`; từ dòng 4100 thì quên → cảnh báo. Cách chữa: thêm helper **`Element<T>(root, name)`** trả về **not-null** và ném ngay tại chỗ tra cứu kèm tên phần tử bị thiếu, thay cho cả `FindName(…)!` lẫn câu `Assert` thừa; nhờ vậy trạng thái dòng không bao giờ bị hạ xuống maybe-null và không cần `!` nào nữa. Số assertion của `--verify` giảm đúng **một** (1407 → 1406) vì bỏ câu `Assert` thừa; phần kiểm "phần tử có tồn tại" vẫn còn, và còn rõ hơn (báo tên phần tử thay vì trỏ vào dòng thứ hai mươi dùng nó) | bằng chứng cho chẩn đoán, đọc ngay trong tệp: (a) dòng 366 tác giả **đã gặp đúng lỗi này** và chữa bằng `if (baked is null) return;` kèm ghi chú *"Non-Nullable copy so the local helper below does not have to re-prove the null state"*; (b) dòng 957 và 3714 viết `Assert(x is not null && x.Foo)` — dereference **trong cùng biểu thức** nên được thu hẹp đúng, và **không** lần chạy CI nào báo cảnh báo ở đó; (c) dòng 3322 dùng `wav!.Append(…)` để thu hẹp lại sau một câu `Assert(wav is not null && …)` — cùng một mẹo `!`, xác nhận chẩn đoán. Đã quét tự động toàn tệp (script tìm mọi `Assert(<var> is not null…)` rồi dò chỗ `<var>.` ở các câu sau trong cùng hàm): đúng **3** ứng viên, và cả ba đều đã được giải thích — `wav` (đã có `wav!`), `chips` (báo nhầm vì khớp chữ trong chuỗi của câu `Assert` khác), và chính dòng chú thích XML mới thêm. `python3 tools/check_sources.py`: exit 0. **Phần biên dịch thật do CI Windows xác nhận** — sandbox không có .NET SDK nên không tự chạy được |
+
+### 6.7 Hai việc người dùng đã chọn nhưng sandbox này **không làm được**
+
+Cả hai đều do mạng của sandbox, không phải do repo — ghi lại để lần sau không thử lại vô ích:
+
+* **Tải artifact `keyflow-previews` để commit ảnh mới**: artifact vẫn còn (`id 11148505196`, 7 052 863 byte, `expired=false`) nhưng API trả 302 sang `productionresultssa10.blob.core.windows.net`, và host đó **không nối được** — `gh run download` ba lần đều `EOF`, `curl -sSL` báo `OpenSSL SSL_connect: SSL_ERROR_SYSCALL`. `raw.githubusercontent.com` và `objects.githubusercontent.com` cũng 000; chỉ `api.github.com`, `pypi.org` và `registry.npmjs.org` là thông. **Việc này hoá ra không cần làm tay — xem §6.12**: bước `Commit refreshed previews` của chính workflow đã đẩy 23 ảnh mới lên nhánh (`07cfe64`) ở lượt chạy trên push event, và run `36845212582` sau đó báo **0 cảnh báo drift**. Câu "`docs/previews/` vẫn lệch" ở đây từng đúng và **nay không còn đúng**.
+* **Cài .NET 10 SDK**: `dot.net`, `builds.dotnet.microsoft.com`, `dotnetcli.azureedge.net` và `api.nuget.org` đều trả `000`. Không có SDK thì không build được project test `net10.0` của P3 #2 tại đây, dù về nguyên tắc nó chạy được trên Linux.
+
+Hai lệnh để làm mới ảnh từ máy của bạn (artifact của run 36831576802 vẫn còn):
+
+```powershell
+gh run download 36831576802 -n keyflow-previews -D docs/previews   # hai bộ vi/ + en/ và presets.jpg
+git add docs/previews; git commit -m "Refresh the README previews from CI artifact 36831576802"
+```
+
+### 6.8 CI đã xác nhận (run 36834861621, nhánh `arena/01a0f671-pianopath`, commit `dcc943c`)
+
+Sandbox không có .NET SDK nên **chính runner Windows của repo là lớp kiểm chứng** cho hai thay đổi trên:
+
+| Đo trên CI | Kết quả |
+|---|---|
+| **Mười cảnh báo CS8602** | **còn 0**. `gh api …/check-runs/110279800651/annotations` không còn mục nào khớp "null reference" (trước đó: 10, và bị GitHub cắt ở 10). Chẩn đoán "một câu `Assert` thừa là nguyên nhân gốc" vậy là đúng — không phải sửa từng chỗ giải tham chiếu |
+| **`Element<T>` chạy thật** | `Verification passed: **1406** assertions, 3 skipped check group(s)`, `PianoPath.exe exited with code 0 after 300 log line(s)`. Đúng **1407 → 1406** như đã tính (bỏ một câu `Assert` thừa); `VerifyEmbersShell` vẫn chạy qua nên cả tám lần tra cứu phần tử đều tìm thấy phần tử của chúng |
+| **Bước `Report preview drift` chạy thật** | `! 23 file(s) under docs/previews differ from what this build rendered (…)` — nêu đủ tên 23 tệp (11 `en/` + 11 `vi/` + `presets.jpg`) |
+
+### 6.9 Một lỗi thiết kế do chính lần CI đó lộ ra, đã sửa
+
+Con số **23/23** là manh mối: cả `shortcuts.png` lẫn `language-dock.png` — hai cảnh mà ba commit gần đây
+không đụng tới — cũng khác bản đã commit. Đối chiếu lịch sử: repo có **349 commit thì 106 là preview
+refresh**, tức gần như lần push nào cũng ra diff. Kết luận: **ảnh render không ổn định theo byte giữa các
+lần chạy**, nên `git status` trên `docs/previews` *luôn* khác rỗng ngay sau khi render. Bước drift vì thế
+**không được đứng trước** bước commit — nếu không nó sẽ kêu oan ở mọi lần chạy, kể cả lần mà bước commit
+vừa ghi ảnh mới thành công ngay sau đó (đúng cái bệnh "cảnh báo mà không ai đọc" mà nó sinh ra để chữa).
+
+Đã chuyển `Report preview drift` xuống **sau** `Commit refreshed previews`; thứ tự đó *chính là* phép kiểm:
+refresh mà ghi được thì cây làm việc sạch và bước này nói "khớp", còn push bị từ chối (GH013) hoặc bước
+commit bị bỏ qua (pull request) thì tệp vẫn bẩn và độ lệch là thật, chưa ai giải quyết. Kiểm lại bằng cách
+chạy đúng đoạn script trong repo git tạm: cây sạch → `docs/previews matches what this build rendered, or the
+refresh above just committed it.`; hai tệp bẩn → `::warning title=Previews are stale::2 file(s) … and were not
+committed`. `python3 tools/check_sources.py`: exit 0.
+
+### 6.10 §6.9 sai, và lần CI thứ hai đã chỉ ra chỗ sai
+
+§6.9 kết luận rằng chỉ cần **chuyển bước drift xuống sau bước commit** là phép kiểm đúng, với lý do
+"refresh mà ghi được thì cây làm việc sạch". **Lý do đó sai.** Bước commit `git commit` **trước** rồi mới
+`git push`; khi push bị từ chối (GH013) thì commit vẫn đã xảy ra trên runner, cây làm việc **vẫn sạch**,
+và bước drift — vốn đọc `git status` — im lặng. Đúng như vậy ở run **36836190788**: 13 bước xanh,
+`Verification passed: 1406 assertions`, **0 cảnh báo CS8602**, nhưng annotation `Previews are stale`
+**biến mất** trong khi độ lệch vẫn nguyên đó (chính commit ấy bị runner vứt đi). Một phép kiểm im lặng
+đúng lúc có chuyện là tệ hơn không có phép kiểm.
+
+Chữa lại theo hai tín hiệu tách bạch, vì chúng là hai câu hỏi khác nhau:
+
+| Câu hỏi | Cách trả lời |
+|---|---|
+| Build này có render lại ảnh không? | `git diff --name-only "$GITHUB_SHA" -- docs/previews` — so với **commit mà lần chạy bắt đầu**, không phải với cây làm việc, nên một commit cục bộ không che được |
+| Bản refresh có **lên nhánh** thật không? | bước commit đặt `id: commit-previews` và chỉ ghi `landed=true` vào `$GITHUB_OUTPUT` khi `git push` **thành công** (hoặc không có gì để ghi); nhánh GH013 không ghi gì |
+
+Chỉ "**có render lại và không lên nhánh**" mới là độ lệch đáng báo; refresh đã lên nhánh và thư mục không
+đổi đều in một dòng thường. Kiểm lại bằng cách chạy đúng đoạn script (trích từ YAML, thế biểu thức
+`${{ steps.commit-previews.outputs.landed }}` bằng từng giá trị) trong repo git tạm: **(A)** push bị từ chối
+→ `::warning title=Previews are stale::2 file(s) … were re-rendered by this build and not committed` +
+summary liệt kê đúng hai tệp; **(B)** `landed=true` → `This build re-rendered 2 file(s) and the step above
+committed them to the branch.`; **(C)** không render lại gì → `This build rendered the same pictures the
+branch already carries.`. Cả ba exit 0. `python3 tools/check_sources.py`: exit 0.
+
+### 6.11 Mục P3 #2: bộ test tách ra `tests/PianoPath.Tests` (2026-10-01, **CI xanh**)
+
+Roadmap gọi đúng thứ bị thiếu: cả repo chỉ có một project là exe WPF, nên **không có cách nào chạy lẻ một bài kiểm**. Nay `tests/PianoPath.Tests` là project xUnit trên `net10.0` thường và job **`test`** trên `ubuntu-latest` chạy nó.
+
+**86 test case / 65 hàm test / 1 010 dòng**, link 9 tệp nguồn của app: `MidiReader` (format 1/2, kênh percussion, tempo map, SMPTE, từ chối tệp không dùng được), `NoteTimeline`, `MusicXmlReader` (divisions/chord/backup/forward, 6/8, hai part, từ chối văn bản không phải score), `HandSplit`, `Meter`, `WavWriter`, nửa thuần của `Loc`. Chưa link: `Localizer.cs` (WPF), `MidiDeviceService.cs` + `PianoAudioEngine.cs` (WinMM), `SoundFontSynthesizer.cs` (bộ dựng `.sf2` fixture là ~10 helper riêng, vẫn ở `VerifySoundFontEngine`).
+
+**Mối nối `Loc`.** Các reader báo lỗi qua `Loc.T`/`Loc.F`, mà `Localizer` gán nhãn lên phần tử WPF → link nguyên tệp là đòi WindowsBase. `Loc` nay là `partial`: `Loc.cs` là bảng + tra cứu, `Localizer.cs` là nhãn sống, nối bằng `static partial void RefreshLiveLabels();` — bản build không link nửa WPF **biên dịch mất lời gọi**. Đối chiếu 42 thành viên trước/sau: không mất, không trùng. `tools/check_sources.py` đọc bảng đăng ký ngôn ngữ theo **thư mục** thay vì tên tệp cứng (`Localization/*.cs` trừ `Strings.*`) — nó vốn hardcode `Localizer.cs`.
+
+**Bốn cái bẫy, chỉ CI mới thấy được** (sandbox không có .NET SDK nên CI là trình biên dịch duy nhất):
+
+| # | Cái bẫy | Bằng chứng / cách sửa |
+| --- | --- | --- |
+| 1 | `PianoPath.csproj` nằm ở **gốc repo** nên glob mặc định `**/*.cs` **sẽ biên dịch cả `tests/` vào app** | Bắt được bằng đọc csproj *trước* khi push. Thêm `<Compile Remove="tests/**/*.cs" />` (+ `None`/`EmbeddedResource Remove="tests/**/*"`, đặt trước nhóm `presets/*.json` vì thứ tự ItemGroup có ý nghĩa) |
+| 2 | Quên `using Xunit;` ở cả 5 tệp test | Run `36842181232`: `CS0246 'Fact' could not be found` — `ImplicitUsings` không kéo namespace của package |
+| 3 | `WavWriterTests` khẳng định tệp 44 byte **ngay sau `TryCreate`** | Run `36843377088` nói **0**: constructor ghi header vào `FileStream` có buffer mặc định nên chưa chạm đĩa. **Test sai, sản phẩm đúng** — tách thành hai bài: trạng thái đối tượng khi đang mở, và tệp header-only sau khi đóng |
+| 4 | Job đỏ chỉ báo `Process completed with exit code 1` | Run `36842680108`: annotations **không có lỗi biên dịch nào** ⇒ biên dịch được, test trượt lúc chạy — nhưng **không biết bài nào**. Job log chỉ đọc được khi có người đang mở nó; `gh run view --log` và `…/actions/jobs/{id}/logs` đều chết ở `productionresultssa14.blob.core.windows.net` |
+
+Cái bẫy #4 là thứ đáng ghi nhất: **kết luận của một lượt CI đã qua phải lấy từ annotation, không phải từ log.** Job `test` nay ghi `.trx` và có bước `if: always()` đọc nó thành annotation nêu **tên từng bài kèm lý do** + một khối `GITHUB_STEP_SUMMARY`. Bước đó chính là thứ đọc ra được tên `Opening_a_track_leaves_an_empty_file_with_the_header_already_in_place` ở cái bẫy #3.
+
+**Không link `PianoPath.csproj` mà link tệp nguồn** là cố ý: giữ được mọi kiểu `internal` (tất cả model của app đều `internal`) mà không cần `InternalsVisibleTo`, và chưa phải tách thư viện. Đổi lại là một ràng buộc phải nói rõ trong README: **mọi tệp trong `<Compile Include>` của csproj test phải biên dịch được không có WPF/`System.Drawing`/Vortice/WinMM** — thêm tệp kéo WPF là job Linux đỏ, đó là tín hiệu chứ không phải lỗi.
+
+**Đường biên tiếp theo** (để test settings JSON / hồ sơ / thư viện bài / lịch sử luyện tập): cả bốn đều chạm đáy ở `PianoVisualSettingsStore` → `ShellThemes`, mà record `ShellTheme` khai báo bằng `System.Windows.Media.Color`. `Practice/PracticeChart.cs` là hình học thuần nhưng dùng `System.Windows.Point`/`Rect`.
+
+**Kết quả CI (run `36843377088`)**: `static` ✅ `test` ✅ `build` ✅ · `Verification passed: 1406 assertions, 3 skipped` · `CS8602: 0` · job Windows xanh là xác nhận quan trọng nhất, vì tách `Loc` thành `partial` chạm vào bản build của app.
+
+### 6.12 Previews tự được commit, và một lệnh `git push` đã che mất lỗi (2026-10-01)
+
+**Việc từng nói là "người dùng phải làm tay trên Windows" hoá ra không cần.** Commit `07cfe64` trên nhánh này — tác giả `keyflow previews <actions@users.noreply.github.com>`, thông điệp `Refresh the README previews from CI [skip ci]` — thay đổi **đúng 23 tệp** dưới `docs/previews/` (11 `vi/` + 11 `en/` + `presets.jpg`), ví dụ `vi/stage-gpu-galaxy.png` 377 137 → 517 665 byte. Đó là bước `Commit refreshed previews` của chính workflow: nó chỉ bị bỏ qua ở **pull request**, còn ở **push event lên `arena/**`** thì nó đẩy được vì workflow có `permissions: contents: write`. Run `36845212582` chạy trên commit kế tiếp báo **0 cảnh báo `Previews are stale`** (trước đó là 23 tệp) — tức ảnh trong repo giờ khớp đúng thứ engine render.
+
+**Lỗi của tôi, đáng ghi vì nó là lỗi kiểm chứng chứ không phải lỗi code.** Tôi đã push bằng:
+
+```bash
+git push -q origin arena/01a0f671-pianopath 2>/dev/null; echo pushed
+```
+
+Hai chỗ sai chồng nhau: `;` in `pushed` **bất kể** push thành công hay không, và `2>/dev/null` vứt đi đúng dòng `! [rejected] … (non-fast-forward)` cần đọc. Kết quả là tôi báo "đã push" cho một commit **không hề lên remote** (`git ls-remote` cho `07cfe64` trong khi local là `58dc733`). Chỉ `git ls-remote origin refs/heads/<branch>` đối chiếu với `git rev-parse HEAD` mới lật ra được. Push lại sau khi `git rebase 07cfe64` thì lên thật: `1533e1c`. **Bài học: sau mỗi push phải đối chiếu SHA remote, không đọc lời nhắn của chính lệnh push.**
+
+Cũng vì commit `07cfe64` mang `[skip ci]`, nó không tự tạo lượt chạy — nên run kế tiếp chỉ xuất hiện khi commit tài liệu được đẩy lên.
+
+### 6.13 Làm ảnh preview tất định: ba lần đoán sai, rồi đo (2026-10-01)
+
+**Triệu chứng.** Run `36845212582` báo 0 cảnh báo drift mà CI vẫn commit lại 23 ảnh: hai lần render liên tiếp của cùng một code khác nhau ở **23/23 tệp** (`vi/stage-gpu.png` 251 566 → 254 255 byte). Bộ phát hiện drift không phân biệt được "giao diện đổi" với "máy chậm hơn một chút". Người dùng chọn **sửa gốc** (render tất định), không chọn so sánh có dung sai pixel.
+
+**Ba lần sửa dựa trên suy luận, cả ba đều hụt.** Mỗi lần mất một lượt CI hơn mười phút, và mỗi lần số liệu của lượt sau chỉ ra chỗ sai:
+
+| Lần | Giả thuyết | Vì sao hụt (số liệu đo được) |
+| --- | --- | --- |
+| `d0cbf4b` | Ghim bước `FrameClock`, chụp sau 45 khung do compositor phát | Báo cáo chụp: mọi ảnh `how=watchdog`, `wpfFrames=8…19`. Trên runner `CompositionTarget.Rendering` chỉ phát 8–19 khung trong 17 s, nên cổng 45 không bao giờ đạt và watchdog chụp ở một số khung ngẫu nhiên |
+| `fa298f5` | Thêm reset cho mô phỏng GPU, chờ `FramesSinceReset ≥ 45` | `gpuFrames=3…12` ngay lúc ghi báo cáo trong khi cổng đòi ≥ 45: reset là bất đồng bộ, cổng đọc **bộ đếm cũ** trước khi luồng render kịp xử lý nó |
+| `377dc80` | Bước WPF trực tiếp + ngân sách khung cho luồng GPU | Cùng lỗi cổng chờ. Ngoài ra khung GPU chỉ lên sân khấu WPF trong `CompositionTarget.Rendering` (`PianoStage.OnGpuRendering`), và `ReadbackRing` đọc ngược **trễ một khung**: dù luồng render đúng đến đâu, ảnh chụp vẫn thấy một khung cũ |
+
+Trong lúc đó tôi còn tự gây ra một lỗi: tệp `*.report.txt` ghi cạnh ảnh bị bước `git add docs/previews` của CI commit vào repo (22 tệp, mang `seconds=` đổi mỗi lượt, tức **đảm bảo** commit mới ở mọi lượt chạy dù ảnh có tất định). Đã gỡ; báo cáo nay ghi ra thư mục ngoài `docs/previews`, và `tools/check_sources.py` (`scan_previews_folder`) báo lỗi nếu thư mục đó chứa bất cứ thứ gì ngoài ảnh, để lỗi này không tái diễn.
+
+**Phép đo thật sự có tác dụng: so từng pixel hai ảnh do cùng một code render ở hai lượt CI.** Kho git đã có sẵn các cặp ảnh đó (CI commit chúng), và một bộ giải mã PNG ngắn bằng Python là đủ. Cặp `769649c` / `e1fb78f` (cùng code `fa298f5`):
+
+| Ảnh | Pixel lệch | max \|Δ\| | Nằm ở đâu |
+| --- | --- | --- | --- |
+| `theme-dock`, `design-dock`, `language-dock` | ≈ 42 000 (5,6 %) | **1** | chỉ từ hàng 405 trở xuống: phần khung GPU lộ ra ngoài dock. Toàn bộ chrome (header, dock, chữ) **giống hệt từng bit** |
+| `shortcuts`, `play-dialog` | 11 000 – 19 000 | 1 | cùng dải đáy |
+| `stage-live`, `stage-gpu`, `galaxy`, `storm`, `background-image` | 145 000 – 455 000 | 229 – 247 | chùm sáng và tia lửa quanh nốt đang giữ, trong khung GPU |
+| `main-menu` | 13 500 | 91 | **khắp ảnh, kể cả chrome**: hạt mote và các dải sóng của `MenuBackdrop` |
+
+Từ đó ra hai nguyên nhân thật, không cái nào là thứ ba lần trước đã sửa:
+
+1. **Khung GPU phụ thuộc `simulation.Time`, kể cả khi cảnh đứng yên.** Bước composite cuối cộng nhiễu dither `Hash21(pixel + frac(ScreenTime.z) * 61)` với `ScreenTime.z = simulation.Time` (`Gpu/StageShaders.hlsl`, hàm `PsComposite`). Mỗi giá trị `Time` cho một mẫu nhiễu ±1 khác trên mọi vùng sáng, đúng dải \|Δ\| = 1 ở bàn phím; còn quanh nốt giữ thì pha của hiệu ứng lệch nhiều hơn.
+2. **`ShowStartupMenu()` ghi đè khoá chrome.** Nó gọi `MenuBackdrop.Configure(…, _visualSettings.ChromeMotion, …)` ngay sau khi `DisableChromeMotion()` đã đặt "Off", nên menu luôn chuyển động đầy đủ trong ảnh chụp tự động, trái với chính chú thích ở `App.xaml.cs` ("a frozen chrome keeps every screenshot identical"). Lỗi có từ trước đợt này.
+
+**Đã loại trừ bằng số liệu:** chrome WPF ở mọi ảnh trừ menu; nhãn có số đo (kiểu "shaders compiled in N ms") lọt vào ảnh; RNG không seed (đã grep: mọi luồng đều có seed hoặc là `SeededRandom` không trạng thái); đồng hồ thật trong khung GPU (`GpuStageFeed.Now` chỉ ảnh hưởng khi đang phát bài hoặc có `PulseBeat`, cả hai đều không xảy ra ở chế độ chụp).
+
+**Cách sửa cuối cùng, nhỏ hơn mọi lần trước:**
+
+- Khung GPU của ảnh chụp được dựng **đồng bộ** bằng `GpuRenderLoop.RenderOnce` (đường sẵn có của `--gpu-snapshot` và bộ kiểm thử): mô phỏng mới, đúng **480 bước 1/60 s**, không luồng nào chạy tự do nên không còn gì phụ thuộc tốc độ máy. 480 bước = 8 giây, đúng thời gian nốt đã được giữ trước kia, nên hình giữ nguyên trạng thái ổn định.
+- Luồng render thật được **đỗ** (`GpuRenderLoop.Park`, có xác nhận) trước khi nhấn phím, vì nó sẽ lấy mất sự kiện của nốt preview khỏi feed. Khung đã dựng được ghi thẳng vào bitmap của sân khấu (`PianoStage.ShowGpuFrame`) nên khung muộn của luồng đó không ghi đè được.
+- `RenderOnce(renderWarmup: false)` chỉ vẽ khung cuối, nên 480 bước chỉ tốn một lần vẽ. Điều này đúng vì mỗi khung được dựng lại từ đầu (đã đọc: `ClearState`, xoá HDR và depth; các `Build*` không ghi trạng thái và không dùng RNG; `AddPetals` chỉ dựng lười một bộ đệm có seed) và được `--verify` chứng minh tại chỗ.
+- `ShowStartupMenu` tôn trọng khoá chrome.
+- `ChromeBackdrop.ResetAnimation` và `PianoStage.ResetAnimation` seed lại luồng số: mỗi `RebuildField` tiêu thụ luồng chung, nên vị trí hạt phụ thuộc số lần cửa sổ đã dựng lại trước đó.
+- `FrameClock.Freeze` chặn khung compositor lọt vào lúc WPF dựng lại trước khi chụp. Cả chuỗi (đỗ, reset, nhấn phím, bước, dựng khung GPU, chụp) chạy trong một lần gọi, không nhường dispatcher.
+
+**Kiểm chứng ba lớp:**
+
+1. `--verify`. `VerifyDeterministicPreview` (sân khấu WPF: cùng số bước ra cùng SHA-256, khác số bước ra khác) và `VerifyDeterministicGpuFrame` (GPU: hai lần render giống hệt từng byte; chỉ vẽ khung cuối bằng vẽ mọi khung; thêm bước ra ảnh khác). Khẳng định thứ hai là bằng chứng cho giả định "bỏ qua các khung trung gian".
+2. Trong chính lượt build: render lại 3 ảnh (GPU với hợp âm, dock, menu) và so SHA-256; lệch thì cảnh báo `Previews are not reproducible` kèm hai mã băm, và đính cả hai ảnh vào artifact `keyflow-preview-recheck` để định vị chỗ lệch từng pixel thay vì đoán.
+3. Mỗi ảnh ghi một dòng `sha=…` kèm thời gian từng pha vào annotation `Preview capture (en)` và `(vi)`, để so hai lượt chạy bằng mắt. Chia theo ngôn ngữ vì GitHub cắt một annotation ở đúng **4096 ký tự**: lần đầu gom cả 22 dòng vào một cái và mất tám dòng cuối.
+
+**Kết quả CI: tái lập đã được chứng minh.** Run `36863155317` (`b553a82`) xanh với `Verification passed: 1411 assertions` (tức 3 khẳng định mới của `VerifyDeterministicGpuFrame` đều đạt), phép tự kiểm báo `Previews are reproducible`, và CI commit bộ ảnh mới `9991d66`. Từ đó, **bốn lượt chạy liên tiếp** (`36867655720` trên `b105a48`, `36873989640` trên `de18ad3`, `36878012766` trên `4fbbfa0`, `36879955747` trên `a9724c8`) render lại toàn bộ 23 ảnh (22 PNG và `presets.jpg`) trên các runner khác nhau, vào những lúc khác nhau, mà **không commit gì**: mọi tệp giống hệt từng byte với bản đã commit. Ở lượt cuối còn đối chiếu độc lập: mã băm CI báo cho cả 22 PNG bằng SHA-256 của chính các tệp đang nằm trong git, và `presets.jpg` chưa đổi kể từ `9991d66`. Bốn lượt này thay đổi cả cách dựng khung (thiết bị mới, rồi thiết bị nóng của vòng lặp đã đỗ, rồi ép WARP cho vòng lặp thật) mà không đổi một byte nào. Có thêm hai bằng chứng cùng lượt: `stage-live` và `stage-gpu` là **hai tiến trình riêng** nhưng ra cùng `sha` (`94a3975f1047` ở bản `en`), và hai lượt render lại của phép tự kiểm khớp từng byte. Đây là phép thử mà ba lần hụt trước đều không qua được.
+
+**Chi phí, và lần đo thứ năm.** Cách dựng đồng bộ làm một lượt build tăng từ 10,3 lên 29,4 phút (bước previews 240 s → 921 s, gallery 299 s → 680 s). Đọc code không chỉ ra pha nào gây ra điều đó: ảnh dock đứng yên tốn bằng ảnh có hợp âm, và bước mô phỏng rẻ khi không có nốt. Sau bốn lần đoán trật, báo cáo chụp được thêm thời gian từng pha (mili giây), và số đo trả lời ngay:
+
+| Pha (mỗi ảnh GPU) | Thời gian |
+| --- | --- |
+| `Stage.Advance` × 480 (phía WPF) | 2 ms |
+| 480 bước mô phỏng GPU | 5 – 27 ms |
+| tạo thiết bị WARP và biên dịch 12 shader | 0,5 – 0,75 s |
+| render pass của WPF, rồi chụp | 3 ms; 0,1 – 0,3 s |
+| **một khung trên thiết bị WARP mới tạo** (1,6 s nộp lệnh, 15,5 – 20,5 s đến khi đọc ngược trả về) | **17 – 22 s** |
+
+Toàn bộ chi phí là **khung đầu tiên trên một thiết bị WARP mới**: đó là lúc WARP sinh mã cho từng shader. Vòng lặp thật cũng trả khoản đó, nhưng ngay lúc khởi động, bị giấu sau tám giây chờ; cách đồng bộ ban đầu tạo một thiết bị mới cho mỗi ảnh nên trả lại khoản đó 25 lần. Bước 480 và đường WPF gần như miễn phí, nên không phải chỗ cần tiết kiệm.
+
+Cách sửa là để chính luồng render đã đỗ dựng khung cuối trên thiết bị đã nóng suốt tám giây (`GpuRenderLoop.RenderParked` giao việc, `RenderFrames` là phần của `RenderOnce` chạy sau khi thiết bị đã có). Lần thử đầu **không có tác dụng** và lại do một giả định sai: vòng lặp thật báo `IsWarp = false` trên runner, vì máy không có card nên Windows trình bày bộ điều hợp phần mềm "Microsoft Basic Render Driver" như một adapter *phần cứng*, điều kiện "chỉ dùng lại thiết bị WARP" đã từ chối nó, và mọi ảnh rơi về đường thiết bị mới như cũ (cột `fresh` trong báo cáo cho thấy ngay). Lần sau `--snapshot` đặt `GpuRenderLoop.ForceWarpForSession` trước khi cửa sổ tồn tại (vòng lặp khởi động ngay trong constructor), nên ảnh chụp luôn dùng WARP trên mọi máy: không còn phụ thuộc card đồ hoạ của máy chụp, và vòng lặp là thiết bị `RenderParked` được phép dùng lại.
+
+**Kết quả (run `36878012766`, `4fbbfa0`):** mọi ảnh đi đường `parked` với `warp=True`; **`readback` còn 45 – 60 ms** (trước 15 – 20,5 s); cả chuỗi mỗi ảnh tốn khoảng 0,3 s trên tám giây chờ cổng; bước previews 921 s → **263 s**, gallery 680 s → **311 s**, cả job **29,4 → 12,2 phút**. Quan trọng hơn: CI **không commit gì**, tức ảnh dựng bằng thiết bị nóng của vòng lặp giống hệt từng byte với ảnh đã commit từ thiết bị mới. Đổi thiết bị dựng không làm đổi một byte nào.
+
+**Bài học, từ cả đợt này:** năm lần sửa, ba lần đầu hụt và lần thứ tư đúng nhưng chậm gấp ba, đều do cùng một thói quen: kết luận từ việc đọc code rồi đưa lên CI để xem. Hai thứ thực sự có tác dụng đều là **đo thứ có sẵn**: so từng pixel hai ảnh cùng code (đã nằm sẵn trong git), và thêm thời gian từng pha vào báo cáo chụp. Cả hai tốn vài phút, còn mỗi lượt đoán sai tốn từ mười đến ba mươi phút CI.

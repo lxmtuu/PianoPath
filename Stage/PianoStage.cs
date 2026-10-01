@@ -33,15 +33,17 @@ internal sealed partial class PianoStage : FrameworkElement
     private readonly Dictionary<ulong, Brush> _gradientCache = [];
     private readonly List<Star> _stars = [];
     private readonly List<Petal> _petals = [];
+    /// <summary>Seed of the blossom field, and of the particle stream. Fixed so a screenshot run repeats.</summary>
+    private const int PetalSeed = 20240616, ParticleSeed = 7331;
     /// <summary>Own random stream so the blossom field stays identical when particle effects consume their own numbers.</summary>
-    private readonly Random _petalRandom = new(20240616);
+    private Random _petalRandom = new(PetalSeed);
     private int _petalCount = -1;
     private double _petalWidth = -1, _petalHeight = -1;
     private readonly List<Spark> _sparks = [];
     private readonly List<Ring> _rings = [];
     private readonly List<Flash> _flashes = [];
     private readonly List<LiveTrail> _liveTrails = [];
-    private readonly Random _random = new(7331);
+    private Random _random = new(ParticleSeed);
     private readonly bool[] _activeKey = new bool[128];
     private readonly Color[] _activeKeyColor = new Color[128];
     private readonly double[] _keyHeat = new double[128];
@@ -538,6 +540,29 @@ internal sealed partial class PianoStage : FrameworkElement
         }
         _releaseScanIndex = firstUnended >= 0 ? firstUnended : NoteTimeline.FirstIndexAtOrAfter(_notes, _position);
         _releaseScanPos = _position;
+    }
+
+    /// <summary>
+    /// Puts the stage back at frame zero: the accumulated animation time is cleared, every transient
+    /// particle list is emptied and both random streams are re-seeded, so the next N frames always draw
+    /// the same picture.
+    ///
+    /// A screenshot run calls this right before it starts counting frames. Without it the picture would
+    /// still carry however many frames the window happened to draw while it settled — and that count
+    /// differs from one runner to the next, which is what made the README previews differ byte for byte
+    /// between two builds of the same interface.
+    /// </summary>
+    internal void ResetAnimation()
+    {
+        _elapsed = 0;
+        _beatPulse = 0; _energyLevel = 0;
+        _sparks.Clear(); _rings.Clear(); _flashes.Clear(); _liveTrails.Clear();
+        _petals.Clear(); _petalCount = -1;
+        Array.Clear(_keyHeat);
+        Array.Clear(_wispBudget);
+        _petalRandom = new Random(PetalSeed);
+        _random = new Random(ParticleSeed);
+        InvalidateVisual();
     }
 
     public void Advance(double seconds)
