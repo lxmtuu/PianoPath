@@ -375,7 +375,11 @@ public class FrameBudgetTests
 
         Assert.Equal(FrameTrend.Unknown, baseline.Compare(Run(false, Scene("default", 60)), Scene("default", 60)).Trend);
         Assert.Equal(FrameTrend.Unknown, Run(false, Scene("default", 60)).Compare(baseline, Scene("default", 60)).Trend);
-        Assert.Equal(FrameTrend.Unknown, baseline.Compare(Run(true, Scene("default", 60, 3840, 2160)), Scene("default", 60, 3840, 2160)).Trend);
+        // The size lives in the scene being compared, so both halves of this pair have to be spelled out:
+        // a 4K run compared with a 4K scene is comparable, and only 4K against 1080p is not.
+        var fourK = Run(true, Scene("default", 60, 3840, 2160));
+        Assert.Equal(FrameTrend.Unknown, baseline.Compare(fourK, baseline.Scene("default")!).Trend);
+        Assert.Equal(FrameTrend.Unknown, fourK.Compare(baseline, fourK.Scene("default")!).Trend);
     }
 
     [Fact]

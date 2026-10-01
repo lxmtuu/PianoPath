@@ -324,8 +324,9 @@ internal static partial class VerificationSuite
             "A real graphics card is what the budgets were written for, and it has to be recognised as one.");
         var gate = FrameBudget.DefaultLook;
         Assert(gate.Judge(true, 400, "Microsoft Basic Render Driver").Verdict == FrameVerdict.NotApplicable
-            && gate.Judge(false, 400, "Microsoft Basic Render Driver").Verdict == FrameVerdict.NotApplicable,
-            "A frame drawn by a software rasterizer is measured and compared with the previous run, never judged against the budget.");
+            && gate.Judge(FrameBudget.IsSoftwareAdapter(false, "Microsoft Basic Render Driver"), 400, "Microsoft Basic Render Driver").Verdict == FrameVerdict.NotApplicable,
+            "A frame drawn by a software rasterizer is measured and compared with the previous run, never judged against the budget - " +
+            "and the adapter's name is what says it is one, because Judge is handed the answer, not the string.");
         Assert(gate.Judge(false, 7.9, "NVIDIA GeForce RTX 4070").Verdict == FrameVerdict.Pass
             && gate.Judge(false, 8, "NVIDIA GeForce RTX 4070").Verdict == FrameVerdict.Pass
             && gate.Judge(false, 8.1, "NVIDIA GeForce RTX 4070").Verdict == FrameVerdict.Fail,
@@ -418,7 +419,7 @@ internal static partial class VerificationSuite
         Assert(measured.WarmupMs > 0 && measured.Preset == VisualPresets.DefaultPresetName && measured.Stats.FpsAtP95 > 0,
             "The warm-up really ran (the first frames are where the shaders, the atlas and the texture ring are built) and the scene drew the default look.");
         Assert(FrameBenchRun.TryParse(new FrameBenchRun { TakenUtc = "2026-10-01T00:00:00.0000000Z", AppVersion = "0.4.0", Adapter = "verify", SoftwareAdapter = true, Scenes = [measured] }.ToJson(), out var measuredBack)
-            && measuredBack.Scene("verify") is { } measuredScene && measuredScene.Samples.Count == 24,
+            && measuredBack.Scene("verify") is { } measuredScene && measuredScene.Samples.Count == measured.Samples.Count,
             "A report built from a real measurement has to survive the round trip through JSON with every frame time still in it.");
         Results.Add($"PASS perf gate: 2 budgets at 1080p (p95 < {FrameBudget.Ms(FrameBudget.DefaultLook.P95LimitMs)} ms for the default look, < {FrameBudget.Ms(FrameBudget.HeavyLook.P95LimitMs)} ms for {FrameBudget.HeavyLook.Preset}), " +
             $"nearest-rank percentiles, the software-adapter rule, the JSON round trip and the relative gate check out, and {measured.Frames} frames of {measured.Width}×{measured.Height} sampled on the loop itself " +
