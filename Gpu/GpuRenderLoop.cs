@@ -81,6 +81,15 @@ internal sealed class GpuRenderLoop : IDisposable
     /// </summary>
     internal double? FixedFrameSeconds { get; set; }
 
+    /// <summary>
+    /// Stops stepping the simulation once this many frames have run since the last reset, while the loop
+    /// keeps presenting the frozen state. Pairs with <see cref="FixedFrameSeconds"/>: a screenshot has to
+    /// show frame <i>N</i>, not whatever frame the render thread happened to reach. Measured on one build,
+    /// that thread ran 156 to 200 frames during the 17 seconds a capture takes, so without a budget the
+    /// picture depends on machine speed even with a pinned step.
+    /// </summary>
+    internal int? FixedFrameBudget { get; set; }
+
     private int _resetRequested;
 
     /// <summary>
@@ -191,6 +200,10 @@ internal sealed class GpuRenderLoop : IDisposable
                     Interlocked.Exchange(ref _framesSinceReset, 0);
                 }
                 Interlocked.Increment(ref _framesSinceReset);
+                // Past the budget the simulation freezes: the loop keeps presenting the last state so the
+                // picture stays on screen, but no further frame can move it.
+                var budget = FixedFrameBudget;
+                if (budget is int limit && Interlocked.Read(ref _framesSinceReset) > limit) dt = 0;
                 // the simulation runs in the layout of the primary output (the window when it is open)
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);

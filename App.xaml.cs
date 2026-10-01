@@ -99,7 +99,7 @@ public partial class App : Application
         {
             if (e.Args.Contains("--compact")) { window.WindowState = WindowState.Normal; window.Width = 1080; window.Height = 700; }
             var target = e.Args[snapshotIndex + 1];
-            var captured = false; var previewPressed = false; var previewStarted = false; var loadedWait = Stopwatch.StartNew();
+            var captured = false; var previewPressed = false; var previewStarted = false; var previewStepped = false; var loadedWait = Stopwatch.StartNew();
             // The previews have to come out byte-identical from one build to the next. Both clocks are pinned
             // to this step and the capture waits for a frame count instead of a wall-clock delay, so the
             // animated layers land at the same phase however fast the runner is.
@@ -125,13 +125,16 @@ public partial class App : Application
                 if (captured || (!window.HasSoundFont && loadedWait.Elapsed < TimeSpan.FromSeconds(8))) return;
                 // The counted sequence starts here, not at window load: however long the instrument took to
                 // scan must not leak into the picture, or a slow runner draws a different frame than a fast one.
-                if (!previewStarted) { previewStarted = true; window.BeginDeterministicPreview(previewStepSeconds); PressPreview(); }
-                if (FrameClock.Shared.FrameCount < previewFrames) return;
-                // The GPU thread simulates on its own clock; the stage shows whatever it last presented, so
-                // wait until it has stepped as far as the WPF side has *since its own reset* — FramesRendered
-                // counts the whole session, which includes the frames drawn while the window was settling.
+                if (!previewStarted) { previewStarted = true; window.BeginDeterministicPreview(previewStepSeconds, previewFrames); PressPreview(); }
+                // Step the animation directly instead of waiting for the compositor to deliver it. Measured
+                // over one build, CompositionTarget.Rendering gave 8 to 19 frames in the 17 seconds a
+                // capture takes, so a frame count of 45 was never reached and the watchdog shot at whatever
+                // count the machine had reached — 8 for one picture, 19 for the next.
+                if (!previewStepped) { previewStepped = true; window.RunDeterministicPreviewFrames(previewFrames, previewStepSeconds); }
+                // The GPU thread simulates on its own clock and is capped at the same frame count, so wait
+                // until it has actually got there before reading the frame it presents.
                 if (window.GpuLoop is { } loop && loop.FramesSinceReset < previewFrames) return;
-                Shoot("counted");
+                Shoot("stepped");
             }
             // Two attempts at making the previews reproducible went out on reasoning alone and both were
             // wrong, so the capture now reports how it actually got its picture. The build turns these into

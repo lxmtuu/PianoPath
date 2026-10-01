@@ -92,9 +92,19 @@ internal sealed class ChromeBackdrop : FrameworkElement
     private void OnFrame(double delta)
     {
         if (!_wantsFrames) return;
+        AdvanceFrame(delta);
+        InvalidateVisual();
+    }
+
+    /// <summary>
+    /// One frame of the backdrop, driven directly instead of by the compositor. A screenshot run steps the
+    /// backdrop this way: <c>CompositionTarget.Rendering</c> delivers only a handful of frames a second on a
+    /// CI runner, so a capture that waits for composition frames never reaches its frame count.
+    /// </summary>
+    internal void AdvanceFrame(double delta)
+    {
         _time += delta * (.35 + _motion * .65);
         Advance(_time, delta);
-        InvalidateVisual();
     }
 
     private void Advance(double time, double delta)

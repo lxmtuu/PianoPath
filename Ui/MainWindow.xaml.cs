@@ -213,7 +213,7 @@ public partial class MainWindow : Window
     /// happened to be. Two builds of the same interface produced 23 differing PNGs, which made the drift
     /// check unable to tell "the interface changed" from "the frame count differed".
     /// </summary>
-    internal void BeginDeterministicPreview(double stepSeconds)
+    internal void BeginDeterministicPreview(double stepSeconds, int frames)
     {
         Stage.ResetAnimation();
         DockBackdrop.ResetAnimation();
@@ -222,12 +222,38 @@ public partial class MainWindow : Window
         {
             // The main window's stage is drawn by the GPU simulation by default, so its state has to go back
             // to frame zero too; pinning the step alone leaves however long the loop already ran baked in.
+            // The budget then freezes it on frame N: left running, that thread stepped 156 to 200 frames
+            // during one capture, so the picture followed machine speed even with a pinned step.
             _gpuLoop.FixedFrameSeconds = stepSeconds;
+            _gpuLoop.FixedFrameBudget = frames;
             _gpuLoop.RequestSimulationReset();
         }
         FrameClock.Shared.UseFixedStep(stepSeconds);
         // Nothing may be playing yet, so ask for frames explicitly: the capture counts them.
         FrameClock.Shared.Acquire();
+    }
+
+    /// <summary>
+    /// Advances the animated layers by <paramref name="frames"/> steps of <paramref name="stepSeconds"/>,
+    /// driven directly rather than by the compositor.
+    ///
+    /// This is what makes the previews reproducible in practice. Waiting for composition frames does not
+    /// work on a CI runner: measured over one build, <c>CompositionTarget.Rendering</c> delivered 8 to 19
+    /// frames in the 17 seconds a screenshot takes, so the frame count was never reached and the capture
+    /// fell through to the watchdog at whatever count the machine had happened to reach — 8 for one
+    /// picture, 19 for the next. Stepping the animation here makes the picture a function of the argument.
+    /// </summary>
+    internal void RunDeterministicPreviewFrames(int frames, double stepSeconds)
+    {
+        for (var i = 0; i < frames; i++)
+        {
+            Stage.Advance(stepSeconds);
+            DockBackdrop.AdvanceFrame(stepSeconds);
+            MenuBackdrop.AdvanceFrame(stepSeconds);
+        }
+        Stage.InvalidateVisual();
+        DockBackdrop.InvalidateVisual();
+        MenuBackdrop.InvalidateVisual();
     }
 
     private void Tick(double elapsed)
