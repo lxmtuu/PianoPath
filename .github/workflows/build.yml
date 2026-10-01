@@ -270,7 +270,10 @@ jobs:
             # card this is WARP, Windows' software rasterizer: slower, but pixel-for-pixel the same shaders.
             @{ Name = 'stage-live.png';  Args = @('--play-preview') },
             # The same stage under the GPU engine's own name, the picture the README's GPU section embeds.
-            @{ Name = 'stage-gpu.png';   Args = @('--play-preview', '--gpu') },
+            # A held chord rather than the single note of stage-live: since the GPU engine became the
+            # default the two shots rendered the very same picture, so this one now shows what a held
+            # chord looks like on the default look — the hold effects linking the pressed keys.
+            @{ Name = 'stage-gpu.png';   Args = @('--play-preview', '--play-chord', '--gpu') },
             # Two looks that exercise the effect families the GPU engine draws: trails, ambient layers,
             # arcs between held keys, impact morphs and key labels. A held chord shows the hold effects.
             @{ Name = 'stage-gpu-galaxy.png'; Args = @('--play-preview', '--play-chord', '--gpu', '--preset=GalaxyVoyage') },
@@ -282,6 +285,13 @@ jobs:
             @{ Name = 'main-menu.png';   Args = @('--menu') },
             @{ Name = 'design-dock.png'; Args = @('--show-settings', '--settings-tab=style') },
             @{ Name = 'theme-dock.png';  Args = @('--show-settings', '--settings-tab=theme') },
+            # The three SESSION pages. The group owns real features (practice tempo, the history chart
+            # and its ghosts, the recording formats) yet had no picture of its own anywhere in the
+            # README, so a reader could only guess what the pages look like. The History page of a
+            # pristine first run is its empty state, which is exactly what a new install shows.
+            @{ Name = 'practice-dock.png';  Args = @('--show-settings', '--settings-tab=practice') },
+            @{ Name = 'history-dock.png';   Args = @('--show-settings', '--settings-tab=history') },
+            @{ Name = 'recording-dock.png'; Args = @('--show-settings', '--settings-tab=recording') },
             @{ Name = 'play-dialog.png'; Args = @('--play-dialog') },
             @{ Name = 'shortcuts.png';   Args = @('--shortcuts') },
             # The page that owns the interface language, so each set shows that language in the app itself.
