@@ -103,7 +103,7 @@ internal static partial class VerificationSuite
         var fastInput = new GpuFrameInput { Look = fastLook, StageHeightDip = 360 }; fastInput.Pressed[60] = true;
         var fastSimulation = new GpuStageSimulation(); var fastFeed = new GpuStageFeed();
         fastSimulation.Step(.04, fastInput, fastFeed, 640); fastInput.Pressed[60] = false;
-        burstSimulation.Step(.04, burstInput, burstFeed, 640); fastSimulation.Step(.04, fastInput, fastFeed, 640);
+        fastSimulation.Step(.04, fastInput, fastFeed, 640);
         for (var i = 0; i < 30; i++)
         {
             burstSimulation.Step(.05, burstInput, burstFeed, 640);
