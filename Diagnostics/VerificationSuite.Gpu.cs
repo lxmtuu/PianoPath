@@ -31,11 +31,25 @@ internal static partial class VerificationSuite
             "The GPU look should carry the stage's own note colours and keyboard proportion.");
 
         // ---- GPU-exclusive effects: the settings must reach the render look with their slider values ----
-        var gpuEffects = new PianoVisualSettings { NoteShimmer = true, NoteShimmerAmount = 60, HaloPulse = true, HaloPulseIntensity = 70, ShootingStars = true, ShootingStarsAmount = 30 };
+        var gpuEffects = new PianoVisualSettings
+        {
+            NoteShimmer = true, NoteShimmerAmount = 60, HaloPulse = true, HaloPulseIntensity = 70,
+            HaloPulseStyle = "Electric Arc", HaloPulseSpeed = 75,
+            BackgroundMotion = "Aurora", BackgroundMotionAmount = 68, BackgroundMotionSpeed = 40, BackgroundMotionColor = "#54DFFF",
+            ShootingStars = true, ShootingStarsAmount = 30
+        };
         var effectLook = GpuLook.From(gpuEffects, (pitch, track) => Color.FromRgb(255, 80, 220), .2);
         Assert(effectLook.NoteShimmer && effectLook.HaloPulse && effectLook.ShootingStars
-            && Math.Abs(effectLook.NoteShimmerAmount - .6f) < .01f && Math.Abs(effectLook.HaloPulseIntensity - .7f) < .01f && Math.Abs(effectLook.ShootingStarsAmount - .3f) < .01f,
-            "Note shimmer, halo light pulses and shooting stars must flow into the GPU look with their slider values.");
+            && Math.Abs(effectLook.NoteShimmerAmount - .6f) < .01f && Math.Abs(effectLook.HaloPulseIntensity - .7f) < .01f && Math.Abs(effectLook.ShootingStarsAmount - .3f) < .01f
+            && effectLook.HaloPulseStyle == "Electric Arc" && Math.Abs(effectLook.HaloPulseSpeed - 1.5625f) < .01f
+            && effectLook.BackgroundMotion == "Aurora" && Math.Abs(effectLook.BackgroundMotionAmount - .68f) < .01f
+            && Math.Abs(effectLook.BackgroundMotionSpeed - .95f) < .01f && Math.Abs(effectLook.BackgroundMotionColor.X - 84 / 255f) < .01f,
+            "Note shimmer, halo style/speed, procedural backdrop settings and shooting stars must flow into the GPU look.");
+        var invalidMotion = new PianoVisualSettings { BackgroundMotion = "Warp", BackgroundMotionAmount = 140, BackgroundMotionSpeed = -3, HaloPulseStyle = "Flash", HaloPulseSpeed = 180 };
+        invalidMotion.Clamp();
+        Assert(invalidMotion.BackgroundMotion == "None" && invalidMotion.BackgroundMotionAmount == 100 && invalidMotion.BackgroundMotionSpeed == 0
+            && invalidMotion.HaloPulseStyle == "Pulse" && invalidMotion.HaloPulseSpeed == 100,
+            "The new procedural motion choices and sliders must clamp and fall back safely on malformed preset data.");
         Assert(Array.IndexOf(PianoVisualSettings.AmbientLights, "Spotlights") >= 0,
             "The Spotlights light layer should be a choice the GPU stage draws.");
         var landing = new PianoVisualSettings();
@@ -61,10 +75,51 @@ internal static partial class VerificationSuite
         feed.ClearTransient();
         Assert(feed.TakeClearRequest() && !feed.TakeClearRequest(), "A clear request should be taken exactly once.");
 
+        // ---- note sparks: the burst family shapes the sustained emitter; physics time does not slow the stage clock ----
+        var burstSettings = new PianoVisualSettings
+        {
+            ShowEmbers = true, ImpactBurst = "Confetti", ParticleAmount = 80, PhysicsTimeFactor = 50,
+            ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ImpactMorph = "None", ShowHalo = false, ShowKeys = false
+        };
+        var burstLook = GpuLook.From(burstSettings, (pitch, track) => Color.FromRgb(255, 120, 90), .205);
+        var burstFeed = new GpuStageFeed(); burstFeed.Impact(60, 1);
+        var burstInput = new GpuFrameInput { Look = burstLook, StageHeightDip = 360 };
+        var burstSimulation = new GpuStageSimulation();
+        burstSimulation.Step(.04, burstInput, burstFeed, 640);
+        var burstSprites = new GpuInstanceList<GpuSpriteInstance>(64);
+        burstSimulation.BuildSprites(burstLook, new GpuSceneLayout(640, 360, .205f), burstSprites);
+        var hasImpactConfetti = false;
+        foreach (var sprite in burstSprites.Span) if (sprite.PosSize.W == 3) { hasImpactConfetti = true; break; }
+        burstFeed.ClearTransient(); burstInput.Pressed[60] = true;
+        burstSimulation.Step(.04, burstInput, burstFeed, 640);
+        var sustainedSprites = new GpuInstanceList<GpuSpriteInstance>(64);
+        burstSimulation.BuildSprites(burstLook, new GpuSceneLayout(640, 360, .205f), sustainedSprites);
+        var hasSustainedConfetti = false;
+        foreach (var sprite in sustainedSprites.Span) if (sprite.PosSize.W == 3) { hasSustainedConfetti = true; break; }
+        burstInput.Pressed[60] = false;
+        var fastSettings = burstSettings.Clone(); fastSettings.PhysicsTimeFactor = 200;
+        var fastLook = GpuLook.From(fastSettings, (pitch, track) => Color.FromRgb(255, 120, 90), .205);
+        var fastInput = new GpuFrameInput { Look = fastLook, StageHeightDip = 360 }; fastInput.Pressed[60] = true;
+        var fastSimulation = new GpuStageSimulation(); var fastFeed = new GpuStageFeed();
+        fastSimulation.Step(.04, fastInput, fastFeed, 640); fastInput.Pressed[60] = false;
+        burstSimulation.Step(.04, burstInput, burstFeed, 640); fastSimulation.Step(.04, fastInput, fastFeed, 640);
+        for (var i = 0; i < 30; i++)
+        {
+            burstSimulation.Step(.05, burstInput, burstFeed, 640);
+            fastSimulation.Step(.05, fastInput, fastFeed, 640);
+        }
+        Assert(burstSimulation.ParticleCount > fastSimulation.ParticleCount && fastSimulation.ParticleCount == 0 && hasImpactConfetti && hasSustainedConfetti
+            && Math.Abs(burstSimulation.Time - 1.58) < .002 && Math.Abs(fastSimulation.Time - 1.58) < .002,
+            "Impact and held-key emitters should use their selected shape, particle ageing should honor slow/fast physics, and both stage clocks should remain real-time.");
+
         // ---- shaders ------------------------------------------------------------------------------------
         var source = GpuStageRenderer.ShaderSource();
         foreach (var entry in new[] { "VsFullscreen", "PsBackground", "VsNote", "PsNote", "VsKey", "PsKey", "VsSprite", "PsSprite", "PsBloomPrefilter", "PsBloomDown", "PsBloomUp", "PsComposite" })
             Assert(source.Contains(entry + "(", StringComparison.Ordinal), $"The embedded shader source should define {entry}.");
+        Assert(source.Contains("float3 BackgroundMotion(", StringComparison.Ordinal) && source.Contains("float4 SceneFxColor", StringComparison.Ordinal)
+            && source.Contains("HitFx.x < 5.5", StringComparison.Ordinal) && source.Contains("the centre of the keyboard", StringComparison.Ordinal),
+            "The embedded HLSL should contain the procedural background modes and animated hit-line families.");
 
         // ---- a real frame on WARP -----------------------------------------------------------------------
         const int width = 640, height = 360;
@@ -78,6 +133,7 @@ internal static partial class VerificationSuite
         var elapsed = clock.Elapsed.TotalMilliseconds;
         double Luma(int x, int y) { var i = (y * width + x) * 4; return .0722 * pixels[i] + .7152 * pixels[i + 1] + .2126 * pixels[i + 2]; }
         double Average(int y0, int y1) { var sum = 0.0; var count = 0; for (var y = y0; y < y1; y++) for (var x = 0; x < width; x += 3) { sum += Luma(x, y); count++; } return sum / count; }
+        double ImageAverage(byte[] image, int y0, int y1) { var sum = 0.0; var count = 0; for (var y = y0; y < y1; y++) for (var x = 0; x < width; x += 3) { var i = (y * width + x) * 4; sum += .0722 * image[i] + .7152 * image[i + 1] + .2126 * image[i + 2]; count++; } return sum / count; }
         var keyboard = Average((int)(height * .86), height - 4);
         var sky = Average(4, (int)(height * .3));
         var distinct = new HashSet<int>();
@@ -85,17 +141,52 @@ internal static partial class VerificationSuite
         Assert(keyboard > 60, $"The GPU frame should show a lit white-key keyboard along the bottom (average luma {keyboard:0}).");
         Assert(keyboard > sky + 20, $"The keyboard should stand out from the dark stage above it (keys {keyboard:0}, stage {sky:0}).");
         Assert(distinct.Count > 40, $"The GPU frame should be a picture, not a flat fill ({distinct.Count} distinct sampled colours).");
-        Results.Add($"PASS gpu stage: settings, feed and {source.Length / 1024} KiB of HLSL check out; a {width}×{height} frame with 13 simulated steps rendered on {adapter} in {elapsed:0} ms (keys {keyboard:0}, stage {sky:0}, {distinct.Count} colours).");
+        var motionFeed = new GpuStageFeed(); motionFeed.SetStageHeight(height);
+        var motionSettings = new PianoVisualSettings
+        {
+            BackgroundMotion = "Nebula", BackgroundMotionAmount = 85, BackgroundMotionSpeed = 38, BackgroundMotionColor = "#9B6BFF",
+            BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = false,
+            ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowLightBeams = false, ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+        };
+        motionFeed.SetLook(GpuLook.From(motionSettings, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+        motionFeed.SetState([], 0, false, new HashSet<int>());
+        var motionPixels = GpuRenderLoop.RenderOnce(motionFeed, width, height, 4, 1 / 60.0, out _);
+        var baselineFeed = new GpuStageFeed(); baselineFeed.SetStageHeight(height);
+        var baselineSettings = motionSettings.Clone(); baselineSettings.BackgroundMotion = "None";
+        baselineFeed.SetLook(GpuLook.From(baselineSettings, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+        baselineFeed.SetState([], 0, false, new HashSet<int>());
+        var baselinePixels = GpuRenderLoop.RenderOnce(baselineFeed, width, height, 4, 1 / 60.0, out _);
+        var proceduralBaselineSky = ImageAverage(baselinePixels, 4, (int)(height * .55));
+        var proceduralSky = ImageAverage(motionPixels, 4, (int)(height * .55));
+        Assert(proceduralSky > proceduralBaselineSky + 1.5, $"A selected procedural nebula should visibly light the GPU background ({proceduralSky:0.0} versus {proceduralBaselineSky:0.0}).");
+        var chromaFeed = new GpuStageFeed(); chromaFeed.SetStageHeight(height);
+        var chromaSettings = new PianoVisualSettings
+        {
+            BackgroundMode = "ChromaGreen", BackgroundMotion = "Nebula", BackgroundMotionAmount = 100,
+            ShowHalo = false, ShowKeys = false, ShowNotes = false, ShowEmbers = false, ShowFlame = false,
+            ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false, ShowLightBeams = false, ShowPetals = false
+        };
+        chromaFeed.SetLook(GpuLook.From(chromaSettings, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+        chromaFeed.SetState([], 0, false, new HashSet<int>());
+        var chromaPixels = GpuRenderLoop.RenderOnce(chromaFeed, width, height, 2, 1 / 60.0, out _);
+        var centerPixel = ((height / 2) * width + width / 2) * 4;
+        Assert(chromaPixels[centerPixel + 1] > 240 && chromaPixels[centerPixel] < 10 && chromaPixels[centerPixel + 2] < 10,
+            "An enabled procedural motion layer must never contaminate the pure green chroma-key frame.");
+        Results.Add($"PASS gpu stage: settings, feed and {source.Length / 1024} KiB of HLSL check out; a {width}×{height} frame with 13 simulated steps rendered on {adapter} in {elapsed:0} ms (keys {keyboard:0}, stage {sky:0}, {distinct.Count} colours); procedural sky {proceduralBaselineSky:0.0} → {proceduralSky:0.0}, chroma stays pure green.");
 
         // ---- round 2: the software stage's effect families on the GPU ------------------------------------
         var fxSettings = new PianoVisualSettings
         {
             AmbientCosmic = "Galaxy", FallingTrail = "Sparkles", KeyLabels = "All", ImpactMorph = "Shatter", ImpactFlashStyle = "Lightning",
-            ReleaseEffect = "Echo Rings", HoldElectricArc = true, HoldBar = true, BackgroundGuide = true, ShowPetals = true
+            ReleaseEffect = "Echo Rings", HoldElectricArc = true, HoldBar = true, BackgroundGuide = true, ShowPetals = true,
+            BackgroundMotion = "Aurora", BackgroundMotionAmount = 55, BackgroundMotionColor = "#55FFD8",
+            HaloPulse = true, HaloPulseStyle = "Electric Arc", HaloPulseIntensity = 65, HaloPulseSpeed = 60
         };
         var fxLook = GpuLook.From(fxSettings, (pitch, track) => Color.FromRgb(255, 80, 220), .205);
-        Assert(fxLook.AmbientCosmic == "Galaxy" && fxLook.FallingTrail == "Sparkles" && fxLook.KeyLabels == 2 && fxLook.ImpactFlashStyle == 1 && fxLook.HoldElectricArc && fxLook.ShowPetals,
-            "The GPU look should carry the ambient, trail, label, flash, arc and petal settings.");
+        Assert(fxLook.AmbientCosmic == "Galaxy" && fxLook.FallingTrail == "Sparkles" && fxLook.KeyLabels == 2 && fxLook.ImpactFlashStyle == 1 && fxLook.HoldElectricArc && fxLook.ShowPetals
+            && fxLook.BackgroundMotion == "Aurora" && fxLook.HaloPulse && fxLook.HaloPulseStyle == "Electric Arc",
+            "The GPU look should carry the ambient, trail, label, flash, hit-line motion, procedural sky, arc and petal settings.");
         var ambient = new GpuInstanceList<GpuSpriteInstance>(64);
         new GpuStageSimulation().BuildAmbient(fxLook, new GpuSceneLayout(640, 360, .205f), ambient);
         Assert(ambient.Count > 300, $"Galaxy, guide lanes and petals should put hundreds of shapes behind the notes ({ambient.Count}).");

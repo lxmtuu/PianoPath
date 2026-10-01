@@ -34,10 +34,12 @@ TARGET = ROOT / "presets"
 PRESETS: list[dict] = [
     {
         "name": "Ember Rain",
-        "description": "Warm sparks falling through rain over a dark stage: ember notes, melting impacts and water ripples on every hit.",
+        "description": "Warm sparks fall through rain beneath a restrained ember haze: molten notes, melting impacts and water ripples on every hit.",
         "settings": {
             "NoteStyle": "Fire", "ColorMode": "Gradient", "Palette": "Fire",
             "NoteColorStart": "#FF6A00", "NoteColorEnd": "#FFD166", "HaloColor": "#FF4A1C", "HaloIntensity": 120,
+            "BackgroundMotion": "Ember Haze", "BackgroundMotionAmount": 42, "BackgroundMotionSpeed": 48, "BackgroundMotionColor": "#FF6A24",
+            "HaloPulse": True, "HaloPulseStyle": "Sweep", "HaloPulseIntensity": 52, "HaloPulseSpeed": 48,
             "NoteTexture": 70, "NoteTint": 85, "NoteGlow": 120, "NoteEdge": 100, "NoteEdgeWidth": 40,
             "NoteRoundness": 40, "NoteHeadGlow": 60, "NoteFallSpeed": 520,
             "FallingTrail": "Sparkles", "FallingTrailIntensity": 70, "FallingTrailLength": 60,
@@ -63,10 +65,12 @@ PRESETS: list[dict] = [
     },
     {
         "name": "Lo-Fi Study",
-        "description": "Quiet pastel bars, dust instead of sparks and almost no glow: the cheapest look, made for long study recordings.",
+        "description": "Quiet pastel bars, soft aurora, dust instead of sparks and almost no glow: a calm look for long study recordings.",
         "settings": {
             "NoteStyle": "Solid", "ColorMode": "Gradient", "Palette": "Ocean",
             "NoteColorStart": "#8FB8C9", "NoteColorEnd": "#C9A6D8", "HaloColor": "#9AB6C4", "HaloIntensity": 40, "NoteLandingGlow": False,
+            "BackgroundMotion": "Aurora", "BackgroundMotionAmount": 16, "BackgroundMotionSpeed": 14, "BackgroundMotionColor": "#9AB6C4",
+            "HaloPulse": True, "HaloPulseStyle": "Pulse", "HaloPulseIntensity": 18, "HaloPulseSpeed": 16,
             "NoteTexture": 20, "NoteTint": 60, "NoteGlow": 45, "NoteEdge": 30, "NoteEdgeWidth": 20,
             "NoteRoundness": 70, "NoteHeadGlow": 20, "NoteFallSpeed": 480, "Notes3D": False,
             "FallingTrail": "None",
@@ -87,10 +91,11 @@ PRESETS: list[dict] = [
     },
     {
         "name": "Sunset Drive",
-        "description": "Synthwave neon in magenta and amber: speed-line trails, shattering hits, echo rings and laser beams over a purple horizon.",
+        "description": "Synthwave neon in magenta and amber: speed-line trails, shattering hits, echo rings and lasers racing over a moving retro grid.",
         "settings": {
             "NoteStyle": "Neon", "ColorMode": "Gradient", "Palette": "Custom",
-            "NoteColorStart": "#FF3D7F", "NoteColorEnd": "#FFB86B", "HaloColor": "#FF7A59", "HaloIntensity": 110, "HaloPulse": True, "HaloPulseIntensity": 60, "NoteShimmer": True, "NoteShimmerAmount": 30,
+            "NoteColorStart": "#FF3D7F", "NoteColorEnd": "#FFB86B", "HaloColor": "#FF7A59", "HaloIntensity": 110,
+            "HaloPulse": True, "HaloPulseStyle": "Sweep", "HaloPulseIntensity": 60, "HaloPulseSpeed": 58, "NoteShimmer": True, "NoteShimmerAmount": 30,
             "NoteTexture": 35, "NoteTint": 40, "NoteGlow": 115, "NoteEdge": 120, "NoteEdgeWidth": 55,
             "NoteRoundness": 55, "NoteHeadGlow": 50, "NoteFallSpeed": 620,
             "FallingTrail": "Speed Lines", "FallingTrailIntensity": 80, "FallingTrailLength": 65,
@@ -107,6 +112,7 @@ PRESETS: list[dict] = [
             "ParticleAmount": 34, "ParticleVelocity": 250, "ParticleSpread": 72, "Gravity": 300,
             "ParticleLife": 0.8, "ParticleSize": 1.9, "ParticleGlow": 110,
             "BackgroundGradient": True, "BackgroundMode": "Solid", "BackgroundColor": "#1B0B2E",
+            "BackgroundMotion": "Retro Grid", "BackgroundMotionAmount": 48, "BackgroundMotionSpeed": 54, "BackgroundMotionColor": "#FF4C93",
             "ShowStars": True, "StarDensity": 70, "HorizonGlow": 65,
             "KeyboardStyle": "Glass", "PressedKeyColorMode": "Note", "KeyGlowRadius": 75,
             "BloomIntensity": 95, "BloomSize": 80, "Vignette": 42, "Saturation": 118, "Contrast": 108,

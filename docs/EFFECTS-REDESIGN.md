@@ -378,3 +378,30 @@ Falling/Hold/Release theo vòng đời nốt; Ambient độc lập nên sau; Sma
 
 Nguyên tắc bất biến: **mọi cài đặt hiện trên UI đều phải có logic thật** —
 Planned không hiện UI.
+
+## 8. GPU atmosphere, hit line and emitter refinement
+
+GPU adds a second, full-screen atmosphere path beside the instanced ambient shapes:
+
+- `BackgroundMotion` runs in `Gpu/StageShaders.hlsl::BackgroundMotion`, so Aurora, Nebula,
+  Prism, Ember Haze, Ocean Flow and Retro Grid are coherent shader fields, not thousands
+  of CPU-created sprites. Amount, speed and a palette tint travel through `GpuLook` and
+  the `SceneFx` frame constants. None, a hidden background and chroma key suppress it.
+- `HaloPulseStyle` selects Pulse, Sweep, Twin Comets, Spectrum, Electric Arc or Ripple.
+  The shader modulates the note-aware hit-line filament; `AddHaloPulses` adds sparse,
+  style-specific HDR geometry for the moving heads, arcs and rings. Intensity and speed
+  are independent controls, and activity/tempo sync only modulate brightness.
+- The held-key spark emitter now uses the selected burst family too (Embers, Splash,
+  Fireworks, Confetti or Dust), with each family owning its velocity, gravity, drag,
+  lifetime, shape and colour response. `ParticleRandomness`, life randomness and size
+  randomness control actual independent samples instead of decorative-only sliders.
+- The GPU physics-time control scales particle integration and particle ageing only.
+  Song time, key transitions, live-note trails, the background shader and hit-line motion
+  keep real frame time, so slow-motion sparks do not slow the performance.
+- Each built-in and community look chooses a motion profile for its theme; Classic Roll,
+  Two Hands and Green Screen deliberately retain a quiet or clean backdrop.
+
+The settings path is covered in `SETTINGS-WIRING-AUDIT.md`. `VerifyGpuStage` checks mapping,
+clamps, impact and held-emitter shapes, slow/fast particle ageing with a real-time stage clock,
+a WARP render of the procedural sky and active hit line, and a clean chroma frame; the community
+preset generator keeps every shipped JSON preset complete.

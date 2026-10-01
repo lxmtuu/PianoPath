@@ -70,6 +70,7 @@ Phương pháp:
 | Chức năng cài đặt | Thuộc tính | Logic tiêu thụ |
 |---|---|---|
 | Amount / Response | `ParticleAmount`, `ParticleResponse` | `PianoStage.cs:204` |
+| Impact burst / held-key GPU emitter family | `ImpactBurst`, `ShowEmbers` | `PianoStage.SpawnImpactBurst`; `GpuStageSimulation.Impact` and `Step` use the same family for impact and sustain, including Zone → Embers/Splash |
 | Velocity / randomness / Speed | `ParticleVelocity`, `ParticleRandomness`, `ParticleSpeed` | `PianoStage.cs:210` |
 | Spread | `ParticleSpread` | `PianoStage.cs:207` |
 | Emitter size | `EmitterSize` | `PianoStage.cs:211` |
@@ -79,7 +80,7 @@ Phương pháp:
 | Glow | `ParticleGlow` | `PianoStage.cs:679` |
 | Gravity / Drag | `Gravity`, `Drag` | `PianoStage.cs:257` (bước physics) |
 | Vector field / Field scale / Evolution | `VectorField`, `FieldScale`, `EvolutionSpeed` | `PianoStage.cs:250, :256` |
-| Physics time factor | `PhysicsTimeFactor` | `PianoStage.cs:227` (dt nhân hệ số) |
+| Physics time factor | `PhysicsTimeFactor` | `PianoStage.cs:227` (dt của hiệu ứng); trên GPU, `GpuStageSimulation.Step` chỉ nhân hệ số vào tuổi/vận tốc hạt — đồng hồ sân khấu, nốt, nền và halo vẫn chạy theo thời gian thật |
 | Wisp density / rise / height / width / turbulence / glow | `WispAmount…WispGlow` | `PianoStage.cs:239` (spawn gate), `:283-291` (SpawnWisps), `:247` (turbulence), `:663` (glow) |
 | Flame intensity / height / color | `FlameIntensity`, `FlameHeight`, `FlameColorMode` | `PianoStage.cs:1004-1005` |
 | Impact wave (Ring/Shockwave/None) · size · intensity | `ShowImpactRings`, `ImpactWave`, `RingSize`, `ImpactWaveIntensity` | `PianoStage.cs` SpawnImpactWave → DrawRings/DrawShockwave (size and brightness follow hit strength) |
@@ -105,6 +106,8 @@ Phương pháp:
 | Mode (Solid/Image/ChromaGreen) | `BackgroundMode` | `PianoStage.cs:305` (chroma tắt vignette/aura/sao/beam — nhánh `else` `:312-337`), `:316`, `:914` (shader tắt khi green screen) |
 | Background color / Image + dim / CHOOSE-CLEAR IMAGE | `BackgroundColor`, `BackgroundImagePath`, `BackgroundDim` | `PianoStage.cs:315, :316-321, :94` (tải ảnh); `MainWindow.Settings.cs` ChooseStageBackground |
 | Aura gradient / Stars / density / Guide lanes | `BackgroundGradient`, `ShowStars`, `StarDensity`, `BackgroundGuide` | `PianoStage.cs:323, :332, :357, :333` |
+| GPU animated backdrop | `BackgroundMotion`, `BackgroundMotionAmount`, `BackgroundMotionSpeed`, `BackgroundMotionColor` | `GpuLook.From` → `GpuStageRenderer.BuildConstants` (`SceneFx`) → `StageShaders.hlsl::BackgroundMotion` (`PsBackground`); Aurora / Nebula / Prism / Ember Haze / Ocean Flow / Retro Grid; skipped for None, hidden background and chroma |
+| GPU hit-line animation | `HaloPulse`, `HaloPulseStyle`, `HaloPulseIntensity`, `HaloPulseSpeed` | `GpuStageSimulation.AddHaloPulses` for travelling geometry + `GpuStageRenderer.BuildConstants` (`HitFx`) → `StageShaders.hlsl::PsSprite`; Pulse / Sweep / Twin Comets / Spectrum / Electric Arc / Ripple |
 | Vignette / Horizon glow / Beam intensity | `Vignette`, `HorizonGlow`, `BeamIntensity` | `PianoStage.cs:346, :767-782`; `:335, :388-389`; `:336, :408-413` |
 | Halo line / color / intensity | `ShowHalo`, `HaloColor`, `HaloIntensity` | `PianoStage.cs:345, :387/:702/:787`, `:703`; màu halo còn tint rim light của shader (`Shading/PianoShaderScene.cs:159`) |
 | Parallax / Zoom / Horizontal framing | `CameraParallax`, `CameraZoom`, `CameraOffset` | `PianoStage.cs:126, :307, :306, :308` (transform camera mỗi frame) |

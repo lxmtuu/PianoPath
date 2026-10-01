@@ -1205,6 +1205,18 @@ internal static partial class VerificationSuite
         }
         Assert(VisualPresets.FindBuiltIn("inferno")!.Settings.NoteStyle == "Fire" && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.ShowWisps && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMode == "ChromaGreen",
             "The reference looks (burning notes, rainbow wisps, chroma key) should map to the matching renderer options.");
+        Assert(VisualPresets.BuiltIn.All(p => PianoVisualSettings.BackgroundMotions.Contains(p.Settings.BackgroundMotion)
+                && PianoVisualSettings.HaloPulseStyles.Contains(p.Settings.HaloPulseStyle))
+            && VisualPresets.FindBuiltIn("Neon Violet")!.Settings.BackgroundMotion == "Nebula"
+            && VisualPresets.FindBuiltIn("Inferno")!.Settings.BackgroundMotion == "Ember Haze"
+            && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.HaloPulseStyle == "Spectrum"
+            && VisualPresets.FindBuiltIn("Ice Crystal")!.Settings.HaloPulseStyle == "Ripple"
+            && VisualPresets.FindBuiltIn("Ocean Depths")!.Settings.BackgroundMotion == "Ocean Flow"
+            && VisualPresets.FindBuiltIn("Retro Arcade")!.Settings.BackgroundMotion == "Retro Grid"
+            && VisualPresets.FindBuiltIn("Classic Roll")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Classic Roll")!.Settings.HaloPulse
+            && VisualPresets.FindBuiltIn("Two Hands")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Two Hands")!.Settings.HaloPulse
+            && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Green Screen")!.Settings.HaloPulse,
+            "Every built-in look should carry a validated, theme-matched motion profile, while the chroma preset keeps its background clean.");
         var target = new PianoVisualSettings { BackgroundImagePath = "C:\\keep.png", NoteGlow = 1 };
         target.CopyFrom(VisualPresets.Inferno());
         Assert(target.NoteStyle == "Fire" && target.BackgroundImagePath == "C:\\keep.png" && !ReferenceEquals(target.TrackColors, VisualPresets.Inferno().TrackColors),
@@ -1265,8 +1277,18 @@ internal static partial class VerificationSuite
         Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.General),
             "The first section should open on Style and the last one should close on the pages of the application itself.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
-        Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode)) && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)),
-            "Note style, color mode, keyboard style, background mode and wisps should be editable from the dock.");
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode))
+                && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMotion)) && choices.ContainsKey(nameof(PianoVisualSettings.HaloPulseStyle))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)) && toggles.ContainsKey(nameof(PianoVisualSettings.HaloPulse)),
+            "Note style, background motion, hit-line style, keyboard style and their effect switches should be editable from the dock.");
+        var initialBackgroundMotion = visualSettings.BackgroundMotion;
+        choices[nameof(PianoVisualSettings.BackgroundMotion)].SelectedValue = "Ocean Flow";
+        Assert(visualSettings.BackgroundMotion == "Ocean Flow", "Choosing a procedural background should update the live visual settings.");
+        choices[nameof(PianoVisualSettings.BackgroundMotion)].SelectedValue = initialBackgroundMotion;
+        var initialHaloPulseStyle = visualSettings.HaloPulseStyle;
+        choices[nameof(PianoVisualSettings.HaloPulseStyle)].SelectedValue = "Twin Comets";
+        Assert(visualSettings.HaloPulseStyle == "Twin Comets", "Choosing a hit-line animation should update the live visual settings.");
+        choices[nameof(PianoVisualSettings.HaloPulseStyle)].SelectedValue = initialHaloPulseStyle;
         var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode;
         choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = "Fire";
         Assert(visualSettings.NoteStyle == "Fire" && visualSettings.PresetModified, "Choosing a note style should update the renderer settings and flag the preset as modified.");
@@ -3561,6 +3583,12 @@ internal static partial class VerificationSuite
             Assert(loaded.ToJson() == PianoVisualSettings.FromJson(loaded.ToJson()).ToJson() && loaded.BackgroundAppearanceVersion >= 2,
                 $"presets/{name}.json should already hold final values: loading it twice must not change it again (no migration or clamping left to do).");
         }
+        Assert(shelf.All(preset => PianoVisualSettings.BackgroundMotions.Contains(preset.Settings.BackgroundMotion)
+                && PianoVisualSettings.HaloPulseStyles.Contains(preset.Settings.HaloPulseStyle))
+            && shelf.FirstOrDefault(preset => preset.Name == "Ember Rain")?.Settings.BackgroundMotion == "Ember Haze"
+            && shelf.FirstOrDefault(preset => preset.Name == "Lo-Fi Study")?.Settings.BackgroundMotion == "Aurora"
+            && shelf.FirstOrDefault(preset => preset.Name == "Sunset Drive")?.Settings.BackgroundMotion == "Retro Grid",
+            "Every community preset should ship a validated motion profile that supports its theme.");
         Assert(shelf.Select(preset => preset.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == shelf.Count
                 && !shelf.Any(preset => VisualPresets.FindBuiltIn(preset.Name) is not null),
             "Shelf names should be unique and should not shadow a built-in preset.");

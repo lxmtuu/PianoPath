@@ -17,7 +17,7 @@ namespace PianoPath;
 internal struct GpuFrameConstants
 {
     public Vector4 ScreenTime, SceneSize, Camera, Background, Aura, Horizon, SceneA, SceneB;
-    public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2;
+    public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -360,6 +360,16 @@ internal sealed class GpuStageRenderer : IDisposable
         context.PSUnsetShaderResource(0);
     }
 
+    private static float BackgroundMotionId(string style) => style switch
+    {
+        "Aurora" => 1, "Nebula" => 2, "Prism" => 3, "Ember Haze" => 4, "Ocean Flow" => 5, "Retro Grid" => 6, _ => 0
+    };
+
+    private static float HaloMotionId(string style) => style switch
+    {
+        "Pulse" => 1, "Sweep" => 2, "Twin Comets" => 3, "Spectrum" => 4, "Electric Arc" => 5, "Ripple" => 6, _ => 0
+    };
+
     private GpuFrameConstants BuildConstants(GpuRenderTarget target, GpuFrameInput input, GpuSceneLayout layout, GpuStageSimulation simulation,
         float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth)
     {
@@ -397,7 +407,12 @@ internal sealed class GpuStageRenderer : IDisposable
             Post = new Vector4(look.ShaderExposure, look.ShaderFilmic ? 1 : 0, 1, 1),
             // threshold 1.8: the lit white keys reach about 1.4 and must not bloom (their blur greys the
             // black keys); notes, sparks, flares and pressed keys are emissive and sit well above it
-            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f, 1.8f, .8f / 255f)
+            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f, 1.8f, .8f / 255f),
+            SceneFx = new Vector4(look.ShowBackground && !look.Chroma ? BackgroundMotionId(look.BackgroundMotion) : 0,
+                look.BackgroundMotionAmount, look.BackgroundMotionSpeed, simulation.Activity),
+            SceneFxColor = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundMotionColor), 1),
+            HitFx = new Vector4(look.ShowHalo && look.HaloPulse ? HaloMotionId(look.HaloPulseStyle) : 0,
+                look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity)
         };
     }
 

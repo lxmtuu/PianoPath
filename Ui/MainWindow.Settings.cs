@@ -373,9 +373,9 @@ public partial class MainWindow
 
     private void BuildParticlesPage()
     {
-        var sparks = Card(ParticleSettingsHost, "SPARKS · EMITTER", "Burst when a note reaches the keyboard.");
-        Toggle(sparks, "Enable sparks", nameof(PianoVisualSettings.ShowEmbers), "Turn the spark burst on or off.");
-        SliderRow(sparks, "Amount", nameof(PianoVisualSettings.ParticleAmount), 0, 120, "Particles per impact.");
+        var sparks = Card(ParticleSettingsHost, "SPARKS · EMITTER", "Impact bursts with a lighter stream of sparks while notes are held.");
+        Toggle(sparks, "Enable sparks", nameof(PianoVisualSettings.ShowEmbers), "Enable impact bursts and the sustained note spark emitter.");
+        SliderRow(sparks, "Amount", nameof(PianoVisualSettings.ParticleAmount), 0, 120, "Particles per impact and rate of the held-key emitter.");
         SliderRow(sparks, "Velocity", nameof(PianoVisualSettings.ParticleVelocity), 0, 800, "Initial speed.");
         SliderRow(sparks, "Velocity randomness", nameof(PianoVisualSettings.ParticleRandomness), 0, 100, "Variation of the initial speed.");
         SliderRow(sparks, "Spread", nameof(PianoVisualSettings.ParticleSpread), 0, 100, "Angle of the burst cone.");
@@ -383,7 +383,7 @@ public partial class MainWindow
         SliderRow(sparks, "Emitter size", nameof(PianoVisualSettings.EmitterSize), 0, 100, "Width of the spawn area on the key.");
         SliderRow(sparks, "Spiral", nameof(PianoVisualSettings.Spiral), 0, 100, "Twists the burst direction over time.");
         SliderRow(sparks, "Speed", nameof(PianoVisualSettings.ParticleSpeed), 0, 300, "Overall speed multiplier.");
-        Choice(sparks, "Burst style", nameof(PianoVisualSettings.ImpactBurst), "Look of the particle explosion: embers, water splash, fireworks, confetti or dust.",
+        Choice(sparks, "Burst style", nameof(PianoVisualSettings.ImpactBurst), "The impact burst and held-key emitter share a family: embers, water splash, fireworks, confetti or dust.",
             ("Embers", "Embers"), ("Splash", "Splash"), ("Fireworks", "Fireworks"), ("Confetti", "Confetti"), ("Dust", "Dust"));
 
         var physics = Card(ParticleSettingsHost, "SPARKS · PHYSICS", "Lifetime, size and forces.");
@@ -467,6 +467,11 @@ public partial class MainWindow
         Note(background, "Green screen mode disables vignette, beams and decorative layers so the key can be pulled cleanly.").VisibleWhen = () => _visualSettings.BackgroundMode == "ChromaGreen";
 
         var atmosphere = Card(SceneSettingsHost, "ATMOSPHERE", "Decorative layers drawn behind the notes.");
+        Choice(atmosphere, "Animated backdrop", nameof(PianoVisualSettings.BackgroundMotion), "A procedural GPU atmosphere that moves behind the piano without adding particle geometry.",
+            ("None", "Off"), ("Aurora", "Aurora"), ("Nebula", "Nebula"), ("Prism", "Prism"), ("Ember Haze", "Ember haze"), ("Ocean Flow", "Ocean flow"), ("Retro Grid", "Retro grid"));
+        SliderRow(atmosphere, "Motion intensity", nameof(PianoVisualSettings.BackgroundMotionAmount), 0, 100, "Strength of the moving background light.").VisibleWhen = () => _visualSettings.BackgroundMotion != "None";
+        SliderRow(atmosphere, "Motion speed", nameof(PianoVisualSettings.BackgroundMotionSpeed), 0, 100, "How quickly the background layers drift.").VisibleWhen = () => _visualSettings.BackgroundMotion != "None";
+        ColorRow(atmosphere, "Motion tint", nameof(PianoVisualSettings.BackgroundMotionColor), "Palette tint for the moving atmosphere.").VisibleWhen = () => _visualSettings.BackgroundMotion != "None";
         Toggle(atmosphere, "Purple aura gradient", nameof(PianoVisualSettings.BackgroundGradient), "Soft radial glow at the top of the stage.");
         Toggle(atmosphere, "Stars", nameof(PianoVisualSettings.ShowStars), "Twinkling star field.");
         SliderRow(atmosphere, "Star density", nameof(PianoVisualSettings.StarDensity), 0, 100, "How many stars are visible.").VisibleWhen = () => _visualSettings.ShowStars;
@@ -504,7 +509,11 @@ public partial class MainWindow
         ColorRow(halo, "Halo color", nameof(PianoVisualSettings.HaloColor), "Also tints the horizon glow and the keyboard rim light.");
         SliderRow(halo, "Halo intensity", nameof(PianoVisualSettings.HaloIntensity), 0, 200, "Brightness and photon emission of the hit line.");
         Toggle(halo, "Halo light pulses", nameof(PianoVisualSettings.HaloPulse), "Bright pulses of the halo colour travel along the hit line, so the stage keeps breathing between notes (GPU stage).").VisibleWhen = () => _visualSettings.ShowHalo;
+        Choice(halo, "Pulse style", nameof(PianoVisualSettings.HaloPulseStyle), "Choose how the hit-line light moves.",
+            ("Pulse", "Pulse"), ("Sweep", "Sweep"), ("Twin Comets", "Twin comets"), ("Spectrum", "Spectrum"), ("Electric Arc", "Electric arc"), ("Ripple", "Ripple"))
+            .VisibleWhen = () => _visualSettings.ShowHalo && _visualSettings.HaloPulse;
         SliderRow(halo, "Pulse intensity", nameof(PianoVisualSettings.HaloPulseIntensity), 0, 100, "How bright the travelling pulses are.").VisibleWhen = () => _visualSettings.ShowHalo && _visualSettings.HaloPulse;
+        SliderRow(halo, "Pulse speed", nameof(PianoVisualSettings.HaloPulseSpeed), 0, 100, "How quickly the pulse effect travels or animates.").VisibleWhen = () => _visualSettings.ShowHalo && _visualSettings.HaloPulse;
     }
 
     private void BuildCameraPage()
