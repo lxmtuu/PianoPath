@@ -1,1 +1,0 @@
-play-dialog.png how=stepped started=True wpfFrames=0 gpuFrames=7 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.6

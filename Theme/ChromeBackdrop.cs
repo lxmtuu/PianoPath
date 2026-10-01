@@ -78,8 +78,12 @@ internal sealed class ChromeBackdrop : FrameworkElement
 
     /// <summary>
     /// Puts the backdrop back at frame zero: the mote field is re-scattered from its fixed seed and the
-    /// accumulated time is cleared. A screenshot run calls this before it starts counting frames, so the
-    /// picture depends on how many frames were counted and not on how long the window took to settle.
+    /// accumulated time is cleared.
+    ///
+    /// Every <see cref="RebuildField"/> draws from the one random stream, and it runs on each resize and
+    /// each theme or density change, so the positions of the motes depend on how many rebuilds happened
+    /// while the window was settling. A screenshot run calls this first so the field is the same in every
+    /// run, however the window got there.
     /// </summary>
     internal void ResetAnimation()
     {
@@ -92,19 +96,9 @@ internal sealed class ChromeBackdrop : FrameworkElement
     private void OnFrame(double delta)
     {
         if (!_wantsFrames) return;
-        AdvanceFrame(delta);
-        InvalidateVisual();
-    }
-
-    /// <summary>
-    /// One frame of the backdrop, driven directly instead of by the compositor. A screenshot run steps the
-    /// backdrop this way: <c>CompositionTarget.Rendering</c> delivers only a handful of frames a second on a
-    /// CI runner, so a capture that waits for composition frames never reaches its frame count.
-    /// </summary>
-    internal void AdvanceFrame(double delta)
-    {
         _time += delta * (.35 + _motion * .65);
         Advance(_time, delta);
+        InvalidateVisual();
     }
 
     private void Advance(double time, double delta)

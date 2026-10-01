@@ -206,6 +206,12 @@ jobs:
             @{ Name = 'language-dock.png'; Args = @('--show-settings', '--settings-tab=general') }
           )
           New-Item -ItemType Directory -Force -Path $out | Out-Null
+          # Where the app writes one line per picture (App.ReportPreview): a hash of the PNG, how the capture
+          # was reached and what drew the stage. Outside docs/previews on purpose. Everything inside that
+          # folder is committed, and a line holding a measured duration would change the commit on every run.
+          $reports = Join-Path $env:RUNNER_TEMP 'preview-reports'
+          Remove-Item -Recurse -Force $reports -ErrorAction SilentlyContinue
+          $env:KEYFLOW_PREVIEW_REPORTS = $reports
           $failed = @()
           foreach ($lang in @('en', 'vi')) {
             foreach ($shot in $shots) {
@@ -225,12 +231,35 @@ jobs:
             }
           }
           if ($failed.Count) { "::error title=Keyflow previews::$($failed -join ', ') was not written"; exit 1 }
-          # Each screenshot writes a one-line report of how it was taken. Publishing them as annotations is
-          # the only way to read them later: a finished run's job log is not retrievable through the API,
-          # and two attempts at making these previews reproducible were judged on reasoning alone.
-          Get-ChildItem -Path $out -Recurse -Filter '*.report.txt' | ForEach-Object {
-            "::notice title=Preview capture::$((Get-Content $_.FullName -Raw).Trim())"
+          # One annotation with a line per picture. The hash of each PNG is what lets two runs be compared
+          # without waiting for the commit step, and it is a single annotation because GitHub shows only the
+          # first ten of a kind per step. A finished run's job log cannot be read afterwards; annotations can.
+          # (A diagnostic must not fail the step, and pwsh stops on the first error here: hence SilentlyContinue.)
+          $lines = Get-ChildItem -Path $reports -Filter '*.txt' -ErrorAction SilentlyContinue | Sort-Object Name | ForEach-Object { (Get-Content $_.FullName -Raw).Trim() }
+          "::notice title=Preview capture::$($lines -join '%0A')"
+          Remove-Item Env:KEYFLOW_PREVIEW_REPORTS
+
+          # The property everything above depends on, checked where it can be seen: render three of the pictures
+          # a second time, from the same executable and a fresh settings folder, and compare the bytes. Two
+          # renders of the same code that disagree mean the committed pictures will keep changing and the drift
+          # check below cannot be trusted. A warning, not a failure: it says the renderer is noisy, which is not
+          # something the author of a pull request can act on. One picture of each kind: the GPU stage with a held
+          # chord, the settings dock over the stage, and the main menu with its backdrop.
+          $unstable = @()
+          foreach ($name in @('stage-gpu-galaxy.png', 'theme-dock.png', 'main-menu.png')) {
+            $shot = $shots | Where-Object { $_.Name -eq $name }
+            $first = Join-Path $out "en/$name"
+            $again = Join-Path $env:RUNNER_TEMP "again-$name"
+            Remove-Item -Force $again -ErrorAction SilentlyContinue
+            $settings = Join-Path $env:TEMP "keyflow-preview-again-$([IO.Path]::GetFileNameWithoutExtension($name))"
+            Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
+            $args = @('--snapshot', $again, '--compact', '--lang=en', "--settings-dir=$settings") + $shot.Args
+            Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait | Out-Null
+            if (-not (Test-Path $again)) { $unstable += "$name (no second picture)"; continue }
+            if ((Get-FileHash $first).Hash -ne (Get-FileHash $again).Hash) { $unstable += $name }
           }
+          if ($unstable.Count) { "::warning title=Previews are not reproducible::A second render of $($unstable -join ', ') differs from the first byte for byte, so the committed pictures will keep changing and the drift check cannot be trusted." }
+          else { "::notice title=Previews are reproducible::A second render of three pictures matched the first byte for byte." }
 
       # Every built-in look, drawn by both engines side by side (software | Direct3D 11), in one picture:
       # docs/previews/presets.jpg. It is how a change to the GPU engine is checked against the look each

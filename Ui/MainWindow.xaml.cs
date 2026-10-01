@@ -203,57 +203,78 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Puts the window into the state the README previews are captured from: every animator is returned to
-    /// frame zero and both clocks — the WPF frame clock and the GPU render thread — are pinned to a fixed
-    /// step, so the picture N frames later is the same on any machine.
+    /// Puts the window into the state the README previews are captured from: the GPU render thread stopped
+    /// and every animator back at frame zero.
     ///
-    /// Without this the previews are not reproducible. Every animator integrates the frame delta, and the
-    /// screenshot used to be taken after a wall-clock settle, so the number of frames that had run — and
-    /// therefore the phase of the petals, wisps, arcs and backdrop motes — depended on how fast the runner
-    /// happened to be. Two builds of the same interface produced 23 differing PNGs, which made the drift
-    /// check unable to tell "the interface changed" from "the frame count differed".
+    /// The previews have to come out byte for byte the same from one build to the next, or the drift check
+    /// cannot tell "the interface changed" from "the machine was a little slower". Measured by comparing two
+    /// CI renders of the same code, the chrome was already identical and the whole difference sat in the GPU
+    /// frame, apart from the main menu, whose backdrop kept moving. So the render thread, which free-runs on
+    /// its own clock, is parked before anything is pressed, and the frame is built synchronously afterwards by
+    /// <see cref="RunDeterministicPreviewFrames"/>.
     /// </summary>
-    internal void BeginDeterministicPreview(double stepSeconds, int frames)
+    internal void BeginDeterministicPreview()
     {
+        // The thread would otherwise take the preview note's events off the feed before the synchronous frame
+        // saw them, and publish frames of its own over it. A loop that is still starting cannot be parked, so
+        // wait for its device first (it answers on failure too, so this never waits out the full ten seconds).
+        _gpuLoop?.WaitUntilStarted(TimeSpan.FromSeconds(10));
+        if (_gpuLoop is { Error: null, IsReady: true } loop) loop.Park(TimeSpan.FromSeconds(3));
         Stage.ResetAnimation();
         DockBackdrop.ResetAnimation();
         MenuBackdrop.ResetAnimation();
-        if (_gpuLoop is not null)
-        {
-            // The main window's stage is drawn by the GPU simulation by default, so its state has to go back
-            // to frame zero too; pinning the step alone leaves however long the loop already ran baked in.
-            // The budget then freezes it on frame N: left running, that thread stepped 156 to 200 frames
-            // during one capture, so the picture followed machine speed even with a pinned step.
-            _gpuLoop.FixedFrameSeconds = stepSeconds;
-            _gpuLoop.FixedFrameBudget = frames;
-            _gpuLoop.RequestSimulationReset();
-        }
-        FrameClock.Shared.UseFixedStep(stepSeconds);
-        // Nothing may be playing yet, so ask for frames explicitly: the capture counts them.
-        FrameClock.Shared.Acquire();
     }
 
     /// <summary>
-    /// Advances the animated layers by <paramref name="frames"/> steps of <paramref name="stepSeconds"/>,
-    /// driven directly rather than by the compositor.
+    /// Advances the stage <paramref name="frames"/> steps of <paramref name="stepSeconds"/>, builds the GPU frame
+    /// for that same moment, and leaves the window ready to be captured.
     ///
-    /// This is what makes the previews reproducible in practice. Waiting for composition frames does not
-    /// work on a CI runner: measured over one build, <c>CompositionTarget.Rendering</c> delivered 8 to 19
-    /// frames in the 17 seconds a screenshot takes, so the frame count was never reached and the capture
-    /// fell through to the watchdog at whatever count the machine had happened to reach — 8 for one
-    /// picture, 19 for the next. Stepping the animation here makes the picture a function of the argument.
+    /// Everything happens in this one call and nothing yields to the dispatcher until the capture, so no
+    /// composition frame can add a step of the machine's own length: the picture is a function of the two
+    /// arguments. Waiting for the compositor instead does not work on a CI runner. Measured over one build,
+    /// <c>CompositionTarget.Rendering</c> delivered 8 to 19 frames in the 17 seconds a screenshot took, and the
+    /// render thread ran 156 to 200 over the same time, each picture landing on a different count.
     /// </summary>
     internal void RunDeterministicPreviewFrames(int frames, double stepSeconds)
     {
-        for (var i = 0; i < frames; i++)
-        {
-            Stage.Advance(stepSeconds);
-            DockBackdrop.AdvanceFrame(stepSeconds);
-            MenuBackdrop.AdvanceFrame(stepSeconds);
-        }
+        for (var i = 0; i < frames; i++) Stage.Advance(stepSeconds);
+        if (GpuStageActive) ShowDeterministicGpuFrame(frames, stepSeconds);
+        FrameClock.Shared.Freeze();
         Stage.InvalidateVisual();
-        DockBackdrop.InvalidateVisual();
-        MenuBackdrop.InvalidateVisual();
+        FlushRenderPass();
+    }
+
+    /// <summary>
+    /// The GPU stage after <paramref name="frames"/> fixed steps from a fresh simulation, rendered on the
+    /// calling thread (<see cref="GpuRenderLoop.RenderOnce"/>, the same path <c>--gpu-snapshot</c> and the
+    /// verification suite use) and shown in place of whatever the parked render thread last produced.
+    /// </summary>
+    private void ShowDeterministicGpuFrame(int frames, double stepSeconds)
+    {
+        var (width, height) = Stage.GpuPixelSize;
+        if (width < 16 || height < 16) return;
+        try
+        {
+            var pixels = GpuRenderLoop.RenderOnce(_gpuFeed, width, height, frames - 1, stepSeconds, out _);
+            Stage.ShowGpuFrame(pixels, width, height);
+        }
+        catch (Exception ex)
+        {
+            // The screenshot is still taken, with whatever frame the stage already shows.
+            Trace.WriteLine($"Keyflow: the deterministic GPU frame could not be built: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Lets WPF run the layout and render passes the invalidations above queued. A live visual reuses its
+    /// cached drawing until one has run, and neither <c>RenderTargetBitmap.Render</c> nor a same-tick
+    /// <c>InvalidateVisual</c> re-runs <c>OnRender</c>, so a capture taken without this shows the old stage.
+    /// </summary>
+    private void FlushRenderPass()
+    {
+        var frame = new DispatcherFrame();
+        Dispatcher.BeginInvoke(DispatcherPriority.Render, () => frame.Continue = false);
+        Dispatcher.PushFrame(frame);
     }
 
     private void Tick(double elapsed)

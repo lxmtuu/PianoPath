@@ -231,4 +231,49 @@ internal static partial class VerificationSuite
         Results.Add($"PASS gpu recording: {recorded} frames of 320×180 rendered by the loop with no window and no preview (keys {recordedKeys:0}).");
         Results.Add($"PASS gpu stage effects: {ambient.Count} ambient shapes, a {atlas.Width}×{atlas.Height} glyph atlas ({inked} inked px), sky {plainSky:0.0} → {fxSky:0.0} with the galaxy on.");
     }
+
+    /// <summary>
+    /// The README previews can only repeat byte for byte if the GPU frame is a pure function of the feed and
+    /// the number of simulation steps. The capture relies on three facts about <see cref="GpuRenderLoop.RenderOnce"/>,
+    /// and each is asserted here on WARP, in this process, so a regression shows up in the verification log
+    /// instead of as another commit of changed pictures:
+    ///
+    /// * two renders from identical feeds after the same number of steps are identical, which includes the
+    ///   final pass that dithers with the simulation's clock;
+    /// * drawing only the last step gives the same picture as drawing every step, which is what lets the
+    ///   previews step 480 frames for the price of one draw;
+    /// * a different number of steps gives a different picture, or the two assertions above would hold for a
+    ///   renderer that ignored time altogether.
+    /// </summary>
+    private static void VerifyDeterministicGpuFrame()
+    {
+        const int width = 320, height = 180, frames = 48;
+        var settings = new PianoVisualSettings
+        {
+            AmbientCosmic = "Galaxy", FallingTrail = "Sparkles", ImpactMorph = "Shatter", ImpactFlashStyle = "Lightning",
+            ReleaseEffect = "Echo Rings", HoldElectricArc = true, HoldBar = true, ShowPetals = true,
+            BackgroundMotion = "Aurora", BackgroundMotionAmount = 55, BackgroundMotionColor = "#55FFD8",
+            HaloPulse = true, HaloPulseStyle = "Electric Arc", HaloPulseIntensity = 65, HaloPulseSpeed = 60
+        };
+        GpuStageFeed Feed()
+        {
+            var feed = new GpuStageFeed();
+            feed.SetStageHeight(height);
+            feed.SetLook(GpuLook.From(settings, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+            feed.SetState([], 0, false, new HashSet<int> { 60, 64, 67 });
+            foreach (var pitch in new[] { 60, 64, 67 }) feed.Impact(pitch, 1);
+            return feed;
+        }
+        var first = GpuRenderLoop.RenderOnce(Feed(), width, height, frames - 1, 1 / 60.0, out var adapter);
+        var second = GpuRenderLoop.RenderOnce(Feed(), width, height, frames - 1, 1 / 60.0, out _);
+        var lastOnly = GpuRenderLoop.RenderOnce(Feed(), width, height, frames - 1, 1 / 60.0, out _, renderWarmup: false);
+        var later = GpuRenderLoop.RenderOnce(Feed(), width, height, frames + 11, 1 / 60.0, out _, renderWarmup: false);
+        Assert(first.AsSpan().SequenceEqual(second),
+            "Two GPU frames rendered from identical feeds after the same number of steps must be identical byte for byte: the README previews depend on it.");
+        Assert(first.AsSpan().SequenceEqual(lastOnly),
+            "Drawing only the last step must give the same picture as drawing every step, or the previews cannot skip the frames in between.");
+        Assert(!first.AsSpan().SequenceEqual(later),
+            "A GPU frame after more simulation steps must differ from an earlier one, otherwise the determinism checks prove nothing.");
+        Results.Add($"PASS gpu determinism: the {width}×{height} frame after {frames} fixed steps repeats byte for byte on {adapter}, drawing only the last step gives the same picture, and {frames + 12} steps give a different one.");
+    }
 }

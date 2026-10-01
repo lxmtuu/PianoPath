@@ -73,35 +73,23 @@ internal sealed class GpuRenderLoop : IDisposable
     /// <summary>Wait for the display's vertical blank when presenting the stage window.</summary>
     internal bool VSync { get => _vsync; set => _vsync = value; }
 
-    /// <summary>
-    /// Advances the simulation by this many seconds per frame instead of by the measured wall-clock
-    /// delta, for renders that have to repeat byte for byte (the README previews). The loop still runs
-    /// at the machine's own pace and <see cref="FramesRendered"/> still counts real frames, so a capture
-    /// that waits for a frame count gets the same simulation state on any runner.
-    /// </summary>
-    internal double? FixedFrameSeconds { get; set; }
+    private volatile bool _parked;
+    private readonly ManualResetEventSlim _parkedAck = new(false);
 
     /// <summary>
-    /// Stops stepping the simulation once this many frames have run since the last reset, while the loop
-    /// keeps presenting the frozen state. Pairs with <see cref="FixedFrameSeconds"/>: a screenshot has to
-    /// show frame <i>N</i>, not whatever frame the render thread happened to reach. Measured on one build,
-    /// that thread ran 156 to 200 frames during the 17 seconds a capture takes, so without a budget the
-    /// picture depends on machine speed even with a pinned step.
+    /// Stops the render thread from stepping the simulation or publishing frames, and returns once it has
+    /// acknowledged, so nothing is in flight afterwards.
+    ///
+    /// A screenshot run parks the loop before it presses anything and builds its own frame synchronously
+    /// (see <see cref="RenderOnce"/>). Left running, the thread would take the preview note's events off the
+    /// feed before that frame ever saw them, and it would publish frames of its own on top of it.
     /// </summary>
-    internal int? FixedFrameBudget { get; set; }
-
-    private int _resetRequested;
-
-    /// <summary>
-    /// Asks the render thread to put its simulation back at frame zero. The simulation lives on that
-    /// thread, so the deterministic preview capture can only request the reset, not perform it.
-    /// </summary>
-    internal void RequestSimulationReset() => Volatile.Write(ref _resetRequested, 1);
-
-    /// <summary>Frames the render thread has stepped since the last simulation reset.</summary>
-    internal long FramesSinceReset => Interlocked.Read(ref _framesSinceReset);
-
-    private long _framesSinceReset;
+    internal bool Park(TimeSpan timeout)
+    {
+        _parkedAck.Reset();
+        _parked = true;
+        return _parkedAck.Wait(timeout);
+    }
 
     internal void SetEmbedded(bool enabled, int width, int height)
     {
@@ -162,6 +150,8 @@ internal sealed class GpuRenderLoop : IDisposable
         {
             while (_running)
             {
+                // Parked: acknowledge before touching the feed or the device, so Park() returning means no frame is in flight.
+                if (_parked) { _parkedAck.Set(); Thread.Sleep(5); last = clock.Elapsed.TotalSeconds; continue; }
                 var frameStart = clock.Elapsed.TotalSeconds;
                 bool embeddedEnabled; int ew, eh; IntPtr hwnd; int ww, wh; bool windowChanged;
                 lock (_outputGate)
@@ -192,18 +182,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 gpu.UpdateBackground(_feed.Background);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
-                var dt = FixedFrameSeconds ?? (now - last); last = now;
-                if (Volatile.Read(ref _resetRequested) == 1)
-                {
-                    Interlocked.Exchange(ref _resetRequested, 0);
-                    simulation.Reset();
-                    Interlocked.Exchange(ref _framesSinceReset, 0);
-                }
-                Interlocked.Increment(ref _framesSinceReset);
-                // Past the budget the simulation freezes: the loop keeps presenting the last state so the
-                // picture stays on screen, but no further frame can move it.
-                var budget = FixedFrameBudget;
-                if (budget is int limit && Interlocked.Read(ref _framesSinceReset) > limit) dt = 0;
+                var dt = now - last; last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
@@ -291,14 +270,18 @@ internal sealed class GpuRenderLoop : IDisposable
         _running = false;
         if (!_thread.Join(TimeSpan.FromSeconds(2))) Trace.WriteLine("Keyflow: the GPU stage thread did not stop within 2 s.");
         _started.Dispose();
+        _parkedAck.Dispose();
     }
 
     /// <summary>
     /// Renders one frame synchronously on a private WARP device and returns it as BGRA pixels. Used by
     /// the verification suite and <c>--gpu-snapshot</c>, where a deterministic software rasterizer
     /// matters more than speed.
+    ///
+    /// <paramref name="renderWarmup"/> false steps the simulation through the warm-up frames without drawing
+    /// them, so a long run (the README previews step 480 frames) costs one draw instead of 480.
     /// </summary>
-    internal static byte[] RenderOnce(GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, out string adapter, bool forceWarp = true)
+    internal static byte[] RenderOnce(GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, out string adapter, bool forceWarp = true, bool renderWarmup = true)
     {
         using var renderer = GpuStageRenderer.Create(forceWarp);
         adapter = renderer.AdapterName;
@@ -318,6 +301,9 @@ internal sealed class GpuRenderLoop : IDisposable
             var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
             var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
             simulation.Step(frameSeconds, input, feed, layout.Width);
+            // Every frame is drawn from scratch out of the simulation and the input, so the frames before the last
+            // only matter through the simulation, which the step above already advanced.
+            if (!renderWarmup && frame < warmupFrames) continue;
             renderer.UpdateBackground(feed.Background);
             renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);

@@ -305,41 +305,49 @@ Hai chỗ sai chồng nhau: `;` in `pushed` **bất kể** push thành công hay
 
 Cũng vì commit `07cfe64` mang `[skip ci]`, nó không tự tạo lượt chạy — nên run kế tiếp chỉ xuất hiện khi commit tài liệu được đẩy lên.
 
-### 6.13 Làm ảnh preview tất định (2026-10-01, **CI xanh**)
+### 6.13 Làm ảnh preview tất định: ba lần đoán sai, rồi đo (2026-10-01)
 
-§6.12 để lại một câu hỏi chưa trả lời: run `36845212582` báo **0 cảnh báo drift**, vậy mà CI vẫn commit lại 23 ảnh. Đo ra thì hai lần render liên tiếp khác nhau ở **23/23 tệp** (`vi/stage-gpu.png` 251 566 → 254 255 byte) — tức ảnh render **không tất định theo byte**, và bộ phát hiện drift không phân biệt được "giao diện đổi" với "số khung hình khác". Người dùng chọn **sửa gốc**.
+**Triệu chứng.** Run `36845212582` báo 0 cảnh báo drift mà CI vẫn commit lại 23 ảnh: hai lần render liên tiếp của cùng một code khác nhau ở **23/23 tệp** (`vi/stage-gpu.png` 251 566 → 254 255 byte). Bộ phát hiện drift không phân biệt được "giao diện đổi" với "máy chậm hơn một chút". Người dùng chọn **sửa gốc** (render tất định), không chọn so sánh có dung sai pixel.
 
-**Ngẫu nhiên không phải nguyên nhân.** Mọi luồng số đều có seed cố định (`ChromeBackdrop` 20240831, `PianoStage` 20240616/7331, `new Random(4242)`) và phần còn lại là `SeededRandom(int)` — một hàm băm sin, không trạng thái. Nguyên nhân là **thời gian**: mọi animator tích phân delta khung hình (`PianoStage.Advance` → `_elapsed`, `ChromeBackdrop.OnFrame` → `_time`, `GpuRenderLoop` → `dt = now - last`), còn ảnh thì chụp sau **một khoảng chờ theo giây tường** (8 s), nên số khung hình đã chạy — và do đó pha của cánh hoa, wisps, hồ quang, mote — phụ thuộc tốc độ runner.
+**Ba lần sửa dựa trên suy luận, cả ba đều hụt.** Mỗi lần mất một lượt CI hơn mười phút, và mỗi lần số liệu của lượt sau chỉ ra chỗ sai:
 
-**Sửa ở bốn chỗ:**
+| Lần | Giả thuyết | Vì sao hụt (số liệu đo được) |
+| --- | --- | --- |
+| `d0cbf4b` | Ghim bước `FrameClock`, chụp sau 45 khung do compositor phát | Báo cáo chụp: mọi ảnh `how=watchdog`, `wpfFrames=8…19`. Trên runner `CompositionTarget.Rendering` chỉ phát 8–19 khung trong 17 s, nên cổng 45 không bao giờ đạt và watchdog chụp ở một số khung ngẫu nhiên |
+| `fa298f5` | Thêm reset cho mô phỏng GPU, chờ `FramesSinceReset ≥ 45` | `gpuFrames=3…12` ngay lúc ghi báo cáo trong khi cổng đòi ≥ 45: reset là bất đồng bộ, cổng đọc **bộ đếm cũ** trước khi luồng render kịp xử lý nó |
+| `377dc80` | Bước WPF trực tiếp + ngân sách khung cho luồng GPU | Cùng lỗi cổng chờ. Ngoài ra khung GPU chỉ lên sân khấu WPF trong `CompositionTarget.Rendering` (`PianoStage.OnGpuRendering`), và `ReadbackRing` đọc ngược **trễ một khung**: dù luồng render đúng đến đâu, ảnh chụp vẫn thấy một khung cũ |
 
-| Chỗ | Sửa |
-| --- | --- |
-| `Ui/FrameClock.cs` | `UseFixedStep(seconds)` ghim delta và đếm khung hình (`FrameCount`) |
-| `Gpu/GpuRenderLoop.cs` | `FixedFrameSeconds` thay `dt` đo được; `FramesRendered` (đã có sẵn) dùng để chờ |
-| `Stage/PianoStage.cs`, `Theme/ChromeBackdrop.cs` | `ResetAnimation()` đưa về khung 0: xoá `_elapsed`/`_time`, dọn hạt, **seed lại** luồng số (seed thành hằng `PetalSeed`/`ParticleSeed`/`FieldSeed`, trường `Random` bỏ `readonly`) |
-| `App.xaml.cs` | chụp sau **45 khung hình đếm được** thay vì chờ giây; chuỗi đếm **bắt đầu sau khi instrument đã settle**, và nốt preview cũng bấm ở đó |
+Trong lúc đó tôi còn tự gây ra một lỗi: tệp `*.report.txt` ghi cạnh ảnh bị bước `git add docs/previews` của CI commit vào repo (22 tệp, mang `seconds=` đổi mỗi lượt, tức **đảm bảo** commit mới ở mọi lượt chạy dù ảnh có tất định). Đã gỡ; báo cáo nay ghi ra thư mục ngoài `docs/previews`, và `tools/check_sources.py` (`scan_previews_folder`) báo lỗi nếu thư mục đó chứa bất cứ thứ gì ngoài ảnh, để lỗi này không tái diễn.
 
-Hai chi tiết dễ sai, đều bắt được khi đọc lại chính code mình vừa viết: (1) `ContentRendered` đang bấm nốt preview **trước** khi chuỗi đếm bắt đầu → onset rơi vào khung ngẫu nhiên, nên dời `PressPreview()` vào `TryCapture()`; (2) watchdog chụp thẳng khi chưa đếm đủ khung → nay nó khởi động chuỗi đếm rồi mới chịu chụp ở lần tick thứ hai.
+**Phép đo thật sự có tác dụng: so từng pixel hai ảnh do cùng một code render ở hai lượt CI.** Kho git đã có sẵn các cặp ảnh đó (CI commit chúng), và một bộ giải mã PNG ngắn bằng Python là đủ. Cặp `769649c` / `e1fb78f` (cùng code `fa298f5`):
 
-**Kiểm chứng chứ không tin:** `--verify` thêm `VerifyDeterministicPreview` — cùng số khung hình phải ra **cùng pixel** (SHA-256 của ảnh render), và khác số khung hình phải ra ảnh khác (nếu không thì khẳng định đầu vô nghĩa). `Verification passed: 1406 → **1408** assertions` ở run `36847748821`, `static`/`test`/`build` đều xanh, `CS8602: 0`.
+| Ảnh | Pixel lệch | max \|Δ\| | Nằm ở đâu |
+| --- | --- | --- | --- |
+| `theme-dock`, `design-dock`, `language-dock` | ≈ 42 000 (5,6 %) | **1** | chỉ từ hàng 405 trở xuống: phần khung GPU lộ ra ngoài dock. Toàn bộ chrome (header, dock, chữ) **giống hệt từng bit** |
+| `shortcuts`, `play-dialog` | 11 000 – 19 000 | 1 | cùng dải đáy |
+| `stage-live`, `stage-gpu`, `galaxy`, `storm`, `background-image` | 145 000 – 455 000 | 229 – 247 | chùm sáng và tia lửa quanh nốt đang giữ, trong khung GPU |
+| `main-menu` | 13 500 | 91 | **khắp ảnh, kể cả chrome**: hạt mote và các dải sóng của `MenuBackdrop` |
 
-**Cách biết nó thật sự có tác dụng:** run `36847748821` **vẫn** commit previews (`0bb502e`) — đúng, vì ảnh trong repo lúc đó do code cũ render. Phép thử thật là lượt chạy **kế tiếp** phải thấy ảnh giống hệt và **không** commit gì.
+Từ đó ra hai nguyên nhân thật, không cái nào là thứ ba lần trước đã sửa:
 
-### 6.14 Lần sửa hụt, và mắt xích GPU (2026-10-01)
+1. **Khung GPU phụ thuộc `simulation.Time`, kể cả khi cảnh đứng yên.** Bước composite cuối cộng nhiễu dither `Hash21(pixel + frac(ScreenTime.z) * 61)` với `ScreenTime.z = simulation.Time` (`Gpu/StageShaders.hlsl`, hàm `PsComposite`). Mỗi giá trị `Time` cho một mẫu nhiễu ±1 khác trên mọi vùng sáng, đúng dải \|Δ\| = 1 ở bàn phím; còn quanh nốt giữ thì pha của hiệu ứng lệch nhiều hơn.
+2. **`ShowStartupMenu()` ghi đè khoá chrome.** Nó gọi `MenuBackdrop.Configure(…, _visualSettings.ChromeMotion, …)` ngay sau khi `DisableChromeMotion()` đã đặt "Off", nên menu luôn chuyển động đầy đủ trong ảnh chụp tự động, trái với chính chú thích ở `App.xaml.cs` ("a frozen chrome keeps every screenshot identical"). Lỗi có từ trước đợt này.
 
-§6.13 ghim bước khung hình và đếm 45 khung. **Kết quả đo được: vẫn khác nhau ở 23/23 tệp** (`0bb502e` so với `78ec813`, cả hai đều render bằng code mới). Kết luận "ghim số khung hình là đủ" **sai**.
+**Đã loại trừ bằng số liệu:** chrome WPF ở mọi ảnh trừ menu; nhãn có số đo (kiểu "shaders compiled in N ms") lọt vào ảnh; RNG không seed (đã grep: mọi luồng đều có seed hoặc là `SeededRandom` không trạng thái); đồng hồ thật trong khung GPU (`GpuStageFeed.Now` chỉ ảnh hưởng khi đang phát bài hoặc có `PulseBeat`, cả hai đều không xảy ra ở chế độ chụp).
 
-**Bằng chứng chỉ ra chỗ sai.** `VerifyDeterministicPreview` **đạt** ngay từ lượt đầu — tức sân khấu WPF, khi được tự `Advance()` từng bước, thật sự tất định. Vậy phần lệch không nằm ở đó. Hai manh mối còn lại: `RenderBackend` mặc định là **`"Gpu"`** (`Stage/PianoVisualSettings.cs:372`), nên hình trong ảnh đến từ `GpuStageSimulation`; và lớp ấy có `_time` **tích luỹ từ lúc luồng render khởi động** (`Gpu/GpuStageSimulation.cs:146`) mà **không có hàm reset nào**. Ghim bước chỉ sửa *tốc độ*, không sửa *điểm bắt đầu*.
+**Cách sửa cuối cùng, nhỏ hơn mọi lần trước:**
 
-**Sửa:**
+- Khung GPU của ảnh chụp được dựng **đồng bộ** bằng `GpuRenderLoop.RenderOnce` (đường sẵn có của `--gpu-snapshot` và bộ kiểm thử): mô phỏng mới, đúng **480 bước 1/60 s**, không luồng nào chạy tự do nên không còn gì phụ thuộc tốc độ máy. 480 bước = 8 giây, đúng thời gian nốt đã được giữ trước kia, nên hình giữ nguyên trạng thái ổn định.
+- Luồng render thật được **đỗ** (`GpuRenderLoop.Park`, có xác nhận) trước khi nhấn phím, vì nó sẽ lấy mất sự kiện của nốt preview khỏi feed. Khung đã dựng được ghi thẳng vào bitmap của sân khấu (`PianoStage.ShowGpuFrame`) nên khung muộn của luồng đó không ghi đè được.
+- `RenderOnce(renderWarmup: false)` chỉ vẽ khung cuối, nên 480 bước chỉ tốn một lần vẽ. Điều này đúng vì mỗi khung được dựng lại từ đầu (đã đọc: `ClearState`, xoá HDR và depth; các `Build*` không ghi trạng thái và không dùng RNG; `AddPetals` chỉ dựng lười một bộ đệm có seed) và được `--verify` chứng minh tại chỗ.
+- `ShowStartupMenu` tôn trọng khoá chrome.
+- `ChromeBackdrop.ResetAnimation` và `PianoStage.ResetAnimation` seed lại luồng số: mỗi `RebuildField` tiêu thụ luồng chung, nên vị trí hạt phụ thuộc số lần cửa sổ đã dựng lại trước đó.
+- `FrameClock.Freeze` chặn khung compositor lọt vào lúc WPF dựng lại trước khi chụp. Cả chuỗi (đỗ, reset, nhấn phím, bước, dựng khung GPU, chụp) chạy trong một lần gọi, không nhường dispatcher.
 
-| Chỗ | Sửa |
-| --- | --- |
-| `Gpu/GpuStageSimulation.cs` | `Reset()`: `_time`, hạt, ring, flash, trail, các bao tuyến theo phím, seed lại `Random` (thành hằng `RandomSeed`) |
-| `Gpu/GpuRenderLoop.cs` | `RequestSimulationReset()` — mô phỏng nằm trên luồng render nên chỉ có thể *yêu cầu* qua cờ `Volatile`; kèm `FramesSinceReset` |
-| `App.xaml.cs` | chờ `FramesSinceReset` thay vì `FramesRendered` — bộ đếm cũ tính cả những khung vẽ ra trong lúc window đang settle |
+**Kiểm chứng ba lớp:**
 
-**Cách biết lần này có thật không** (đừng lặp lại lỗi của §6.13 là tin vào một lượt chạy): lượt chạy ngay sau commit sửa **vẫn** commit previews, vì ảnh trong repo do code cũ render — điều đó **không** nói lên gì. Chỉ lượt chạy **kế tiếp**, khi ảnh trong repo đã do chính code mới render, mới là phép thử: nó phải thấy ảnh giống hệt và **không** commit gì.
+1. `--verify`. `VerifyDeterministicPreview` (sân khấu WPF: cùng số bước ra cùng SHA-256, khác số bước ra khác) và `VerifyDeterministicGpuFrame` (GPU: hai lần render giống hệt từng byte; chỉ vẽ khung cuối bằng vẽ mọi khung; thêm bước ra ảnh khác). Khẳng định thứ hai là bằng chứng cho giả định "bỏ qua các khung trung gian".
+2. Trong chính lượt build: render lại 3 ảnh (GPU với hợp âm, dock, menu) và so SHA-256; lệch thì cảnh báo `Previews are not reproducible`.
+3. Mỗi ảnh ghi một dòng `sha=…` vào **một** annotation (GitHub chỉ hiện 10 annotation mỗi loại cho mỗi bước), để so hai lượt chạy bằng mắt.
 
-**Bài học chung cho cả hai lượt:** một thay đổi về tính tất định chỉ được chứng minh bằng **hai lượt render liên tiếp cho ra cùng kết quả**, không phải bằng một lượt chạy xanh.
+**Trạng thái khi viết mục này: chưa có kết quả CI cho cách sửa cuối.** Sandbox không có .NET SDK, và token GitHub hết hạn nên chưa push được. Phép thử thật vẫn là: lượt chạy **sau** lượt đầu tiên dùng code này phải thấy ảnh giống hệt và không commit gì. Một lượt chạy xanh không chứng minh điều đó, đây là bài học của cả ba lần hụt ở trên. Còn một rủi ro không do code này điều khiển: nếu hai runner có CPU khác đời, WARP có thể ra sai số cuối khác nhau; khi đó bước tự kiểm trong lượt build vẫn báo "reproducible" còn hai lượt chạy lại lệch nhau, và dòng `sha=` sẽ cho thấy chính xác ảnh nào.

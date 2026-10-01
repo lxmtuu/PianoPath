@@ -1,1 +1,0 @@
-design-dock.png how=stepped started=True wpfFrames=0 gpuFrames=5 gpuBackend=Microsoft Basic Render Driver soundfont=False seconds=8.4

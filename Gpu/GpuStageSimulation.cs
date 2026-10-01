@@ -85,36 +85,12 @@ internal sealed partial class GpuStageSimulation
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
     private readonly bool[] _active = new bool[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
-    /// <summary>Seed of the particle stream. Fixed so a screenshot run repeats.</summary>
-    private const int RandomSeed = 20260930;
-    private Random _random = new(RandomSeed);
+    private readonly Random _random = new(20260930);
     private double _time;
     private float _simWidth = 1280, _activity, _beatPulse;
     private GpuLook _look = new();
 
     internal double Time => _time;
-
-    /// <summary>
-    /// Puts the simulation back at frame zero: the clock, every particle, ring, flash and trail, the
-    /// per-key envelopes and the random stream.
-    ///
-    /// The stage of the main window is rendered by this simulation by default (<c>RenderBackend</c> is
-    /// <c>Gpu</c>), so a screenshot shows whatever state it happens to be in. Pinning the frame step is
-    /// not enough on its own: the loop has already been running for however long the window took to
-    /// settle, and that many seconds of accumulated <c>_time</c> shifts every ambient layer. Resetting
-    /// here is what makes "N frames after a reset" mean the same picture on any machine.
-    /// </summary>
-    internal void Reset()
-    {
-        _time = 0;
-        _count = 0;
-        _activity = 0; _beatPulse = 0; _pedalBoost = 1;
-        _rings.Clear(); _flashes.Clear(); _trails.Clear();
-        Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_spill);
-        Array.Clear(_sparkBudget); Array.Clear(_wispBudget); Array.Clear(_flameBudget);
-        Array.Clear(_active);
-        _random = new Random(RandomSeed);
-    }
     internal int ParticleCount => _count;
     internal int LiveTrailCount => _trails.Count;
     internal Vector3 HorizonColor { get; private set; }

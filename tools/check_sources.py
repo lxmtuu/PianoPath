@@ -768,6 +768,22 @@ def scan_readme():
     return errors
 
 
+# docs/previews belongs to CI: the build runs ``git add docs/previews`` and commits whatever is there. A
+# diagnostic written into it (a capture report with a measured duration, a hash, a log) changes on every run
+# and so guarantees a fresh commit forever, which is exactly what happened once with ``*.report.txt``. The
+# folder may hold pictures only; diagnostics go outside the repository (see ``App.ReportPreview``).
+PREVIEW_PICTURES = {".png", ".jpg", ".jpeg"}
+
+
+def scan_previews_folder():
+    folder = ROOT / "docs" / "previews"
+    if not folder.exists():
+        return []
+    return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures only, because CI commits everything in it on every run; "
+            "write diagnostics outside the repository (see App.ReportPreview)"
+            for path in sorted(folder.rglob("*")) if path.is_file() and path.suffix.lower() not in PREVIEW_PICTURES]
+
+
 def scan_cli_and_samples():
     """Command line, workflow and documentation are one product, so they are checked against each other.
 
@@ -1115,6 +1131,7 @@ def main():
     errors.extend(scan_theme_tokens())
     errors.extend(scan_installer())
     errors.extend(scan_readme())
+    errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
     errors.extend(scan_preset_shelf())
