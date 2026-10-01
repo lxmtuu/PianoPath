@@ -246,19 +246,29 @@ jobs:
           # something the author of a pull request can act on. One picture of each kind: the GPU stage with a held
           # chord, the settings dock over the stage, and the main menu with its backdrop.
           $unstable = @()
+          $recheck = Join-Path $env:RUNNER_TEMP 'preview-recheck'
+          Remove-Item -Recurse -Force $recheck -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $recheck | Out-Null
           foreach ($name in @('stage-gpu-galaxy.png', 'theme-dock.png', 'main-menu.png')) {
             $shot = $shots | Where-Object { $_.Name -eq $name }
             $first = Join-Path $out "en/$name"
-            $again = Join-Path $env:RUNNER_TEMP "again-$name"
-            Remove-Item -Force $again -ErrorAction SilentlyContinue
+            $again = Join-Path $recheck "again-$name"
             $settings = Join-Path $env:TEMP "keyflow-preview-again-$([IO.Path]::GetFileNameWithoutExtension($name))"
             Remove-Item -Recurse -Force $settings -ErrorAction SilentlyContinue
             $args = @('--snapshot', $again, '--compact', '--lang=en', "--settings-dir=$settings") + $shot.Args
             Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait | Out-Null
             if (-not (Test-Path $again)) { $unstable += "$name (no second picture)"; continue }
-            if ((Get-FileHash $first).Hash -ne (Get-FileHash $again).Hash) { $unstable += $name }
+            $hashFirst = (Get-FileHash $first).Hash.Substring(0, 12).ToLower()
+            $hashAgain = (Get-FileHash $again).Hash.Substring(0, 12).ToLower()
+            if ($hashFirst -ne $hashAgain) {
+              $unstable += "$name (sha $hashFirst, then $hashAgain)"
+              Copy-Item -Force $first (Join-Path $recheck "first-$name")
+            }
           }
-          if ($unstable.Count) { "::warning title=Previews are not reproducible::A second render of $($unstable -join ', ') differs from the first byte for byte, so the committed pictures will keep changing and the drift check cannot be trusted." }
+          if ($unstable.Count) {
+            "::warning title=Previews are not reproducible::A second render of $($unstable -join '; ') differs from the first byte for byte, so the committed pictures will keep changing and the drift check cannot be trusted. Both renders are in the keyflow-preview-recheck artifact."
+            "unstable=true" >> $env:GITHUB_OUTPUT
+          }
           else { "::notice title=Previews are reproducible::A second render of three pictures matched the first byte for byte." }
 
       # Every built-in look, drawn by both engines side by side (software | Direct3D 11), in one picture:
@@ -325,6 +335,16 @@ jobs:
           path: |
             docs/previews/**/*.png
             docs/previews/presets.jpg
+          if-no-files-found: warn
+
+      # Only when the second render disagreed with the first: both pictures, so the difference can be
+      # located pixel by pixel instead of guessed at.
+      - name: Upload the pictures that did not reproduce
+        if: steps.render-previews.outputs.unstable == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-preview-recheck
+          path: ${{ runner.temp }}/preview-recheck/*.png
           if-no-files-found: warn
 
       # The workflow renders every file it lists in $shots, so `tools/check_sources.py` lets a README

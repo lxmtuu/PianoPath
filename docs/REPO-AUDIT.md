@@ -347,7 +347,7 @@ Từ đó ra hai nguyên nhân thật, không cái nào là thứ ba lần trư�
 **Kiểm chứng ba lớp:**
 
 1. `--verify`. `VerifyDeterministicPreview` (sân khấu WPF: cùng số bước ra cùng SHA-256, khác số bước ra khác) và `VerifyDeterministicGpuFrame` (GPU: hai lần render giống hệt từng byte; chỉ vẽ khung cuối bằng vẽ mọi khung; thêm bước ra ảnh khác). Khẳng định thứ hai là bằng chứng cho giả định "bỏ qua các khung trung gian".
-2. Trong chính lượt build: render lại 3 ảnh (GPU với hợp âm, dock, menu) và so SHA-256; lệch thì cảnh báo `Previews are not reproducible`.
+2. Trong chính lượt build: render lại 3 ảnh (GPU với hợp âm, dock, menu) và so SHA-256; lệch thì cảnh báo `Previews are not reproducible` kèm hai mã băm, và đính cả hai ảnh vào artifact `keyflow-preview-recheck` để định vị chỗ lệch từng pixel thay vì đoán.
 3. Mỗi ảnh ghi một dòng `sha=…` vào **một** annotation (GitHub chỉ hiện 10 annotation mỗi loại cho mỗi bước), để so hai lượt chạy bằng mắt.
 
 **Trạng thái khi viết mục này: chưa có kết quả CI cho cách sửa cuối.** Sandbox không có .NET SDK, và token GitHub hết hạn nên chưa push được. Phép thử thật vẫn là: lượt chạy **sau** lượt đầu tiên dùng code này phải thấy ảnh giống hệt và không commit gì. Một lượt chạy xanh không chứng minh điều đó, đây là bài học của cả ba lần hụt ở trên. Còn một rủi ro không do code này điều khiển: nếu hai runner có CPU khác đời, WARP có thể ra sai số cuối khác nhau; khi đó bước tự kiểm trong lượt build vẫn báo "reproducible" còn hai lượt chạy lại lệch nhau, và dòng `sha=` sẽ cho thấy chính xác ảnh nào.
