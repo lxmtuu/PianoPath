@@ -269,9 +269,15 @@ public partial class MainWindow : Window
         if (width < 16 || height < 16) return "{too small}";
         try
         {
-            var pixels = GpuRenderLoop.RenderOnce(_gpuFeed, width, height, frames - 1, stepSeconds, out _);
+            // The parked loop's own device has been drawing since the window opened, so the frame costs it a
+            // fraction of a second; a brand-new software device spends about seventeen seconds on its first frame.
+            // Only a software (WARP) device is reused: the previews are WARP renders on every machine, so a real
+            // graphics card must not make them differ. Anything else, or any failure, falls back to a fresh device.
+            var pixels = _gpuLoop is { IsWarp: true } loop ? loop.RenderParked(width, height, frames - 1, stepSeconds, TimeSpan.FromSeconds(60)) : null;
+            var reused = pixels is not null;
+            pixels ??= GpuRenderLoop.RenderOnce(_gpuFeed, width, height, frames - 1, stepSeconds, out _);
             Stage.ShowGpuFrame(pixels, width, height);
-            return "{" + GpuRenderLoop.LastRenderTimings + "}";
+            return "{" + (reused ? "parked " : "fresh ") + GpuRenderLoop.LastRenderTimings + "}";
         }
         catch (Exception ex)
         {
