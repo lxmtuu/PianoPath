@@ -529,3 +529,42 @@ jobs:
             printf '%s\n' "$drifted" | sed 's|^|- `|; s|$|`|'
           } >>"$GITHUB_STEP_SUMMARY"
           echo "::warning title=Previews are stale::$count file(s) under docs/previews were re-rendered by this build and not committed ($names). Refresh them from the keyflow-previews artifact of this run."
+
+      # The packaging path is the one thing none of the steps above touch: this job builds and verifies
+      # bin/, while a release ships publish/ — a single file, an installer compiled from that folder, a
+      # ZIP of it. publish.ps1 had therefore never run anywhere before the release itself, which is what
+      # docs/REPO-AUDIT.md §5.3 names as the last blind spot of the checker: a defect in the script would
+      # have been found by the person cutting the release, at the moment they cut it.
+      #
+      # It publishes the framework-dependent kind, which downloads no runtime pack and takes a couple of
+      # minutes, with -AllowLfsPointer because this job does not fetch the 113 MiB SoundFont — the point is
+      # the packaging, not the piano (release.yml publishes the real thing with LFS). The assertions after
+      # it are what makes the step about the *package* rather than about dotnet: the executable, the
+      # licence MIT asks to travel with copies, the SoundFont's attribution, and the ZIP -Zip promised.
+      - name: Publish a distributable build
+        shell: pwsh
+        run: |
+          .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64 -Zip -AllowLfsPointer
+          $folder = 'publish/win-x64-fd'
+          foreach ($file in @("$folder/PianoPath.exe", "$folder/LICENSE.txt", "$folder/Assets/ConcertGrand.sf2", "$folder/Assets/ATTRIBUTION.txt")) {
+            if (-not (Test-Path $file)) {
+              "::error title=Published package::$file is missing from the published folder"
+              throw "$file was not published"
+            }
+          }
+          $zip = Get-ChildItem publish -Filter 'Keyflow-*-win-x64-fd.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $zip) { throw 'publish.ps1 -Zip wrote no Keyflow-*-win-x64-fd.zip into publish/' }
+          # The last link of the version chain, checked against the binary a user would actually run:
+          # <Version> in the project file, which AppInfo reads back and which the SDK stamps into the
+          # executable's version resource. A package named after one version and containing another is
+          # the defect this whole step exists for.
+          $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
+          $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
+          if (-not $version) { throw 'PianoPath.csproj has no <Version>, so there is nothing to compare the package with' }
+          $exe = Get-Item "$folder/PianoPath.exe"
+          $stamped = "$($exe.VersionInfo.ProductVersion)"
+          if (-not $stamped.StartsWith($version)) {
+            throw "the published executable reports version '$stamped' while PianoPath.csproj declares '$version'"
+          }
+          if ($zip.Name -notlike "Keyflow-$version-*") { throw "the ZIP is named $($zip.Name), which does not carry the version $version" }
+          "published $($zip.Name) ($([math]::Round($zip.Length / 1MB, 1)) MB); the executable is $([math]::Round($exe.Length / 1MB, 1)) MB at version $stamped"

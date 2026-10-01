@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Reflection;
 using System.Text;
 
 namespace PianoPath;
@@ -74,7 +73,7 @@ internal static class FrameBenchmark
             var run = new FrameBenchRun
             {
                 TakenUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
-                AppVersion = Version(),
+                AppVersion = AppInfo.Version,
                 Adapter = loop.AdapterName,
                 Warp = loop.IsWarp,
                 SoftwareAdapter = software,
@@ -251,12 +250,4 @@ internal static class FrameBenchmark
 
     private static string? Value(string[] args, string prefix) =>
         args.FirstOrDefault(argument => argument.StartsWith(prefix, StringComparison.Ordinal))?[prefix.Length..];
-
-    private static string Version()
-    {
-        var assembly = typeof(FrameBenchmark).Assembly;
-        var informational = assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
-        // SourceLink appends "+<sha>" to the informational version; a report compares app versions, not builds.
-        return (string.IsNullOrWhiteSpace(informational) ? assembly.GetName().Version?.ToString() : informational?.Split('+')[0]) ?? "0";
-    }
 }

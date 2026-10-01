@@ -426,3 +426,93 @@ Cũng từ hai lượt đo cạnh nhau, đo được **độ nhiễu của WARP*
 Cả hai đều có test/khẳng định mới để không quay lại. Đây cũng là chỗ đáng ghi về phương pháp: hai lỗi này **không** nằm trong phần CI vừa báo đỏ, nên "CI xanh" không thay được một lượt đọc hết diff.
 
 **Bài học.** Cả hai lỗi CI bắt được đều cùng một loại: tôi viết khẳng định cho **hành vi tôi định làm** rồi tin rằng code đã làm đúng như vậy, thay vì đọc xem hàm được trao tham số gì. `Judge` nhận `bool` chứ không nhận tên adapter, và `Compare` lấy cỡ từ **cảnh** chứ không từ lượt chạy — hai chi tiết đó đều nằm trong chữ ký hàm, đọc mười giây là thấy, và mỗi lượt CI để phát hiện ra tốn gần mười phút.
+
+## 7. Đợt rà soát trước phát hành 1.0.0 — 2026‑10‑02
+
+Đọc lại toàn kho **lần cuối trước khi cắt bản phát hành chính thức đầu tiên**, trọng tâm là con đường phát
+hành — phần duy nhất của repo chưa từng chạy thật (`docs/ROADMAP.md` §4 #7). Sandbox này không có .NET
+SDK và không tải được gì ngoài GitHub API, nên phần C#/PowerShell/YAML được **soát tay** và do CI trên
+nhánh xác nhận; `tools/check_sources.py` và các mutation test chạy được tại chỗ.
+
+### 7.1 Đối chiếu từng con số mà tài liệu đang tuyên bố
+
+Một bản phát hành chính thức không được mở đầu bằng một câu sai trong README, nên mọi con số dẫn xuất
+được đo lại thay vì tin:
+
+| Tuyên bố | Ở đâu | Đo lại lúc rà soát | Kết quả |
+| --- | --- | --- | --- |
+| "132 test case / 93 hàm test / 1 434 dòng, link 10 tệp nguồn" | `docs/ROADMAP.md` §4 #2 | 83 `[Fact]` + 11 `[Theory]` = 94 hàm; 83 + 50 `[InlineData]` = 133 case; `wc -l` = 1 462; 10 `Compile Include` | ✅ đúng **trước** đợt này; đợt này thêm 1 test (hộp thoại About) nên con số trong roadmap đã được đếm lại và ghi ngày đếm |
+| "`VerificationSuite` có 58 hàm `Verify*` trong 5 150 dòng" | `docs/ROADMAP.md` §4 #2 | 58 tên `Verify…(` khác nhau; `VerificationSuite.cs` 4 706 + `.Gpu.cs` 444 = 5 150 dòng | ✅ |
+| "28 ảnh README (14 cảnh × 2 ngôn ngữ)" | cả hai README | 14 mục `Name = '…'` trong `$shots` của `build.yml`; 14 tệp trong `docs/previews/vi` và 14 trong `docs/previews/en` | ✅ |
+| "13 trang dock chia 4 nhóm" | README, §2 | `SettingsPages.Sections`: 7 + 2 + 3 + 1 = 13 trang, 4 nhãn nhóm | ✅ |
+| gallery preset render đủ preset có sẵn | `build.yml` | 14 preset trong `Stage/VisualPresets.cs` (`new(DefaultPresetName, …)` + 13 tên) và 14 tên trong `$presets` | ✅ (checker vẫn đối chiếu hai chiều) |
+| "bản dịch *một phần* 108 câu" | `docs/ROADMAP.md` P0 #3, README | `installer/Languages/Vietnamese.isl`: 104 `[Messages]` + 4 `[CustomMessages]` = 108 | ✅ |
+| 1 266 khoá trong inventory, 1 166 khoá nguồn in | §5.1 | chính `tools/check_sources.py` in ra hai con số đó | ✅ (không đổi sau đợt này: sửa khoá About là sửa **tại chỗ**, không thêm/bớt khoá) |
+| "repo chưa có tag hay release nào" | `docs/ROADMAP.md` §4 #7 | `git ls-remote --tags origin` rỗng, `gh release list` rỗng, `release.yml` chưa có lượt chạy nào | ✅ đúng — và đó là lý do đợt rà soát này tồn tại |
+| CI xanh trên `main` | — | run `36918513003` (`840f9c0`): `static`, `test`, `build` đều `success`, không step nào khác `success`/`skipped` | ✅ |
+| SoundFont trong checkout là con trỏ LFS | §5.2 | `Assets/ConcertGrand.sf2` = 134 byte (sandbox này không có `git lfs`); `publish.ps1` từ chối publish đúng trường hợp đó | ✅ đúng thiết kế |
+
+### 7.2 Đã sửa trong đợt này
+
+| Việc | Bằng chứng kiểm chứng |
+| --- | --- |
+| **Hộp thoại About gõ cứng số phiên bản ngay trong khoá chuỗi** ("…Keyflow 0.4.0 · shipped languages…"), trong khi menu khởi động *đã* đọc phiên bản từ assembly (`Ui/MainWindow.Menu.cs:49`, kèm fallback `?? "0.4"` cũng gõ tay). Một lần bump vì thế có thể ship menu nói một số bên trên hộp thoại About nói số khác — và About là chỗ người ta nhìn khi nghi một bản tải về | nay cả hai đọc **`AppInfo.Version`** (`AppInfo.cs`, đọc `AssemblyInformationalVersion` và cắt phần `+<sha>` của SourceLink, fallback là ba phần đầu của `AssemblyVersion`); câu About thành template `{0}` trong **cả hai** bảng chuỗi và đi qua `Loc.F`. `Diagnostics/FrameBenchmark.cs` bỏ hàm `Version()` riêng để dùng cùng một chỗ. Kiểm chứng: test portable mới `The_about_box_is_a_template_both_languages_can_fill` (điền `{0}` vào cả hai bảng — một dấu ngoặc nhọn lạc trong bản dịch sẽ ném `FormatException` lúc người dùng mở hộp thoại), `scan_localization` (hai bảng cùng tập khoá, cùng placeholder, cùng số dấu xuống dòng), và luật mới ở dòng dưới |
+| **Số phiên bản nằm ở tám chỗ, không luật nào giữ chúng**: `<Version>`, `#define AppVersion` của bộ cài, hai ví dụ `/DAppVersion=`, hai cặp `git tag`/`git push origin`, hai bảng chuỗi, fallback `?? "0.4"` | luật mới **`scan_release_version`** trong `tools/check_sources.py`: `<Version>` phải là `MAJOR.MINOR.PATCH` và là giá trị duy nhất; bộ cài, **cả hai** README (`git tag`, `git push origin`, `/DAppVersion=`) và **cả hai** CHANGELOG (mục mới nhất *và* toàn bộ danh sách phiên bản phải trùng nhau) phải nói cùng một số; hai README phải **link** tới changelog của bản mình (link chứ không phải nhắc tên trong câu chữ); `AppInfo.cs` phải tồn tại và hai bề mặt in phiên bản phải đọc nó; **không file `.cs` nào được gõ lại con số** (đọc qua `_code()` nên comment được phép kể chuyện cũ). Mutation test **12/12** trên bản sao repo: dịch `<Version>` sang 1.0.1 (10 lỗi nêu tên từng bản sao), làm cũ fallback bộ cài, đổi mục mới nhất của changelog, bỏ ngày ở tiêu đề, làm hai changelog lệch nhau, gõ `"Keyflow 1.0.0"` vào nguồn, thôi không đọc `AppInfo.Version`, nhắc changelog bằng chữ thường thay vì link (cả hai README), xoá `AppInfo.cs`, viết `<Version>1.0</Version>`, làm cũ ví dụ `git tag` |
+| **`publish.ps1` chưa từng chạy ở đâu trước lúc cắt bản phát hành** — §5.3 gọi đúng đây là "vùng mù duy nhất còn lại của bộ kiểm" | `build.yml` thêm bước *Publish a distributable build*: `publish.ps1 -Mode FrameworkDependent -Runtime win-x64 -Zip -AllowLfsPointer` (không cần runtime pack, không cần LFS) **mỗi lần push**, rồi khẳng định thư mục publish có `PianoPath.exe`, `LICENSE.txt`, `Assets\ConcertGrand.sf2`, `Assets\ATTRIBUTION.txt`, có ZIP `-Zip` đã hứa, tên ZIP mang đúng phiên bản, và **phiên bản đóng dấu trong file .exe** (`VersionInfo.ProductVersion`) khớp `<Version>` — tức kiểm cả mắt xích cuối: số trong project file → số trong binary người dùng chạy. Đặt **cuối job** để một lỗi đóng gói không chặn việc render và commit ảnh README |
+| **`release.yml` đọc phiên bản bằng `dotnet msbuild -getProperty:Version`** | đổi sang `Select-Xml` trên `PianoPath.csproj` — đúng cách `publish.ps1` đọc, có nhánh `$null` và câu `throw` riêng. Lý do: MSBuild in *cảnh báo* cạnh giá trị nó in, và một bộ cài đặt tên theo dòng cảnh báo thì chỉ người tải về mới phát hiện ra |
+| **Gói phân phối không kèm giấy phép**: ZIP và thư mục bộ cài chỉ có `PianoPath.exe` + `Assets\` (bộ cài hiện LICENSE trong wizard nhưng không cài nó vào máy) | `PianoPath.csproj` thêm `<Content Include="LICENSE" … TargetPath="LICENSE.txt" />` nên cả ba đường publish (script, hồ sơ Visual Studio, `dotnet publish` tay) đều chép nó; `[Files]` của Inno glob cả thư mục publish nên bộ cài có theo, và bước publish mới trong `build.yml` khẳng định tệp đó tồn tại. MIT đòi giấy phép đi kèm bản sao, CC BY 3.0 đòi ghi công — nay cả hai nằm **trong** gói |
+| **Không có cách nào kiểm một tệp tải về** (các gói chưa ký số) | bước *Hash the packages* của `release.yml` viết `publish/SHA256SUMS.txt` theo định dạng `sha256sum -c` đọc được (`<hash chữ thường>␣␣<tên tệp>`), đính kèm artifact lẫn GitHub Release; cả hai README nói cách đối chiếu bằng `Get-FileHash` |
+| **README hứa `win-arm64` nhưng release không có gói nào cho nó** | leg thứ ba trong `release.yml`: self-contained `win-arm64`, **tắt ReadyToRun** (lý do ghi ngay trong workflow: runner là x64, R2R chéo là thứ repo chưa từng đo, và gói này dành cho máy chưa ai ở đây chạy). Bộ cài vẫn chỉ x64 vì `Keyflow.iss` đặt `ArchitecturesAllowed=x64compatible` — ghi rõ trong cả hai README và trong ghi chú phát hành |
+| **File bộ cài không tự nói nó là bản nào** | `Keyflow.iss` thêm `VersionInfoVersion`/`VersionInfoProductVersion`/`VersionInfoProductName` trong `[Setup]`, lấy từ chính `{#AppVersion}` |
+| **Chưa có CHANGELOG** (`docs/ROADMAP.md` §4 #7 ghi nhận) | `CHANGELOG.md` (tiếng Việt) + `CHANGELOG.en.md` (tiếng Anh), cùng danh sách phiên bản, mỗi README link tới bản của mình; `scan_release_version` giữ hai tệp và `<Version>` không lệch nhau |
+| **Ghi chú phát hành chỉ là bản tự sinh từ commit** | `release.yml` thêm `body` mở đầu: bảng chọn gói (bốn gói khác nhau ở chỗ máy đích cần gì), nhắc giữ `Assets\` cạnh .exe và giữ `LICENSE.txt`/`ATTRIBUTION.txt`, nói rõ gói **chưa ký số** và cách qua SmartScreen, rồi trỏ tới hai CHANGELOG **của đúng tag đó**; GitHub nối ghi chú tự sinh vào sau |
+| **Hai chỗ tài liệu còn lệch mà chỉ đọc lại từng câu mới thấy**: (a) cả hai README mô tả bước `Report preview drift` bằng `git status`, trong khi chính workflow diff cây làm việc với `$GITHUB_SHA` — vì bước commit ở trên đã commit *trước khi* push, và một lần push bị từ chối (GH013) để lại cây sạch trong khi nhánh vẫn mang ảnh cũ; (b) bullet `.github/workflows/` ở mục *Cấu trúc chính* còn nói "render **22** ảnh README" (con số dẫn xuất mà §5.1 từng tuyên bố đã gỡ hết), và **không nhắc job `test`** dù job đó đã chạy song song từ 2026‑10‑01 | sửa cả hai bản README theo đúng cơ chế (kèm lý do `git status` không dùng được), gỡ con số dẫn xuất còn lại ở cả bullet đó lẫn bảng workflow ("28 ảnh (14 cảnh × 2 ngôn ngữ)" → "hai bộ ảnh, mỗi cảnh một ảnh cho mỗi ngôn ngữ"), và bullet nay kể đủ ba job cộng bước publish mới |
+| **Cả hai README mô tả bước `Report preview drift` bằng `git status`** — sai so với chính workflow: bước đó diff cây làm việc với `$GITHUB_SHA` vì bước commit ở trên đã commit *trước khi* push, và một lần push bị từ chối (GH013) để lại cây sạch trong khi nhánh vẫn mang ảnh cũ (hai cái bẫy này được ghi trong comment của workflow) | sửa cả hai bản README theo đúng cơ chế, kèm lý do vì sao `git status` không dùng được |
+
+| **Bộ kiểm không hề parse các file MSBuild** — lỗi do chính đợt này gây ra và bắt được trước khi commit: một comment viết thêm vào `PianoPath.csproj` có nhắc tới `--bench`, mà **comment XML không được chứa hai dấu gạch nối liên tiếp**, nên MSBuild từ chối nạp project (không build, không publish, không test project) trong khi `tools/check_sources.py` vẫn xanh: nó parse XAML và soát cân bằng ngoặc của C#, còn `.csproj`/`.pubxml` thì chỉ đọc bằng regex | luật mới **`scan_project_files`**: parse mọi `*.csproj`, `*.pubxml`, `*.props`, `*.targets` (trừ `obj/`, `bin/`) đúng cách MSBuild sẽ parse, và câu lỗi nói luôn vì sao (`--` trong comment). Mutation test **3/3**: chèn `--bench` vào comment của `PianoPath.csproj`, cắt một thẻ giữa chừng trong hồ sơ publish, gõ `--` vào comment của project test — cả ba đỏ, kèm tên tệp và số dòng. Bài học cùng loại với §6: "checker xanh" chỉ có nghĩa bằng đúng tập luật nó đang có |
+
+### 7.3 Đã kiểm, không thấy vấn đề
+
+* **Không TODO/FIXME/HACK/XXX** trong mã nguồn, không `NotImplementedException`; không bí mật hay
+  credential nào (grep các mẫu `api_key`/`secret`/`password`/`token` gán một chuỗi ≥12 ký tự: rỗng).
+* **Không tệp nhị phân nào lọt vào cây** ngoài con trỏ LFS 134 byte của SoundFont, ảnh `docs/previews`
+  và `docs/samples` do CI/script sinh; `.gitignore` phủ đúng mọi thứ đợt này sinh ra (`publish/`,
+  `installer/Output/`, `*.zip`, `*.log`) nên `SHA256SUMS.txt` của CI không bao giờ thành một commit.
+* **Bốn file MSBuild vẫn parse đúng** (`PianoPath.csproj`, project test, hai hồ sơ publish) — và nay điều đó do chính checker khẳng định mỗi lần chạy (`scan_project_files`, dòng trên).
+* **Cả hai workflow vẫn parse đúng**: vì sandbox không có bộ phân tích YAML, một bộ kiểm cấu trúc nhỏ
+  được viết cho đợt này (block scalar `|`/`>`, sequence of mappings, indent theo cột thật) và **chạy trên
+  bản HEAD vốn xanh trước** để chắc nó đọc đúng, rồi mới chạy trên bản sửa: `build.yml` 19 step
+  (3 job, đúng `needs: static`), `release.yml` 10 step, không step nào có `run` rỗng, không tab.
+* **Câu About sau khi thành template không còn ngoặc nhọn lạc**: đếm `{`/`}` trong cả khoá lẫn giá trị ở
+  hai bảng cho ra đúng một `{0}`, không ngoặc thừa, và 12 dấu xuống dòng giữ nguyên ở cả hai — tức
+  `string.Format` không ném và bản dịch không mất dòng.
+* **Thứ tự ordinal của hai bảng chuỗi không đổi** khi sửa khoá About: ký tự khác nhau (`0` → `{`) nằm
+  sâu trong câu, còn hai khoá láng giềng khác nhau ngay sau `Keyflow␣`, nên vị trí sắp xếp giữ nguyên
+  (checker vẫn khẳng định điều này mỗi lần chạy).
+* **Giấy phép**: `LICENSE` (MIT, © 2026 Yami, Neyu — Contributor: Jin) khớp `<Copyright>` trong csproj và
+  `AppCopyright` của bộ cài; `Assets/ATTRIBUTION.txt` ghi đủ tác giả, nguồn, giấy phép CC BY 3.0 và nói rõ
+  tệp SF2 không bị sửa.
+* **Phiên bản action** trong hai workflow vẫn là những bản đang dùng ở HEAD (`checkout@v7`,
+  `setup-dotnet@v6`, `upload-artifact@v7`, `cache/restore@v4`, `cache/save@v4`, `action-gh-release@v3`).
+
+### 7.4 Ghi nhận, chưa sửa (rủi ro còn lại của lần phát hành)
+
+* **`release.yml` vẫn chưa từng chạy một lần.** Mọi khẳng định về nó ở trên là **đọc code**, không phải
+  số đo — ba leg publish, bước hash, `body` của release và việc đính kèm artifact chỉ được chứng minh khi
+  workflow chạy. Việc đầu tiên sau khi đợt này vào `main` nên là một lượt `workflow_dispatch` (chỉ ra
+  artifact, không tạo release; ~113 MiB băng thông LFS), rồi cài thử bộ cài và giải nén thử ZIP trên một
+  máy Windows sạch.
+* **Gói `win-arm64` chưa máy ARM nào chạy**, và leg đó tắt ReadyToRun. Nó được publish để có, không phải
+  vì đã được kiểm.
+* **Sandbox không có `pwsh`**: `publish.ps1`, `tools/build_installer.ps1` và các đoạn PowerShell mới trong
+  hai workflow chỉ được soát tay — đọc lại từng dòng, kiểm cân bằng ngoặc/chuỗi, và bọc mọi chỗ có thể
+  `$null` (`$node` trước `.Node`, `"$($exe.VersionInfo.ProductVersion)"` trước `.StartsWith`,
+  `-ErrorAction SilentlyContinue` cho `Get-ChildItem`, `@(...)` quanh `foreach` để `$lines` luôn là mảng).
+  Lớp xác nhận thật là job Windows của `build.yml` trên nhánh này.
+* **Bộ kiểm YAML của đợt này nằm ngoài repo** (`/tmp` của sandbox): nó là công cụ soát tay cho một lần
+  sửa, không phải luật của repo. Muốn giữ thì phải chuyển vào `tools/` kèm mutation test của chính nó,
+  như mọi luật khác.
+* **Ký mã, MSIX, manifest winget, auto-update** vẫn ở `docs/ROADMAP.md` §4 #5 — đều cần tài khoản hoặc
+  chứng chỉ, không xong bằng code, và đã ghi rõ trong cả hai CHANGELOG lẫn ghi chú phát hành.
+* **Hai con số vẫn chờ máy thật** như §3.2 đã ghi: ngân sách p95 8/16 ms chờ một card đồ hoạ thật, và một
+  tệp MP4 thật chờ một máy Windows bình thường (runner treo trong `IMFSample::SetSampleTime`).

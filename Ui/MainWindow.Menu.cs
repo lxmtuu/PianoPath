@@ -45,8 +45,7 @@ public partial class MainWindow
     internal void ShowStartupMenu()
     {
         SetChromeVisible(false);
-        Loc.Format(MainMenuVersionLabel, "Keyflow {0} · Concert Grand Edition",
-            System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "0.4");
+        Loc.Format(MainMenuVersionLabel, "Keyflow {0} · Concert Grand Edition", AppInfo.Version);
         RefreshMenuThemeChips();
         RefreshMenuStageLook();
         MainMenuOverlay.Visibility = Visibility.Visible;
@@ -94,7 +93,7 @@ public partial class MainWindow
     }
 
     private void MainMenuAbout_Click(object sender, RoutedEventArgs e) => ShowMessage(
-        Loc.T("Keyflow · Piano Performance & Concert VFX Studio\n\nA professional real-time MIDI piano visualizer: ray-traced keyboard shading, thermal sparks & embers, acoustic resonance waves, flames, and a full concert stage designer.\n\nInterface themes: Concert Grand (Steinway ebony & champagne gold), Concert Noir (obsidian slate with silvery platinum) and Velvet Gold (mahogany velvet & burnished brass).\n\nThemes and stage effects are driven by the shared vsync clock for fluid 60+ FPS motion.\nSoundFont: Bundled Yamaha Disklavier Grand Piano (88 Keys).\nShading model: Cook-Torrance GGX + ACES filmic tone mapping.\nKeyflow 0.4.0 · shipped languages: English and Tiếng Việt.\n\n© 2026 Yami · Neyu · Keyflow — released under the MIT license.\nContributor: Jin"),
+        Loc.F("Keyflow · Piano Performance & Concert VFX Studio\n\nA professional real-time MIDI piano visualizer: ray-traced keyboard shading, thermal sparks & embers, acoustic resonance waves, flames, and a full concert stage designer.\n\nInterface themes: Concert Grand (Steinway ebony & champagne gold), Concert Noir (obsidian slate with silvery platinum) and Velvet Gold (mahogany velvet & burnished brass).\n\nThemes and stage effects are driven by the shared vsync clock for fluid 60+ FPS motion.\nSoundFont: Bundled Yamaha Disklavier Grand Piano (88 Keys).\nShading model: Cook-Torrance GGX + ACES filmic tone mapping.\nKeyflow {0} · shipped languages: English and Tiếng Việt.\n\n© 2026 Yami · Neyu · Keyflow — released under the MIT license.\nContributor: Jin", AppInfo.Version),
         "About Keyflow Concert Grand", MessageBoxImage.Information);
 
     private void MainMenuExit_Click(object sender, RoutedEventArgs e) => Close();
