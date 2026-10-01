@@ -30,7 +30,8 @@ public partial class MainWindow
         ("MOVE AROUND", [
             ("F11", "Toggle full screen."),
             ("F1", "Open or close this card."),
-            ("Esc", "Escape goes back through the open dialog, menu or dock; it clears a settings search first."),
+            ("Tab", "Open the Play dialog from the live stage; in menus and dialogs, Tab still moves focus."),
+            ("Esc", "Escape goes back through the open dialog, quick adjustments, menu or dock; it clears a settings search first."),
             ("Ctrl+Z / Ctrl+Shift+Z", "Undo and redo design changes; the dock keeps the last 32 states, and a drag counts as one."),
             ("Pointer idle", "After 2.8 s of stillness the header, transport, dock and REC button hide so only the stage is left. Move the mouse to bring them back."),
         ]),

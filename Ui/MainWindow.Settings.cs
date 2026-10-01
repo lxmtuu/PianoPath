@@ -1032,8 +1032,14 @@ public partial class MainWindow
         if (property is nameof(PianoVisualSettings.HandSplitPitch) && ModeCombo.SelectedIndex is 2 or 3) { ApplyTrackFilter(); UpdateSongUi(); }
         if (property is nameof(PianoVisualSettings.NoteFallSpeed) && PlaySpeedSlider is not null)
         {
-            PlaySpeedSlider.Value = Math.Clamp(_visualSettings.NoteFallSpeed, PlaySpeedSlider.Minimum, PlaySpeedSlider.Maximum);
-            if (PlaySpeedLabel is not null) PlaySpeedLabel.Text = ((int)_visualSettings.NoteFallSpeed).ToString();
+            var wasLoading = _loadingVisualSettings;
+            _loadingVisualSettings = true;
+            try
+            {
+                PlaySpeedSlider.Value = Math.Clamp(_visualSettings.NoteFallSpeed, PlaySpeedSlider.Minimum, PlaySpeedSlider.Maximum);
+                if (PlaySpeedLabel is not null) PlaySpeedLabel.Text = ((int)_visualSettings.NoteFallSpeed).ToString();
+            }
+            finally { _loadingVisualSettings = wasLoading; }
         }
         ApplyVisualSettings("Visual changes apply live");
     }
@@ -1324,6 +1330,7 @@ public partial class MainWindow
         ApplyRenderBackend();
         SyncCameraOverlay();
         ApplyChromeTheme();
+        SyncPlayInlineControls(refreshThemeChips: false);
         RefreshHandStatus();
         if (reloadBackground && Stage.BackgroundLoadError is { } error)
         {

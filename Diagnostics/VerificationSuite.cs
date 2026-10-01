@@ -4052,17 +4052,128 @@ internal static partial class VerificationSuite
     {
         var menu = (FrameworkElement)window.FindName("MainMenuOverlay")!;
         var play = (FrameworkElement)window.FindName("PlayDialogOverlay")!;
+        var quickAdjust = (FrameworkElement)window.FindName("QuickAdjustOverlay")!;
         var settings = (FrameworkElement)window.FindName("SettingsPanel")!;
         var tabs = (TabControl)window.FindName("SettingsTabs")!;
-        Assert(menu is not null && play is not null, "The concert shell should provide a main menu and a pre-flight Play dialog.");
+        var quickControlsHost = (StackPanel)window.FindName("QuickAdjustControlsHost")!;
+        var quickLayerHost = (WrapPanel)window.FindName("QuickAdjustLayerHost")!;
+        var quickHandColorsCard = (FrameworkElement)window.FindName("QuickAdjustHandColorsCard")!;
+        Assert(menu is not null && play is not null && quickAdjust is not null, "The concert shell should provide a main menu, a pre-flight Play dialog and shared quick adjustments.");
         Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
 
         window.ShowStartupMenu();
         Assert(menu!.Visibility == Visibility.Visible, "The home path should open the main menu over the stage.");
+
+        // The startup-menu quick-adjust entry and Play-dialog settings action share live controls,
+        // while Advanced settings remains a one-click route to the full Style dock.
+        var quickChoices = (Dictionary<string, ComboBox>)Field(window, "_quickAdjustChoices");
+        var visualChoices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices");
+        Invoke(window, "MainMenuQuickAdjust_Click", window, new RoutedEventArgs());
+        Assert(menu.Visibility == Visibility.Collapsed && quickAdjust.Visibility == Visibility.Visible
+                && play.Visibility == Visibility.Collapsed && settings.Visibility == Visibility.Collapsed
+                && quickControlsHost.Children.Count > 0 && quickLayerHost.Children.OfType<CheckBox>().Count() == 6
+                && KeyboardNavigation.GetTabNavigation((FrameworkElement)window.FindName("QuickAdjustCard")!) == KeyboardNavigationMode.Cycle,
+            "The startup menu should open a focused quick-adjust surface with common style and stage-layer controls.");
+        var originalQuickStyle = visualSettings.NoteStyle;
+        var originalQuickMode = visualSettings.ColorMode;
+        var originalQuickBackground = visualSettings.ShowBackground;
+        var originalQuickPresetModified = visualSettings.PresetModified;
+        var quickStyleChoice = quickChoices[nameof(PianoVisualSettings.NoteStyle)];
+        var styleSourceChoice = visualChoices[nameof(PianoVisualSettings.NoteStyle)];
+        Assert(quickStyleChoice.Items.Count > 1 && Equals(quickStyleChoice.SelectedValue, styleSourceChoice.SelectedValue),
+            "Quick note-style choices should begin synchronized with the Design dock's real choice.");
+        if (quickStyleChoice.Items.Count > 1)
+        {
+            quickStyleChoice.SelectedIndex = (quickStyleChoice.SelectedIndex + 1) % quickStyleChoice.Items.Count;
+            Assert(Equals(visualSettings.NoteStyle, quickStyleChoice.SelectedValue)
+                    && Equals(styleSourceChoice.SelectedValue, quickStyleChoice.SelectedValue),
+                "Changing a quick note-style choice should update the settings model and the Design dock immediately.");
+            quickStyleChoice.SelectedValue = originalQuickStyle;
+        }
+        var originalQuickFallSpeed = visualSettings.NoteFallSpeed;
+        var quickFallSlider = ((List<(Slider Slider, TextBlock Value)>)Field(window, "_playInlineSliders"))
+            .Single(pair => Equals(pair.Slider.Tag, nameof(PianoVisualSettings.NoteFallSpeed))).Slider;
+        var dockFallSlider = ((Dictionary<string, Slider>)Field(window, "_visualSliders"))[nameof(PianoVisualSettings.NoteFallSpeed)];
+        var playFallSlider = (Slider)window.FindName("PlaySpeedSlider")!;
+        quickFallSlider.Value = originalQuickFallSpeed < (quickFallSlider.Minimum + quickFallSlider.Maximum) / 2
+            ? Math.Min(quickFallSlider.Maximum, originalQuickFallSpeed + 20)
+            : Math.Max(quickFallSlider.Minimum, originalQuickFallSpeed - 20);
+        Assert(Math.Abs(visualSettings.NoteFallSpeed - quickFallSlider.Value) < .01
+                && Math.Abs(dockFallSlider.Value - quickFallSlider.Value) < .01
+                && Math.Abs(playFallSlider.Value - quickFallSlider.Value) < .01,
+            "Quick fall-speed adjustments should update the shared settings model, Design dock and Play speed slider immediately.");
+        quickFallSlider.Value = originalQuickFallSpeed;
+        var quickColorMode = quickChoices[nameof(PianoVisualSettings.ColorMode)];
+        quickColorMode.SelectedValue = "PerHand";
+        Assert(visualSettings.ColorMode == "PerHand" && quickHandColorsCard.Visibility == Visibility.Visible,
+            "Choosing per-hand colors in Quick Adjust should reveal the direct left/right color controls.");
+        quickColorMode.SelectedValue = originalQuickMode;
+        var quickBackground = quickLayerHost.Children.OfType<CheckBox>().Single(check => Equals(check.Tag, nameof(PianoVisualSettings.ShowBackground)));
+        quickBackground.IsChecked = !originalQuickBackground;
+        Assert(visualSettings.ShowBackground != originalQuickBackground,
+            "A quick stage-layer switch should update the same live setting as the Design dock.");
+        quickBackground.IsChecked = originalQuickBackground;
+        visualSettings.PresetModified = originalQuickPresetModified;
+        Invoke(window, "RefreshSettingControls");
+        Invoke(window, "ApplyVisualSettings", "Visual changes apply live", false, Array.Empty<object>());
+        Invoke(window, "QuickAdjustClose_Click", window, new RoutedEventArgs());
+        Assert(menu.Visibility == Visibility.Visible && quickAdjust.Visibility == Visibility.Collapsed && settings.Visibility == Visibility.Collapsed,
+            "Closing menu-origin Quick Adjust should return to the startup menu.");
+
+        Invoke(window, "MainMenuQuickAdjust_Click", window, new RoutedEventArgs());
+        Invoke(window, "QuickAdjustAdvanced_Click", window, new RoutedEventArgs());
+        Assert(settings.Visibility == Visibility.Visible && quickAdjust.Visibility == Visibility.Collapsed
+                && tabs.SelectedIndex == SettingsPages.IndexOf(SettingsPages.Style),
+            "Advanced settings from the startup quick-adjust surface should open the matching full Style dock.");
+        Invoke(window, "SettingsBack_Click", window, new RoutedEventArgs());
+        Assert(menu.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
+            "Returning from quick-adjust advanced settings should restore the startup menu.");
+
         Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
         Assert(menu!.Visibility == Visibility.Collapsed && play!.Visibility == Visibility.Visible, "Choosing Play on the main menu should open the pre-flight dialog.");
         Assert(((TextBlock)window.FindName("PlayDialogPrimaryLabel")!).Text == Loc.T("Choose a MIDI file"),
-            "With no loaded score, the sticky primary action should clearly offer to choose a MIDI file.");
+            "With no loaded score, the compact session action should clearly offer to choose a MIDI file.");
+        var liveAction = (Button)window.FindName("PlayDialogLiveButton")!;
+        var sessionAction = (Button)window.FindName("PlayDialogPrimaryButton")!;
+        Assert(Grid.GetRow(liveAction) == 2 && ReferenceEquals(liveAction.Style, window.FindResource("AccentButtonStyle"))
+                && Grid.GetColumn(sessionAction) == 2 && Grid.GetRow(sessionAction) == 0
+                && ((Button)window.FindName("PlayDialogMidiButton")!).Visibility == Visibility.Collapsed,
+            "The large gold action should be Live Play; the former primary action should move to the small session-action position.");
+
+        // The compact action keeps all of its old state-specific behavior: choose a file, start a
+        // loaded score, or return to an already-running score. The file-picker button only appears
+        // alongside Start once there is a score to replace.
+        var originalAllNotes = (List<NoteEvent>)Field(window, "_allNotes");
+        var originalNotes = (List<NoteEvent>)Field(window, "_notes");
+        var originalSongPath = (string)Field(window, "_songPath");
+        var originalSongLabel = (string)Field(window, "_songLabel");
+        var originalPlaying = (bool)Field(window, "_playing");
+        var sampleNotes = new List<NoteEvent> { new() { Pitch = 60, Start = 0, Duration = 2, Track = 0 } };
+        SetField(window, "_allNotes", sampleNotes);
+        SetField(window, "_notes", sampleNotes);
+        SetField(window, "_songPath", "sample.mid");
+        SetField(window, "_songLabel", "Sample");
+        Invoke(window, "RefreshPlayDialogState");
+        Assert(((TextBlock)window.FindName("PlayDialogPrimaryLabel")!).Text == Loc.T("Start playback")
+                && ((Button)window.FindName("PlayDialogMidiButton")!).Visibility == Visibility.Visible,
+            "With a score loaded, the compact action should start playback and the MIDI button should remain available to replace it.");
+        SetField(window, "_playing", true);
+        Invoke(window, "RefreshPlayDialogState");
+        Assert(((TextBlock)window.FindName("PlayDialogPrimaryLabel")!).Text == Loc.T("Return to playback"),
+            "While the score is already playing, the compact action should return to it without restarting.");
+        SetField(window, "_playing", originalPlaying);
+        SetField(window, "_allNotes", originalAllNotes);
+        SetField(window, "_notes", originalNotes);
+        SetField(window, "_songPath", originalSongPath);
+        SetField(window, "_songLabel", originalSongLabel);
+        Invoke(window, "RefreshPlayDialogState");
+        Invoke(window, "PlayDialogLive_Click", liveAction, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed && menu.Visibility == Visibility.Collapsed,
+            "The large Live Play button should keep the original live-performance action and return to the stage.");
+        Invoke(window, "MainMenuPlay_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Visible,
+            "The session setup should remain reachable after choosing Live Play.");
+
         Assert(KeyboardNavigation.GetTabNavigation((FrameworkElement)window.FindName("PlayDialogCard")!) == KeyboardNavigationMode.Cycle,
             "Tab should remain inside the Play dialog while it is open.");
         Assert(((TextBox)window.FindName("LibrarySearchBox")!).Visibility == Visibility.Collapsed,
@@ -4075,15 +4186,79 @@ internal static partial class VerificationSuite
         notesToggle.IsChecked = true;
         Assert(visualSettings.ShowNotes, "Switching the Notes layer back on should restore the stage settings.");
 
-        // The visible settings link opens the right dock page and keeps the Play dialog as a return route.
-        Invoke(window, "PlayDialogSettings_Click", window, new RoutedEventArgs());
-        Assert(play.Visibility == Visibility.Collapsed && settings.Visibility == Visibility.Visible
+        // Each hand card opens an in-place color-preset picker. Applying a preset changes only that
+        // hand and enables the existing PerHand mode without replacing the rest of the stage look.
+        var originalHandMode = visualSettings.ColorMode;
+        var originalLeftHandColor = visualSettings.LeftHandColor;
+        var originalRightHandColor = visualSettings.RightHandColor;
+        var originalPresetModified = visualSettings.PresetModified;
+        var handPresetPanel = (FrameworkElement)window.FindName("HandPresetPanel")!;
+        var handPresetTitle = (TextBlock)window.FindName("HandPresetTitle")!;
+        var handPresetHost = (WrapPanel)window.FindName("HandPresetChoicesHost")!;
+        var leftHandCard = (Button)window.FindName("LeftStyleCard")!;
+        var rightHandCard = (Button)window.FindName("RightStyleCard")!;
+        Invoke(window, "PlayDialogStyleCard_Click", leftHandCard, new RoutedEventArgs());
+        Assert(handPresetPanel.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed
+                && handPresetTitle.Text == Loc.T("Left hand presets"),
+            "The Left Hand card should show its own preset picker in Play instead of navigating into settings.");
+        Assert(handPresetHost.Children.OfType<Button>().All(button => !string.IsNullOrWhiteSpace(AutomationProperties.GetName(button)))
+                && AutomationProperties.GetName(handPresetHost.Children.OfType<Button>().Single(button => Equals(button.Tag, "#49E2C2"))) == Loc.T("Aurora Teal"),
+            "Every generated hand preset needs a localized screen-reader name.");
+        var leftPreset = handPresetHost.Children.OfType<Button>().Single(button => Equals(button.Tag, "#49E2C2"));
+        Invoke(window, "PlayDialogHandPreset_Click", leftPreset, new RoutedEventArgs());
+        Assert(visualSettings.ColorMode == "PerHand" && visualSettings.LeftHandColor == "#49E2C2"
+                && visualSettings.RightHandColor == originalRightHandColor,
+            "Choosing a left-hand preset should enable PerHand colors and leave the right hand unchanged.");
+
+        var leftAfterPreset = visualSettings.LeftHandColor;
+        Invoke(window, "PlayDialogStyleCard_Click", rightHandCard, new RoutedEventArgs());
+        Assert(handPresetPanel.Visibility == Visibility.Visible && handPresetTitle.Text == Loc.T("Right hand presets"),
+            "The Right Hand card should switch the in-place picker to right-hand presets.");
+        var rightPreset = handPresetHost.Children.OfType<Button>().Single(button => Equals(button.Tag, "#7183FF"));
+        Invoke(window, "PlayDialogHandPreset_Click", rightPreset, new RoutedEventArgs());
+        Assert(visualSettings.RightHandColor == "#7183FF" && visualSettings.LeftHandColor == leftAfterPreset,
+            "Choosing a right-hand preset should leave the left-hand choice intact.");
+        var source = PresentationSource.FromVisual(window)!;
+        var closeHandPicker = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent };
+        Invoke(window, "Window_KeyDown", window, closeHandPicker);
+        Assert(handPresetPanel.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible && closeHandPicker.Handled,
+            "Escape should close the hand preset panel before leaving the Play dialog.");
+
+        Invoke(window, "PlayDialogStyleCard_Click", leftHandCard, new RoutedEventArgs());
+        Invoke(window, "PlayDialogHandPresetAdvanced_Click", window, new RoutedEventArgs());
+        Assert(settings.Visibility == Visibility.Visible && tabs.SelectedIndex == SettingsPages.IndexOf(SettingsPages.Notes)
+                && handPresetPanel.Visibility == Visibility.Collapsed,
+            "The hand picker should offer a direct advanced route to the matching Notes settings page.");
+        Invoke(window, "SettingsBack_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
+            "Returning from advanced hand settings should restore the Play dialog.");
+
+        visualSettings.ColorMode = originalHandMode;
+        visualSettings.LeftHandColor = originalLeftHandColor;
+        visualSettings.RightHandColor = originalRightHandColor;
+        visualSettings.PresetModified = originalPresetModified;
+        Invoke(window, "RefreshSettingControls");
+        Invoke(window, "RefreshHandStyleCards");
+        Invoke(window, "ApplyVisualSettings", "Visual changes apply live", false, Array.Empty<object>());
+
+        // The Play-dialog action now opens the shared quick-adjust surface. Its direct advanced route
+        // still opens the full dock and preserves the Play dialog as the return destination.
+        Invoke(window, "PlayDialogQuickAdjust_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed && quickAdjust.Visibility == Visibility.Visible
+                && settings.Visibility == Visibility.Collapsed,
+            "Play setup Quick Adjust should open directly without forcing the user through the full dock.");
+        Invoke(window, "QuickAdjustAdvanced_Click", window, new RoutedEventArgs());
+        Assert(settings.Visibility == Visibility.Visible && quickAdjust.Visibility == Visibility.Collapsed
                 && tabs.SelectedIndex == SettingsPages.IndexOf(SettingsPages.Style)
                 && ((FrameworkElement)window.FindName("SettingsReturnButton")!).Visibility == Visibility.Visible,
-            "Play setup Settings should open the design dock with an explicit way back.");
+            "Advanced settings from Play Quick Adjust should open the design dock with an explicit way back.");
         Invoke(window, "SettingsBack_Click", window, new RoutedEventArgs());
         Assert(play.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
             "The settings dock's return control should restore the Play dialog, not drop the user onto the stage.");
+        Invoke(window, "PlayDialogQuickAdjust_Click", window, new RoutedEventArgs());
+        Invoke(window, "QuickAdjustClose_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Visible && quickAdjust.Visibility == Visibility.Collapsed,
+            "Closing Play-origin Quick Adjust should return to the Play dialog without resetting the session setup.");
 
         var notesLink = new Button { DataContext = SettingsPages.Notes };
         Invoke(window, "PlayDialogDeepLink_Click", notesLink, new RoutedEventArgs());
@@ -4091,7 +4266,6 @@ internal static partial class VerificationSuite
                 && tabs.SelectedIndex == SettingsPages.IndexOf(SettingsPages.Notes),
             "An inline More settings link should open the exact dock page it names.");
 
-        var source = PresentationSource.FromVisual(window)!;
         Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
         Assert(play.Visibility == Visibility.Visible && settings.Visibility == Visibility.Collapsed,
             "Escape from a deep-linked dock page should restore Play and keep its navigation origin.");
@@ -4124,6 +4298,30 @@ internal static partial class VerificationSuite
         Invoke(window, "PlayDialogBack_Click", window, new RoutedEventArgs());
         Assert(play.Visibility == Visibility.Collapsed && menu.Visibility == Visibility.Collapsed,
             "Back from a stage-origin Play dialog should return to the live stage.");
+        var openPlayWithTab = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Tab) { RoutedEvent = Keyboard.KeyDownEvent };
+        Invoke(window, "Window_KeyDown", window, openPlayWithTab);
+        Assert(play.Visibility == Visibility.Visible && openPlayWithTab.Handled,
+            "Tab on the live stage should open the Play dialog as its session-setup shortcut.");
+        var tabInsidePlay = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Tab) { RoutedEvent = Keyboard.KeyDownEvent };
+        Invoke(window, "Window_KeyDown", window, tabInsidePlay);
+        Assert(!tabInsidePlay.Handled,
+            "Tab inside the Play dialog should remain ordinary focus navigation, not reopen or dismiss the dialog.");
+        Invoke(window, "PlayDialogBack_Click", window, new RoutedEventArgs());
+        Assert(play.Visibility == Visibility.Collapsed,
+            "Closing the Tab-opened Play dialog should return to the stage.");
+        Invoke(window, "PlayDialogOpen_Click", window, new RoutedEventArgs());
+        Invoke(window, "PlayDialogQuickAdjust_Click", window, new RoutedEventArgs());
+        var tabInsideQuickAdjust = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Tab) { RoutedEvent = Keyboard.KeyDownEvent };
+        Invoke(window, "Window_KeyDown", window, tabInsideQuickAdjust);
+        Assert(!tabInsideQuickAdjust.Handled,
+            "Tab in Quick Adjust should remain normal dialog focus navigation, not reopen Play behind it.");
+        var escapeQuickAdjust = new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent };
+        Invoke(window, "Window_KeyDown", window, escapeQuickAdjust);
+        Assert(quickAdjust.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Visible && escapeQuickAdjust.Handled,
+            "Escape should close Quick Adjust first and return to the Play dialog that opened it.");
+        Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
+        Assert(play.Visibility == Visibility.Collapsed,
+            "A second Escape should unwind the Play dialog to the stage.");
         window.ShowStartupMenu();
         Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
         Assert(menu.Visibility == Visibility.Collapsed,

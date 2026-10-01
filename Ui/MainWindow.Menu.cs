@@ -7,10 +7,10 @@ using System.Windows.Media;
 namespace PianoPath;
 
 /// <summary>
-/// Concert shell: the startup main menu (Play / Design / Settings / About / Exit, with a live theme
-/// picker and a stage-look read-out) and the pre-flight Play dialog with per-hand style cards and
-/// quick layer switches. Play, dock and menu navigation share an explicit return surface, and every
-/// quick switch mirrors a real stage setting so the dock and dialog never disagree.
+/// Concert shell: the startup menu (Play / Design / Quick Adjust / Settings / About / Exit, with a live
+/// theme picker and stage-look read-out), a shared contextual quick-adjust surface, and the pre-flight
+/// Play dialog with per-hand style cards and quick layer switches. Navigation has explicit return
+/// surfaces, and every quick control writes through the same live settings path as the Design dock.
 /// </summary>
 public partial class MainWindow
 {
@@ -18,7 +18,29 @@ public partial class MainWindow
 
     private NavigationSurface _playDialogReturnSurface = NavigationSurface.Stage;
     private NavigationSurface _settingsReturnSurface = NavigationSurface.Stage;
+    private NavigationSurface _quickAdjustReturnSurface = NavigationSurface.Stage;
     private readonly List<Button> _menuThemeChips = [];
+    private readonly Dictionary<string, ComboBox> _quickAdjustChoices = [];
+    private readonly Dictionary<string, Border> _quickHandColorDots = [];
+    private FrameworkElement? _quickHandSplitRow;
+    private bool _quickAdjustControlsBuilt;
+
+    private sealed record HandColorPreset(string Name, string Hex);
+
+    /// <summary>Per-hand color looks used by the Play dialog. They intentionally change only one hand's color.</summary>
+    private static readonly HandColorPreset[] HandColorPresets =
+    [
+        new("Ocean Blue", "#3FA9FF"),
+        new("Rose Neon", "#FF6FD8"),
+        new("Aurora Teal", "#49E2C2"),
+        new("Violet Glow", "#8C69FF"),
+        new("Sunset Amber", "#FFB05A"),
+        new("Ice Crystal", "#9BE8FF"),
+        new("Concert Gold", "#F3C05E"),
+        new("Electric Storm", "#7183FF"),
+    ];
+
+    private bool _handPresetTargetsRight;
 
     internal void ShowStartupMenu()
     {
@@ -32,7 +54,7 @@ public partial class MainWindow
         MenuPlayButton.Focus();
         // Choreography: the two primary actions arrive first, then the links and the side card.
         ChromeMotion.FadeIn(MainMenuOverlay, 260);
-        ChromeMotion.Cascade([MenuBrand, MenuPlayButton, MenuDesignButton], 60, 18);
+        ChromeMotion.Cascade([MenuBrand, MenuPlayButton, MenuQuickAdjustButton], 60, 18);
         ChromeMotion.Cascade([.. MenuLinkStack.Children.OfType<FrameworkElement>(), MenuSidePanel], 45, 12);
     }
 
@@ -57,6 +79,8 @@ public partial class MainWindow
         SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Style);
         OpenSettingsPanelFor(NavigationSurface.MainMenu);
     }
+
+    private void MainMenuQuickAdjust_Click(object sender, RoutedEventArgs e) => OpenQuickAdjust(NavigationSurface.MainMenu);
 
     private void MainMenuSettings_Click(object sender, RoutedEventArgs e)
     {
@@ -170,6 +194,7 @@ public partial class MainWindow
         _playDialogReturnSurface = returnToMenu ? NavigationSurface.MainMenu : NavigationSurface.Stage;
         _settingsReturnSurface = NavigationSurface.Stage;
         UpdateSettingsReturnButton();
+        HandPresetPanel.Visibility = Visibility.Collapsed;
         HideStartupMenu();
         if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel();
         ShowPlayDialog();
@@ -196,16 +221,7 @@ public partial class MainWindow
         }
         finally { _loadingVisualSettings = false; }
 
-        var left = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.LeftHandColor : _visualSettings.NoteColorStart);
-        var right = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.RightHandColor : _visualSettings.NoteColorEnd);
-        LeftStyleCard.BorderBrush = new SolidColorBrush(left);
-        RightStyleCard.BorderBrush = new SolidColorBrush(right);
-        // The preset name is translated and the "edited" marker appended, both inside the renderer, so
-        // the two hand cards follow a language switch instead of keeping the text of the old one.
-        string PresetCaption() => VisualPresets.DisplayName(_visualSettings.PresetName)
-            + (_visualSettings.PresetModified ? " *" : "");
-        Loc.Bind(LeftStyleLabel, PresetCaption);
-        Loc.Bind(RightStyleLabel, PresetCaption);
+        RefreshHandStyleCards();
         if (PlayDialogHaloColorDot is not null)
             PlayDialogHaloColorDot.Background = new SolidColorBrush(SafeColor(_visualSettings.HaloColor));
         if (PlayDialogThemeOrb is not null)
@@ -220,7 +236,7 @@ public partial class MainWindow
         PlayDialogOverlay.Visibility = Visibility.Visible;
         ChromeMotion.FadeIn(PlayDialogOverlay, 200);
         ChromeMotion.PopIn(PlayDialogCard);
-        PlayDialogMidiButton.Focus();
+        (PlayDialogMidiButton.Visibility == Visibility.Visible ? PlayDialogMidiButton : PlayDialogPrimaryButton).Focus();
     }
 
     private static Color SafeColor(string hex)
@@ -251,6 +267,7 @@ public partial class MainWindow
 
         var hasLoadedSong = !string.IsNullOrWhiteSpace(_songPath) && _allNotes.Count > 0;
         PlayDialogLoadedSongPanel.Visibility = hasLoadedSong ? Visibility.Visible : Visibility.Collapsed;
+        PlayDialogMidiButton.Visibility = hasLoadedSong ? Visibility.Visible : Visibility.Collapsed;
         if (!hasLoadedSong) return;
 
         PlayDialogLoadedSongTitle.Text = _songLabel;
@@ -263,8 +280,144 @@ public partial class MainWindow
 
     private void PlayDialogOpen_Click(object sender, RoutedEventArgs e) => OpenPlayDialog();
 
+    private void RefreshHandStyleCards()
+    {
+        if (LeftStyleCard is null || RightStyleCard is null) return;
+        var left = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.LeftHandColor : _visualSettings.NoteColorStart);
+        var right = SafeColor(_visualSettings.ColorMode == "PerHand" ? _visualSettings.RightHandColor : _visualSettings.NoteColorEnd);
+        LeftStyleCard.BorderBrush = new SolidColorBrush(left);
+        RightStyleCard.BorderBrush = new SolidColorBrush(right);
+        Loc.Bind(LeftStyleLabel, () => HandStyleCaption(rightHand: false));
+        Loc.Bind(RightStyleLabel, () => HandStyleCaption(rightHand: true));
+    }
+
+    private string HandStyleCaption(bool rightHand)
+    {
+        if (_visualSettings.ColorMode != "PerHand")
+            return VisualPresets.DisplayName(_visualSettings.PresetName) + (_visualSettings.PresetModified ? " *" : "");
+
+        var hex = rightHand ? _visualSettings.RightHandColor : _visualSettings.LeftHandColor;
+        var preset = HandColorPresets.FirstOrDefault(item => string.Equals(item.Hex, hex, StringComparison.OrdinalIgnoreCase));
+        return preset is null ? Loc.F("Custom · {0}", hex.ToUpperInvariant()) : Loc.T(preset.Name);
+    }
+
+    private void PlayDialogStyleCard_Click(object sender, RoutedEventArgs e) =>
+        ShowHandPresetPicker(ReferenceEquals(sender, RightStyleCard));
+
+    private void ShowHandPresetPicker(bool rightHand)
+    {
+        _handPresetTargetsRight = rightHand;
+        Loc.Set(HandPresetTitle, rightHand ? "Right hand presets" : "Left hand presets");
+        Loc.Set(HandPresetHint, "Choose a color preset. Only the selected hand will change.");
+        RefreshHandPresetChoices();
+        HandPresetPanel.Visibility = Visibility.Visible;
+        HandPresetPanel.BringIntoView();
+        ChromeMotion.FadeIn(HandPresetPanel, 150);
+        FocusHandPresetChoice();
+    }
+
+    private void RefreshHandPresetChoices()
+    {
+        if (HandPresetChoicesHost is null) return;
+        HandPresetChoicesHost.Children.Clear();
+        var current = _handPresetTargetsRight ? _visualSettings.RightHandColor : _visualSettings.LeftHandColor;
+        foreach (var preset in HandColorPresets)
+        {
+            var selected = string.Equals(current, preset.Hex, StringComparison.OrdinalIgnoreCase);
+            var color = new SolidColorBrush(SafeColor(preset.Hex));
+            var button = new Button
+            {
+                DataContext = preset,
+                Tag = preset.Hex,
+                Style = (Style)FindResource("GhostButtonStyle"),
+                MinWidth = 126,
+                MinHeight = 32,
+                Margin = new Thickness(3),
+                Padding = new Thickness(8, 5, 8, 5),
+                BorderThickness = new Thickness(1.5),
+                BorderBrush = color,
+                Background = (Brush)FindResource(selected ? "AccentSoftBrush" : "ControlBrush"),
+                HorizontalContentAlignment = HorizontalAlignment.Left
+            };
+            var content = new StackPanel { Orientation = Orientation.Horizontal };
+            content.Children.Add(new Border
+            {
+                Width = 12,
+                Height = 12,
+                CornerRadius = new CornerRadius(6),
+                Background = color,
+                BorderBrush = (Brush)FindResource("TextBrush"),
+                BorderThickness = new Thickness(.5),
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 7, 0)
+            });
+            var label = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), VerticalAlignment = VerticalAlignment.Center };
+            Loc.Set(label, preset.Name);
+            Loc.Set(button, preset.Name, AutomationProperties.NameProperty);
+            Loc.Set(button, preset.Name, FrameworkElement.ToolTipProperty);
+            content.Children.Add(label);
+            button.Content = content;
+            button.Click += PlayDialogHandPreset_Click;
+            HandPresetChoicesHost.Children.Add(button);
+        }
+        if (HandPresetPanel.Visibility == Visibility.Visible) FocusHandPresetChoice();
+    }
+
+    private void FocusHandPresetChoice()
+    {
+        var current = _handPresetTargetsRight ? _visualSettings.RightHandColor : _visualSettings.LeftHandColor;
+        var selected = HandPresetChoicesHost.Children.OfType<Button>().FirstOrDefault(button => Equals(button.Tag, current));
+        (selected ?? HandPresetChoicesHost.Children.OfType<Button>().FirstOrDefault())?.Focus();
+    }
+
+    private void PlayDialogHandPreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { DataContext: HandColorPreset preset }) return;
+        ApplyHandColorPreset(preset.Hex);
+    }
+
+    private void ApplyHandColorPreset(string hex)
+    {
+        var property = _handPresetTargetsRight
+            ? nameof(PianoVisualSettings.RightHandColor)
+            : nameof(PianoVisualSettings.LeftHandColor);
+        Prop(property).SetValue(_visualSettings, hex);
+
+        // A hand color only affects notes in PerHand mode. Selecting one turns that mode on while
+        // preserving the other hand, note style, effects, theme and every unrelated setting.
+        if (_visualSettings.ColorMode != "PerHand") _visualSettings.ColorMode = "PerHand";
+        RefreshSettingControls();
+        MarkModified(property);
+        RefreshHandStyleCards();
+        RefreshHandPresetChoices();
+        ApplyVisualSettings("Color applied");
+    }
+
+    private void PlayDialogHandPresetCustom_Click(object sender, RoutedEventArgs e)
+    {
+        var current = _handPresetTargetsRight ? _visualSettings.RightHandColor : _visualSettings.LeftHandColor;
+        var picker = new ColorPickerWindow(current) { Owner = this };
+        if (picker.ShowDialog() == true && picker.SelectedHex is { } hex) ApplyHandColorPreset(hex);
+    }
+
+    private void HideHandPresetPanel(bool restoreFocus)
+    {
+        if (HandPresetPanel is null || HandPresetPanel.Visibility != Visibility.Visible) return;
+        HandPresetPanel.Visibility = Visibility.Collapsed;
+        if (restoreFocus) ( _handPresetTargetsRight ? RightStyleCard : LeftStyleCard ).Focus();
+    }
+
+    private void PlayDialogHandPresetClose_Click(object sender, RoutedEventArgs e) => HideHandPresetPanel(restoreFocus: true);
+
+    private void PlayDialogHandPresetAdvanced_Click(object sender, RoutedEventArgs e)
+    {
+        HideHandPresetPanel(restoreFocus: false);
+        OpenSettingsFromPlayDialog(SettingsPages.Notes);
+    }
+
     private void PlayDialogBack_Click(object sender, RoutedEventArgs e)
     {
+        HideHandPresetPanel(restoreFocus: false);
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
         _lastPointerActivity = DateTime.UtcNow;
         if (_playDialogReturnSurface == NavigationSurface.MainMenu)
@@ -278,6 +431,7 @@ public partial class MainWindow
 
     private void PlayDialogClose_Click(object sender, RoutedEventArgs e)
     {
+        HideHandPresetPanel(restoreFocus: false);
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
         _lastPointerActivity = DateTime.UtcNow;
         SetChromeVisible(true);
@@ -286,7 +440,182 @@ public partial class MainWindow
 
     private void PlayDialogOpenMidi_Click(object sender, RoutedEventArgs e) => OpenMidi_Click(sender, e);
 
-    private void PlayDialogSettings_Click(object sender, RoutedEventArgs e) => OpenSettingsFromPlayDialog(SettingsPages.Style);
+    private void PlayDialogQuickAdjust_Click(object sender, RoutedEventArgs e) => OpenQuickAdjust(NavigationSurface.PlayDialog);
+
+    private void OpenQuickAdjust(NavigationSurface returnSurface)
+    {
+        _quickAdjustReturnSurface = returnSurface;
+        if (SettingsPanel.Visibility == Visibility.Visible || _settingsHiddenByIdle) CloseSettingsPanel();
+        if (returnSurface == NavigationSurface.MainMenu) HideStartupMenu();
+        else if (returnSurface == NavigationSurface.PlayDialog) PlayDialogOverlay.Visibility = Visibility.Collapsed;
+
+        BuildQuickAdjustControls();
+        SyncPlayInlineControls();
+        SyncQuickAdjustState();
+        SetChromeVisible(true);
+        QuickAdjustOverlay.Visibility = Visibility.Visible;
+        _lastPointerActivity = DateTime.UtcNow;
+        ChromeMotion.FadeIn(QuickAdjustOverlay, 180);
+        ChromeMotion.PopIn(QuickAdjustCard);
+        _quickAdjustChoices.GetValueOrDefault(nameof(PianoVisualSettings.NoteStyle))?.Focus();
+    }
+
+    private void CloseQuickAdjust()
+    {
+        if (QuickAdjustOverlay.Visibility != Visibility.Visible) return;
+        var destination = _quickAdjustReturnSurface;
+        QuickAdjustOverlay.Visibility = Visibility.Collapsed;
+        _lastPointerActivity = DateTime.UtcNow;
+        switch (destination)
+        {
+            case NavigationSurface.MainMenu:
+                ShowStartupMenu();
+                break;
+            case NavigationSurface.PlayDialog:
+                ShowPlayDialog();
+                break;
+            default:
+                SetChromeVisible(true);
+                Stage.Focus();
+                break;
+        }
+    }
+
+    private void QuickAdjustClose_Click(object sender, RoutedEventArgs e) => CloseQuickAdjust();
+
+    private void QuickAdjustAdvanced_Click(object sender, RoutedEventArgs e)
+    {
+        var destination = _quickAdjustReturnSurface;
+        QuickAdjustOverlay.Visibility = Visibility.Collapsed;
+        SettingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Style);
+        OpenSettingsPanelFor(destination);
+    }
+
+    private void QuickAdjustOverlay_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (ReferenceEquals(sender, QuickAdjustOverlay)) CloseQuickAdjust();
+    }
+
+    private void QuickAdjustCard_MouseDown(object sender, MouseButtonEventArgs e) => e.Handled = true;
+
+    private Border QuickAdjustGroup(string title, out StackPanel body)
+    {
+        body = new StackPanel();
+        var heading = new TextBlock { Style = (Style)FindResource("EyebrowTextStyle"), Margin = new Thickness(0, 0, 0, 6) };
+        Loc.Set(heading, title);
+        body.Children.Add(heading);
+        return new Border
+        {
+            Padding = new Thickness(12),
+            Margin = new Thickness(0, 0, 0, 10),
+            CornerRadius = new CornerRadius(11),
+            Background = (Brush)FindResource("ControlBrush"),
+            BorderBrush = (Brush)FindResource("ControlBorderBrush"),
+            BorderThickness = new Thickness(1),
+            Child = body
+        };
+    }
+
+    private void BuildQuickAdjustControls()
+    {
+        if (_quickAdjustControlsBuilt) return;
+        _quickAdjustControlsBuilt = true;
+
+        var notesCard = QuickAdjustGroup("Notes", out var notesBody);
+        foreach (var spec in new[]
+        {
+            new InlineControl("Note style", nameof(PianoVisualSettings.NoteStyle)),
+            new InlineControl("Color mode", nameof(PianoVisualSettings.ColorMode)),
+        })
+        {
+            var row = BuildInlineChoice(spec);
+            if (row is Grid grid && grid.Children.OfType<ComboBox>().FirstOrDefault() is { } combo)
+                _quickAdjustChoices[spec.Property] = combo;
+            notesBody.Children.Add(row);
+        }
+        notesBody.Children.Add(BuildInlineSlider(new InlineControl("Fall speed", nameof(PianoVisualSettings.NoteFallSpeed))));
+        notesBody.Children.Add(BuildInlineSlider(new InlineControl("Glow", nameof(PianoVisualSettings.NoteGlow))));
+        var splitRow = BuildInlineSlider(new InlineControl("Hand split point", nameof(PianoVisualSettings.HandSplitPitch)));
+        _quickHandSplitRow = splitRow;
+        notesBody.Children.Add(splitRow);
+        QuickAdjustControlsHost.Children.Add(notesCard);
+
+        foreach (var spec in new[]
+        {
+            new InlineControl("Background", nameof(PianoVisualSettings.ShowBackground)),
+            new InlineControl("Notes", nameof(PianoVisualSettings.ShowNotes)),
+            new InlineControl("Embers", nameof(PianoVisualSettings.ShowEmbers)),
+            new InlineControl("Halo", nameof(PianoVisualSettings.ShowHalo)),
+            new InlineControl("Flame", nameof(PianoVisualSettings.ShowFlame)),
+            new InlineControl("Keys", nameof(PianoVisualSettings.ShowKeys)),
+        })
+        {
+            var toggle = BuildInlineToggle(spec);
+            toggle.MinWidth = 150;
+            QuickAdjustLayerHost.Children.Add(toggle);
+        }
+
+        QuickAdjustHandColorsHost.Children.Add(BuildQuickHandColorButton(rightHand: false));
+        QuickAdjustHandColorsHost.Children.Add(BuildQuickHandColorButton(rightHand: true));
+        SyncQuickAdjustState();
+    }
+
+    private Button BuildQuickHandColorButton(bool rightHand)
+    {
+        var property = rightHand ? nameof(PianoVisualSettings.RightHandColor) : nameof(PianoVisualSettings.LeftHandColor);
+        var labelKey = rightHand ? "Right Hand" : "Left Hand";
+        var dot = new Border
+        {
+            Width = 14,
+            Height = 14,
+            CornerRadius = new CornerRadius(7),
+            Background = new SolidColorBrush(SafeColor((string)Prop(property).GetValue(_visualSettings)!)),
+            BorderBrush = (Brush)FindResource("TextBrush"),
+            BorderThickness = new Thickness(.5),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        _quickHandColorDots[property] = dot;
+        var label = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), VerticalAlignment = VerticalAlignment.Center };
+        Loc.Set(label, labelKey);
+        var content = new StackPanel { Orientation = Orientation.Horizontal };
+        content.Children.Add(dot);
+        content.Children.Add(label);
+        var button = new Button
+        {
+            Tag = property,
+            Content = content,
+            Style = (Style)FindResource("GhostButtonStyle"),
+            MinWidth = 142,
+            Margin = new Thickness(3),
+            Padding = new Thickness(10, 7, 10, 7)
+        };
+        Loc.Set(button, labelKey, AutomationProperties.NameProperty);
+        Loc.Set(button, "Choose any color for this hand", FrameworkElement.ToolTipProperty);
+        button.Click += QuickHandColor_Click;
+        return button;
+    }
+
+    private void QuickHandColor_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { Tag: string property }) return;
+        var rightHand = property == nameof(PianoVisualSettings.RightHandColor);
+        var current = (string)Prop(property).GetValue(_visualSettings)!;
+        var picker = new ColorPickerWindow(current) { Owner = this };
+        if (picker.ShowDialog() != true || picker.SelectedHex is not { } hex) return;
+        _handPresetTargetsRight = rightHand;
+        ApplyHandColorPreset(hex);
+    }
+
+    private void SyncQuickAdjustState()
+    {
+        if (!_quickAdjustControlsBuilt) return;
+        var perHand = _visualSettings.ColorMode == "PerHand";
+        QuickAdjustHandColorsCard.Visibility = perHand ? Visibility.Visible : Visibility.Collapsed;
+        if (_quickHandSplitRow is not null) _quickHandSplitRow.Visibility = perHand ? Visibility.Visible : Visibility.Collapsed;
+        foreach (var (property, dot) in _quickHandColorDots)
+            dot.Background = new SolidColorBrush(SafeColor((string)Prop(property).GetValue(_visualSettings)!));
+    }
 
     private void OpenSettingsFromPlayDialog(string page)
     {
@@ -297,6 +626,7 @@ public partial class MainWindow
 
     private void PlayDialogLive_Click(object sender, RoutedEventArgs e)
     {
+        HideHandPresetPanel(restoreFocus: false);
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
         SetChromeVisible(true);
         _lastPointerActivity = DateTime.UtcNow;
@@ -319,6 +649,7 @@ public partial class MainWindow
             RefreshPlayDialogState();
             return;
         }
+        HideHandPresetPanel(restoreFocus: false);
         PlayDialogOverlay.Visibility = Visibility.Collapsed;
         SetChromeVisible(true);
         _lastPointerActivity = DateTime.UtcNow;
@@ -340,8 +671,6 @@ public partial class MainWindow
         MarkModified();
         ApplyVisualSettings("Halo color applied");
     }
-
-    private void PlayDialogStyleCard_Click(object sender, RoutedEventArgs e) => OpenSettingsFromPlayDialog(SettingsPages.Notes);
 
     /// <summary>Opens the design dock on the page named by the chevron's DataContext.</summary>
     private void PlayDialogDeepLink_Click(object sender, RoutedEventArgs e)
@@ -529,7 +858,7 @@ public partial class MainWindow
     }
 
     /// <summary>Pulls the current settings into the inline controls (dialog opened, preset applied, reset).</summary>
-    private void SyncPlayInlineControls()
+    private void SyncPlayInlineControls(bool refreshThemeChips = true)
     {
         var wasLoading = _loadingVisualSettings;
         _loadingVisualSettings = true;
@@ -542,10 +871,21 @@ public partial class MainWindow
                 slider.Value = Math.Clamp(value, slider.Minimum, slider.Maximum);
                 label.Text = FormatSetting(property, value);
             }
-            foreach (var combo in _playInlineChoices) combo.SelectedValue = (string)Prop((string)combo.Tag).GetValue(_visualSettings)!;
-            RefreshPlayThemeChips();
+            foreach (var combo in _playInlineChoices)
+            {
+                if (combo.Tag is not string property) continue;
+                if (_visualChoices.TryGetValue(property, out var source))
+                {
+                    if (!ReferenceEquals(combo.ItemsSource, source.ItemsSource)) combo.ItemsSource = source.ItemsSource;
+                    if (combo.DisplayMemberPath != source.DisplayMemberPath) combo.DisplayMemberPath = source.DisplayMemberPath;
+                    if (combo.SelectedValuePath != source.SelectedValuePath) combo.SelectedValuePath = source.SelectedValuePath;
+                }
+                combo.SelectedValue = (string)Prop(property).GetValue(_visualSettings)!;
+            }
+            if (refreshThemeChips) RefreshPlayThemeChips();
         }
         finally { _loadingVisualSettings = wasLoading; }
+        SyncQuickAdjustState();
     }
 
     private void RefreshPlayThemeChips()

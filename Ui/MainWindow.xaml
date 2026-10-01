@@ -346,7 +346,7 @@
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <Button x:Name="PlayDialogBackButton" Content="Back" Tag="{StaticResource IconBack}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogBack_Click" Padding="9,7" FontSize="10" ToolTip="Back to the live stage" local:Loc.Localize="True"/>
                         <TextBlock Grid.Column="1" Text="Play" local:Loc.Localize="True" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="12,0,0,0"/>
-                        <Button Grid.Column="2" x:Name="PlayDialogSettingsButton" Content="SETTINGS" Tag="{StaticResource IconSliders}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogSettings_Click" Padding="10,8" FontSize="9.5" Margin="0,0,8,0" ToolTip="Open stage settings" local:Loc.Localize="True"/>
+                        <Button Grid.Column="2" x:Name="PlayDialogQuickAdjustButton" Content="QUICK ADJUST" Tag="{StaticResource IconSliders}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogQuickAdjust_Click" Padding="10,8" FontSize="9.5" Margin="0,0,8,0" ToolTip="Quickly adjust the stage while you set up a session." local:Loc.Localize="True"/>
                         <Button Grid.Column="3" Style="{StaticResource RoundGlyphButtonStyle}" Tag="{StaticResource IconClose}" VerticalAlignment="Center" Click="PlayDialogClose_Click" ToolTip="Close" local:Loc.Localize="True"/>
                     </Grid>
                     <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,14,0,0">
@@ -358,7 +358,12 @@
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <Button x:Name="PlayDialogMidiButton" Content="MIDI File" Tag="{StaticResource IconFolder}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogOpenMidi_Click" Padding="16,9" ToolTip="Choose a Standard MIDI file" local:Loc.Localize="True"/>
-                                        <Button Grid.Column="2" Content="Live Play" Style="{StaticResource GhostButtonStyle}" Click="PlayDialogLive_Click" Padding="12,8" FontSize="12" ToolTip="Skip playback and perform live right away" local:Loc.Localize="True"/>
+                                        <Button x:Name="PlayDialogPrimaryButton" Grid.Column="2" Style="{StaticResource GhostButtonStyle}" Click="PlayDialogPlay_Click" Padding="14,8" FontSize="12" MinWidth="154" ToolTip="Choose a MIDI file" AutomationProperties.Name="Choose a MIDI file" local:Loc.Localize="True">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Path x:Name="PlayDialogPrimaryIcon" Data="{StaticResource IconFolder}" Fill="{DynamicResource Accent2Brush}" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center"/>
+                                                <TextBlock x:Name="PlayDialogPrimaryLabel" Text="Choose a MIDI file" local:Loc.Localize="True" FontWeight="SemiBold" Margin="8,0,0,0" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                        </Button>
                                     </Grid>
                                     <Border x:Name="PlayDialogLoadedSongPanel" Visibility="Collapsed" Margin="0,10,0,0" Padding="10,8" CornerRadius="9" Background="{DynamicResource AccentSoftBrush}" BorderBrush="{DynamicResource AccentBrush}" BorderThickness="1">
                                         <Grid>
@@ -392,19 +397,34 @@
                             <TextBlock Text="STYLES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,6"/>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Button x:Name="LeftStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="#10131B" Margin="0,0,6,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="0" ToolTip="Open the Notes page to design this hand" AutomationProperties.Name="Open the Notes page to design this hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
+                                <Button x:Name="LeftStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="#10131B" Margin="0,0,6,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="0" ToolTip="Choose a color preset for the left hand" AutomationProperties.Name="Choose a color preset for the left hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
                                     <StackPanel>
                                         <TextBlock Text="Left Hand" local:Loc.Localize="True" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                                        <TextBlock x:Name="LeftStyleLabel" Text="Neon Violet" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                                        <TextBlock x:Name="LeftStyleLabel" Text="Ocean Blue" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Button>
-                                <Button Grid.Column="1" x:Name="RightStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="#10131B" Margin="6,0,0,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="1" ToolTip="Open the Notes page to design this hand" AutomationProperties.Name="Open the Notes page to design this hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
+                                <Button Grid.Column="1" x:Name="RightStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="#10131B" Margin="6,0,0,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="1" ToolTip="Choose a color preset for the right hand" AutomationProperties.Name="Choose a color preset for the right hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
                                     <StackPanel>
                                         <TextBlock Text="Right Hand" local:Loc.Localize="True" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                                        <TextBlock x:Name="RightStyleLabel" Text="Neon Violet" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                                        <TextBlock x:Name="RightStyleLabel" Text="Rose Neon" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Button>
                             </Grid>
+                            <Border x:Name="HandPresetPanel" Visibility="Collapsed" Margin="0,8,0,0" Padding="12" CornerRadius="11" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                                <StackPanel>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <TextBlock x:Name="HandPresetTitle" Text="Left hand presets" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center"/>
+                                        <Button Grid.Column="1" Content="Close" local:Loc.Localize="True" Style="{StaticResource MiniButtonStyle}" Click="PlayDialogHandPresetClose_Click" Padding="8,4"/>
+                                    </Grid>
+                                    <TextBlock x:Name="HandPresetHint" Text="Choose a color preset. Only the selected hand will change." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" TextWrapping="Wrap" Margin="0,4,0,6"/>
+                                    <WrapPanel x:Name="HandPresetChoicesHost"/>
+                                    <WrapPanel Margin="0,6,0,0">
+                                        <Button Content="Custom color…" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="10,6" Margin="0,0,6,0" Click="PlayDialogHandPresetCustom_Click" ToolTip="Choose any color for this hand"/>
+                                        <Button Content="Advanced note settings…" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="10,6" Click="PlayDialogHandPresetAdvanced_Click" ToolTip="Open the Notes settings page"/>
+                                    </WrapPanel>
+                                </StackPanel>
+                            </Border>
                             <TextBlock Text="PLAYBACK SPEED" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,2"/>
                             <Grid Margin="0,6,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -479,10 +499,10 @@
                             </StackPanel>
                         </StackPanel>
                     </ScrollViewer>
-                    <Button x:Name="PlayDialogPrimaryButton" Grid.Row="2" Margin="0,18,0,0" Height="58" Style="{StaticResource AccentButtonStyle}" FontSize="18" Click="PlayDialogPlay_Click" ToolTip="Choose a MIDI file" AutomationProperties.Name="Choose a MIDI file" local:Loc.Localize="True">
+                    <Button x:Name="PlayDialogLiveButton" Grid.Row="2" Margin="0,18,0,0" Height="58" Style="{StaticResource AccentButtonStyle}" FontSize="18" Click="PlayDialogLive_Click" ToolTip="Skip playback and perform live right away" AutomationProperties.Name="Live Play" local:Loc.Localize="True">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Path x:Name="PlayDialogPrimaryIcon" Data="{StaticResource IconFolder}" Fill="White" Width="16" Height="16" Stretch="Uniform" VerticalAlignment="Center"/>
-                            <TextBlock x:Name="PlayDialogPrimaryLabel" Text="Choose a MIDI file" local:Loc.Localize="True" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
+                            <Path Data="{StaticResource IconKeyboard}" Fill="White" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center"/>
+                            <TextBlock Text="Live Play" local:Loc.Localize="True" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
                 </Grid>
@@ -547,7 +567,7 @@
                         </StackPanel>
                     </StackPanel>
                     <Button x:Name="MenuPlayButton" Content="Perform &amp; Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Open a MIDI score or perform live on the concert stage (Space)" local:Loc.Localize="True"/>
-                    <Button x:Name="MenuDesignButton" Content="Stage Design Studio" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuDesign_Click" ToolTip="Fine-tune visual effects, ray-traced keyboard shading and colors" local:Loc.Localize="True"/>
+                    <Button x:Name="MenuQuickAdjustButton" Content="Quick adjustments" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuQuickAdjust_Click" ToolTip="Quickly adjust common stage controls; use Stage Design Studio for everything else." local:Loc.Localize="True"/>
                     <StackPanel x:Name="MenuLinkStack" Margin="10,22,0,0">
                         <Button Content="Audio &amp; MIDI Hardware Setup" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Disklavier SoundFonts, MIDI routing and latency settings" local:Loc.Localize="True"/>
                         <Button Content="Keyboard &amp; Shortcuts" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuShortcuts_Click" ToolTip="Every shortcut the stage listens to (F1)" local:Loc.Localize="True"/>
@@ -571,7 +591,7 @@
                             </StackPanel>
                             <TextBlock x:Name="MenuPresetLabel" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,12" TextWrapping="Wrap"/>
                             <WrapPanel>
-                                <Button Content="OPEN DESIGN" Style="{StaticResource AccentButtonStyle}" Click="MainMenuDesign_Click" Margin="0,0,8,0" ToolTip="Every stage setting lives in the design dock" local:Loc.Localize="True"/>
+                                <Button Content="Stage Design Studio" Style="{StaticResource AccentButtonStyle}" Click="MainMenuDesign_Click" Margin="0,0,8,0" ToolTip="Open the full stage settings dock" local:Loc.Localize="True"/>
                                 <Button Content="TRY A LOOK" Click="MenuPresetShuffle_Click" ToolTip="Cycle through the built-in stage presets" local:Loc.Localize="True"/>
                             </WrapPanel>
                         </StackPanel>
@@ -589,6 +609,44 @@
                     <TextBlock x:Name="MenuQuoteText" Style="{StaticResource MenuQuoteStyle}" Margin="10,20,0,0" Text="The piano keys are black and white, but they sound like a million colors in your mind." local:Loc.Localize="True"/>
                 </StackPanel>
             </Grid>
+        </Grid>
+
+        <!-- Shared contextual controls: opened from both the startup menu and the Play dialog.
+             Every control writes through the same settings handlers as the Design dock. -->
+        <Grid x:Name="QuickAdjustOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="31" Background="#A8040509" MouseDown="QuickAdjustOverlay_MouseDown">
+            <Border x:Name="QuickAdjustCard" Width="620" MaxHeight="700" VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" CornerRadius="18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource DockShadow}" KeyboardNavigation.TabNavigation="Cycle" MouseDown="QuickAdjustCard_MouseDown">
+                <Grid Margin="26,22,26,22">
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                    <Grid>
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <StackPanel>
+                            <TextBlock x:Name="QuickAdjustTitle" Text="Quick adjustments" local:Loc.Localize="True" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                            <TextBlock x:Name="QuickAdjustSubtitle" Text="Common controls apply immediately and stay in sync across Play and Design." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,12,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                        <Button Grid.Column="1" Style="{StaticResource RoundGlyphButtonStyle}" Tag="{StaticResource IconClose}" VerticalAlignment="Top" Click="QuickAdjustClose_Click" ToolTip="Close" local:Loc.Localize="True"/>
+                    </Grid>
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Margin="0,16,0,12">
+                        <StackPanel>
+                            <StackPanel x:Name="QuickAdjustControlsHost"/>
+                            <StackPanel Margin="0,14,0,0">
+                                <TextBlock Text="STAGE LAYERS" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,6"/>
+                                <WrapPanel x:Name="QuickAdjustLayerHost"/>
+                            </StackPanel>
+                            <Border x:Name="QuickAdjustHandColorsCard" Visibility="Collapsed" Margin="0,14,0,0" Padding="12" CornerRadius="11" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                                <StackPanel>
+                                    <TextBlock Text="Hand colors" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,6"/>
+                                    <WrapPanel x:Name="QuickAdjustHandColorsHost"/>
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                    </ScrollViewer>
+                    <Grid Grid.Row="2">
+                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                        <Button x:Name="QuickAdjustAdvancedButton" Content="Advanced settings…" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" HorizontalAlignment="Left" Click="QuickAdjustAdvanced_Click" ToolTip="Open the full stage settings dock"/>
+                        <Button Grid.Column="1" Content="Close" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="QuickAdjustClose_Click" MinWidth="92"/>
+                    </Grid>
+                </Grid>
+            </Border>
         </Grid>
     </Grid>
 </Window>
