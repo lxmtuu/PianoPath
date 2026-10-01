@@ -1,0 +1,45 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Plain net10.0, not net10.0-windows: the point of this project is that these checks run on any
+         machine, so a Linux CI job can fail a MIDI regression without a Windows runner being free. -->
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>PianoPath.Tests</RootNamespace>
+    <!-- The product types are internal. Linking the source files compiles them into this assembly, so
+         no InternalsVisibleTo is needed and no library has to be carved out of PianoPath.csproj yet. -->
+    <EnableDefaultCompileItems>true</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <!-- The sources under test, linked rather than referenced.
+       Every file here has to compile without WPF, System.Drawing, Vortice or WinMM, which is what
+       keeps this project on plain net10.0. The ones left out are left out for a reason:
+         Localization/Localizer.cs   - the live-label half of Loc: DependencyObject, AutomationProperties
+         Midi/MidiDeviceService.cs   - WinMM P/Invoke
+         Audio/PianoAudioEngine.cs   - WinMM P/Invoke
+         Stage/, Theme/, Library/, Profile/, Practice/
+                                     - all bottom out in ShellThemes, whose record is declared in terms
+                                       of System.Windows.Media.Color, or in PianoVisualSettingsStore
+       Adding a file to this list is the whole act of widening the coverage; if it drags WPF in, the
+       build says so immediately on the Linux job. -->
+  <ItemGroup>
+    <Compile Include="..\..\Localization\Loc.cs" Link="Product\Localization\Loc.cs" />
+    <Compile Include="..\..\Localization\Strings.English.cs" Link="Product\Localization\Strings.English.cs" />
+    <Compile Include="..\..\Localization\Strings.Vietnamese.cs" Link="Product\Localization\Strings.Vietnamese.cs" />
+    <Compile Include="..\..\Midi\MidiFileReader.cs" Link="Product\Midi\MidiFileReader.cs" />
+    <Compile Include="..\..\Midi\MusicXmlReader.cs" Link="Product\Midi\MusicXmlReader.cs" />
+    <Compile Include="..\..\Midi\HandSplit.cs" Link="Product\Midi\HandSplit.cs" />
+    <Compile Include="..\..\Midi\Meter.cs" Link="Product\Midi\Meter.cs" />
+    <Compile Include="..\..\Audio\IAudioTrack.cs" Link="Product\Audio\IAudioTrack.cs" />
+    <Compile Include="..\..\Audio\WavWriter.cs" Link="Product\Audio\WavWriter.cs" />
+  </ItemGroup>
+
+</Project>

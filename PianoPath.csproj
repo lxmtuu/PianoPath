@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
@@ -13,6 +13,14 @@
     <Description>Piano practice and visualizer for Windows: MIDI playback, SoundFont synthesis and a concert-themed piano-roll stage.</Description>
     <Version>0.4.0</Version>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- The test project is a sibling, not a dependency: it links the sources it needs. Without this the
+         default glob would compile tests/ into the application as well, where xUnit does not exist. -->
+    <Compile Remove="tests/**/*.cs" />
+    <None Remove="tests/**/*" />
+    <EmbeddedResource Remove="tests/**/*" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- The community preset shelf: the files in presets/ ship inside the application, read by

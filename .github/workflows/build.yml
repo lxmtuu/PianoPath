@@ -25,6 +25,27 @@ jobs:
       - name: Static source check
         run: python3 tools/check_sources.py
 
+  # Second lane: the checks that used to live only inside `--verify`, which means they could only run on
+  # a Windows runner and could not be run one at a time. tests/PianoPath.Tests links the sources that
+  # need neither WPF nor WinMM (MIDI, MusicXML, the hand-split guess, the meter table, the WAV writer,
+  # the string table) and runs them under xUnit on plain net10.0, so a MIDI regression goes red here in
+  # about a minute without waiting for a Windows runner to be free. It runs beside `build` rather than
+  # in front of it: both only need `static`, and neither is a prerequisite for the other.
+  test:
+    needs: static
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Run the portable test project
+        run: dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release --logger "console;verbosity=normal"
+
   build:
     needs: static
     runs-on: windows-latest

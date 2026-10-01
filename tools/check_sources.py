@@ -491,10 +491,15 @@ def scan_localization(cs_files):
     """
     errors = []
     root = ROOT / "Localization"
-    localizer = (root / "Localizer.cs").read_text(encoding="utf-8")
-    registered = re.findall(r'new\("([a-z]{2}(?:-[A-Za-z]{2})?)", "([^"]*)", "([^"]*)", Strings(\w+)\.Table\)', localizer)
+    # The registry lives with the string table, not with the WPF label binder: Loc.cs holds Languages
+    # and the look-up, Localizer.cs only the half that paints live labels. Reading the folder rather
+    # than one hard-coded name keeps this check pointing at whichever file carries the registry.
+    registry_files = sorted(p for p in root.glob("*.cs") if not p.name.startswith("Strings."))
+    registry = "\n".join(path.read_text(encoding="utf-8") for path in registry_files)
+    registered = re.findall(r'new\("([a-z]{2}(?:-[A-Za-z]{2})?)", "([^"]*)", "([^"]*)", Strings(\w+)\.Table\)', registry)
     if not registered:
-        return [f"{root / 'Localizer.cs'}: no language is registered in Languages"], 0, 0
+        names = ", ".join(p.name for p in registry_files) or "no file"
+        return [f"Localization/ ({names}): no language is registered in Languages"], 0, 0
 
     tables, sheet = {}, {}
     for code, _english, _native, table in registered:
