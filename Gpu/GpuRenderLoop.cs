@@ -73,6 +73,14 @@ internal sealed class GpuRenderLoop : IDisposable
     /// <summary>Wait for the display's vertical blank when presenting the stage window.</summary>
     internal bool VSync { get => _vsync; set => _vsync = value; }
 
+    /// <summary>
+    /// Advances the simulation by this many seconds per frame instead of by the measured wall-clock
+    /// delta, for renders that have to repeat byte for byte (the README previews). The loop still runs
+    /// at the machine's own pace and <see cref="FramesRendered"/> still counts real frames, so a capture
+    /// that waits for a frame count gets the same simulation state on any runner.
+    /// </summary>
+    internal double? FixedFrameSeconds { get; set; }
+
     internal void SetEmbedded(bool enabled, int width, int height)
     {
         lock (_outputGate) { _embeddedEnabled = enabled; _embeddedWidth = Math.Clamp(width, 0, 3840); _embeddedHeight = Math.Clamp(height, 0, 2160); }
@@ -162,7 +170,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 gpu.UpdateBackground(_feed.Background);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
-                var dt = now - last; last = now;
+                var dt = FixedFrameSeconds ?? (now - last); last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);

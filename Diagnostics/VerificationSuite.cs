@@ -1069,6 +1069,7 @@ internal static partial class VerificationSuite
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
         Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
+        Run(nameof(VerifyDeterministicPreview), () => VerifyDeterministicPreview(stage));
         Run(nameof(VerifySettingsDock), () => VerifySettingsDock(window, stage, visualSettings));
         Run(nameof(VerifyLanguageSwitching), () => VerifyLanguageSwitching(window));
         Run(nameof(VerifyAccessibility), () => VerifyAccessibility(window));
@@ -4027,6 +4028,42 @@ internal static partial class VerificationSuite
             "The Ocean theme should graph splash + ripple + rain.");
         Assert(retro.ImpactBurst == "Confetti" && retro.ImpactMorph == "Bounce" && retro.ReleaseEffect == "Snap Back" && retro.NoteRoundness == 0,
             "The Retro theme should graph square pixels + confetti + bounce + snap.");
+    }
+
+    /// <summary>
+    /// The README previews are committed by CI and compared byte for byte with the next build, so the stage
+    /// has to draw the same picture for the same frame count. This asserts the property the capture relies
+    /// on: a reset followed by a fixed number of fixed-size steps always lands on the same pixels, while a
+    /// different number of steps lands somewhere else — so the frame count, not the wall clock, is what
+    /// decides the picture. Before the capture was pinned to a frame count, two builds of the same
+    /// interface produced 23 differing PNGs and the drift check could not tell the two cases apart.
+    /// </summary>
+    private static void VerifyDeterministicPreview(PianoStage stage)
+    {
+        const double step = 1.0 / 60;
+        const int frames = 45;
+        var width = Math.Max(160, (int)stage.ActualWidth);
+        var height = Math.Max(90, (int)stage.ActualHeight);
+
+        string Shot(int framesToRun)
+        {
+            stage.ResetAnimation();
+            for (var i = 0; i < framesToRun; i++) stage.Advance(step);
+            ForceStageRender(stage);
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(stage);
+            var pixels = new byte[width * height * 4];
+            bitmap.CopyPixels(pixels, width * 4, 0);
+            return Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(pixels));
+        }
+
+        var first = Shot(frames);
+        Assert(Shot(frames) == first,
+            "The same frame count must draw the same stage picture, or the README previews cannot be compared byte for byte between builds.");
+        Assert(Shot(frames + 30) != first,
+            "A different frame count should draw a different picture: if every frame were identical, the assertion above would pass even without the pinned clock.");
+        stage.ResetAnimation();
+        ForceStageRender(stage);
     }
 
     /// <summary>Forces the stage to draw now so the shading state can be asserted synchronously.</summary>

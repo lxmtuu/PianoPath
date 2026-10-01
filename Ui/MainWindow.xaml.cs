@@ -202,6 +202,28 @@ public partial class MainWindow : Window
         FrameClock.Shared.Release();
     }
 
+    /// <summary>
+    /// Puts the window into the state the README previews are captured from: every animator is returned to
+    /// frame zero and both clocks — the WPF frame clock and the GPU render thread — are pinned to a fixed
+    /// step, so the picture N frames later is the same on any machine.
+    ///
+    /// Without this the previews are not reproducible. Every animator integrates the frame delta, and the
+    /// screenshot used to be taken after a wall-clock settle, so the number of frames that had run — and
+    /// therefore the phase of the petals, wisps, arcs and backdrop motes — depended on how fast the runner
+    /// happened to be. Two builds of the same interface produced 23 differing PNGs, which made the drift
+    /// check unable to tell "the interface changed" from "the frame count differed".
+    /// </summary>
+    internal void BeginDeterministicPreview(double stepSeconds)
+    {
+        Stage.ResetAnimation();
+        DockBackdrop.ResetAnimation();
+        MenuBackdrop.ResetAnimation();
+        if (_gpuLoop is not null) _gpuLoop.FixedFrameSeconds = stepSeconds;
+        FrameClock.Shared.UseFixedStep(stepSeconds);
+        // Nothing may be playing yet, so ask for frames explicitly: the capture counts them.
+        FrameClock.Shared.Acquire();
+    }
+
     private void Tick(double elapsed)
     {
         if (_playing)

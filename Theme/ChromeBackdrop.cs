@@ -17,9 +17,12 @@ internal sealed class ChromeBackdrop : FrameworkElement
 {
     private const int MaxParticles = 90;
 
+    /// <summary>Seed of the mote field. Fixed so the animated backdrop looks the same in every run.</summary>
+    private const int FieldSeed = 20240831;
+
     private readonly List<Mote> _motes = [];
     private readonly Dictionary<uint, Brush> _brushes = [];
-    private readonly Random _random = new(20240831);
+    private Random _random = new(FieldSeed);
 
     private ShellTheme _theme = ShellThemes.Default;
     private double _motion = 1;
@@ -71,6 +74,19 @@ internal sealed class ChromeBackdrop : FrameworkElement
         if (wanted == _wantsFrames) return;
         _wantsFrames = wanted;
         if (wanted) FrameClock.Shared.Acquire(); else FrameClock.Shared.Release();
+    }
+
+    /// <summary>
+    /// Puts the backdrop back at frame zero: the mote field is re-scattered from its fixed seed and the
+    /// accumulated time is cleared. A screenshot run calls this before it starts counting frames, so the
+    /// picture depends on how many frames were counted and not on how long the window took to settle.
+    /// </summary>
+    internal void ResetAnimation()
+    {
+        _random = new Random(FieldSeed);
+        _time = 0;
+        RebuildField();
+        InvalidateVisual();
     }
 
     private void OnFrame(double delta)

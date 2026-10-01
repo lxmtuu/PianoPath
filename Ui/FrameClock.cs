@@ -35,6 +35,32 @@ internal sealed class FrameClock
 
     private FrameClock() { }
 
+    /// <summary>
+    /// Switches the clock onto a fixed frame step and starts counting frames, for renders that have to
+    /// come out byte-identical from one run to the next — the README previews.
+    ///
+    /// Every animator in the app integrates the delta this clock hands out, so on a wall-clock step the
+    /// picture depends on how fast the machine happened to draw: the same window screenshotted twice
+    /// lands the petals, wisps and arcs at different phases and the two PNGs differ. Pinning the step
+    /// makes the picture a function of the frame count alone, and <see cref="FrameCount"/> is what the
+    /// capture waits for, so "the same interface" really does produce the same bytes.
+    /// </summary>
+    internal void UseFixedStep(double seconds)
+    {
+        _fixedDelta = seconds;
+        FrameCount = 0;
+        _lastFrameSeconds = -1;
+    }
+
+    /// <summary>
+    /// Frames delivered since the last <see cref="Acquire"/> (or since <see cref="UseFixedStep"/>).
+    /// Counted on real composition frames, so it advances at the machine's own pace while the
+    /// simulation it drives does not.
+    /// </summary>
+    internal long FrameCount { get; private set; }
+
+    private double? _fixedDelta;
+
     /// <summary>Raised once per real composition frame with the seconds elapsed since the previous one.</summary>
     internal event Action<double>? Tick;
 
@@ -75,8 +101,9 @@ internal sealed class FrameClock
         // A repeated composition time is not a new frame. Skipping it keeps the motion smooth; feeding
         // it forward would double-report the previous frame as a zero-length one.
         if (_lastFrameSeconds >= 0 && now <= _lastFrameSeconds) return;
-        _delta = _lastFrameSeconds < 0 ? 1.0 / 60 : Math.Clamp(now - _lastFrameSeconds, 0, MaxDelta);
+        _delta = _fixedDelta ?? (_lastFrameSeconds < 0 ? 1.0 / 60 : Math.Clamp(now - _lastFrameSeconds, 0, MaxDelta));
         _lastFrameSeconds = now;
+        FrameCount++;
         if (_delta > 0) _fps += (1 / _delta - _fps) * .08;
         Tick?.Invoke(_delta);
     }
