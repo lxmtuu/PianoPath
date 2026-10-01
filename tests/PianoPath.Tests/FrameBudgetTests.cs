@@ -344,8 +344,17 @@ public class FrameBudgetTests
 
         Assert.Equal(FrameTrend.Regression, trend);
         Assert.Equal(60, delta, 3);
-        Assert.Contains("regression", line, StringComparison.Ordinal);
-        Assert.Contains(slower.LogLines(baseline), line => line.StartsWith("WARN perf: ", StringComparison.Ordinal));
+        Assert.Contains("reported, not judged", line, StringComparison.Ordinal);
+        // Both runs above are on a software rasterizer, and there the same code measured p95 307 ms and then
+        // 788 ms one commit apart, so a WARN would be a claim the data disproves: every line stays a NOTE.
+        Assert.All(slower.LogLines(baseline), printed => Assert.StartsWith("NOTE perf: ", printed));
+
+        // On a machine the budgets were written for, the same movement is a verdict, and it is a warning.
+        var hardware = Run(false, Scene("default", 96));
+        var hardwareBaseline = Run(false, Scene("default", 60));
+        Assert.Contains("regression in the code between the two commits",
+            hardware.Compare(hardwareBaseline, hardware.Scene("default")!).Line, StringComparison.Ordinal);
+        Assert.Contains(hardware.LogLines(hardwareBaseline), printed => printed.StartsWith("WARN perf: ", StringComparison.Ordinal));
     }
 
     [Fact]

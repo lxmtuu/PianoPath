@@ -240,9 +240,13 @@ internal sealed class FrameBenchRun
         var delta = (now - then) / then * 100;
         var shape = $"previous run p95 {FrameBudget.Ms(then)} ms → this run {FrameBudget.Ms(now)} ms ({Sign(delta)}{Percent(delta)}%)";
         if (delta >= (FrameBudget.RegressionFactor - 1) * 100)
-            return (FrameTrend.Regression, delta,
-                $"the scene '{scene.Scene}' got slower on the same kind of adapter — {shape}; a jump past {Percent((FrameBudget.RegressionFactor - 1) * 100)}% " +
-                "is read as a regression in the code between the two commits");
+            return (FrameTrend.Regression, delta, SoftwareAdapter
+                // Measured, not assumed: the same code gave this scene p95 307.21 ms and then 788.32 ms on two
+                // runners, one commit apart, and that commit changed one string. A software rasterizer varies by
+                // more than the threshold, so on one the movement is a number to read rather than a verdict.
+                ? $"the scene '{scene.Scene}' moved on the same kind of adapter — {shape}; a software rasterizer's own frame time varies by more than this between two runs of the same code, so the number is reported, not judged"
+                : $"the scene '{scene.Scene}' got slower on the same kind of adapter — {shape}; a jump past {Percent((FrameBudget.RegressionFactor - 1) * 100)}% " +
+                  "is read as a regression in the code between the two commits");
         // Two sentences, not one: the gate's second CI run read a 62.8% drop and still called it "held its
         // frame time", because Faster and Steady shared a line. A number and a sentence that disagree about
         // each other are worse than either on its own.
@@ -283,7 +287,9 @@ internal sealed class FrameBenchRun
                 _ => $"NOTE perf: {scene.VerdictNote}"
             });
             var (trend, _, line) = Compare(previous, scene);
-            lines.Add(trend == FrameTrend.Regression ? $"WARN perf: {line}" : $"NOTE perf: {line}");
+            // A WARN is a claim about the code between two commits, and on a software rasterizer that claim is
+            // false more often than not, so only a machine the budgets were written for gets the warning.
+            lines.Add(trend == FrameTrend.Regression && !SoftwareAdapter ? $"WARN perf: {line}" : $"NOTE perf: {line}");
         }
         return lines;
     }

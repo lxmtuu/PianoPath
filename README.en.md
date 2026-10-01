@@ -635,7 +635,9 @@ keyboard shading level) from the old WPF stage, so they were rewritten as **one 
 **Which machines the budgets bind.** Only a machine with a real graphics card: over budget, the exit code is `3`. A CI runner has no card, so the stage is drawn by **WARP** and
 is *not* held to the absolute budgets — Windows even presents its software adapter as a "hardware" one, so the app reads the adapter **name** and not only the WARP flag
 (`FrameBudget.IsSoftwareAdapter`), and a name it cannot read counts as software. There the number still means something **relatively**: CI keeps the previous run's report in the
-Actions cache and compares this run's p95 with it on the same kind of machine; half again as slow prints `WARN perf:` with the exact difference. Every run's report is published as
+Actions cache and compares this run's p95 with it on the same kind of machine. **On WARP the difference is a number, not a verdict** — the same code measured p95 307 ms and then
+788 ms on two runs, so every comparison line there is a `NOTE`; only a machine with a real card, which is what the budgets were written for, prints `WARN perf:` when it is half
+again as slow (and `FAIL` when it is over budget). Every run's report is published as
 the `keyflow-bench-report` artifact, and because it lives in the cache rather than in the repository, a measured number never becomes a commit.
 
 Both the measurement and the comparison carry a layer of verification: `VerifyFrameBudget` in `--verify` checks the budget table, the percentile arithmetic, the adapter rule, the

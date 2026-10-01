@@ -523,7 +523,8 @@ Hai con số đó là của **đường GPU**. Roadmap từng ghi "p95 < 8 ms �
 **Máy nào bị xử theo ngưỡng.** Chỉ máy có card đồ hoạ thật: vượt ngân sách thì mã thoát là `3`. Runner CI không có card nên vẽ bằng **WARP** và *không* bị so với
 ngưỡng tuyệt đối — Windows còn trình adapter phần mềm như một adapter "phần cứng", nên app đọc cả **tên** adapter chứ không chỉ cờ WARP (`FrameBudget.IsSoftwareAdapter`),
 và tên không đọc được thì coi như phần mềm. Ở đó con số vẫn có nghĩa **tương đối**: CI giữ báo cáo của lần chạy trước trong Actions cache và so p95 lần này với nó
-trên cùng loại máy; chậm hơn 50% thì in `WARN perf:` nêu đúng mức chênh. Báo cáo của mỗi lượt chạy được đính kèm làm artifact `keyflow-bench-report`, và vì nó nằm
+trên cùng loại máy. **Trên WARP mức chênh chỉ là con số, không phải kết luận** — cùng một code mà hai lượt chạy đo được p95 307 ms rồi 788 ms, nên mọi dòng so sánh ở đó
+là `NOTE`; chỉ máy có card thật, nơi ngân sách được viết cho, mới in `WARN perf:` khi chậm hơn 50% (và `FAIL` khi vượt ngân sách). Báo cáo của mỗi lượt chạy được đính kèm làm artifact `keyflow-bench-report`, và vì nó nằm
 trong cache chứ không trong repo nên một con số đo được không bao giờ thành một commit.
 
 Cả phép đo lẫn luật so sánh đều có lớp kiểm chứng: `VerifyFrameBudget` trong `--verify` kiểm bảng ngân sách, cách tính phân vị, luật adapter, bản JSON đọc ngược được

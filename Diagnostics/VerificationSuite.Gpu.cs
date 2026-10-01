@@ -399,9 +399,14 @@ internal static partial class VerificationSuite
             "A run that holds or clearly beats the previous p95 is not a regression, whatever else the runner was doing that day.");
         var slower = RunOf(true, SceneAt("default", 96));
         var regression = slower.Compare(baseline, slower.Scene("default")!);
-        Assert(regression.Trend == FrameTrend.Regression && regression.DeltaPercent > 59
-            && slower.LogLines(baseline).Any(line => line.StartsWith("WARN perf: ", StringComparison.Ordinal)),
-            "Half again as slow as the previous run on the same kind of adapter is the one thing CI can judge absolutely: the code between the two commits did it.");
+        Assert(regression.Trend == FrameTrend.Regression && regression.DeltaPercent > 59,
+            "Half again as slow as the previous run on the same kind of adapter is a movement the gate has to name.");
+        Assert(slower.LogLines(baseline).All(line => line.StartsWith("NOTE perf: ", StringComparison.Ordinal))
+            && slower.LogLines(baseline).Any(line => line.Contains("reported, not judged", StringComparison.Ordinal)),
+            "On a software rasterizer that movement is a number to read, not a verdict: two runs of the same code gave one scene p95 307 ms and then 788 ms, so a WARN there would be a claim the data disproves.");
+        var slowerOnHardware = RunOf(false, SceneAt("default", 96));
+        Assert(slowerOnHardware.LogLines(RunOf(false, SceneAt("default", 60))).Any(line => line.StartsWith("WARN perf: ", StringComparison.Ordinal)),
+            "On a machine the budgets were written for, half again as slow IS read as a regression in the code between the two commits, and the line says so as a warning.");
         Assert(reread.Compare(run, reread.Scene("default")!).Trend == FrameTrend.Steady,
             "A report read back from its own JSON compares steady against the run that wrote it, which is what CI does every time a baseline is fresh.");
 
