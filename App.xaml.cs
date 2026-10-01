@@ -100,6 +100,7 @@ public partial class App : Application
                     "audio" or "sound" => SettingsPages.Audio,
                     "midi" => SettingsPages.Midi,
                     "practice" => SettingsPages.Practice,
+                    "history" or "session" => SettingsPages.History,
                     "recording" or "record" => SettingsPages.Recording,
                     "general" or "language" or "app" => SettingsPages.General,
                     _ => SettingsPages.Style

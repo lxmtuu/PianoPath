@@ -161,7 +161,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # build (if needed) and
 | `--encode-probe=<file.avi>` | Write **three frames** into an uncompressed AVI and exit (exit code `0` = written, `2` = this machine could not). It is the **sample-plumbing probe**: an AVI needs no encoder at all, so `--verify` asks it only when a run produced **no MP4 take** — and always *after* the take, never before it, so a diagnostic that hangs cannot block the very thing it exists to explain. |
 | `--encode-take=<file.mp4>` | Write **one** short 64×48 MP4 take and exit, printing each step it took (exit code `0` = the take was written, `2` = this machine cannot write an MP4). It is the child process `--verify` starts to try the encoders: they are native code that can take a whole process down with it, which would cost the run its verdict — out of process it costs a SKIP line instead. |
 | `--bench[=<frames>] [--bench-out=<file.json>] [--bench-baseline=<file.json>]` | Run the **perf gate** and exit: it draws the GPU stage through the app's own render loop at **1920×1080**, measures **every frame's own length** for two scenes (the *default look* and the *busiest built-in look*) and writes a JSON report — mean/median/p95/p99/max plus each frame time. Exit code `0` = passed, `2` = no frame could be measured at all (this machine has no Direct3D device, or the render loop stopped), `3` = **over budget** on a machine with a real graphics card (p95 < 8 ms for the default scene, < 16 ms for the heavy one). A machine with only a software rasterizer (WARP — every CI runner) is **never judged against the absolute budgets**: the report still carries every number, and CI compares them **relatively** with the previous run on the same kind of machine (`--bench-baseline` is that run's report). Measures 120 frames by default and writes `%TEMP%\keyflow-bench.json`. See [The frame budget gate](#the-frame-budget-gate---bench). |
-| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|recording\|general]` | Open the settings dock on a given page (`general` = the General page: language, graphics engine, settings profile). |
+| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|history\|recording\|general]` | Open the settings dock on a given page — all 13 pages of the dock, including `history` (the practice history, its chart and ghosts); `general` = the General page: language, graphics engine, settings profile. |
 | `--snapshot <file.png> [--compact] [--play-preview] [--menu]` | Capture the window and exit (`--compact` = 1080×700, `--play-preview` = pre-press a note, `--menu` = open the startup menu). |
 | `--gpu` | Kept for older launch scripts: the **Direct3D 11 GPU stage is the default stage** of every run, so this flag changes nothing. A machine without a graphics card uses WARP, Windows' software rasterizer. CI uses it to capture `stage-gpu.png`. |
 | `--software` | Draw **one run** with the WPF renderer instead of the GPU engine (the stored settings stay untouched): used for deterministic captures and CI's software column of the preset gallery. |
@@ -171,7 +171,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # build (if needed) and
 | `--background-image=<file.png>` | Draw a specific picture behind the keyboard **for this run only**: it does not set the "modified" flag and never auto-saves, so `visual-settings.json` stays untouched. CI uses it to render the background-feature illustration from the generated sample `docs/samples/stage-backdrop.png` (built by `tools/make_stage_background.py`) instead of somebody's screenshot. |
 | `--settings-dir=<folder>` | Read/write settings and user presets in another folder (default `%LOCALAPPDATA%\Keyflow`) — handy for a portable build or for capturing a pristine first run. `--verify` always uses a temporary folder, so it **never overwrites your real settings or presets**. |
 
-Example that reproduces the README pictures exactly (twenty-two images — a set per language: this edition
+Example that reproduces the README pictures exactly (twenty-eight images — a set per language: this edition
 reads `docs/previews/en` and `README.md` reads `docs/previews/vi`, with `--lang` pinning each set):
 
 ```powershell
@@ -181,13 +181,16 @@ foreach ($lang in @('en', 'vi')) {
   $dir = "$env:TEMP\keyflow-preview-$lang"   # temporary settings folder: every capture is a pristine first run
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI uses a temporary folder per picture
   & $exe --snapshot $set\stage-live.png       --compact --play-preview  --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\stage-gpu.png        --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu
+  & $exe --snapshot $set\stage-gpu.png        --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord
   & $exe --snapshot $set\stage-gpu-galaxy.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=GalaxyVoyage
   & $exe --snapshot $set\stage-gpu-storm.png  --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=ElectricStorm
   & $exe --snapshot $set\background-image.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
   & $exe --snapshot $set\main-menu.png         --compact --menu          --lang=$lang --settings-dir="$dir"
   & $exe --snapshot $set\design-dock.png       --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=style
   & $exe --snapshot $set\theme-dock.png        --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=theme
+  & $exe --snapshot $set\practice-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=practice
+  & $exe --snapshot $set\history-dock.png      --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=history
+  & $exe --snapshot $set\recording-dock.png    --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=recording
   & $exe --snapshot $set\play-dialog.png       --compact --play-dialog   --lang=$lang --settings-dir="$dir"
   & $exe --snapshot $set\shortcuts.png         --compact --shortcuts     --lang=$lang --settings-dir="$dir"
   & $exe --snapshot $set\language-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=general
@@ -278,6 +281,9 @@ The main stage is the Direct3D 11 GPU engine (the default since this version; th
 
 ![Keyflow GPU stage](docs/previews/en/stage-gpu.png)
 
+*The same stage holding a chord (`--play-chord`): the hold bar and the hold effects linking the pressed keys*
+*on the default Neon Violet look — the same engine as the hero picture above, but no longer the same picture.*
+
 The same engine with two presets that use the effect families: **Galaxy Voyage** (rainbow trails, the Galaxy cosmic layer) and **Electric Storm** (speed-line trails, electric arcs between held keys, the Lightning Storm energy layer):
 
 ![Keyflow GPU stage · Galaxy Voyage](docs/previews/en/stage-gpu-galaxy.png)
@@ -364,6 +370,14 @@ code, the XAML and the verification suite all read from the same place (see `Ui/
 | | Recording | The **OUTPUT** card (applied when the next recording starts): **Format** (AVI / 32-bit alpha PNG sequence / MP4 H.264 + AAC), **Resolution** (match window / 720p / 1080p), **Frame rate** (15–60), **Record audio** and **Transparent background** (shown for the PNG sequence only). |
 | **APP** | General | **Interface language** (English / Tiếng Việt / follow Windows) with a line naming the language that is running; **GRAPHICS ENGINE**: GPU frame rate (60 / 120 / 144 / 240 FPS / Unlimited), VSync in the GPU stage window, the **OPEN GPU STAGE WINDOW** button and an engine status line (the adapter and shader compile time, or the reason the software renderer is drawing); **SETTINGS PROFILE**: **EXPORT / IMPORT PROFILE…**. |
 
+The three **SESSION** pages of the dock, rendered by CI with `--show-settings --settings-tab=…` — the only group of the dock that used to have nothing but prose:
+
+| Practice | History | Recording |
+| --- | --- | --- |
+| ![Practice page](docs/previews/en/practice-dock.png) | ![Practice history page](docs/previews/en/history-dock.png) | ![Recording page](docs/previews/en/recording-dock.png) |
+
+*Practice: the practice modes, the practice tempo and the A–B loop. History: the runs of the open song with the chart and the ghosts — the CI machine is a pristine first run, so the page shows its empty state, exactly what a fresh install shows. Recording: the OUTPUT card with the format, resolution, frame rate, audio track and transparent background.*
+
 The rest of the interface:
 
 | Area | Contents |
@@ -399,9 +413,9 @@ builds the app and then re-renders **two sets of pictures** — every subject in
 `--verify`. Each set pins its own `--lang` — `docs/previews/en/` for this edition, `docs/previews/vi/` for
 `README.md` — so the captions always match the language of the README that shows them whatever the runner's
 display language is, and every picture gets a settings folder of its own, so it is always a pristine first
-run. The subjects are: the live stage, the GPU stage, two GPU presets (Galaxy Voyage and Electric Storm),
-the background image, the startup menu, the Style dock, the Theme dock, the Play dialog, the shortcuts card
-and the General page. A separate step of the same workflow renders the **preset gallery**
+run. The subjects are: the live stage, the GPU stage holding a chord, two GPU presets (Galaxy Voyage and
+Electric Storm), the background image, the startup menu, the Style dock, the Theme dock, the three SESSION
+pages (Practice, History, Recording), the Play dialog, the shortcuts card and the General page. A separate step of the same workflow renders the **preset gallery**
 `docs/previews/presets.jpg` (every built-in preset drawn twice, software | GPU, in one JPEG shared by both
 READMEs). Finally the workflow **commits them straight into the branch**
 (`Refresh the README previews from CI [skip ci]`), so after a UI change there is nothing else to do: the
@@ -518,7 +532,7 @@ Two workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 22 README images (11 subjects × 2 languages) and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so `git status` on that folder is the comparison itself — any file that differs is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact). |
+| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render the 28 README images (14 subjects × 2 languages) and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so `git status` on that folder is the comparison itself — any file that differs is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact). |
 | `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish both kinds, smoke-test the published build, compile the `.exe` installer from that same publish folder, upload both ZIPs plus the installer as artifacts and (for a tag) attach them to the GitHub Release with generated notes. |
 
 ```powershell
@@ -740,7 +754,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `presets/`: the community shelf — one full preset per file, written by `tools/make_presets.py` and embedded into the build by `PianoPath.csproj` (read by `Stage/CommunityPresets.cs`), so adding a look is adding a JSON file.
 - `tools/`: `check_sources.py` (static checks for syntax/XAML/dock catalogue/theme tokens/README/command line, runs anywhere), `make_presets.py` (writes `presets/*.json` from the defaults `PianoVisualSettings` declares), `shader_preview.py` (Python port of the shader for previewing, writes to `tools/out/`, not committed) and `make_stage_background.py` (generates the sample backdrop `docs/samples/stage-backdrop.png`), `add_string.py` (adds one string key with its Vietnamese translation to both `Localization/` tables, in ordinal order), `inno_messages.py` (generates the list of valid Inno Setup message names, `installer/Languages/messages.txt`) and `build_installer.ps1` (compiles the installer; both workflows call it).
 - `Localization/`: `Localizer.cs` (languages, table lookup, live labels, XAML markers) and `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + translation; adding a language means adding one such file).
-- `docs/previews/`: the interface pictures rendered by the application in CI — `en/` for this edition, `vi/` for `README.md` (11 pictures each), plus `presets.jpg` (the gallery of 14 presets × software | GPU engine, shared by both editions); the workflow owns all of it, so do not hand-commit other images into these folders.
+- `docs/previews/`: the interface pictures rendered by the application in CI — `en/` for this edition, `vi/` for `README.md` (14 pictures each), plus `presets.jpg` (the gallery of 14 presets × software | GPU engine, shared by both editions); the workflow owns all of it, so do not hand-commit other images into these folders.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
 - `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `Properties/AssemblyInfo.cs`: WPF's `ThemeInfo` attribute (where theme resource dictionaries are looked up); `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
 - `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, then a `build` job on Windows: Release build, `--verify`, **the frame budget measured with `--bench` and compared with the previous run from the cache**, a trial installer build, rendering the 22 README pictures and the preset gallery, then committing them back to the branch when it accepts the push) and `release.yml` (publish + attach the ZIPs to the GitHub Release when a `v*` tag is pushed).

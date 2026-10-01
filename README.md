@@ -144,7 +144,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # biên dịch (nếu c
 | `--encode-probe=<file.avi>` | Ghi **ba khung** vào một tệp AVI không nén rồi thoát (mã thoát `0` = đã ghi xong, `2` = máy này không ghi được). Đây là **phép thử đường ống mẫu**: AVI không cần bộ mã hoá nào, nên `--verify` chỉ gọi nó khi lượt chạy **không ra được tệp MP4 nào** — và luôn gọi *sau* lượt ghi, không bao giờ trước, để một phép thử có thể treo không chặn mất chính thứ nó định giải thích. |
 | `--encode-take=<file.mp4>` | Ghi **một** bản MP4 ngắn 64×48 rồi thoát, in ra từng bước đã làm (mã thoát `0` = đã ghi xong, `2` = máy này không ghi được MP4). Đây là tiến trình con mà `--verify` tự gọi để thử bộ mã hoá: bộ mã hoá là mã gốc, lỗi trong đó có thể làm sập cả tiến trình, nên nếu chạy trong chính lượt kiểm chứng thì sẽ mất luôn kết luận — chạy riêng thì chỉ tốn một dòng SKIP. |
 | `--bench[=<khung>] [--bench-out=<tệp.json>] [--bench-baseline=<tệp.json>]` | Chạy **cổng hiệu năng** rồi thoát: dựng sân khấu GPU bằng chính vòng dựng hình của app ở **1920×1080**, đo **thời gian của từng khung** cho hai cảnh (*look mặc định* và *look nặng nhất có sẵn*) rồi ghi báo cáo JSON — mean/median/p95/p99/max kèm thời gian từng khung. Mã thoát `0` = đạt, `2` = không đo được khung nào (máy không có thiết bị Direct3D, hoặc vòng dựng hình dừng giữa chừng), `3` = **vượt ngân sách** trên máy có card đồ hoạ thật (p95 < 8 ms cảnh mặc định, < 16 ms cảnh nặng). Máy chỉ có bộ dựng hình phần mềm (WARP — mọi runner CI) **không bị xử theo ngưỡng tuyệt đối**: báo cáo vẫn ghi đủ số, và CI so **tương đối** với lần đo trước trên cùng loại máy (`--bench-baseline` là báo cáo của lần đó). Mặc định đo 120 khung và ghi ra `%TEMP%\keyflow-bench.json`. Xem [Cổng hiệu năng](#cổng-hiệu-năng---bench). |
-| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|recording\|general]` | Mở sẵn dock cài đặt ở đúng trang (`general` = trang General: ngôn ngữ, engine đồ hoạ, hồ sơ cài đặt). |
+| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|history\|recording\|general]` | Mở sẵn dock cài đặt ở đúng trang — đủ 13 trang của dock, kể cả `history` (lịch sử luyện tập, biểu đồ và ghost); `general` = trang General: ngôn ngữ, engine đồ hoạ, hồ sơ cài đặt. |
 | `--snapshot <file.png> [--compact] [--play-preview] [--menu]` | Chụp màn hình rồi thoát (`--compact` = 1080×700, `--play-preview` = nhấn sẵn một nốt, `--menu` = mở menu khởi động). |
 | `--gpu` | Giữ lại cho các script cũ: **sân khấu GPU Direct3D 11 đã là sân khấu mặc định** của mọi lần chạy, nên cờ này không đổi gì. Máy không có card đồ hoạ dùng WARP, bộ dựng hình phần mềm của Windows. CI dùng nó để chụp `stage-gpu.png`. |
 | `--software` | Vẽ **một lần chạy** bằng bộ dựng hình WPF thay vì engine GPU (không đụng vào cài đặt đã lưu): dùng cho ảnh tất định và cột "phần mềm" của bộ gallery preset trong CI. |
@@ -154,7 +154,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # biên dịch (nếu c
 | `--background-image=<file.png>` | Vẽ một ảnh cụ thể phía sau bàn phím **chỉ trong lần chạy này**: không bật cờ "đã sửa", không tự lưu, nên `visual-settings.json` giữ nguyên. CI dùng nó để render ảnh minh hoạ tính năng ảnh nền từ ảnh mẫu `docs/samples/stage-backdrop.png` (sinh bởi `tools/make_stage_background.py`) thay vì ảnh chụp của người nào đó. |
 | `--settings-dir=<thư mục>` | Đọc/ghi cài đặt và preset người dùng ở thư mục khác (mặc định `%LOCALAPPDATA%\Keyflow`) — hữu ích cho bản portable hoặc khi muốn chụp ảnh từ trạng thái mặc định. Chạy `--verify` luôn tự dùng thư mục tạm nên **không bao giờ ghi đè cài đặt/preset thật của bạn**. |
 
-Ví dụ tạo lại đúng ảnh của README (hai mươi hai ảnh — mỗi ngôn ngữ một bộ: bản này đọc `docs/previews/vi`, còn
+Ví dụ tạo lại đúng ảnh của README (hai mươi tám ảnh — mỗi ngôn ngữ một bộ: bản này đọc `docs/previews/vi`, còn
 `README.en.md` đọc `docs/previews/en`, `--lang` ghim đúng ngôn ngữ của bộ ảnh):
 
 ```powershell
@@ -164,13 +164,16 @@ foreach ($lang in @('en', 'vi')) {
   $dir = "$env:TEMP\keyflow-preview-$lang"   # thư mục cài đặt tạm: ảnh chụp luôn là trạng thái chạy lần đầu
   Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI dùng một thư mục tạm riêng cho từng ảnh
   & $exe --snapshot $set\stage-live.png       --compact --play-preview  --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\stage-gpu.png        --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu
+  & $exe --snapshot $set\stage-gpu.png        --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord
   & $exe --snapshot $set\stage-gpu-galaxy.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=GalaxyVoyage
   & $exe --snapshot $set\stage-gpu-storm.png  --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=ElectricStorm
   & $exe --snapshot $set\background-image.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
   & $exe --snapshot $set\main-menu.png         --compact --menu          --lang=$lang --settings-dir="$dir"
   & $exe --snapshot $set\design-dock.png       --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=style
   & $exe --snapshot $set\theme-dock.png        --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=theme
+  & $exe --snapshot $set\practice-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=practice
+  & $exe --snapshot $set\history-dock.png      --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=history
+  & $exe --snapshot $set\recording-dock.png    --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=recording
   & $exe --snapshot $set\play-dialog.png       --compact --play-dialog   --lang=$lang --settings-dir="$dir"
   & $exe --snapshot $set\shortcuts.png         --compact --shortcuts     --lang=$lang --settings-dir="$dir"
   & $exe --snapshot $set\language-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=general
@@ -256,6 +259,9 @@ Thẻ **F1** trong ứng dụng liệt kê đúng bảng này (ảnh ở đầu 
 Sân khấu chính chính là engine GPU Direct3D 11 (mặc định từ bản này; ảnh CI dựng bằng WARP):
 
 ![Keyflow GPU stage](docs/previews/vi/stage-gpu.png)
+
+*Cũng sân khấu ấy với một hợp âm đang giữ (`--play-chord`): thanh giữ và các hiệu ứng giữ phím nối những*
+*phím đang nhấn trên diện mạo mặc định Neon Violet — cùng engine nhưng khác bức hero phía trên, nên hai ảnh không còn là một.*
 
 Cùng engine với hai preset dùng các họ hiệu ứng: **Galaxy Voyage** (vệt cầu vồng, lớp Cosmic thiên hà) và **Electric Storm** (vệt speed lines, tia điện nối các phím đang giữ, lớp Energy bão sét):
 
@@ -343,6 +349,14 @@ Dock cài đặt có **13 trang, xếp thành bốn nhóm theo mục đích** �
 | | Recording | Thẻ **OUTPUT** (áp dụng từ lần ghi kế tiếp): **Format** (AVI / chuỗi PNG 32-bit alpha / MP4 H.264 + AAC), **Resolution** (theo cửa sổ / 720p / 1080p), **Frame rate** (15–60), **Record audio** và **Transparent background** (chỉ hiện với chuỗi PNG). |
 | **APP** | General | **Ngôn ngữ giao diện** (English / Tiếng Việt / theo Windows) kèm dòng ghi ngôn ngữ đang chạy; **GRAPHICS ENGINE**: GPU frame rate (60 / 120 / 144 / 240 FPS / Unlimited), VSync in the GPU stage window, nút **OPEN GPU STAGE WINDOW** và dòng trạng thái engine (adapter và thời gian biên dịch shader, hoặc lý do phải dùng bộ dựng hình phần mềm); **SETTINGS PROFILE**: **EXPORT / IMPORT PROFILE…**. |
 
+Ba trang nhóm **SESSION** của dock, ảnh CI render bằng `--show-settings --settings-tab=…` — nhóm trang duy nhất của dock trước đây chỉ có chữ mô tả:
+
+| Practice | History | Recording |
+| --- | --- | --- |
+| ![Practice page](docs/previews/vi/practice-dock.png) | ![Practice history page](docs/previews/vi/history-dock.png) | ![Recording page](docs/previews/vi/recording-dock.png) |
+
+*Practice: chế độ tập, tempo luyện tập và vòng lặp A–B. History: bảng các lượt chơi của bài đang mở cùng biểu đồ và ghost — máy CI chạy lần đầu nên trang còn trống, đúng như những gì một bản cài mới hiện. Recording: thẻ OUTPUT chọn định dạng, độ phân giải, khung hình/giây, đường tiếng và nền trong suốt.*
+
 Phần còn lại của giao diện:
 
 | Khu vực | Nội dung |
@@ -369,7 +383,7 @@ Phần còn lại của giao diện:
 
 Ảnh trong README (và trong `docs/previews/vi/`) do ứng dụng render, không phải ảnh dàn dựng.
 
-**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại **hai bộ ảnh** — một cảnh trong danh sách `$shots` của workflow cho mỗi ngôn ngữ — bằng chính file `PianoPath.exe` vừa vượt qua `--verify`. Mỗi bộ ghim `--lang` của chính nó — `docs/previews/vi/` cho bản này, `docs/previews/en/` cho `README.en.md` — nên caption luôn đúng ngôn ngữ của bản README bất kể ngôn ngữ của runner, và mỗi ảnh dùng một thư mục cài đặt tạm riêng nên luôn là trạng thái chạy lần đầu. Danh sách cảnh là: sân khấu live, sân khấu GPU, hai preset GPU (Galaxy Voyage và Electric Storm), ảnh nền, menu khởi động, dock Style, dock Theme, hộp thoại Play, thẻ phím tắt và trang General. Một bước riêng của cùng workflow dựng thêm **gallery preset** `docs/previews/presets.jpg` (mỗi preset có sẵn vẽ hai lần, engine phần mềm | GPU, dồn vào một ảnh JPEG dùng chung cho cả hai bản README). Cuối cùng workflow **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`), nên sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Nếu nhánh chỉ nhận pull request (một quy tắc của repository mà token của workflow không vượt qua được) thì lần push bị từ chối: bước đó chỉ báo cảnh báo `Previews not committed` chứ không làm build đỏ, và ảnh mới nằm trong artifact `keyflow-previews` của chính lần chạy ấy — tải về rồi commit tay. Artifact gồm hai bộ PNG và cả gallery `presets.jpg`:
+**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại **hai bộ ảnh** — một cảnh trong danh sách `$shots` của workflow cho mỗi ngôn ngữ — bằng chính file `PianoPath.exe` vừa vượt qua `--verify`. Mỗi bộ ghim `--lang` của chính nó — `docs/previews/vi/` cho bản này, `docs/previews/en/` cho `README.en.md` — nên caption luôn đúng ngôn ngữ của bản README bất kể ngôn ngữ của runner, và mỗi ảnh dùng một thư mục cài đặt tạm riêng nên luôn là trạng thái chạy lần đầu. Danh sách cảnh là: sân khấu live, sân khấu GPU (một hợp âm đang giữ), hai preset GPU (Galaxy Voyage và Electric Storm), ảnh nền, menu khởi động, dock Style, dock Theme, ba trang nhóm SESSION (Practice, History, Recording), hộp thoại Play, thẻ phím tắt và trang General. Một bước riêng của cùng workflow dựng thêm **gallery preset** `docs/previews/presets.jpg` (mỗi preset có sẵn vẽ hai lần, engine phần mềm | GPU, dồn vào một ảnh JPEG dùng chung cho cả hai bản README). Cuối cùng workflow **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`), nên sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Nếu nhánh chỉ nhận pull request (một quy tắc của repository mà token của workflow không vượt qua được) thì lần push bị từ chối: bước đó chỉ báo cảnh báo `Previews not committed` chứ không làm build đỏ, và ảnh mới nằm trong artifact `keyflow-previews` của chính lần chạy ấy — tải về rồi commit tay. Artifact gồm hai bộ PNG và cả gallery `presets.jpg`:
 ```powershell
 gh run list --workflow build.yml --limit 5          # tìm run mới nhất
 gh run download <run-id> -n keyflow-previews -D docs/previews
@@ -463,7 +477,7 @@ Hai workflow trong `.github/workflows/`:
 
 | Workflow | Kích hoạt | Nội dung |
 | --- | --- | --- |
-| `build.yml` | push lên `main`/`arena/**`, mọi pull request | **job `static` trên `ubuntu-latest`** chạy kiểm tra tĩnh (`tools/check_sources.py`, ~10 s) → **job `test` trên `ubuntu-latest`** (project xUnit `tests/PianoPath.Tests`, chạy **song song** với nhánh Windows) và **job `build` trên `windows-latest`** (chỉ được xếp lịch khi `static` xanh): build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render 22 ảnh README (11 cảnh × 2 ngôn ngữ) cùng gallery preset `presets.jpg`, upload artifact `keyflow-previews` (hai bộ PNG và `presets.jpg`), **báo cáo ảnh lệch** (`Report preview drift`: hai bước render vừa ghi đè `docs/previews` bằng ảnh của chính build này, nên `git status` trên thư mục đó chính là bảng đối chiếu — lệch tệp nào là cảnh báo nêu tên tệp đó, kể cả ở pull request nơi bước commit bị bỏ qua) và commit ảnh mới vào nhánh đang build (bỏ qua với pull request; nhánh chỉ nhận pull request thì bước này chỉ cảnh báo, ảnh vẫn nằm trong artifact). |
+| `build.yml` | push lên `main`/`arena/**`, mọi pull request | **job `static` trên `ubuntu-latest`** chạy kiểm tra tĩnh (`tools/check_sources.py`, ~10 s) → **job `test` trên `ubuntu-latest`** (project xUnit `tests/PianoPath.Tests`, chạy **song song** với nhánh Windows) và **job `build` trên `windows-latest`** (chỉ được xếp lịch khi `static` xanh): build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render 28 ảnh README (14 cảnh × 2 ngôn ngữ) cùng gallery preset `presets.jpg`, upload artifact `keyflow-previews` (hai bộ PNG và `presets.jpg`), **báo cáo ảnh lệch** (`Report preview drift`: hai bước render vừa ghi đè `docs/previews` bằng ảnh của chính build này, nên `git status` trên thư mục đó chính là bảng đối chiếu — lệch tệp nào là cảnh báo nêu tên tệp đó, kể cả ở pull request nơi bước commit bị bỏ qua) và commit ảnh mới vào nhánh đang build (bỏ qua với pull request; nhánh chỉ nhận pull request thì bước này chỉ cảnh báo, ảnh vẫn nằm trong artifact). |
 | `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish cả hai kiểu, smoke test bản vừa publish, biên dịch bộ cài `.exe` từ chính thư mục vừa publish, tải hai file ZIP + bộ cài lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. |
 
 ```powershell
@@ -603,7 +617,7 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 - `presets/`: kệ preset cộng đồng — mỗi tệp là một preset đầy đủ, `tools/make_presets.py` sinh ra và `PianoPath.csproj` nhúng thẳng vào bản build (`Stage/CommunityPresets.cs` đọc), nên thêm một diện mạo mới chỉ là thêm một tệp JSON.
 - `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README/bảng tham số dòng lệnh, chạy mọi máy), `make_presets.py` (sinh `presets/*.json` từ giá trị mặc định của `PianoVisualSettings`), `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit) và `make_stage_background.py` (sinh ảnh nền mẫu `docs/samples/stage-backdrop.png`), `add_string.py` (thêm một khoá chuỗi cùng bản dịch tiếng Việt vào cả hai bảng `Localization/` đúng thứ tự ordinal), `inno_messages.py` (sinh danh sách tên câu hợp lệ của Inno Setup — `installer/Languages/messages.txt`) và `build_installer.ps1` (biên dịch bộ cài, dùng chung cho cả hai workflow).
 - `Localization/`: `Localizer.cs` (ngôn ngữ, bảng tra, nhãn sống, marker XAML) và `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + bản dịch; thêm ngôn ngữ = thêm một tệp như vậy).
-- `docs/previews/`: ảnh giao diện do ứng dụng render trong CI — `vi/` cho bản README này, `en/` cho `README.en.md` (mỗi thư mục 11 ảnh), cùng `presets.jpg` (gallery 14 preset × engine phần mềm | GPU, dùng chung cho cả hai bản); tất cả do workflow sở hữu, không nên tay nộp ảnh khác vào.
+- `docs/previews/`: ảnh giao diện do ứng dụng render trong CI — `vi/` cho bản README này, `en/` cho `README.en.md` (mỗi thư mục 14 ảnh), cùng `presets.jpg` (gallery 14 preset × engine phần mềm | GPU, dùng chung cho cả hai bản); tất cả do workflow sở hữu, không nên tay nộp ảnh khác vào.
 - `docs/samples/`: ảnh nền mẫu mà repo tự sinh (`tools/make_stage_background.py`), dùng cho ảnh chụp tính năng ảnh nền và để mọi người thử tính năng này mà không cần tìm ảnh trên mạng.
 - `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `Properties/AssemblyInfo.cs`: thuộc tính `ThemeInfo` của WPF (nơi tìm resource dictionary theo theme); `installer/Keyflow.iss`: script Inno Setup tạo bộ cài; `installer/Languages/`: bản dịch tiếng Việt dạng tệp một phần (`Vietnamese.isl`) cùng danh sách tên câu hợp lệ (`messages.txt`).
 - `.github/workflows/`: `build.yml` (job `static` trên Ubuntu chạy kiểm tra tĩnh, rồi job `build` trên Windows: build Release, `--verify`, **đo ngân sách khung hình bằng `--bench` rồi so với lần chạy trước trong cache**, dựng thử bộ cài, render 22 ảnh README và gallery preset rồi commit ảnh về nhánh nếu nhánh cho phép) và `release.yml` (publish + đính kèm ZIP vào GitHub Release khi đẩy tag `v*`).
