@@ -12,8 +12,22 @@ on:
     tags: ["v*"]
   workflow_dispatch:
 
+env:
+  # Where the packages and their documentation are published. The source repository is private; this is
+  # the public one. A repository variable can point it elsewhere (a fork, or a repository with another
+  # name) without editing this file — the fallback is the name the installer's AppPublisherURL and
+  # tools/make_public_docs.py already carry, and tools/check_sources.py makes those agree.
+  PUBLIC_REPOSITORY: ${{ vars.PUBLIC_RELEASES_REPOSITORY || 'lxmtuu/PianoPath-Releases' }}
+
 permissions:
   contents: write
+
+# A release run is expensive (LFS bandwidth, three publishes). Two runs of the same tag are one accident
+# too many, so a newer run of the same ref replaces the older one — except for a tag, where cancelling a
+# half-published release would be worse than letting it finish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: ${{ !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
   publish:
@@ -137,6 +151,161 @@ jobs:
             The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC"
             on the first launch — choose *More info → Run anyway*.
 
-            What changed: [CHANGELOG.en.md](https://github.com/lxmtuu/PianoPath/blob/${{ github.ref_name }}/CHANGELOG.en.md) ·
-            [CHANGELOG.md — tiếng Việt](https://github.com/lxmtuu/PianoPath/blob/${{ github.ref_name }}/CHANGELOG.md)
+            What changed: [CHANGELOG.en.md](https://github.com/${{ env.PUBLIC_REPOSITORY }}/blob/release/public-${{ github.ref_name }}/CHANGELOG.en.md) ·
+            [CHANGELOG.md — tiếng Việt](https://github.com/${{ env.PUBLIC_REPOSITORY }}/blob/release/public-${{ github.ref_name }}/CHANGELOG.md)
+
+            The same packages and their documentation are published to the public release repository:
+            <https://github.com/${{ env.PUBLIC_REPOSITORY }}/releases>. This repository stays private, so
+            the changelog links above point at the public copy of those files — the only copy a reader
+            without access here can open.
           generate_release_notes: true
+
+      # The public repository gets documents, and the version of them that goes public has to be reviewable
+      # inside this one first. This step builds that version as a branch of this repository: the files come
+      # from docs/release/ — what tools/make_public_docs.py writes and tools/check_sources.py pins byte for
+      # byte — plus docs/previews/, which the render steps above have just produced. It is an *orphan*
+      # branch: a root commit means the public tree carries the files that are meant to be public and none
+      # of this repository's history.
+      #
+      # Two things read that branch: the step below, which pushes it to the public repository when it holds
+      # a token, and a maintainer whose gh is already logged in, who can push the same branch by hand with
+      # tools/publish_public.ps1 instead of keeping a second credential in this repository's secrets.
+      - name: Create the public release branch
+        id: public_branch
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.ref_name }}"
+          $branch = "release/public-$tag"
+          $staging = Join-Path $env:RUNNER_TEMP 'public-release'
+
+          # Nothing here is guessed: docs/release is committed (the checker compares it with its generator),
+          # and docs/previews is what the render steps above put into the working tree.
+          if (-not (Test-Path 'docs/release/README.md')) { throw 'docs/release is missing; run tools/make_public_docs.py and commit the result' }
+          if (-not (Test-Path 'docs/previews')) { throw 'docs/previews is missing; the README pictures would not resolve on the public page' }
+
+          Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Path $staging | Out-Null
+          Copy-Item 'docs/release/*' $staging -Recurse -Force
+          Copy-Item 'docs/previews' (Join-Path $staging 'docs/previews') -Recurse -Force
+
+          # A public branch may never carry source code. tools/check_sources.py asserts the same list against
+          # the committed docs/release tree; this one covers the previews and anything a future copy list adds.
+          $forbidden = @('.cs', '.xaml', '.csproj', '.sln', '.iss', '.ps1', '.py', '.hlsl', '.sf2', '.yml')
+          $bad = @(Get-ChildItem $staging -Recurse -File -Force | Where-Object { $forbidden -contains $_.Extension })
+          if ($bad.Count -gt 0) { throw "the public tree would publish source file(s): $($bad.FullName -join ', ')" }
+
+          # An orphan branch: the index and the working tree become the public tree, so the commit has no
+          # parent and none of this repository's history travels with it.
+          git config user.name 'github-actions[bot]'
+          git config user.email 'actions@users.noreply.github.com'
+          git checkout --orphan $branch
+          git rm -r --cached --quiet .
+          Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' } | ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
+          Copy-Item (Join-Path $staging '*') . -Recurse -Force
+          git add -A
+          git commit --quiet -m "Keyflow $tag - release documents"
+
+          $commit = "$(git rev-parse HEAD)".Trim()
+          $pushLog = git push --force origin "HEAD:refs/heads/$branch" 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            $pushLog | ForEach-Object { $_ }
+            # build.yml meets the same wall when it commits previews back to a branch, and answers it the
+            # same way: the rules are the repository's, the tree is not lost, and a release must not go red
+            # over a branch this job does not need — tools/publish_public.ps1 builds and pushes the same
+            # tree from a desktop, where those rules do not apply. The step below then accepts any commit
+            # on the public branch instead of this exact one.
+            if ("$pushLog" -match 'GH013|repository rule|protected branch') {
+              '::warning title=Public release::The repository rules declined the release branch; publish with `pwsh tools/publish_public.ps1 -Tag ' + $tag + '`.'
+              $commit = ''
+            } else {
+              throw 'the public release branch could not be pushed'
+            }
+          }
+          "expected=$commit" >> $env:GITHUB_OUTPUT
+          "public tree: $((Get-ChildItem -Recurse -File -Force).Count) file(s), $(('{0:N0}' -f ((Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum).Sum / 1KB))) KB"
+          "::notice title=Public release branch::$branch is $(if ($commit) { $commit } else { '<not pushed: the repository rules declined it>' })"
+          @('# Public release branch', '', "``$branch`` at ``$(if ($commit) { $commit } else { '<declined by the repository rules>' })``.", '',
+            'Push it to the public repository with `pwsh tools/publish_public.ps1 -Tag ' + $tag +
+            '` if no token is configured, or let the next step do it.') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+      # Publishing is the only thing here that touches another repository, so it is the only step that may
+      # hold a token for one: PUBLIC_RELEASES_TOKEN is a fine-grained token scoped to the public release
+      # repository alone (Contents: read and write). Everything else in this job works with the workflow's
+      # own read-only-capable GITHUB_TOKEN, so a defect in the packaging path cannot reach the public
+      # repository. tools/check_sources.py asserts that this token is named nowhere else in the repository.
+      #
+      # Without the secret the step does not fail: it says what to run and waits a few minutes for that
+      # publish to land, because a release whose packages and branch are already in place must not be red
+      # only because a credential is held in somebody's gh login instead of in a secret.
+      - name: Publish to the public release repository
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          # GITHUB_TOKEN is the workflow's own credential: the step reads this repository's newest release
+          # with it (a private repository answers nobody anonymously). The line that publishes replaces
+          # GH_TOKEN with PUBLIC_RELEASES_TOKEN before git is given anything, so the two never mix.
+          GH_TOKEN: ${{ github.token }}
+          PUBLIC_RELEASES_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $tag = "${{ github.ref_name }}"
+          $repository = "${{ env.PUBLIC_REPOSITORY }}"
+          $branch = "release/public-$tag"
+          $staging = Join-Path $env:RUNNER_TEMP 'public-release'
+          $scratch = Join-Path $env:RUNNER_TEMP 'public-repo'
+          # The commit the branch step pushed, or empty when the repository rules declined that push (see
+          # above) — in which case any commit on the public branch counts as published.
+          $commit = "${{ steps.public_branch.outputs.expected }}".Trim()
+
+          # Only the newest release moves main, so the repository's front page shows the current page and a
+          # re-published older tag (a fix to its notes, say) cannot push it backwards.
+          $latest = ''
+          try { $latest = "$(& gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)".Trim() } catch { }
+          $updateMain = ($latest -eq $tag)
+
+          # The token never appears in a command line — that would print it into the log. gh hands it to git
+          # through its credential helper, which reads it from the environment of this step alone.
+          if ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) {
+            '::warning title=Public release::No PUBLIC_RELEASES_TOKEN secret: run `pwsh tools/publish_public.ps1 -Tag ' + $tag + '` within the next few minutes to publish ' + $repository + ', or add the secret to let this step do it.'
+          } else {
+            $env:GH_TOKEN = $env:PUBLIC_RELEASES_TOKEN
+            gh auth setup-git
+            Remove-Item $scratch -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $scratch | Out-Null
+            git -C $scratch init --quiet
+            git -C $scratch remote add origin "https://github.com/$repository.git"
+            Copy-Item (Join-Path $staging '*') $scratch -Recurse -Force
+            git -C $scratch add -A
+            git -C $scratch -c user.name='github-actions[bot]' -c user.email='actions@users.noreply.github.com' commit --quiet -m "Keyflow $tag - release documents"
+            git -C $scratch push --force origin "HEAD:refs/heads/$branch"
+            if ($LASTEXITCODE -ne 0) { throw "the push to $repository failed; does the repository exist and does the token hold Contents: write on it?" }
+            if ($updateMain) {
+              git -C $scratch push --force origin "HEAD:refs/heads/main"
+              if ($LASTEXITCODE -ne 0) { throw "the push of main to $repository failed" }
+            }
+            "::notice title=Public release::published $branch$(if ($updateMain) { ' and main' }) to $repository"
+            "https://github.com/$repository/tree/$branch" | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
+
+          # Whether the token was there or the push comes from somebody's desktop, the work is done when the
+          # public branch carries this commit. Read anonymously through the API (no credential is used, the
+          # repository is public) and wait a little, so a manual publish that is already under way is seen.
+          $deadline = (Get-Date).AddMinutes($(if ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) { 5 } else { 1 }))
+          $published = $false
+          while (-not $published -and (Get-Date) -lt $deadline) {
+            try {
+              $reference = Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/git/ref/heads/$branch" -Headers @{ 'User-Agent' = 'keyflow-release' } -ErrorAction Stop
+              $sha = "$($reference.object.sha)".Trim()
+              $published = if ($commit) { $sha -eq $commit } else { -not [string]::IsNullOrWhiteSpace($sha) }
+            } catch {
+              $published = $false
+            }
+            if (-not $published) { Start-Sleep -Seconds 15 }
+          }
+          if ($published) {
+            "::notice title=Public release::$repository/$branch now carries this release's documents"
+          } else {
+            '::warning title=Public release::Not published yet. Run `pwsh tools/publish_public.ps1 -Tag ' + $tag + '` when convenient; it builds the same tree from this tag and needs no stored credential.'
+          }
