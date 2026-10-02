@@ -1,28 +1,66 @@
 name: release
 
-# Builds the distributable packages: three portable zips, the .exe installer and a SHA-256 list of all of
-# them. Runs when a version tag such as v1.0.0 is pushed (the packages are attached to a GitHub Release) or
-# manually from the Actions tab (they are available as workflow artifacts, and no release is created).
-#
-# build.yml already publishes the small framework-dependent kind on every push, so what is new here is the
-# part that needs the real 113 MiB SoundFont: two self-contained packages, an installer compiled from the
-# folder a user actually downloads, and a --verify run against the published executable.
+# Builds packages from the private source repository. Tags publish only the downloadable files and the
+# curated, versioned changelog sections to the configured public release repository. A workflow_dispatch
+# run without release_tag is a build-only run; pass an existing vX.Y.Z tag to migrate/re-publish a release.
 on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Optional existing vX.Y.Z tag to publish (leave blank for build-only artifacts)"
+        required: false
+        type: string
 
+# The source job only needs to read this private repository. The cross-repository write token is only
+# made available to the small release job, after all build/test/package steps have finished.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  publish:
+  package:
     runs-on: windows-latest
+    outputs:
+      release_tag: ${{ steps.release-metadata.outputs.release_tag }}
+      publish_release: ${{ steps.release-metadata.outputs.publish_release }}
     steps:
       - uses: actions/checkout@v7
         with:
+          # For a manual migration, build the selected source tag, not the default branch. A regular
+          # tag push uses github.ref; a manual run without a tag stays build-only.
+          ref: ${{ inputs.release_tag || github.ref }}
           # A release must ship the real SoundFont, so download the ~113 MiB LFS object (counts against the LFS bandwidth quota).
           lfs: true
+
+      - name: Validate release tag and version
+        id: release-metadata
+        shell: pwsh
+        env:
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
+        run: |
+          $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
+          $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
+          if (-not $version) { throw 'PianoPath.csproj has no <Version> to name the packages with' }
+
+          $tagInput = $env:RELEASE_TAG_INPUT
+          $tag = if ($env:GITHUB_EVENT_NAME -eq 'push') { $env:GITHUB_REF_NAME } elseif ($tagInput) { $tagInput.Trim() } else { '' }
+          if ($tag) {
+            $tagMatch = [regex]::Match($tag, '^v(?<version>\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?)$')
+            if (-not $tagMatch.Success) {
+              throw "Release tag '$tag' must be vMAJOR.MINOR.PATCH and match PianoPath.csproj."
+            }
+            if ($tagMatch.Groups['version'].Value -ne $version) {
+              throw "Release tag '$tag' does not match PianoPath.csproj version '$version'."
+            }
+            "release_tag=$tag" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            'publish_release=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            "::notice title=Release tag::Will publish $tag from the matching source tag."
+          } else {
+            'release_tag=' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            'publish_release=false' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+            '::notice title=Build-only run::No release_tag was supplied; packages will be available as a workflow artifact only.'
+          }
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -72,18 +110,13 @@ jobs:
       - name: Build the .exe installer
         shell: pwsh
         run: |
-          # The version is read the way publish.ps1 reads it — out of the project file — rather than by
-          # asking MSBuild to evaluate it: MSBuild prints warnings beside the value it prints, and an
-          # installer named after a warning would be found by whoever downloaded it.
           $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
           $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
           if (-not $version) { throw 'PianoPath.csproj has no <Version> to name the installer with' }
           pwsh tools/build_installer.ps1 -Version $version -OutputDir installer\Output
 
-      # Nothing here is code-signed, so the hashes are what a downloader has to go on: they are the proof
-      # that the file which arrived is the file this run attached. Written in the format `sha256sum -c`
-      # reads (lowercase hash, two spaces, file name), into publish/ because that folder is git-ignored
-      # and already holds the packages — the checkout stays clean either way.
+      # Nothing here is code-signed, so the hashes are what a downloader has to go on: the proof that the
+      # file which arrived is the file this run attached. The same manifest is included in the public release.
       - name: Hash the packages
         shell: pwsh
         run: |
@@ -98,6 +131,70 @@ jobs:
           $lines | ForEach-Object { $_ }
           "::notice title=Packages::$($packages.Count) package(s) hashed into $sums"
 
+      # Release notes are built only from the versioned changelog entries. Do not ask GitHub to generate
+      # notes from commits: those live in this private repository and can contain private PR titles/links.
+      - name: Prepare public release notes
+        if: steps.release-metadata.outputs.publish_release == 'true'
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.release-metadata.outputs.release_tag }}
+        run: |
+          $version = $env:RELEASE_TAG.Substring(1)
+          function Read-ReleaseEntry([string] $path, [string] $version) {
+            $text = Get-Content -Raw -Encoding utf8 $path
+            $pattern = '(?ms)^## ' + [regex]::Escape($version) + ' — \d{4}-\d{2}-\d{2}\r?\n.*?(?=^## |\z)'
+            $match = [regex]::Match($text, $pattern)
+            if (-not $match.Success) { throw "$path has no changelog entry for $version" }
+            $entry = $match.Value.Trim()
+            $newline = $entry.IndexOf("`n")
+            if ($newline -lt 0) { throw "$path has an incomplete changelog entry for $version" }
+            return $entry.Substring($newline + 1).Trim()
+          }
+
+          $english = Read-ReleaseEntry 'CHANGELOG.en.md' $version
+          $vietnamese = Read-ReleaseEntry 'CHANGELOG.md' $version
+          # These internal roadmap cross-references are useful in the private changelog but have no public target.
+          $english = $english -replace 'The whole v0.5–v0.8 scope of `docs/ROADMAP\.md` has landed;\s*this entry ', 'This entry '
+          $vietnamese = $vietnamese -replace 'Toàn bộ phạm vi v0.5–v0.8 của `docs/ROADMAP\.md` đã vào;\s*mục này ', 'Mục này '
+          $english = [regex]::Replace($english, '\(no release was cut before\s*1\.0\.0, so the detailed history is the commit log and the pull requests\)', '')
+          $vietnamese = [regex]::Replace($vietnamese, '\(trước 1\.0\.0 repo chưa cắt bản\s*phát hành nào, nên lịch sử chi tiết nằm trong log commit và các pull request\)', '')
+          $english = [regex]::Replace($english, '\s*\(`docs/ROADMAP\.md` §\d+ #\d+\)', '')
+          $vietnamese = [regex]::Replace($vietnamese, '\s*\(`docs/ROADMAP\.md` §\d+ #\d+\)', '')
+          $english = [regex]::Replace($english, '\s*`docs/ROADMAP\.md` §\d+ #\d+\.?', '')
+          $vietnamese = [regex]::Replace($vietnamese, '\s*— `docs/ROADMAP\.md` §\d+ #\d+\.?', '.')
+          if (($english + $vietnamese) -match '(?i)https?://github\.com/lxmtuu/PianoPath(?:/|\s|$)') {
+            throw 'A private source-repository URL was found in the public changelog entry; remove it before publishing.'
+          }
+
+          $body = @"
+          # Keyflow $env:RELEASE_TAG
+
+          For Windows 10/11. Choose one package:
+
+          | File | Package |
+          | --- | --- |
+          | `Keyflow-$version-win-x64.zip` | Self-contained Windows x64; unzip and run `PianoPath.exe`. |
+          | `Keyflow-Setup-$version.exe` | Windows x64 installer with Start Menu/Desktop shortcuts and an uninstaller. |
+          | `Keyflow-$version-win-x64-fd.zip` | Smaller x64 package; requires the [.NET 10 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/10.0). |
+          | `Keyflow-$version-win-arm64.zip` | Self-contained Windows on ARM; built by CI but not yet tested on an ARM device. |
+          | `SHA256SUMS.txt` | SHA-256 checksums for every package above. |
+
+          Keep the `Assets` folder beside the executable. Retain `LICENSE.txt` (MIT) and `Assets/ATTRIBUTION.txt` (FreePats YDP Grand Piano, CC BY 3.0), included in each package.
+
+          The packages are not code-signed. On the first launch, Windows SmartScreen may show “Windows protected your PC”; choose **More info → Run anyway**.
+
+          ## Release notes — English
+
+          $english
+
+          ## Ghi chú phát hành — Tiếng Việt
+
+          $vietnamese
+          "@
+          $notesPath = 'publish/public-release-notes.md'
+          Set-Content -Path $notesPath -Value $body -Encoding utf8
+          "::notice title=Release notes::$notesPath is ready for the public release."
+
       - name: Upload workflow artifacts
         uses: actions/upload-artifact@v7
         with:
@@ -105,38 +202,69 @@ jobs:
           path: |
             publish/*.zip
             publish/SHA256SUMS.txt
+            publish/public-release-notes.md
             installer/Output/Keyflow-Setup-*.exe
           if-no-files-found: error
 
-      - name: Attach packages to the GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+  # Isolated from source checkout/build steps: the write-only cross-repository token is never present while
+  # the private source is being built. This job creates a release, not a source mirror or a public code tag.
+  publish-public-release:
+    needs: package
+    if: needs.package.outputs.publish_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - name: Validate public release repository and credentials
+        id: target
+        shell: pwsh
+        env:
+          PUBLIC_RELEASES_REPOSITORY: ${{ vars.PUBLIC_RELEASES_REPOSITORY }}
+          PUBLIC_RELEASES_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
+        run: |
+          $targetInput = $env:PUBLIC_RELEASES_REPOSITORY
+          $target = if ($targetInput) { $targetInput.Trim() } else { '' }
+          if (-not $target -or $target -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') {
+            throw 'Set the repository variable PUBLIC_RELEASES_REPOSITORY to owner/repo (for example lxmtuu/PianoPath-Releases).'
+          }
+          if (-not $env:PUBLIC_RELEASES_TOKEN) {
+            throw 'Set the repository secret PUBLIC_RELEASES_TOKEN to a fine-grained token with Contents: Read and write on the public release repository.'
+          }
+          if ($target -ieq $env:GITHUB_REPOSITORY) {
+            throw 'PUBLIC_RELEASES_REPOSITORY must be a different repository from the private source repository.'
+          }
+
+          $headers = @{
+            Authorization = "Bearer $env:PUBLIC_RELEASES_TOKEN"
+            Accept = 'application/vnd.github+json'
+            'X-GitHub-Api-Version' = '2022-11-28'
+          }
+          $repo = Invoke-RestMethod -Method Get -Uri "https://api.github.com/repos/$target" -Headers $headers
+          if ($repo.private) { throw "Target repository $($repo.full_name) is private; it must be public for downloads." }
+          if ($repo.archived) { throw "Target repository $($repo.full_name) is archived." }
+          if (-not $repo.default_branch) {
+            throw "Target repository $($repo.full_name) needs an initialized default branch (for example, create it with a README)."
+          }
+          "default_branch=$($repo.default_branch)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "::notice title=Public release target::$($repo.full_name) (public), default branch $($repo.default_branch)."
+
+      - uses: actions/download-artifact@v7
+        with:
+          name: Keyflow-packages
+          path: dist
+
+      - name: Attach packages to the public release repository
         uses: softprops/action-gh-release@v3
         with:
+          repository: ${{ vars.PUBLIC_RELEASES_REPOSITORY }}
+          token: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
+          tag_name: ${{ needs.package.outputs.release_tag }}
+          target_commitish: ${{ steps.target.outputs.default_branch }}
           files: |
-            publish/*.zip
-            publish/SHA256SUMS.txt
-            installer/Output/Keyflow-Setup-*.exe
-          # What to download is the one thing a reader of a release page needs and the one thing generated
-          # notes cannot know: four packages that differ in what they need on the target PC, and no
-          # signature on any of them. GitHub appends its own generated notes to this body.
-          body: |
-            **Keyflow ${{ github.ref_name }}** for Windows 10/11 (64-bit). Pick one package:
-
-            | File | What it is |
-            | --- | --- |
-            | `Keyflow-…-win-x64.zip` | Portable and self-contained: unzip and run `PianoPath.exe`. Nothing else to install. |
-            | `Keyflow-Setup-….exe` | Installer for Windows x64: Start Menu and Desktop shortcuts, an uninstall entry, and a wizard in English or Tiếng Việt. |
-            | `Keyflow-…-win-x64-fd.zip` | Smaller download; that PC needs the [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0). |
-            | `Keyflow-…-win-arm64.zip` | Windows on ARM, self-contained. Published by CI; no ARM machine has run it yet. |
-            | `SHA256SUMS.txt` | The SHA-256 of every file above: `Get-FileHash .\Keyflow-…-win-x64.zip -Algorithm SHA256`. |
-
-            Keep `Assets\` next to the executable, and keep the `LICENSE.txt` (MIT) and
-            `Assets\ATTRIBUTION.txt` that ship in every package: the bundled piano is FreePats' YDP Grand
-            Piano under CC BY 3.0.
-
-            The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC"
-            on the first launch — choose *More info → Run anyway*.
-
-            What changed: [CHANGELOG.en.md](https://github.com/lxmtuu/PianoPath/blob/${{ github.ref_name }}/CHANGELOG.en.md) ·
-            [CHANGELOG.md — tiếng Việt](https://github.com/lxmtuu/PianoPath/blob/${{ github.ref_name }}/CHANGELOG.md)
-          generate_release_notes: true
+            dist/publish/*.zip
+            dist/publish/SHA256SUMS.txt
+            dist/installer/Output/Keyflow-Setup-*.exe
+          body_path: dist/publish/public-release-notes.md
+          # Never generate notes from commits in the private source repository.
+          generate_release_notes: false

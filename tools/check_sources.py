@@ -1264,6 +1264,46 @@ def scan_release_version(cs_files):
     return errors
 
 
+def scan_release_workflow_privacy():
+    """A private-source/public-download release has a security boundary, not just a destination URL.
+
+    The packages are built from the private checkout, but the cross-repository credential must never be
+    in that job. Only the isolated release job may use it; GitHub-generated notes must stay disabled so
+    private PR titles and commit links cannot be copied into a public release.
+    """
+    path = ROOT / ".github" / "workflows" / "release.yml"
+    if not path.exists():
+        return [".github/workflows/release.yml is missing; it is the private-source/public-release pipeline"]
+    text = path.read_text(encoding="utf-8")
+    marker = "  publish-public-release:\n"
+    if marker not in text:
+        return ["release.yml has no isolated publish-public-release job; cross-repository credentials must not be in the build job"]
+    package_job, release_job = text.split(marker, 1)
+    errors = []
+
+    if re.search(r"(?m)^\s*contents:\s*write\s*$", text):
+        errors.append("release.yml grants contents: write through GITHUB_TOKEN; source-build permissions should stay read-only")
+    if "PUBLIC_RELEASES_TOKEN" in package_job:
+        errors.append("release.yml exposes PUBLIC_RELEASES_TOKEN before the isolated release job")
+    if "softprops/action-gh-release" in package_job:
+        errors.append("release.yml runs the cross-repository release action in the package job")
+    if "actions/checkout" in release_job:
+        errors.append("release.yml checks out the private source in the credential-bearing release job")
+    if "softprops/action-gh-release" not in release_job:
+        errors.append("release.yml does not publish from its isolated release job")
+    if not re.search(r"repository:\s*\$\{\{\s*vars\.PUBLIC_RELEASES_REPOSITORY\s*\}\}", release_job):
+        errors.append("release.yml must select the public destination with vars.PUBLIC_RELEASES_REPOSITORY")
+    if not re.search(r"token:\s*\$\{\{\s*secrets\.PUBLIC_RELEASES_TOKEN\s*\}\}", release_job):
+        errors.append("release.yml must use the scoped PUBLIC_RELEASES_TOKEN only in the isolated release job")
+    if not re.search(r"generate_release_notes:\s*false", release_job):
+        errors.append("release.yml must disable generated notes so private commit and pull-request history cannot leak")
+    if "body_path:" not in release_job or "public-release-notes.md" not in package_job:
+        errors.append("release.yml must publish the curated versioned notes, not GitHub's private-source commit notes")
+    if "CHANGELOG.en.md" not in package_job or "CHANGELOG.md" not in package_job:
+        errors.append("release.yml must include both language editions of the versioned changelog in public notes")
+    return errors
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -1287,6 +1327,7 @@ def main():
     errors.extend(localization_errors)
     errors.extend(scan_dead_keys(cs_files, xaml_files))
     errors.extend(scan_release_version(cs_files))
+    errors.extend(scan_release_workflow_privacy())
     errors.extend(scan_project_files())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
@@ -1295,6 +1336,7 @@ def main():
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
+    print("checked that public release publishing is isolated from the private source build and generated private-commit notes are disabled")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     if errors:
         print(f"\n{len(errors)} problem(s):")

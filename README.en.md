@@ -5,6 +5,8 @@
 >
 > **Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)** (bản tiếng Việt: [CHANGELOG.md](CHANGELOG.md))
 > — everything a user can see, recorded per released version.
+>
+> **Download Keyflow:** [latest public release](https://github.com/lxmtuu/PianoPath-Releases/releases/latest). The source repository is private and available only to authorized collaborators.
 
 Keyflow is a Windows desktop application (C# · WPF · .NET 10) for **playing, practising and making
 piano videos from MIDI** at concert-production quality. The interface ships **two languages — English
@@ -54,6 +56,8 @@ else's artwork.*
 - [Testing](#testing) · [Technical documentation](#technical-documentation) · [Repository layout](#repository-layout) · [Licence](#licence)
 
 ## Quick start
+
+Just want to use the app? Download the installer or ZIP from the [public releases repository](https://github.com/lxmtuu/PianoPath-Releases/releases/latest). The source-build commands below are for collaborators who have access to the private source repository.
 
 Already know .NET? The whole flow fits in a few PowerShell commands (each step is explained below):
 
@@ -120,6 +124,8 @@ already have.
    - **Visual Studio Code**: install the **C# Dev Kit** extension (Microsoft); it uses the SDK from step 2.
 
 ## Getting the source
+
+The `lxmtuu/PianoPath` source repository is private, so the clone below works only for accounts with access. End users do not need the source; download a build from [PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases/releases/latest).
 
 ```powershell
 cd $HOME\source            # or any folder; avoid paths with special characters
@@ -514,8 +520,8 @@ publish\win-x64\
 
 - **Sending a ZIP**: compress the whole folder (`.\publish.ps1 -Zip` or `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). The recipient unzips it and runs `PianoPath.exe`; never separate the `.exe` from the `Assets\` folder.
 - **The `.exe` installer (optional)**: install [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish the self-contained build and run `iscc .\installer\Keyflow.iss` (or open the file in the Inno Setup Compiler and press F9). The result is `installer\Output\Keyflow-Setup-<version>.exe`, which creates Start Menu/Desktop shortcuts and an uninstall entry. Override the version with `iscc /DAppVersion=1.0.0 .\installer\Keyflow.iss`. The installer ships English and Vietnamese wizard text: it picks the language from Windows, and the Vietnamese wording is a *partial* file (`installer\Languages\Vietnamese.isl`) that overrides the messages this wizard actually shows while the rest falls back to `Default.isl`. Run `pwsh tools/build_installer.ps1` instead of calling `iscc` by hand when you want CI to check the translation — add `-Stub` if you have not published yet; the script fails the moment ISCC warns about anything but the expected "this message stays English" notice of a partial translation.
-- **The `win-arm64` build**: `publish.ps1 -Runtime win-arm64` (or the ZIP `release.yml` attaches to the GitHub Release) is for Windows on ARM; the `.exe` installer exists for x64 only, because `Keyflow.iss` sets `ArchitecturesAllowed=x64compatible`. CI publishes the ARM package, but no ARM machine has run it yet.
-- **Checking a download**: every GitHub Release carries a `SHA256SUMS.txt` of each attached file; compare with `Get-FileHash .\Keyflow-<version>-win-x64.zip -Algorithm SHA256`. The packages are not code-signed, so this is how a downloader checks that they received what the repository built.
+- **The `win-arm64` build**: `publish.ps1 -Runtime win-arm64` (or the ZIP in the [public releases repository](https://github.com/lxmtuu/PianoPath-Releases/releases)) is for Windows on ARM; the `.exe` installer exists for x64 only, because `Keyflow.iss` sets `ArchitecturesAllowed=x64compatible`. CI publishes the ARM package, but no ARM machine has run it yet.
+- **Checking a download**: every release in [PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases/releases) carries a `SHA256SUMS.txt` of each attached file; compare with `Get-FileHash .\Keyflow-<version>-win-x64.zip -Algorithm SHA256`. The packages are not code-signed, so this is how a downloader checks that they received what the release workflow built.
 - **Version number**: edit `<Version>` in `PianoPath.csproj` before publishing; the script and the installer read that value, the application prints it on the start-up menu and in the About box through `AppInfo.Version`, and `tools/check_sources.py` pins every remaining mirror (the installer, both READMEs, both changelogs) to the same number.
 - **SmartScreen**: the file is not code-signed, so Windows shows "Windows protected your PC" on first launch; choose *More info → Run anyway*. Removing the warning needs a code-signing certificate, for example: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
 - **Antivirus** sometimes scans a single-file self-contained build slowly on first launch; that is normal for .NET packages that unpack themselves.
@@ -539,16 +545,14 @@ Two workflows live in `.github/workflows/`:
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
 | `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render **both README picture sets** — one picture per subject in `$shots` per language — and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so the difference between the working tree and the commit this run started from is the comparison itself — `git status` cannot be used, because the commit step above commits before it pushes and a declined push leaves a clean tree while the branch still carries the old pictures; any file that drifted without the refresh reaching the branch is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact) → **one real publish** (`publish.ps1 -Mode FrameworkDependent -AllowLfsPointer -Zip`; CI does not fetch LFS, so the SoundFont stays a pointer) and then checks that the publish folder holds `PianoPath.exe`, `LICENSE.txt` and `Assets\` — so a defect in the packaging path turns red at push time instead of waiting for a release to be cut. |
-| `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish **three packages** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke-test the published self-contained `win-x64` build with `--verify`, compile the `.exe` installer from that same publish folder, compute a **`SHA256SUMS.txt`** of every attached file, upload all of them as artifacts and (for a tag) attach them to the GitHub Release with generated notes. The installer exists for `win-x64` only; the `win-arm64` package is not smoke tested, because the runner is an x64 machine. |
+| `release.yml` | source tag `v*` or **Run workflow** | Checks out the matching source tag with LFS, publishes **three packages** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke-tests x64 with `--verify`, builds the installer, hashes every package into **`SHA256SUMS.txt`**, and uploads the workflow artifact. For a tag (or an existing tag entered on a manual run), an isolated job publishes the files and curated bilingual release notes to the public [`PianoPath-Releases`](https://github.com/lxmtuu/PianoPath-Releases/releases) repository; it never generates notes from private commits/PRs. One-time token setup is in [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md). The installer is x64 only; the ARM package has not been tested on an ARM device. |
 
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Every `release.yml` run downloads ~113 MiB from Git LFS and counts against the account's LFS bandwidth,
-so only run it when releasing. `build.yml` does not download LFS at all (the checks that need the
-SoundFont report `SKIP` by themselves).
+`lxmtuu/PianoPath` is the private source repository; releases are created separately in `PianoPath-Releases`, without copying source code or private commit history. To publish the existing `v1.0.0` release there once, create/configure the public repository and its variable/secret as described in [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md), then run **Actions → release → Run workflow** with `v1.0.0` in `release_tag`. The old release in the private repository stays private. Each publish run downloads ~113 MiB from Git LFS and counts against the account's LFS bandwidth, so only run it for releases. `build.yml` does not download LFS (checks that need the SoundFont report `SKIP` by themselves).
 
 ### Common publishing problems
 
@@ -730,6 +734,7 @@ the result is a `NOTE`, not a `FAIL`.
 | `docs/DOCK-NAVIGATION-AUDIT.md` | The review of how features are arranged: why the dock is grouped by purpose (three groups when it was written, four now — see the note at its top), the page catalogue as the single source of truth, the F1 card and the README picture pipeline, plus the checks that keep them aligned. |
 | `docs/EFFECTS-REDESIGN.md` | The design of the effects system: the 87 effects arranged by the four phases of a note (falling, impact, hold, release), the ambient layers, the modulators and the combo themes, plus a phase-by-phase roadmap — finish each step completely before starting the next; the table in code lives in `Stage/Effects/EffectCatalog.cs`. |
 | `docs/REPO-AUDIT.md` | The results of the whole-repository audit (2026‑09): the three-layer method (static checks, `--verify`, CI pictures), what was fixed with its proof, and the limits that remain. |
+| [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md) | How the private source repository publishes only distributable packages to a public releases repository, with the required Actions permissions, scoped token, and one-time `v1.0.0` migration. |
 
 ## Repository layout
 
@@ -764,11 +769,10 @@ the result is a `NOTE`, not a `FAIL`.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
 - `CHANGELOG.md` / `CHANGELOG.en.md`: the bilingual changelog — each README links to its own edition, and `scan_release_version` keeps the version list of both equal to `<Version>`;
   `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `Properties/AssemblyInfo.cs`: WPF's `ThemeInfo` attribute (where theme resource dictionaries are looked up); `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
-- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, a `test` job on Ubuntu for the portable xUnit project, then a `build` job on Windows: Release build, `--verify`, **the frame budget measured with `--bench` and compared with the previous run from the cache**, a trial installer build against a stub folder, rendering **both README picture sets** — one picture per subject per language — and the preset gallery, committing them back to the branch when it accepts the push, and finally **one trial framework-dependent publish** so a defect in the packaging path turns red at push time) and `release.yml` (checkout with LFS, publish three packages, smoke-test the published build, compile the installer from that same folder, hash every package into `SHA256SUMS.txt`, then attach all of it to the GitHub Release when a `v*` tag is pushed).
+- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, a `test` job on Ubuntu for the portable xUnit project, then a `build` job on Windows: Release build, `--verify`, **the frame budget measured with `--bench` and compared with the previous run from the cache**, a trial installer build against a stub folder, rendering **both README picture sets** — one picture per subject per language — and the preset gallery, committing them back to the branch when it accepts the push, and finally **one trial framework-dependent publish** so a defect in the packaging path turns red at push time) and `release.yml` (checkout the exact source tag with LFS, publish three packages, smoke-test the build, compile the installer, hash the packages into `SHA256SUMS.txt`, upload an artifact, then use an isolated job to publish only the packages and curated notes to `PianoPath-Releases`, without generating notes from private history).
 
 ## Licence
 
-The source code is released under the MIT licence (see `LICENSE`). The bundled SoundFont belongs to
-FreePats under the CC BY 3.0 licence (see `Assets/ATTRIBUTION.txt`).
+The source in the private repository is licensed under MIT (see `LICENSE`); every public package includes that licence. The bundled SoundFont belongs to FreePats under CC BY 3.0 (see `Assets/ATTRIBUTION.txt` in each package).
 
 Copyright belongs to the authors **Yami** and **Neyu**; **Jin** contributes to the project.

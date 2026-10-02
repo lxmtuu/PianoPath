@@ -6,6 +6,8 @@
 >
 > **Nhật ký thay đổi: [CHANGELOG.md](CHANGELOG.md)** (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
 > — mọi thay đổi người dùng nhìn thấy, ghi theo từng phiên bản phát hành.
+>
+> **Tải ứng dụng:** [bản phát hành công khai mới nhất](https://github.com/lxmtuu/PianoPath-Releases/releases/latest). Mã nguồn ở repo riêng tư và chỉ dành cho cộng tác viên được cấp quyền.
 
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng. Sân khấu ấy do một **engine GPU Direct3D 11** vẽ trên luồng riêng — HDR 16-bit, bloom nhiều tầng, tới 240 FPS và không bao giờ làm chậm đầu vào MIDI; bộ dựng hình WPF chỉ còn là đường dự phòng khi Direct3D không khởi động được (xem [Sân khấu & hiệu ứng hình ảnh](#sân-khấu--hiệu-ứng-hình-ảnh)).
 
@@ -43,6 +45,8 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 - [Kiểm thử](#kiểm-thử) · [Tài liệu kỹ thuật](#tài-liệu-kỹ-thuật) · [Cấu trúc chính](#cấu-trúc-chính) · [Giấy phép](#giấy-phép)
 
 ## Bắt đầu nhanh
+
+Chỉ muốn dùng ứng dụng? Tải bộ cài hoặc ZIP từ [repo phát hành công khai](https://github.com/lxmtuu/PianoPath-Releases/releases/latest). Các lệnh bên dưới dành cho cộng tác viên có quyền truy cập repo mã nguồn riêng tư.
 
 Đã quen với .NET? Toàn bộ quy trình gói gọn trong vài lệnh PowerShell (chi tiết từng bước ở các mục bên dưới):
 
@@ -107,6 +111,8 @@ Mở **PowerShell** (không cần quyền admin) và cài lần lượt. Nếu �
    - **Visual Studio Code**: cài extension **C# Dev Kit** (Microsoft); extension tự dùng SDK đã cài ở bước 2.
 
 ## Tải mã nguồn
+
+Repo `lxmtuu/PianoPath` là riêng tư: lệnh clone bên dưới chỉ chạy với tài khoản đã được cấp quyền. Người dùng cuối không cần mã nguồn; tải bản phát hành công khai tại [PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases/releases/latest).
 
 ```powershell
 cd $HOME\source            # hoặc thư mục bất kỳ; tránh đường dẫn có ký tự đặc biệt
@@ -460,8 +466,8 @@ publish\win-x64\
 
 - **Gửi dạng ZIP**: nén cả thư mục (`.\publish.ps1 -Zip` hoặc `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). Người nhận giải nén rồi chạy `PianoPath.exe`; không được tách `.exe` khỏi thư mục `Assets\`.
 - **Bộ cài `.exe` (tuỳ chọn)**: cài [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish bản self-contained rồi chạy `iscc .\installer\Keyflow.iss` (hoặc mở file trong Inno Setup Compiler và nhấn F9). Kết quả: `installer\Output\Keyflow-Setup-<phiên bản>.exe` tạo shortcut Start Menu/Desktop và mục gỡ cài đặt. Đổi phiên bản bằng `iscc /DAppVersion=1.0.0 .\installer\Keyflow.iss`. Bộ cài **tự chọn ngôn ngữ theo Windows** và có cả tiếng Anh lẫn tiếng Việt: bản tiếng Việt là một tệp *một phần* ở `installer\Languages\Vietnamese.isl` (chỉ ghi đè những câu trình cài đặt thật sự hiện, phần còn lại theo `Default.isl`). Chạy `pwsh tools/build_installer.ps1` thay cho lệnh `iscc` tay khi muốn CI kiểm hộ — thêm `-Stub` nếu chưa publish; script dừng ngay khi ISCC cảnh báo bất cứ điều gì ngoài thông báo "câu này còn dùng bản tiếng Anh" của bản dịch một phần.
-- **Bản `win-arm64`**: `publish.ps1 -Runtime win-arm64` (hoặc gói ZIP do `release.yml` đính kèm vào GitHub Release) dành cho Windows on ARM; bộ cài `.exe` chỉ có bản x64 vì `Keyflow.iss` đặt `ArchitecturesAllowed=x64compatible`. Gói ARM được CI publish chứ chưa chạy thử trên máy ARM thật.
-- **Kiểm tệp tải về**: mỗi GitHub Release kèm `SHA256SUMS.txt` của từng tệp đính kèm; đối chiếu bằng `Get-FileHash .\Keyflow-<phiên bản>-win-x64.zip -Algorithm SHA256`. Các gói chưa ký số, nên đây là cách người tải tự kiểm mình nhận đúng tệp repo build ra.
+- **Bản `win-arm64`**: `publish.ps1 -Runtime win-arm64` (hoặc ZIP trong [repo phát hành công khai](https://github.com/lxmtuu/PianoPath-Releases/releases)) dành cho Windows on ARM; bộ cài `.exe` chỉ có bản x64 vì `Keyflow.iss` đặt `ArchitecturesAllowed=x64compatible`. Gói ARM được CI publish chứ chưa chạy thử trên máy ARM thật.
+- **Kiểm tệp tải về**: mỗi bản phát hành ở [PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases/releases) kèm `SHA256SUMS.txt` của từng tệp đính kèm; đối chiếu bằng `Get-FileHash .\Keyflow-<phiên bản>-win-x64.zip -Algorithm SHA256`. Các gói chưa ký số, nên đây là cách người tải tự kiểm mình nhận đúng tệp repo build ra.
 - **Đổi số phiên bản**: sửa `<Version>` trong `PianoPath.csproj` trước khi publish; script và bộ cài đọc giá trị này, ứng dụng tự in nó ra menu khởi động và hộp thoại About qua `AppInfo.Version`, còn `tools/check_sources.py` ghim mọi bản sao còn lại (bộ cài, hai README, hai CHANGELOG) vào cùng một số.
 - **SmartScreen**: file chưa ký số nên Windows hiện "Windows protected your PC" ở lần chạy đầu; chọn *More info → Run anyway*. Muốn bỏ cảnh báo cần chứng chỉ ký mã, ví dụ: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
 - **Phần mềm diệt virus** đôi khi quét lâu file single-file self-contained ở lần chạy đầu; đây là hành vi bình thường với các gói .NET tự giải nén.
@@ -484,14 +490,14 @@ Hai workflow trong `.github/workflows/`:
 | Workflow | Kích hoạt | Nội dung |
 | --- | --- | --- |
 | `build.yml` | push lên `main`/`arena/**`, mọi pull request | **job `static` trên `ubuntu-latest`** chạy kiểm tra tĩnh (`tools/check_sources.py`, ~10 s) → **job `test` trên `ubuntu-latest`** (project xUnit `tests/PianoPath.Tests`, chạy **song song** với nhánh Windows) và **job `build` trên `windows-latest`** (chỉ được xếp lịch khi `static` xanh): build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render **hai bộ ảnh README** — mỗi cảnh trong `$shots` một ảnh cho mỗi ngôn ngữ — cùng gallery preset `presets.jpg`, upload artifact `keyflow-previews` (hai bộ PNG và `presets.jpg`), **báo cáo ảnh lệch** (`Report preview drift`: hai bước render vừa ghi đè `docs/previews` bằng ảnh của chính build này, nên phần khác biệt giữa cây làm việc và commit mà lượt chạy bắt đầu chính là bảng đối chiếu — `git status` không dùng được, vì bước commit ở trên đã commit trước khi push và một lần push bị từ chối để lại cây sạch trong khi nhánh vẫn mang ảnh cũ; tệp nào lệch mà ảnh mới không lên được nhánh là cảnh báo nêu tên tệp đó, kể cả ở pull request nơi bước commit bị bỏ qua) và commit ảnh mới vào nhánh đang build (bỏ qua với pull request; nhánh chỉ nhận pull request thì bước này chỉ cảnh báo, ảnh vẫn nằm trong artifact) → **một lượt publish thật** (`publish.ps1 -Mode FrameworkDependent -AllowLfsPointer -Zip`; CI không tải LFS nên SoundFont vẫn là con trỏ) rồi kiểm thư mục publish có đủ `PianoPath.exe`, `LICENSE.txt` và `Assets\` — để lỗi của đường đóng gói đỏ ngay lúc push thay vì đợi tới lần cắt bản phát hành. |
-| `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish **ba gói** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke test bản self-contained `win-x64` vừa publish bằng `--verify`, biên dịch bộ cài `.exe` từ chính thư mục publish đó, tính **`SHA256SUMS.txt`** cho từng tệp đính kèm, tải tất cả lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. Bộ cài chỉ có bản `win-x64`; gói `win-arm64` không được smoke test vì runner là máy x64. |
+| `release.yml` | tag mã nguồn `v*` hoặc bấm **Run workflow** | Checkout đúng tag kèm LFS, publish **ba gói** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke test bản x64 bằng `--verify`, biên dịch bộ cài, băm mọi gói vào **`SHA256SUMS.txt`** rồi tải lên artifact. Với tag (hoặc nhập tag cũ khi chạy thủ công), một job riêng phát hành các gói và ghi chú song ngữ đã biên tập lên repo công khai [`PianoPath-Releases`](https://github.com/lxmtuu/PianoPath-Releases/releases); job này không tạo ghi chú từ commit/PR riêng tư. Cấu hình token một lần theo [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md). Bộ cài chỉ có `win-x64`; gói `win-arm64` chưa được thử trên máy ARM thật. |
 
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Mỗi lần chạy `release.yml` tải ~113 MiB từ Git LFS và tính vào hạn mức băng thông LFS của tài khoản, nên chỉ nên chạy khi phát hành. `build.yml` không tải LFS (các mục kiểm thử cần SoundFont sẽ tự động `SKIP`).
+Repo `lxmtuu/PianoPath` hiện là riêng tư; bản phát hành công khai được tạo riêng tại `PianoPath-Releases`, không đẩy mã nguồn hoặc lịch sử commit sang đó. Để chuyển bản `v1.0.0` hiện có lần đầu: cấu hình repo công khai, biến và secret theo [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md), sau đó chạy **Actions → release → Run workflow** và nhập `v1.0.0` vào `release_tag`. Bản phát hành riêng tư cũ vẫn riêng tư. Mỗi lần chạy publish tải ~113 MiB từ Git LFS và tính vào hạn mức băng thông LFS, nên chỉ chạy khi phát hành. `build.yml` không tải LFS (các mục kiểm thử cần SoundFont sẽ tự động `SKIP`).
 
 ### Lỗi thường gặp khi publish
 
@@ -593,6 +599,7 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 | `docs/DOCK-NAVIGATION-AUDIT.md` | Đợt rà soát cách sắp xếp chức năng: vì sao dock chia nhóm theo mục đích (lúc viết là ba nhóm, nay là bốn — xem ghi chú ở đầu tài liệu), danh mục trang là nguồn sự thật duy nhất, thẻ phím tắt F1 và đường ảnh README, cùng các kiểm tra tự động giữ chúng không lệch. |
 | `docs/EFFECTS-REDESIGN.md` | Thiết kế hệ thống hiệu ứng: 87 hiệu ứng xếp theo bốn giai đoạn của một nốt (rơi, chạm, giữ, nhả), lớp ambient, modulator và combo theme, cùng roadmap từng phase — làm đến đâu hoàn thiện đến đó; bảng trong code nằm ở `Stage/Effects/EffectCatalog.cs`. |
 | `docs/REPO-AUDIT.md` | Kết quả rà soát toàn kho (2026‑09): phương pháp ba lớp (kiểm tra tĩnh, `--verify`, ảnh CI), những gì đã sửa kèm bằng chứng kiểm chứng và các hạn chế còn lại. |
+| [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md) | Cách giữ repo mã nguồn riêng tư nhưng phát hành gói tải về công khai, gồm quyền Actions, token giới hạn, và chuyển bản `v1.0.0` hiện có. |
 
 ## Cấu trúc chính
 
@@ -627,10 +634,10 @@ Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạ
 - `docs/samples/`: ảnh nền mẫu mà repo tự sinh (`tools/make_stage_background.py`), dùng cho ảnh chụp tính năng ảnh nền và để mọi người thử tính năng này mà không cần tìm ảnh trên mạng.
 - `CHANGELOG.md` / `CHANGELOG.en.md`: nhật ký thay đổi song ngữ — mỗi README trỏ tới bản của mình, và `scan_release_version` giữ danh sách phiên bản của cả hai khớp `<Version>`;
   `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `Properties/AssemblyInfo.cs`: thuộc tính `ThemeInfo` của WPF (nơi tìm resource dictionary theo theme); `installer/Keyflow.iss`: script Inno Setup tạo bộ cài; `installer/Languages/`: bản dịch tiếng Việt dạng tệp một phần (`Vietnamese.isl`) cùng danh sách tên câu hợp lệ (`messages.txt`).
-- `.github/workflows/`: `build.yml` (job `static` trên Ubuntu chạy kiểm tra tĩnh, job `test` trên Ubuntu chạy project xUnit portable, rồi job `build` trên Windows: build Release, `--verify`, **đo ngân sách khung hình bằng `--bench` rồi so với lần chạy trước trong cache**, dựng thử bộ cài trên thư mục giả, render **hai bộ ảnh README** — mỗi cảnh một ảnh cho mỗi ngôn ngữ — cùng gallery preset rồi commit ảnh về nhánh nếu nhánh cho phép, và cuối cùng **publish thử một bản framework-dependent** để lỗi của đường đóng gói đỏ ngay lúc push) và `release.yml` (checkout kèm LFS, publish ba gói, smoke test bản vừa publish, dựng bộ cài từ chính thư mục đó, băm từng gói thành `SHA256SUMS.txt`, rồi đính kèm tất cả vào GitHub Release khi đẩy tag `v*`).
+- `.github/workflows/`: `build.yml` (job `static` trên Ubuntu chạy kiểm tra tĩnh, job `test` trên Ubuntu chạy project xUnit portable, rồi job `build` trên Windows: build Release, `--verify`, **đo ngân sách khung hình bằng `--bench` rồi so với lần chạy trước trong cache**, dựng thử bộ cài trên thư mục giả, render **hai bộ ảnh README** — mỗi cảnh một ảnh cho mỗi ngôn ngữ — cùng gallery preset rồi commit ảnh về nhánh nếu nhánh cho phép, và cuối cùng **publish thử một bản framework-dependent** để lỗi của đường đóng gói đỏ ngay lúc push) và `release.yml` (checkout đúng tag mã nguồn kèm LFS, publish ba gói, smoke test bản vừa publish, dựng bộ cài, băm thành `SHA256SUMS.txt`, tải artifact, rồi dùng job riêng đính kèm gói và ghi chú đã biên tập vào repo phát hành công khai `PianoPath-Releases`; không sinh ghi chú từ lịch sử riêng tư).
 
 ## Giấy phép
 
-Mã nguồn phát hành theo giấy phép MIT (xem `LICENSE`). SoundFont đi kèm thuộc FreePats, giấy phép CC BY 3.0 (xem `Assets/ATTRIBUTION.txt`).
+Mã nguồn trong repo riêng tư được cấp phép theo MIT (xem `LICENSE`); giấy phép này cũng nằm trong mọi gói tải công khai. SoundFont đi kèm thuộc FreePats theo CC BY 3.0 (xem `Assets/ATTRIBUTION.txt` trong từng gói).
 
 Bản quyền thuộc về tác giả **Yami** và **Neyu**; **Jin** là người đóng góp cho dự án.
