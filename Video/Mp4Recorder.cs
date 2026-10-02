@@ -33,14 +33,32 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// <summary>The audio bitrate the AAC encoder is asked for: 192 kbps, transparent for a sampled piano.</summary>
     internal const int AudioBytesPerSecond = 24000;
 
+    /// <summary>Frames that may wait for the encoder before further ones are folded into the newest as repeats.</summary>
+    private const int MaxQueuedFrames = 4;
+
+    /// <summary>A frame on its way to the encoder: its pixels, the timeline slot it starts at and how many slots it fills.</summary>
+    private sealed class PendingFrame(byte[] bgra, int index, int repeat)
+    {
+        internal readonly byte[] Bgra = bgra;
+        internal readonly int Index = index;
+        internal int Repeat = repeat;
+    }
+
     private readonly Lock _lock = new();
     private readonly byte[] _nv12;
+    private readonly object _queueGate = new();
+    private readonly Queue<PendingFrame> _queue = new();
+    private readonly Stack<byte[]> _spare = new();
+    private PendingFrame? _tail;
+    private Thread? _worker;
+    private bool _closing;
+    private Exception? _workerError;
     private readonly byte[] _audioBytes = new byte[8192];
     private Mf.IMFSinkWriter? _writer;
     private int _videoStream = -1;
     private int _audioStream = -1;
     private long _audioFrames;
-    private bool _finalized;
+    private volatile bool _finalized;
     private readonly Action<string>? _step;
 
     /// <summary>
@@ -75,6 +93,8 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
                 : "NOTE MP4 encoder: the AAC probe says no, so the take carries the picture only.");
             AudioDropped = withAudio && !wantsAudio;
             Open(encodersForAudio: wantsAudio);
+            _worker = new Thread(EncodeLoop) { IsBackground = true, Name = "MP4 encoder" };
+            _worker.Start();
         }
         catch
         {
@@ -175,23 +195,72 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         (int)Math.Clamp(width * (long)height * frameRate * 7 / 100, 2_000_000, 24_000_000);
 
     /// <summary>
-    /// Writes one frame, or <paramref name="repeat"/> copies of it when the render fell behind the clock, so a
-    /// slow machine produces a file that plays at the right speed instead of a fast-forward.
+    /// Hands one frame to the encoder thread, or <paramref name="repeat"/> copies of it when the render fell
+    /// behind the clock, so a slow machine produces a file that plays at the right speed instead of a
+    /// fast-forward. The colour conversion and the encoder run on that thread, never on the caller's: when the
+    /// encoder cannot keep up, the frames beyond a short queue are folded into the newest one as repeats, so
+    /// the window never waits for the codec and the file still keeps time. A failure on the encoder thread is
+    /// raised from the next call here.
     /// </summary>
     public void WriteFrame(byte[] frame, int repeat = 1)
     {
         if (frame.Length != FrameBytes) throw new ArgumentException(Loc.F("Expected a {0}×{1} BGRA frame ({2} bytes).", Width, Height, FrameBytes), nameof(frame));
-        lock (_lock)
+        if (repeat < 1) return;
+        lock (_queueGate)
         {
-            if (_finalized) return;
-            Nv12Frame.FromBgra(frame, Width, Height, _nv12);
-            for (var copy = 0; copy < repeat; copy++)
+            if (_workerError is { } error) throw new InvalidOperationException(error.Message, error);
+            if (_finalized || _closing) return;
+            if (_queue.Count >= MaxQueuedFrames && _tail is not null)
             {
-                var (time, duration) = FrameTime(FrameCount, FrameRate);
-                var hr = WriteSample(_videoStream, _nv12, _nv12.Length, time, duration);
-                if (hr < 0) throw new InvalidOperationException(Loc.F("The encoder stopped taking frames ({0}).", Mf.Describe(hr)));
-                FrameCount++;
+                _tail.Repeat += repeat;
             }
+            else
+            {
+                var buffer = _spare.Count > 0 ? _spare.Pop() : new byte[FrameBytes];
+                Buffer.BlockCopy(frame, 0, buffer, 0, frame.Length);
+                _tail = new PendingFrame(buffer, FrameCount, repeat);
+                _queue.Enqueue(_tail);
+                Monitor.Pulse(_queueGate);
+            }
+            FrameCount += repeat;
+        }
+    }
+
+    /// <summary>The encoder thread: takes frames off the queue, converts them to NV12 and writes them, until the take closes.</summary>
+    private void EncodeLoop()
+    {
+        while (true)
+        {
+            PendingFrame item;
+            lock (_queueGate)
+            {
+                while (_queue.Count == 0)
+                {
+                    if (_closing) return;
+                    Monitor.Wait(_queueGate);
+                }
+                item = _queue.Dequeue();
+            }
+            try
+            {
+                Nv12Frame.FromBgra(item.Bgra, Width, Height, _nv12);
+                lock (_lock)
+                {
+                    if (_finalized) return;
+                    for (var copy = 0; copy < item.Repeat; copy++)
+                    {
+                        var (time, duration) = FrameTime(item.Index + copy, FrameRate);
+                        var hr = WriteSample(_videoStream, _nv12, _nv12.Length, time, duration);
+                        if (hr < 0) throw new InvalidOperationException(Loc.F("The encoder stopped taking frames ({0}).", Mf.Describe(hr)));
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                lock (_queueGate) { _workerError = ex; _queue.Clear(); _tail = null; }
+                return;
+            }
+            lock (_queueGate) _spare.Push(item.Bgra);
         }
     }
 
@@ -232,6 +301,11 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// <summary>Closes the file: the last frames, the index and the two stream headers are written here.</summary>
     public void Dispose()
     {
+        // The frames still queued are written first, so the take ends where the recording did. A codec that
+        // wedges is given a few seconds, not forever: the take is then abandoned rather than the window.
+        lock (_queueGate) { _closing = true; Monitor.PulseAll(_queueGate); }
+        var drained = _worker is null || _worker.Join(TimeSpan.FromSeconds(10));
+        if (!drained) { _finalized = true; return; }
         lock (_lock)
         {
             if (!_finalized)
@@ -396,28 +470,40 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     internal static int WriteSampleTo(Mf.IMFSinkWriter writer, int streamIndex, byte[] bytes, int count, long time, long duration,
         Action<string>? step = null)
     {
-        step?.Invoke($"NOTE MP4 encoder: a media buffer is being made for {count} bytes.");
-        var hr = Mf.MFCreateMemoryBuffer(count, out var buffer);
-        if (hr < 0) return hr;
-        step?.Invoke("NOTE MP4 encoder: the buffer is being locked.");
-        hr = buffer.Lock(out var pointer, out _, out _);
-        if (hr < 0) return hr;
-        step?.Invoke("NOTE MP4 encoder: the buffer is locked; the bytes go in.");
-        Marshal.Copy(bytes, 0, pointer, count);
-        step?.Invoke("NOTE MP4 encoder: the bytes are in; the buffer is being released.");
-        buffer.Unlock();
-        step?.Invoke("NOTE MP4 encoder: the buffer is released; saying how much of it is filled.");
-        buffer.SetCurrentLength(count);
-        step?.Invoke("NOTE MP4 encoder: a sample is being made to carry the buffer.");
-        hr = Mf.MFCreateSample(out var sample);
-        if (hr < 0) return hr;
-        step?.Invoke("NOTE MP4 encoder: the buffer is being put into the sample.");
-        sample.AddBuffer(buffer);
-        step?.Invoke("NOTE MP4 encoder: the sample's time is being set.");
-        sample.SetSampleTime(time);
-        step?.Invoke("NOTE MP4 encoder: the sample's duration is being set.");
-        sample.SetSampleDuration(duration);
-        step?.Invoke("NOTE MP4 encoder: the sample is stamped; handing it to the writer.");
-        return writer.WriteSample(streamIndex, sample);
+        // Every buffer and sample is a native allocation (a 1080p frame is about 3 MB). The runtime only sees the
+        // tiny managed wrapper, so left to the collector they pile up for minutes and are then freed in one
+        // stall; they are released here, as soon as the writer has taken its own reference.
+        Mf.IMFMediaBuffer? buffer = null;
+        Mf.IMFSample? sample = null;
+        try
+        {
+            step?.Invoke($"NOTE MP4 encoder: a media buffer is being made for {count} bytes.");
+            var hr = Mf.MFCreateMemoryBuffer(count, out buffer);
+            if (hr < 0) return hr;
+            step?.Invoke("NOTE MP4 encoder: the buffer is being locked.");
+            hr = buffer.Lock(out var pointer, out _, out _);
+            if (hr < 0) return hr;
+            try
+            {
+                step?.Invoke("NOTE MP4 encoder: the buffer is locked; the bytes go in.");
+                Marshal.Copy(bytes, 0, pointer, count);
+            }
+            finally { buffer.Unlock(); }
+            step?.Invoke("NOTE MP4 encoder: the bytes are in; saying how much of the buffer is filled.");
+            buffer.SetCurrentLength(count);
+            step?.Invoke("NOTE MP4 encoder: a sample is being made to carry the buffer.");
+            hr = Mf.MFCreateSample(out sample);
+            if (hr < 0) return hr;
+            sample.AddBuffer(buffer);
+            sample.SetSampleTime(time);
+            sample.SetSampleDuration(duration);
+            step?.Invoke("NOTE MP4 encoder: the sample is stamped; handing it to the writer.");
+            return writer.WriteSample(streamIndex, sample);
+        }
+        finally
+        {
+            if (sample is not null) { try { Marshal.ReleaseComObject(sample); } catch { } }
+            if (buffer is not null) { try { Marshal.ReleaseComObject(buffer); } catch { } }
+        }
     }
 }
