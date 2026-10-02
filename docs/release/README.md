@@ -1,15 +1,24 @@
 # Keyflow · Piano Performance & Concert VFX Studio
 
+> **Đây là kho phát hành, không phải kho mã nguồn.** Kho này chỉ chứa bản dựng và tài liệu
+> người dùng của Keyflow; mã nguồn nằm ở một kho riêng và không được công khai. Mọi tệp ở đây
+> do quy trình phát hành của kho nguồn sinh ra tại đúng tag `v1.0.0` — xem
+> **[Tải bản phát hành](#tải-bản-phát-hành)** bên dưới, hoặc
+> **[Releases](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)** cho bản mới nhất, và **[Issues](https://github.com/lxmtuu/PianoPath-Releases/issues)** để báo lỗi.
+>
+> *Đừng sửa tệp trong kho này bằng tay*: mỗi lần phát hành, nhánh này được dựng lại từ kho
+> nguồn nên mọi thay đổi viết tay sẽ bị ghi đè.
+
 > **English version: [README.en.md](README.en.md)** · Bản dưới đây là bản gốc tiếng Việt. Hai tệp là
-> cùng một tài liệu, cùng ảnh (do CI render) và cùng bảng tham số dòng lệnh; `tools/check_sources.py`
-> kiểm cả hai nên không bản nào lệch khỏi bản kia.
+> cùng một tài liệu và cùng ảnh (do CI render); cả hai được sinh từ một bản gốc nên
+> không bản nào lệch khỏi bản kia.
 >
 > **Nhật ký thay đổi: [CHANGELOG.md](CHANGELOG.md)** (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
 > — mọi thay đổi người dùng nhìn thấy, ghi theo từng phiên bản phát hành.
 >
 > **Tải bản dựng: [kho phát hành công khai](https://github.com/lxmtuu/PianoPath-Releases/releases)** — ZIP portable và bộ cài `.exe`.
-> Kho bạn đang đọc là **kho mã nguồn riêng tư**; gói phát hành và trang sản phẩm chỉ nằm ở kho kia
-> (xem [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md)).
+> Kho bạn đang đọc là **kho mã nguồn riêng tư**: đây là nơi giữ mã nguồn, còn gói phát hành và
+> trang sản phẩm chỉ nằm ở kho kia.
 
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng. Sân khấu ấy do một **engine GPU Direct3D 11** vẽ trên luồng riêng — HDR 16-bit, bloom nhiều tầng, tới 240 FPS và không bao giờ làm chậm đầu vào MIDI; bộ dựng hình WPF chỉ còn là đường dự phòng khi Direct3D không khởi động được (xem [Sân khấu & hiệu ứng hình ảnh](#sân-khấu--hiệu-ứng-hình-ảnh)).
 
@@ -33,39 +42,68 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 | --- | --- | --- |
 | ![Keyflow main menu](docs/previews/vi/main-menu.png) | ![Design dock](docs/previews/vi/design-dock.png) | ![Theme page](docs/previews/vi/theme-dock.png) |
 
-> **Ảnh trong README do chính ứng dụng render** trong CI (`--snapshot`). Muốn làm mới sau khi sửa
-> giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).
+> **Ảnh trong README do chính ứng dụng render** trong CI (`--snapshot`). Ảnh được render lại mỗi khi giao diện đổi,
+> rồi chép sang kho này ở mỗi lần phát hành.
+
+## Tải bản phát hành
+
+Mỗi mốc phát hành (`v1.0.0` và các bản sau) là một mục trong **[Releases](https://github.com/lxmtuu/PianoPath-Releases/releases)**, kèm
+`SHA256SUMS.txt` của mọi tệp đính kèm. Bản mới nhất: **[https://github.com/lxmtuu/PianoPath-Releases/releases/latest](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)**.
+
+| Tệp | Là gì | Máy đích cần gì |
+| --- | --- | --- |
+| `Keyflow-1.0.0-win-x64.zip` | Bản portable **self-contained**: giải nén là chạy `PianoPath.exe` | Không cần cài gì thêm |
+| `Keyflow-Setup-1.0.0.exe` | **Bộ cài** cho Windows x64: shortcut Start Menu/Desktop, mục gỡ cài đặt, wizard Anh/Việt | Không cần cài gì thêm |
+| `Keyflow-1.0.0-win-x64-fd.zip` | Bản **framework-dependent**, nhẹ hơn nhiều | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `Keyflow-1.0.0-win-arm64.zip` | Windows on ARM, self-contained (CI publish; chưa máy ARM nào chạy thử) | Không cần cài gì thêm |
+
+Cài bằng bộ cài thì xong; dùng bản ZIP thì **giải nén cả thư mục rồi chạy `PianoPath.exe`** — đừng
+tách `.exe` ra khỏi thư mục của nó:
+
+```
+Keyflow-1.0.0-win-x64\
+├── PianoPath.exe              ← file chạy duy nhất
+├── LICENSE.txt                ← giấy phép MIT, phải đi kèm bản sao
+└── Assets\
+    ├── ConcertGrand.sf2       ← SoundFont ~113 MiB, phải nằm cạnh .exe
+    └── ATTRIBUTION.txt        ← ghi công FreePats (CC BY 3.0)
+```
+
+- **Kiểm tệp tải về**: mỗi release kèm `SHA256SUMS.txt`; đối chiếu bằng
+  `Get-FileHash .\Keyflow-1.0.0-win-x64.zip -Algorithm SHA256`. Các gói **chưa ký số** nên đây là
+  cách duy nhất để chắc tệp nhận được đúng là tệp quy trình trên build ra.
+- **SmartScreen**: vì chưa ký số, lần chạy đầu Windows hiện *"Windows protected your PC"* — chọn
+  **More info → Run anyway**.
+- **Giữ giấy phép**: `LICENSE.txt` (MIT) và `Assets\ATTRIBUTION.txt` (CC BY 3.0 của SoundFont) đã nằm
+  trong mỗi gói; đừng xoá chúng khi chia sẻ lại.
+- **Nhật ký thay đổi**: [CHANGELOG.md](CHANGELOG.md) (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
+  — mỗi bản một mục, ghi những gì người dùng nhìn thấy.
+- **Bộ kiểm chứng**: `PianoPath.exe --verify --verify-log=%TEMP%\keyflow-verify.log` chạy ngay trên máy
+  bạn vừa tải về và in từng mục PASS/FAIL (mục cần phần cứng không có sẽ ghi SKIP, không phải lỗi).
 
 ## Mục lục
 
-- [Bắt đầu nhanh](#bắt-đầu-nhanh) · [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
-- [Cài đặt công cụ](#cài-đặt-công-cụ) · [Tải mã nguồn](#tải-mã-nguồn) · [Biên dịch và chạy](#biên-dịch-và-chạy)
-- [Thiết lập lần đầu](#thiết-lập-lần-đầu) · [Bắt đầu sử dụng](#bắt-đầu-sử-dụng)
+- [Tải bản phát hành](#tải-bản-phát-hành)
+- [Yêu cầu hệ thống](#yêu-cầu-hệ-thống)
+- [Thiết lập lần đầu](#thiết-lập-lần-đầu)
+- [Bắt đầu sử dụng](#bắt-đầu-sử-dụng)
 - [Bàn phím & thao tác nhanh](#bàn-phím--thao-tác-nhanh)
-- [Chức năng](#chức-năng) · [Đa ngôn ngữ](#đa-ngôn-ngữ) · [Bản đồ giao diện](#bản-đồ-giao-diện) · [Giới hạn hiện tại](#giới-hạn-hiện-tại)
-- [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện) · [Đóng gói và xuất file .exe](#đóng-gói-và-xuất-file-exe)
-- [Kiểm thử](#kiểm-thử) · [Tài liệu kỹ thuật](#tài-liệu-kỹ-thuật) · [Cấu trúc chính](#cấu-trúc-chính) · [Giấy phép](#giấy-phép)
-
-## Bắt đầu nhanh
-
-Đã quen với .NET? Toàn bộ quy trình gói gọn trong vài lệnh PowerShell (chi tiết từng bước ở các mục bên dưới):
-
-```powershell
-winget install --id Git.Git -e; winget install --id GitHub.GitLFS -e; winget install --id Microsoft.DotNet.SDK.10 -e
-git lfs install
-git clone https://github.com/lxmtuu/PianoPath.git; cd PianoPath; git lfs pull
-dotnet run --project .\PianoPath.csproj -c Release    # biên dịch rồi mở ứng dụng
-.\publish.ps1 -Zip                                    # đóng gói publish\win-x64\PianoPath.exe + file ZIP để gửi đi
-```
-
-Nếu máy chặn script PowerShell, chạy `Set-ExecutionPolicy -Scope Process Bypass` trước `.\publish.ps1`.
+- [Chức năng](#chức-năng)
+  - [Sân khấu & hiệu ứng hình ảnh](#sân-khấu--hiệu-ứng-hình-ảnh)
+  - [Âm thanh, MIDI & luyện tập](#âm-thanh-midi--luyện-tập)
+  - [Giao diện, preset & ghi hình](#giao-diện-preset--ghi-hình)
+- [Đa ngôn ngữ](#đa-ngôn-ngữ)
+- [Bản đồ giao diện](#bản-đồ-giao-diện)
+- [Giới hạn hiện tại](#giới-hạn-hiện-tại)
+- [Kiểm thử](#kiểm-thử)
+- [Giấy phép](#giấy-phép)
 
 ## Yêu cầu hệ thống
 
 | Thành phần | Yêu cầu | Ghi chú |
 | --- | --- | --- |
 | Hệ điều hành | Windows 10 (khuyến nghị 22H2) hoặc Windows 11, 64-bit | Ứng dụng dùng WPF và WinMM nên chỉ chạy trên Windows. |
-| Để **chạy bản đã đóng gói** | Không cần cài gì thêm với bản self-contained; bản framework-dependent cần **.NET 10 Desktop Runtime (x64)** | Xem [Đóng gói và xuất file .exe](#đóng-gói-và-xuất-file-exe). |
+| Để **chạy bản đã đóng gói** | Không cần cài gì thêm với bản self-contained; bản framework-dependent cần **.NET 10 Desktop Runtime (x64)** | Xem [Tải bản phát hành](#tải-bản-phát-hành). |
 | Để **biên dịch từ mã nguồn** | **.NET 10 SDK** (10.0.100 trở lên), **Git** và **Git LFS** | SoundFont `Assets/ConcertGrand.sf2` (~113 MiB) được lưu bằng Git LFS. |
 | IDE (tuỳ chọn) | Visual Studio 2026 với workload **.NET desktop development**, hoặc VS Code + extension **C# Dev Kit** | .NET 10 cần Visual Studio 2026 (18.0) trở lên; VS 2022 chỉ mở được dự án khi đã cài .NET 10 SDK và không hỗ trợ đầy đủ. |
 | Ổ đĩa | ~1,5 GB cho SDK + ~500 MB cho mã nguồn và bản build | Bản publish self-contained chiếm thêm ~300 MB. |
@@ -73,141 +111,6 @@ Nếu máy chặn script PowerShell, chạy `Set-ExecutionPolicy -Scope Process 
 | Đồ hoạ | GPU hỗ trợ **Direct3D 11** (feature level 11_0 trở lên, shader model 5.0) | Sân khấu mặc định là engine GPU: Keyflow thử card đồ hoạ trước rồi mới tới **WARP** (bộ dựng hình phần mềm của Windows — cùng shader, chỉ chậm hơn card thật); shader HLSL được biên dịch lúc khởi động bằng `d3dcompiler_47.dll` có sẵn trong Windows. Direct3D không khởi động được thì dùng bộ dựng hình WPF và nói lý do ở **General → GRAPHICS ENGINE**. |
 | MIDI (tuỳ chọn) | Đàn/thiết bị MIDI USB được Windows nhận diện | Không có đàn vẫn chơi được bằng bàn phím máy tính hoặc piano ảo. |
 | Python (tuỳ chọn) | Python 3.9+ | Chỉ dùng cho `tools/check_sources.py` (kiểm tra tĩnh, không cần .NET SDK). |
-
-## Cài đặt công cụ
-
-Mở **PowerShell** (không cần quyền admin) và cài lần lượt. Nếu đã có sẵn công cụ nào thì bỏ qua bước đó.
-
-1. **Git và Git LFS**
-
-   ```powershell
-   winget install --id Git.Git -e
-   winget install --id GitHub.GitLFS -e
-   ```
-
-   Đóng và mở lại PowerShell rồi kích hoạt LFS một lần cho tài khoản Windows hiện tại:
-
-   ```powershell
-   git lfs install
-   ```
-
-   Không dùng winget thì tải Git tại <https://git-scm.com/download/win> và Git LFS tại <https://git-lfs.com>.
-
-2. **.NET 10 SDK** (đã bao gồm runtime để chạy ứng dụng)
-
-   ```powershell
-   winget install --id Microsoft.DotNet.SDK.10 -e
-   ```
-
-   Hoặc tải bộ cài "SDK 10.0.x – Windows x64 Installer" tại <https://dotnet.microsoft.com/download/dotnet/10.0>. Mở lại PowerShell rồi kiểm tra:
-
-   ```powershell
-   dotnet --list-sdks      # phải có một dòng 10.0.xxx
-   git lfs version         # phải in ra git-lfs/x.y.z
-   ```
-
-3. **IDE (tuỳ chọn)**
-   - **Visual Studio 2026**: tải Community (miễn phí) tại <https://visualstudio.microsoft.com/>, trong Visual Studio Installer tích workload **.NET desktop development**. Workload này đã kèm .NET 10 SDK.
-   - **Visual Studio Code**: cài extension **C# Dev Kit** (Microsoft); extension tự dùng SDK đã cài ở bước 2.
-
-## Tải mã nguồn
-
-Kho này là **private**: chỉ chủ dự án và người được mời clone được. Người dùng cuối không cần mã nguồn —
-tải gói ở [kho phát hành công khai](https://github.com/lxmtuu/PianoPath-Releases/releases). Phần dưới dành cho người đóng góp đã được cấp quyền.
-
-```powershell
-cd $HOME\source            # hoặc thư mục bất kỳ; tránh đường dẫn có ký tự đặc biệt
-git clone https://github.com/lxmtuu/PianoPath.git
-cd PianoPath
-git lfs pull               # tải SoundFont thật (~113 MiB) nếu clone chưa tự tải
-```
-
-Kiểm tra SoundFont đã đúng chưa (phải là 118 398 836 byte ≈ 113 MiB, không phải 134 byte):
-
-```powershell
-(Get-Item .\Assets\ConcertGrand.sf2).Length
-```
-
-Nếu con số chỉ vài trăm byte thì file mới là **con trỏ LFS**: chạy lại `git lfs install` rồi `git lfs pull`. Ứng dụng vẫn mở được với con trỏ LFS nhưng sẽ báo không nạp được SoundFont; khi đó có thể nạp tạm một tệp `.sf2` khác bằng **LOAD SOUNDFONT** (trang Audio).
-
-Tải ZIP từ GitHub ("Code → Download ZIP") **không** kèm file LFS; hãy dùng `git clone` hoặc tải riêng SoundFont rồi chép vào `Assets\ConcertGrand.sf2`.
-
-## Biên dịch và chạy
-
-### Dòng lệnh (khuyến nghị)
-
-```powershell
-dotnet restore .\PianoPath.csproj                        # tải gói (lần đầu)
-dotnet build   .\PianoPath.csproj -c Release             # biên dịch → bin\Release\net10.0-windows\PianoPath.exe
-dotnet run --project .\PianoPath.csproj -c Release       # biên dịch (nếu cần) và chạy
-```
-
-- `dotnet run` không có `-c Release` sẽ dùng cấu hình Debug (`bin\Debug\net10.0-windows\PianoPath.exe`), chậm hơn khi vẽ nhiều hạt.
-- Có thể chạy trực tiếp file `.exe` trong thư mục `bin\...`; thư mục `Assets\` (SoundFont, attribution) đã được chép kèm tự động.
-- Lần chạy đầu Windows có thể hỏi quyền tường lửa hoặc SmartScreen vì file chưa ký số; chọn *More info → Run anyway*.
-
-### Tham số dòng lệnh
-
-| Tham số | Tác dụng |
-| --- | --- |
-| `--verify [--verify-log=<file>]` | Chạy bộ kiểm chứng hồi quy rồi thoát (mã thoát `0` = đạt). Xem [Kiểm thử](#kiểm-thử). |
-| `--encode-probe=<file.avi>` | Ghi **ba khung** vào một tệp AVI không nén rồi thoát (mã thoát `0` = đã ghi xong, `2` = máy này không ghi được). Đây là **phép thử đường ống mẫu**: AVI không cần bộ mã hoá nào, nên `--verify` chỉ gọi nó khi lượt chạy **không ra được tệp MP4 nào** — và luôn gọi *sau* lượt ghi, không bao giờ trước, để một phép thử có thể treo không chặn mất chính thứ nó định giải thích. |
-| `--encode-take=<file.mp4>` | Ghi **một** bản MP4 ngắn 64×48 rồi thoát, in ra từng bước đã làm (mã thoát `0` = đã ghi xong, `2` = máy này không ghi được MP4). Đây là tiến trình con mà `--verify` tự gọi để thử bộ mã hoá: bộ mã hoá là mã gốc, lỗi trong đó có thể làm sập cả tiến trình, nên nếu chạy trong chính lượt kiểm chứng thì sẽ mất luôn kết luận — chạy riêng thì chỉ tốn một dòng SKIP. |
-| `--bench[=<khung>] [--bench-out=<tệp.json>] [--bench-baseline=<tệp.json>]` | Chạy **cổng hiệu năng** rồi thoát: dựng sân khấu GPU bằng chính vòng dựng hình của app ở **1920×1080**, đo **thời gian của từng khung** cho hai cảnh (*look mặc định* và *look nặng nhất có sẵn*) rồi ghi báo cáo JSON — mean/median/p95/p99/max kèm thời gian từng khung. Mã thoát `0` = đạt, `2` = không đo được khung nào (máy không có thiết bị Direct3D, hoặc vòng dựng hình dừng giữa chừng), `3` = **vượt ngân sách** trên máy có card đồ hoạ thật (p95 < 8 ms cảnh mặc định, < 16 ms cảnh nặng). Máy chỉ có bộ dựng hình phần mềm (WARP — mọi runner CI) **không bị xử theo ngưỡng tuyệt đối**: báo cáo vẫn ghi đủ số, và CI so **tương đối** với lần đo trước trên cùng loại máy (`--bench-baseline` là báo cáo của lần đó). Mặc định đo 120 khung và ghi ra `%TEMP%\keyflow-bench.json`. Xem [Cổng hiệu năng](#cổng-hiệu-năng---bench). |
-| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|history\|recording\|general]` | Mở sẵn dock cài đặt ở đúng trang — đủ 13 trang của dock, kể cả `history` (lịch sử luyện tập, biểu đồ và ghost); `general` = trang General: ngôn ngữ, engine đồ hoạ, hồ sơ cài đặt. |
-| `--snapshot <file.png> [--compact] [--play-preview] [--menu]` | Chụp màn hình rồi thoát (`--compact` = 1080×700, `--play-preview` = nhấn sẵn một nốt, `--menu` = mở menu khởi động). |
-| `--gpu` | Giữ lại cho các script cũ: **sân khấu GPU Direct3D 11 đã là sân khấu mặc định** của mọi lần chạy, nên cờ này không đổi gì. Máy không có card đồ hoạ dùng WARP, bộ dựng hình phần mềm của Windows. CI dùng nó để chụp `stage-gpu.png`. |
-| `--software` | Vẽ **một lần chạy** bằng bộ dựng hình WPF thay vì engine GPU (không đụng vào cài đặt đã lưu): dùng cho ảnh tất định và cột "phần mềm" của bộ gallery preset trong CI. |
-| `--play-dialog` / `--shortcuts` | Mở sẵn hộp thoại Play / thẻ phím tắt để chụp ảnh (dùng cùng `--snapshot`). |
-| `--lang=<en\|vi>` | Chạy một lần bằng ngôn ngữ chỉ định, **ghi đè** cài đặt đã lưu — dùng để chụp ảnh giao diện tiếng Việt hoặc kiểm bản dịch mà không đụng vào `%LOCALAPPDATA%\Keyflow`. |
-| `--preset=<tên>` / `--play-chord` | Áp một preset có sẵn chỉ trong lần chạy này (không cần dấu cách: `--preset=GalaxyVoyage`), và giữ thêm một hợp âm rải khi chụp để hiện các hiệu ứng giữ phím nối các phím (tia điện). CI dùng chúng để chụp `stage-gpu-galaxy.png` và `stage-gpu-storm.png`. |
-| `--background-image=<file.png>` | Vẽ một ảnh cụ thể phía sau bàn phím **chỉ trong lần chạy này**: không bật cờ "đã sửa", không tự lưu, nên `visual-settings.json` giữ nguyên. CI dùng nó để render ảnh minh hoạ tính năng ảnh nền từ ảnh mẫu `docs/samples/stage-backdrop.png` (sinh bởi `tools/make_stage_background.py`) thay vì ảnh chụp của người nào đó. |
-| `--settings-dir=<thư mục>` | Đọc/ghi cài đặt và preset người dùng ở thư mục khác (mặc định `%LOCALAPPDATA%\Keyflow`) — hữu ích cho bản portable hoặc khi muốn chụp ảnh từ trạng thái mặc định. Chạy `--verify` luôn tự dùng thư mục tạm nên **không bao giờ ghi đè cài đặt/preset thật của bạn**. |
-
-Ví dụ tạo lại đúng ảnh của README (hai mươi tám ảnh — mỗi ngôn ngữ một bộ: bản này đọc `docs/previews/vi`, còn
-`README.en.md` đọc `docs/previews/en`, `--lang` ghim đúng ngôn ngữ của bộ ảnh):
-
-```powershell
-$exe = ".\bin\Release\net10.0-windows\PianoPath.exe"
-foreach ($lang in @('en', 'vi')) {
-  $set = "docs\previews\$lang"        # mỗi bản README chỉ đọc bộ ảnh của đúng ngôn ngữ đó
-  $dir = "$env:TEMP\keyflow-preview-$lang"   # thư mục cài đặt tạm: ảnh chụp luôn là trạng thái chạy lần đầu
-  Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI dùng một thư mục tạm riêng cho từng ảnh
-  & $exe --snapshot $set\stage-live.png       --compact --play-preview  --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\stage-gpu.png        --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord
-  & $exe --snapshot $set\stage-gpu-galaxy.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=GalaxyVoyage
-  & $exe --snapshot $set\stage-gpu-storm.png  --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=ElectricStorm
-  & $exe --snapshot $set\background-image.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
-  & $exe --snapshot $set\main-menu.png         --compact --menu          --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\design-dock.png       --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=style
-  & $exe --snapshot $set\theme-dock.png        --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=theme
-  & $exe --snapshot $set\practice-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=practice
-  & $exe --snapshot $set\history-dock.png      --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=history
-  & $exe --snapshot $set\recording-dock.png    --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=recording
-  & $exe --snapshot $set\play-dialog.png       --compact --play-dialog   --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\shortcuts.png         --compact --shortcuts     --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\language-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=general
-}
-```
-
-### Visual Studio 2026
-
-1. **File → Open → Project/Solution**, chọn `PianoPath.csproj` (không có file `.sln`, Visual Studio tự tạo solution tạm).
-2. Chọn cấu hình **Release** hoặc **Debug** trên thanh công cụ, nhấn **F5** (chạy kèm debugger) hoặc **Ctrl+F5**.
-3. Muốn chạy với tham số (ví dụ `--verify`): **Project → PianoPath Properties → Debug → Open debug launch profiles UI → Command line arguments**.
-
-### Visual Studio Code
-
-1. **File → Open Folder** chọn thư mục `PianoPath`; C# Dev Kit tự nhận `PianoPath.csproj`.
-2. Nhấn **F5** → chọn **C#** → **PianoPath**; hoặc dùng terminal tích hợp với các lệnh `dotnet` ở trên.
-
-### Cập nhật phiên bản mới
-
-```powershell
-git pull
-git lfs pull
-dotnet build .\PianoPath.csproj -c Release
-```
 
 ## Thiết lập lần đầu
 
@@ -389,131 +292,6 @@ Phần còn lại của giao diện:
 - Sân khấu mặc định là engine GPU Direct3D 11 (shader HLSL, đổ bóng bàn phím ở mỗi khung hình), nên chi phí đổ bóng nằm trên GPU. **Bộ dựng hình phần mềm** (shader CPU đa luồng, chạy một lần bằng `--software`) chỉ còn là đường dự phòng khi Direct3D không khởi động được và là đường vẽ cho bản ghi PNG trong suốt: ở đó lần bake đầu ở mức Cinematic trên máy yếu có thể tốn vài chục ms; đã có Fast/Off và cache để giảm. Máy không có GPU tương thích dùng WARP (bộ dựng hình phần mềm của Windows): cùng shader, chỉ chậm hơn card thật.
 - Trên sân khấu GPU, khuông nhạc, điểm đánh dấu bàn tay, hình camera, watermark và bộ đếm/FPS vẫn là lớp vector WPF phủ lên khung GPU. Chưa có particle compute shader, depth of field, motion blur theo velocity buffer hay camera keyframe (xem `docs/ROADMAP.md`).
 
-## Tạo lại ảnh giao diện
-
-Ảnh trong README (và trong `docs/previews/vi/`) do ứng dụng render, không phải ảnh dàn dựng.
-
-**Tự động:** mỗi lần push lên `main` hoặc nhánh làm việc (`arena/**`), workflow `build.yml` build xong thì render lại **hai bộ ảnh** — một cảnh trong danh sách `$shots` của workflow cho mỗi ngôn ngữ — bằng chính file `PianoPath.exe` vừa vượt qua `--verify`. Mỗi bộ ghim `--lang` của chính nó — `docs/previews/vi/` cho bản này, `docs/previews/en/` cho `README.en.md` — nên caption luôn đúng ngôn ngữ của bản README bất kể ngôn ngữ của runner, và mỗi ảnh dùng một thư mục cài đặt tạm riêng nên luôn là trạng thái chạy lần đầu. Danh sách cảnh là: sân khấu live, sân khấu GPU (một hợp âm đang giữ), hai preset GPU (Galaxy Voyage và Electric Storm), ảnh nền, menu khởi động, dock Style, dock Theme, ba trang nhóm SESSION (Practice, History, Recording), hộp thoại Play, thẻ phím tắt và trang General. Một bước riêng của cùng workflow dựng thêm **gallery preset** `docs/previews/presets.jpg` (mỗi preset có sẵn vẽ hai lần, engine phần mềm | GPU, dồn vào một ảnh JPEG dùng chung cho cả hai bản README). Cuối cùng workflow **commit thẳng vào nhánh** (`Refresh the README previews from CI [skip ci]`), nên sửa giao diện xong không cần làm gì thêm — ảnh trong README sẽ đúng theo commit đó. Nếu nhánh chỉ nhận pull request (một quy tắc của repository mà token của workflow không vượt qua được) thì lần push bị từ chối: bước đó chỉ báo cảnh báo `Previews not committed` chứ không làm build đỏ, và ảnh mới nằm trong artifact `keyflow-previews` của chính lần chạy ấy — tải về rồi commit tay. Artifact gồm hai bộ PNG và cả gallery `presets.jpg`:
-```powershell
-gh run list --workflow build.yml --limit 5          # tìm run mới nhất
-gh run download <run-id> -n keyflow-previews -D docs/previews
-```
-
-**Thủ công — render tại máy:** chạy các lệnh `--snapshot` ở mục [Tham số dòng lệnh](#tham-số-dòng-lệnh). Ảnh chụp tự tắt chuyển động giao diện để kết quả tất định giữa các máy.
-
-Muốn README chiếu thêm một cảnh: thêm một dòng vào `$shots` của `build.yml`, rồi trỏ README tới `docs/previews/vi/<tên>.png` (và `docs/previews/en/<tên>.png` cho bản tiếng Anh). `tools/check_sources.py` cho phép README đi trước ảnh đúng một commit vì chính commit render ảnh sẽ bắt kịp, nhưng báo lỗi nếu README trỏ tới một ảnh không tồn tại và cũng không có tên trong `$shots`, nên ảnh và tài liệu không thể lệch nhau im lặng.
-
-Ảnh chụp được render **tất định**: hai lượt render cùng một code phải ra cùng từng byte, nếu không bước đối chiếu không phân biệt được "giao diện đổi" với "máy chậm hơn một chút". Sân khấu GPU của mỗi ảnh được dựng **đồng bộ** (một mô phỏng mới, đúng 480 bước 1/60 s, vẽ bằng `GpuRenderLoop.RenderParked` trên thiết bị đã nóng của luồng render đã đỗ; `RenderOnce` là đường dự phòng) thay vì lấy khung của luồng render chạy tự do, vì khung đó phụ thuộc đồng hồ của mô phỏng ngay cả khi cảnh đứng yên: bước cuối trộn nhiễu dither theo thời gian. Luồng render thật được đỗ lại trước khi nhấn phím, backdrop của menu theo đúng khoá chrome, và mọi animator được đưa về khung 0. `--verify` giữ tính chất này (`VerifyDeterministicPreview` cho sân khấu WPF, `VerifyDeterministicGpuFrame` cho khung GPU), lượt build render lại ba ảnh và cảnh báo nếu chúng lệch, và mỗi ảnh để lại một dòng `sha=…` trong annotation `Preview capture (en)` / `(vi)`. Câu chuyện đầy đủ, kể cả ba lần sửa hụt, nằm ở `docs/REPO-AUDIT.md` §6.13.
-
-## Đóng gói và xuất file .exe
-
-Bản build trong `bin\` chỉ chạy trên máy đã cài .NET SDK và gồm nhiều tệp. Để gửi cho người khác hoặc phát hành, hãy **publish**. Có hai kiểu:
-
-| Kiểu | Lệnh nhanh | Kích thước | Máy đích cần gì | Nên dùng khi |
-| --- | --- | --- | --- | --- |
-| **Self-contained** (khuyến nghị) | `.\publish.ps1` | `PianoPath.exe` ~150–190 MB + SoundFont 113 MiB | Không cần cài gì | Phát hành công khai, máy người dùng không rõ có .NET hay không |
-| **Framework-dependent** | `.\publish.ps1 -Mode FrameworkDependent` | `PianoPath.exe` ~1–2 MB + SoundFont 113 MiB | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) | Nội bộ, nhiều máy đã có .NET, muốn gói nhỏ |
-
-Cả hai kiểu đều xuất **một file `.exe` duy nhất** (`PublishSingleFile`) cùng thư mục `Assets\` chứa SoundFont và tệp attribution đặt cạnh. WPF không hỗ trợ trimming và Native AOT nên các tuỳ chọn đó không được dùng.
-
-### Cách 1 · Script `publish.ps1` (một lệnh)
-
-```powershell
-cd PianoPath
-Set-ExecutionPolicy -Scope Process Bypass      # chỉ cho phiên PowerShell hiện tại, nếu máy chặn script
-.\publish.ps1                                  # self-contained, win-x64 → .\publish\win-x64\PianoPath.exe
-.\publish.ps1 -Zip                             # thêm .\publish\Keyflow-<phiên bản>-win-x64.zip để gửi đi
-.\publish.ps1 -Mode FrameworkDependent -Zip    # bản nhỏ → .\publish\win-x64-fd\ và ...-win-x64-fd.zip
-.\publish.ps1 -Runtime win-arm64               # Windows on ARM (Surface Pro X, Snapdragon X)
-.\publish.ps1 -Clean                           # xoá bin/, obj/ và thư mục đích trước khi publish
-```
-
-Script kiểm tra phiên bản SDK, **từ chối publish nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ LFS** (tránh phát hành bản không có tiếng đàn; thêm `-AllowLfsPointer` nếu cố ý), chạy `dotnet publish` với các tham số bên dưới rồi in đường dẫn và dung lượng kết quả.
-
-### Cách 2 · Lệnh `dotnet publish` thủ công
-
-```powershell
-# Self-contained, một file .exe, không cần cài .NET trên máy đích
-dotnet publish .\PianoPath.csproj -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:PublishReadyToRun=true -p:DebugType=None -p:SatelliteResourceLanguages=en `
-  -o .\publish\win-x64
-
-# Framework-dependent, một file .exe nhỏ, máy đích cần .NET 10 Desktop Runtime
-dotnet publish .\PianoPath.csproj -c Release -r win-x64 --self-contained false `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:DebugType=None -p:SatelliteResourceLanguages=en `
-  -o .\publish\win-x64-fd
-```
-
-Ý nghĩa các tham số: `-r win-x64` chọn kiến trúc (thay bằng `win-arm64` cho ARM); `PublishSingleFile` gộp mọi DLL vào một `.exe`; `IncludeNativeLibrariesForSelfExtract` gộp cả DLL native của WPF (bắt buộc cho single-file WPF, chúng được giải nén vào `%TEMP%\.net\PianoPath\` ở lần chạy đầu); `PublishReadyToRun` biên dịch sẵn để khởi động nhanh hơn; `DebugType=None` bỏ file `.pdb`; `SatelliteResourceLanguages=en` bỏ các thư mục ngôn ngữ của WPF.
-
-### Cách 3 · Visual Studio 2026
-
-1. Chuột phải dự án **PianoPath → Publish…**.
-2. Chọn hồ sơ có sẵn **win-x64-self-contained** hoặc **win-x64-framework-dependent** (trong `Properties\PublishProfiles\`), bấm **Publish**.
-3. Kết quả nằm ở `publish\win-x64\` hoặc `publish\win-x64-fd\` trong thư mục dự án. Hồ sơ đã bật single-file, ReadyToRun và tắt trimming; có thể sửa trong **Show all settings**.
-
-### Kết quả và cách phân phối
-
-```
-publish\win-x64\
-├── PianoPath.exe              ← file chạy duy nhất
-├── LICENSE.txt                ← giấy phép MIT, phải đi kèm bản sao
-└── Assets\
-    ├── ConcertGrand.sf2       ← SoundFont, phải luôn nằm cạnh .exe trong thư mục Assets
-    └── ATTRIBUTION.txt        ← ghi công FreePats (CC BY 3.0), giữ kèm khi phân phối
-```
-
-- **Gửi dạng ZIP**: nén cả thư mục (`.\publish.ps1 -Zip` hoặc `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). Người nhận giải nén rồi chạy `PianoPath.exe`; không được tách `.exe` khỏi thư mục `Assets\`.
-- **Bộ cài `.exe` (tuỳ chọn)**: cài [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish bản self-contained rồi chạy `iscc .\installer\Keyflow.iss` (hoặc mở file trong Inno Setup Compiler và nhấn F9). Kết quả: `installer\Output\Keyflow-Setup-<phiên bản>.exe` tạo shortcut Start Menu/Desktop và mục gỡ cài đặt. Đổi phiên bản bằng `iscc /DAppVersion=1.0.0 .\installer\Keyflow.iss`. Bộ cài **tự chọn ngôn ngữ theo Windows** và có cả tiếng Anh lẫn tiếng Việt: bản tiếng Việt là một tệp *một phần* ở `installer\Languages\Vietnamese.isl` (chỉ ghi đè những câu trình cài đặt thật sự hiện, phần còn lại theo `Default.isl`). Chạy `pwsh tools/build_installer.ps1` thay cho lệnh `iscc` tay khi muốn CI kiểm hộ — thêm `-Stub` nếu chưa publish; script dừng ngay khi ISCC cảnh báo bất cứ điều gì ngoài thông báo "câu này còn dùng bản tiếng Anh" của bản dịch một phần.
-- **Bản `win-arm64`**: `publish.ps1 -Runtime win-arm64` (hoặc gói ZIP do `release.yml` đính kèm vào GitHub Release) dành cho Windows on ARM; bộ cài `.exe` chỉ có bản x64 vì `Keyflow.iss` đặt `ArchitecturesAllowed=x64compatible`. Gói ARM được CI publish chứ chưa chạy thử trên máy ARM thật.
-- **Kiểm tệp tải về**: mỗi GitHub Release — ở [kho phát hành công khai](https://github.com/lxmtuu/PianoPath-Releases/releases) — kèm `SHA256SUMS.txt` của từng tệp đính kèm; đối chiếu bằng `Get-FileHash .\Keyflow-<phiên bản>-win-x64.zip -Algorithm SHA256`. Các gói chưa ký số, nên đây là cách người tải tự kiểm mình nhận đúng tệp repo build ra.
-- **Đổi số phiên bản**: sửa `<Version>` trong `PianoPath.csproj` trước khi publish; script và bộ cài đọc giá trị này, ứng dụng tự in nó ra menu khởi động và hộp thoại About qua `AppInfo.Version`, còn `tools/check_sources.py` ghim mọi bản sao còn lại (bộ cài, hai README, hai CHANGELOG) vào cùng một số.
-- **SmartScreen**: file chưa ký số nên Windows hiện "Windows protected your PC" ở lần chạy đầu; chọn *More info → Run anyway*. Muốn bỏ cảnh báo cần chứng chỉ ký mã, ví dụ: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
-- **Phần mềm diệt virus** đôi khi quét lâu file single-file self-contained ở lần chạy đầu; đây là hành vi bình thường với các gói .NET tự giải nén.
-
-### Kiểm tra bản đã publish
-
-```powershell
-$log = "$env:TEMP\keyflow-verification.log"
-$p = Start-Process .\publish\win-x64\PianoPath.exe -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
-Get-Content $log; "Exit code: $($p.ExitCode)"      # 0 = đạt
-Start-Process .\publish\win-x64\PianoPath.exe       # chạy thử bình thường
-```
-
-Nên thử trên một máy sạch (hoặc máy ảo) chưa cài .NET để chắc bản self-contained chạy được và bản framework-dependent báo đúng thông báo cần cài runtime.
-
-### Phát hành tự động trên GitHub
-
-Hai workflow trong `.github/workflows/`:
-
-| Workflow | Kích hoạt | Nội dung |
-| --- | --- | --- |
-| `build.yml` | push lên `main`/`arena/**`, mọi pull request | **job `static` trên `ubuntu-latest`** chạy kiểm tra tĩnh (`tools/check_sources.py`, ~10 s) → **job `test` trên `ubuntu-latest`** (project xUnit `tests/PianoPath.Tests`, chạy **song song** với nhánh Windows) và **job `build` trên `windows-latest`** (chỉ được xếp lịch khi `static` xanh): build Release → chạy `--verify` (**FAIL là đỏ build**) → **biên dịch bộ cài** trên thư mục `publish\win-x64` giả (cảnh báo lạ của ISCC là đỏ build) → render **hai bộ ảnh README** — mỗi cảnh trong `$shots` một ảnh cho mỗi ngôn ngữ — cùng gallery preset `presets.jpg`, upload artifact `keyflow-previews` (hai bộ PNG và `presets.jpg`), **báo cáo ảnh lệch** (`Report preview drift`: hai bước render vừa ghi đè `docs/previews` bằng ảnh của chính build này, nên phần khác biệt giữa cây làm việc và commit mà lượt chạy bắt đầu chính là bảng đối chiếu — `git status` không dùng được, vì bước commit ở trên đã commit trước khi push và một lần push bị từ chối để lại cây sạch trong khi nhánh vẫn mang ảnh cũ; tệp nào lệch mà ảnh mới không lên được nhánh là cảnh báo nêu tên tệp đó, kể cả ở pull request nơi bước commit bị bỏ qua) và commit ảnh mới vào nhánh đang build (bỏ qua với pull request; nhánh chỉ nhận pull request thì bước này chỉ cảnh báo, ảnh vẫn nằm trong artifact) → **một lượt publish thật** (`publish.ps1 -Mode FrameworkDependent -AllowLfsPointer -Zip`; CI không tải LFS nên SoundFont vẫn là con trỏ) rồi kiểm thư mục publish có đủ `PianoPath.exe`, `LICENSE.txt` và `Assets\` — để lỗi của đường đóng gói đỏ ngay lúc push thay vì đợi tới lần cắt bản phát hành. |
-| `release.yml` | tag `v*` hoặc bấm **Run workflow** | Checkout kèm LFS, publish **ba gói** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke test bản self-contained `win-x64` vừa publish bằng `--verify`, biên dịch bộ cài `.exe` từ chính thư mục publish đó, tính **`SHA256SUMS.txt`** cho từng tệp đính kèm, tải tất cả lên artifact và (với tag) đính kèm vào GitHub Release cùng ghi chú phát hành tự động. Bộ cài chỉ có bản `win-x64`; gói `win-arm64` không được smoke test vì runner là máy x64. Với tag, workflow còn **dựng nhánh phát hành công khai**: một nhánh *orphan* `release/public-<tag>` trong kho này (chỉ chứa `docs/release/` do `tools/make_public_docs.py` sinh và `docs/previews/`, không có lịch sử của kho nguồn) rồi **đẩy nhánh đó sang [lxmtuu/PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases)** — bằng secret `PUBLIC_RELEASES_TOKEN` nếu có, hoặc chờ người trực phát hành chạy `pwsh tools/publish_public.ps1 -Tag <tag>` (không cần lưu credential nào; `build.yml` không bao giờ chạm tới kho công khai). |
-
-```powershell
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-Mỗi lần chạy `release.yml` tải ~113 MiB từ Git LFS và tính vào hạn mức băng thông LFS của tài khoản, nên chỉ nên chạy khi phát hành. `build.yml` không tải LFS (các mục kiểm thử cần SoundFont sẽ tự động `SKIP`).
-
-**Hai kho, một sản phẩm.** Kho này là nguồn (private); [lxmtuu/PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases) là nơi công khai: mỗi tag có một nhánh `release/public-<tag>` chứa trang sản phẩm song ngữ, CHANGELOG, giấy phép, ảnh giao diện và — quan trọng nhất — các gói đính kèm trong GitHub Release. Nhánh đó **không** mang mã nguồn, không mang lịch sử commit của kho này, và không được sửa tay: `tools/check_sources.py` so từng byte của `docs/release/` với script sinh ra nó, nên một trang công khai lệch khỏi README này là một lần build đỏ. Việc thiết lập một lần (tạo kho, secret, variable), cách phát hành bằng tay và những đánh đổi của mô hình này nằm ở [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md).
-
-### Lỗi thường gặp khi publish
-
-| Hiện tượng | Nguyên nhân / cách xử lý |
-| --- | --- |
-| `publish.ps1` báo SoundFont chỉ vài trăm byte | Chưa tải LFS: `git lfs install` rồi `git lfs pull`. |
-| `NETSDK1045: The current .NET SDK does not support targeting .NET 10.0` | Cài .NET 10 SDK, hoặc SDK cũ đang được ưu tiên bởi `global.json`; kiểm tra `dotnet --list-sdks`. |
-| Máy đích báo "To run this application, you must install .NET Desktop Runtime" | Bản framework-dependent; cài .NET 10 Desktop Runtime x64 hoặc dùng bản self-contained. |
-| Mở ứng dụng nhưng không có tiếng, trang Audio báo không nạp được SoundFont | Thư mục `Assets\` không nằm cạnh `.exe`, hoặc tệp là con trỏ LFS. |
-| Trang Audio báo `NO AUDIO DEVICE` dù SoundFont đã nạp | Windows không mở được thiết bị phát (`waveOut error 2`): máy chưa có card âm thanh, hoặc thiết bị đang bị ứng dụng khác giữ ở chế độ độc quyền. Ứng dụng vẫn chạy đầy đủ, chỉ không phát tiếng. |
-| `PublishTrimmed`/`PublishAot` báo lỗi hoặc ứng dụng crash khi mở | WPF không hỗ trợ; bỏ hai tuỳ chọn này. |
-| Publish `win-x86` báo lỗi runtime pack | Chỉ dùng `win-x64` hoặc `win-arm64`; các bản 32-bit không được kiểm thử. |
-
 ## Kiểm thử
 
 Bộ xác minh tích hợp nằm trong `Diagnostics/VerificationSuite.cs` và chạy ngay bằng chính ứng dụng (cần Windows vì khởi động WPF thật):
@@ -528,115 +306,6 @@ Mã thoát `0` là đạt, `1` là có lỗi; nhật ký ghi từng mục PASS/F
 Bộ kiểm thử shader có hai mục riêng: `VerifyShaderPipeline` (không cần WPF layout) kiểm tra toán sRGB/ACES/GGX, jitter tất định, **chữ ký cache bake** (slider không liên quan không gây bake lại), bake nền phải opaque và trải sáng thật, cột phím đen phải tối hơn cột ngà, và tile overlay của một phím kêu phải che đúng phím rồi mờ ra; `VerifyShadedStage` bật/tắt `ShadingQuality` trong dock và khẳng định stage thật sự đổi giữa bàn phím vector và bàn phím shader, đồng thời bake được tái sử dụng giữa các khung hình.
 
 Engine GPU có một mục riêng, `VerifyGpuStage` (`Diagnostics/VerificationSuite.Gpu.cs`), và không đòi card đồ hoạ thật vì khung hình thử dựng trên WARP — có sẵn ở mọi runner CI. Mục này kiểm: **cài đặt** (bản cài mới mặc định `RenderBackend = Gpu`; tệp cũ ghi `Software` được nâng lên GPU khi nạp; tên engine hay tốc độ khung hình lạ rơi về mặc định; áp preset giữ nguyên engine, FPS và VSync vì chúng thuộc về máy); **look** (`GpuLook` mang đúng màu nốt, tỉ lệ bàn phím và giá trị các slider Note shimmer / Halo light pulses / Shooting stars / Landing glow, cùng lựa chọn Spotlights); **cầu nối luồng** (`GpuStageFeed` đưa cho luồng dựng hình bài đang chạy, các phím đang giữ và một đồng hồ ngoại suy không bao giờ quá 50 ms; hit và nốt live xếp hàng không mất, yêu cầu xoá chỉ được nhận đúng một lần); **shader nhúng** (đủ 12 entry point HLSL); **một khung thật** 640×360 dựng trên WARP rồi đọc ngược để đo (bàn phím phải sáng ở đáy, nổi hơn nền tối phía trên, và ảnh phải nhiều màu chứ không phải một mảng phẳng); **các họ hiệu ứng** (look mang đủ cài đặt ambient, vệt rơi, nhãn phím, chớp, hồ quang và cánh hoa; Galaxy, guide lanes và cánh hoa dựng ra hàng trăm hình sau nốt; atlas chữ 1024×768 có mực thật; và bầu trời của khung GPU sáng lên khi bật lớp thiên hà); cuối cùng là **ghi hình** (`GpuRecordingTap`: vòng dựng hình chạy một mình, không cửa sổ, không xem trước, vẫn giao đủ khung 320×180 có bàn phím trong đó).
-
-### Cổng hiệu năng (`--bench`)
-
-Ngân sách khung hình không được là cảm giác, nên app tự đo nó:
-
-```powershell
-.\bin\Release\net10.0-windows\PianoPath.exe --bench=240 --bench-out=$env:TEMP\keyflow-bench.json
-(Get-Content $env:TEMP\keyflow-bench.json -Raw | ConvertFrom-Json).scenes | Select-Object scene, frames, particles, @{n='p95';e={$_.stats.p95Ms}}
-```
-
-`--bench` **không mở cửa sổ nào**: nó chạy chính `GpuRenderLoop` của sân khấu (cùng vòng lặp, cùng mô phỏng, cùng bước đọc ngược khung về WPF) ở 1920×1080,
-cho một bài hát tự chạy qua `BenchTransport`, và ghi **thời gian của từng khung** ra JSON. Hai cảnh được đo, mỗi cảnh một ngân sách (`Diagnostics/FrameBudget.cs`):
-
-| Cảnh | Look | Ngân sách p95 |
-| --- | --- | --- |
-| `default` | cài đặt của một lần chạy đầu tiên | 8 ms |
-| `heavy` | preset có sẵn nặng nhất — *Galaxy Voyage*: thiên hà, sao, sao băng, vệt cầu vồng, pháo hoa | 16 ms |
-
-Hai con số đó là của **đường GPU**. Roadmap từng ghi "p95 < 8 ms ở *Classic Roll*, < 16 ms ở *Cinematic*" — nhưng đó là hai thứ khác loại (một preset và một mức
-đổ bóng bàn phím) và thuộc về sân khấu WPF cũ, nên chúng được viết lại thành **một look ở một kích thước**, giữ nguyên hai con số.
-
-**Máy nào bị xử theo ngưỡng.** Chỉ máy có card đồ hoạ thật: vượt ngân sách thì mã thoát là `3`. Runner CI không có card nên vẽ bằng **WARP** và *không* bị so với
-ngưỡng tuyệt đối — Windows còn trình adapter phần mềm như một adapter "phần cứng", nên app đọc cả **tên** adapter chứ không chỉ cờ WARP (`FrameBudget.IsSoftwareAdapter`),
-và tên không đọc được thì coi như phần mềm. Ở đó con số vẫn có nghĩa **tương đối**: CI giữ báo cáo của lần chạy trước trong Actions cache và so p95 lần này với nó
-trên cùng loại máy. **Trên WARP mức chênh chỉ là con số, không phải kết luận** — cùng một code mà hai lượt chạy đo được p95 307 ms rồi 788 ms, nên mọi dòng so sánh ở đó
-là `NOTE`; chỉ máy có card thật, nơi ngân sách được viết cho, mới in `WARN perf:` khi chậm hơn 50% (và `FAIL` khi vượt ngân sách). Báo cáo của mỗi lượt chạy được đính kèm làm artifact `keyflow-bench-report`, và vì nó nằm
-trong cache chứ không trong repo nên một con số đo được không bao giờ thành một commit.
-
-Cả phép đo lẫn luật so sánh đều có lớp kiểm chứng: `VerifyFrameBudget` trong `--verify` kiểm bảng ngân sách, cách tính phân vị, luật adapter, bản JSON đọc ngược được
-và **một lượt đo thật** 24 khung 320×180 qua đúng đường `--bench` đi; nửa thuần (phân vị, ngân sách, so sánh tương đối, JSON) nằm trong `tests/PianoPath.Tests`
-nên chạy được trên Linux, nơi không có Direct3D.
-
-### Bộ test chạy trên mọi máy (`tests/PianoPath.Tests`)
-
-`--verify` cần Windows vì nó khởi động WPF thật. Những phần **không** cần cửa sổ — parser MIDI, parser MusicXML, suy luận chia tay, bảng nhóm phách, bộ ghi WAV và bảng chuỗi — đã được tách ra một project xUnit trên `net10.0` thường, chạy được trên Linux/macOS và chạy lẻ được từng bài:
-
-```powershell
-dotnet test tests/PianoPath.Tests --configuration Release
-dotnet test tests/PianoPath.Tests --filter MeterTests        # một lớp
-dotnet test tests/PianoPath.Tests --filter "FullyQualifiedName~Format2"   # một bài
-```
-
-CI chạy nó ở job **`test`** trên `ubuntu-latest`, **song song** với job Windows (cả hai chỉ chờ job `static`), nên một lỗi MIDI đỏ trong khoảng một phút mà không phải đợi runner Windows rảnh.
-
-Project này **liên kết tệp nguồn** thay vì tham chiếu `PianoPath.csproj`, nên mọi kiểu `internal` của ứng dụng dùng được mà không cần `InternalsVisibleTo`, và chưa phải tách thư viện. Điều đó đặt ra một ràng buộc: **mọi tệp trong danh sách `<Compile Include>` của `tests/PianoPath.Tests/PianoPath.Tests.csproj` phải biên dịch được mà không có WPF, `System.Drawing`, Vortice hay WinMM** — thêm một tệp kéo WPF theo là job Linux đỏ ngay, và đó là tín hiệu chứ không phải lỗi.
-
-Để nối được như vậy, `Loc` đã tách làm hai nửa `partial`: `Localization/Loc.cs` là bảng chuỗi và phép tra cứu (thuần tính toán), `Localization/Localizer.cs` là nửa gán nhãn sống lên phần tử WPF. Hai nửa nối bằng một **partial method**, nên bản build nào không link nửa WPF thì lời gọi **được trình biên dịch gỡ bỏ** thay vì đòi WindowsBase.
-
-Chưa vào bộ test này: SoundFont (bộ dựng tệp `.sf2` thử nghiệm là một khối helper riêng, vẫn nằm ở `VerifySoundFontEngine`), cùng settings JSON, hồ sơ cài đặt, thư viện bài và lịch sử luyện tập — bốn thứ sau đều chạm đáy ở `PianoVisualSettingsStore` → `ShellThemes`, mà record `ShellTheme` khai báo bằng `System.Windows.Media.Color` (xem `docs/ROADMAP.md` §4 mục 2).
-
-### Kiểm tra tĩnh (chạy được trên mọi máy, kể cả không có .NET SDK)
-
-```powershell
-python tools/check_sources.py          # cú pháp C#, XML + resource XAML, danh mục dock, theme token, bảng chuỗi, link/ảnh README, bản dịch bộ cài
-python tools/shader_preview.py 780 180 0.6   # port Python của shader, xuất ảnh tools/out/ (không commit)
-pwsh tools/build_installer.ps1 -Stub   # biên dịch installer\Keyflow.iss trên thư mục publish giả (cần Inno Setup)
-```
-
-`check_sources.py` kiểm tra: cân bằng ngoặc/dấu nháy của mọi tệp C#; tính hợp lệ XML và mọi `StaticResource`/`DynamicResource` của XAML; mọi `FindName`/`FindResource` và mọi event handler trong XAML đều tồn tại trong C#; **danh mục trang trong `Ui/SettingsPages.cs` khớp từng tiêu đề, đúng thứ tự và đúng nhãn nhóm với tab strip trong `Ui/MainWindow.xaml`**; **mọi theme token mà `ShellThemeManager` phát ra đều có giá trị mặc định trong `App.xaml`**; **mọi ảnh và liên kết nội bộ trong `README.md` lẫn `README.en.md` đều tồn tại, mỗi bản phải trỏ sang bản kia**, **mọi tham số dòng lệnh mà app đọc đều có trong bảng tham số của cả hai README và ngược lại, mọi tham số/đường dẫn workflow `build.yml` truyền cho `PianoPath.exe` đều thật sự tồn tại**, **bộ cài: mọi câu trong `installer\Languages\Vietnamese.isl` đều có thật trong `Default.isl` của Inno Setup (và đúng phân đoạn `[Messages]`/`[CustomMessages]`), placeholder không rơi mất, tệp có BOM, `[Languages]`/`[LangOptions]` khai báo đúng dạng mà trình biên dịch đòi**, **kệ preset cộng đồng: mỗi tệp trong `presets/` có đủ và đúng mọi khoá của `PianoVisualSettings`, tên tệp khớp `PresetName` và không trùng preset có sẵn, và tệp đã commit vẫn đúng bằng thứ `tools/make_presets.py` sinh ra**, và **ảnh mẫu trong `docs/samples` vẫn khớp với script sinh ra nó**; và **bảng chuỗi**: mọi ngôn ngữ dịch đúng tập khoá của inventory, placeholder và xuống dòng còn nguyên, mọi chuỗi mà mã nguồn in ra (kể cả chuỗi trong XAML có marker, tên trang, theme, preset và thẻ phím tắt) đều là một khoá của inventory. CI chạy script này trước bước build trên Windows.
-
-Nhật ký `--verify` dùng bốn tiền tố: `PASS` (đã kiểm tra và đạt), `FAIL` (có lỗi, mã thoát `1`), `SKIP` (điều kiện môi trường không cho phép kiểm tra) và `NOTE` (thông tin môi trường). Bộ kiểm thử tự bỏ qua thay vì báo lỗi khi máy thiếu phần cứng: nếu `Assets\ConcertGrand.sf2` vẫn là con trỏ Git LFS (clone chưa `git lfs pull`, hoặc CI checkout với `lfs: false`) thì các mục piano đi kèm bị `SKIP` và ứng dụng được xác minh ở chế độ im lặng; nếu Windows không mở được thiết bị âm thanh (`waveOut error 2`) hoặc một cổng MIDI output không mở được, engine vẫn nạp SoundFont và chạy im lặng, kết quả ghi `NOTE` chứ không `FAIL`.
-
-## Tài liệu kỹ thuật
-
-| Tài liệu | Nội dung |
-| --- | --- |
-| [`README.en.md`](README.en.md) | Bản tiếng Anh của chính tài liệu này: cùng ảnh, cùng bảng tham số dòng lệnh, được `tools/check_sources.py` kiểm song song nên hai bản không thể lệch nhau. |
-| `docs/UI-SHADER-REVIEW.md` | Rà soát giao diện và đợt nâng cấp shader đổ bóng kiểu Unreal: mô hình shading, camera, cache bake, cách tự kiểm chứng. |
-| `docs/SETTINGS-WIRING-AUDIT.md` | Bảng đối chiếu **mọi** chức năng cài đặt với đoạn code tiêu thụ nó — chứng minh không có setting nào "chết". |
-| `docs/LOCALIZATION.md` | Kiến trúc đa ngôn ngữ: khoá là văn bản nguồn, một tệp bảng mỗi ngôn ngữ, nhãn sống, quy ước dịch tiếng Việt, cách thêm ngôn ngữ mới và ba lớp kiểm chứng. |
-| `docs/ROADMAP.md` | Hướng cập nhật tiếp theo (P0→P3), khối lượng ước đoán và những việc đã cân nhắc nhưng không làm. |
-| `docs/DOCK-NAVIGATION-AUDIT.md` | Đợt rà soát cách sắp xếp chức năng: vì sao dock chia nhóm theo mục đích (lúc viết là ba nhóm, nay là bốn — xem ghi chú ở đầu tài liệu), danh mục trang là nguồn sự thật duy nhất, thẻ phím tắt F1 và đường ảnh README, cùng các kiểm tra tự động giữ chúng không lệch. |
-| `docs/EFFECTS-REDESIGN.md` | Thiết kế hệ thống hiệu ứng: 87 hiệu ứng xếp theo bốn giai đoạn của một nốt (rơi, chạm, giữ, nhả), lớp ambient, modulator và combo theme, cùng roadmap từng phase — làm đến đâu hoàn thiện đến đó; bảng trong code nằm ở `Stage/Effects/EffectCatalog.cs`. |
-| `docs/REPO-AUDIT.md` | Kết quả rà soát toàn kho (2026‑09): phương pháp ba lớp (kiểm tra tĩnh, `--verify`, ảnh CI), những gì đã sửa kèm bằng chứng kiểm chứng và các hạn chế còn lại. |
-
-## Cấu trúc chính
-
-- `App.xaml`: theme mặc định và toàn bộ control template (button, switch, slider, combo, textbox, scrollbar, tab điều hướng, danh sách preset) — mọi token màu đọc qua `DynamicResource` nên đổi theme tức thì. `App.xaml.cs`: khởi động và đọc mọi tham số dòng lệnh (`--verify`, `--snapshot`, `--show-settings`, `--play-dialog`, `--shortcuts`, `--lang`, `--background-image`, `--gpu` / `--software`, `--preset` / `--play-chord`, `--settings-dir`, `--encode-probe` / `--encode-take`, `--bench` — xem [Tham số dòng lệnh](#tham-số-dòng-lệnh)). `AppInfo.cs`: phiên bản phát hành của bản đang chạy, đọc từ assembly mà SDK đã đóng dấu `<Version>` — nhãn phiên bản của menu khởi động, hộp thoại About và báo cáo `--bench` in cùng một con số, và `scan_release_version` không cho nguồn nào gõ lại nó.
-- `Ui/`: `MainWindow.xaml` (bố cục header / sân khấu + dock / footer transport / menu hoà nhạc / hộp thoại Play / thẻ phím tắt), `MainWindow.xaml.cs` (điều phối playback, chấm điểm, MIDI, ẩn/hiện giao diện và ghi video), `MainWindow.Settings.cs` (sinh các trang cài đặt, tìm kiếm, preset, danh sách track), `MainWindow.Menu.cs` (menu chính + hộp thoại Play + chip theme), `MainWindow.Shortcuts.cs` (thẻ F1), `SettingsPages.cs` (**danh mục 13 trang + 4 nhóm**, attached property in nhãn nhóm), `MainWindow.Language.cs` (đổi ngôn ngữ trực tiếp, dựng lại các mặt tự ghép văn bản), `DeviceOption.cs` (tách id thiết bị và caption đã dịch), `FrameClock.cs` (đồng hồ khung hình vsync dùng chung), `ChromeMotion.cs` (easing/entrance dùng chung), `ColorPickerWindow.cs`, `TextPromptWindow.cs`, `MainWindow.Practice.cs` (đường cong giảm tốc khi luyện tập: sai liên tiếp thì bài chậm xuống, đúng liên tiếp thì tăng lại về tốc độ thường) và `ThemeStudioWindow.cs` (xưởng theme: đặt tên, chọn họ backdrop và năm màu gốc, xem chrome dẫn xuất cập nhật ngay khi gõ).
-- `Theme/`: `ShellTheme.cs` (ba giao diện + bảng màu + id cũ + `ShellThemeManager`) `ChromeBackdrop.cs` (backdrop động cho menu và dock), `UserShellTheme.cs` (theme do người dùng tạo: năm màu gốc + một họ backdrop, còn bảng hai mươi token đầy đủ được **dẫn xuất** từ đó nên theme tự tạo không thể có viền khó đọc hay control tối hơn cửa sổ) và `UserThemeStore.cs` (mỗi theme một tệp JSON trong thư mục cài đặt cạnh preset người dùng; id suy từ tên nên đổi tên tệp bằng tay chỉ tạo ra một id mới).
-- `Stage/SheetLayer.cs`: lớp khuông nhạc — hình học thuần (`Step`, `Place`, `LedgerLines`, `NoteX`, `SignatureStep`, `Beams`/`Flags` cho nối đuôi, `Rests`/`Rest` cho dấu nghỉ, `Ties` cho dấu luyến, `Slurs` cho chỗ dòng nhạc đổi tay, `Chords`/`Streams` cho hợp âm và dòng đọc từng tay) cho vị trí từng nốt và từng dấu hoá trên khuông đôi, phần vẽ chỉ chuyển số đó thành đường/nốt/khoá nhạc/hoá biểu.
-- `Stage/MusicKey.cs`: tông của bài — tương quan Krumhansl–Kessler trên thời lượng vang của từng cao độ, hoá biểu mà tông đó ngụ ý, cách viết cao độ theo tông (`Spell`) và kế hoạch dấu hoá của từng ô nhịp.
-- `Stage/`: `PianoVisualSettings.cs` (thông số lưu JSON trong LocalAppData, có migration), `VisualPresets.cs` (preset có sẵn + kho preset người dùng; file preset là phong bì `Version/Thumbnail/Settings`, tệp cũ dạng JSON trần vẫn đọc được), `PianoStage.cs` (vẽ nền/vignette/beam, nốt theo 4 kiểu và 5 chế độ màu, tia lửa, wisps, lửa, vòng sóng/shockwave/ripple, chớp impact, vệt rơi, hold bar/arc, hiệu ứng nhả, 4 lớp ambient, cánh hoa, bàn phím vector hoặc shader) và `PianoStage.Gpu.cs` (cầu nối tới engine GPU: chuyển mọi thay đổi của sân khấu vào `GpuStageFeed`, hiện khung mà luồng dựng hình đọc ngược thay cho các lớp tự vẽ, và dựng atlas chữ cho tên nốt).
-- `Stage/Shading/`: shader đổ bóng kiểu Unreal cho bàn phím — `ShaderMath.cs` (GGX/Smith/Schlick, ACES, sRGB, dither), `PianoShaderScene.cs` (scene + camera + cache key), `PianoKeyboardRenderer.cs` (ray-trace bóng mềm, contact AO, IBL, đèn màu theo nốt, tile overlay).
-- `Gpu/`: engine đồ hoạ Direct3D 11 — `StageShaders.hlsl` (mọi shader, nhúng vào bản build), `GpuLook.cs` (ảnh chụp bất biến của cài đặt), `GpuStageFeed.cs` (cầu nối luồng UI → luồng dựng hình, ngoại suy đồng hồ bài hát), `GpuStageSimulation.cs` (hạt, trail, phím) cùng hai phần mở rộng `GpuStageSimulation.Ambient.cs` (guide lanes, cánh hoa, bốn lớp ambient, vệt sau nốt) và `GpuStageSimulation.Effects.cs` (sóng/chớp impact, morph, hiệu ứng nhả, hồ quang điện, tên nốt trên phím), `GpuStageRenderer.cs` (thiết bị, pipeline HDR, bloom), `GpuRenderLoop.cs` (vòng lặp game, swap chain, đọc ngược khung cho sân khấu nhúng, và lấy mẫu thời gian từng khung cho `--bench`), `GpuRecordingTap.cs` (khung off-screen đúng cỡ và FPS của bản ghi), `SwapChainHost.cs`; `Ui/GpuStageWindow.cs` và `Ui/MainWindow.Gpu.cs` nối nó vào giao diện.
-- `Stage/Effects/EffectCatalog.cs`: danh mục hiệu ứng — nguồn duy nhất cho 87 hiệu ứng của sân khấu, xếp theo bốn giai đoạn của một nốt (rơi, chạm, giữ, nhả), lớp ambient, modulator và bảy combo theme; mỗi hiệu ứng mang trạng thái `Available` hoặc `Planned` và chỉ hiệu ứng `Available` mới hiện trong UI. Thiết kế đầy đủ nằm ở `docs/EFFECTS-REDESIGN.md`.
-- `Profile/SettingsProfile.cs`: hồ sơ cài đặt — `Keyflow.profile.json` gom cài đặt sân khấu, ngôn ngữ và theme vỏ vào một tệp (nhập/xuất ở trang General, cũng nhận tệp kéo‑thả vào cửa sổ); từ chối JSON lạ, và ngôn ngữ không có trong bản build thì rơi về `en`.
-- `Audio/`: `PianoAudioEngine.cs` (đầu ra PCM `waveOut`, luồng phát và hall reverb, kèm **tap** đưa từng khối render cho bản ghi), `WavWriter.cs` (ghi WAV PCM 16-bit dạng luồng, vá kích thước khi đóng) và `SoundFontSynthesizer.cs` (đọc vùng mẫu `.sf2` theo đặc tả SF2).
-- `Camera/`: `MediaFoundation.cs` (khai báo tay đúng phần Media Foundation cần dùng — `mfplat.dll`/`mf.dll`/`mfreadwrite.dll`, kèm ghi chú thứ tự vtable), `CameraFrameReader.cs` (liệt kê camera, mở camera hoặc tệp video thành source reader RGB32, đọc khung trên luồng riêng, mọi lỗi trả về thành câu) và `CameraOverlay.cs` (hình học thuần: vị trí theo góc, lật khung bottom-up/mirror, key xanh theo ngưỡng, hệ số opacity) và `HandTracker.cs` (theo dõi bàn tay — chỉ là số học trên pixel, không mô hình: đọc khung trên lưới 32×24, nhận da theo YCbCr với cửa sổ chroma theo slider **Skin sensitivity**, nhóm ô liền kề lớn nhất là bàn tay, đếm ngón theo biên dạng cột và đổi vị trí ngang thành phím của sân khấu).
-- `Midi/`: `Meter.cs` (nhịp đơn đập theo đơn vị đã ghi, nhịp ghép 6/8–12/8 đập theo nhóm ba và trả về số phách của ô nhịp), `MidiFileReader.cs` (Standard MIDI File định dạng 0/1/2, độ chia PPQ hoặc SMPTE → nốt, tempo map, lưới phách, tên track), `MusicXmlReader.cs` (MusicXML/MXL → nốt, lưới phách, tên bè và **điểm chia tay theo khuông nhạc**) và `HandSplit.cs` (suy luận chia tay từ cao độ cho tệp MIDI), `MidiDeviceService.cs` (thiết bị WinMM).
-- `Midi/HandSplit.cs`: suy luận điểm chia tay của một bài (hai cụm theo thời lượng vang, chốt giữa C4 khi khoảng trống rộng, bỏ qua bài một tay).
-- `Stage/PresetThumbnail.cs`: ảnh xem trước lưu trong file preset (render sân khấu ở 192×112, từ chối mọi thứ không phải PNG đúng cỡ).
-- `Stage/VisualPresetShare.cs`: mã chia sẻ diện mạo (gzip + base64url, bỏ đường dẫn ảnh nền, giới hạn kích thước) và `Ui/MainWindow.Sharing.cs` (nút COPY CODE / APPLY CODE ở trang Style).
-- `Practice/PracticeHistory.cs`: lịch sử luyện tập (mỗi lượt một dòng JSON kèm danh sách nốt đã chấm điểm, mới nhất trước, lượt tốt nhất theo bài, gom theo ngày cho biểu đồ, báo cáo HTML) và `Ui/MainWindow.History.cs` (trang **History** của dock: bảng lượt chơi, biểu đồ 14 ngày, hai hàng ghost). `Practice/PracticeChart.cs` giữ hình học thuần của biểu đồ và của ghost.
-- `Library/SongLibrary.cs`: chỉ mục bài gần đây (`library.json` trong thư mục cài đặt) — mới nhất trước, tối đa 12 bài, khoá theo đường dẫn; `Ui/MainWindow.Library.cs` dựng danh sách RECENT và mục **LIBRARY** (chọn thư mục, tìm kiếm, thẻ) của hộp thoại Play và khôi phục giá trị đã lưu qua các slider.
-- `Library/SongFolderIndex.cs` + `Library/SongFolderWatcher.cs`: thư viện theo thư mục — quét tối đa 3 tầng/500 tệp, đọc tệp bằng chính reader của app, cache theo kích thước + giờ sửa (`library-index.json` kèm thẻ), tìm kiếm theo tiêu đề/tên tệp/thẻ, và watcher chỉ báo "có thay đổi" để cửa sổ tự quét lại trên luồng của nó.
-- `Video/AviVideoRecorder.cs`: ghi frame AVI bằng Windows Video for Windows.
-- `Video/Mp4Recorder.cs`: ghi **MP4 (H.264 + AAC)** bằng Media Foundation sink writer — video từ khung BGRA của sân khấu (chuyển sang NV12 qua `Video/Nv12Frame.cs`), audio từ chính PCM của engine qua giao kèo `Audio/IAudioTrack.cs`; `Camera/MediaFoundation.Encode.cs` giữ phần khai báo COM theo vừa đúng thứ tự vtable.
-- `Video/IFrameRecorder.cs`: giao kèo chung của hai bộ ghi (kích thước, khung hình mỗi giây, số khung, dung lượng, `HasAlpha`) để phiên ghi trong `Ui/MainWindow.xaml.cs` không cần biết đang ghi định dạng nào.
-- `Video/PngSequenceRecorder.cs`: ghi chuỗi khung PNG 32-bit (`frame-000001.png`) vào một thư mục, kèm `sequence.json` mô tả kích thước/khung hình mỗi giây/số khung và lệnh ffmpeg dựng lại thành video alpha.
-- `Diagnostics/VerificationSuite.cs`: bộ kiểm tra hồi quy chạy bằng `--verify`, fixtures tự tạo; `Diagnostics/VerificationSuite.Gpu.cs` giữ `VerifyGpuStage`, phần kiểm engine GPU. `Diagnostics/Mp4TakeAttempt.cs` ghi một bản MP4 ngắn và kể từng bước nó đang làm, còn `Diagnostics/EncodeProbeAttempt.cs` ghi ba ảnh vào một AVI qua đúng bước lấy mẫu của bản ghi mà không dùng bộ mã hoá nào — nó trả lời câu hỏi mà một bản ghi hỏng để ngỏ: máy không hoàn tất được thứ không cần codec thì lỗi nằm ở chính stack media của máy. `Diagnostics/FrameBudget.cs` giữ nửa thuần của **cổng hiệu năng** (ngân sách p95 theo từng cảnh, phân vị nearest-rank, luật máy nào bị xử theo ngưỡng, báo cáo JSON và phép so tương đối — chạy được trên mọi máy, được link vào `tests/PianoPath.Tests`), còn `Diagnostics/FrameBenchmark.cs` là nửa chạy `GpuRenderLoop` thật cho `--bench`.
-- `presets/`: kệ preset cộng đồng — mỗi tệp là một preset đầy đủ, `tools/make_presets.py` sinh ra và `PianoPath.csproj` nhúng thẳng vào bản build (`Stage/CommunityPresets.cs` đọc), nên thêm một diện mạo mới chỉ là thêm một tệp JSON.
-- `tools/`: `check_sources.py` (kiểm tra tĩnh cú pháp/XAML/danh mục dock/theme token/README/bảng tham số dòng lệnh, chạy mọi máy), `make_presets.py` (sinh `presets/*.json` từ giá trị mặc định của `PianoVisualSettings`), `shader_preview.py` (port Python của shader để xem trước, ảnh xuất vào `tools/out/`, không commit) và `make_stage_background.py` (sinh ảnh nền mẫu `docs/samples/stage-backdrop.png`), `add_string.py` (thêm một khoá chuỗi cùng bản dịch tiếng Việt vào cả hai bảng `Localization/` đúng thứ tự ordinal), `inno_messages.py` (sinh danh sách tên câu hợp lệ của Inno Setup — `installer/Languages/messages.txt`) và `build_installer.ps1` (biên dịch bộ cài, dùng chung cho cả hai workflow).
-- `Localization/`: `Localizer.cs` (ngôn ngữ, bảng tra, nhãn sống, marker XAML) và `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + bản dịch; thêm ngôn ngữ = thêm một tệp như vậy).
-- `docs/previews/`: ảnh giao diện do ứng dụng render trong CI — `vi/` cho bản README này, `en/` cho `README.en.md` (mỗi thư mục 14 ảnh), cùng `presets.jpg` (gallery 14 preset × engine phần mềm | GPU, dùng chung cho cả hai bản); tất cả do workflow sở hữu, không nên tay nộp ảnh khác vào.
-- `docs/samples/`: ảnh nền mẫu mà repo tự sinh (`tools/make_stage_background.py`), dùng cho ảnh chụp tính năng ảnh nền và để mọi người thử tính năng này mà không cần tìm ảnh trên mạng.
-- `CHANGELOG.md` / `CHANGELOG.en.md`: nhật ký thay đổi song ngữ — mỗi README trỏ tới bản của mình, và `scan_release_version` giữ danh sách phiên bản của cả hai khớp `<Version>`;
-  `publish.ps1`: script publish/đóng gói (self-contained hoặc framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: hồ sơ Publish cho Visual Studio; `Properties/AssemblyInfo.cs`: thuộc tính `ThemeInfo` của WPF (nơi tìm resource dictionary theo theme); `installer/Keyflow.iss`: script Inno Setup tạo bộ cài; `installer/Languages/`: bản dịch tiếng Việt dạng tệp một phần (`Vietnamese.isl`) cùng danh sách tên câu hợp lệ (`messages.txt`).
-- `.github/workflows/`: `build.yml` (job `static` trên Ubuntu chạy kiểm tra tĩnh, job `test` trên Ubuntu chạy project xUnit portable, rồi job `build` trên Windows: build Release, `--verify`, **đo ngân sách khung hình bằng `--bench` rồi so với lần chạy trước trong cache**, dựng thử bộ cài trên thư mục giả, render **hai bộ ảnh README** — mỗi cảnh một ảnh cho mỗi ngôn ngữ — cùng gallery preset rồi commit ảnh về nhánh nếu nhánh cho phép, và cuối cùng **publish thử một bản framework-dependent** để lỗi của đường đóng gói đỏ ngay lúc push) và `release.yml` (checkout kèm LFS, publish ba gói, smoke test bản vừa publish, dựng bộ cài từ chính thư mục đó, băm từng gói thành `SHA256SUMS.txt`, rồi đính kèm tất cả vào GitHub Release khi đẩy tag `v*`).
 
 ## Giấy phép
 

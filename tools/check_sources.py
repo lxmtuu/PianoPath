@@ -1146,6 +1146,183 @@ def scan_project_files():
     return errors
 
 
+# The files a public release branch may hold: the two product pages the generator writes, the changelogs,
+# the licences, the document about the two languages, the version marker, and pictures. Anything else is
+# either a mistake or a leak, and the release branch is the one place where a mistake is public for ever.
+PUBLIC_RELEASE_FILES = {
+    "README.md", "README.en.md", "CHANGELOG.md", "CHANGELOG.en.md", "LICENSE",
+    "Assets/ATTRIBUTION.txt", "docs/LOCALIZATION.md", "VERSION",
+}
+
+
+def scan_public_release():
+    """The source repository is private and the release repository is public, so what crosses the line has
+    to be pinned by something other than good intentions.
+
+    Three things can go wrong here, and none of them shows up in a build: the public page can drift from
+    the README it is generated from (the drift is invisible unless somebody reads both), a source file can
+    be copied into the public tree (a leak nobody notices until a stranger downloads it), and the token
+    that writes to the public repository can be reachable from more of the workflow than the one step that
+    needs it. So this rule compares ``docs/release/`` with its generator byte for byte, keeps the list of
+    files that may travel explicit, checks every link on the generated pages, and asserts that the token
+    is named in exactly one file.
+    """
+    import importlib.util
+    import tempfile
+
+    errors = []
+    generator_path = ROOT / "tools" / "make_public_docs.py"
+    target = ROOT / "docs" / "release"
+    if not generator_path.exists():
+        return ["tools/make_public_docs.py is missing; it writes and explains the public release documents"]
+    if not target.exists():
+        return ["docs/release/ is missing; run `python3 tools/make_public_docs.py` and commit the result"]
+
+    spec = importlib.util.spec_from_file_location("make_public_docs", generator_path)
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except SystemExit as error:
+        return [f"tools/make_public_docs.py refuses to run: {error}"]
+
+    # 1. One public repository, named the same wherever it is typed.
+    repository = module.PUBLIC_REPOSITORY
+    workflow = ROOT / ".github" / "workflows" / "release.yml"
+    workflow_text = workflow.read_text(encoding="utf-8") if workflow.exists() else ""
+    installer = (ROOT / "installer" / "Keyflow.iss").read_text(encoding="utf-8")
+    names = {
+        "tools/make_public_docs.py": re.search(r'PUBLIC_REPOSITORY = "([^"]+)"', generator_path.read_text(encoding="utf-8")),
+        ".github/workflows/release.yml": re.search(r"vars\.PUBLIC_RELEASES_REPOSITORY \|\| '([^']+)'", workflow_text),
+        "installer/Keyflow.iss": re.search(r"AppPublisherURL=https://github\.com/(\S+)", installer),
+        "tools/publish_public.ps1": re.search(r"\$Repository = '([^']+)'",
+                                              (ROOT / "tools" / "publish_public.ps1").read_text(encoding="utf-8")
+                                              if (ROOT / "tools" / "publish_public.ps1").exists() else ""),
+    }
+    for name, found in names.items():
+        if not found:
+            errors.append(f"{name} no longer names the public release repository (expected "
+                          f"{repository!r}); a reader of one file would have to guess where releases go")
+        elif found.group(1) != repository:
+            errors.append(f"{name} points at {found.group(1)}, while tools/make_public_docs.py publishes "
+                          f"to {repository} — the installer, the workflow and the public pages disagree")
+    for name in ("README.md", "README.en.md", "docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md"):
+        path = ROOT / name
+        if not path.exists():
+            errors.append(f"{name} is missing; it is one of the places a reader is told where releases live")
+        elif f"github.com/{repository}" not in path.read_text(encoding="utf-8"):
+            errors.append(f"{name} never links to the public release repository {repository}; a reader of "
+                          f"the private repository has no way to find where the packages are published")
+
+    # 2. docs/release is exactly what the generator writes.
+    try:
+        version = module.release_version()
+    except SystemExit as error:
+        errors.append(f"tools/make_public_docs.py cannot read the release version: {error}")
+        return errors
+    committed = {path.relative_to(target).as_posix(): path.read_bytes()
+                 for path in target.rglob("*") if path.is_file()}
+    with tempfile.TemporaryDirectory() as scratch:
+        generated_paths = module.write_all(Path(scratch), version)
+        generated = {path.relative_to(scratch).as_posix(): path.read_bytes() for path in generated_paths}
+    for name in sorted(committed.keys() - generated.keys() - {"docs/previews"}):
+        if name.startswith("docs/previews/"):
+            continue
+        errors.append(f"docs/release/{name} is not something tools/make_public_docs.py writes; the public "
+                      f"branch holds documents the project generates and nothing else")
+    for name in sorted(generated.keys() - committed.keys()):
+        errors.append(f"docs/release/{name} is missing; run `python3 tools/make_public_docs.py`")
+    for name in sorted(generated.keys() & committed.keys()):
+        if generated[name] != committed[name]:
+            errors.append(f"docs/release/{name} does not match tools/make_public_docs.py — regenerate it "
+                          f"with `python3 tools/make_public_docs.py` instead of editing it by hand")
+
+    # 3. Nothing on the public branch is source code, and no source file would be copied there either.
+    for name in sorted(committed):
+        if name == "docs/previews" or name.startswith("docs/previews/"):
+            continue
+        if name not in PUBLIC_RELEASE_FILES:
+            errors.append(f"docs/release/{name} is not in the list of files allowed to be public; if it is "
+                          f"meant to travel, add it to PUBLIC_RELEASE_FILES in tools/check_sources.py too")
+    for source, destination in module.COPIES:
+        source_path = ROOT / source
+        if not source_path.exists():
+            errors.append(f"tools/make_public_docs.py copies {source}, which is not in the checkout")
+        if Path(destination).suffix in module.FORBIDDEN_SUFFIXES:
+            errors.append(f"tools/make_public_docs.py would copy {source} to {destination} in the public branch")
+
+    # 4. Every link on the public pages has a destination.
+    for name, own in (("README.md", "vi"), ("README.en.md", "en")):
+        text = committed.get(name, b"").decode("utf-8")
+        covered = set(generated.keys()) | PUBLIC_RELEASE_FILES
+        headings = {readme_slug(m.group(2)) for m in re.finditer(r"^(#{1,6})\s+(.*)$", text, re.M)}
+        for anchor in re.findall(r"\]\(#([^)\s]+)\)", text):
+            if anchor not in headings:
+                errors.append(f"docs/release/{name} links to '#{anchor}', which is not a heading there")
+        for link in re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text):
+            if link in covered:
+                continue
+            if link.startswith("docs/previews/"):
+                # The release step copies the whole docs/previews folder, so any picture CI knows about is
+                # there; what still has to hold is the rule the two pages follow in this repository: each
+                # edition shows its own language's pictures.
+                parts = link.split("/")
+                # docs/previews/<lang>/<picture> belongs to one edition; docs/previews/<picture> is shared
+                # (the preset gallery is, because it shows both engines side by side).
+                if len(parts) >= 4 and parts[2] != own:
+                    errors.append(f"docs/release/{name} shows '{link}', which belongs to the other "
+                                  f"language's picture set")
+                continue
+            errors.append(f"docs/release/{name} links to '{link}', which no step copies into the release branch")
+    if "docs/previews" not in workflow_text:
+        errors.append(".github/workflows/release.yml no longer copies docs/previews into the public branch, "
+                      "so every picture on the public pages is a broken link")
+
+    # 5. The public pages say what a downloader has to know, and the workflow still attaches those files.
+    attachments = ("publish/*.zip", "publish/SHA256SUMS.txt", "installer/Output/Keyflow-Setup-*.exe")
+    for pattern in attachments:
+        if pattern not in workflow_text:
+            errors.append(f".github/workflows/release.yml no longer attaches {pattern}; the download table "
+                          f"on the public pages describes a release that would not carry it")
+    for name, language in (("README.md", "vi"), ("README.en.md", "en")):
+        text = committed.get(name, b"").decode("utf-8")
+        for fragment in ("SHA256SUMS.txt", "Keyflow-Setup-", "win-x64.zip", "win-x64-fd.zip", "win-arm64.zip",
+                         "Get-FileHash", "SmartScreen", "LICENSE.txt", "Assets\\ATTRIBUTION.txt", "Assets\\"):
+            if fragment not in text:
+                errors.append(f"docs/release/{name} ({language}) does not mention {fragment!r}; the download "
+                              f"section has to name the packages, the hashes and the files that travel with them")
+
+    # 6. The token that writes to the public repository is named in one workflow and nothing else.
+    token = "PUBLIC_RELEASES_TOKEN"
+    holders = []
+    for path in sorted(ROOT.glob("**/*")):
+        if not path.is_file() or ".git/" in path.as_posix() or "obj" in path.parts or "bin" in path.parts:
+            continue
+        # The generator is imported by this rule, and this file has to name the token to check it; the
+        # scan looks for the token in every other file.
+        if path in (generator_path, Path(__file__).resolve()):
+            continue
+        try:
+            if token in path.read_text(encoding="utf-8"):
+                holders.append(path.relative_to(ROOT).as_posix())
+        except (UnicodeDecodeError, OSError):
+            continue
+    # Documentation may name it — the runbook tells a maintainer what to configure, and both READMEs
+    # explain the model. What must not name it is anything that can act: a workflow, a script, a source
+    # file. That is the whole point of the token living in one step of one workflow.
+    for name in holders:
+        if name.endswith(".md") or name == ".github/workflows/release.yml":
+            continue
+        errors.append(f"{name} names {token}; the token belongs to the one release step that publishes, "
+                      f"and tools/publish_public.ps1 exists so a maintainer needs no stored credential")
+    if ".github/workflows/release.yml" not in holders:
+        errors.append(f".github/workflows/release.yml no longer names {token}; the automatic publish step "
+                      f"cannot be told which credential to use")
+    if ".github/workflows/build.yml" in holders:
+        errors.append(f".github/workflows/build.yml names {token}; the build job must not be able to reach "
+                      f"the public repository at all")
+    return errors
+
+
 RELEASE_VERSION = re.compile(r"\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?")
 # A changelog entry is "## <version> — <date>"; an "## Unreleased" section is allowed on top and is not
 # a version, so it is skipped rather than compared.
@@ -1288,6 +1465,7 @@ def main():
     errors.extend(scan_dead_keys(cs_files, xaml_files))
     errors.extend(scan_release_version(cs_files))
     errors.extend(scan_project_files())
+    errors.extend(scan_public_release())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
@@ -1296,6 +1474,7 @@ def main():
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
+    print("checked the public release documents against their generator, their links, and the token that publishes them")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

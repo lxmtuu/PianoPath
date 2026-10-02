@@ -1,14 +1,24 @@
 # Keyflow · Piano Performance & Concert VFX Studio
 
-> Bản tiếng Việt: [README.md](README.md) · This is the English translation of the same document. Every
-> screenshot below is rendered by the application itself, so the two files always show the same build.
+> **This is the release repository, not the source repository.** It carries only Keyflow's built
+> packages and its user documentation; the source lives in a private repository. Everything here
+> is produced by the source repository's release pipeline at exactly tag `v1.0.0` — see
+> **[Downloading a release](#downloading-a-release)** below, **[Releases](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)** for the
+> newest one, and **[Issues](https://github.com/lxmtuu/PianoPath-Releases/issues)** to report a defect.
+>
+> *Do not edit files in this repository by hand*: the branch is rebuilt from the source repository
+> on every release, so hand edits are overwritten.
+
+> Bản tiếng Việt: [README.md](README.md) · Both language editions are generated from one
+> source, and every screenshot below is rendered by the application itself, so the two files always
+> show the same build.
 >
 > **Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)** (bản tiếng Việt: [CHANGELOG.md](CHANGELOG.md))
 > — everything a user can see, recorded per released version.
 >
 > **Download a build: [the public release repository](https://github.com/lxmtuu/PianoPath-Releases/releases)** — the portable ZIP and the `.exe`
-> installer. The repository you are reading is the **private source repository**; packages and the product
-> page live in that other one (see [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md)).
+> installer. The repository you are reading is the **private source repository**: the source lives here, while
+> the packages and the product page live in that other one.
 
 Keyflow is a Windows desktop application (C# · WPF · .NET 10) for **playing, practising and making
 piano videos from MIDI** at concert-production quality. The interface ships **two languages — English
@@ -45,39 +55,69 @@ else's artwork.*
 | ![Keyflow main menu](docs/previews/en/main-menu.png) | ![Design dock](docs/previews/en/design-dock.png) | ![Theme page](docs/previews/en/theme-dock.png) |
 
 > **Every image in the README is rendered by the application** in CI (`--snapshot`). To refresh them
-> after a UI change, see [Rendering the interface pictures again](#rendering-the-interface-pictures-again).
+> the pictures are rendered again whenever the
+> interface changes and copied here on every release.
+
+## Downloading a release
+
+Every release (`v1.0.0` and later) is a GitHub **Release** holding four packages and a
+`SHA256SUMS.txt` covering all of them: **[https://github.com/lxmtuu/PianoPath-Releases/releases/latest](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)**.
+
+| File | What it is | What the target PC needs |
+| --- | --- | --- |
+| `Keyflow-1.0.0-win-x64.zip` | Portable **self-contained** build: unzip and run `PianoPath.exe` | Nothing else |
+| `Keyflow-Setup-1.0.0.exe` | **Installer** for Windows x64: Start Menu/Desktop shortcuts, an uninstall entry, an English/Vietnamese wizard | Nothing else |
+| `Keyflow-1.0.0-win-x64-fd.zip` | **Framework-dependent** build, far smaller | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `Keyflow-1.0.0-win-arm64.zip` | Windows on ARM, self-contained (published by CI; no ARM machine has run it yet) | Nothing else |
+
+Run the installer and you are done; for a ZIP, **unzip the whole folder and run `PianoPath.exe`** — never
+separate the `.exe` from its folder:
+
+```
+Keyflow-1.0.0-win-x64\
+├── PianoPath.exe              ← the single executable
+├── LICENSE.txt                ← the MIT licence, which has to travel with copies
+└── Assets\
+    ├── ConcertGrand.sf2       ← the ~113 MiB SoundFont; it must sit next to the .exe
+    └── ATTRIBUTION.txt        ← FreePats credit (CC BY 3.0)
+```
+
+- **Checking a download**: each release carries `SHA256SUMS.txt`; compare with
+  `Get-FileHash .\Keyflow-1.0.0-win-x64.zip -Algorithm SHA256`. The packages are **not code-signed**,
+  so this is the only way to be sure the file that arrived is the file the pipeline built.
+- **SmartScreen**: because nothing is signed, the first launch shows *"Windows protected your PC"* —
+  choose **More info → Run anyway**.
+- **Keep the licences**: `LICENSE.txt` (MIT) and `Assets\ATTRIBUTION.txt` (the SoundFont's CC BY 3.0)
+  ship inside every package; do not remove them when passing a copy on.
+- **What changed**: [CHANGELOG.en.md](CHANGELOG.en.md) (Vietnamese edition: [CHANGELOG.md](CHANGELOG.md))
+  — one entry per release, listing everything a user can see.
+- **The verification suite**: `PianoPath.exe --verify --verify-log=%TEMP%\keyflow-verify.log` runs on the
+  machine you just downloaded to and prints PASS/FAIL per subject (a subject that needs hardware you do
+  not have reports SKIP, which is not a failure).
 
 ## Contents
 
-- [Quick start](#quick-start) · [System requirements](#system-requirements)
-- [Installing the tools](#installing-the-tools) · [Getting the source](#getting-the-source) · [Building and running](#building-and-running)
-- [First-time setup](#first-time-setup) · [Getting started](#getting-started)
+- [Downloading a release](#downloading-a-release)
+- [System requirements](#system-requirements)
+- [First-time setup](#first-time-setup)
+- [Getting started](#getting-started)
 - [Keyboard & shortcuts](#keyboard--shortcuts)
-- [Features](#features) · [Languages](#languages) · [Interface map](#interface-map) · [Current limitations](#current-limitations)
-- [Rendering the interface pictures again](#rendering-the-interface-pictures-again) · [Packaging and shipping the .exe](#packaging-and-shipping-the-exe)
-- [Testing](#testing) · [Technical documentation](#technical-documentation) · [Repository layout](#repository-layout) · [Licence](#licence)
-
-## Quick start
-
-Already know .NET? The whole flow fits in a few PowerShell commands (each step is explained below):
-
-```powershell
-winget install --id Git.Git -e; winget install --id GitHub.GitLFS -e; winget install --id Microsoft.DotNet.SDK.10 -e
-git lfs install
-git clone https://github.com/lxmtuu/PianoPath.git; cd PianoPath; git lfs pull
-dotnet run --project .\PianoPath.csproj -c Release    # build, then open the application
-.\publish.ps1 -Zip                                    # package publish\win-x64\PianoPath.exe + a ZIP to send around
-```
-
-If the machine blocks PowerShell scripts, run `Set-ExecutionPolicy -Scope Process Bypass` before
-`.\publish.ps1`.
+- [Features](#features)
+  - [Stage & visual effects](#stage--visual-effects)
+  - [Audio, MIDI & practice](#audio-midi--practice)
+  - [Interface, presets & recording](#interface-presets--recording)
+- [Languages](#languages)
+- [Interface map](#interface-map)
+- [Current limitations](#current-limitations)
+- [Testing](#testing)
+- [Licence](#licence)
 
 ## System requirements
 
 | Component | Requirement | Notes |
 | --- | --- | --- |
 | Operating system | Windows 10 (22H2 recommended) or Windows 11, 64-bit | The application uses WPF and WinMM, so it runs on Windows only. |
-| To **run a packaged build** | Nothing extra for the self-contained build; the framework-dependent build needs the **.NET 10 Desktop Runtime (x64)** | See [Packaging and shipping the .exe](#packaging-and-shipping-the-exe). |
+| To **run a packaged build** | Nothing extra for the self-contained build; the framework-dependent build needs the **.NET 10 Desktop Runtime (x64)** | See [Downloading a release](#downloading-a-release). |
 | To **build from source** | **.NET 10 SDK** (10.0.100 or newer), **Git** and **Git LFS** | The SoundFont `Assets/ConcertGrand.sf2` (~113 MiB) is stored through Git LFS. |
 | IDE (optional) | Visual Studio 2026 with the **.NET desktop development** workload, or VS Code + the **C# Dev Kit** extension | .NET 10 needs Visual Studio 2026 (18.0) or newer; VS 2022 can open the project once the .NET 10 SDK is installed but is not fully supported. |
 | Disk | ~1.5 GB for the SDK + ~500 MB for sources and build output | A self-contained publish adds ~300 MB. |
@@ -85,147 +125,6 @@ If the machine blocks PowerShell scripts, run `Set-ExecutionPolicy -Scope Proces
 | Graphics | A GPU with **Direct3D 11** (feature level 11_0 or newer, shader model 5.0) | The default stage is the GPU engine: Keyflow tries the graphics card first and only then **WARP**, Windows' software rasterizer (the same shaders, just slower than a real card); the HLSL shaders are compiled at startup with the `d3dcompiler_47.dll` that ships with Windows. If Direct3D cannot start, the WPF renderer takes over and the reason is shown under **General → GRAPHICS ENGINE**. |
 | MIDI (optional) | A USB piano/keyboard that Windows recognises | Without one you can still play with the computer keyboard or the on-screen piano. |
 | Python (optional) | Python 3.9+ | Only for `tools/check_sources.py` (static checks, no .NET SDK needed). |
-
-## Installing the tools
-
-Open **PowerShell** (no administrator rights needed) and install the tools in order. Skip anything you
-already have.
-
-1. **Git and Git LFS**
-
-   ```powershell
-   winget install --id Git.Git -e
-   winget install --id GitHub.GitLFS -e
-   ```
-
-   Close and reopen PowerShell, then enable LFS once for the current Windows account:
-
-   ```powershell
-   git lfs install
-   ```
-
-   Without winget, download Git from <https://git-scm.com/download/win> and Git LFS from <https://git-lfs.com>.
-
-2. **.NET 10 SDK** (it already includes the runtime needed to run the app)
-
-   ```powershell
-   winget install --id Microsoft.DotNet.SDK.10 -e
-   ```
-
-   Or download "SDK 10.0.x – Windows x64 Installer" from <https://dotnet.microsoft.com/download/dotnet/10.0>. Reopen PowerShell and check:
-
-   ```powershell
-   dotnet --list-sdks      # one line must read 10.0.xxx
-   git lfs version         # must print git-lfs/x.y.z
-   ```
-
-3. **IDE (optional)**
-   - **Visual Studio 2026**: get Community (free) from <https://visualstudio.microsoft.com/>, then tick the **.NET desktop development** workload in the Visual Studio Installer. That workload already brings the .NET 10 SDK.
-   - **Visual Studio Code**: install the **C# Dev Kit** extension (Microsoft); it uses the SDK from step 2.
-
-## Getting the source
-
-This repository is **private**: only the owners and invited collaborators can clone it. An end user does
-not need the source — download a package from [the public release repository](https://github.com/lxmtuu/PianoPath-Releases/releases). What follows
-is for contributors who have been given access.
-
-```powershell
-cd $HOME\source            # or any folder; avoid paths with special characters
-git clone https://github.com/lxmtuu/PianoPath.git
-cd PianoPath
-git lfs pull               # downloads the real SoundFont (~113 MiB) if the clone did not
-```
-
-Check the SoundFont is the real thing (it must be 118,398,836 bytes ≈ 113 MiB, not 134 bytes):
-
-```powershell
-(Get-Item .\Assets\ConcertGrand.sf2).Length
-```
-
-If the number is only a few hundred bytes the file is still an **LFS pointer**: run `git lfs install`
-again and then `git lfs pull`. The application still opens with the pointer but reports that it could
-not load a SoundFont; in that case load another `.sf2` for the session with **LOAD SOUNDFONT** (Audio
-page).
-
-Downloading the ZIP from GitHub ("Code → Download ZIP") does **not** include LFS files; use
-`git clone`, or download the SoundFont separately and copy it to `Assets\ConcertGrand.sf2`.
-
-## Building and running
-
-### Command line (recommended)
-
-```powershell
-dotnet restore .\PianoPath.csproj                        # restore packages (first time)
-dotnet build   .\PianoPath.csproj -c Release             # build → bin\Release\net10.0-windows\PianoPath.exe
-dotnet run --project .\PianoPath.csproj -c Release       # build (if needed) and run
-```
-
-- `dotnet run` without `-c Release` uses the Debug configuration (`bin\Debug\net10.0-windows\PianoPath.exe`), which is slower when drawing many particles.
-- You can also run the `.exe` from the `bin\...` folder directly; the `Assets\` folder (SoundFont, attribution) is copied next to it automatically.
-- On first launch Windows may ask about the firewall or show SmartScreen, because the file is not code-signed; choose *More info → Run anyway*.
-
-### Command line switches
-
-| Switch | Effect |
-| --- | --- |
-| `--verify [--verify-log=<file>]` | Run the regression verification suite and exit (exit code `0` = passed). See [Testing](#testing). |
-| `--encode-probe=<file.avi>` | Write **three frames** into an uncompressed AVI and exit (exit code `0` = written, `2` = this machine could not). It is the **sample-plumbing probe**: an AVI needs no encoder at all, so `--verify` asks it only when a run produced **no MP4 take** — and always *after* the take, never before it, so a diagnostic that hangs cannot block the very thing it exists to explain. |
-| `--encode-take=<file.mp4>` | Write **one** short 64×48 MP4 take and exit, printing each step it took (exit code `0` = the take was written, `2` = this machine cannot write an MP4). It is the child process `--verify` starts to try the encoders: they are native code that can take a whole process down with it, which would cost the run its verdict — out of process it costs a SKIP line instead. |
-| `--bench[=<frames>] [--bench-out=<file.json>] [--bench-baseline=<file.json>]` | Run the **perf gate** and exit: it draws the GPU stage through the app's own render loop at **1920×1080**, measures **every frame's own length** for two scenes (the *default look* and the *busiest built-in look*) and writes a JSON report — mean/median/p95/p99/max plus each frame time. Exit code `0` = passed, `2` = no frame could be measured at all (this machine has no Direct3D device, or the render loop stopped), `3` = **over budget** on a machine with a real graphics card (p95 < 8 ms for the default scene, < 16 ms for the heavy one). A machine with only a software rasterizer (WARP — every CI runner) is **never judged against the absolute budgets**: the report still carries every number, and CI compares them **relatively** with the previous run on the same kind of machine (`--bench-baseline` is that run's report). Measures 120 frames by default and writes `%TEMP%\keyflow-bench.json`. See [The frame budget gate](#the-frame-budget-gate---bench). |
-| `--show-settings [--settings-tab=style\|theme\|notes\|particles\|keyboard\|background\|camera\|audio\|midi\|practice\|history\|recording\|general]` | Open the settings dock on a given page — all 13 pages of the dock, including `history` (the practice history, its chart and ghosts); `general` = the General page: language, graphics engine, settings profile. |
-| `--snapshot <file.png> [--compact] [--play-preview] [--menu]` | Capture the window and exit (`--compact` = 1080×700, `--play-preview` = pre-press a note, `--menu` = open the startup menu). |
-| `--gpu` | Kept for older launch scripts: the **Direct3D 11 GPU stage is the default stage** of every run, so this flag changes nothing. A machine without a graphics card uses WARP, Windows' software rasterizer. CI uses it to capture `stage-gpu.png`. |
-| `--software` | Draw **one run** with the WPF renderer instead of the GPU engine (the stored settings stay untouched): used for deterministic captures and CI's software column of the preset gallery. |
-| `--play-dialog` / `--shortcuts` | Open the Play dialog / the shortcuts card so it can be captured (used together with `--snapshot`). |
-| `--lang=<en\|vi>` | Run once in the given language, **overriding** the stored setting — used to capture Vietnamese screenshots or to check a translation without touching `%LOCALAPPDATA%\Keyflow`. |
-| `--preset=<name>` / `--play-chord` | Apply a built-in preset for this run only (spaces optional: `--preset=GalaxyVoyage`), and hold a spread chord while capturing so the hold effects that link keys (electric arcs) show. CI uses them to capture `stage-gpu-galaxy.png` and `stage-gpu-storm.png`. |
-| `--background-image=<file.png>` | Draw a specific picture behind the keyboard **for this run only**: it does not set the "modified" flag and never auto-saves, so `visual-settings.json` stays untouched. CI uses it to render the background-feature illustration from the generated sample `docs/samples/stage-backdrop.png` (built by `tools/make_stage_background.py`) instead of somebody's screenshot. |
-| `--settings-dir=<folder>` | Read/write settings and user presets in another folder (default `%LOCALAPPDATA%\Keyflow`) — handy for a portable build or for capturing a pristine first run. `--verify` always uses a temporary folder, so it **never overwrites your real settings or presets**. |
-
-Example that reproduces the README pictures exactly (twenty-eight images — a set per language: this edition
-reads `docs/previews/en` and `README.md` reads `docs/previews/vi`, with `--lang` pinning each set):
-
-```powershell
-$exe = ".\bin\Release\net10.0-windows\PianoPath.exe"
-foreach ($lang in @('en', 'vi')) {
-  $set = "docs\previews\$lang"        # each README reads only its own language's pictures
-  $dir = "$env:TEMP\keyflow-preview-$lang"   # temporary settings folder: every capture is a pristine first run
-  Remove-Item -Recurse -Force $dir -ErrorAction SilentlyContinue   # CI uses a temporary folder per picture
-  & $exe --snapshot $set\stage-live.png       --compact --play-preview  --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\stage-gpu.png        --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord
-  & $exe --snapshot $set\stage-gpu-galaxy.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=GalaxyVoyage
-  & $exe --snapshot $set\stage-gpu-storm.png  --compact --play-preview  --lang=$lang --settings-dir="$dir" --gpu --play-chord --preset=ElectricStorm
-  & $exe --snapshot $set\background-image.png --compact --play-preview  --lang=$lang --settings-dir="$dir" --background-image=docs\samples\stage-backdrop.png
-  & $exe --snapshot $set\main-menu.png         --compact --menu          --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\design-dock.png       --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=style
-  & $exe --snapshot $set\theme-dock.png        --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=theme
-  & $exe --snapshot $set\practice-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=practice
-  & $exe --snapshot $set\history-dock.png      --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=history
-  & $exe --snapshot $set\recording-dock.png    --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=recording
-  & $exe --snapshot $set\play-dialog.png       --compact --play-dialog   --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\shortcuts.png         --compact --shortcuts     --lang=$lang --settings-dir="$dir"
-  & $exe --snapshot $set\language-dock.png     --compact --show-settings --lang=$lang --settings-dir="$dir" --settings-tab=general
-}
-```
-
-### Visual Studio 2026
-
-1. **File → Open → Project/Solution**, pick `PianoPath.csproj` (there is no `.sln`; Visual Studio creates a temporary solution).
-2. Choose the **Release** or **Debug** configuration in the toolbar, then press **F5** (run with the debugger) or **Ctrl+F5**.
-3. To run with switches (for example `--verify`): **Project → PianoPath Properties → Debug → Open debug launch profiles UI → Command line arguments**.
-
-### Visual Studio Code
-
-1. **File → Open Folder** and pick the `PianoPath` folder; C# Dev Kit finds `PianoPath.csproj` itself.
-2. Press **F5** → choose **C#** → **PianoPath**; or use the integrated terminal with the `dotnet` commands above.
-
-### Updating to a newer version
-
-```powershell
-git pull
-git lfs pull
-dotnet build .\PianoPath.csproj -c Release
-```
 
 ## First-time setup
 
@@ -415,170 +314,6 @@ The rest of the interface:
 - The default stage is the Direct3D 11 GPU engine (HLSL shaders, keyboard shading on every frame), so the shading cost sits on the GPU. The **software renderer** (a multithreaded CPU shader, one run with `--software`) is only the fallback for when Direct3D cannot start and the path that draws transparent PNG takes: there the first bake at the Cinematic level can cost a few dozen milliseconds on a slow machine; Fast/Off and the bake cache exist to reduce that. A machine with no compatible GPU uses WARP, Windows' software rasterizer: the same shaders, just slower than a real card.
 - On the GPU stage the sheet music, the hand marker, the camera picture, the watermark and the key counter / FPS HUD are still WPF vector layers drawn over the GPU frame. There is no particle compute shader, depth of field, velocity-buffer motion blur or camera keyframing yet (see `docs/ROADMAP.md`).
 
-## Rendering the interface pictures again
-
-The pictures in the README (and in `docs/previews/en/`) are rendered by the application, not staged.
-
-**Automatic:** on every push to `main` or a working branch (`arena/**`), the `build.yml` workflow
-builds the app and then re-renders **two sets of pictures** — every subject in the workflow's `$shots` list, once per language — with the very `PianoPath.exe` that just passed
-`--verify`. Each set pins its own `--lang` — `docs/previews/en/` for this edition, `docs/previews/vi/` for
-`README.md` — so the captions always match the language of the README that shows them whatever the runner's
-display language is, and every picture gets a settings folder of its own, so it is always a pristine first
-run. The subjects are: the live stage, the GPU stage holding a chord, two GPU presets (Galaxy Voyage and
-Electric Storm), the background image, the startup menu, the Style dock, the Theme dock, the three SESSION
-pages (Practice, History, Recording), the Play dialog, the shortcuts card and the General page. A separate step of the same workflow renders the **preset gallery**
-`docs/previews/presets.jpg` (every built-in preset drawn twice, software | GPU, in one JPEG shared by both
-READMEs). Finally the workflow **commits them straight into the branch**
-(`Refresh the README previews from CI [skip ci]`), so after a UI change there is nothing else to do: the
-README pictures match that commit. If the branch only accepts pull requests (a repository rule the
-workflow's own token cannot bypass) the push is declined; the step then only warns (`Previews not committed`)
-instead of turning the build red, and the new pictures are in the `keyflow-previews` artifact of that very
-run — download them and commit them by hand. The artifact holds both PNG sets and the `presets.jpg` gallery:
-```powershell
-gh run list --workflow build.yml --limit 5          # find the newest run
-gh run download <run-id> -n keyflow-previews -D docs/previews
-```
-
-**Manual — render locally:** run the `--snapshot` commands in
-[Command line switches](#command-line-switches). Captures freeze the interface animations so the
-result is deterministic across machines.
-
-To make the README show one more subject, add a line to `$shots` in `build.yml`, then point the README at
-`docs/previews/en/<name>.png` (and `docs/previews/vi/<name>.png` for the Vietnamese edition).
-`tools/check_sources.py` lets a README run one commit ahead of a picture, because the commit that renders it
-catches up, but it fails when the README points at an image that does not exist and is not named in `$shots`
-either, so pictures and documentation cannot drift apart silently.
-
-The screenshots are rendered **deterministically**: two renders of the same code must agree byte for byte, or the drift check cannot tell "the interface changed" from "the machine was a little slower". The GPU stage in each picture is built **synchronously** (a fresh simulation, exactly 480 steps of 1/60 s, drawn by `GpuRenderLoop.RenderParked` on the warm device of the parked render thread, with `RenderOnce` as the fallback) instead of taking the frame of the free-running render thread, because that frame depends on the simulation's clock even when the scene is still: the last pass mixes in dither noise that follows it. The real render thread is parked before anything is pressed, the menu backdrop obeys the chrome lock, and every animator is put back at frame zero. `--verify` holds the property (`VerifyDeterministicPreview` for the WPF stage, `VerifyDeterministicGpuFrame` for the GPU frame), the build renders three pictures a second time and warns if they differ, and every picture leaves a `sha=…` line in the `Preview capture (en)` / `(vi)` annotation. The full story, three failed fixes included, is in `docs/REPO-AUDIT.md` §6.13.
-
-## Packaging and shipping the .exe
-
-A build inside `bin\` only runs on a machine with the .NET SDK installed and consists of many files.
-To send it to somebody — or to publish a release — **publish** it. There are two kinds:
-
-| Kind | Quick command | Size | What the target machine needs | When to use it |
-| --- | --- | --- | --- | --- |
-| **Self-contained** (recommended) | `.\publish.ps1` | `PianoPath.exe` ~150–190 MB + 113 MiB SoundFont | Nothing | Public releases, machines that may not have .NET |
-| **Framework-dependent** | `.\publish.ps1 -Mode FrameworkDependent` | `PianoPath.exe` ~1–2 MB + 113 MiB SoundFont | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) | Internal use, many machines already have .NET, smaller package |
-
-Both kinds produce **a single `.exe`** (`PublishSingleFile`) next to an `Assets\` folder holding the
-SoundFont and the attribution file. WPF supports neither trimming nor Native AOT, so those options are
-not used.
-
-### Option 1 · the `publish.ps1` script (one command)
-
-```powershell
-cd PianoPath
-Set-ExecutionPolicy -Scope Process Bypass      # for the current PowerShell session only, if scripts are blocked
-.\publish.ps1                                  # self-contained, win-x64 → .\publish\win-x64\PianoPath.exe
-.\publish.ps1 -Zip                             # also writes .\publish\Keyflow-<version>-win-x64.zip to send around
-.\publish.ps1 -Mode FrameworkDependent -Zip    # smaller build → .\publish\win-x64-fd\ and ...-win-x64-fd.zip
-.\publish.ps1 -Runtime win-arm64               # Windows on ARM (Surface Pro X, Snapdragon X)
-.\publish.ps1 -Clean                           # delete bin/, obj/ and the target folder before publishing
-```
-
-The script checks the SDK version, **refuses to publish while `Assets\ConcertGrand.sf2` is still an LFS
-pointer** (so a silent piano is never shipped; pass `-AllowLfsPointer` to do it on purpose), runs
-`dotnet publish` with the parameters below and prints the resulting paths and sizes.
-
-### Option 2 · the `dotnet publish` command by hand
-
-```powershell
-# Self-contained, single .exe, no .NET needed on the target machine
-dotnet publish .\PianoPath.csproj -c Release -r win-x64 --self-contained true `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:PublishReadyToRun=true -p:DebugType=None -p:SatelliteResourceLanguages=en `
-  -o .\publish\win-x64
-
-# Framework-dependent, small single .exe, target machine needs the .NET 10 Desktop Runtime
-dotnet publish .\PianoPath.csproj -c Release -r win-x64 --self-contained false `
-  -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true `
-  -p:DebugType=None -p:SatelliteResourceLanguages=en `
-  -o .\publish\win-x64-fd
-```
-
-What the parameters mean: `-r win-x64` picks the architecture (use `win-arm64` for ARM);
-`PublishSingleFile` packs every DLL into one `.exe`; `IncludeNativeLibrariesForSelfExtract` packs the
-native WPF DLLs too (required for single-file WPF; they are extracted to `%TEMP%\.net\PianoPath\` on
-first launch); `PublishReadyToRun` pre-compiles for a faster start; `DebugType=None` drops the `.pdb`;
-`SatelliteResourceLanguages=en` drops the WPF language folders.
-
-### Option 3 · Visual Studio 2026
-
-1. Right-click the **PianoPath → Publish…** project.
-2. Pick the existing **win-x64-self-contained** or **win-x64-framework-dependent** profile (in `Properties\PublishProfiles\`) and press **Publish**.
-3. The result lands in `publish\win-x64\` or `publish\win-x64-fd\` inside the project folder. The profiles already enable single-file and ReadyToRun and disable trimming; change them under **Show all settings**.
-
-### Result and how to distribute it
-
-```
-publish\win-x64\
-├── PianoPath.exe              ← the single executable
-├── LICENSE.txt                ← the MIT licence, which has to travel with copies
-└── Assets\
-    ├── ConcertGrand.sf2       ← SoundFont, must always stay next to the .exe in the Assets folder
-    └── ATTRIBUTION.txt        ← credits FreePats (CC BY 3.0); keep it when redistributing
-```
-
-- **Sending a ZIP**: compress the whole folder (`.\publish.ps1 -Zip` or `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). The recipient unzips it and runs `PianoPath.exe`; never separate the `.exe` from the `Assets\` folder.
-- **The `.exe` installer (optional)**: install [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish the self-contained build and run `iscc .\installer\Keyflow.iss` (or open the file in the Inno Setup Compiler and press F9). The result is `installer\Output\Keyflow-Setup-<version>.exe`, which creates Start Menu/Desktop shortcuts and an uninstall entry. Override the version with `iscc /DAppVersion=1.0.0 .\installer\Keyflow.iss`. The installer ships English and Vietnamese wizard text: it picks the language from Windows, and the Vietnamese wording is a *partial* file (`installer\Languages\Vietnamese.isl`) that overrides the messages this wizard actually shows while the rest falls back to `Default.isl`. Run `pwsh tools/build_installer.ps1` instead of calling `iscc` by hand when you want CI to check the translation — add `-Stub` if you have not published yet; the script fails the moment ISCC warns about anything but the expected "this message stays English" notice of a partial translation.
-- **The `win-arm64` build**: `publish.ps1 -Runtime win-arm64` (or the ZIP `release.yml` attaches to the GitHub Release) is for Windows on ARM; the `.exe` installer exists for x64 only, because `Keyflow.iss` sets `ArchitecturesAllowed=x64compatible`. CI publishes the ARM package, but no ARM machine has run it yet.
-- **Checking a download**: every GitHub Release — in [the public release repository](https://github.com/lxmtuu/PianoPath-Releases/releases) — carries a `SHA256SUMS.txt` of each attached file; compare with `Get-FileHash .\Keyflow-<version>-win-x64.zip -Algorithm SHA256`. The packages are not code-signed, so this is how a downloader checks that they received what the repository built.
-- **Version number**: edit `<Version>` in `PianoPath.csproj` before publishing; the script and the installer read that value, the application prints it on the start-up menu and in the About box through `AppInfo.Version`, and `tools/check_sources.py` pins every remaining mirror (the installer, both READMEs, both changelogs) to the same number.
-- **SmartScreen**: the file is not code-signed, so Windows shows "Windows protected your PC" on first launch; choose *More info → Run anyway*. Removing the warning needs a code-signing certificate, for example: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
-- **Antivirus** sometimes scans a single-file self-contained build slowly on first launch; that is normal for .NET packages that unpack themselves.
-
-### Checking a published build
-
-```powershell
-$log = "$env:TEMP\keyflow-verification.log"
-$p = Start-Process .\publish\win-x64\PianoPath.exe -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
-Get-Content $log; "Exit code: $($p.ExitCode)"      # 0 = passed
-Start-Process .\publish\win-x64\PianoPath.exe       # then just run it
-```
-
-Try it on a clean machine (or a virtual machine) without .NET to be sure the self-contained build runs
-and the framework-dependent one reports the runtime it needs.
-
-### Automatic releases on GitHub
-
-Two workflows live in `.github/workflows/`:
-
-| Workflow | Trigger | Contents |
-| --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render **both README picture sets** — one picture per subject in `$shots` per language — and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so the difference between the working tree and the commit this run started from is the comparison itself — `git status` cannot be used, because the commit step above commits before it pushes and a declined push leaves a clean tree while the branch still carries the old pictures; any file that drifted without the refresh reaching the branch is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact) → **one real publish** (`publish.ps1 -Mode FrameworkDependent -AllowLfsPointer -Zip`; CI does not fetch LFS, so the SoundFont stays a pointer) and then checks that the publish folder holds `PianoPath.exe`, `LICENSE.txt` and `Assets\` — so a defect in the packaging path turns red at push time instead of waiting for a release to be cut. |
-| `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish **three packages** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke-test the published self-contained `win-x64` build with `--verify`, compile the `.exe` installer from that same publish folder, compute a **`SHA256SUMS.txt`** of every attached file, upload all of them as artifacts and (for a tag) attach them to the GitHub Release with generated notes. The installer exists for `win-x64` only; the `win-arm64` package is not smoke tested, because the runner is an x64 machine. For a tag it also **builds the public release branch**: an *orphan* branch `release/public-<tag>` in this repository (holding only `docs/release/`, which `tools/make_public_docs.py` writes, and `docs/previews/` — none of the source repository's history) which is then **pushed to [lxmtuu/PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases)** — with the `PUBLIC_RELEASES_TOKEN` secret when it is configured, or by waiting for whoever is on release duty to run `pwsh tools/publish_public.ps1 -Tag <tag>` (no stored credential at all; `build.yml` never reaches the public repository). |
-
-```powershell
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-Every `release.yml` run downloads ~113 MiB from Git LFS and counts against the account's LFS bandwidth,
-so only run it when releasing. `build.yml` does not download LFS at all (the checks that need the
-SoundFont report `SKIP` by themselves).
-
-**Two repositories, one product.** This repository is the source (private); [lxmtuu/PianoPath-Releases](https://github.com/lxmtuu/PianoPath-Releases) is the public one:
-every tag gets a `release/public-<tag>` branch holding the bilingual product page, the changelogs, the
-licences and the interface pictures, plus — the part that matters most — the packages attached to its
-GitHub Release. That branch carries **no** source code and none of this repository's commit history, and
-it is not edited by hand: `tools/check_sources.py` compares `docs/release/` byte for byte with the script
-that writes it, so a public page that drifts from this README turns a build red. The one-time setup
-(creating the repository, the secret, the variable), how to publish by hand, and what this model trades
-away are in [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md).
-
-### Common publishing problems
-
-| Symptom | Cause / fix |
-| --- | --- |
-| `publish.ps1` reports the SoundFont is only a few hundred bytes | LFS was not fetched: `git lfs install` then `git lfs pull`. |
-| `NETSDK1045: The current .NET SDK does not support targeting .NET 10.0` | Install the .NET 10 SDK, or an older SDK is being preferred by `global.json`; check `dotnet --list-sdks`. |
-| The target machine says "To run this application, you must install .NET Desktop Runtime" | It is the framework-dependent build; install the .NET 10 Desktop Runtime x64 or use the self-contained build. |
-| The app opens but stays silent and the Audio page cannot load a SoundFont | The `Assets\` folder is not next to the `.exe`, or the file is an LFS pointer. |
-| The Audio page shows `NO AUDIO DEVICE` although the SoundFont loaded | Windows could not open the output device (`waveOut error 2`): no sound card, or another application holds it in exclusive mode. Everything else works, it just does not make a sound. |
-| `PublishTrimmed`/`PublishAot` errors, or the app crashes at start | WPF supports neither; drop both options. |
-| Publishing `win-x86` fails with a runtime-pack error | Only `win-x64` and `win-arm64` are used; 32-bit builds are not tested. |
-
 ## Testing
 
 The integrated verification suite lives in `Diagnostics/VerificationSuite.cs` and runs inside the
@@ -648,140 +383,6 @@ fades; `VerifyShadedStage` toggles `ShadingQuality` in the dock and asserts that
 between the vector keyboard and the shader keyboard while the bake is reused across frames.
 
 The Direct3D 11 engine has a part of its own, `VerifyGpuStage` (`Diagnostics/VerificationSuite.Gpu.cs`), and it needs no real graphics card: the test frame is drawn on WARP, which every CI runner has. It checks: the **settings** (a fresh install defaults to `RenderBackend = Gpu`; an old file that names `Software` is moved to the GPU on load; an unknown engine name or frame rate falls back to the default; applying a preset keeps the engine, the FPS and VSync because they belong to the computer); the **look** (`GpuLook` carries the exact note colours, the keyboard proportion, the slider values of Note shimmer / Halo light pulses / Shooting stars / Landing glow and the Spotlights choice); the **thread bridge** (`GpuStageFeed` hands the render thread the running song, the held keys and a clock extrapolated by never more than 50 ms; hits and live notes queue without loss and a clear request is taken exactly once); the **embedded shaders** (all 12 HLSL entry points); **one real frame** of 640×360 drawn on WARP and read back for measuring (the keyboard must be lit along the bottom, stand out from the dark stage above it, and the picture must hold many colours rather than one flat fill); the **effect families** (the look carries the ambient, trail, key-label, flash, arc and petal settings; Galaxy, guide lanes and petals put hundreds of shapes behind the notes; the 1024×768 glyph atlas holds real ink; and the sky of the GPU frame brightens when the galaxy layer is on); and finally **recording** (`GpuRecordingTap`: the render loop alone, with no window and no preview, still hands over exact-size 320×180 frames with the keyboard in them).
-
-### The frame budget gate (`--bench`)
-
-A frame budget must not be a feeling, so the app measures it:
-
-```powershell
-.\bin\Release\net10.0-windows\PianoPath.exe --bench=240 --bench-out=$env:TEMP\keyflow-bench.json
-(Get-Content $env:TEMP\keyflow-bench.json -Raw | ConvertFrom-Json).scenes | Select-Object scene, frames, particles, @{n='p95';e={$_.stats.p95Ms}}
-```
-
-`--bench` **opens no window**: it runs the stage's own `GpuRenderLoop` (the same loop, the same simulation, the same frame read-back into WPF) at 1920×1080, plays a song
-through it, and writes **every frame's own length** into a JSON report. Two scenes are measured, each with its own budget (`Diagnostics/FrameBudget.cs`):
-
-| Scene | Look | p95 budget |
-| --- | --- | --- |
-| `default` | the settings of a first run | 8 ms |
-| `heavy` | the busiest built-in preset — *Galaxy Voyage*: galaxy, stars, shooting stars, rainbow trails, fireworks | 16 ms |
-
-Those two numbers belong to the **GPU path**. The roadmap used to say "p95 < 8 ms in *Classic Roll*, < 16 ms in *Cinematic*" — two different kinds of thing (a preset and a
-keyboard shading level) from the old WPF stage, so they were rewritten as **one look at one size**, keeping both numbers.
-
-**Which machines the budgets bind.** Only a machine with a real graphics card: over budget, the exit code is `3`. A CI runner has no card, so the stage is drawn by **WARP** and
-is *not* held to the absolute budgets — Windows even presents its software adapter as a "hardware" one, so the app reads the adapter **name** and not only the WARP flag
-(`FrameBudget.IsSoftwareAdapter`), and a name it cannot read counts as software. There the number still means something **relatively**: CI keeps the previous run's report in the
-Actions cache and compares this run's p95 with it on the same kind of machine. **On WARP the difference is a number, not a verdict** — the same code measured p95 307 ms and then
-788 ms on two runs, so every comparison line there is a `NOTE`; only a machine with a real card, which is what the budgets were written for, prints `WARN perf:` when it is half
-again as slow (and `FAIL` when it is over budget). Every run's report is published as
-the `keyflow-bench-report` artifact, and because it lives in the cache rather than in the repository, a measured number never becomes a commit.
-
-Both the measurement and the comparison carry a layer of verification: `VerifyFrameBudget` in `--verify` checks the budget table, the percentile arithmetic, the adapter rule, the
-JSON reading back, and **one real measurement** of 24 frames at 320×180 through the very path `--bench` takes; the pure half (percentiles, budgets, the relative comparison, the
-JSON) lives in `tests/PianoPath.Tests`, so it runs on Linux, where there is no Direct3D.
-
-### The test suite that runs on any machine (`tests/PianoPath.Tests`)
-
-`--verify` needs Windows because it starts real WPF. The parts that do **not** need a window — the MIDI parser, the MusicXML parser, hand-split inference, the meter table, the WAV writer and the string table — now live in an xUnit project on plain `net10.0`, which runs on Linux/macOS and one test at a time:
-
-```powershell
-dotnet test tests/PianoPath.Tests --configuration Release
-dotnet test tests/PianoPath.Tests --filter MeterTests        # one class
-dotnet test tests/PianoPath.Tests --filter "FullyQualifiedName~Format2"   # one test
-```
-
-CI runs it in the **`test`** job on `ubuntu-latest`, **beside** the Windows job (both only wait for `static`), so a broken MIDI read goes red in about a minute instead of waiting for a Windows runner.
-
-The project **links the source files** instead of referencing `PianoPath.csproj`, so every `internal` type of the app is usable without `InternalsVisibleTo` and no library has been split out yet. That imposes one rule: **every file listed under `<Compile Include>` in `tests/PianoPath.Tests/PianoPath.Tests.csproj` must compile without WPF, `System.Drawing`, Vortice or WinMM** — adding a file that drags WPF along turns the Linux job red, and that is the signal working, not a defect.
-
-Making that possible took one seam: `Loc` was split into two `partial` halves — `Localization/Loc.cs` is the string table and the look-ups (pure computation), `Localization/Localizer.cs` is the half that writes live labels onto WPF elements. They meet through a **partial method**, so a build that does not link the WPF half has the call **removed by the compiler** instead of needing WindowsBase.
-
-Not in this suite yet: SoundFont (its test `.sf2` builder is a block of helpers of its own, still in `VerifySoundFontEngine`), plus the settings JSON, the settings profile, the song library and the practice history — the last four all bottom out at `PianoVisualSettingsStore` → `ShellThemes`, whose `ShellTheme` record is declared in `System.Windows.Media.Color` (see `docs/ROADMAP.md` §4 item 2).
-
-### Static checks (run anywhere, even without the .NET SDK)
-
-```powershell
-python tools/check_sources.py          # C# syntax, XML + XAML resources, dock catalogue, theme tokens, string tables, README links/images, installer translation
-python tools/shader_preview.py 780 180 0.6   # Python port of the shader, writes pictures to tools/out/ (not committed)
-pwsh tools/build_installer.ps1 -Stub   # compile installer\Keyflow.iss against a stub publish folder (needs Inno Setup)
-```
-
-`check_sources.py` verifies: bracket/quote balance of every C# file; XML validity and every
-`StaticResource`/`DynamicResource` in the XAML; every `FindName`/`FindResource` and every XAML event
-handler really exists in C#; **the page catalogue in `Ui/SettingsPages.cs` matches the tab strip in
-`Ui/MainWindow.xaml` exactly — every caption, in order, with the right group label**; **every theme
-token published by `ShellThemeManager` has a default in `App.xaml`**; **every image and internal link
-in `README.md` and `README.en.md` exists, every table-of-contents anchor resolves and each edition links
-to the other**, **every
-command-line switch the app reads is documented in both README command-line tables and vice versa,
-and every switch/path `build.yml` passes to `PianoPath.exe` really exists**, **the community shelf: every file in `presets/` names exactly the settings of
-`PianoVisualSettings`, its file name matches `PresetName` and shadows no built-in, and the committed
-file still equals what `tools/make_presets.py` writes**, **the sample picture in `docs/samples` still
-matches the script that generates it**, **the installer: every message in
-`installer\Languages\Vietnamese.isl` exists in Inno Setup's own `Default.isl` (in the right
-`[Messages]`/`[CustomMessages]` section), keeps every placeholder, is stored with a UTF-8 BOM, and the
-`[Languages]`/`[LangOptions]` declaration is the shape the compiler insists on**, and **the string
-tables**: every language
-translates exactly the keys of the inventory, placeholders and line breaks survive, and every literal
-the sources can print (including marked XAML strings, page names, themes, presets and the shortcut
-card) is a key of the inventory. CI runs this script before the Windows build.
-
-The `--verify` log uses four prefixes: `PASS` (checked and passed), `FAIL` (a defect, exit code `1`),
-`SKIP` (the environment cannot run that check) and `NOTE` (environment information). The suite skips
-instead of failing when hardware is missing: if `Assets\ConcertGrand.sf2` is still an LFS pointer
-(a clone without `git lfs pull`, or a CI checkout with `lfs: false`) the bundled-piano items are
-`SKIP`ped and the app is verified in silent mode instead; if Windows cannot open an audio device
-(`waveOut error 2`) or a MIDI output port, the engine still loads the SoundFont and runs silently, and
-the result is a `NOTE`, not a `FAIL`.
-
-## Technical documentation
-
-| Document | Contents |
-| --- | --- |
-| [`README.md`](README.md) | The Vietnamese original of this document: the same pictures and the same command-line table, checked side by side by `tools/check_sources.py`, so neither edition can drift. |
-| `docs/UI-SHADER-REVIEW.md` | Review of the interface and of the Unreal-style keyboard shading upgrade: shading model, camera, bake cache, how it verifies itself. |
-| `docs/SETTINGS-WIRING-AUDIT.md` | The table matching **every** settings control with the code that consumes it — proof that no setting is "dead". |
-| `docs/LOCALIZATION.md` | The localization architecture: keys are source text, one table file per language, live labels, Vietnamese conventions, adding a new language and the three verification layers. |
-| `docs/ROADMAP.md` | Where the project goes next (P0→P3), estimated sizes and the things deliberately not done. |
-| `docs/DOCK-NAVIGATION-AUDIT.md` | The review of how features are arranged: why the dock is grouped by purpose (three groups when it was written, four now — see the note at its top), the page catalogue as the single source of truth, the F1 card and the README picture pipeline, plus the checks that keep them aligned. |
-| `docs/EFFECTS-REDESIGN.md` | The design of the effects system: the 87 effects arranged by the four phases of a note (falling, impact, hold, release), the ambient layers, the modulators and the combo themes, plus a phase-by-phase roadmap — finish each step completely before starting the next; the table in code lives in `Stage/Effects/EffectCatalog.cs`. |
-| `docs/REPO-AUDIT.md` | The results of the whole-repository audit (2026‑09): the three-layer method (static checks, `--verify`, CI pictures), what was fixed with its proof, and the limits that remain. |
-
-## Repository layout
-
-- `App.xaml`: default theme and every control template (button, switch, slider, combo, textbox, scrollbar, navigation tab, preset list) — all colours read through `DynamicResource`, so a theme swap is instant. `App.xaml.cs`: startup and every command-line switch (`--verify`, `--snapshot`, `--show-settings`, `--play-dialog`, `--shortcuts`, `--lang`, `--background-image`, `--gpu` / `--software`, `--preset` / `--play-chord`, `--settings-dir`, `--encode-probe` / `--encode-take`, `--bench` — see [Command line switches](#command-line-switches)). `AppInfo.cs`: the release version of the running build, read from the assembly the SDK stamped with `<Version>` — the start-up menu's version label, the About box and the `--bench` report all print that one number, and `scan_release_version` lets no source file type it again.
-- `Ui/`: `MainWindow.xaml` (header / stage + dock / transport footer / concert menu / Play dialog / shortcuts card), `MainWindow.xaml.cs` (playback, scoring, MIDI, chrome hiding and video recording), `MainWindow.Settings.cs` (generated settings pages, search, presets, track list), `MainWindow.Menu.cs` (main menu + Play dialog + theme chips), `MainWindow.Shortcuts.cs` (the F1 card), `SettingsPages.cs` (**the 13-page / 4-group catalogue**, attached property printing the group label), `MainWindow.Language.cs` (live language switching, rebuilding the surfaces whose text is composed), `DeviceOption.cs` (device id separated from the translated caption), `FrameClock.cs` (the shared vsync frame clock), `ChromeMotion.cs` (shared easing/entrance), `ColorPickerWindow.cs`, `TextPromptWindow.cs`, `MainWindow.Practice.cs` (the practice slow-down curve: after a run of misses the song steps down, after a run of correct notes it steps back up to the normal speed) and `ThemeStudioWindow.cs` (the theme studio: name a theme, pick its backdrop family and its five seed colours, watch the derived chrome update as you type).
-- `Theme/`: `ShellTheme.cs` (the three interfaces + palettes + legacy ids + `ShellThemeManager`) `ChromeBackdrop.cs` (the animated backdrop for the menu and the dock), `UserShellTheme.cs` (a theme the user made: five seed colours and a backdrop family, with the full twenty-token palette **derived** from them, so a hand-made theme cannot end up with an unreadable border or a control darker than its window) and `UserThemeStore.cs` (one JSON file per theme in the settings folder, next to the user presets; the id is derived from the name, so a file renamed by hand simply arrives under a new id).
-- `Stage/SheetLayer.cs`: the staff layer — pure geometry (`Step`, `Place`, `LedgerLines`, `NoteX`, `SignatureStep`, `Beams`/`Flags` for the beaming, `Rests`/`Rest` for the rests, `Ties` for the ties, `Slurs` for where the line changes hands and `Chords`/`Streams` for chords and the per-hand streams) for where every note and every accidental sign is written on the grand staff, and drawing code that only turns those numbers into lines, note heads, two clefs and the signature.
-- `Stage/MusicKey.cs`: the key of a song — the Krumhansl–Kessler correlation over sounding pitch classes, the signature that key implies, how it spells a pitch (`Spell`) and the accidental plan of each bar.
-- `Stage/`: `PianoVisualSettings.cs` (the JSON settings stored in LocalAppData, with migrations), `VisualPresets.cs` (built-in presets + the user preset store; a preset file is a `Version/Thumbnail/Settings` envelope, and a bare settings JSON from an older build still loads), `PianoStage.cs` (background/vignette/beams, notes in 4 styles and 5 colour modes, sparks, wisps, flames, rings/shockwaves/ripples, impact flashes, falling trails, hold bar/arc, release effects, 4 ambient layers, petals, vector or shader keyboard) and `PianoStage.Gpu.cs` (the bridge to the GPU engine: forwards every change of the stage into `GpuStageFeed`, shows the frame the render thread reads back instead of the layers it would draw itself, and builds the glyph atlas for note names).
-- `Stage/Shading/`: the Unreal-style keyboard shading — `ShaderMath.cs` (GGX/Smith/Schlick, ACES, sRGB, dither), `PianoShaderScene.cs` (scene + camera + cache key), `PianoKeyboardRenderer.cs` (soft ray-traced shadow, contact AO, IBL, coloured per-note light, overlay tiles).
-- `Gpu/`: the Direct3D 11 graphics engine — `StageShaders.hlsl` (every shader, embedded in the build), `GpuLook.cs` (immutable snapshot of the settings), `GpuStageFeed.cs` (UI thread → render thread bridge, song-clock extrapolation), `GpuStageSimulation.cs` (particles, trails, keys) with its two extensions `GpuStageSimulation.Ambient.cs` (guide lanes, petals, the four ambient layers, the trails behind notes) and `GpuStageSimulation.Effects.cs` (impact waves/flashes, morphs, release effects, electric arcs, note names on the keys), `GpuStageRenderer.cs` (device, HDR pipeline, bloom), `GpuRenderLoop.cs` (game loop, swap chain, frame read-back for the embedded stage, and per-frame timing samples for `--bench`), `GpuRecordingTap.cs` (the off-screen frame at the take's exact size and rate), `SwapChainHost.cs`; `Ui/GpuStageWindow.cs` and `Ui/MainWindow.Gpu.cs` wire it into the interface.
-- `Stage/Effects/EffectCatalog.cs`: the effects catalogue — the single source for the stage's 87 effects, arranged by the four phases of a note (falling, impact, hold, release), the ambient layers, the modulators and seven combo themes; every effect carries a status of `Available` or `Planned`, and only `Available` effects appear in the UI. The full design is in `docs/EFFECTS-REDESIGN.md`.
-- `Profile/SettingsProfile.cs`: the settings profile — `Keyflow.profile.json` packs the stage settings, the interface language and the shell theme into one file (import/export on the General page, and it also accepts a file dropped onto the window); it rejects foreign JSON, and a language that is not in the build falls back to `en`.
-- `Audio/`: `PianoAudioEngine.cs` (`waveOut` PCM output, playback thread and hall reverb, plus the **tap** that hands each rendered block to a recording), `WavWriter.cs` (streaming 16-bit PCM WAVE writer that patches its sizes on close) and `SoundFontSynthesizer.cs` (reads `.sf2` sample zones to the SF2 specification).
-- `Camera/`: `MediaFoundation.cs` (the part of Media Foundation the overlay needs, declared by hand — `mfplat.dll`/`mf.dll`/`mfreadwrite.dll`, with the vtable order documented where it matters), `CameraFrameReader.cs` (enumerates the cameras, opens a camera or a video file as an RGB32 source reader, reads frames on its own thread, and turns every failure into a sentence) and `CameraOverlay.cs` (pure arithmetic: where the picture sits per corner, bottom-up and mirrored frames, the green key by tolerance, the opacity factor), `HandTracker.cs` (hand tracking — pure arithmetic on pixels, no model: it reads a frame on a 32×24 grid, finds skin in YCbCr with a chroma window set by the **Skin sensitivity** slider, takes the biggest group of touching skin cells as the hand, counts fingers from the column profile and turns the horizontal position into a key of the stage) and `MediaFoundation.Encode.cs` (the COM declarations of the MP4 sink writer, in exactly the vtable order).
-- `Midi/`: `Meter.cs` (a simple meter beats on its written beat-type, a compound 6/8–12/8 one in threes, and a bar's beats come back with it), `MidiFileReader.cs` (Standard MIDI File, formats 0/1/2 with a PPQ or an SMPTE division → notes, tempo map, beat grid, track names), `MusicXmlReader.cs` (MusicXML/MXL → notes, beat grid, part names and the **hand split the staves state**) and `HandSplit.cs` (inferring a split from pitches for MIDI files), plus `MidiDeviceService.cs` (WinMM devices).
-- `Midi/HandSplit.cs`: hand-split inference for a song (two clusters by sounding time, middle C in a wide gap, one-hand songs left alone).
-- `Stage/PresetThumbnail.cs`: the preview stored inside a preset file (renders the stage at 192×112, refuses anything that is not a PNG of that size).
-- `Stage/VisualPresetShare.cs`: the look share code (gzip + base64url, no background image path, hard size limits) and `Ui/MainWindow.Sharing.cs` (the COPY CODE / APPLY CODE buttons on the Style page).
-- `Practice/PracticeHistory.cs`: the practice history (one JSON line per run with the notes it graded, newest first, the best take per song, the per-day buckets behind the chart, the HTML report) and `Ui/MainWindow.History.cs` (the dock's **History** page: the run list, the fourteen-day chart and the two ghost rows). `Practice/PracticeChart.cs` holds the pure geometry of the chart and the ghost.
-- `Library/SongLibrary.cs`: the recent-songs index (`library.json` in the settings folder) — newest first, at most twelve, keyed by path; `Ui/MainWindow.Library.cs` builds the Play dialog's RECENT list and its **LIBRARY** section (folder, search, tags) and restores the stored values through the sliders.
-- `Library/SongFolderIndex.cs` + `Library/SongFolderWatcher.cs`: the library of a folder — three levels and 500 files at most, every file read by the app's own readers, a cache keyed by size and write time (`library-index.json`, with the tags), search over titles, file names and tags, and a watcher that only reports "something changed" so the window rescans on its own thread.
-- `Video/AviVideoRecorder.cs`: AVI frame writing through Windows Video for Windows.
-- `Video/Mp4Recorder.cs`: writes **MP4 (H.264 + AAC)** through the Media Foundation sink writer — the video comes from the stage's BGRA frames (converted to NV12 by `Video/Nv12Frame.cs`), the audio from the engine's own PCM through the `Audio/IAudioTrack.cs` contract.
-- `Video/IFrameRecorder.cs`: the contract both recorders implement (size, frame rate, frame count, bytes written, `HasAlpha`), so the recording session in `Ui/MainWindow.xaml.cs` does not care which format is running.
-- `Video/PngSequenceRecorder.cs`: writes a folder of 32-bit PNG frames (`frame-000001.png`) plus `sequence.json` describing the size, rate, frame count and the ffmpeg command that rebuilds an alpha video.
-- `Diagnostics/VerificationSuite.cs`: the regression suite run by `--verify`, with self-made fixtures; `Diagnostics/VerificationSuite.Gpu.cs` holds `VerifyGpuStage`, the checks of the GPU engine. `Diagnostics/Mp4TakeAttempt.cs` writes one short MP4 take and says what it was doing, step by step, while `Diagnostics/EncodeProbeAttempt.cs` writes three pictures into an AVI through the take's own sample step with no encoder involved — it answers the question a failed take leaves open: a machine that cannot finish something that needs no codec has trouble in its own media stack. `Diagnostics/FrameBudget.cs` holds the pure half of the **perf gate** (the per-scene p95 budgets, the nearest-rank percentiles, the rule for which machines a budget binds, the JSON report and the relative comparison — it runs anywhere and is linked into `tests/PianoPath.Tests`), and `Diagnostics/FrameBenchmark.cs` is the half that runs the real `GpuRenderLoop` for `--bench`.
-- `presets/`: the community shelf — one full preset per file, written by `tools/make_presets.py` and embedded into the build by `PianoPath.csproj` (read by `Stage/CommunityPresets.cs`), so adding a look is adding a JSON file.
-- `tools/`: `check_sources.py` (static checks for syntax/XAML/dock catalogue/theme tokens/README/command line, runs anywhere), `make_presets.py` (writes `presets/*.json` from the defaults `PianoVisualSettings` declares), `shader_preview.py` (Python port of the shader for previewing, writes to `tools/out/`, not committed) and `make_stage_background.py` (generates the sample backdrop `docs/samples/stage-backdrop.png`), `add_string.py` (adds one string key with its Vietnamese translation to both `Localization/` tables, in ordinal order), `inno_messages.py` (generates the list of valid Inno Setup message names, `installer/Languages/messages.txt`) and `build_installer.ps1` (compiles the installer; both workflows call it).
-- `Localization/`: `Localizer.cs` (languages, table lookup, live labels, XAML markers) and `Strings.English.cs` / `Strings.Vietnamese.cs` (inventory + translation; adding a language means adding one such file).
-- `docs/previews/`: the interface pictures rendered by the application in CI — `en/` for this edition, `vi/` for `README.md` (14 pictures each), plus `presets.jpg` (the gallery of 14 presets × software | GPU engine, shared by both editions); the workflow owns all of it, so do not hand-commit other images into these folders.
-- `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
-- `CHANGELOG.md` / `CHANGELOG.en.md`: the bilingual changelog — each README links to its own edition, and `scan_release_version` keeps the version list of both equal to `<Version>`;
-  `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `Properties/AssemblyInfo.cs`: WPF's `ThemeInfo` attribute (where theme resource dictionaries are looked up); `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
-- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, a `test` job on Ubuntu for the portable xUnit project, then a `build` job on Windows: Release build, `--verify`, **the frame budget measured with `--bench` and compared with the previous run from the cache**, a trial installer build against a stub folder, rendering **both README picture sets** — one picture per subject per language — and the preset gallery, committing them back to the branch when it accepts the push, and finally **one trial framework-dependent publish** so a defect in the packaging path turns red at push time) and `release.yml` (checkout with LFS, publish three packages, smoke-test the published build, compile the installer from that same folder, hash every package into `SHA256SUMS.txt`, then attach all of it to the GitHub Release when a `v*` tag is pushed).
 
 ## Licence
 

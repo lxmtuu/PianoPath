@@ -497,9 +497,10 @@ Một bản phát hành chính thức không được mở đầu bằng một c
 
 ### 7.4 Ghi nhận, chưa sửa (rủi ro còn lại của lần phát hành)
 
-* **`release.yml` vẫn chưa từng chạy một lần.** Mọi khẳng định về nó ở trên là **đọc code**, không phải
-  số đo — ba leg publish, bước hash, `body` của release và việc đính kèm artifact chỉ được chứng minh khi
-  workflow chạy. Việc đầu tiên sau khi đợt này vào `main` nên là một lượt `workflow_dispatch` (chỉ ra
+* ~~**`release.yml` vẫn chưa từng chạy một lần.**~~ **Đã đóng (2026‑10‑02):** workflow chạy thật hai lần
+  — một lượt `workflow_dispatch` (36935570069) và lượt tag `v1.0.0` (36982257369), cả hai xanh; ba gói,
+  bộ cài và `SHA256SUMS.txt` đã nằm trong release `v1.0.0`. Hai bước **mới** thêm ở §8.3 (dựng nhánh phát
+  hành, đẩy sang kho công khai) thì vẫn là đọc code cho tới lần chạy tag kế tiếp. Việc đầu tiên sau khi đợt này vào `main` nên là một lượt `workflow_dispatch` (chỉ ra
   artifact, không tạo release; ~113 MiB băng thông LFS), rồi cài thử bộ cài và giải nén thử ZIP trên một
   máy Windows sạch.
 * **Gói `win-arm64` chưa máy ARM nào chạy**, và leg đó tắt ReadyToRun. Nó được publish để có, không phải
@@ -516,3 +517,51 @@ Một bản phát hành chính thức không được mở đầu bằng một c
   chứng chỉ, không xong bằng code, và đã ghi rõ trong cả hai CHANGELOG lẫn ghi chú phát hành.
 * **Hai con số vẫn chờ máy thật** như §3.2 đã ghi: ngân sách p95 8/16 ms chờ một card đồ hoạ thật, và một
   tệp MP4 thật chờ một máy Windows bình thường (runner treo trong `IMFSample::SetSampleTime`).
+
+## 8. Đợt rà soát 2026‑10‑02 (chiều) và ranh giới private/public
+
+Lượt này do yêu cầu "kiểm tra toàn bộ sau đó làm phương án repo private + repo phát hành public". Phần
+*kiểm tra* đứng trên ba lớp có sẵn; phần *phương án* là mục 8.3 và sổ tay
+`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`.
+
+### 8.1 Kết quả rà soát
+
+| Việc kiểm | Kết quả |
+|---|---|
+| `tools/check_sources.py` trên HEAD | **xanh** — 90 tệp C#, 2 XAML, 99 resource key, 149 named element, chuỗi/bộ cài/phiên bản/README/MSBuild đều khớp |
+| Bí mật và dữ liệu cá nhân | **sạch** — không `api_key`/`secret`/`password`/token nào gán giá trị, không đường dẫn `C:\Users\…`, danh tính commit duy nhất là `Yami <…@users.noreply.github.com>`; không webhook, không deploy key |
+| Nhị phân và kích thước | chỉ có con trỏ LFS 134 byte cho SoundFont, ảnh `docs/previews`/`docs/samples`; `.git` 9,5 MB, cây 22 MB |
+| CI gần nhất trên `main` | **xanh** (run 36934073411); `release.yml` đã chạy thật hai lần (workflow_dispatch + tag `v1.0.0`), nên mục "release.yml chưa từng chạy" ở §7.4 **đã đóng** |
+| Bảo vệ nhánh | hai ruleset đang bật (`Protect Branch`, `Protect Main Branch`) — lý do `build.yml` phải xử lý GH013 khi commit ảnh, và lý do bước dựng nhánh phát hành của `release.yml` cũng xử lý y hệt |
+| Vệ sinh kho | **34 nhánh cũ** trên remote (32 nhánh `arena/*`, `docs/readme-audit-p0`, `feature/settings-ui`, `fix/ui-inputs-and-async-key-tiles`) và **1 pull request còn mở (#6)**; chưa xoá gì — việc này thuộc về chủ kho, câu lệnh an toàn nằm ở §8.4 |
+| Quyền của token phiên này | `admin: true` trên repo nhưng `administration` **không** được cấp: đổi visibility, tạo repo, tạo secret đều trả 403 `Resource not accessible by integration` — ba việc đó phải làm bằng tay (§8.3) |
+
+### 8.2 Ranh giới private/public
+
+Kho nguồn là private; gói và trang sản phẩm đi sang kho công khai. Điều đáng ghi lại không phải là việc
+tách hai kho, mà là **cách nó được kiểm**: trang công khai không được viết tay lần thứ hai. Hai README
+của kho này là bản gốc; `tools/make_public_docs.py` cắt ra trang sản phẩm (giữ phần giới thiệu, thêm mục
+tải, bỏ những mục chỉ có nghĩa khi có mã nguồn, dựng lại mục lục) và ghi vào `docs/release/`; thư mục ấy
+được commit, còn `scan_public_release` trong `tools/check_sources.py` **so từng byte** với thứ script
+sinh ra. Một README đổi mà quên sinh lại là một lần build đỏ, ở job `static` trên Ubuntu, trước cả khi
+job Windows được xếp lịch.
+
+### 8.3 Đã làm trong lượt này
+
+| Việc | Bằng chứng |
+|---|---|
+| Sinh trang công khai từ nguồn duy nhất | `tools/make_public_docs.py` (+ `docs/release/`: 2 README, 2 CHANGELOG, `LICENSE`, `Assets/ATTRIBUTION.txt`, `docs/LOCALIZATION.md`, `VERSION`); script **dừng** khi một mục bị đổi tên, khi một câu phải viết lại không còn khớp, hay khi một liên kết trên trang công khai trỏ vào thứ không được chép |
+| Luật tĩnh cho ranh giới | `scan_public_release` (6 nhóm kiểm: một tên kho duy nhất; tài liệu khớp máy sinh; danh sách tệp được đi là danh sách đóng; mọi liên kết/anchor có đích; trang tải nói đúng thứ release đính kèm; `PUBLIC_RELEASES_TOKEN` chỉ có trong đúng một bước), mutation test **5/5**: đổi tên kho trong `Keyflow.iss`, sửa tay `docs/release/README.md`, xoá `docs/release/VERSION`, thả `Program.cs` vào `docs/release/`, để `build.yml` nhắc tên token — cả năm đỏ kèm câu nói rõ phải chạy lệnh gì |
+| Đường phát hành công khai trong `release.yml` | Bước *Create the public release branch* dựng nhánh **orphan** `release/public-<tag>` trong kho này (chỉ `docs/release/` + `docs/previews/`; kiểm luôn danh sách đuôi cấm; push bị ruleset chặn thì chỉ **cảnh báo** và bước sau chấp nhận mọi commit trên nhánh công khai), rồi bước *Publish to the public release repository* đẩy sang kho công khai bằng secret `PUBLIC_RELEASES_TOKEN` — hoặc, khi không có secret, in câu lệnh và **chờ 5 phút** cho lần đẩy tay. `main` của kho công khai chỉ dịch chuyển khi đây là bản mới nhất (`releases/latest`), nên phát hành lại một tag cũ không kéo trang chủ lùi |
+| Đường thủ công không cần credential lưu sẵn | `tools/publish_public.ps1` (worktree ở đúng tag → chép `docs/release/` + `docs/previews/` → commit **root** bằng chính danh tính của tác giả tag → `gh auth setup-git` → `git push --force`; `-Packages` thì tạo/đắp GitHub Release; `-DryRun` thì chỉ in). Token không bao giờ vào URL nên không vào log |
+| Giảm phút CI sau khi repo thành private | `build.yml` thêm `concurrency: cancel-in-progress` (trừ `main`); chi phí và cách tiết kiệm thêm được ghi ở sổ tay §6 |
+| Bộ cài trỏ đúng nơi phát hành | `AppPublisherURL` → `https://github.com/lxmtuu/PianoPath-Releases`, và `scan_public_release` giữ nó khớp với script sinh trang công khai cùng hai README |
+| Người đọc biết tải ở đâu | khối đầu của **cả hai** README, mục *Tải mã nguồn* nói rõ kho này là private, mục *Phát hành tự động trên GitHub* mô tả mô hình hai kho, và `docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md` là sổ tay vận hành (ba việc thiết lập một lần, quy trình phát hành, checklist sau phát hành, đánh đổi, cách đổi tên kho, cách quay lại) |
+
+### 8.4 Việc phải làm bằng tay (ngoài quyền của token phiên này)
+
+1. `gh repo create lxmtuu/PianoPath-Releases --public` — hoặc đổi tên trong 5 chỗ nếu chọn tên khác (§7 của sổ tay).
+2. `gh repo edit lxmtuu/PianoPath --visibility private --accept-visibility-change-consequences` — hiện có 1 sao, 0 fork nên không mất fork nào.
+3. Secret `PUBLIC_RELEASES_TOKEN` (fine-grained, chỉ repo phát hành, Contents: read/write) nếu muốn tự động hoàn toàn; không đặt cũng chạy được bằng `tools/publish_public.ps1`.
+4. Phát hành lại `v1.0.0` sang kho công khai: **Run workflow** cho `release.yml`, hoặc `pwsh tools/publish_public.ps1 -Tag v1.0.0 -Packages publish` nếu đã có ba gói trong `publish\`.
+5. Dọn nhánh cũ (tuỳ): `git fetch --prune && git branch -r --merged origin/main | grep -E 'origin/(arena/|docs/|feature/|fix/)' | sed 's|origin/||' | xargs -n1 git push origin --delete` — chỉ xoá nhánh **đã merge**; nhánh của pull request #6 còn mở thì để lại.
