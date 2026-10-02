@@ -176,6 +176,12 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
+          # Native commands report failure through $LASTEXITCODE, and one of them below is expected to fail
+          # on a repository whose rules decline a branch. PowerShell 7.3 and later can be configured to turn
+          # a native command's non-zero exit into a terminating error; this keeps that switch out of the way.
+          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
           $tag = "${{ github.ref_name }}"
           $branch = "release/public-$tag"
           $staging = Join-Path $env:RUNNER_TEMP 'public-release'
@@ -223,7 +229,7 @@ jobs:
               throw 'the public release branch could not be pushed'
             }
           }
-          "expected=$commit" >> $env:GITHUB_OUTPUT
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "expected=$commit" -Encoding utf8
           "public tree: $((Get-ChildItem -Recurse -File -Force).Count) file(s), $(('{0:N0}' -f ((Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum).Sum / 1KB))) KB"
           "::notice title=Public release branch::$branch is $(if ($commit) { $commit } else { '<not pushed: the repository rules declined it>' })"
           @('# Public release branch', '', "``$branch`` at ``$(if ($commit) { $commit } else { '<declined by the repository rules>' })``.", '',
@@ -250,6 +256,12 @@ jobs:
           PUBLIC_RELEASES_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
+          # Native commands report failure through $LASTEXITCODE, and one of them below is expected to fail
+          # on a repository whose rules decline a branch. PowerShell 7.3 and later can be configured to turn
+          # a native command's non-zero exit into a terminating error; this keeps that switch out of the way.
+          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+            $PSNativeCommandUseErrorActionPreference = $false
+          }
           $tag = "${{ github.ref_name }}"
           $repository = "${{ env.PUBLIC_REPOSITORY }}"
           $branch = "release/public-$tag"
