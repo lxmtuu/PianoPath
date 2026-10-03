@@ -9,8 +9,24 @@ internal sealed class AviVideoRecorder : IFrameRecorder
     private const uint OfWrite = 1, OfCreate = 0x1000, AviIfKeyFrame = 0x10;
     private IntPtr _file, _rawStream, _compressedStream, _writeStream;
     private readonly int _width, _height, _stride;
-    private int _frameIndex;
+    private int _frameIndex, _accepted;
     private bool _initialized, _disposed;
+    private readonly object _queueGate = new();
+    private readonly Queue<PendingFrame> _queue = new();
+    private readonly Stack<byte[]> _spare = new();
+    private PendingFrame? _tail;
+    private Thread? _worker;
+    private bool _closing, _dropFramesRefused;
+    private Exception? _workerError;
+    /// <summary>Frames that may wait for the writer before further ones are folded into the newest as repeats.</summary>
+    private const int MaxQueuedFrames = 4;
+
+    /// <summary>A frame on its way to the writer: its pixels and how many timeline slots it fills.</summary>
+    private sealed class PendingFrame(byte[] pixels, int repeat)
+    {
+        internal readonly byte[] Pixels = pixels;
+        internal int Repeat = repeat;
+    }
     /// <summary>Classic AVI (RIFF with 32-bit offsets) cannot grow past 2 GiB; stop a little before that so the index still fits.</summary>
     public const long SizeLimitBytes = 1_900_000_000;
     public bool UsesMjpeg { get; private set; }
@@ -18,7 +34,7 @@ internal sealed class AviVideoRecorder : IFrameRecorder
     public int Height => _height;
     public int FrameRate { get; }
     /// <summary>Frames written so far, including repeated frames used to keep the file in sync with wall-clock time.</summary>
-    public int FrameCount => _frameIndex;
+    public int FrameCount => Math.Max(_accepted, _frameIndex);
     /// <summary>Approximate payload written so far (uncompressed size of every frame handed to the stream).</summary>
     public long BytesWritten { get; private set; }
     public bool IsNearSizeLimit => BytesWritten >= SizeLimitBytes;
@@ -37,7 +53,12 @@ internal sealed class AviVideoRecorder : IFrameRecorder
         if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
         _width = width & ~1; _height = height & ~1; FrameRate = frameRate; _stride = ((_width * 3 + 3) / 4) * 4; OutputPath = path;
         AVIFileInit(); _initialized = true;
-        try { Open(path); }
+        try
+        {
+            Open(path);
+            _worker = new Thread(WriteLoop) { IsBackground = true, Name = "AVI writer" };
+            _worker.Start();
+        }
         catch { Dispose(); throw; }
     }
 
@@ -73,7 +94,84 @@ internal sealed class AviVideoRecorder : IFrameRecorder
 
     /// <summary>Write one bottom-up, padded 24-bit BGR frame, optionally repeated so the stream keeps real-time pacing.</summary>
     /// <summary>The session's entry point; see <see cref="IFrameRecorder.WriteFrame"/>.</summary>
-    public void WriteFrame(byte[] frame, int repeat = 1) => WriteBgrFrame(frame, repeat);
+    /// <remarks>
+    /// Only copies the frame into a short queue: the codec and the disk run on the writer thread, so the window
+    /// never waits for them. When the writer falls behind, frames beyond the queue are folded into the newest
+    /// one as repeats, which keeps the file in step with the clock. A failure on the writer thread is raised
+    /// from the next call here.
+    /// </remarks>
+    public void WriteFrame(byte[] frame, int repeat = 1)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        if (frame.Length != FrameBytes) throw new ArgumentException(Loc.F("Expected a {0}×{1} BGR frame ({2} bytes).", _width, _height, FrameBytes), nameof(frame));
+        if (repeat < 1) return;
+        lock (_queueGate)
+        {
+            if (_workerError is { } error) throw new IOException(error.Message, error);
+            if (_closing) return;
+            if (_queue.Count >= MaxQueuedFrames && _tail is not null)
+            {
+                _tail.Repeat += repeat;
+            }
+            else
+            {
+                var buffer = _spare.Count > 0 ? _spare.Pop() : new byte[FrameBytes];
+                Buffer.BlockCopy(frame, 0, buffer, 0, frame.Length);
+                _tail = new PendingFrame(buffer, repeat);
+                _queue.Enqueue(_tail);
+                Monitor.Pulse(_queueGate);
+            }
+            _accepted += repeat;
+        }
+    }
+
+    /// <summary>The writer thread: takes frames off the queue and writes them until the take closes.</summary>
+    private void WriteLoop()
+    {
+        while (true)
+        {
+            PendingFrame item;
+            lock (_queueGate)
+            {
+                while (_queue.Count == 0)
+                {
+                    if (_closing) return;
+                    Monitor.Wait(_queueGate);
+                }
+                item = _queue.Dequeue();
+            }
+            try
+            {
+                WriteBgrFrame(item.Pixels, 1);
+                if (item.Repeat > 1) WriteRepeats(item.Pixels, item.Repeat - 1);
+            }
+            catch (Exception ex)
+            {
+                lock (_queueGate) { _workerError = ex; _queue.Clear(); _tail = null; }
+                return;
+            }
+            lock (_queueGate) _spare.Push(item.Pixels);
+        }
+    }
+
+    /// <summary>
+    /// Fills <paramref name="count"/> more timeline slots with the frame just written. An AVI "null frame" (a
+    /// sample of zero bytes) means "show the previous picture again", so a repeat costs nothing to compress or
+    /// store; where the stream refuses one, the picture is written out in full instead.
+    /// </summary>
+    private void WriteRepeats(byte[] pixels, int count)
+    {
+        for (var i = 0; i < count; i++)
+        {
+            if (!_dropFramesRefused)
+            {
+                var result = AVIStreamWrite(_writeStream, _frameIndex, 1, IntPtr.Zero, 0, 0, out var written, out _);
+                if (result == 0 && written == 1) { _frameIndex++; continue; }
+                _dropFramesRefused = true;
+            }
+            WriteBgrFrame(pixels, 1);
+        }
+    }
 
     public void WriteBgrFrame(byte[] pixels, int repeat = 1)
     {
@@ -105,6 +203,10 @@ internal sealed class AviVideoRecorder : IFrameRecorder
     public void Dispose()
     {
         if (_disposed) return;
+        // The frames still queued are written first, so the take ends where the recording did; a codec that
+        // wedges is given a few seconds, not forever.
+        lock (_queueGate) { _closing = true; Monitor.PulseAll(_queueGate); }
+        if (_worker is not null && !_worker.Join(TimeSpan.FromSeconds(10))) { _disposed = true; return; }
         _disposed = true;
         if (_compressedStream != IntPtr.Zero) { AVIStreamRelease(_compressedStream); _compressedStream = IntPtr.Zero; }
         if (_rawStream != IntPtr.Zero) { AVIStreamRelease(_rawStream); _rawStream = IntPtr.Zero; }
