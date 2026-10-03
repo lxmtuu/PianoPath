@@ -215,7 +215,7 @@
     "BloomSize": 80,
     "RecordingResolution": "Window",
     "RecordingFrameRate": 30.0,
-    "RecordingFormat": "Avi",
+    "RecordingFormat": "Mp4",
     "RecordingTransparent": true,
     "RenderBackend": "Gpu",
     "GpuFrameRate": "144",

@@ -275,7 +275,7 @@ internal static partial class Mf
             if (MFCreateMediaType(out var target) != S_OK) return MF_E_OUT_OF_MEMORY;
             target.SetGUIDKey(MajorType, VideoMajorType);
             target.SetGUIDKey(SubType, Rgb32); // the uncompressed 32-bit type the AVI container takes as it is
-            target.SetUINT64Key(FrameSize, Pack(height, width));
+            target.SetUINT64Key(FrameSize, Pack(width, height));
             target.SetUINT64Key(FrameRateKey, Pack(frameRate, 1));
             target.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
             target.SetUINT32Key(InterlaceMode, InterlaceProgressive);
@@ -284,7 +284,7 @@ internal static partial class Mf
             if (MFCreateMediaType(out var input) != S_OK) return MF_E_OUT_OF_MEMORY;
             input.SetGUIDKey(MajorType, VideoMajorType);
             input.SetGUIDKey(SubType, Rgb32);
-            input.SetUINT64Key(FrameSize, Pack(height, width));
+            input.SetUINT64Key(FrameSize, Pack(width, height));
             input.SetUINT64Key(FrameRateKey, Pack(frameRate, 1));
             input.SetUINT64Key(PixelAspectRatio, Pack(1, 1));
             hr = writer.SetInputMediaType(index, input, null);
