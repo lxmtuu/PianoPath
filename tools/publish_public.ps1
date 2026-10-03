@@ -53,7 +53,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Tag,
 
-    [string] $Repository = 'lxmtuu/PianoPath-Releases',
+    [string] $Repository = 'lxmtuu/KeyFlow',
 
     [string] $Branch,
 

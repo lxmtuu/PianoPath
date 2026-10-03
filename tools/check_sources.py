@@ -1152,6 +1152,13 @@ def scan_project_files():
 PUBLIC_RELEASE_FILES = {
     "README.md", "README.en.md", "CHANGELOG.md", "CHANGELOG.en.md", "LICENSE",
     "Assets/ATTRIBUTION.txt", "docs/LOCALIZATION.md", "VERSION",
+    # The product presentation. It used to live only in the public repository — made there, committed
+    # there, mentioned nowhere in this one — which is the one arrangement the release branch cannot
+    # keep: the branch is rebuilt from this repository on every release, so the next publish would have
+    # deleted it. It travels now (COPIES in tools/make_public_docs.py) and is allowed to.
+    "docs/presentation/README.md",
+    "docs/presentation/Keyflow-Presentation-v1.0.0.pdf",
+    "docs/presentation/Keyflow-Presentation-v1.0.0.docx",
 }
 
 

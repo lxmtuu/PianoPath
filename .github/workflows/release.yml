@@ -17,7 +17,7 @@ env:
   # the public one. A repository variable can point it elsewhere (a fork, or a repository with another
   # name) without editing this file — the fallback is the name the installer's AppPublisherURL and
   # tools/make_public_docs.py already carry, and tools/check_sources.py makes those agree.
-  PUBLIC_REPOSITORY: ${{ vars.PUBLIC_RELEASES_REPOSITORY || 'lxmtuu/PianoPath-Releases' }}
+  PUBLIC_REPOSITORY: ${{ vars.PUBLIC_RELEASES_REPOSITORY || 'lxmtuu/KeyFlow' }}
 
 permissions:
   contents: write
@@ -354,6 +354,49 @@ jobs:
             }
             "::notice title=Public release::published $branch$(if ($updateMain) { ' and main' }) to $repository"
             "https://github.com/$repository/tree/$branch" | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+
+            # The public repository is where a downloader lands, so it needs the packages themselves and
+            # not only the pages that describe them: a download page whose ZIP and installer live in
+            # another repository sends a stranger somewhere they may not be able to go. This is the same
+            # create-or-upload that tools/publish_public.ps1 -Packages does by hand, over the same file
+            # names the artifact step uploads. A failure here warns instead of failing the run: the
+            # packages are attached to this repository's own release either way, and the release branch
+            # was pushed a line above.
+            $versionNode = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
+            $version = if ($versionNode) { $versionNode.Node.InnerText.Trim() } else { "$tag".TrimStart('v') }
+            $files = @(
+              Get-ChildItem publish -Filter '*.zip' -ErrorAction SilentlyContinue
+              Get-ChildItem publish -Filter 'SHA256SUMS.txt' -ErrorAction SilentlyContinue
+              Get-ChildItem 'installer/Output' -Filter 'Keyflow-Setup-*.exe' -ErrorAction SilentlyContinue
+            )
+            if ($files.Count -eq 0) {
+              '::warning title=Public release::no package was found to attach to the release on ' + $repository
+            } else {
+              $paths = @($files | ForEach-Object { $_.FullName })
+              & gh release view $tag --repo $repository 2>&1 | Out-Null
+              if ($LASTEXITCODE -eq 0) {
+                & gh release upload $tag @paths --repo $repository --clobber | Out-Host
+              } else {
+                $notes = @(
+                  "**Keyflow $tag** for Windows 10/11 (64-bit). Pick one package: the installer, or a ZIP you unzip and run ``PianoPath.exe`` from.",
+                  '',
+                  "``Keyflow-$version-win-x64.zip`` is portable and self-contained. ``Keyflow-Setup-$version.exe`` installs for Windows x64: Start Menu and Desktop shortcuts, an uninstall entry, and a wizard in English or Tiếng Việt. ``Keyflow-$version-win-x64-fd.zip`` is a smaller download for a PC that has the .NET 10 Desktop Runtime, and ``Keyflow-$version-win-arm64.zip`` is Windows on ARM.",
+                  '',
+                  'Keep ``Assets\`` next to the executable, and keep the ``LICENSE.txt`` (MIT) and ``Assets\ATTRIBUTION.txt`` that ship inside every package: the bundled piano is FreePats'' YDP Grand Piano under CC BY 3.0.',
+                  '',
+                  'The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC" on the first launch — choose *More info → Run anyway*. ``SHA256SUMS.txt`` covers every file above: ``Get-FileHash .\Keyflow-' + $version + '-win-x64.zip -Algorithm SHA256``.',
+                  '',
+                  "What changed: https://github.com/$repository/blob/$branch/CHANGELOG.en.md · https://github.com/$repository/blob/$branch/CHANGELOG.md"
+                ) -join "`n"
+                & gh release create $tag @paths --repo $repository --title "Keyflow $version" --notes $notes | Out-Host
+              }
+              if ($LASTEXITCODE -ne 0) {
+                '::warning title=Public release::the packages could not be attached to the release on ' + $repository + ' (does the token hold Contents: write on it?); they are attached to the release of this repository.'
+              } else {
+                "::notice title=Public release::$($files.Count) package(s) attached to the $tag release on $repository"
+                "https://github.com/$repository/releases/tag/$tag" | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+              }
+            }
           }
 
           if (-not $publish) {

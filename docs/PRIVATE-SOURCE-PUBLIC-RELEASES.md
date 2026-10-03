@@ -11,21 +11,28 @@ script đó, và `release.yml` chỉ chép đúng thư mục ấy (cộng `docs/
 ## 1. Mô hình
 
 ```
-lxmtuu/PianoPath  (private — nguồn, lịch sử, LFS, CI, dock, mọi thứ)
+lxmtuu/PianoPath  (nguồn, lịch sử, LFS, CI, dock, mọi thứ — public từ 2026-10-03, xem §2a)
         │
         │  tag v1.0.0  ──►  release.yml
         │                      │
         │                      ├── publish 3 gói (ZIP x64, ZIP x64-fd, ZIP arm64) + bộ cài .exe
         │                      ├── SHA256SUMS.txt
+        │                      ├── đính 4 gói + SHA256SUMS.txt vào Release của **chính kho này**
         │                      ├── dựng nhánh orphan `release/public-v1.0.0`
         │                      │      = docs/release/ (sinh sẵn, đã commit, đã được kiểm)
         │                      │      + docs/previews/ (ảnh CI vừa render)
+        │                      │      + docs/presentation/ (bộ slide PDF + DOCX + README)
         │                      │      + 0 dòng lịch sử của kho nguồn
-        │                      └── đẩy nhánh đó sang kho công khai
-        ▼
-lxmtuu/PianoPath-Releases  (public — chỉ tài liệu + ảnh, và GitHub Release đính kèm 4 gói)
-        https://github.com/lxmtuu/PianoPath-Releases
+        │                      └── đẩy nhánh đó sang kho công khai, và đính cùng 4 gói ấy
+        ▼                         vào Release ở đó
+lxmtuu/KeyFlow  (public — chỉ tài liệu + ảnh + bộ slide, và GitHub Release đính kèm 4 gói)
+        https://github.com/lxmtuu/KeyFlow
 ```
+
+Kho công khai **đã tồn tại** (từ 2026-10-02) và `main` của nó đang giữ tài liệu `v1.0.0`; điều đã sai
+không phải là mô hình mà là **tên**: năm tệp trong kho nguồn cùng gõ `lxmtuu/PianoPath-Releases`, một kho
+chưa bao giờ tồn tại, trong khi kho thật là `lxmtuu/KeyFlow`. Từ 2026-10-03 cả năm chỗ gõ `lxmtuu/KeyFlow`,
+và lớp kiểm tĩnh giữ chúng khớp nhau như cũ.
 
 Hai đường đẩy sang kho công khai, cùng một kết quả:
 
@@ -38,12 +45,14 @@ Thiếu secret thì bước tự động **không làm đỏ build**: nó in m�
 chờ tối đa **5 phút** để xem bản đẩy tay có lên không. Nếu không, lượt chạy vẫn xanh — vì gói và nhánh
 phát hành đã nằm đúng chỗ của chúng trong kho nguồn rồi.
 
-## 2. Ba việc thiết lập một lần
+## 2. Trạng thái hiện tại, và những gì còn phải cấu hình
 
-Làm một lần, bằng tài khoản `lxmtuu` (token của phiên agent **không** có quyền `administration`, nên ba
-việc dưới đây phải do bạn bấm hoặc chạy `gh` trên máy bạn).
+| Kho | Vai trò | Trạng thái |
+| --- | --- | --- |
+| `lxmtuu/PianoPath` | **nguồn**: mã, lịch sử, LFS, CI, và một bản sao các gói trong Release của chính nó | **public** (mô hình này giả định private — xem *a*) |
+| `lxmtuu/KeyFlow` | **phát hành**: trang sản phẩm song ngữ, ảnh giao diện, bộ slide, các gói trong GitHub Release | public; `main` đang giữ tài liệu `v1.0.0` |
 
-**a. Đổi kho nguồn sang private**
+**a. (Tuỳ chọn, nhưng là mô hình) đưa kho nguồn về private**
 
 ```bash
 gh repo edit lxmtuu/PianoPath --visibility private --accept-visibility-change-consequences
@@ -52,32 +61,42 @@ gh repo edit lxmtuu/PianoPath --visibility private --accept-visibility-change-co
 Trước khi bấm, biết trước ba điều: repo hiện có **1 sao và 0 fork** (nên không mất fork nào), **lịch sử
 traffic/insights công khai dừng lại**, và mọi liên kết công khai cũ (`github.com/lxmtuu/PianoPath`,
 `blob/main`…) bắt đầu trả 404 với người ngoài — kể cả liên kết trong ghi chú phát hành `v1.0.0` đã phát
-hành trước đó, nên bản phát hành lại ở kho công khai (bước dưới) là thứ thay thế chúng.
+hành trước đó, nên bản phát hành ở kho công khai là thứ thay thế chúng.
 
-**b. Tạo kho phát hành công khai**
+Chừng nào kho nguồn còn public thì **không có gì hỏng**: cả hai README và banner của trang công khai chỉ
+nói *mã nguồn nằm ở một kho riêng*, không nói kho đó công khai hay không — nên trang công khai không nói
+sai ở trạng thái nào.
+
+**b. Kho phát hành `lxmtuu/KeyFlow` đã có sẵn** — không tạo lại. Ba thứ nên kiểm một lần:
 
 ```bash
-gh repo create lxmtuu/PianoPath-Releases --public \
-  --description "Keyflow — bản dựng cho Windows (kho phát hành; mã nguồn ở kho riêng)"
-gh repo edit lxmtuu/PianoPath-Releases --enable-issues        # nơi nhận báo lỗi từ người dùng
+gh repo view lxmtuu/KeyFlow                     # default branch phải là main (trang sản phẩm nằm ở đó)
+gh repo edit lxmtuu/KeyFlow --enable-issues     # nơi nhận báo lỗi từ người dùng
+gh api repos/lxmtuu/KeyFlow/contents \
+  --jq '.[].name'                               # chỉ tài liệu; không được có mã nguồn
 ```
 
-Đừng tạo README trong kho đó: nhánh `main` sẽ do lần phát hành đầu tiên đặt vào (trang sản phẩm song
-ngữ). Sau lần phát hành đầu, vào **Settings → Branches** đặt default branch là `main` (hoặc nhánh
-`release/public-<tag>` mới nhất) để trang chủ kho hiện đúng trang sản phẩm.
+Nhánh `main` của kho đó **do phát hành sinh ra** — đừng sửa tay, lần phát hành sau sẽ ghi đè. Một hệ quả
+đáng nhớ: tệp nào chỉ tồn tại ở kho công khai mà **không** có trong kho nguồn thì sẽ bị xoá ở lần ghi đè
+kế tiếp. Bộ slide `docs/presentation/` từng như vậy; nay nó nằm trong kho nguồn và đi theo mỗi bản phát
+hành (xem §5).
 
 **c. Secret và variable** (cả hai đều tuỳ chọn — thiếu cũng chỉ là đường thủ công)
 
 ```bash
-# Fine-grained PAT, scope: chỉ repo PianoPath-Releases, quyền Contents: Read and write
+# Fine-grained PAT, scope: chỉ repo KeyFlow, quyền Contents: Read and write (đẩy nhánh + tạo Release)
 gh secret set PUBLIC_RELEASES_TOKEN --repo lxmtuu/PianoPath
-# Chỉ cần khi kho phát hành mang tên khác mặc định
-gh variable set PUBLIC_RELEASES_REPOSITORY --repo lxmtuu/PianoPath --body "lxmtuu/PianoPath-Releases"
+# CHỈ đặt nếu kho phát hành mang tên khác mặc định. Nếu biến này đang mang tên cũ
+# (lxmtuu/PianoPath-Releases) thì sửa lại hoặc xoá hẳn — biến thắng giá trị mặc định trong workflow.
+gh variable list --repo lxmtuu/PianoPath
+gh variable set PUBLIC_RELEASES_REPOSITORY --repo lxmtuu/PianoPath --body "lxmtuu/KeyFlow"
+gh variable delete PUBLIC_RELEASES_REPOSITORY --repo lxmtuu/PianoPath   # hoặc xoá, dùng mặc định
 ```
 
-Tên mặc định đã nằm trong `.github/workflows/release.yml` (`PUBLIC_REPOSITORY`), trong
-`tools/make_public_docs.py`, trong `AppPublisherURL` của bộ cài và trong cả hai README; lớp kiểm tĩnh
-(`scan_public_release`) đòi tất cả nói cùng một tên, nên đổi tên kho thì phải đổi cả năm chỗ — xem §7.
+Tên mặc định nằm ở **sáu** chỗ — `PUBLIC_REPOSITORY` của `tools/make_public_docs.py`, hằng dự phòng của
+`.github/workflows/release.yml`, `AppPublisherURL` của bộ cài, `-Repository` mặc định của
+`tools/publish_public.ps1`, cả hai README và tài liệu này — và `scan_public_release` đòi tất cả nói cùng
+một tên, xem §7.
 
 ## 3. Phát hành một bản
 
@@ -94,8 +113,10 @@ Tên mặc định đã nằm trong `.github/workflows/release.yml` (`PUBLIC_REP
    ```
 
 4. **Đợi `release.yml`.** Nó publish ba gói + bộ cài, băm `SHA256SUMS.txt`, đính kèm vào Release của
-   **kho này**, dựng nhánh `release/public-v1.0.0`, rồi đẩy sang kho công khai:
-   * có secret → tự động, xong trong vài giây;
+   **kho này**, dựng nhánh `release/public-v1.0.0`, rồi đẩy sang kho công khai — và đính **cùng bốn gói +
+   `SHA256SUMS.txt`** vào Release ở kho công khai đó (một lượt tải 370 MB hai lần; đổi lại, người tải
+   không phải sang kho nguồn):
+   * có secret → tự động, xong trong vài phút;
    * không có secret → bước in cảnh báo và **chờ 5 phút**. Trong 5 phút đó, trên máy bạn:
 
      ```powershell
@@ -114,11 +135,13 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
 ## 4. Kiểm sau khi phát hành
 
 - Nhánh công khai có: `README.md`, `README.en.md`, `CHANGELOG.md`, `CHANGELOG.en.md`, `LICENSE`,
-  `Assets/ATTRIBUTION.txt`, `docs/LOCALIZATION.md`, `docs/previews/…`, `VERSION`.
+  `Assets/ATTRIBUTION.txt`, `docs/LOCALIZATION.md`, `docs/presentation/…` (bộ slide), `docs/previews/…`,
+  `VERSION`.
 - **Không** có: bất kỳ `*.cs`, `*.xaml`, `*.csproj`, `*.iss`, `*.ps1`, `*.py`, `*.hlsl`, `*.sf2`, `.github/`.
   (Lớp kiểm tĩnh khẳng định danh sách này trên `docs/release/` đã commit; bước dựng nhánh lặp lại phép
   kiểm trên cả `docs/previews/`.)
-- Release ở kho công khai có **4 gói + `SHA256SUMS.txt`**, và `SHA256SUMS.txt` khớp với tệp đã tải:
+- Release ở **cả hai** kho có **4 gói + `SHA256SUMS.txt`** (`gh release view v1.0.0 --repo lxmtuu/KeyFlow`),
+  và `SHA256SUMS.txt` khớp với tệp đã tải:
   `Get-FileHash .\Keyflow-1.0.0-win-x64.zip -Algorithm SHA256`.
 - Trên một máy Windows sạch: cài bằng bộ cài (hoặc giải nén ZIP) rồi chạy
   `PianoPath.exe --verify --verify-log=%TEMP%\keyflow-verify.log` — mã thoát `0`. Đây vẫn là việc **duy
@@ -134,7 +157,8 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
    README và tài liệu này phải trỏ cùng một kho công khai.
 2. **Tài liệu khớp máy sinh ra nó**: `docs/release/` so từng byte với `write_all()` của
    `tools/make_public_docs.py`; thiếu tệp, thừa tệp hay lệch một ký tự đều đỏ, kèm đúng câu lệnh phải chạy.
-3. **Danh sách tệp được đi là danh sách đóng**: chỉ 8 đường dẫn ở §4, cộng `docs/previews/`.
+3. **Danh sách tệp được đi là danh sách đóng**: chỉ 11 đường dẫn (8 tài liệu ở §4, bộ slide 3 tệp),
+   cộng `docs/previews/`.
 4. **Mọi liên kết trên trang công khai có đích**: anchor phải là một tiêu đề của chính trang đó, liên kết
    tệp phải là tệp được chép, ảnh phải đúng bộ ảnh của ngôn ngữ đó (trừ gallery `presets.jpg` dùng chung).
 5. **Trang tải phải nói đúng thứ release đính kèm**: bảng gói nhắc đủ ZIP/Setup/SHA256SUMS và
@@ -174,13 +198,14 @@ Năm chỗ, và lớp kiểm tĩnh sẽ đỏ cho tới khi đủ cả năm:
 | Chỗ | Sửa gì |
 | --- | --- |
 | `tools/make_public_docs.py` | `PUBLIC_REPOSITORY = "owner/name"` (nguồn của mọi liên kết trên trang công khai) |
+| `tools/publish_public.ps1` | `-Repository` mặc định (`lxmtuu/KeyFlow`) |
 | `.github/workflows/release.yml` | hằng dự phòng `vars.PUBLIC_RELEASES_REPOSITORY \|\| 'owner/name'` |
 | `installer/Keyflow.iss` | `AppPublisherURL=https://github.com/owner/name` |
 | `README.md`, `README.en.md` | liên kết ở khối đầu và trong mục phát hành |
 | tài liệu này | tiêu đề mô hình và các lệnh `gh` |
 
-Rồi chạy lại `python3 tools/make_public_docs.py` **hai lần** (một lần để sinh `docs/release/`, một lần để
-`scan_public_release` so lại — lần thứ hai là lớp kiểm, không phải script).
+Rồi chạy `python3 tools/make_public_docs.py` (sinh lại `docs/release/`) và `python3 tools/check_sources.py`
+(lớp kiểm: `scan_public_release` so từng byte, đọc tên kho từ **cả sáu** chỗ và đỏ nếu chúng lệch nhau).
 
 ## 8. Muốn quay lại mô hình cũ
 
