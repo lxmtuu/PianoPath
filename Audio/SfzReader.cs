@@ -76,10 +76,13 @@ internal static class SfzReader
         {
             if (!inRegion) return;
             inRegion = false;
-            var merged = new Dictionary<string, string>(global, StringComparer.OrdinalIgnoreCase);
-            foreach (var pair in master) merged[pair.Key] = pair.Value;
-            foreach (var pair in group) merged[pair.Key] = pair.Value;
-            foreach (var pair in region) merged[pair.Key] = pair.Value;
+            // Each opcode remembers the header level it came from, because key= at a deeper level must
+            // beat lokey/hikey/pitch_keycenter inherited from a shallower one (and only then).
+            var merged = new Dictionary<string, (string Value, int Level)>(StringComparer.OrdinalIgnoreCase);
+            foreach (var pair in global) merged[pair.Key] = (pair.Value, 0);
+            foreach (var pair in master) merged[pair.Key] = (pair.Value, 1);
+            foreach (var pair in group) merged[pair.Key] = (pair.Value, 2);
+            foreach (var pair in region) merged[pair.Key] = (pair.Value, 3);
             regions.Add(BuildRegion(merged, control, baseDirectory, cache));
             region.Clear();
         }
@@ -185,9 +188,11 @@ internal static class SfzReader
         return tokens;
     }
 
-    private static SfzRegion BuildRegion(Dictionary<string, string> opcodes, Dictionary<string, string> control, string baseDirectory, Dictionary<string, WavData> cache)
+    private static SfzRegion BuildRegion(Dictionary<string, (string Value, int Level)> opcodes, Dictionary<string, string> control, string baseDirectory, Dictionary<string, WavData> cache)
     {
-        if (!opcodes.TryGetValue("sample", out var sample) || sample.Length == 0)
+        string? Opt(string name) => opcodes.TryGetValue(name, out var entry) ? entry.Value : null;
+        int LevelOf(string name) => opcodes.TryGetValue(name, out var entry) ? entry.Level : -1;
+        if (Opt("sample") is not { Length: > 0 } sample)
             throw new InvalidDataException("An SFZ region has no sample= opcode.");
         var defaultPath = control.TryGetValue("default_path", out var dp) ? dp : "";
         var relative = (defaultPath + sample).Replace('\\', Path.DirectorySeparatorChar).Replace('/', Path.DirectorySeparatorChar);
@@ -198,30 +203,37 @@ internal static class SfzReader
             cache[fullPath] = audio = WavReader.Read(fullPath);
         }
         var region = new SfzRegion { Sample = audio, SamplePath = fullPath };
-        // key= sets the window and the root in one stroke; explicit opcodes afterwards refine it.
-        if (opcodes.TryGetValue("key", out var key)) { var k = ParseNote(key); region.LoKey = region.HiKey = region.Root = k; }
-        if (opcodes.TryGetValue("lokey", out var v)) region.LoKey = ParseNote(v);
-        if (opcodes.TryGetValue("hikey", out v)) region.HiKey = ParseNote(v);
-        if (opcodes.TryGetValue("pitch_keycenter", out v)) region.Root = ParseNote(v);
-        if (opcodes.TryGetValue("lovel", out v)) region.LoVel = ParseInt(v);
-        if (opcodes.TryGetValue("hivel", out v)) region.HiVel = ParseInt(v);
-        if (opcodes.TryGetValue("transpose", out v)) region.Transpose = ParseInt(v);
-        if (opcodes.TryGetValue("tune", out v)) region.TuneCents = ParseDouble(v);
-        if (opcodes.TryGetValue("volume", out v)) region.VolumeDb = ParseDouble(v);
-        if (opcodes.TryGetValue("pan", out v)) region.Pan = Math.Clamp(ParseDouble(v), -100, 100);
-        if (opcodes.TryGetValue("amp_veltrack", out v)) region.AmpVeltrack = Math.Clamp(ParseDouble(v) / 100, -1, 1);
-        if (opcodes.TryGetValue("ampeg_attack", out v)) region.AttackSeconds = Math.Clamp(ParseDouble(v), 0, 20);
-        if (opcodes.TryGetValue("ampeg_decay", out v)) region.DecaySeconds = Math.Clamp(ParseDouble(v), 0, 20);
-        if (opcodes.TryGetValue("ampeg_sustain", out v)) region.SustainLevel = Math.Clamp(ParseDouble(v) / 100, 0, 1);
-        if (opcodes.TryGetValue("ampeg_release", out v)) region.ReleaseSeconds = Math.Clamp(ParseDouble(v), .015, 20);
-        if (opcodes.TryGetValue("trigger", out v)) region.TriggerRelease = v is "release" or "release_key";
-        if (opcodes.TryGetValue("rt_decay", out v)) region.RtDecayDb = Math.Max(0, ParseDouble(v));
-        if (opcodes.TryGetValue("seq_length", out v)) region.SeqLength = Math.Max(1, ParseInt(v));
-        if (opcodes.TryGetValue("seq_position", out v)) region.SeqPosition = Math.Max(1, ParseInt(v));
-        if (opcodes.TryGetValue("loop_mode", out v)) region.Loop = v is "loop_continuous" or "loop_sustain";
-        if (opcodes.TryGetValue("loop_start", out v)) region.LoopStart = ParseInt(v);
-        if (opcodes.TryGetValue("loop_end", out v)) region.LoopEnd = ParseInt(v);
-        if (opcodes.TryGetValue("offset", out v)) region.Offset = Math.Max(0, ParseInt(v));
+        // key= expands to lokey+hikey+pitch_keycenter, but only beats one of them when it sits at a
+        // deeper header level: <region> key=60 overrides a group's window, a region's own lokey wins.
+        var keyLevel = LevelOf("key"); var keyNote = keyLevel >= 0 ? ParseNote(Opt("key")!) : 0;
+        int PickNote(string name, int fallback)
+        {
+            var explicitLevel = LevelOf(name);
+            if (keyLevel > explicitLevel) return keyNote;
+            return explicitLevel >= 0 ? ParseNote(Opt(name)!) : fallback;
+        }
+        region.LoKey = PickNote("lokey", 0);
+        region.HiKey = PickNote("hikey", 127);
+        region.Root = PickNote("pitch_keycenter", 60);
+        if (Opt("lovel") is { } v) region.LoVel = ParseInt(v);
+        if (Opt("hivel") is { } hivel) region.HiVel = ParseInt(hivel);
+        if (Opt("transpose") is { } transpose) region.Transpose = ParseInt(transpose);
+        if (Opt("tune") is { } tune) region.TuneCents = ParseDouble(tune);
+        if (Opt("volume") is { } volume) region.VolumeDb = ParseDouble(volume);
+        if (Opt("pan") is { } pan) region.Pan = Math.Clamp(ParseDouble(pan), -100, 100);
+        if (Opt("amp_veltrack") is { } veltrack) region.AmpVeltrack = Math.Clamp(ParseDouble(veltrack) / 100, -1, 1);
+        if (Opt("ampeg_attack") is { } attack) region.AttackSeconds = Math.Clamp(ParseDouble(attack), 0, 20);
+        if (Opt("ampeg_decay") is { } decay) region.DecaySeconds = Math.Clamp(ParseDouble(decay), 0, 20);
+        if (Opt("ampeg_sustain") is { } sustain) region.SustainLevel = Math.Clamp(ParseDouble(sustain) / 100, 0, 1);
+        if (Opt("ampeg_release") is { } release) region.ReleaseSeconds = Math.Clamp(ParseDouble(release), .015, 20);
+        if (Opt("trigger") is { } trigger) region.TriggerRelease = trigger is "release" or "release_key";
+        if (Opt("rt_decay") is { } rtDecay) region.RtDecayDb = Math.Max(0, ParseDouble(rtDecay));
+        if (Opt("seq_length") is { } seqLength) region.SeqLength = Math.Max(1, ParseInt(seqLength));
+        if (Opt("seq_position") is { } seqPosition) region.SeqPosition = Math.Max(1, ParseInt(seqPosition));
+        if (Opt("loop_mode") is { } loopMode) region.Loop = loopMode is "loop_continuous" or "loop_sustain";
+        if (Opt("loop_start") is { } loopStart) region.LoopStart = ParseInt(loopStart);
+        if (Opt("loop_end") is { } loopEnd) region.LoopEnd = ParseInt(loopEnd);
+        if (Opt("offset") is { } offset) region.Offset = Math.Max(0, ParseInt(offset));
         if (region.LoopEnd <= region.LoopStart) region.Loop = false;
         if (region.LoopEnd >= audio.Frames) region.LoopEnd = Math.Max(0, audio.Frames - 1);
         return region;

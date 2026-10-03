@@ -88,7 +88,7 @@ internal sealed class PianoAudioEngine : IDisposable
     /// <summary>Loads a piano by file type: <c>.sfz</c> builds the SFZ engine, anything else is read as SF2.</summary>
     public void LoadInstrument(string path)
     {
-        _instrument = Path.GetExtension(path).Equals(".sfz", StringComparison.OrdinalIgnoreCase)
+        _instrument = System.IO.Path.GetExtension(path).Equals(".sfz", StringComparison.OrdinalIgnoreCase)
             ? SfzReader.Read(path)
             : SoundFontReader.Read(path);
         Rebuild();
