@@ -111,7 +111,8 @@ internal static class AudioSinkFactory
     /// <summary>The chain behind an explicit request that failed: the message of the request is kept.</summary>
     private static IAudioSink? Fallback(double latencyMilliseconds, AudioRenderCallback render, ref string? failure)
     {
-        var sink = WasapiAudioSink.TryCreate(exclusive: false, latencyMilliseconds, render, out var wasapiFailure)
+        // The cast picks the common interface for ??: the two sinks share IAudioSink and nothing else.
+        var sink = (IAudioSink?)WasapiAudioSink.TryCreate(exclusive: false, latencyMilliseconds, render, out var wasapiFailure)
             ?? WaveOutAudioSink.TryCreate(render, out _);
         failure ??= wasapiFailure;
         return sink;
