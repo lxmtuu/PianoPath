@@ -191,7 +191,7 @@ Mọi preset có sẵn, mỗi preset vẽ bằng cả hai engine cạnh nhau (ph
 | --- | --- |
 | SoundFont | Tự nạp grand piano Yamaha đi kèm; cho phép nạp `.sf2` khác, liệt kê bank/program, chọn preset, đa âm và phát stereo 44.1 kHz qua WASAPI shared/exclusive, driver ASIO hoặc `waveOut` — chọn backend và độ trễ mong muốn ở **OUTPUT & LATENCY**, dòng chữ bên dưới ghi đường đang phát và buffer thật. |
 | Reverb | Hall reverb stereo chạy thời gian thực, bật mặc định, có nút bypass độc lập; reverb vẫn vang sau khi nhả phím. |
-| Pedal | Ba pedal MIDI tiêu chuẩn: una corda/soft (CC 67, giảm gain và làm dịu âm), sostenuto (CC 66, giữ những nốt đang nhấn khi pedal xuống), sustain/damper (CC 64, giữ tiếng sau khi nhả phím). Nút trên màn hình, pedal MIDI vào SoundFont và MIDI output đều được kết nối; độ dài thanh nốt live chỉ tăng trong lúc phím được giữ, còn pedal chỉ tác động lên tiếng đàn. |
+| Pedal | Ba pedal MIDI tiêu chuẩn: una corda/soft (CC 67, giảm gain và làm dịu âm), sostenuto (CC 66, giữ những nốt đang nhấn khi pedal xuống), sustain/damper (CC 64, giữ tiếng sau khi nhả phím). Pedal sustain là **damper liên tục**: pedal nửa chừng (half‑pedal) kéo dài đuôi tiếng thay vì giữ hẳn, và đạp lại kịp lúc (repedal) bắt được dây còn đang kêu — giá trị CC 64 thô từ pedal liên tục đi thẳng vào synthesizer. Khi pedal xuống, dàn **cộng hưởng dây** (64 waveguide, một dây một phím) cùng ngân vang như trên đàn grand thật và tắt ngay khi nhả pedal; nút STRING RESONANCE trong Settings → Audio bật/tắt. Nút trên màn hình, pedal MIDI vào SoundFont và MIDI output đều được kết nối; độ dài thanh nốt live chỉ tăng trong lúc phím được giữ, còn pedal chỉ tác động lên tiếng đàn. |
 | MIDI vào | Phím máy tính, click/giữ phím ảo và WinMM MIDI input; tự mở MIDI input đầu tiên, giữ lựa chọn sau khi làm mới danh sách, hiển thị tín hiệu/nốt nhận được. |
 | MIDI ra | WinMM MIDI output để gửi Note On/Off tới synthesizer hoặc thiết bị MIDI đã chọn. |
 | Bài MIDI | Đọc **định dạng 0/1/2** (format 2 là các chuỗi độc lập nên được chạy lần lượt, hết chuỗi này tới chuỗi kia), **độ chia PPQ hoặc SMPTE** (SMPTE là thời gian tuyệt đối: tempo chỉ đổi nhịp của metronome chứ không đổi vị trí nốt), tempo map, nhịp, tên track, thời lượng/velocity nốt (bỏ qua kênh trống 10), solo/mute và đổi màu từng track, tua, tempo, loop A–B, metronome theo tempo map (nhấn mạnh phách đầu ô nhịp). |
@@ -257,7 +257,7 @@ Dock cài đặt có **13 trang, xếp thành bốn nhóm theo mục đích** �
 | | Keyboard | Kiểu bàn phím, nhãn phím, nỉ đỏ, chiếu sáng và nhóm **RAY-TRACED SHADING**. |
 | | Background | Màu/ảnh/green screen, bầu khí quyển, guide lanes, halo, 4 lớp ambient. |
 | | Camera & FX | Parallax, zoom, khung hình, saturation, contrast, bloom, **lớp phủ camera** (camera trực tiếp hoặc video + key xanh). |
-| **SOUND & INPUT** | Audio | Nạp SoundFont, chọn preset nhạc cụ, hall reverb. |
+| **SOUND & INPUT** | Audio | Nạp SoundFont, chọn preset nhạc cụ, hall reverb, cộng hưởng dây, backend đầu ra và độ trễ. |
 | | MIDI | Thiết bị vào/ra, danh sách track (solo/mute/màu), metronome. |
 | **SESSION** | Practice | Chế độ tập, tempo, vòng lặp A–B, và **tempo luyện tập tự động**: sai liên tiếp quá ngưỡng thì bài chậm dần 5% mỗi bước, chơi đúng liên tiếp 4 nốt thì nhanh lại 2% và không bao giờ vượt 100%. |
 | | History | **Lịch sử luyện tập**: từng lượt chơi của bài đang mở (thời điểm, độ chính xác, nốt đúng/sai, chuỗi dài nhất), lượt tốt nhất của bài đó, nút **EXPORT HTML** xuất báo cáo và **CLEAR HISTORY** xoá. |

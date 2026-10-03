@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -82,6 +82,7 @@ internal static partial class VerificationSuite
                             Assert(soundFontLabel.Text != Loc.T("NO SOUNDFONT · SILENT"), "A normal app startup should show the bundled piano as its active SoundFont.");
                             Assert(((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled && ((ComboBox)startupWindow.FindName("PresetCombo")).SelectedIndex == 0, "Startup should select the bundled acoustic-grand preset.");
                             Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The bundled piano should start with hall reverb active in the UI and audio engine.");
+                            Assert(((ToggleButton)startupWindow.FindName("ResonanceToggle")).IsChecked == true && audio.StringResonanceEnabled, "The bundled piano should start with sympathetic string resonance active in the UI and audio engine.");
                             Results.Add($"PASS WPF startup: bundled grand loads automatically, its preset is selected and room reverb starts enabled{(audio.HasAudioOutput ? "" : $"; no audio device here ({audio.PlaybackError}) so playback is silent")}.");
                             startupWindow.Close();
                             VerifyPracticeWindow(args, app);
@@ -940,6 +941,84 @@ internal static partial class VerificationSuite
         Results.Add($"PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, {(engineOutputAvailable ? "waveOut output" : "silent-mode fallback")} and silent unload.");
     }
 
+    /// <summary>
+    /// The continuous damper model behind CC 64: values in the half-pedal zone stretch a release instead
+    /// of merely holding or dropping it, pressing the pedal catches strings that are still audible
+    /// (repedalling), and the sympathetic-resonance bank rings only while the pedal is down. Uses the
+    /// looped test font because an unlooped voice runs off its half-second sample long before these
+    /// timings play out. The 0/127 edges every switch pedal and MIDI file sends are covered by
+    /// VerifySoundFontEngine and must behave exactly as before.
+    /// </summary>
+    private static void VerifyPianoPedalModel()
+    {
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont-pedal.sf2"); File.WriteAllBytes(path, CreateTestSoundFont(layered: true));
+        var font = SoundFontReader.Read(path);
+
+        // CC 64 at 40 is in the half-pedal zone: the released key must outlive a normal release (which the
+        // 1-second envelope ends inside 1.5 s) but still die eventually instead of being held outright.
+        var half = new SoundFontSynthesizer(font, 22050); var plain = new SoundFontSynthesizer(font, 22050);
+        half.NoteOn(0, 69, 100); plain.NoteOn(0, 69, 100);
+        var attack = new short[2205 * 2]; half.Render(attack, 2205); plain.Render(attack, 2205);
+        half.ProcessMidi(0, 0xB0, 64, 40); half.NoteOff(0, 69); plain.NoteOff(0, 69);
+        var halfTail = new short[33075 * 2]; var plainTail = new short[33075 * 2];
+        half.Render(halfTail, 33075); plain.Render(plainTail, 33075);
+        Assert(plain.ActiveVoiceCount == 0, "A release with the pedal up should still end within the normal envelope time.");
+        Assert(half.ActiveVoiceCount == 1 && halfTail.Skip(33075 * 2 - 400).Any(sample => sample != 0), "Half-pedalling (CC 64 below the catch point) should stretch the release past its normal length.");
+        half.ProcessMidi(0, 0xB0, 64, 0);
+        var damped = new short[22050 * 2]; half.Render(damped, 22050);
+        Assert(half.ActiveVoiceCount == 0, "Dropping the pedal mid-release should let the dampers end the stretched tail quickly.");
+
+        // Repedalling: the pedal pressed after a release catches the string at its current loudness.
+        var catchSynth = new SoundFontSynthesizer(font, 22050);
+        catchSynth.NoteOn(0, 69, 100); catchSynth.Render(attack, 2205);
+        catchSynth.NoteOff(0, 69); catchSynth.Render(attack, 2205);
+        catchSynth.ProcessMidi(0, 0xB0, 64, 127);
+        var caught = new short[44100 * 2]; catchSynth.Render(caught, 44100);
+        Assert(catchSynth.ActiveVoiceCount == 1 && caught.Skip(44100 * 2 - 400).Any(sample => sample != 0), "Repedalling should catch a still-audible string and hold it at its caught loudness.");
+        catchSynth.ProcessMidi(0, 0xB0, 64, 0);
+        var released = new short[33075 * 2]; catchSynth.Render(released, 33075);
+        Assert(catchSynth.ActiveVoiceCount == 0, "Releasing the pedal should release a repedalled string normally.");
+
+        // A string that has already faded below audibility must not come back when the pedal goes down.
+        var fadedSynth = new SoundFontSynthesizer(font, 22050);
+        fadedSynth.NoteOn(0, 69, 100); fadedSynth.Render(attack, 2205); fadedSynth.NoteOff(0, 69);
+        var fadeOut = new short[15435 * 2]; fadedSynth.Render(fadeOut, 15435);
+        fadedSynth.ProcessMidi(0, 0xB0, 64, 127);
+        var silentCatch = new short[22050 * 2]; fadedSynth.Render(silentCatch, 22050);
+        Assert(fadedSynth.ActiveVoiceCount == 0, "A string that has faded out should not be revived by the pedal.");
+
+        // Sympathetic resonance: the string bank rings after the dry burst stops while the pedal is down,
+        // chokes as soon as the pedal lifts, and is bit-identical dry when the feature is off.
+        var resonance = new StringResonance(22050);
+        var silence = new float[512 * 2];
+        for (var i = 0; i < 24; i++) { Array.Clear(silence, 0, silence.Length); resonance.Process(silence, 512, 1); }
+        var burst = new float[512 * 2];
+        for (var i = 0; i < 64; i++) { burst[i * 2] = .8f; burst[i * 2 + 1] = .8f; }
+        resonance.Process(burst, 512, 1);
+        var ringing = false; var block = new float[512 * 2];
+        for (var i = 0; i < 8; i++) { Array.Clear(block, 0, block.Length); resonance.Process(block, 512, 1); if (block.Any(sample => Math.Abs(sample) > 1e-6f)) ringing = true; }
+        Assert(ringing, "Open strings should keep ringing after the dry signal stops while the pedal is down.");
+        var residual = 0f;
+        for (var i = 0; i < 48; i++)
+        {
+            Array.Clear(block, 0, block.Length); resonance.Process(block, 512, 0);
+            if (i == 47) residual = block.Max(Math.Abs);
+        }
+        Assert(residual < 1e-4f, $"Lifting the pedal should let the dampers choke the resonating strings (residual={residual}).");
+        var disabled = new StringResonance(22050) { Enabled = false };
+        var dry = new float[512 * 2]; for (var i = 0; i < dry.Length; i++) dry[i] = (float)Math.Sin(i * .1) * .5f;
+        var expected = (float[])dry.Clone();
+        disabled.Process(dry, 512, 1);
+        Assert(dry.SequenceEqual(expected), "Disabled string resonance must leave the mix bit-identical.");
+        using (var engine = new PianoAudioEngine())
+        {
+            Assert(engine.StringResonanceEnabled, "String resonance should default to on, matching the UI toggle.");
+            engine.StringResonanceEnabled = false;
+            Assert(!engine.StringResonanceEnabled, "The string-resonance toggle should reach the audio engine.");
+        }
+        Results.Add("PASS piano pedal model: half-pedal release stretching, repedal catch of audible strings, no revival of faded strings, and sympathetic string resonance that rings under the pedal, chokes on release and bypasses cleanly.");
+    }
+
     private static void VerifyBundledPiano()
     {
         var path = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -1049,8 +1128,10 @@ internal static partial class VerificationSuite
         Assert((off & 255) == 0x82 && ((off >> 8) & 127) == 60, "MIDI output Note Off bytes should be correct.");
         using var service = new MidiDeviceService(); var messages = new List<(int pitch, int velocity, bool on)>();
         var pedals = new List<(PianoPedal pedal, bool down)>();
+        var levels = new List<(PianoPedal pedal, int value)>();
         service.NoteChanged += (pitch, velocity, pressed) => messages.Add((pitch, velocity, pressed));
         service.PedalChanged += (pedal, down) => pedals.Add((pedal, down));
+        service.PedalLevelChanged += (pedal, value) => levels.Add((pedal, value));
         service.ProcessNativeInputMessage(0x3C1, (UIntPtr)on); // MIM_OPEN must not be parsed as a note.
         service.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)on);
         service.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)off);
@@ -1064,6 +1145,10 @@ internal static partial class VerificationSuite
         Assert(messages.Count == 2 && messages[0] == (60, 100, true) && messages[1] == (60, 0, false), "The WinMM MIM_DATA callback should translate packed Note On/Off messages and ignore other callback messages.");
         Assert(pedals.Count == 6 && pedals.Take(3).Select(x => x.pedal).SequenceEqual([PianoPedal.Soft, PianoPedal.Sostenuto, PianoPedal.Sustain]) && pedals.All(x => x.down == pedals.IndexOf(x) < 3), "MIDI CC 67/66/64 should report real-time soft, sostenuto and sustain pedal edges.");
         Assert(MidiDeviceService.ControllerFor(PianoPedal.Sustain) == 64 && MidiDeviceService.ControllerFor(PianoPedal.Sostenuto) == 66 && MidiDeviceService.ControllerFor(PianoPedal.Soft) == 67, "Pedal output should use the standard MIDI controller numbers.");
+        // A continuous pedal sends the whole 0..127 range; the raw value must survive next to the on/off edge.
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(64, 45));
+        Assert(levels.Count == 7 && levels[6] == (PianoPedal.Sustain, 45) && levels.Take(6).Select(x => x.value).SequenceEqual([127, 127, 127, 0, 0, 0]), "Pedal messages should also report their raw controller value for half-pedalling.");
+        Assert(pedals.Count == 7 && pedals[6] == (PianoPedal.Sustain, false), "A half-pedal value below 64 should still read as 'up' for the on/off consumers.");
         var controllerMessage = MidiDeviceService.PackControllerMessage(64, 127, 3);
         Assert((controllerMessage & 255) == 0xB3 && ((controllerMessage >> 8) & 127) == 64 && ((controllerMessage >> 16) & 127) == 127, "MIDI pedal output should pack controller, value and channel correctly.");
         var ins = MidiDeviceService.Inputs; var outs = MidiDeviceService.Outputs;

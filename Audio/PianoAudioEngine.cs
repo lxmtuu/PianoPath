@@ -18,6 +18,7 @@ internal sealed class PianoAudioEngine : IDisposable
 
     private Pipeline? _pipeline;
     private int _reverbEnabled = 1;
+    private int _resonanceEnabled = 1;
     private AudioOutputChoice _outputChoice = AudioOutputChoice.Auto;
     private double _latencyMilliseconds = 10;
     private (int Bank, int Program)? _selectedPreset;
@@ -46,6 +47,17 @@ internal sealed class PianoAudioEngine : IDisposable
         }
     }
 
+    /// <summary>Sympathetic string resonance while the sustain pedal is down; see <see cref="StringResonance"/>.</summary>
+    public bool StringResonanceEnabled
+    {
+        get => Volatile.Read(ref _resonanceEnabled) != 0;
+        set
+        {
+            Volatile.Write(ref _resonanceEnabled, value ? 1 : 0);
+            Volatile.Read(ref _pipeline)?.SetResonanceEnabled(value);
+        }
+    }
+
     /// <summary>
     /// Remembers the output request — backend plus the WASAPI latency target — and rebuilds the live
     /// pipeline around it when a SoundFont is already playing. Held notes are cut by the rebuild (the synth
@@ -66,7 +78,7 @@ internal sealed class PianoAudioEngine : IDisposable
 
     private void Rebuild(SoundFontData font)
     {
-        var next = new Pipeline(font, ReverbEnabled, _outputChoice, _latencyMilliseconds);
+        var next = new Pipeline(font, ReverbEnabled, StringResonanceEnabled, _outputChoice, _latencyMilliseconds);
         if (_selectedPreset is { } preset) next.Synth.SelectPreset(preset.Bank, preset.Program);
         Interlocked.Exchange(ref _pipeline, next)?.Dispose();
     }
@@ -113,6 +125,7 @@ internal sealed class PianoAudioEngine : IDisposable
         /// <summary>Frames rendered per tap-only block; matches the recording clock's accounting.</summary>
         private const int TapBlockFrames = 512;
         private readonly StereoHallReverb _reverb = new(SampleRate);
+        private readonly StringResonance _resonance = new(SampleRate);
         private readonly float[] _tapSamples = new float[TapBlockFrames * 2];
         private short[] _tapPcm = new short[TapBlockFrames * 2];
         private Action<short[], int>? _tap;
@@ -126,15 +139,17 @@ internal sealed class PianoAudioEngine : IDisposable
         /// <summary>The explicit backend request's failure when a fallback sink answered instead.</summary>
         public string? FallbackNotice { get; }
 
-        public Pipeline(SoundFontData font, bool reverbEnabled, AudioOutputChoice choice, double latencyMilliseconds)
+        public Pipeline(SoundFontData font, bool reverbEnabled, bool resonanceEnabled, AudioOutputChoice choice, double latencyMilliseconds)
         {
             Synth = new SoundFontSynthesizer(font, SampleRate);
             _reverb.Enabled = reverbEnabled;
+            _resonance.Enabled = resonanceEnabled;
             Sink = AudioSinkFactory.TryCreate(choice, latencyMilliseconds, Render, out var failure);
             if (Sink is null) OutputError = failure; else FallbackNotice = failure;
         }
 
         public void SetReverbEnabled(bool enabled) => _reverb.Enabled = enabled;
+        public void SetResonanceEnabled(bool enabled) => _resonance.Enabled = enabled;
         internal bool HasTap => Volatile.Read(ref _tap) is not null;
         internal void SetTap(Action<short[], int>? tap) => Volatile.Write(ref _tap, tap);
 
@@ -142,6 +157,8 @@ internal sealed class PianoAudioEngine : IDisposable
         private void Render(float[] interleaved, int frames)
         {
             Synth.Render(interleaved, frames);
+            // The open strings answer the dry piano before the room does, like in the instrument itself.
+            _resonance.Process(interleaved, frames, Synth.DamperLevel);
             _reverb.Process(interleaved, frames);
             // The block the device is about to play is also the block the recording keeps, so the WAV cannot
             // drift away from what was heard. The tap runs on this thread and must be quick; the recorder locks.

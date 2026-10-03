@@ -14,6 +14,10 @@ internal sealed class MidiDeviceService : IDisposable
     private MidiInProc? _callback;
     public event Action<int, int, bool>? NoteChanged;
     public event Action<PianoPedal, bool>? PedalChanged;
+    /// <summary>The raw controller value 0..127 of a pedal message. A continuous (half-)pedal sends the
+    /// whole range; the synthesiser uses it for half-pedalling while <see cref="PedalChanged"/> keeps
+    /// feeding the on/off consumers such as the pedal toggles on screen.</summary>
+    public event Action<PianoPedal, int>? PedalLevelChanged;
     public bool InputOpen => _input != IntPtr.Zero;
     public static IReadOnlyList<string> Inputs => Enumerable.Range(0, (int)midiInGetNumDevs()).Select(i => GetName(i, true)).ToArray();
     public static IReadOnlyList<string> Outputs => Enumerable.Range(0, (int)midiOutGetNumDevs()).Select(i => GetName(i, false)).ToArray();
@@ -73,7 +77,7 @@ internal sealed class MidiDeviceService : IDisposable
         else if (kind == 0xB0)
         {
             var pedal = data1 switch { 67 => PianoPedal.Soft, 66 => PianoPedal.Sostenuto, 64 => PianoPedal.Sustain, _ => (PianoPedal?)null };
-            if (pedal is { } value) PedalChanged?.Invoke(value, data2 >= 64);
+            if (pedal is { } value) { PedalLevelChanged?.Invoke(value, data2); PedalChanged?.Invoke(value, data2 >= 64); }
         }
     }
     private static string GetName(int id, bool input)

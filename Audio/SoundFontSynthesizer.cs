@@ -289,7 +289,18 @@ internal sealed class SoundFontSynthesizer
     private readonly int _sampleRate;
     private readonly SoundFontPreset?[] _channelPresets = new SoundFontPreset?[16];
     private readonly int[] _bank = new int[16];
-    private readonly bool[] _sustain = new bool[16];
+    /// <summary>
+    /// Damper (sustain pedal) position per channel, 0..1 from CC 64. A switch pedal only ever sends 0 and
+    /// 127 and behaves exactly as before; a continuous pedal gets the three zones of a real damper rail:
+    /// below <see cref="DamperFree"/> the felt sits on the strings (normal release), above
+    /// <see cref="DamperCatch"/> it is fully lifted (notes hold), and in between the strings are
+    /// half-damped — released notes die more slowly the higher the pedal rides (half-pedalling).
+    /// The catch point sits at the MIDI on/off convention (value 64), so files and switch pedals that
+    /// only ever send 0 and 127 — and the on-screen pedal buttons — behave exactly as they always did.
+    /// </summary>
+    private readonly double[] _damper = new double[16];
+    private const double DamperFree = .25;
+    private const double DamperCatch = .5;
     private readonly bool[] _sostenuto = new bool[16];
     private readonly bool[] _soft = new bool[16];
     private readonly List<Voice> _voices = [];
@@ -306,17 +317,27 @@ internal sealed class SoundFontSynthesizer
         /// <summary>SF2 sample mode 3: loop only while the note is held, then play the remainder of the sample.</summary>
         public bool LoopUntilRelease;
         public double Age, ReleaseAge = -1, ReleaseLevel;
+        /// <summary>Half-pedalling: 1 is a normal release, larger values stretch it (damper riding high).</summary>
+        public double ReleaseScale = 1;
         public bool KeyHeld = true, SustainHeld, SostenutoHeld;
         public double FilterLeft, FilterRight;
         public double Envelope()
         {
-            if (ReleaseAge >= 0) return ReleaseLevel * Math.Exp(-ReleaseAge * 7.0 / Release);
+            if (ReleaseAge >= 0) return ReleaseLevel * Math.Exp(-ReleaseAge * 7.0 / (Release * ReleaseScale));
             if (Attack > 0 && Age < Attack) return Age / Attack;
             var decayAge = Age - Attack;
             if (Decay > 0 && decayAge < Decay) return 1 + (Sustain - 1) * decayAge / Decay;
             return Sustain;
         }
         public void ReleaseKey() { if (ReleaseAge >= 0) return; ReleaseLevel = Math.Max(.01, Envelope()); ReleaseAge = 0; }
+        /// <summary>The damper moved while this voice was already releasing: rebase the decay at the
+        /// current loudness with the new speed, so a moving pedal bends the tail without a click.</summary>
+        public void RetimeRelease(double scale)
+        {
+            if (ReleaseAge < 0) { ReleaseScale = scale; return; }
+            if (Math.Abs(scale - ReleaseScale) < .01) return;
+            ReleaseLevel = Math.Max(.01, Envelope()); ReleaseAge = 0; ReleaseScale = scale;
+        }
     }
 
     public SoundFontSynthesizer(SoundFontData font, int sampleRate = 44100)
@@ -350,7 +371,7 @@ internal sealed class SoundFontSynthesizer
                     else if (data1 == 32) _bank[channel] = (_bank[channel] & 0x3f80) | data2;
                     else if (data1 == 67) _soft[channel] = data2 >= 64;
                 }
-                if (data1 == 64) SetSustain(channel, data2 >= 64);
+                if (data1 == 64) SetDamper(channel, data2);
                 else if (data1 == 66) SetSostenuto(channel, data2 >= 64);
                 else if (data1 == 120 || data1 == 123) AllNotesOff(channel);
                 break;
@@ -391,22 +412,62 @@ internal sealed class SoundFontSynthesizer
             foreach (var voice in _voices.Where(v => v.Channel == (channel & 15) && v.Pitch == pitch && v.KeyHeld))
             {
                 voice.KeyHeld = false;
-                if (_sustain[voice.Channel]) voice.SustainHeld = true;
-                if (!voice.SustainHeld && !voice.SostenutoHeld) voice.ReleaseKey();
+                if (voice.SostenutoHeld) continue;
+                if (_damper[voice.Channel] >= DamperCatch) { voice.SustainHeld = true; continue; }
+                voice.ReleaseScale = ReleaseScaleFor(_damper[voice.Channel]);
+                voice.ReleaseKey();
             }
         }
     }
-    private void SetSustain(int channel, bool down)
+    /// <summary>Maps a damper position to a release stretch: felt fully down decays normally, and the
+    /// half-pedal zone fades towards a six-times-longer tail just before the strings come free.</summary>
+    private static double ReleaseScaleFor(double damper) =>
+        damper <= DamperFree ? 1 : 1 + (Math.Min(damper, DamperCatch) - DamperFree) / (DamperCatch - DamperFree) * 5;
+    /// <summary>
+    /// Continuous sustain pedal (CC 64). Above the catch point every sounding or still-audible string is
+    /// held — including strings caught mid-decay, which is how pianists "repedal". Below it, held strings
+    /// are released with a tail stretched by the current pedal depth, so riding the pedal half-way lets
+    /// chords bleed into each other without holding them outright.
+    /// </summary>
+    private void SetDamper(int channel, int value)
     {
         lock (_gate)
         {
-            if (_sustain[channel] == down) return; _sustain[channel] = down;
-            if (!down) foreach (var voice in _voices.Where(v => v.Channel == channel && v.SustainHeld))
+            var level = Math.Clamp(value, 0, 127) / 127.0;
+            if (Math.Abs(_damper[channel] - level) < .001) return;
+            _damper[channel] = level;
+            if (level >= DamperCatch)
             {
-                voice.SustainHeld = false;
-                if (!voice.KeyHeld && !voice.SostenutoHeld) voice.ReleaseKey();
+                foreach (var voice in _voices)
+                {
+                    if (voice.Channel != channel || voice.KeyHeld || voice.SustainHeld || voice.SostenutoHeld) continue;
+                    if (voice.ReleaseAge < 0) continue;
+                    var caught = voice.Envelope();
+                    if (caught < .02) continue; // a string that has already faded out cannot be caught again
+                    voice.SustainHeld = true; voice.ReleaseAge = -1;
+                    voice.Sustain = Math.Clamp(Math.Min(voice.Sustain, caught), .01, 1);
+                    voice.Age = Math.Max(voice.Age, voice.Attack + voice.Decay); // hold at the caught loudness
+                }
+                return;
+            }
+            var scale = ReleaseScaleFor(level);
+            foreach (var voice in _voices)
+            {
+                if (voice.Channel != channel) continue;
+                if (voice.SustainHeld)
+                {
+                    voice.SustainHeld = false;
+                    if (voice.KeyHeld || voice.SostenutoHeld) continue;
+                    voice.ReleaseScale = scale; voice.ReleaseKey();
+                }
+                else if (!voice.KeyHeld && !voice.SostenutoHeld && voice.ReleaseAge >= 0) voice.RetimeRelease(scale);
             }
         }
+    }
+    /// <summary>Highest damper position across channels, 0..1 — feeds the sympathetic-resonance stage.</summary>
+    public double DamperLevel
+    {
+        get { lock (_gate) { var level = 0.0; foreach (var value in _damper) level = Math.Max(level, value); return level; } }
     }
     private void SetSostenuto(int channel, bool down)
     {
@@ -421,7 +482,9 @@ internal sealed class SoundFontSynthesizer
             else foreach (var voice in _voices.Where(v => v.Channel == channel && v.SostenutoHeld))
             {
                 voice.SostenutoHeld = false;
-                if (!voice.KeyHeld && !voice.SustainHeld) voice.ReleaseKey();
+                if (voice.KeyHeld || voice.SustainHeld) continue;
+                if (_damper[channel] >= DamperCatch) { voice.SustainHeld = true; continue; }
+                voice.ReleaseScale = ReleaseScaleFor(_damper[channel]); voice.ReleaseKey();
             }
         }
     }
@@ -429,7 +492,7 @@ internal sealed class SoundFontSynthesizer
     {
         lock (_gate) foreach (var voice in _voices.Where(v => channel is null || v.Channel == channel))
         {
-            voice.KeyHeld = false; voice.SustainHeld = false; voice.SostenutoHeld = false; voice.ReleaseKey();
+            voice.KeyHeld = false; voice.SustainHeld = false; voice.SostenutoHeld = false; voice.ReleaseScale = 1; voice.ReleaseKey();
         }
     }
     /// <summary>Drops the oldest voice that is already releasing, or the oldest voice overall, so a Note On can be honoured.</summary>
@@ -507,7 +570,7 @@ internal sealed class SoundFontSynthesizer
                 left[i] += sampleL * gain * voice.PanLeft; right[i] += sampleR * gain * voice.PanRight;
                 voice.Position += voice.Step; voice.Age += sampleSeconds; if (voice.ReleaseAge >= 0) voice.ReleaseAge += sampleSeconds;
             }
-            if (envelope < .001 || voice.Position >= r.End || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * 1.1) _voices.RemoveAt(v);
+            if (envelope < .001 || voice.Position >= r.End || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * voice.ReleaseScale * 1.1) _voices.RemoveAt(v);
         }
     }
     private static double Interpolate(SoundFontData font, int index, double fraction)

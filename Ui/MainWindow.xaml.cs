@@ -117,16 +117,15 @@ public partial class MainWindow : Window
                 finally { Stage.SuppressGpuForward = false; _liveAudioSent = false; }
             });
         };
-        _midi.PedalChanged += (pedal, down) =>
+        // The raw controller value reaches the synthesiser so a continuous pedal can half-pedal; it is sent
+        // from the MIDI thread for the same latency reason as the notes above.
+        _midi.PedalLevelChanged += (pedal, value) => _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), value);
+        _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() =>
         {
-            _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), down ? 127 : 0);
-            Dispatcher.BeginInvoke(() =>
-            {
-                _liveAudioSent = true;
-                try { SetPedalState(pedal, down); }
-                finally { _liveAudioSent = false; }
-            });
-        };
+            _liveAudioSent = true;
+            try { SetPedalState(pedal, down); }
+            finally { _liveAudioSent = false; }
+        });
         PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
         // A folder indexed in an earlier session is watched from the start, so the library is live whether or
         // not the Play dialog has been opened yet.
@@ -575,6 +574,12 @@ public partial class MainWindow : Window
         if (sender is not ToggleButton toggle) return;
         _audio.ReverbEnabled = toggle.IsChecked == true;
         if (_uiReady) UpdateSoundFontUi();
+    }
+
+    private void ResonanceToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ToggleButton toggle) return;
+        _audio.StringResonanceEnabled = toggle.IsChecked == true;
     }
 
     private void UpdateSongUi()

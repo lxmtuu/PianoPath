@@ -171,7 +171,10 @@
                                     <TextBlock Text="PRESET" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <ComboBox x:Name="PresetCombo" IsEnabled="False" SelectionChanged="PresetCombo_SelectionChanged" ToolTip="Choose an instrument preset from the loaded SoundFont" local:Loc.Localize="True"/>
                                     <TextBlock Text="EFFECTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
-                                    <ToggleButton x:Name="ReverbToggle" Content="HALL REVERB" local:Loc.Localize="True" HorizontalAlignment="Left" Height="32" Style="{StaticResource PedalToggleStyle}" IsChecked="True" Checked="ReverbToggle_Changed" Unchecked="ReverbToggle_Changed"/>
+                                    <WrapPanel>
+                                        <ToggleButton x:Name="ReverbToggle" Content="HALL REVERB" local:Loc.Localize="True" Height="32" Style="{StaticResource PedalToggleStyle}" IsChecked="True" Checked="ReverbToggle_Changed" Unchecked="ReverbToggle_Changed" Margin="0,0,8,0"/>
+                                        <ToggleButton x:Name="ResonanceToggle" Content="STRING RESONANCE" local:Loc.Localize="True" Height="32" Style="{StaticResource PedalToggleStyle}" IsChecked="True" Checked="ResonanceToggle_Changed" Unchecked="ResonanceToggle_Changed" ToolTip="Open strings ring along while the sustain pedal is down, like on a real grand"/>
+                                    </WrapPanel>
                                     <TextBlock Text="OUTPUT &amp; LATENCY" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Text="Auto picks WASAPI and falls back by itself. WASAPI keeps the piano a few milliseconds behind the keys; ASIO talks to a studio interface's own driver; waveOut is the old compatible path." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
                                     <TextBlock Text="Audio output" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,2,0,4"/>
