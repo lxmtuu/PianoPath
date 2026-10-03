@@ -1647,9 +1647,7 @@ public partial class MainWindow
         if (!UserShellThemes.IsUserTheme(current.Id)) { Loc.Set(SettingsSaveLabel, "Only themes you made can be edited or deleted."); return; }
         var studio = new ThemeStudioWindow(UserShellThemes.FromTheme(current, current.Name), "Edit theme") { Owner = this };
         if (studio.ShowDialog() != true || studio.Result is not { } theme) return;
-        // Renaming writes a new file, so the old one has to go or the picker would show the theme twice.
-        if (!string.Equals(theme.Name, current.Name, StringComparison.OrdinalIgnoreCase)) UserThemeStore.Default.Delete(current.Id);
-        SaveUserTheme(theme);
+        SaveUserTheme(theme, current.Id);
     }
 
     private void DeleteTheme_Click(object sender, RoutedEventArgs e)
@@ -1664,15 +1662,15 @@ public partial class MainWindow
     }
 
     /// <summary>Saves a theme the user made, selects it and repaints both chip rows.</summary>
-    private void SaveUserTheme(UserShellTheme theme)
+    private void SaveUserTheme(UserShellTheme theme, string? replacingId = null)
     {
-        if (UserThemeStore.NameConflict(theme.Name) is { } conflict)
+        if (UserThemeStore.NameConflict(theme.Name, replacingId) is { } conflict)
         {
             ShowMessage(Loc.F(conflict, theme.Name), "Create theme", MessageBoxImage.Information);
             return;
         }
         ShellTheme saved;
-        try { saved = UserThemeStore.Default.Save(theme); }
+        try { saved = UserThemeStore.Default.Save(theme, replacingId); }
         catch (Exception ex) { ShowMessage(ex.Message, "Create theme", MessageBoxImage.Warning); return; }
         _visualSettings.ShellTheme = saved.Id;
         MarkModified();

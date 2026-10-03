@@ -4,10 +4,10 @@ using System.Diagnostics;
 namespace PianoPath;
 
 /// <summary>One note hit the render thread turns into light: burst, flash, ring and a key press.</summary>
-internal readonly record struct GpuHit(int Pitch, float Strength, long Timestamp);
+internal readonly record struct GpuHit(int Pitch, float Strength, long Timestamp, long Generation);
 
 /// <summary>A live key event from the player (press or release) with the moment it happened.</summary>
-internal readonly record struct GpuLiveEvent(int Pitch, bool Down, float Strength, long Timestamp);
+internal readonly record struct GpuLiveEvent(int Pitch, bool Down, float Strength, long Timestamp, long Generation);
 
 /// <summary>What the render thread reads at the start of one frame.</summary>
 internal sealed class GpuFrameInput
@@ -56,6 +56,7 @@ internal sealed class GpuStageFeed
     private float _pointerX = .5f, _pointerY = .5f;
     private double _stageHeightDip = 720;
     private int _clearRequests;
+    private long _eventGeneration;
 
     internal static long Now => Stopwatch.GetTimestamp();
     internal static double Seconds(long ticks) => ticks / (double)Stopwatch.Frequency;
@@ -125,8 +126,8 @@ internal sealed class GpuStageFeed
         }
     }
 
-    internal void Impact(int pitch, double strength) => _hits.Enqueue(new GpuHit(pitch, (float)strength, Now));
-    internal void LiveNote(int pitch, bool down, double strength) => _live.Enqueue(new GpuLiveEvent(pitch, down, (float)strength, Now));
+    internal void Impact(int pitch, double strength) => _hits.Enqueue(new GpuHit(pitch, (float)strength, Now, Volatile.Read(ref _eventGeneration)));
+    internal void LiveNote(int pitch, bool down, double strength) => _live.Enqueue(new GpuLiveEvent(pitch, down, (float)strength, Now, Volatile.Read(ref _eventGeneration)));
 
     internal void PulseBeat(double strength)
     {
@@ -138,6 +139,9 @@ internal sealed class GpuStageFeed
     /// <summary>Drops every transient effect (stop, seek, song change).</summary>
     internal void ClearTransient()
     {
+        Interlocked.Increment(ref _eventGeneration);
+        _hits.Clear();
+        _live.Clear();
         Interlocked.Increment(ref _clearRequests);
         lock (_gate) Array.Clear(_pressed);
     }
@@ -150,8 +154,21 @@ internal sealed class GpuStageFeed
         return true;
     }
 
-    internal bool TryDequeueHit(out GpuHit hit) => _hits.TryDequeue(out hit);
-    internal bool TryDequeueLive(out GpuLiveEvent live) => _live.TryDequeue(out live);
+    internal bool TryDequeueHit(out GpuHit hit)
+    {
+        while (_hits.TryDequeue(out hit))
+            if (hit.Generation == Volatile.Read(ref _eventGeneration)) return true;
+        hit = default;
+        return false;
+    }
+
+    internal bool TryDequeueLive(out GpuLiveEvent live)
+    {
+        while (_live.TryDequeue(out live))
+            if (live.Generation == Volatile.Read(ref _eventGeneration)) return true;
+        live = default;
+        return false;
+    }
 
     /// <summary>Fills <paramref name="input"/> with the state for a frame presented at <paramref name="now"/>.</summary>
     internal void Capture(GpuFrameInput input, long now)

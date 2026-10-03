@@ -58,9 +58,9 @@ internal sealed record PracticeRun(string Song, string SongPath, DateTime Played
 ///
 /// <para>
 /// Lines are appended rather than rewritten, so a long session never loses an earlier take, and a line
-/// that cannot be read is skipped instead of failing the whole file. The in-memory list keeps the newest
-/// <see cref="Capacity"/> runs, which is what the dock page and the HTML report show; the best accuracy
-/// per song is derived from it, so a take can be compared with the best one before it.
+/// that cannot be read is skipped instead of failing the whole file. The UI list retains only the newest
+/// <see cref="Capacity"/> runs and their bounded ghost notes; a streaming pass over the archive builds small
+/// all-time summaries, daily totals and best-run metadata without retaining every historical run in memory.
 /// </para>
 /// </summary>
 internal static class PracticeHistory
@@ -78,12 +78,19 @@ internal static class PracticeHistory
     internal const int ChartDays = 14;
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = false };
     private static readonly List<PracticeRun> Runs_ = [];
+    // All-time bests keep only scalar run data; bounded ghost payloads are retained only in Runs_.
+    private static readonly Dictionary<string, PracticeRun> BestBySongPath = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<string, (string Song, int Runs, double Best)> SummaryBySong = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly Dictionary<DateTime, (int Runs, int Hits, int Misses)> DailyTotals = [];
+    private static int _totalRuns;
     private static string? _loadedFrom;
 
     internal static string FilePath => Path.Combine(PianoVisualSettingsStore.SettingsDirectory, "history", "practice.jsonl");
 
     /// <summary>Recorded runs, newest first. Reloaded automatically when the settings folder changes.</summary>
     internal static IReadOnlyList<PracticeRun> Runs { get { EnsureLoaded(); return Runs_; } }
+    /// <summary>All runs in the append-only archive, including rows older than the recent in-memory window.</summary>
+    internal static int TotalRuns { get { EnsureLoaded(); return _totalRuns; } }
 
     /// <summary>Reads the file again; used by <c>--verify</c> after it damages the file on purpose.</summary>
     internal static void Reload() { _loadedFrom = null; EnsureLoaded(); }
@@ -98,6 +105,7 @@ internal static class PracticeHistory
         };
         Runs_.Insert(0, run);
         if (Runs_.Count > Capacity) Runs_.RemoveRange(Capacity, Runs_.Count - Capacity);
+        Accumulate(run);
         try
         {
             var directory = Path.GetDirectoryName(FilePath)!;
@@ -116,17 +124,15 @@ internal static class PracticeHistory
     {
         EnsureLoaded();
         if (string.IsNullOrEmpty(songPath)) return null;
-        return Runs_.Where(run => string.Equals(run.SongPath, songPath, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(run => run.Accuracy).FirstOrDefault();
+        return BestBySongPath.TryGetValue(songPath, out var best) ? best : null;
     }
 
     /// <summary>Runs grouped by song, best accuracy first; the summary of the HTML report.</summary>
     internal static IReadOnlyList<(string Song, int Runs, double Best)> Summary()
     {
         EnsureLoaded();
-        return Runs_.GroupBy(run => run.SongPath.Length == 0 ? run.Song : run.SongPath, StringComparer.OrdinalIgnoreCase)
-            .Select(group => (group.First().Song, group.Count(), group.Max(run => run.Accuracy)))
-            .OrderByDescending(entry => entry.Item3).ThenBy(entry => entry.Song, StringComparer.OrdinalIgnoreCase).ToList();
+        return SummaryBySong.Values
+            .OrderByDescending(entry => entry.Best).ThenBy(entry => entry.Song, StringComparer.OrdinalIgnoreCase).ToList();
     }
 
     /// <summary>
@@ -141,13 +147,8 @@ internal static class PracticeHistory
         var last = now.Date;
         var first = last.AddDays(1 - days);
         var buckets = new Dictionary<DateTime, (int Runs, int Hits, int Misses)>();
-        foreach (var run in Runs_)
-        {
-            var day = run.PlayedUtc.ToLocalTime().Date;
-            if (day < first || day > last) continue;
-            buckets.TryGetValue(day, out var bucket);
-            buckets[day] = (bucket.Runs + 1, bucket.Hits + run.Hits, bucket.Misses + run.Misses);
-        }
+        foreach (var (day, bucket) in DailyTotals)
+            if (day >= first && day <= last) buckets[day] = bucket;
         var result = new List<PracticeDay>(days);
         for (var day = first; day <= last; day = day.AddDays(1))
         {
@@ -184,7 +185,7 @@ internal static class PracticeHistory
     internal static void Clear()
     {
         EnsureLoaded();
-        Runs_.Clear();
+        ClearInMemory();
         try { if (File.Exists(FilePath)) File.Delete(FilePath); }
         catch
         {
@@ -216,7 +217,8 @@ internal static class PracticeHistory
             + "p.sub{margin:0 0 20px;color:#666}table{border-collapse:collapse;margin:0 0 28px}th,td{padding:6px 12px;border-bottom:1px solid #ddd;text-align:left}"
             + "th{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:#666}</style></head><body>");
         text.AppendLine("<h1>" + WebUtility.HtmlEncode(Loc.T("Keyflow practice history")) + "</h1>");
-        text.AppendLine("<p class=\"sub\">" + WebUtility.HtmlEncode(Loc.F("Exported {0} · {1} runs", DateTime.Now.ToString("g"), Runs_.Count)) + "</p>");
+        text.AppendLine("<p class=\"sub\">" + WebUtility.HtmlEncode(Loc.F("Exported {0} · {1} total runs", DateTime.Now.ToString("g"), _totalRuns)) + "</p>");
+        text.AppendLine("<p class=\"sub\">" + WebUtility.HtmlEncode(Loc.F("The report lists up to the newest {0} runs; daily and per-song summaries cover the full archive.", Capacity)) + "</p>");
         text.AppendLine("<table><tr><th>" + WebUtility.HtmlEncode(Loc.T("Song")) + "</th><th>" + WebUtility.HtmlEncode(Loc.T("Played")) + "</th><th>"
             + WebUtility.HtmlEncode(Loc.T("Accuracy")) + "</th><th>" + WebUtility.HtmlEncode(Loc.T("Hits")) + "</th><th>" + WebUtility.HtmlEncode(Loc.T("Missed"))
             + "</th><th>" + WebUtility.HtmlEncode(Loc.T("Best streak")) + "</th></tr>");
@@ -253,21 +255,51 @@ internal static class PracticeHistory
         var directory = PianoVisualSettingsStore.SettingsDirectory;
         if (string.Equals(_loadedFrom, directory, StringComparison.OrdinalIgnoreCase)) return;
         _loadedFrom = directory;
-        Runs_.Clear();
+        ClearInMemory();
         try
         {
             if (!File.Exists(FilePath)) return;
+            var recent = new Queue<PracticeRun>(Capacity);
             foreach (var line in File.ReadLines(FilePath))
             {
                 if (string.IsNullOrWhiteSpace(line)) continue;
                 PracticeRun? run = null;
                 try { run = JsonSerializer.Deserialize<PracticeRun>(line, Options); }
                 catch { /* a half-written line from a crash is skipped, the rest of the file survives */ }
-                if (run is not null && run.PlayedUtc != default) Runs_.Add(run);
+                if (run is null || run.PlayedUtc == default) continue;
+                Accumulate(run);
+                recent.Enqueue(run);
+                if (recent.Count > Capacity) recent.Dequeue();
             }
-            Runs_.Reverse(); // the file is the order the runs happened in; the list shows the newest first
-            if (Runs_.Count > Capacity) Runs_.RemoveRange(Capacity, Runs_.Count - Capacity);
+            Runs_.AddRange(recent.Reverse()); // file order is oldest first; the UI list is newest first
         }
-        catch { Runs_.Clear(); }
+        catch { ClearInMemory(); }
+    }
+
+    private static void Accumulate(PracticeRun run)
+    {
+        _totalRuns++;
+        var summaryKey = string.IsNullOrEmpty(run.SongPath) ? run.Song : run.SongPath;
+        if (SummaryBySong.TryGetValue(summaryKey, out var summary))
+            SummaryBySong[summaryKey] = (run.Song, summary.Runs + 1, Math.Max(summary.Best, run.Accuracy));
+        else SummaryBySong[summaryKey] = (run.Song, 1, run.Accuracy);
+
+        var day = run.PlayedUtc.ToLocalTime().Date;
+        DailyTotals.TryGetValue(day, out var totals);
+        DailyTotals[day] = (totals.Runs + 1, totals.Hits + run.Hits, totals.Misses + run.Misses);
+
+        if (string.IsNullOrEmpty(run.SongPath)) return;
+        if (!BestBySongPath.TryGetValue(run.SongPath, out var best) || run.Accuracy > best.Accuracy
+            || run.Accuracy.Equals(best.Accuracy) && run.PlayedUtc >= best.PlayedUtc)
+            BestBySongPath[run.SongPath] = run with { Ghost = null };
+    }
+
+    private static void ClearInMemory()
+    {
+        Runs_.Clear();
+        BestBySongPath.Clear();
+        SummaryBySong.Clear();
+        DailyTotals.Clear();
+        _totalRuns = 0;
     }
 }

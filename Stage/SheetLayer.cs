@@ -132,10 +132,11 @@ internal static class SheetLayer
         IReadOnlyList<Slur> Slurs, IReadOnlyList<IReadOnlyList<int>> Chords, IReadOnlyList<IReadOnlyList<int>>[] Streams);
 
     /// <summary>Works out the plan of a song: its accidentals, its beams, its rests, its ties and its hand-offs.</summary>
-    internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key)
+    internal static SheetPlan Plan(IReadOnlyList<NoteEvent> notes, IReadOnlyList<double> beats, int beatsPerBar, double handSplit, MusicKey key,
+        IReadOnlyList<int>? downbeatIndices = null)
     {
         var beatSeconds = BeatSeconds(beats);
-        var downbeats = Downbeats(beats, beatsPerBar);
+        var downbeats = Downbeats(beats, beatsPerBar, downbeatIndices);
         var ties = Ties(notes, handSplit);
         // A note a tie carries on from is a continuation of the one before it, which the accidentals have to know.
         var carried = new HashSet<int>();
@@ -215,13 +216,28 @@ internal static class SheetLayer
         return found;
     }
 
-    /// <summary>The times a measure starts: every <paramref name="beatsPerBar"/>-th beat of the song's grid.</summary>
-    internal static IReadOnlyList<double> Downbeats(IReadOnlyList<double> beats, int beatsPerBar)
+    /// <summary>The times a measure starts, using explicit measure indices when a score supplies them.</summary>
+    internal static IReadOnlyList<double> Downbeats(IReadOnlyList<double> beats, int beatsPerBar, IReadOnlyList<int>? downbeatIndices = null)
     {
+        if (downbeatIndices is { Count: > 0 })
+            return downbeatIndices.Where(index => index >= 0 && index < beats.Count).Select(index => beats[index]).ToList();
         var perBar = Math.Max(1, beatsPerBar);
         var downbeats = new List<double>();
         for (var index = 0; index < beats.Count; index += perBar) downbeats.Add(beats[index]);
         return downbeats;
+    }
+
+    private static bool IsDownbeat(int index, int beatsPerBar, IReadOnlyList<int>? downbeatIndices)
+    {
+        if (downbeatIndices is not { Count: > 0 }) return index % Math.Max(1, beatsPerBar) == 0;
+        int low = 0, high = downbeatIndices.Count - 1;
+        while (low <= high)
+        {
+            var middle = (low + high) >> 1;
+            if (downbeatIndices[middle] == index) return true;
+            if (downbeatIndices[middle] < index) low = middle + 1; else high = middle - 1;
+        }
+        return false;
     }
 
     /// <summary>One note joined to the notes beside it by a beam: the run of note indices it covers, its stems' direction and how many beams it carries.</summary>
@@ -653,7 +669,7 @@ internal static class SheetLayer
     internal static void Draw(
         DrawingContext dc, Rect area, IReadOnlyList<NoteEvent> notes, double position, double handSplit, MusicKey key,
         IReadOnlyList<double> beats, int beatsPerBar, double secondsVisible, Color ink, Color accent, double opacity, double pixelsPerDip,
-        SheetPlan? plan = null)
+        SheetPlan? plan = null, IReadOnlyList<int>? downbeatIndices = null)
     {
         if (area.Width < 40 || area.Height < 24) return;
         dc.DrawRoundedRectangle(
@@ -671,8 +687,8 @@ internal static class SheetLayer
         var inset = LeftInset(area, key);
         var lineLeft = area.X + inset;
         var lineRight = area.Right - 8;
-        var downbeats = Downbeats(beats, beatsPerBar);
-        var sheet = plan ?? Plan(notes, beats, beatsPerBar, handSplit, key);
+        var downbeats = Downbeats(beats, beatsPerBar, downbeatIndices);
+        var sheet = plan ?? Plan(notes, beats, beatsPerBar, handSplit, key, downbeatIndices);
         var accidentals = sheet.Accidentals;
         var beatSeconds = BeatSeconds(beats);
 
@@ -704,7 +720,7 @@ internal static class SheetLayer
         {
             var beat = beats[index];
             if (beat < windowStart || beat > windowStart + secondsVisible) continue;
-            var startsMeasure = index % Math.Max(1, beatsPerBar) == 0;
+            var startsMeasure = IsDownbeat(index, beatsPerBar, downbeatIndices);
             var x = NoteX(beat, windowStart, secondsVisible, area, inset);
             if (startsMeasure && x - lastBarX < 6) continue;      // two downbeats inside one pixel must not darken it
             if (startsMeasure) lastBarX = x;

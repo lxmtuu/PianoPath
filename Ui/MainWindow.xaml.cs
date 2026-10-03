@@ -54,6 +54,7 @@ public partial class MainWindow : Window
     /// <summary>Notes before this index are already played, missed or intentionally skipped by a seek; only later notes can still be missed.</summary>
     private int _missScanIndex;
     private IReadOnlyList<double> _beatTimes = [];
+    private IReadOnlyList<int> _downbeatIndices = [];
     private IReadOnlyDictionary<int, string> _trackNames = new Dictionary<int, string>();
     private int _beatsPerBar = 4, _nextBeat;
     private IReadOnlyList<NoteEvent>? _songDurationSource;
@@ -360,7 +361,7 @@ public partial class MainWindow : Window
     private void UpdateStage() => Stage.SetState(_notes, _position, _playing, _pressed);
 
     /// <summary>Hands the sheet layer the grid to draw bar lines on; called whenever a song is loaded.</summary>
-    private void UpdateSheet() => Stage.SetSheet(_beatTimes, _beatsPerBar);
+    private void UpdateSheet() => Stage.SetSheet(_beatTimes, _beatsPerBar, _downbeatIndices);
     private NoteEvent? NextExpectedNote()
     {
         for (var i = _missScanIndex; i < _notes.Count; i++) { var note = _notes[i]; if (!note.Played && !note.Missed) return note; }
@@ -381,12 +382,26 @@ public partial class MainWindow : Window
         var click = false; var downbeat = false;
         while (_nextBeat < _beatTimes.Count && _beatTimes[_nextBeat] <= _position)
         {
-            if (_beatTimes[_nextBeat] > previous || forceOnset) { click = true; downbeat = _beatsPerBar > 0 && _nextBeat % _beatsPerBar == 0; }
+            if (_beatTimes[_nextBeat] > previous || forceOnset) { click = true; downbeat = IsDownbeat(_nextBeat); }
             _nextBeat++;
         }
         if (click) Stage.PulseBeat(downbeat ? 1 : .6); // Tempo Sync follows the MIDI tempo map even when the click is muted.
         if (click && MetronomeCheck.IsChecked == true && _audio.HasSoundFont) { _audio.NoteOn(MetronomePitch, downbeat ? 84 : 62); _metronomeOffAt = _position + .08; }
     }
+
+    private bool IsDownbeat(int beatIndex)
+    {
+        if (_downbeatIndices.Count == 0) return _beatsPerBar > 0 && beatIndex % _beatsPerBar == 0;
+        int low = 0, high = _downbeatIndices.Count - 1;
+        while (low <= high)
+        {
+            var middle = (low + high) >> 1;
+            if (_downbeatIndices[middle] == beatIndex) return true;
+            if (_downbeatIndices[middle] < beatIndex) low = middle + 1; else high = middle - 1;
+        }
+        return false;
+    }
+
     private void TempoSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
     {
         _tempo = e.NewValue / 100; if (TempoLabel is not null) TempoLabel.Text = $"{e.NewValue:0}%";
@@ -445,7 +460,7 @@ public partial class MainWindow : Window
     private void LoadSong(string path, MidiSong song, MusicXmlScore? score)
     {
         Stop();
-        _allNotes = song.Notes; _beatTimes = song.BeatTimes; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
+        _allNotes = song.Notes; _beatTimes = song.BeatTimes; _downbeatIndices = song.DownbeatIndices; _beatsPerBar = song.BeatsPerBar; _trackNames = song.TrackNames;
         _songLabel = Path.GetFileNameWithoutExtension(path); _songPath = path;
         Loc.Bind(SongTitle, () => _songLabel); // a file name is the user's text, not a key
         _position = 0; ResetScore(); _outputFinished.Clear(); PopulateTracks(); ApplyTrackFilter(); UpdateSongUi(); UpdatePlaybackLabel(); UpdateTime(); UpdateSheet(); UpdateStage();

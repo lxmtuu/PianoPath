@@ -72,8 +72,14 @@ internal static partial class VerificationSuite
         feed.Impact(60, 1); feed.LiveNote(64, true, .9);
         Assert(feed.TryDequeueHit(out var hit) && hit.Pitch == 60 && feed.TryDequeueLive(out var live) && live.Pitch == 64 && live.Down,
             "Hits and live notes should queue losslessly from the UI thread to the render thread.");
+        feed.Impact(61, .5); feed.LiveNote(61, true, .5);
         feed.ClearTransient();
+        Assert(!feed.TryDequeueHit(out _) && !feed.TryDequeueLive(out _),
+            "Clearing transient state must drop hit and live-note events that were waiting for the render thread.");
         Assert(feed.TakeClearRequest() && !feed.TakeClearRequest(), "A clear request should be taken exactly once.");
+        feed.Impact(62, .5);
+        Assert(feed.TryDequeueHit(out var afterClear) && afterClear.Pitch == 62,
+            "A new event after a clear must still reach the render thread.");
 
         // ---- note sparks: the burst family shapes the sustained emitter; physics time does not slow the stage clock ----
         var burstSettings = new PianoVisualSettings

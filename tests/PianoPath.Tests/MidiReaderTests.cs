@@ -151,6 +151,19 @@ public class MidiReaderTests
     }
 
     [Fact]
+    public void Format2_applies_the_beat_cap_to_the_whole_file()
+    {
+        var path = MidiFixture.WriteToTempFile(MidiFixture.LongFormatTwoPatterns(125_001), "format-two-grid-cap");
+        try
+        {
+            var song = MidiReader.ReadSong(path);
+
+            Assert.Equal(MidiReader.MaxBeats, song.BeatTimes.Count);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void An_Smpte_division_reads_ticks_as_absolute_time()
     {
         var path = MidiFixture.WriteToTempFile(MidiFixture.Smpte(), "smpte");

@@ -18,6 +18,8 @@ env:
   # name) without editing this file — the fallback is the name the installer's AppPublisherURL and
   # tools/make_public_docs.py already carry, and tools/check_sources.py makes those agree.
   PUBLIC_REPOSITORY: ${{ vars.PUBLIC_RELEASES_REPOSITORY || 'lxmtuu/KeyFlow' }}
+  # Treat the ref as data in PowerShell; never splice this value into a run script.
+  RELEASE_TAG: ${{ github.ref_name }}
 
 permissions:
   contents: write
@@ -42,6 +44,23 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Validate release tag
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = $env:RELEASE_TAG
+          if ($tag -notmatch '^v\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$') {
+            throw "Release tag '$tag' is not a supported version tag."
+          }
+          $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
+          $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
+          if (-not $version -or $tag -cne "v$version") {
+            throw "Release tag '$tag' must match the project version v$version."
+          }
+
+      - name: Test the tagged source
+        run: dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release
+
       - name: Publish self-contained single file (win-x64)
         shell: pwsh
         run: .\publish.ps1 -Mode SelfContained -Runtime win-x64 -Zip
@@ -60,9 +79,8 @@ jobs:
         run: .\publish.ps1 -Mode SelfContained -Runtime win-arm64 -Zip -NoReadyToRun
 
       - name: Smoke test the published executable
-        # Left non-blocking on purpose: a release must not be held hostage by a headless smoke test.
-        # The log is printed, annotated and attached to the job summary so a failure is still visible.
-        continue-on-error: true
+        # A release is gated on the executable that will ship, not just on the source build.
+        # Keep the verification log and annotations, but let a failed check stop packaging and publication.
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
@@ -132,9 +150,9 @@ jobs:
         id: notes
         shell: pwsh
         run: |
-          $tag = "${{ github.ref_name }}"
-          $public = "${{ env.PUBLIC_REPOSITORY }}".Trim()
-          $here = "${{ github.repository }}"
+          $tag = $env:RELEASE_TAG
+          $public = ($env:PUBLIC_REPOSITORY).Trim()
+          $here = $env:GITHUB_REPOSITORY
           $base = if ($public -and $public -ine $here) {
             "https://github.com/$public/blob/release/public-$tag"
           } else {
@@ -204,7 +222,7 @@ jobs:
           if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
             $PSNativeCommandUseErrorActionPreference = $false
           }
-          $tag = "${{ github.ref_name }}"
+          $tag = $env:RELEASE_TAG
           $branch = "release/public-$tag"
           $staging = Join-Path $env:RUNNER_TEMP 'public-release'
 
@@ -233,6 +251,8 @@ jobs:
           Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' } | ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
           Copy-Item (Join-Path $staging '*') . -Recurse -Force
           git add -A
+          $tree = "$(git write-tree)".Trim()
+          if ($LASTEXITCODE -ne 0 -or -not $tree) { throw 'could not compute the public release tree' }
           git commit --quiet -m "Keyflow $tag - release documents"
 
           $commit = "$(git rev-parse HEAD)".Trim()
@@ -242,8 +262,8 @@ jobs:
             # build.yml meets the same wall when it commits previews back to a branch, and answers it the
             # same way: the rules are the repository's, the tree is not lost, and a release must not go red
             # over a branch this job does not need — tools/publish_public.ps1 builds and pushes the same
-            # tree from a desktop, where those rules do not apply. The step below then accepts any commit
-            # on the public branch instead of this exact one.
+            # tree from a desktop, where those rules do not apply. The step below compares the public tree,
+            # not this repository's commit ID, so independently-created commits can still be verified.
             if ("$pushLog" -match 'GH013|repository rule|protected branch') {
               '::warning title=Public release::The repository rules declined the release branch; publish with `pwsh tools/publish_public.ps1 -Tag ' + $tag + '`.'
               $commit = ''
@@ -251,7 +271,7 @@ jobs:
               throw 'the public release branch could not be pushed'
             }
           }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "expected=$commit" -Encoding utf8
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "expected_tree=$tree" -Encoding utf8
           "public tree: $((Get-ChildItem -Recurse -File -Force).Count) file(s), $(('{0:N0}' -f ((Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum).Sum / 1KB))) KB"
           "::notice title=Public release branch::$branch is $(if ($commit) { $commit } else { '<not pushed: the repository rules declined it>' })"
           @('# Public release branch', '', "``$branch`` at ``$(if ($commit) { $commit } else { '<declined by the repository rules>' })``.", '',
@@ -284,19 +304,19 @@ jobs:
           if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
             $PSNativeCommandUseErrorActionPreference = $false
           }
-          $tag = "${{ github.ref_name }}"
-          $repository = "${{ env.PUBLIC_REPOSITORY }}"
+          $tag = $env:RELEASE_TAG
+          $repository = $env:PUBLIC_REPOSITORY
           $branch = "release/public-$tag"
           $staging = Join-Path $env:RUNNER_TEMP 'public-release'
           $scratch = Join-Path $env:RUNNER_TEMP 'public-repo'
-          # The commit the branch step pushed, or empty when the repository rules declined that push (see
-          # above) — in which case any commit on the public branch counts as published.
-          $commit = "${{ steps.public_branch.outputs.expected }}".Trim()
+          # The generated tree is stable across independently-created root commits and is the content we
+          # expect both the workflow publisher and a manual publish to send.
+          $expectedTree = "${{ steps.public_branch.outputs.expected_tree }}".Trim()
 
           # Only the newest release moves main, so the repository's front page shows the current page and a
           # re-published older tag (a fix to its notes, say) cannot push it backwards.
           $latest = ''
-          try { $latest = "$(& gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)".Trim() } catch { }
+          try { $latest = (& gh api ('repos/' + $env:GITHUB_REPOSITORY + '/releases/latest') --jq .tag_name | Out-String).Trim() } catch { }
           $updateMain = ($latest -eq $tag)
 
           # THE ONE RULE THIS STEP MAY NOT BREAK: main of the source repository is never written here. On
@@ -307,7 +327,7 @@ jobs:
           #
           # (1) A target that *is* this repository: the documents were already built on $branch here by the
           # step above, so there is nothing to publish anywhere else. main is not touched.
-          $sourceRepository = "${{ github.repository }}"
+          $sourceRepository = $env:GITHUB_REPOSITORY
           $publish = $true
           if ($repository -ieq $sourceRepository) {
             $updateMain = $false
@@ -404,7 +424,7 @@ jobs:
           }
 
           # Whether the token was there or the push comes from somebody's desktop, the work is done when the
-          # public branch carries this commit. Read anonymously through the API (no credential is used, the
+          # public branch carries this tree. Read anonymously through the API (no credential is used, the
           # repository is public) and wait a little, so a manual publish that is already under way is seen.
           $deadline = (Get-Date).AddMinutes($(if ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) { 5 } else { 1 }))
           $published = $false
@@ -412,7 +432,9 @@ jobs:
             try {
               $reference = Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/git/ref/heads/$branch" -Headers @{ 'User-Agent' = 'keyflow-release' } -ErrorAction Stop
               $sha = "$($reference.object.sha)".Trim()
-              $published = if ($commit) { $sha -eq $commit } else { -not [string]::IsNullOrWhiteSpace($sha) }
+              $commitObject = Invoke-RestMethod -Uri "https://api.github.com/repos/$repository/git/commits/$sha" -Headers @{ 'User-Agent' = 'keyflow-release' } -ErrorAction Stop
+              $treeSha = "$($commitObject.tree.sha)".Trim()
+              $published = if ($expectedTree) { $treeSha -eq $expectedTree } else { -not [string]::IsNullOrWhiteSpace($treeSha) }
             } catch {
               $published = $false
             }
