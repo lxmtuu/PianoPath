@@ -864,6 +864,8 @@ internal static class StringsVietnamese
         ["Recording MP4 with the audio inside · click to stop"] = "Đang ghi MP4 có âm thanh trong tệp · bấm để dừng",
         ["Recording PNG frames · click to stop"] = "Đang ghi chuỗi PNG · bấm để dừng",
         ["Recording a PNG sequence with alpha"] = "Đang ghi chuỗi PNG có alpha",
+        ["No MJPEG codec on this machine, so this take is recorded as MP4 instead of a raw AVI"] = "Máy chưa có codec MJPEG nên lần quay này ghi ra MP4 thay vì AVI thô",
+        ["The MP4 file could not be finished ({0})."] = "Không hoàn tất được tệp MP4 ({0}).",
         ["Recording complete"] = "Ghi hình xong",
         ["Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop"] = "Đang ghi AVI thô (máy chưa có codec MJPEG) · khoảng {0:0} s vừa giới hạn 2 GB của AVI · nhấp để dừng",
         ["Recording raw AVI · about {0:0} s fit before the 2 GB limit"] = "Ghi AVI thô · khoảng {0:0} s trước khi chạm giới hạn 2 GB",

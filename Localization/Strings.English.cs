@@ -864,6 +864,8 @@ internal static class StringsEnglish
         ["Recording MP4 with the audio inside · click to stop"] = "Recording MP4 with the audio inside · click to stop",
         ["Recording PNG frames · click to stop"] = "Recording PNG frames · click to stop",
         ["Recording a PNG sequence with alpha"] = "Recording a PNG sequence with alpha",
+        ["No MJPEG codec on this machine, so this take is recorded as MP4 instead of a raw AVI"] = "No MJPEG codec on this machine, so this take is recorded as MP4 instead of a raw AVI",
+        ["The MP4 file could not be finished ({0})."] = "The MP4 file could not be finished ({0}).",
         ["Recording complete"] = "Recording complete",
         ["Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop"] = "Recording raw AVI (no MJPEG codec installed) · about {0:0} s fit in the 2 GB AVI limit · click to stop",
         ["Recording raw AVI · about {0:0} s fit before the 2 GB limit"] = "Recording raw AVI · about {0:0} s fit before the 2 GB limit",

@@ -74,7 +74,8 @@ public partial class App : Application
         var snapshotIndex = Array.IndexOf(e.Args, "--snapshot");
         // Automated captures: the chrome must not animate or hide while a screenshot is pending, and
         // they may ask for a specific surface with --menu / --show-settings / --play-dialog / --shortcuts.
-        var automated = snapshotIndex >= 0 || e.Args.Contains("--show-settings") || e.Args.Contains("--play-dialog") || e.Args.Contains("--shortcuts");
+        var soak = e.Args.Any(argument => argument.StartsWith("--soak-record=", StringComparison.Ordinal));
+        var automated = soak || snapshotIndex >= 0 || e.Args.Contains("--show-settings") || e.Args.Contains("--play-dialog") || e.Args.Contains("--shortcuts");
         // Automated captures wait several seconds for the SoundFont and must not animate:
         // a frozen chrome keeps every screenshot identical and the run inexpensive.
         if (automated) { window.AutoHideChrome = false; window.DisableChromeMotion(); }
@@ -111,6 +112,7 @@ public partial class App : Application
         // The play dialog and the shortcut card are captured on their own, over a stage that stays visible.
         if (e.Args.Contains("--play-dialog")) window.OpenPlayDialog();
         if (e.Args.Contains("--shortcuts")) window.ShowShortcuts();
+        if (soak) RecordingSoak.Start(window, e.Args, this);
         if (snapshotIndex >= 0 && snapshotIndex + 1 < e.Args.Length)
         {
             if (e.Args.Contains("--compact")) { window.WindowState = WindowState.Normal; window.Width = 1080; window.Height = 700; }
