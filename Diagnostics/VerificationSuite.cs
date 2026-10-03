@@ -1082,10 +1082,15 @@ internal static partial class VerificationSuite
         Assert(pedal.ActiveVoiceCount == 1, "While the pedal holds the string open there is no damper fall and no release sample.");
         pedal.ProcessMidi(0, 0xB0, 64, 0);
         Assert(pedal.ActiveVoiceCount == 2, "Dropping the pedal damps the string and fires its release sample.");
+        // Half-pedalling is timed on the looped region: an unlooped half-second fixture would run off its
+        // sample end long before the stretched tail does (real piano samples ring for ten seconds and more).
         var half = new SfzSynthesizer(instrument, 22050);
-        half.ProcessMidi(0, 0xB0, 64, 40); half.NoteOn(0, 69, 100); half.Render(block, 2205); half.NoteOff(0, 69);
+        half.ProcessMidi(0, 0xB0, 64, 40); half.NoteOn(0, 50, 100); half.Render(block, 2205); half.NoteOff(0, 50);
         half.Render(tail, 33075);
         Assert(half.ActiveVoiceCount == 1, "The SFZ engine should honour the same half-pedal release stretching as the SF2 engine.");
+        half.ProcessMidi(0, 0xB0, 64, 0);
+        var drain = new float[22050 * 2]; half.Render(drain, 22050);
+        Assert(half.ActiveVoiceCount == 0, "Dropping the pedal should let the dampers end the stretched SFZ tail quickly.");
 
         // Loops: a held note keeps sounding long after its half-second sample would have run out.
         var looper = new SfzSynthesizer(instrument, 22050); looper.NoteOn(0, 50, 100);
