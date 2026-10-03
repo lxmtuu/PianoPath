@@ -382,9 +382,9 @@ jobs:
                   '',
                   "``Keyflow-$version-win-x64.zip`` is portable and self-contained. ``Keyflow-Setup-$version.exe`` installs for Windows x64: Start Menu and Desktop shortcuts, an uninstall entry, and a wizard in English or Tiếng Việt. ``Keyflow-$version-win-x64-fd.zip`` is a smaller download for a PC that has the .NET 10 Desktop Runtime, and ``Keyflow-$version-win-arm64.zip`` is Windows on ARM.",
                   '',
-                  'Keep ``Assets\`` next to the executable, and keep the ``LICENSE.txt`` (MIT) and ``Assets\ATTRIBUTION.txt`` that ship inside every package: the bundled piano is FreePats'' YDP Grand Piano under CC BY 3.0.',
+                  'Keep `Assets\` next to the executable, and keep the `LICENSE.txt` (MIT) and `Assets\ATTRIBUTION.txt` that ship inside every package: the bundled piano is FreePats'' YDP Grand Piano under CC BY 3.0.',
                   '',
-                  'The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC" on the first launch — choose *More info → Run anyway*. ``SHA256SUMS.txt`` covers every file above: ``Get-FileHash .\Keyflow-' + $version + '-win-x64.zip -Algorithm SHA256``.',
+                  'The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC" on the first launch — choose *More info → Run anyway*. `SHA256SUMS.txt` covers every file above: `Get-FileHash .\Keyflow-' + $version + '-win-x64.zip -Algorithm SHA256`.',
                   '',
                   "What changed: https://github.com/$repository/blob/$branch/CHANGELOG.en.md · https://github.com/$repository/blob/$branch/CHANGELOG.md"
                 ) -join "`n"
