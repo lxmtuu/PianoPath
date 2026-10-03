@@ -1,10 +1,10 @@
 # Keyflow · Piano Performance & Concert VFX Studio
 
 > **This is the release repository, not the source repository.** It carries only Keyflow's built
-> packages and its user documentation; the source lives in a private repository. Everything here
+> packages and its user documentation; the source lives in a separate repository. Everything here
 > is produced by the source repository's release pipeline at exactly tag `v1.0.0` — see
-> **[Downloading a release](#downloading-a-release)** below, **[Releases](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)** for the
-> newest one, and **[Issues](https://github.com/lxmtuu/PianoPath-Releases/issues)** to report a defect.
+> **[Downloading a release](#downloading-a-release)** below, **[Releases](https://github.com/lxmtuu/KeyFlow/releases/latest)** for the
+> newest one, and **[Issues](https://github.com/lxmtuu/KeyFlow/issues)** to report a defect.
 >
 > *Do not edit files in this repository by hand*: the branch is rebuilt from the source repository
 > on every release, so hand edits are overwritten.
@@ -16,9 +16,9 @@
 > **Changelog: [CHANGELOG.en.md](CHANGELOG.en.md)** (bản tiếng Việt: [CHANGELOG.md](CHANGELOG.md))
 > — everything a user can see, recorded per released version.
 >
-> **Download a build: [the public release repository](https://github.com/lxmtuu/PianoPath-Releases/releases)** — the portable ZIP and the `.exe`
-> installer. The repository you are reading is the **private source repository**: the source lives here, while
-> the packages and the product page live in that other one.
+> **Download a build: [the public release repository](https://github.com/lxmtuu/KeyFlow/releases)** — the portable ZIP and the `.exe`
+> installer. The repository you are reading is the **release repository**: the packages and the product page
+> live here, while the source stays in a separate repository.
 
 Keyflow is a Windows desktop application (C# · WPF · .NET 10) for **playing, practising and making
 piano videos from MIDI** at concert-production quality. The interface ships **two languages — English
@@ -61,7 +61,7 @@ else's artwork.*
 ## Downloading a release
 
 Every release (`v1.0.0` and later) is a GitHub **Release** holding four packages and a
-`SHA256SUMS.txt` covering all of them: **[https://github.com/lxmtuu/PianoPath-Releases/releases/latest](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)**.
+`SHA256SUMS.txt` covering all of them: **[https://github.com/lxmtuu/KeyFlow/releases/latest](https://github.com/lxmtuu/KeyFlow/releases/latest)**.
 
 | File | What it is | What the target PC needs |
 | --- | --- | --- |
@@ -91,6 +91,8 @@ Keyflow-1.0.0-win-x64\
   ship inside every package; do not remove them when passing a copy on.
 - **What changed**: [CHANGELOG.en.md](CHANGELOG.en.md) (Vietnamese edition: [CHANGELOG.md](CHANGELOG.md))
   — one entry per release, listing everything a user can see.
+- **The product presentation**: [docs/presentation](docs/presentation/README.md) — twenty 16:9 slides,
+  as a PDF to present from and a DOCX to edit.
 - **The verification suite**: `PianoPath.exe --verify --verify-log=%TEMP%\keyflow-verify.log` runs on the
   machine you just downloaded to and prints PASS/FAIL per subject (a subject that needs hardware you do
   not have reports SKIP, which is not a failure).

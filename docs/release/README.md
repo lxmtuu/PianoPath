@@ -1,10 +1,10 @@
 # Keyflow · Piano Performance & Concert VFX Studio
 
 > **Đây là kho phát hành, không phải kho mã nguồn.** Kho này chỉ chứa bản dựng và tài liệu
-> người dùng của Keyflow; mã nguồn nằm ở một kho riêng và không được công khai. Mọi tệp ở đây
+> người dùng của Keyflow; mã nguồn nằm ở một kho riêng. Mọi tệp ở đây
 > do quy trình phát hành của kho nguồn sinh ra tại đúng tag `v1.0.0` — xem
 > **[Tải bản phát hành](#tải-bản-phát-hành)** bên dưới, hoặc
-> **[Releases](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)** cho bản mới nhất, và **[Issues](https://github.com/lxmtuu/PianoPath-Releases/issues)** để báo lỗi.
+> **[Releases](https://github.com/lxmtuu/KeyFlow/releases/latest)** cho bản mới nhất, và **[Issues](https://github.com/lxmtuu/KeyFlow/issues)** để báo lỗi.
 >
 > *Đừng sửa tệp trong kho này bằng tay*: mỗi lần phát hành, nhánh này được dựng lại từ kho
 > nguồn nên mọi thay đổi viết tay sẽ bị ghi đè.
@@ -16,9 +16,9 @@
 > **Nhật ký thay đổi: [CHANGELOG.md](CHANGELOG.md)** (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
 > — mọi thay đổi người dùng nhìn thấy, ghi theo từng phiên bản phát hành.
 >
-> **Tải bản dựng: [kho phát hành công khai](https://github.com/lxmtuu/PianoPath-Releases/releases)** — ZIP portable và bộ cài `.exe`.
-> Kho bạn đang đọc là **kho mã nguồn riêng tư**: đây là nơi giữ mã nguồn, còn gói phát hành và
-> trang sản phẩm chỉ nằm ở kho kia.
+> **Tải bản dựng: [kho phát hành công khai](https://github.com/lxmtuu/KeyFlow/releases)** — ZIP portable và bộ cài `.exe`.
+> Kho bạn đang đọc là **kho phát hành**: gói cài và trang sản phẩm nằm ngay ở đây, còn mã
+> nguồn nằm ở một kho riêng.
 
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng. Sân khấu ấy do một **engine GPU Direct3D 11** vẽ trên luồng riêng — HDR 16-bit, bloom nhiều tầng, tới 240 FPS và không bao giờ làm chậm đầu vào MIDI; bộ dựng hình WPF chỉ còn là đường dự phòng khi Direct3D không khởi động được (xem [Sân khấu & hiệu ứng hình ảnh](#sân-khấu--hiệu-ứng-hình-ảnh)).
 
@@ -47,8 +47,8 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 
 ## Tải bản phát hành
 
-Mỗi mốc phát hành (`v1.0.0` và các bản sau) là một mục trong **[Releases](https://github.com/lxmtuu/PianoPath-Releases/releases)**, kèm
-`SHA256SUMS.txt` của mọi tệp đính kèm. Bản mới nhất: **[https://github.com/lxmtuu/PianoPath-Releases/releases/latest](https://github.com/lxmtuu/PianoPath-Releases/releases/latest)**.
+Mỗi mốc phát hành (`v1.0.0` và các bản sau) là một mục trong **[Releases](https://github.com/lxmtuu/KeyFlow/releases)**, kèm
+`SHA256SUMS.txt` của mọi tệp đính kèm. Bản mới nhất: **[https://github.com/lxmtuu/KeyFlow/releases/latest](https://github.com/lxmtuu/KeyFlow/releases/latest)**.
 
 | Tệp | Là gì | Máy đích cần gì |
 | --- | --- | --- |
@@ -78,6 +78,8 @@ Keyflow-1.0.0-win-x64\
   trong mỗi gói; đừng xoá chúng khi chia sẻ lại.
 - **Nhật ký thay đổi**: [CHANGELOG.md](CHANGELOG.md) (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
   — mỗi bản một mục, ghi những gì người dùng nhìn thấy.
+- **Bộ slide thuyết trình sản phẩm**: [docs/presentation](docs/presentation/README.md) — 20 slide 16:9,
+  bản PDF để chiếu và bản DOCX để sửa lại.
 - **Bộ kiểm chứng**: `PianoPath.exe --verify --verify-log=%TEMP%\keyflow-verify.log` chạy ngay trên máy
   bạn vừa tải về và in từng mục PASS/FAIL (mục cần phần cứng không có sẽ ghi SKIP, không phải lỗi).
 

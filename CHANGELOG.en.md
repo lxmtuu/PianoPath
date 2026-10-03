@@ -18,7 +18,7 @@ check red instead of shipping a release that states two versions.
 The product's technical limits live in the README's *[Current limitations](README.en.md#current-limitations)*
 section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## 1.0.0 — 2026-10-02
+## 1.0.0 — 2026-10-03
 
 The first official release. Keyflow is a Windows desktop application (C# · WPF · .NET 10) to **play, practise
 and make piano videos from MIDI** at concert-performance quality, with an interface in **English and Tiếng
@@ -99,6 +99,21 @@ this entry describes the product as released rather than listing every commit (n
 - A **camera overlay** (a live camera or a looping video file, placed by corner, mirrored, opacity, green
   key) and **hand tracking** with classical vision: a YCbCr skin-colour rule with its own sensitivity, a
   32×24 grid, a finger count from the column profile, and a lit band on the key the hand is over.
+- **No more freezes and no more broken files when recording** — three fixes after the first cut: every frame
+  and audio block releases its Media Foundation COM buffer in a `finally` (they used to wait for the GC, so
+  memory ballooned and the window froze when they were all freed at once); frames and audio go through a
+  bounded queue to a worker thread that does the NV12 conversion and the encoder write, and frames the
+  encoder falls behind on are folded into the newest one as repeats so the file keeps real time; a whole MP4
+  take lives on **one thread** (Media Foundation refuses a sink writer created on one thread and called from
+  another, which is why earlier takes came out empty or without an index) and a failed close is reported
+  instead of ignored; AVI is written off the UI thread too, repeats are written as zero-byte null frames
+  rather than re-compressed duplicates, and a take is capped at **1080p** in both directions.
+- **MP4 is now the default format**, and the file it writes opens in every player: `MF_MT_FRAME_SIZE` packs
+  the width into the high word, but the recorder passed the height first, so the encoder read every frame
+  with the wrong stride and a 1920×1080 take was declared 1080×1920 — horizontal static on screen. The size
+  is now declared as width × height, `--soak-record` compares the size the file declares with the size that
+  was asked for, and new profiles default to MP4 instead of AVI (an AVI without an MJPEG codec is raw
+  frames, which fills the 2 GB limit in seconds at 1080p).
 
 ### Library, profile & design desk
 

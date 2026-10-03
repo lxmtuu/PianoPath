@@ -53,7 +53,7 @@ param(
     [Parameter(Mandatory = $true)]
     [string] $Tag,
 
-    [string] $Repository = 'lxmtuu/PianoPath-Releases',
+    [string] $Repository = 'lxmtuu/KeyFlow',
 
     [string] $Branch,
 
@@ -167,18 +167,40 @@ try {
     Write-Host "commit    : $newCommit"
     Get-ChildItem $staging -File | ForEach-Object { Write-Host ("            {0}" -f $_.Name) }
 
+    # The repository this checkout belongs to: the one repository whose main this script must never write.
+    $sourceSlug = ''
+    $origin = "$(& git -C $root remote get-url $Remote)".Trim()
+    if ($origin) { $sourceSlug = ($origin -replace '^.*github\.com[:/]', '') -replace '\.git$', '' }
+
     # main carries the newest release, so the public repository's front page shows the current page. An
     # older tag re-published (a fix to its notes, say) must not push it backwards, so this asks which
-    # release is the newest — a question this repository (private) answers only to the maintainer's gh,
-    # which is the login this script publishes with anyway.
+    # release is the newest — a question this repository answers only to the maintainer's gh, which is the
+    # login this script publishes with anyway.
     $updateMain = $UpdateMain.IsPresent
-    if (-not $updateMain) {
-        $origin = "$(& git -C $root remote get-url $Remote)".Trim()
-        $slug = ($origin -replace '^.*github\.com[:/]', '') -replace '\.git$', ''
-        if ($slug) {
-            $latestOutput = & gh api "repos/$slug/releases/latest" --jq .tag_name 2>$null
-            if ($LASTEXITCODE -eq 0 -and $latestOutput) { $updateMain = ("$latestOutput".Trim() -eq $Tag) }
+    if (-not $updateMain -and $sourceSlug) {
+        $latestOutput = & gh api "repos/$sourceSlug/releases/latest" --jq .tag_name 2>$null
+        if ($LASTEXITCODE -eq 0 -and $latestOutput) { $updateMain = ("$latestOutput".Trim() -eq $Tag) }
+    }
+
+    # A repository may only have its main replaced by documents if it is a repository that exists to hold
+    # documents; this one holds the product. On 2026-10-03 this script was pointed at the source repository
+    # (-Repository lxmtuu/PianoPath) and did exactly that: main spent half an hour holding docs/release and
+    # the sources had to be restored from a branch. Hence the refusals below. tools/check_sources.py fails
+    # the static check if the first one is edited away.
+    if ($sourceSlug -and $Repository -ieq $sourceSlug) {
+        if ($updateMain) {
+            throw (@(
+                "refusing to push the release documents to refs/heads/main of $Repository: that is the source"
+                'repository, whose main is the product and not the documentation. Publish to the public release'
+                'repository instead (docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md), or drop -UpdateMain to write only'
+                "the $Branch branch."
+            ) -join ' ')
         }
+        if ($Branch -in @('main', 'master')) {
+            throw "refusing to write the release documents to $Branch of the source repository $Repository"
+        }
+        Write-Warning ("the target repository is this one ($Repository): the documents go to the $Branch " +
+                       'branch, and its main is never written.')
     }
 
     if ($DryRun) {

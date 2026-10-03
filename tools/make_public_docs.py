@@ -45,7 +45,13 @@ ROOT = Path(__file__).resolve().parent.parent
 # PUBLIC_REPOSITORY default in .github/workflows/release.yml and the installer's AppPublisherURL, and
 # scan_public_release in tools/check_sources.py makes those (plus both READMEs and the runbook under
 # docs/) agree on one name.
-PUBLIC_REPOSITORY = "lxmtuu/PianoPath-Releases"
+#
+# It is lxmtuu/KeyFlow, and it already existed when this name was first typed: the release documents had
+# been published there by hand, under a repository name nothing in the repository mentioned. The checks
+# only made the places that type the name agree with each other, so five files agreed on a repository
+# that did not exist while the real one sat unmentioned. That is why the runbook's first instruction is
+# now "point the release at the repository that exists", not "create the one this repository names".
+PUBLIC_REPOSITORY = "lxmtuu/KeyFlow"
 RELEASES_URL = f"https://github.com/{PUBLIC_REPOSITORY}/releases"
 LATEST_URL = f"{RELEASES_URL}/latest"
 ISSUES_URL = f"https://github.com/{PUBLIC_REPOSITORY}/issues"
@@ -96,6 +102,15 @@ COPIES = (
     ("LICENSE", "LICENSE"),
     ("Assets/ATTRIBUTION.txt", "Assets/ATTRIBUTION.txt"),
     ("docs/LOCALIZATION.md", "docs/LOCALIZATION.md"),
+    # The product presentation: twenty 16:9 slides in PDF and DOCX, plus the README that lists them.
+    # It was made for the public repository — the first copy of it lived there and nowhere else — which
+    # is exactly the arrangement the release branch cannot survive: the branch is rebuilt from this
+    # repository on every release, so a file that only exists on the public side is deleted the next
+    # time a release is published. Naming the three files here is what makes them travel, and
+    # scan_public_release in tools/check_sources.py asserts that these entries still do.
+    ("docs/presentation/README.md", "docs/presentation/README.md"),
+    ("docs/presentation/Keyflow-Presentation-v1.0.0.pdf", "docs/presentation/Keyflow-Presentation-v1.0.0.pdf"),
+    ("docs/presentation/Keyflow-Presentation-v1.0.0.docx", "docs/presentation/Keyflow-Presentation-v1.0.0.docx"),
 )
 
 # Subsections dropped from a section that is kept. The *Testing* section stays because it says the
@@ -126,10 +141,14 @@ DROPPED_SUBSECTIONS = {
 # stops, and whoever edits the README decides what the sentence should say now.
 REWRITES = {
     "vi": (
-        ("Kho bạn đang đọc là **kho mã nguồn riêng tư**; gói phát hành và trang sản phẩm chỉ nằm ở kho kia\n"
+        ("Kho bạn đang đọc là **kho mã nguồn**; gói phát hành và trang sản phẩm nằm ở kho kia\n"
          "> (xem [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md)).",
-         "Kho bạn đang đọc là **kho mã nguồn riêng tư**: đây là nơi giữ mã nguồn, còn gói phát hành và\n"
-         "> trang sản phẩm chỉ nằm ở kho kia."),
+         # The sentence above is written for somebody reading the *source* repository, and the public
+         # page used to carry it unchanged — so the download page said "the repository you are reading
+         # is the private source repository" fifteen lines under a banner saying the opposite. The
+         # rewrite has to state the reader's actual position: packages here, source elsewhere.
+         "Kho bạn đang đọc là **kho phát hành**: gói cài và trang sản phẩm nằm ngay ở đây, còn mã\n"
+         "> nguồn nằm ở một kho riêng."),
         ("Xem [Đóng gói và xuất file .exe](#đóng-gói-và-xuất-file-exe).",
          "Xem [Tải bản phát hành](#tải-bản-phát-hành)."),
         ("Muốn làm mới sau khi sửa\n> giao diện: xem [Tạo lại ảnh giao diện](#tạo-lại-ảnh-giao-diện).",
@@ -140,10 +159,12 @@ REWRITES = {
          "> không bản nào lệch khỏi bản kia."),
     ),
     "en": (
-        ("The repository you are reading is the **private source repository**; packages and the product\n"
+        ("The repository you are reading is the **source repository**; the packages and the product\n"
          "> page live in that other one (see [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md)).",
-         "The repository you are reading is the **private source repository**: the source lives here, while\n"
-         "> the packages and the product page live in that other one."),
+         # Same correction as the Vietnamese edition above: the public page has to describe the
+         # repository the reader is actually in.
+         "The repository you are reading is the **release repository**: the packages and the product page\n"
+         "> live here, while the source stays in a separate repository."),
         ("See [Packaging and shipping the .exe](#packaging-and-shipping-the-exe).",
          "See [Downloading a release](#downloading-a-release)."),
         ("after a UI change, see [Rendering the interface pictures again](#rendering-the-interface-pictures-again).",
@@ -236,12 +257,12 @@ def download_title(language: str) -> str:
 
 
 def banner(language: str, version: str) -> str:
-    """The first thing a reader sees: this is the release repository, and the source is not public."""
+    """The first thing a reader sees: this is the release repository, and the source is elsewhere."""
     tag = f"v{version}"
     if language == "vi":
         return (
             f"> **Đây là kho phát hành, không phải kho mã nguồn.** Kho này chỉ chứa bản dựng và tài liệu\n"
-            f"> người dùng của Keyflow; mã nguồn nằm ở một kho riêng và không được công khai. Mọi tệp ở đây\n"
+            f"> người dùng của Keyflow; mã nguồn nằm ở một kho riêng. Mọi tệp ở đây\n"
             f"> do quy trình phát hành của kho nguồn sinh ra tại đúng tag `{tag}` — xem\n"
             f"> **[Tải bản phát hành](#tải-bản-phát-hành)** bên dưới, hoặc\n"
             f"> **[Releases]({LATEST_URL})** cho bản mới nhất, và **[Issues]({ISSUES_URL})** để báo lỗi.\n"
@@ -251,7 +272,7 @@ def banner(language: str, version: str) -> str:
         )
     return (
         f"> **This is the release repository, not the source repository.** It carries only Keyflow's built\n"
-        f"> packages and its user documentation; the source lives in a private repository. Everything here\n"
+        f"> packages and its user documentation; the source lives in a separate repository. Everything here\n"
         f"> is produced by the source repository's release pipeline at exactly tag `{tag}` — see\n"
         f"> **[Downloading a release](#downloading-a-release)** below, **[Releases]({LATEST_URL})** for the\n"
         f"> newest one, and **[Issues]({ISSUES_URL})** to report a defect.\n"
@@ -301,6 +322,8 @@ Keyflow-{version}-win-x64\\
   trong mỗi gói; đừng xoá chúng khi chia sẻ lại.
 - **Nhật ký thay đổi**: [CHANGELOG.md](CHANGELOG.md) (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
   — mỗi bản một mục, ghi những gì người dùng nhìn thấy.
+- **Bộ slide thuyết trình sản phẩm**: [docs/presentation](docs/presentation/README.md) — 20 slide 16:9,
+  bản PDF để chiếu và bản DOCX để sửa lại.
 - **Bộ kiểm chứng**: `PianoPath.exe --verify --verify-log=%TEMP%\\keyflow-verify.log` chạy ngay trên máy
   bạn vừa tải về và in từng mục PASS/FAIL (mục cần phần cứng không có sẽ ghi SKIP, không phải lỗi).
 """
@@ -338,6 +361,8 @@ Keyflow-{version}-win-x64\\
   ship inside every package; do not remove them when passing a copy on.
 - **What changed**: [CHANGELOG.en.md](CHANGELOG.en.md) (Vietnamese edition: [CHANGELOG.md](CHANGELOG.md))
   — one entry per release, listing everything a user can see.
+- **The product presentation**: [docs/presentation](docs/presentation/README.md) — twenty 16:9 slides,
+  as a PDF to present from and a DOCX to edit.
 - **The verification suite**: `PianoPath.exe --verify --verify-log=%TEMP%\\keyflow-verify.log` runs on the
   machine you just downloaded to and prints PASS/FAIL per subject (a subject that needs hardware you do
   not have reports SKIP, which is not a failure).
