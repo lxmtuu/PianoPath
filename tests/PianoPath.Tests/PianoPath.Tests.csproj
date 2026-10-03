@@ -44,8 +44,15 @@
     <Compile Include="..\..\Audio\IAudioTrack.cs" Link="Product\Audio\IAudioTrack.cs" />
     <Compile Include="..\..\Audio\WavWriter.cs" Link="Product\Audio\WavWriter.cs" />
     <Compile Include="..\..\Audio\WavReader.cs" Link="Product\Audio\WavReader.cs" />
+    <Compile Include="..\..\Audio\FlacReader.cs" Link="Product\Audio\FlacReader.cs" />
     <Compile Include="..\..\Audio\SfzReader.cs" Link="Product\Audio\SfzReader.cs" />
+    <Compile Include="..\..\Audio\SalamanderPiano.cs" Link="Product\Audio\SalamanderPiano.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
+  </ItemGroup>
+
+  <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->
+  <ItemGroup>
+    <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

@@ -136,6 +136,7 @@ public partial class MainWindow : Window
         // The GPU stage is the main stage: the render loop starts with the window and the software
         // renderer only steps in if Direct3D cannot start (or for a --software run).
         ApplyRenderBackend();
+        UpdateSalamanderUi();
         if (loadBuiltInSoundFont) Loaded += MainWindow_Loaded;
     }
     internal bool HasSoundFont => _audio.HasSoundFont;
@@ -143,6 +144,12 @@ public partial class MainWindow : Window
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         Loaded -= MainWindow_Loaded;
+        // Once the downloaded concert grand is installed it outranks the bundled SoundFont at startup.
+        if (SalamanderPiano.IsInstalled)
+        {
+            await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
+            if (_audio.HasSoundFont) return; // otherwise (deleted samples, bad disk) fall back to the bundled grand
+        }
         var bundled = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
         if (SoundFontReader.IsLfsPointer(bundled))
         {
@@ -525,6 +532,58 @@ public partial class MainWindow : Window
         Loc.Format(SoundFontHint, "Instrument · {0}", preset.Name);
     }
     private void UnloadSoundFont_Click(object sender, RoutedEventArgs e) { _audio.UnloadSoundFont(); _isBuiltInSoundFont = false; _suppressPreset = true; PresetCombo.ItemsSource = null; PresetCombo.SelectedIndex = -1; _suppressPreset = false; UpdateSoundFontUi(); }
+
+    // =============================================================================================
+    // The downloadable Salamander concert grand (SalamanderPiano owns the manifest and the files)
+    // =============================================================================================
+
+    private System.Threading.CancellationTokenSource? _salamanderCancel;
+
+    private void UpdateSalamanderUi()
+    {
+        var downloading = _salamanderCancel is not null;
+        SalamanderProgress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
+        SalamanderPlayButton.Visibility = !downloading && SalamanderPiano.IsInstalled ? Visibility.Visible : Visibility.Collapsed;
+        Loc.Set(SalamanderButton, downloading ? "CANCEL DOWNLOAD" : "⬇  DOWNLOAD · 750 MB");
+        if (downloading) { Loc.Set(SalamanderLabel, "SALAMANDER GRAND PIANO · DOWNLOADING"); return; }
+        Loc.Set(SalamanderLabel, SalamanderPiano.IsInstalled ? "SALAMANDER GRAND PIANO · INSTALLED" : "SALAMANDER GRAND PIANO · NOT DOWNLOADED");
+        Loc.Set(SalamanderHint, "Yamaha C5 concert grand · 48 kHz / 24-bit · 16 velocity layers, release samples, string resonance and pedal noise · recorded by Alexander Holm, CC BY");
+    }
+
+    private async void SalamanderButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_salamanderCancel is { } running) { running.Cancel(); return; }
+        using var cancel = _salamanderCancel = new System.Threading.CancellationTokenSource();
+        UpdateSalamanderUi();
+        try
+        {
+            var total = (SalamanderPiano.TotalBytes / 1_000_000).ToString();
+            var progress = new Progress<long>(done =>
+            {
+                SalamanderProgress.Value = done * 1000.0 / SalamanderPiano.TotalBytes;
+                Loc.Format(SalamanderHint, "Downloaded {0} of {1} MB · the piano loads as soon as it finishes", (done / 1_000_000).ToString(), total);
+            });
+            await SalamanderPiano.DownloadAsync(progress, cancel.Token);
+            _salamanderCancel = null;
+            UpdateSalamanderUi();
+            if (!_closing) await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
+        }
+        catch (OperationCanceledException)
+        {
+            _salamanderCancel = null;
+            UpdateSalamanderUi();
+            Loc.Set(SalamanderHint, "Download cancelled · finished files are kept, download again to resume");
+        }
+        catch (Exception ex)
+        {
+            _salamanderCancel = null;
+            UpdateSalamanderUi();
+            Loc.Format(SalamanderHint, "Download failed · {0}", ex.Message);
+        }
+    }
+
+    private async void SalamanderPlay_Click(object sender, RoutedEventArgs e) =>
+        await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
     /// <summary>Shows a warning dialog, or only records it when dialogs are suppressed (verification runs, snapshots).</summary>
     private void ShowError(string message, string titleKey, MessageBoxImage icon = MessageBoxImage.Warning) =>
         ShowMessage(message, titleKey, icon);

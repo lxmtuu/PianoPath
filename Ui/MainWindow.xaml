@@ -157,7 +157,7 @@
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="INSTRUMENT" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                    <TextBlock Text="Keyflow plays through a SoundFont (.sf2). The bundled concert grand loads automatically; load another file to change the sound." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
+                                    <TextBlock Text="Keyflow plays SoundFont (.sf2) and SFZ instruments. The bundled concert grand loads automatically; download the Salamander grand below or load your own file." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
                                     <Border Padding="14" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
                                         <StackPanel>
                                             <TextBlock x:Name="SoundFontLabel" Text="BUILT-IN GRAND · STARTING" local:Loc.Localize="True" Foreground="{StaticResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
@@ -165,6 +165,17 @@
                                             <WrapPanel>
                                                 <Button x:Name="SoundFontButton" Content="◉  LOAD SOUNDFONT" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="LoadSoundFont_Click" Margin="0,0,8,0"/>
                                                 <Button Content="Unload · silent mode" local:Loc.Localize="True" Click="UnloadSoundFont_Click"/>
+                                            </WrapPanel>
+                                        </StackPanel>
+                                    </Border>
+                                    <Border Padding="14" CornerRadius="12" Margin="0,8,0,0" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
+                                        <StackPanel>
+                                            <TextBlock x:Name="SalamanderLabel" Text="SALAMANDER GRAND PIANO · NOT DOWNLOADED" local:Loc.Localize="True" Foreground="{StaticResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="SalamanderHint" Text="Yamaha C5 concert grand · 48 kHz / 24-bit · 16 velocity layers, release samples, string resonance and pedal noise · recorded by Alexander Holm, CC BY" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,3,0,12"/>
+                                            <ProgressBar x:Name="SalamanderProgress" Height="6" Minimum="0" Maximum="1000" Visibility="Collapsed" Margin="0,0,0,12"/>
+                                            <WrapPanel>
+                                                <Button x:Name="SalamanderButton" Content="⬇  DOWNLOAD · 750 MB" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="SalamanderButton_Click" Margin="0,0,8,0"/>
+                                                <Button x:Name="SalamanderPlayButton" Content="PLAY THIS PIANO" local:Loc.Localize="True" Click="SalamanderPlay_Click" Visibility="Collapsed"/>
                                             </WrapPanel>
                                         </StackPanel>
                                     </Border>

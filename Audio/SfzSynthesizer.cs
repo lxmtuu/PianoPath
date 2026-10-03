@@ -22,6 +22,12 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
     private readonly SfzInstrumentData _instrument;
     private readonly SfzRegion[] _attackRegions;
     private readonly SfzRegion[] _releaseRegions;
+    /// <summary>Regions fired by the pedal itself (<c>on_locc64</c>): the mechanical thump of it going down or up.</summary>
+    private readonly SfzRegion[] _pedalNoiseRegions;
+    /// <summary>Last raw CC 64 value per channel, for edge-detecting the pedal-noise windows.</summary>
+    private readonly int[] _lastCc64 = new int[16];
+    /// <summary>Seeded so <c>lorand</c> take-picking cannot break the deterministic verification renders.</summary>
+    private readonly Random _random = new(12345);
     private readonly int _sampleRate;
     private readonly object _gate = new();
     private readonly List<Voice> _voices = [];
@@ -76,8 +82,9 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
     {
         _instrument = instrument;
         _sampleRate = sampleRate;
-        _attackRegions = instrument.Regions.Where(r => !r.TriggerRelease).ToArray();
-        _releaseRegions = instrument.Regions.Where(r => r.TriggerRelease).ToArray();
+        _attackRegions = instrument.Regions.Where(r => !r.TriggerRelease && !r.IsCc64Trigger).ToArray();
+        _releaseRegions = instrument.Regions.Where(r => r.TriggerRelease && !r.IsCc64Trigger).ToArray();
+        _pedalNoiseRegions = instrument.Regions.Where(r => r.IsCc64Trigger).ToArray();
     }
 
     public string Name => _instrument.Name;
@@ -94,7 +101,7 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
             case 0x80: NoteOff(channel, data1); break;
             case 0xB0:
                 if (data1 == 67) lock (_gate) _soft[channel] = data2 >= 64;
-                if (data1 == 64) SetDamper(channel, data2);
+                if (data1 == 64) { SetDamper(channel, data2); PlayPedalNoise(channel, data2); }
                 else if (data1 == 66) SetSostenuto(channel, data2 >= 64);
                 else if (data1 == 120 || data1 == 123) AllNotesOff(channel);
                 break;
@@ -137,7 +144,7 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
             PanLeft = Math.Sqrt((1 - pan) * .5), PanRight = Math.Sqrt((1 + pan) * .5),
             Attack = Math.Clamp(region.AttackSeconds, .0005, 20), Decay = Math.Clamp(region.DecaySeconds, .0005, 20),
             Sustain = Math.Clamp(region.SustainLevel, .001, 1), Release = Math.Clamp(region.ReleaseSeconds, .015, 20),
-            IsRelease = region.TriggerRelease, KeyHeld = !region.TriggerRelease
+            IsRelease = region.TriggerRelease || region.IsCc64Trigger, KeyHeld = !region.TriggerRelease && !region.IsCc64Trigger
         });
     }
 
@@ -167,6 +174,28 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
     /// attenuates the noise for notes that had long decayed — a string barely vibrating barely thumps.
     /// The caller holds the gate.
     /// </summary>
+    /// <summary>Fires <c>on_locc64</c> one-shots when the raw pedal value crosses into a region's window.</summary>
+    private void PlayPedalNoise(int channel, int value)
+    {
+        if (_pedalNoiseRegions.Length == 0) { _lastCc64[channel] = value; return; }
+        lock (_gate)
+        {
+            var previous = _lastCc64[channel]; _lastCc64[channel] = value;
+            if (previous == value) return;
+            var take = _random.NextDouble();
+            foreach (var region in _pedalNoiseRegions)
+            {
+                if (value < region.OnLoCc64 || value > region.OnHiCc64) continue;
+                if (previous >= region.OnLoCc64 && previous <= region.OnHiCc64) continue; // no edge: still inside the window
+                if (take < region.LoRand || take >= region.HiRand) continue;              // lorand/hirand picks one take
+                // A fresh pedal action replaces the tail of the previous one (the source sets say polyphony=1).
+                foreach (var voice in _voices)
+                    if (voice.Channel == channel && voice.Region.IsCc64Trigger) { voice.Release = Math.Min(voice.Release, .1); voice.ReleaseScale = 1; voice.ReleaseKey(); }
+                StartVoice(region, channel, pitch: -1, key: region.Root, velocity: 127, extraGain: 1);
+            }
+        }
+    }
+
     private void TriggerReleaseSamples(int channel, int pitch)
     {
         if (_releaseRegions.Length == 0) return;

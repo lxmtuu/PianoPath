@@ -32,6 +32,11 @@ internal sealed class SfzRegion
     public bool Loop; public int LoopStart, LoopEnd;
     /// <summary>Frames skipped at the start of the sample (<c>offset</c>).</summary>
     public int Offset;
+    /// <summary>CC 64 window that fires this region as a one-shot (<c>on_locc64</c>/<c>on_hicc64</c>): pedal-down and pedal-up noises. −1 means not CC-triggered.</summary>
+    public int OnLoCc64 = -1, OnHiCc64 = -1;
+    /// <summary>Random-selection window (<c>lorand</c>/<c>hirand</c>) so repeated pedal presses alternate takes.</summary>
+    public double LoRand, HiRand = 1;
+    public bool IsCc64Trigger => OnLoCc64 >= 0;
 }
 
 /// <summary>A parsed SFZ instrument: the flattened region list and the control-section keyboard shift.</summary>
@@ -205,7 +210,9 @@ internal static class SfzReader
         if (!cache.TryGetValue(fullPath, out var audio))
         {
             if (!File.Exists(fullPath)) throw new FileNotFoundException($"SFZ sample not found: {relative}", fullPath);
-            cache[fullPath] = audio = WavReader.Read(fullPath);
+            cache[fullPath] = audio = fullPath.EndsWith(".flac", StringComparison.OrdinalIgnoreCase)
+                ? FlacReader.Read(fullPath)
+                : WavReader.Read(fullPath);
         }
         var region = new SfzRegion { Sample = audio, SamplePath = fullPath };
         // key= expands to lokey+hikey+pitch_keycenter, but only beats one of them when it sits at a
@@ -239,6 +246,14 @@ internal static class SfzReader
         if (Opt("loop_start") is { } loopStart) region.LoopStart = ParseInt(loopStart);
         if (Opt("loop_end") is { } loopEnd) region.LoopEnd = ParseInt(loopEnd);
         if (Opt("offset") is { } offset) region.Offset = Math.Max(0, ParseInt(offset));
+        var onLo = Opt("on_locc64"); var onHi = Opt("on_hicc64");
+        if (onLo is not null || onHi is not null)
+        {
+            region.OnLoCc64 = Math.Clamp(onLo is null ? 0 : ParseInt(onLo), 0, 127);
+            region.OnHiCc64 = Math.Clamp(onHi is null ? 127 : ParseInt(onHi), region.OnLoCc64, 127);
+        }
+        if (Opt("lorand") is { } loRand) region.LoRand = Math.Clamp(ParseDouble(loRand), 0, 1);
+        if (Opt("hirand") is { } hiRand) region.HiRand = Math.Clamp(ParseDouble(hiRand), 0, 1);
         if (region.LoopEnd <= region.LoopStart) region.Loop = false;
         if (region.LoopEnd >= audio.Frames) region.LoopEnd = Math.Max(0, audio.Frames - 1);
         return region;

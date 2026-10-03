@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifySfzEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -1115,7 +1115,83 @@ internal static partial class VerificationSuite
         var missing = false;
         try { _ = SfzReader.Read(Path.Combine(dir, "broken.sfz")); } catch (FileNotFoundException) { missing = true; }
         Assert(missing, "A missing SFZ sample should be reported with its path rather than loaded silent.");
-        Results.Add("PASS SFZ engine: WAV 16/24/float decoding, parser inheritance with #define/#include, velocity layers, round-robins, release samples gated by the damper, loops, half-pedalling and engine integration.");
+
+        // Pedal noises: on_locc64 one-shots fire on the pedal's own edges and never answer the keyboard.
+        File.WriteAllText(Path.Combine(dir, "pedal.sfz"),
+            "<group> on_locc64=127 on_hicc64=127 volume=-12\n<region> lorand=0 hirand=0.5 sample=rel.wav\n<region> lorand=0.5 hirand=1 sample=rel.wav\n" +
+            "<group> on_locc64=0 on_hicc64=0\n<region> sample=rel.wav\n");
+        var pedalSet = SfzReader.Read(Path.Combine(dir, "pedal.sfz"));
+        Assert(pedalSet.Regions.Count == 3 && pedalSet.Regions.All(r => r.IsCc64Trigger), "on_locc64/on_hicc64 regions should parse as CC-triggered one-shots.");
+        var thump = new SfzSynthesizer(pedalSet, 22050);
+        thump.ProcessMidi(0, 0xB0, 64, 127);
+        Assert(thump.ActiveVoiceCount == 1, "Flooring the pedal should fire exactly one down-thump take (lorand picks it).");
+        thump.NoteOn(0, 60, 100); thump.ProcessMidi(0, 0xB0, 64, 127);
+        Assert(thump.ActiveVoiceCount == 1, "CC-triggered regions must not answer NoteOn, and a repeated CC value is not a new edge.");
+        thump.ProcessMidi(0, 0xB0, 64, 0);
+        Assert(thump.ActiveVoiceCount == 2, "Lifting the pedal should fire the up-thump sample.");
+        var thumps = new float[11025 * 2]; thump.Render(thumps, 11025);
+        Assert(thump.ActiveVoiceCount == 0 && thumps.Any(s => s != 0), "Pedal noises are audible one-shots that end with their samples.");
+
+        Results.Add("PASS SFZ engine: WAV 16/24/float decoding, parser inheritance with #define/#include, velocity layers, round-robins, release samples gated by the damper, loops, half-pedalling, pedal-noise one-shots and engine integration.");
+    }
+
+    /// <summary>
+    /// The hand-rolled FLAC decoder, against a stream this method assembles bit by bit: a STREAMINFO
+    /// header and one frame with a constant subframe. The fixed, LPC and stereo decode paths are proven
+    /// bit-exact against libFLAC by the test project's committed fixtures; this startup check makes sure
+    /// the container walk itself never regresses on the machine that will load downloaded FLAC samples.
+    /// </summary>
+    private static void VerifyFlacReader()
+    {
+        var bytes = new List<byte> { (byte)'f', (byte)'L', (byte)'a', (byte)'C' };
+        int accumulator = 0, filled = 0;
+        void W(uint value, int count)
+        {
+            for (var i = count - 1; i >= 0; i--)
+            {
+                accumulator = accumulator << 1 | (int)(value >> i & 1);
+                if (++filled == 8) { bytes.Add((byte)accumulator); accumulator = 0; filled = 0; }
+            }
+        }
+        W(1, 1); W(0, 7); W(34, 24);                                // last metadata block: STREAMINFO, 34 bytes
+        W(16, 16); W(16, 16); W(0, 24); W(0, 24);                   // block and frame size ranges
+        W(22050, 20); W(0, 3); W(15, 5); W(0, 4); W(16, 32);        // rate, mono, 16-bit, 16 samples total
+        for (var i = 0; i < 4; i++) W(0, 32);                       // MD5, unused
+        W(0x3FFE, 14); W(0, 2); W(6, 4); W(0, 4); W(0, 4); W(4, 3); W(0, 1); // frame: 8-bit block size follows, mono, 16-bit
+        W(0, 8); W(15, 8); W(0, 8);                                 // frame number, block size 16, CRC-8 (unchecked)
+        W(0, 1); W(0, 6); W(0, 1); W(1234, 16);                     // constant subframe holding 1234
+        while (filled != 0) W(0, 1);                                // byte alignment
+        W(0, 16);                                                   // frame CRC-16 (unchecked)
+        var decoded = FlacReader.Read(bytes.ToArray());
+        Assert(decoded.SampleRate == 22050 && decoded.Channels == 1 && decoded.Samples.Length == 16 && decoded.Samples.All(s => s == 1234),
+            "The FLAC reader should decode a hand-assembled constant-subframe stream exactly.");
+        var refused = false;
+        try { _ = FlacReader.Read(new byte[] { 1, 2, 3, 4 }); } catch (InvalidDataException) { refused = true; }
+        Assert(refused, "A file that is not FLAC should be refused with a clear error.");
+        Results.Add("PASS FLAC reader: container walk, STREAMINFO and constant-subframe decode on a hand-assembled stream; non-FLAC input refused.");
+    }
+
+    /// <summary>
+    /// The downloadable Salamander piano's bookkeeping: the pinned manifest and the generated SFZ mapping
+    /// must agree with each other, because the downloader verifies files against the former and the
+    /// engine plays the latter. No network is touched here.
+    /// </summary>
+    private static void VerifySalamanderPiano()
+    {
+        var entries = SalamanderPiano.ParseManifest();
+        Assert(entries.Length == 641 && entries.Sum(e => e.Size) == SalamanderPiano.TotalBytes,
+            "The Salamander manifest should list all 641 samples and add up to the advertised download size.");
+        Assert(entries.All(e => e.BlobSha.Length == 40 && e.Size > 0 && e.Path.StartsWith("Samples/", StringComparison.Ordinal) && e.Path.EndsWith(".flac", StringComparison.Ordinal))
+            && entries.Select(e => e.Path).Distinct().Count() == entries.Length,
+            "Every manifest entry should carry a hash, a size and a unique Samples/ path.");
+        var names = entries.Select(e => e.Path["Samples/".Length..]).ToHashSet(StringComparer.Ordinal);
+        var referenced = SalamanderPiano.BuildSfz().Split('\n')
+            .Where(line => line.StartsWith("<region>", StringComparison.Ordinal))
+            .Select(line => line[(line.IndexOf("sample=", StringComparison.Ordinal) + "sample=".Length)..].Trim())
+            .ToList();
+        Assert(referenced.Count == 641 && referenced.Distinct().Count() == 641 && referenced.All(names.Contains),
+            "The generated Salamander mapping should reference every downloaded sample exactly once.");
+        Results.Add("PASS Salamander piano: 641-file manifest sums to the advertised size and the generated SFZ mapping references each sample exactly once.");
     }
 
     private static int ZeroCrossings(float[] interleaved)

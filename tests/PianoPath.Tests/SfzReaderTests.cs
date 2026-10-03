@@ -117,6 +117,31 @@ public class SfzReaderTests : IDisposable
     }
 
     [Fact]
+    public void Flac_samples_load_in_regions_and_pedal_noise_opcodes_parse()
+    {
+        File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "mix24s.flac"), Path.Combine(_dir, "note.flac"));
+        File.WriteAllText(Path.Combine(_dir, "flac.sfz"),
+            "<region> sample=note.flac key=c4\n" +
+            "<group> on_locc64=0 on_hicc64=0 volume=-19\n<region> lorand=0 hirand=0.5 sample=note.flac\n");
+
+        var instrument = SfzReader.Read(Path.Combine(_dir, "flac.sfz"));
+
+        Assert.Equal(2, instrument.Regions.Count);
+        var note = instrument.Regions[0];
+        Assert.Equal(48000, note.Sample.SampleRate);
+        Assert.Equal(2, note.Sample.Channels);
+        Assert.Equal(8000, note.Sample.Frames);
+        Assert.False(note.IsCc64Trigger);
+        var thump = instrument.Regions[1];
+        Assert.True(thump.IsCc64Trigger);
+        Assert.Equal(0, thump.OnLoCc64);
+        Assert.Equal(0, thump.OnHiCc64);
+        Assert.Equal(0, thump.LoRand);
+        Assert.Equal(0.5, thump.HiRand);
+        Assert.Equal(-19, thump.VolumeDb);
+    }
+
+    [Fact]
     public void Regions_inherit_global_group_and_define_values_under_their_own_opcodes()
     {
         WriteWav("a.wav", 1, 16, 200, _ => .1);
