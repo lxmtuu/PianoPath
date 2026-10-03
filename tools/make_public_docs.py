@@ -177,6 +177,25 @@ REWRITES = {
     ),
 }
 
+# The source changelog may point at the private roadmap, but that file is deliberately not copied to the
+# public release repository. Changelogs are copied verbatim everywhere else, so this one source-only link
+# needs an explicit rewrite just like the README rewrites above. Keeping the source passage exact makes a
+# future wording change fail generation instead of silently putting another broken link in a release.
+CHANGELOG_REWRITES = {
+    "vi": (
+        ("Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README và\n"
+         "không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP.md`](docs/ROADMAP.md).",
+         "Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README phát hành\n"
+         "và không được lặp lại ở đây; tài liệu kế hoạch phát triển nội bộ không nằm trong kho phát hành công khai."),
+    ),
+    "en": (
+        ("The product's technical limits live in the README's *[Current limitations](README.en.md#current-limitations)*\n"
+         "section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](docs/ROADMAP.md).",
+         "The product's technical limits live in the release README's *[Current limitations](README.en.md#current-limitations)*\n"
+         "section and are not repeated here; the internal development roadmap is not part of the public release repository."),
+    ),
+}
+
 # A generated folder may never hold source code: the release branch is public, so a source file landing
 # there is an unintended publication. scan_public_release() asserts the same thing about the committed
 # docs/release/ tree.
@@ -193,6 +212,27 @@ def release_version() -> str:
     if not declared:
         raise SystemExit("PianoPath.csproj has no <Version>; there is no release to document")
     return declared.group(1).strip()
+
+
+def build_changelog(language: str) -> str:
+    """Copy a changelog while removing links to documents that are private to the source repository."""
+    source = "CHANGELOG.md" if language == "vi" else "CHANGELOG.en.md"
+    text = read(source)
+    for old, new in CHANGELOG_REWRITES[language]:
+        if old not in text:
+            raise SystemExit(
+                f"{source}: the passage to rewrite was not found:\n  {old!r}\n"
+                "The source changelog changed; update CHANGELOG_REWRITES before publishing it.")
+        text = text.replace(old, new, 1)
+    # The public changelog is placed at the public repository root. Every remaining relative link must
+    # therefore point at a file that the release branch carries; external links are intentionally fine.
+    copied = {name for _, name in COPIES} | set(DOCUMENTS.values()) | {"VERSION"}
+    for target in sorted(set(re.findall(r"\]\((?!https?:|#|mailto:)([^)\s]+)\)", text))):
+        target_path = target.split("#", 1)[0]
+        if target_path not in copied:
+            raise SystemExit(
+                f"{source} would link to '{target}' in the public release, but no release step copies that file")
+    return text if text.endswith("\n") else text + "\n"
 
 
 def split_sections(text: str):
@@ -476,7 +516,12 @@ def write_all(out: Path, version: str) -> list[Path]:
     for source, target in COPIES:
         path = out / target
         path.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(ROOT / source, path)
+        if source == "CHANGELOG.md":
+            path.write_text(build_changelog("vi"), encoding="utf-8")
+        elif source == "CHANGELOG.en.md":
+            path.write_text(build_changelog("en"), encoding="utf-8")
+        else:
+            shutil.copyfile(ROOT / source, path)
         written.append(path)
     # The branch says which release it is, so nobody has to open the README to find out.
     version_file = out / "VERSION"
