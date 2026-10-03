@@ -819,6 +819,12 @@ public partial class MainWindow : Window
     /// </summary>
     private static readonly TimeSpan RecorderOpenLimit = TimeSpan.FromSeconds(10);
 
+    /// <summary>A raw AVI that would fill the format's 2 GB in less time than this is written as MP4 instead.</summary>
+    private const double MinRawAviSeconds = 120;
+
+    /// <summary>Set by the <c>--soak-record</c> diagnostics so a take starts without the save dialog; null for a person at the window.</summary>
+    internal string? DiagnosticRecordTarget { get; set; }
+
     private void RecordVideo_Click(object sender, RoutedEventArgs e)
     {
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
@@ -827,7 +833,7 @@ public partial class MainWindow : Window
         var (width, height) = RecordingSize();
         var frameRate = (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
         // A folder for the frames, or a file for the video: one choice in the dock decides which recorder runs.
-        var target = sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile(mp4);
+        var target = DiagnosticRecordTarget ?? (sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile(mp4));
         if (target is null) return;
         try
         {
@@ -835,6 +841,7 @@ public partial class MainWindow : Window
             // engine will hand it samples.
             var withAudio = _visualSettings.RecordAudio && _audio.HasSoundFont;
             var path = target!;
+            var mp4Fallback = false;
             if (target.Length > 0 && sequence)
             {
                 _videoRecorder = new PngSequenceRecorder(path, width, height, frameRate);
@@ -856,7 +863,23 @@ public partial class MainWindow : Window
             }
             else
             {
-                _videoRecorder = new AviVideoRecorder(path, width, height, frameRate);
+                var avi = new AviVideoRecorder(path, width, height, frameRate);
+                _videoRecorder = avi;
+                // Without an MJPEG codec an AVI is raw 24-bit frames: 1080p fills the format's 2 GB ceiling in
+                // seconds. A take that short is no use to anyone, so the same take goes to MP4 instead whenever
+                // this machine can write one; the AVI is kept only when it cannot.
+                var rawSeconds = AviVideoRecorder.SizeLimitBytes / (double)(AviVideoRecorder.BgrStride(width) * height * frameRate);
+                if (!avi.UsesMjpeg && rawSeconds < MinRawAviSeconds)
+                {
+                    var mp4Path = Path.ChangeExtension(path, ".mp4");
+                    var take = Mp4Recorder.TryOpen(mp4Path, width, height, frameRate, withAudio, RecorderOpenLimit, out _, out _);
+                    if (take is not null)
+                    {
+                        avi.Dispose();
+                        try { File.Delete(path); } catch { }
+                        _videoRecorder = take; path = mp4Path; mp4Fallback = true;
+                    }
+                }
             }
             _recordingPath = path;
             // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
@@ -876,7 +899,8 @@ public partial class MainWindow : Window
             else if (_videoRecorder is Mp4Recorder mp4Recorder)
             {
                 Loc.Set(RecordButton, "Recording MP4 with the audio inside · click to stop", FrameworkElement.ToolTipProperty);
-                Loc.Set(SettingsSaveLabel, mp4Recorder.HasAudio ? "Recording MP4 (H.264 + AAC)" : "Recording MP4 (H.264, the sound stayed out)");
+                Loc.Set(SettingsSaveLabel, mp4Fallback ? "No MJPEG codec on this machine, so this take is recorded as MP4 instead of a raw AVI"
+                    : mp4Recorder.HasAudio ? "Recording MP4 (H.264 + AAC)" : "Recording MP4 (H.264, the sound stayed out)");
             }
             else if (((AviVideoRecorder)_videoRecorder).UsesMjpeg)
             {

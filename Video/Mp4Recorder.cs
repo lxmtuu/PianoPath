@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 
 namespace PianoPath;
@@ -53,6 +54,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     private Thread? _worker;
     private bool _closing;
     private Exception? _workerError;
+    private Exception? _openFailure;
     private readonly byte[] _audioBytes = new byte[8192];
     private Mf.IMFSinkWriter? _writer;
     private int _videoStream = -1;
@@ -77,30 +79,52 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
         Width = width; Height = height; FrameRate = frameRate; OutputPath = path;
         _nv12 = new byte[Nv12Frame.Size(width, height)];
+        // Every call into the media stack — starting it, probing the encoders, opening the writer, writing every
+        // sample, closing the file — happens on one thread of its own. A sink writer is only usable from the
+        // apartment it was made in: called from the window's thread it answers E_NOINTERFACE, and the file is
+        // left without an index. The constructor waits here until that thread has the take open (or has failed).
+        using var ready = new ManualResetEventSlim(false);
+        _worker = new Thread(() => RunTake(withAudio, ready)) { IsBackground = true, Name = "MP4 encoder" };
+        _worker.SetApartmentState(ApartmentState.MTA);
+        _worker.Start();
+        ready.Wait();
+        if (_openFailure is { } failure)
+        {
+            _worker.Join();
+            ExceptionDispatchInfo.Capture(failure).Throw();
+        }
+    }
+
+    /// <summary>The encoder thread's whole life: open the take, report that it is open, write frames, close the file.</summary>
+    private void RunTake(bool withAudio, ManualResetEventSlim ready)
+    {
         try
         {
-            _step?.Invoke("NOTE MP4 encoder: starting the media stack for the take.");
-            var hr = Mf.MediaStartup();
-            if (hr != Mf.S_OK) throw new InvalidOperationException(Loc.F("The media stack would not start ({0}).", Mf.Describe(hr)));
-            _step?.Invoke("NOTE MP4 encoder: the media stack is up for the take.");
-            // Whether the sound can go in at all is asked of a throwaway writer first: a stream that is added
-            // and then refused would leave this writer unable to be told to drop it again, and the user's file
-            // would have to be opened a second time. The answer decides the shape of the take before it starts.
-            _step?.Invoke("NOTE MP4 encoder: asking a throwaway writer whether this machine can encode AAC.");
-            var wantsAudio = withAudio && CanEncodeAudio(_step);
-            _step?.Invoke(wantsAudio
-                ? "NOTE MP4 encoder: the AAC probe says yes, so the take carries the sound."
-                : "NOTE MP4 encoder: the AAC probe says no, so the take carries the picture only.");
-            AudioDropped = withAudio && !wantsAudio;
-            Open(encodersForAudio: wantsAudio);
-            _worker = new Thread(EncodeLoop) { IsBackground = true, Name = "MP4 encoder" };
-            _worker.Start();
+            try { OpenTake(withAudio); }
+            catch (Exception ex) { _openFailure = ex; return; }
+            finally { ready.Set(); }
+            EncodeFrames();
         }
-        catch
-        {
-            Dispose();
-            throw;
-        }
+        finally { CloseFile(); }
+    }
+
+    /// <summary>Starts the media stack, asks whether the sound can go in, and opens the writer in the shape that answer allows.</summary>
+    private void OpenTake(bool withAudio)
+    {
+        _step?.Invoke("NOTE MP4 encoder: starting the media stack for the take.");
+        var hr = Mf.MediaStartup();
+        if (hr != Mf.S_OK) throw new InvalidOperationException(Loc.F("The media stack would not start ({0}).", Mf.Describe(hr)));
+        _step?.Invoke("NOTE MP4 encoder: the media stack is up for the take.");
+        // Whether the sound can go in at all is asked of a throwaway writer first: a stream that is added
+        // and then refused would leave this writer unable to be told to drop it again, and the user's file
+        // would have to be opened a second time. The answer decides the shape of the take before it starts.
+        _step?.Invoke("NOTE MP4 encoder: asking a throwaway writer whether this machine can encode AAC.");
+        var wantsAudio = withAudio && CanEncodeAudio(_step);
+        _step?.Invoke(wantsAudio
+            ? "NOTE MP4 encoder: the AAC probe says yes, so the take carries the sound."
+            : "NOTE MP4 encoder: the AAC probe says no, so the take carries the picture only.");
+        AudioDropped = withAudio && !wantsAudio;
+        Open(encodersForAudio: wantsAudio);
     }
 
     /// <summary>
@@ -161,6 +185,9 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
 
     /// <summary>True when the file has an audio stream: the engine's samples go into it, not into a WAV.</summary>
     internal bool HasAudio => _audioStream >= 0;
+
+    /// <summary>What closing the file answered (negative when the index and last frames were not written); null before it is closed.</summary>
+    internal int? FinalizeResult { get; private set; }
 
     /// <summary>True when the audio stream was asked for and refused, so this take has no sound.</summary>
     internal bool AudioDropped { get; private set; }
@@ -227,7 +254,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     }
 
     /// <summary>The encoder thread: takes frames off the queue, converts them to NV12 and writes them, until the take closes.</summary>
-    private void EncodeLoop()
+    private void EncodeFrames()
     {
         while (true)
         {
@@ -301,21 +328,28 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// <summary>Closes the file: the last frames, the index and the two stream headers are written here.</summary>
     public void Dispose()
     {
-        // The frames still queued are written first, so the take ends where the recording did. A codec that
-        // wedges is given a few seconds, not forever: the take is then abandoned rather than the window.
+        // The frames still queued are written first, so the take ends where the recording did, and the encoder
+        // thread closes the file itself: the sink writer was made on a thread of the media stack's own
+        // apartment, and calling it from the window's thread is refused (E_NOINTERFACE) and leaves a file with
+        // no index that no player opens. A codec that wedges is given a few seconds, not forever: the take is
+        // then abandoned rather than the window.
         lock (_queueGate) { _closing = true; Monitor.PulseAll(_queueGate); }
-        var drained = _worker is null || _worker.Join(TimeSpan.FromSeconds(10));
-        if (!drained) { _finalized = true; return; }
+        if (_worker is { } worker && !worker.Join(TimeSpan.FromSeconds(10))) { _finalized = true; return; }
+        if (FinalizeResult is < 0 and var failed)
+            throw new IOException(Loc.F("The MP4 file could not be finished ({0}).", Mf.Describe(failed)));
+    }
+
+    /// <summary>Closes the file: the last frames, the index and the stream headers are written here, on the encoder's thread.</summary>
+    private void CloseFile()
+    {
         lock (_lock)
         {
-            if (!_finalized)
-            {
-                _finalized = true;
-                try { if (FrameCount > 0 || _audioFrames > 0) _writer?.FinalizeFile(); } catch { }
-                // The collector would release the writer at some later point; the file has to be closed now,
-                // both for the user who wants to open it and for anyone reading the take back.
-                Release();
-            }
+            if (_finalized) return;
+            _finalized = true;
+            try { if (FrameCount > 0 || _audioFrames > 0) FinalizeResult = _writer?.FinalizeFile(); } catch (Exception ex) { FinalizeResult = ex.HResult; }
+            // The collector would release the writer at some later point; the file has to be closed now,
+            // both for the user who wants to open it and for anyone reading the take back.
+            Release();
             // The media stack is left running: it is started once for the whole process (see Mf.MediaStartup).
         }
     }

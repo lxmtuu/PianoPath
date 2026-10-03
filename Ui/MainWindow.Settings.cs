@@ -1770,8 +1770,13 @@ public partial class MainWindow
             case "1080p": return (1920, 1080);
         }
         var ratio = Stage.ActualHeight / Math.Max(1, Stage.ActualWidth);
-        var width = Math.Max(640, Math.Min(1920, (int)Stage.ActualWidth)) & ~1;
-        var height = Math.Max(360, (int)(width * (double.IsFinite(ratio) && ratio > 0 ? ratio : 9.0 / 16))) & ~1;
+        var aspect = double.IsFinite(ratio) && ratio > 0 ? ratio : 9.0 / 16;
+        // A take is never larger than 1920×1080, whatever the window or the screen: a 4K stage fills a raw AVI
+        // in seconds and is more than the encoder can keep up with.
+        var width = Math.Max(640, Math.Min(1920, (int)Stage.ActualWidth));
+        if (width * aspect > 1080) width = (int)(1080 / aspect);
+        width = Math.Max(2, width) & ~1;
+        var height = Math.Clamp((int)(width * aspect), 2, 1080) & ~1;
         return (width, height);
     }
 
