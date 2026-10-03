@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifySfzEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -1017,6 +1017,140 @@ internal static partial class VerificationSuite
             Assert(!engine.StringResonanceEnabled, "The string-resonance toggle should reach the audio engine.");
         }
         Results.Add("PASS piano pedal model: half-pedal release stretching, repedal catch of audible strings, no revival of faded strings, and sympathetic string resonance that rings under the pedal, chokes on release and bypasses cleanly.");
+    }
+
+    /// <summary>
+    /// The SFZ sample engine end to end: WAV decoding (16/24-bit PCM and float32), the parser's header
+    /// inheritance, #define/#include and note-name spellings, then playback — velocity layers picking
+    /// different recordings, round-robins alternating takes, trigger=release noises fired only when a
+    /// string is actually damped, loops outliving their sample, and the same continuous damper model as
+    /// the SF2 engine. All fixtures are generated into the temp folder so the check needs no sample set.
+    /// </summary>
+    private static void VerifySfzEngine()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "keyflow-test-sfz");
+        Directory.CreateDirectory(dir);
+        WriteTestWav(Path.Combine(dir, "a4.wav"), channels: 2, bits: 16, rate: 22050, frames: 11025, wave: i => Math.Sin(i * 2 * Math.PI * 440 / 22050) * .33);
+        WriteTestWav(Path.Combine(dir, "a5.wav"), channels: 2, bits: 16, rate: 22050, frames: 11025, wave: i => Math.Sin(i * 2 * Math.PI * 880 / 22050) * .33);
+        WriteTestWav(Path.Combine(dir, "loop.wav"), channels: 1, bits: 16, rate: 22050, frames: 11025, wave: i => Math.Sin(i * 2 * Math.PI * 220 / 22050) * .33);
+        WriteTestWav(Path.Combine(dir, "rel.wav"), channels: 1, bits: 16, rate: 22050, frames: 2205, wave: i => Math.Sin(i * 2 * Math.PI * 3000 / 22050) * .2);
+        WriteTestWav(Path.Combine(dir, "deep.wav"), channels: 1, bits: 24, rate: 22050, frames: 1000, wave: i => i / 1000.0);
+        WriteTestWav(Path.Combine(dir, "float.wav"), channels: 1, bits: 32, rate: 22050, frames: 100, wave: _ => .5);
+
+        var deep = WavReader.Read(Path.Combine(dir, "deep.wav"));
+        var deepOk = true;
+        for (var i = 0; i < 1000; i++) if (deep.Samples[i] != (short)((int)Math.Round(i / 1000.0 * 8388607) >> 8)) deepOk = false;
+        Assert(deepOk && deep.SampleRate == 22050 && deep.Channels == 1, "24-bit PCM WAV files should decode to the matching 16-bit samples.");
+        var floats = WavReader.Read(Path.Combine(dir, "float.wav"));
+        Assert(floats.Samples.All(s => s == 16384), "Float32 WAV files should decode with full-scale mapped to 16-bit.");
+
+        File.WriteAllText(Path.Combine(dir, "incl.txt"), "<group> trigger=release\n<region> sample=rel.wav lokey=a0 hikey=c8 rt_decay=0\n");
+        File.WriteAllText(Path.Combine(dir, "piano.sfz"),
+            "// Keyflow SFZ test instrument\n#define $ROOT 69\n<control> note_offset=0 label_cc7=Vol set_cc7=100\n" +
+            "<curve> curve_index=7 v000=1\n<global> ampeg_release=1 amp_veltrack=0\n" +
+            "<group> lokey=60 hikey=79 pitch_keycenter=$ROOT\n" +
+            "<region> sample=a4.wav lovel=1 hivel=79\n<region> sample=a5.wav lovel=80 hivel=127\n" +
+            "<region> sample=loop.wav key=50 pitch_keycenter=50 loop_mode=loop_continuous loop_start=512 loop_end=10512\n" +
+            "<group> lokey=40 hikey=40 pitch_keycenter=40 seq_length=2\n" +
+            "<region> sample=a4.wav seq_position=1\n<region> sample=a4.wav seq_position=2 volume=-20\n" +
+            "#include \"incl.txt\"\n");
+        var instrument = SfzReader.Read(Path.Combine(dir, "piano.sfz"));
+        Assert(instrument.Name == "piano" && instrument.Regions.Count == 6 && instrument.Regions.Count(r => r.TriggerRelease) == 1, "The SFZ parser should flatten groups, includes and defines into the full region list.");
+        var layer = instrument.Regions[0];
+        Assert(layer.LoKey == 60 && layer.HiKey == 79 && layer.Root == 69 && layer.LoVel == 1 && layer.HiVel == 79 && Math.Abs(layer.ReleaseSeconds - 1) < 1e-9 && layer.AmpVeltrack == 0, "Regions should inherit group, global and #define values under their own opcodes.");
+        var release = instrument.Regions.Single(r => r.TriggerRelease);
+        Assert(release.LoKey == 21 && release.HiKey == 108, "Note names (a0, c8) should parse like MIDI numbers do.");
+
+        // Velocity layers: a soft and a loud strike play different recordings (440 Hz vs 880 Hz here).
+        var soft = new SfzSynthesizer(instrument, 22050); soft.NoteOn(0, 69, 40);
+        var loud = new SfzSynthesizer(instrument, 22050); loud.NoteOn(0, 69, 120);
+        var softBlock = new float[4410 * 2]; soft.Render(softBlock, 4410);
+        var loudBlock = new float[4410 * 2]; loud.Render(loudBlock, 4410);
+        var softCross = ZeroCrossings(softBlock); var loudCross = ZeroCrossings(loudBlock);
+        Assert(softCross > 100 && loudCross > softCross * 1.6 && loudCross < softCross * 2.4, $"Velocity should pick the matching sample layer (zero crossings {softCross} soft vs {loudCross} loud).");
+
+        // Release samples: the damper-fall noise sounds when the string is damped — not while the pedal holds it.
+        var synth = new SfzSynthesizer(instrument, 22050);
+        synth.NoteOn(0, 69, 100); var block = new float[2205 * 2]; synth.Render(block, 2205);
+        Assert(synth.ActiveVoiceCount == 1, "A single key should start one voice until its damper falls.");
+        synth.NoteOff(0, 69);
+        Assert(synth.ActiveVoiceCount == 2, "Releasing an undamped key should add the trigger=release sample.");
+        var tail = new float[33075 * 2]; synth.Render(tail, 33075);
+        Assert(synth.ActiveVoiceCount == 0, "SFZ voices should be freed after the release envelope and the release sample end.");
+        var pedal = new SfzSynthesizer(instrument, 22050);
+        pedal.ProcessMidi(0, 0xB0, 64, 127); pedal.NoteOn(0, 69, 100); pedal.Render(block, 2205); pedal.NoteOff(0, 69);
+        Assert(pedal.ActiveVoiceCount == 1, "While the pedal holds the string open there is no damper fall and no release sample.");
+        pedal.ProcessMidi(0, 0xB0, 64, 0);
+        Assert(pedal.ActiveVoiceCount == 2, "Dropping the pedal damps the string and fires its release sample.");
+        var half = new SfzSynthesizer(instrument, 22050);
+        half.ProcessMidi(0, 0xB0, 64, 40); half.NoteOn(0, 69, 100); half.Render(block, 2205); half.NoteOff(0, 69);
+        half.Render(tail, 33075);
+        Assert(half.ActiveVoiceCount == 1, "The SFZ engine should honour the same half-pedal release stretching as the SF2 engine.");
+
+        // Loops: a held note keeps sounding long after its half-second sample would have run out.
+        var looper = new SfzSynthesizer(instrument, 22050); looper.NoteOn(0, 50, 100);
+        var held = new float[44100 * 2]; looper.Render(held, 44100);
+        Assert(looper.ActiveVoiceCount == 1 && held.Skip(44100 * 2 - 400).Any(s => s != 0), "loop_continuous should keep a held note ringing past the sample end.");
+
+        // Round-robin: the second strike of the same key plays the alternate (-20 dB) take.
+        var robin = new SfzSynthesizer(instrument, 22050);
+        robin.NoteOn(0, 40, 100); robin.Render(block, 2205); var firstPeak = Peak(block);
+        robin.NoteOff(0, 40); robin.Render(tail, 33075);
+        robin.NoteOn(0, 40, 100); robin.Render(block, 2205); var secondPeak = Peak(block);
+        Assert(firstPeak > secondPeak * 5 && secondPeak > 0, $"Round-robin regions should alternate takes ({firstPeak:0.0000} then {secondPeak:0.0000}).");
+
+        using (var engine = new PianoAudioEngine())
+        {
+            engine.LoadInstrument(Path.Combine(dir, "piano.sfz"));
+            Assert(engine.HasSoundFont && engine.IsSfzInstrument && engine.Presets.Count == 0 && engine.LoadedName == "piano", "The audio engine should load SFZ instruments through the same pipeline as SF2 banks.");
+            engine.UnloadSoundFont();
+            Assert(!engine.HasSoundFont, "Unloading an SFZ instrument should return to silent mode.");
+        }
+        File.WriteAllText(Path.Combine(dir, "broken.sfz"), "<region> sample=missing.wav\n");
+        var missing = false;
+        try { _ = SfzReader.Read(Path.Combine(dir, "broken.sfz")); } catch (FileNotFoundException) { missing = true; }
+        Assert(missing, "A missing SFZ sample should be reported with its path rather than loaded silent.");
+        Results.Add("PASS SFZ engine: WAV 16/24/float decoding, parser inheritance with #define/#include, velocity layers, round-robins, release samples gated by the damper, loops, half-pedalling and engine integration.");
+    }
+
+    private static int ZeroCrossings(float[] interleaved)
+    {
+        var crossings = 0;
+        for (var i = 2; i < interleaved.Length; i += 2) if (interleaved[i] > 0 != interleaved[i - 2] > 0) crossings++;
+        return crossings;
+    }
+
+    private static double Peak(float[] interleaved)
+    {
+        var peak = 0.0;
+        foreach (var sample in interleaved) peak = Math.Max(peak, Math.Abs(sample));
+        return peak;
+    }
+
+    /// <summary>Writes a small PCM (16/24-bit) or float32 WAVE file; every channel carries the same wave.</summary>
+    private static void WriteTestWav(string path, int channels, int bits, int rate, int frames, Func<int, double> wave)
+    {
+        using var stream = File.Create(path);
+        using var w = new BinaryWriter(stream);
+        var bytesPerSample = bits / 8; var dataSize = frames * channels * bytesPerSample;
+        w.Write(Encoding.ASCII.GetBytes("RIFF")); w.Write((uint)(36 + dataSize)); w.Write(Encoding.ASCII.GetBytes("WAVE"));
+        w.Write(Encoding.ASCII.GetBytes("fmt ")); w.Write(16u); w.Write((ushort)(bits == 32 ? 3 : 1)); w.Write((ushort)channels);
+        w.Write((uint)rate); w.Write((uint)(rate * channels * bytesPerSample)); w.Write((ushort)(channels * bytesPerSample)); w.Write((ushort)bits);
+        w.Write(Encoding.ASCII.GetBytes("data")); w.Write((uint)dataSize);
+        for (var i = 0; i < frames; i++)
+        {
+            var value = wave(i);
+            for (var c = 0; c < channels; c++)
+            {
+                if (bits == 16) w.Write((short)Math.Clamp((int)Math.Round(value * 32767), short.MinValue, short.MaxValue));
+                else if (bits == 24)
+                {
+                    var scaled = (int)Math.Round(value * 8388607);
+                    w.Write((byte)scaled); w.Write((byte)(scaled >> 8)); w.Write((byte)(scaled >> 16));
+                }
+                else w.Write((float)value);
+            }
+        }
     }
 
     private static void VerifyBundledPiano()

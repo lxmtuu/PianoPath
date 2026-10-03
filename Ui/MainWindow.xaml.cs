@@ -473,7 +473,7 @@ public partial class MainWindow : Window
 
     private async void LoadSoundFont_Click(object sender, RoutedEventArgs e)
     {
-        var dialog = new OpenFileDialog { Filter = Loc.T("SoundFont 2 files (*.sf2)|*.sf2|All files (*.*)|*.*"), Title = Loc.T("Choose a piano SoundFont") };
+        var dialog = new OpenFileDialog { Filter = Loc.T("Piano instruments (*.sf2, *.sfz)|*.sf2;*.sfz|SoundFont 2 files (*.sf2)|*.sf2|SFZ instruments (*.sfz)|*.sfz|All files (*.*)|*.*"), Title = Loc.T("Choose a piano instrument") };
         if (dialog.ShowDialog(this) != true) return;
         await LoadSoundFontAsync(dialog.FileName, builtIn: false);
     }
@@ -486,16 +486,25 @@ public partial class MainWindow : Window
         Loc.Set(SoundFontHint, "Large sample banks may take a few seconds");
         try
         {
-            await Task.Run(() => _audio.LoadSoundFont(path));
+            await Task.Run(() => _audio.LoadInstrument(path));
             if (_closing) { _audio.UnloadSoundFont(); return; }
             foreach (var pedal in _pedalsDown) _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), 127);
             _isBuiltInSoundFont = builtIn;
             _suppressPreset = true;
             try
             {
-                PresetCombo.ItemsSource = _audio.Presets.Select(p => $"{p.Bank:000} · {p.Program:000}  {p.Name}").ToList();
-                var preset = _audio.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0) ?? _audio.Presets.First();
-                PresetCombo.SelectedIndex = _audio.Presets.ToList().IndexOf(preset);
+                if (_audio.Presets.Count > 0)
+                {
+                    PresetCombo.ItemsSource = _audio.Presets.Select(p => $"{p.Bank:000} · {p.Program:000}  {p.Name}").ToList();
+                    var preset = _audio.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0) ?? _audio.Presets.First();
+                    PresetCombo.SelectedIndex = _audio.Presets.ToList().IndexOf(preset);
+                }
+                else
+                {
+                    // An SFZ set is one instrument, not a bank: the combo says so instead of listing presets.
+                    PresetCombo.ItemsSource = new[] { Loc.T("SFZ · SINGLE INSTRUMENT") };
+                    PresetCombo.SelectedIndex = 0;
+                }
             }
             finally { _suppressPreset = false; }
             UpdateSoundFontUi();
@@ -528,6 +537,7 @@ public partial class MainWindow : Window
         if (loaded)
         {
             if (_isBuiltInSoundFont) Loc.Format(SoundFontLabel, "BUILT-IN YAMAHA GRAND · {0}", Loc.T(audible ? "READY" : "NO AUDIO DEVICE"));
+            else if (_audio.IsSfzInstrument) Loc.Format(SoundFontLabel, "SFZ INSTRUMENT {0} · {1}", Loc.T(audible ? "READY" : "LOADED · NO AUDIO DEVICE"), _audio.LoadedName);
             else Loc.Format(SoundFontLabel, "SOUNDFONT {0} · {1}", Loc.T(audible ? "READY" : "LOADED · NO AUDIO DEVICE"), _audio.LoadedName);
         }
         else Loc.Set(SoundFontLabel, "NO SOUNDFONT · SILENT");
@@ -537,7 +547,7 @@ public partial class MainWindow : Window
             if (_audio.PlaybackError is { } playbackError) Loc.Format(SoundFontHint, "No audio output · {0}", playbackError);
             else Loc.Format(SoundFontHint, "{0} · Hall reverb {1}", _isBuiltInSoundFont ? Loc.T("Yamaha grand") : _audio.LoadedName, Loc.T(_audio.ReverbEnabled ? "ON" : "OFF"));
         }
-        else Loc.Set(SoundFontHint, "Load a .sf2 SoundFont to enable piano audio");
+        else Loc.Set(SoundFontHint, "Load a .sf2 SoundFont or .sfz instrument to enable piano audio");
         if (!loaded && PresetCombo.Items.Count == 0)
         {
             _suppressPreset = true;

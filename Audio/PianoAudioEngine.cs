@@ -1,11 +1,13 @@
 namespace PianoPath;
 
 /// <summary>
-/// Streams SoundFont 2 audio to Windows through whichever backend the player chose — WASAPI shared or
+/// Streams piano audio to Windows through whichever backend the player chose — WASAPI shared or
 /// exclusive, an ASIO driver, or the old waveOut queue (<see cref="AudioSinkFactory"/> holds the fallback
-/// ladder). No SoundFont means no synthesized audio. The whole pipeline mixes in 32-bit float at the fixed
-/// <see cref="SampleRate"/>; only the recording tap still speaks 16-bit PCM, because that is what the WAV
-/// and MP4 writers store.
+/// ladder). Two sample engines plug into the same pipeline: SoundFont 2 banks (the bundled Yamaha grand)
+/// and SFZ instruments (the downloadable Steinway sets); <see cref="LoadInstrument"/> routes by file
+/// extension. No instrument means no synthesized audio. The whole pipeline mixes in 32-bit float at the
+/// fixed <see cref="SampleRate"/>; only the recording tap still speaks 16-bit PCM, because that is what
+/// the WAV and MP4 writers store.
 /// </summary>
 internal sealed class PianoAudioEngine : IDisposable
 {
@@ -17,6 +19,9 @@ internal sealed class PianoAudioEngine : IDisposable
     public const int SampleRate = 44100;
 
     private Pipeline? _pipeline;
+    /// <summary>What is loaded right now — a <see cref="SoundFontData"/> or an <see cref="SfzInstrumentData"/> —
+    /// kept so an output switch can rebuild the pipeline around the same instrument.</summary>
+    private object? _instrument;
     private int _reverbEnabled = 1;
     private int _resonanceEnabled = 1;
     private AudioOutputChoice _outputChoice = AudioOutputChoice.Auto;
@@ -24,8 +29,11 @@ internal sealed class PianoAudioEngine : IDisposable
     private (int Bank, int Program)? _selectedPreset;
 
     public bool HasSoundFont => Volatile.Read(ref _pipeline) is not null;
-    public string? LoadedName => Volatile.Read(ref _pipeline)?.Font.Name;
-    public IReadOnlyList<SoundFontPreset> Presets => Volatile.Read(ref _pipeline)?.Font.Presets ?? [];
+    public string? LoadedName => Volatile.Read(ref _pipeline)?.Synth.Name;
+    /// <summary>SF2 presets of the loaded bank; an SFZ instrument is one patch and lists none.</summary>
+    public IReadOnlyList<SoundFontPreset> Presets => (Volatile.Read(ref _pipeline)?.Synth as SoundFontSynthesizer)?.Font.Presets ?? [];
+    /// <summary>True while the loaded instrument is an SFZ set rather than a SoundFont bank.</summary>
+    public bool IsSfzInstrument => Volatile.Read(ref _pipeline)?.Synth is SfzSynthesizer;
     /// <summary>True while the loaded SoundFont is actually streaming to a Windows audio device.</summary>
     public bool HasAudioOutput => Volatile.Read(ref _pipeline)?.Sink is not null;
     /// <summary>Why the speakers are silent although a SoundFont is loaded; <c>null</c> when audio output works.</summary>
@@ -68,25 +76,40 @@ internal sealed class PianoAudioEngine : IDisposable
     {
         _outputChoice = choice;
         _latencyMilliseconds = Math.Clamp(latencyMilliseconds, 2, 50);
-        if (Volatile.Read(ref _pipeline) is { } current) Rebuild(current.Font);
+        if (Volatile.Read(ref _pipeline) is not null) Rebuild();
     }
 
     /// <summary>Opens the active ASIO driver's own settings window; a no-op on every other backend.</summary>
     public void ShowAsioControlPanel() => (Volatile.Read(ref _pipeline)?.Sink as AsioAudioSink)?.ShowControlPanel();
 
-    public void LoadSoundFont(string path) => Rebuild(SoundFontReader.Read(path));
+    /// <summary>The historical name; routes through <see cref="LoadInstrument"/> and accepts both formats.</summary>
+    public void LoadSoundFont(string path) => LoadInstrument(path);
 
-    private void Rebuild(SoundFontData font)
+    /// <summary>Loads a piano by file type: <c>.sfz</c> builds the SFZ engine, anything else is read as SF2.</summary>
+    public void LoadInstrument(string path)
     {
-        var next = new Pipeline(font, ReverbEnabled, StringResonanceEnabled, _outputChoice, _latencyMilliseconds);
-        if (_selectedPreset is { } preset) next.Synth.SelectPreset(preset.Bank, preset.Program);
+        _instrument = Path.GetExtension(path).Equals(".sfz", StringComparison.OrdinalIgnoreCase)
+            ? SfzReader.Read(path)
+            : SoundFontReader.Read(path);
+        Rebuild();
+    }
+
+    private void Rebuild()
+    {
+        if (_instrument is null) return;
+        // The branches share no base class, so the first is cast to the interface for the conditional.
+        var synth = _instrument is SfzInstrumentData sfz
+            ? (IPianoSynthesizer)new SfzSynthesizer(sfz, SampleRate)
+            : new SoundFontSynthesizer((SoundFontData)_instrument, SampleRate);
+        if (synth is SoundFontSynthesizer sf2 && _selectedPreset is { } preset) sf2.SelectPreset(preset.Bank, preset.Program);
+        var next = new Pipeline(synth, ReverbEnabled, StringResonanceEnabled, _outputChoice, _latencyMilliseconds);
         Interlocked.Exchange(ref _pipeline, next)?.Dispose();
     }
 
     public void SelectPreset(int bank, int program)
     {
         _selectedPreset = (bank, program);
-        Volatile.Read(ref _pipeline)?.Synth.SelectPreset(bank, program);
+        (Volatile.Read(ref _pipeline)?.Synth as SoundFontSynthesizer)?.SelectPreset(bank, program);
     }
 
     public void NoteOn(int pitch, int velocity = 96, int channel = 0) => Volatile.Read(ref _pipeline)?.Synth.NoteOn(channel, Math.Clamp(pitch, 0, 127), Math.Clamp(velocity, 1, 127));
@@ -111,12 +134,12 @@ internal sealed class PianoAudioEngine : IDisposable
     /// it returns false when nothing is tapped or no SoundFont is loaded.
     /// </summary>
     public bool PumpTapBlock() => Volatile.Read(ref _pipeline)?.RenderTapBlock() ?? false;
-    public void UnloadSoundFont() => Interlocked.Exchange(ref _pipeline, null)?.Dispose();
+    public void UnloadSoundFont() { _instrument = null; Interlocked.Exchange(ref _pipeline, null)?.Dispose(); }
     public void Dispose() => UnloadSoundFont();
 
     /// <summary>
-    /// Synthesiser, reverb and output sink of one loaded SoundFont, torn down and rebuilt as a unit when the
-    /// font or the output backend changes. The sink pulls blocks through <see cref="Render"/> on its own
+    /// Synthesiser, reverb and output sink of one loaded instrument (SF2 or SFZ), torn down and rebuilt as a
+    /// unit when the instrument or the output backend changes. The sink pulls blocks through <see cref="Render"/> on its own
     /// audio thread; a machine with no usable device has no sink, keeps <see cref="OutputError"/> instead,
     /// and still renders for the recorder through <see cref="RenderTapBlock"/>.
     /// </summary>
@@ -131,17 +154,16 @@ internal sealed class PianoAudioEngine : IDisposable
         private Action<short[], int>? _tap;
         private bool _disposed;
 
-        public SoundFontSynthesizer Synth { get; }
-        public SoundFontData Font => Synth.Font;
+        public IPianoSynthesizer Synth { get; }
         public IAudioSink? Sink { get; }
         /// <summary>Reason the pipeline is silent, or <c>null</c> when a sink accepted the stream.</summary>
         public string? OutputError { get; }
         /// <summary>The explicit backend request's failure when a fallback sink answered instead.</summary>
         public string? FallbackNotice { get; }
 
-        public Pipeline(SoundFontData font, bool reverbEnabled, bool resonanceEnabled, AudioOutputChoice choice, double latencyMilliseconds)
+        public Pipeline(IPianoSynthesizer synth, bool reverbEnabled, bool resonanceEnabled, AudioOutputChoice choice, double latencyMilliseconds)
         {
-            Synth = new SoundFontSynthesizer(font, SampleRate);
+            Synth = synth;
             _reverb.Enabled = reverbEnabled;
             _resonance.Enabled = resonanceEnabled;
             Sink = AudioSinkFactory.TryCreate(choice, latencyMilliseconds, Render, out var failure);

@@ -43,6 +43,8 @@
     <Compile Include="..\..\Midi\Meter.cs" Link="Product\Midi\Meter.cs" />
     <Compile Include="..\..\Audio\IAudioTrack.cs" Link="Product\Audio\IAudioTrack.cs" />
     <Compile Include="..\..\Audio\WavWriter.cs" Link="Product\Audio\WavWriter.cs" />
+    <Compile Include="..\..\Audio\WavReader.cs" Link="Product\Audio\WavReader.cs" />
+    <Compile Include="..\..\Audio\SfzReader.cs" Link="Product\Audio\SfzReader.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
   </ItemGroup>
 

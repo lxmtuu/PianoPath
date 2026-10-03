@@ -282,7 +282,7 @@ internal static class SoundFontReader
 }
 
 /// <summary>Small polyphonic SF2 voice renderer. The synthesizer is only advanced while a SoundFont is loaded.</summary>
-internal sealed class SoundFontSynthesizer
+internal sealed class SoundFontSynthesizer : IPianoSynthesizer
 {
     private readonly object _gate = new();
     private readonly SoundFontData _font;
@@ -347,6 +347,8 @@ internal sealed class SoundFontSynthesizer
         for (var i = 0; i < 16; i++) _channelPresets[i] = defaultPreset;
     }
     public SoundFontData Font => _font;
+    /// <summary>The bank's own name from its INAM record, shown on the Settings page.</summary>
+    public string Name => _font.Name;
     public int ActiveVoiceCount { get { lock (_gate) return _voices.Count; } }
     public void SelectPreset(int bank, int program)
     {
