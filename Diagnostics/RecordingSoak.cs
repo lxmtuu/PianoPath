@@ -36,7 +36,7 @@ internal static class RecordingSoak
         {
             if (!window.GpuStageActive && begun.Elapsed < TimeSpan.FromSeconds(25)) return;
             waiter.Stop();
-            try { Run(window, format, seconds, take, Say, Finish); }
+            try { Run(window, format, seconds, take, Option("--soak-resolution=", "1080p"), Option("--soak-window=", ""), Say, Finish); }
             catch (Exception ex) { Say("FAIL " + ex); Finish(1); }
         };
         window.ContentRendered += (_, _) => waiter.Start();
@@ -52,20 +52,47 @@ internal static class RecordingSoak
         return 0;
     }
 
-    private static void Run(MainWindow window, string format, int seconds, string take, Action<string> say, Action<int> finish)
+    /// <summary>The width and height the MP4 declares for its video (read from the avc1 sample entry), or null when there is no such entry.</summary>
+    private static (int Width, int Height)? DeclaredSize(string take)
     {
+        foreach (var candidate in new[] { take, Path.ChangeExtension(take, ".mp4") })
+        {
+            try
+            {
+                if (!File.Exists(candidate)) continue;
+                var bytes = File.ReadAllBytes(candidate);
+                var at = bytes.AsSpan().IndexOf("avc1"u8);
+                if (at < 0 || at + 32 > bytes.Length) continue;
+                return ((bytes[at + 28] << 8) | bytes[at + 29], (bytes[at + 30] << 8) | bytes[at + 31]);
+            }
+            catch { }
+        }
+        return null;
+    }
+
+    private static void Run(MainWindow window, string format, int seconds, string take, string resolution, string windowSize, Action<string> say, Action<int> finish)
+    {
+        // --soak-window=<width>x<height> resizes the window first, so the "match window" size of a take can be
+        // tried on shapes a person might leave it in (narrow, tall, odd-sized).
+        var parts = windowSize.Split('x');
+        if (parts.Length == 2 && double.TryParse(parts[0], out var w) && double.TryParse(parts[1], out var h))
+        {
+            window.WindowState = WindowState.Normal; window.Width = w; window.Height = h;
+            window.UpdateLayout();
+        }
         var visual = (PianoVisualSettings)typeof(MainWindow).GetField("_visualSettings", Private)!.GetValue(window)!;
         visual.RecordingFormat = format == "mp4" ? RecordingFormatIds.Mp4 : RecordingFormatIds.Avi;
-        visual.RecordingResolution = "1080p";
+        visual.RecordingResolution = resolution;
         visual.RecordingFrameRate = 60;
         visual.RecordAudio = false;
         try { File.Delete(take); } catch { }
         window.DiagnosticRecordTarget = take;
         window.SuppressErrorDialogs = true;
-        say($"soak: {format} 1080p60 for {seconds} s; GPU stage active = {window.GpuStageActive}; window {window.ActualWidth:0}x{window.ActualHeight:0}");
+        say($"soak: {format} {resolution} 60 fps for {seconds} s; GPU stage active = {window.GpuStageActive}; window {window.ActualWidth:0}x{window.ActualHeight:0}");
 
         var press = typeof(MainWindow).GetMethod("PressNote", Private)!;
         var release = typeof(MainWindow).GetMethod("ReleaseNote", Private)!;
+        var (askedWidth, askedHeight) = ((int, int))typeof(MainWindow).GetMethod("RecordingSize", Private)!.Invoke(window, null)!;
         typeof(MainWindow).GetMethod("RecordVideo_Click", Private)!.Invoke(window, [window, new RoutedEventArgs()]);
         if (!window.RecordingFromGpu) say("NOTE the take is not fed by the GPU tap (the software stage is drawing it)");
 
@@ -112,7 +139,10 @@ internal static class RecordingSoak
             say($"RESULT {format}: longest UI gap {longest:0} ms, {stalls} gaps over 100 ms, {ticks} UI ticks in {seconds} s (an idle UI would tick ~{seconds * 125})");
             say($"RESULT {format}: private memory {startMb:0} -> peak {peakMb:0} -> end {process.PrivateMemorySize64 / 1048576.0:0} MB; closing the take took {stop.ElapsedMilliseconds} ms");
             say($"RESULT {format}: file {final / 1048576.0:0.0} MB for {seconds} s ({final / 1048576.0 / seconds:0.0} MB/s)");
-            finish(0);
+            var declared = DeclaredSize(take);
+            var sizeOk = declared is null || declared == (askedWidth, askedHeight);
+            say($"RESULT {format}: the file declares {(declared is { } d ? $"{d.Width}x{d.Height}" : "no H.264 size (not an MP4)")}; the take was asked for {askedWidth}x{askedHeight}{(sizeOk ? "" : "  <-- FRAME SIZE MISMATCH")}");
+            finish(sizeOk ? 0 : 1);
         };
         timer.Start();
     }

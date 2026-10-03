@@ -393,7 +393,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         target.SetGUIDKey(Mf.MajorType, Mf.VideoMajorType);
         target.SetGUIDKey(Mf.SubType, Mf.H264);
         target.SetUINT32Key(Mf.AverageBitrate, BitrateFor(width, height, frameRate));
-        target.SetUINT64Key(Mf.FrameSize, Mf.Pack(height, width));
+        target.SetUINT64Key(Mf.FrameSize, Mf.Pack(width, height));
         target.SetUINT64Key(Mf.FrameRateKey, Mf.Pack(frameRate, 1));
         target.SetUINT64Key(Mf.PixelAspectRatio, Mf.Pack(1, 1));
         target.SetUINT32Key(Mf.InterlaceMode, Mf.InterlaceProgressive);
@@ -412,7 +412,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
         if (input != Mf.S_OK) throw new InvalidOperationException(Loc.F("A media type could not be prepared ({0}).", Mf.Describe(input)));
         video.SetGUIDKey(Mf.MajorType, Mf.VideoMajorType);
         video.SetGUIDKey(Mf.SubType, Mf.Nv12);
-        video.SetUINT64Key(Mf.FrameSize, Mf.Pack(Height, Width));
+        video.SetUINT64Key(Mf.FrameSize, Mf.Pack(Width, Height));
         video.SetUINT64Key(Mf.FrameRateKey, Mf.Pack(FrameRate, 1));
         video.SetUINT64Key(Mf.PixelAspectRatio, Mf.Pack(1, 1));
         video.SetUINT32Key(Mf.InterlaceMode, Mf.InterlaceProgressive);

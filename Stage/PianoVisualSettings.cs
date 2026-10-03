@@ -355,7 +355,7 @@ internal sealed class PianoVisualSettings
     /// What REC writes: <c>Avi</c> for a video file, <c>PngSequence</c> for a folder of 32-bit frames with
     /// an alpha channel (see <see cref="IFrameRecorder"/>). An unknown value falls back to AVI.
     /// </summary>
-    public string RecordingFormat { get; set; } = RecordingFormatIds.Avi;
+    public string RecordingFormat { get; set; } = RecordingFormatIds.Mp4;
     /// <summary>
     /// PNG sequence only: draw the stage without its opaque background so the frames keep their alpha.
     /// Every layer the look enables is still drawn; what is skipped is the fill that would block it.
@@ -513,7 +513,7 @@ internal sealed class PianoVisualSettings
         if (!KeyLabelModes.Contains(KeyLabels)) KeyLabels = "C";
         if (!BackgroundModes.Contains(BackgroundMode)) BackgroundMode = "Solid";
         if (!RecordingResolutions.Contains(RecordingResolution)) RecordingResolution = "Window";
-        if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Avi;
+        if (!RecordingFormats.Contains(RecordingFormat)) RecordingFormat = RecordingFormatIds.Mp4;
         // The GPU stage replaced the software stage as the main window's look: a stored "Software"
         // (or anything else a file may name) migrates to the GPU engine on load.
         RenderBackend = "Gpu";
