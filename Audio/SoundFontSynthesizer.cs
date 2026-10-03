@@ -438,54 +438,76 @@ internal sealed class SoundFontSynthesizer
         for (var i = 0; i < _voices.Count; i++) if (_voices[i].ReleaseAge >= 0) { _voices.RemoveAt(i); return; }
         _voices.RemoveAt(0);
     }
+    /// <summary>16-bit render, kept for the recording writers and the verification suite's PCM probes.</summary>
     public void Render(short[] interleaved, int frames)
     {
         lock (_gate)
         {
-            Array.Clear(interleaved, 0, frames * 2);
-            // Mixing buffers are reused between callbacks so the audio thread does not allocate.
-            if (_mixLeft.Length < frames) { _mixLeft = new double[frames]; _mixRight = new double[frames]; }
-            var left = _mixLeft; var right = _mixRight;
-            Array.Clear(left, 0, frames); Array.Clear(right, 0, frames);
-            var sampleSeconds = 1.0 / _sampleRate;
-            for (var v = _voices.Count - 1; v >= 0; v--)
-            {
-                var voice = _voices[v];
-                var r = voice.Region; var envelope = 0.0;
-                var soft = _soft[voice.Channel]; var softGain = soft ? .72 : 1.0;
-                var filterAlpha = soft ? 1 - Math.Exp(-2 * Math.PI * 4200 / _sampleRate) : 1.0;
-                // Mode 1 keeps looping through the release tail; mode 3 leaves the loop once the note is released.
-                var looping = voice.Loop && r.LoopEnd > r.LoopStart && (!voice.LoopUntilRelease || voice.ReleaseAge < 0);
-                var stereo = r.RightSamples;
-                for (var i = 0; i < frames; i++)
-                {
-                    if (looping && voice.Position >= r.LoopEnd) voice.Position = r.LoopStart + (voice.Position - r.LoopEnd) % (r.LoopEnd - r.LoopStart);
-                    if (voice.Position >= r.End || voice.Position < r.Start) break;
-                    var sampleIndex = (int)voice.Position; var fraction = voice.Position - sampleIndex;
-                    var own = Interpolate(_font, sampleIndex, fraction);
-                    var sampleL = own; var sampleR = own;
-                    if (stereo is not null)
-                    {
-                        var partnerPosition = stereo[0] + (voice.Position - r.Start); var partnerIndex = Math.Clamp((int)partnerPosition, stereo[0], stereo[1] - 1);
-                        var partner = Interpolate(_font, partnerIndex, partnerPosition - partnerIndex);
-                        if (r.StereoSwapped) sampleL = partner; else sampleR = partner;
-                    }
-                    if (soft)
-                    {
-                        voice.FilterLeft += filterAlpha * (sampleL - voice.FilterLeft);
-                        voice.FilterRight += filterAlpha * (sampleR - voice.FilterRight);
-                        sampleL = voice.FilterLeft; sampleR = voice.FilterRight;
-                    }
-                    envelope = voice.Envelope(); var gain = envelope * voice.Gain * softGain;
-                    left[i] += sampleL * gain * voice.PanLeft; right[i] += sampleR * gain * voice.PanRight;
-                    voice.Position += voice.Step; voice.Age += sampleSeconds; if (voice.ReleaseAge >= 0) voice.ReleaseAge += sampleSeconds;
-                }
-                if (envelope < .001 || voice.Position >= r.End || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * 1.1) _voices.RemoveAt(v);
-            }
+            RenderMix(frames);
             for (var i = 0; i < frames; i++)
             {
-                interleaved[i * 2] = ToPcm(left[i]); interleaved[i * 2 + 1] = ToPcm(right[i]);
+                interleaved[i * 2] = ToPcm(_mixLeft[i]); interleaved[i * 2 + 1] = ToPcm(_mixRight[i]);
             }
+        }
+    }
+
+    /// <summary>
+    /// Float render for the live output backends: the same mix and the same tanh soft limiter as the
+    /// 16-bit path, minus the quantisation, so what WASAPI and ASIO play is what the recording stores.
+    /// </summary>
+    public void Render(float[] interleaved, int frames)
+    {
+        lock (_gate)
+        {
+            RenderMix(frames);
+            for (var i = 0; i < frames; i++)
+            {
+                interleaved[i * 2] = SoftClip(_mixLeft[i]); interleaved[i * 2 + 1] = SoftClip(_mixRight[i]);
+            }
+        }
+    }
+
+    /// <summary>Advances every voice by <paramref name="frames"/> into the shared mix buffers. Caller holds the gate.</summary>
+    private void RenderMix(int frames)
+    {
+        // Mixing buffers are reused between callbacks so the audio thread does not allocate.
+        if (_mixLeft.Length < frames) { _mixLeft = new double[frames]; _mixRight = new double[frames]; }
+        var left = _mixLeft; var right = _mixRight;
+        Array.Clear(left, 0, frames); Array.Clear(right, 0, frames);
+        var sampleSeconds = 1.0 / _sampleRate;
+        for (var v = _voices.Count - 1; v >= 0; v--)
+        {
+            var voice = _voices[v];
+            var r = voice.Region; var envelope = 0.0;
+            var soft = _soft[voice.Channel]; var softGain = soft ? .72 : 1.0;
+            var filterAlpha = soft ? 1 - Math.Exp(-2 * Math.PI * 4200 / _sampleRate) : 1.0;
+            // Mode 1 keeps looping through the release tail; mode 3 leaves the loop once the note is released.
+            var looping = voice.Loop && r.LoopEnd > r.LoopStart && (!voice.LoopUntilRelease || voice.ReleaseAge < 0);
+            var stereo = r.RightSamples;
+            for (var i = 0; i < frames; i++)
+            {
+                if (looping && voice.Position >= r.LoopEnd) voice.Position = r.LoopStart + (voice.Position - r.LoopEnd) % (r.LoopEnd - r.LoopStart);
+                if (voice.Position >= r.End || voice.Position < r.Start) break;
+                var sampleIndex = (int)voice.Position; var fraction = voice.Position - sampleIndex;
+                var own = Interpolate(_font, sampleIndex, fraction);
+                var sampleL = own; var sampleR = own;
+                if (stereo is not null)
+                {
+                    var partnerPosition = stereo[0] + (voice.Position - r.Start); var partnerIndex = Math.Clamp((int)partnerPosition, stereo[0], stereo[1] - 1);
+                    var partner = Interpolate(_font, partnerIndex, partnerPosition - partnerIndex);
+                    if (r.StereoSwapped) sampleL = partner; else sampleR = partner;
+                }
+                if (soft)
+                {
+                    voice.FilterLeft += filterAlpha * (sampleL - voice.FilterLeft);
+                    voice.FilterRight += filterAlpha * (sampleR - voice.FilterRight);
+                    sampleL = voice.FilterLeft; sampleR = voice.FilterRight;
+                }
+                envelope = voice.Envelope(); var gain = envelope * voice.Gain * softGain;
+                left[i] += sampleL * gain * voice.PanLeft; right[i] += sampleR * gain * voice.PanRight;
+                voice.Position += voice.Step; voice.Age += sampleSeconds; if (voice.ReleaseAge >= 0) voice.ReleaseAge += sampleSeconds;
+            }
+            if (envelope < .001 || voice.Position >= r.End || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * 1.1) _voices.RemoveAt(v);
         }
     }
     private static double Interpolate(SoundFontData font, int index, double fraction)
@@ -495,4 +517,6 @@ internal sealed class SoundFontSynthesizer
         return a + (b - a) * fraction;
     }
     private static short ToPcm(double sample) => (short)Math.Clamp(Math.Round(Math.Tanh(sample * 1.45) * short.MaxValue), short.MinValue, short.MaxValue);
+    /// <summary>The same soft limiter as <see cref="ToPcm"/> without the 16-bit quantisation step.</summary>
+    private static float SoftClip(double sample) => (float)Math.Tanh(sample * 1.45);
 }

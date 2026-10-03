@@ -44,6 +44,8 @@
     "ShowKeyShadow": true,
     "BackgroundAppearanceVersion": 2,
     "Language": "",
+    "AudioOutputMode": "auto",
+    "AudioLatencyMs": 10.0,
     "ShellTheme": "velvet-gold",
     "ChromeMotion": "Full",
     "BackdropDensity": 100.0,

@@ -123,14 +123,14 @@ Keyflow-1.0.0-win-x64\
 | To **build from source** | **.NET 10 SDK** (10.0.100 or newer), **Git** and **Git LFS** | The SoundFont `Assets/ConcertGrand.sf2` (~113 MiB) is stored through Git LFS. |
 | IDE (optional) | Visual Studio 2026 with the **.NET desktop development** workload, or VS Code + the **C# Dev Kit** extension | .NET 10 needs Visual Studio 2026 (18.0) or newer; VS 2022 can open the project once the .NET 10 SDK is installed but is not fully supported. |
 | Disk | ~1.5 GB for the SDK + ~500 MB for sources and build output | A self-contained publish adds ~300 MB. |
-| Audio | Any sound card Windows recognises (`waveOut` output) | |
+| Audio | Any sound card Windows recognises (WASAPI; optional ASIO for studio interfaces, `waveOut` as the fallback) | |
 | Graphics | A GPU with **Direct3D 11** (feature level 11_0 or newer, shader model 5.0) | The default stage is the GPU engine: Keyflow tries the graphics card first and only then **WARP**, Windows' software rasterizer (the same shaders, just slower than a real card); the HLSL shaders are compiled at startup with the `d3dcompiler_47.dll` that ships with Windows. If Direct3D cannot start, the WPF renderer takes over and the reason is shown under **General → GRAPHICS ENGINE**. |
 | MIDI (optional) | A USB piano/keyboard that Windows recognises | Without one you can still play with the computer keyboard or the on-screen piano. |
 | Python (optional) | Python 3.9+ | Only for `tools/check_sources.py` (static checks, no .NET SDK needed). |
 
 ## First-time setup
 
-1. **Audio**: Keyflow plays through the default Windows output device (`waveOut`). Change speakers/headphones in Windows *Settings → System → Sound* before opening the app.
+1. **Audio**: Keyflow plays through the default Windows output device over **WASAPI** (falling back to `waveOut` when needed); the Audio page's **OUTPUT & LATENCY** section picks WASAPI shared/exclusive, an **ASIO** driver or `waveOut`, plus a target latency. Change speakers/headphones in Windows *Settings → System → Sound* before opening the app.
 2. **SoundFont**: the bundled Yamaha grand loads automatically at startup (it takes a few seconds; the label on the Audio page tells you when it is ready). To use another piano, open **SETTINGS → Audio → LOAD SOUNDFONT** and pick a `.sf2`; choose a preset (bank/program) in the list below it. **HALL REVERB** toggles the room reverb.
 3. **MIDI piano**: plug the instrument in before starting the app and Keyflow connects to the first input by itself. Plugged in later? Open **SETTINGS → MIDI → Refresh devices**. The badge above the keyboard switches to `MIDI IN · C4` when a Note On arrives. The same page holds the MIDI output (to play through an external synth), the metronome and the track list.
 4. **Graphics**: the stage runs on the GPU from the very first launch, with nothing to switch on. To change the frame rate (60 / 120 / 144 / 240 FPS or unlimited), turn off VSync in the GPU stage window, open that window for a second monitor, or see which engine is drawing, open **SETTINGS → General → GRAPHICS ENGINE**. These are settings of the computer: applying a preset does not change them.
@@ -207,7 +207,7 @@ Every built-in preset, drawn by both engines side by side (software | GPU), is i
 
 | Group | Details |
 | --- | --- |
-| SoundFont | Loads the bundled Yamaha grand automatically; loads another `.sf2`, lists bank/program, selects a preset, polyphonic stereo 44.1 kHz PCM output through `waveOut`. |
+| SoundFont | Loads the bundled Yamaha grand automatically; loads another `.sf2`, lists bank/program, selects a preset, polyphonic stereo 44.1 kHz output through WASAPI shared/exclusive, an ASIO driver or `waveOut` — backend and target latency are picked under **OUTPUT & LATENCY**, and the line below it names the live path and its real buffer. |
 | Reverb | Real-time stereo hall reverb, on by default, with its own bypass button; the tail keeps ringing after you release the keys. |
 | Pedals | All three standard MIDI pedals: una corda/soft (CC 67, lowers gain and softens the tone), sostenuto (CC 66, holds the notes that were down when the pedal was pressed), sustain/damper (CC 64, keeps the sound after the key is released). The on-screen buttons, MIDI input and MIDI output are all wired up; a live note bar only grows while the key is physically held, and the pedal only affects the sound. |
 | MIDI input | Computer keyboard, clicking/holding the on-screen keys and WinMM MIDI input; opens the first MIDI input automatically, keeps your choice after refreshing the list, and shows the incoming signal/note. |

@@ -1,228 +1,174 @@
-using System.Runtime.InteropServices;
-using Microsoft.Win32.SafeHandles;
-
 namespace PianoPath;
 
-/// <summary>Streams SoundFont 2 PCM to the Windows audio device. No SoundFont means no synthesized audio.</summary>
+/// <summary>
+/// Streams SoundFont 2 audio to Windows through whichever backend the player chose — WASAPI shared or
+/// exclusive, an ASIO driver, or the old waveOut queue (<see cref="AudioSinkFactory"/> holds the fallback
+/// ladder). No SoundFont means no synthesized audio. The whole pipeline mixes in 32-bit float at the fixed
+/// <see cref="SampleRate"/>; only the recording tap still speaks 16-bit PCM, because that is what the WAV
+/// and MP4 writers store.
+/// </summary>
 internal sealed class PianoAudioEngine : IDisposable
 {
-    private AudioPump? _pump;
+    /// <summary>
+    /// The one sample rate of the whole audio path — synthesiser, reverb, every output backend, and the
+    /// recording writers (<see cref="Mp4Recorder.SampleRate"/> matches it). WASAPI shared lets Windows
+    /// resample to the device's mix rate; the exclusive and ASIO paths open the device at this rate.
+    /// </summary>
+    public const int SampleRate = 44100;
+
+    private Pipeline? _pipeline;
     private int _reverbEnabled = 1;
-    public bool HasSoundFont => Volatile.Read(ref _pump) is not null;
-    public string? LoadedName => Volatile.Read(ref _pump)?.Font.Name;
-    public IReadOnlyList<SoundFontPreset> Presets => Volatile.Read(ref _pump)?.Font.Presets ?? [];
+    private AudioOutputChoice _outputChoice = AudioOutputChoice.Auto;
+    private double _latencyMilliseconds = 10;
+    private (int Bank, int Program)? _selectedPreset;
+
+    public bool HasSoundFont => Volatile.Read(ref _pipeline) is not null;
+    public string? LoadedName => Volatile.Read(ref _pipeline)?.Font.Name;
+    public IReadOnlyList<SoundFontPreset> Presets => Volatile.Read(ref _pipeline)?.Font.Presets ?? [];
     /// <summary>True while the loaded SoundFont is actually streaming to a Windows audio device.</summary>
-    public bool HasAudioOutput => Volatile.Read(ref _pump)?.HasAudioOutput ?? false;
+    public bool HasAudioOutput => Volatile.Read(ref _pipeline)?.Sink is not null;
     /// <summary>Why the speakers are silent although a SoundFont is loaded; <c>null</c> when audio output works.</summary>
-    public string? PlaybackError => Volatile.Read(ref _pump)?.OutputError;
+    public string? PlaybackError => Volatile.Read(ref _pipeline)?.OutputError;
+    /// <summary>The live path ("WASAPI shared · 10.7 ms", "ASIO · Focusrite USB · 2.9 ms"), or <c>null</c> while silent.</summary>
+    public string? OutputDescription => Volatile.Read(ref _pipeline)?.Sink?.Description;
+    /// <summary>Why the <em>requested</em> backend was not used although a fallback is audible; usually <c>null</c>.</summary>
+    public string? OutputFallbackNotice => Volatile.Read(ref _pipeline) is { Sink: not null } pipeline ? pipeline.FallbackNotice : null;
+    /// <summary>True while the audible path is an ASIO driver, which is when its control panel can be shown.</summary>
+    public bool IsAsioOutput => Volatile.Read(ref _pipeline)?.Sink is AsioAudioSink;
+
     public bool ReverbEnabled
     {
         get => Volatile.Read(ref _reverbEnabled) != 0;
         set
         {
             Volatile.Write(ref _reverbEnabled, value ? 1 : 0);
-            Volatile.Read(ref _pump)?.SetReverbEnabled(value);
+            Volatile.Read(ref _pipeline)?.SetReverbEnabled(value);
         }
     }
 
-    public void LoadSoundFont(string path)
+    /// <summary>
+    /// Remembers the output request — backend plus the WASAPI latency target — and rebuilds the live
+    /// pipeline around it when a SoundFont is already playing. Held notes are cut by the rebuild (the synth
+    /// state lives beside the device buffers); the caller re-applies pedals, which is all a player can hold
+    /// across an output switch anyway.
+    /// </summary>
+    public void ConfigureOutput(AudioOutputChoice choice, double latencyMilliseconds)
     {
-        var font = SoundFontReader.Read(path);
-        var synth = new SoundFontSynthesizer(font);
-        var next = new AudioPump(synth, ReverbEnabled);
-        next.Start();
-        Interlocked.Exchange(ref _pump, next)?.Dispose();
+        _outputChoice = choice;
+        _latencyMilliseconds = Math.Clamp(latencyMilliseconds, 2, 50);
+        if (Volatile.Read(ref _pipeline) is { } current) Rebuild(current.Font);
     }
-    public void SelectPreset(int bank, int program) => Volatile.Read(ref _pump)?.Synth.SelectPreset(bank, program);
-    public void NoteOn(int pitch, int velocity = 96, int channel = 0) => Volatile.Read(ref _pump)?.Synth.NoteOn(channel, Math.Clamp(pitch, 0, 127), Math.Clamp(velocity, 1, 127));
-    public void NoteOff(int pitch, int channel = 0) => Volatile.Read(ref _pump)?.Synth.NoteOff(channel, Math.Clamp(pitch, 0, 127));
-    public void ProcessMidi(int channel, int command, int data1, int data2) => Volatile.Read(ref _pump)?.Synth.ProcessMidi(channel, command, data1, data2);
+
+    /// <summary>Opens the active ASIO driver's own settings window; a no-op on every other backend.</summary>
+    public void ShowAsioControlPanel() => (Volatile.Read(ref _pipeline)?.Sink as AsioAudioSink)?.ShowControlPanel();
+
+    public void LoadSoundFont(string path) => Rebuild(SoundFontReader.Read(path));
+
+    private void Rebuild(SoundFontData font)
+    {
+        var next = new Pipeline(font, ReverbEnabled, _outputChoice, _latencyMilliseconds);
+        if (_selectedPreset is { } preset) next.Synth.SelectPreset(preset.Bank, preset.Program);
+        Interlocked.Exchange(ref _pipeline, next)?.Dispose();
+    }
+
+    public void SelectPreset(int bank, int program)
+    {
+        _selectedPreset = (bank, program);
+        Volatile.Read(ref _pipeline)?.Synth.SelectPreset(bank, program);
+    }
+
+    public void NoteOn(int pitch, int velocity = 96, int channel = 0) => Volatile.Read(ref _pipeline)?.Synth.NoteOn(channel, Math.Clamp(pitch, 0, 127), Math.Clamp(velocity, 1, 127));
+    public void NoteOff(int pitch, int channel = 0) => Volatile.Read(ref _pipeline)?.Synth.NoteOff(channel, Math.Clamp(pitch, 0, 127));
+    public void ProcessMidi(int channel, int command, int data1, int data2) => Volatile.Read(ref _pipeline)?.Synth.ProcessMidi(channel, command, data1, data2);
     public void ControlChange(int controller, int value, int channel = 0) => ProcessMidi(channel, 0xB0, controller, value);
-    public void AllNotesOff() => Volatile.Read(ref _pump)?.Synth.AllNotesOff();
+    public void AllNotesOff() => Volatile.Read(ref _pipeline)?.Synth.AllNotesOff();
 
     /// <summary>
     /// Attaches a receiver for every rendered block — <c>(pcm, sampleCount)</c>, called on the audio thread —
     /// or <c>null</c> to detach. The recorder is the only caller: it writes the blocks into the WAV beside the
     /// video, so the file holds exactly what the machine played.
     /// </summary>
-    public void SetTap(Action<short[], int>? tap) => Volatile.Read(ref _pump)?.SetTap(tap);
+    public void SetTap(Action<short[], int>? tap) => Volatile.Read(ref _pipeline)?.SetTap(tap);
 
     /// <summary>True while a tap is attached; the recorder asks before pretending to capture audio.</summary>
-    public bool HasTap => Volatile.Read(ref _pump)?.HasTap ?? false;
+    public bool HasTap => Volatile.Read(ref _pipeline)?.HasTap ?? false;
 
     /// <summary>
     /// Renders one block through the synthesiser and hands it to the tap without touching the sound device.
     /// The recorder drives this on machines with no audio output, so a silent session still records the piano;
     /// it returns false when nothing is tapped or no SoundFont is loaded.
     /// </summary>
-    public bool PumpTapBlock() => Volatile.Read(ref _pump)?.RenderTapBlock() ?? false;
-    public void UnloadSoundFont() => Interlocked.Exchange(ref _pump, null)?.Dispose();
+    public bool PumpTapBlock() => Volatile.Read(ref _pipeline)?.RenderTapBlock() ?? false;
+    public void UnloadSoundFont() => Interlocked.Exchange(ref _pipeline, null)?.Dispose();
     public void Dispose() => UnloadSoundFont();
 
-    private sealed class AudioPump : IDisposable
+    /// <summary>
+    /// Synthesiser, reverb and output sink of one loaded SoundFont, torn down and rebuilt as a unit when the
+    /// font or the output backend changes. The sink pulls blocks through <see cref="Render"/> on its own
+    /// audio thread; a machine with no usable device has no sink, keeps <see cref="OutputError"/> instead,
+    /// and still renders for the recorder through <see cref="RenderTapBlock"/>.
+    /// </summary>
+    private sealed class Pipeline : IDisposable
     {
-        private const int SampleRate = 44100;
-        private const int FramesPerBuffer = 512;
-        private const int BufferCount = 4;
-        private const uint WaveMapper = 0xFFFFFFFF;
-        private const uint CallbackEvent = 0x00050000;
-        private const uint HeaderDone = 0x00000001;
-        private const ushort WaveFormatPcm = 1;
-        private const int BytesPerBuffer = FramesPerBuffer * 4;
-        private readonly AutoResetEvent _ready = new(false);
-        private readonly List<AudioBuffer> _buffers = [];
-        private readonly short[] _pcm = new short[FramesPerBuffer * 2];
+        /// <summary>Frames rendered per tap-only block; matches the recording clock's accounting.</summary>
+        private const int TapBlockFrames = 512;
         private readonly StereoHallReverb _reverb = new(SampleRate);
-        private Thread? _thread;
-        private IntPtr _device;
-        private volatile bool _stopping;
+        private readonly float[] _tapSamples = new float[TapBlockFrames * 2];
+        private short[] _tapPcm = new short[TapBlockFrames * 2];
         private Action<short[], int>? _tap;
         private bool _disposed;
+
         public SoundFontSynthesizer Synth { get; }
         public SoundFontData Font => Synth.Font;
-        /// <summary>Reason the pump is silent, or <c>null</c> when waveOut accepted the stream.</summary>
-        public string? OutputError { get; private set; }
-        public bool HasAudioOutput => _device != IntPtr.Zero;
+        public IAudioSink? Sink { get; }
+        /// <summary>Reason the pipeline is silent, or <c>null</c> when a sink accepted the stream.</summary>
+        public string? OutputError { get; }
+        /// <summary>The explicit backend request's failure when a fallback sink answered instead.</summary>
+        public string? FallbackNotice { get; }
 
-        public AudioPump(SoundFontSynthesizer synth, bool reverbEnabled) { Synth = synth; _reverb.Enabled = reverbEnabled; }
+        public Pipeline(SoundFontData font, bool reverbEnabled, AudioOutputChoice choice, double latencyMilliseconds)
+        {
+            Synth = new SoundFontSynthesizer(font, SampleRate);
+            _reverb.Enabled = reverbEnabled;
+            Sink = AudioSinkFactory.TryCreate(choice, latencyMilliseconds, Render, out var failure);
+            if (Sink is null) OutputError = failure; else FallbackNotice = failure;
+        }
+
         public void SetReverbEnabled(bool enabled) => _reverb.Enabled = enabled;
         internal bool HasTap => Volatile.Read(ref _tap) is not null;
         internal void SetTap(Action<short[], int>? tap) => Volatile.Write(ref _tap, tap);
 
+        /// <summary>One block for the device and, when attached, the recorder — called on the sink's thread.</summary>
+        private void Render(float[] interleaved, int frames)
+        {
+            Synth.Render(interleaved, frames);
+            _reverb.Process(interleaved, frames);
+            // The block the device is about to play is also the block the recording keeps, so the WAV cannot
+            // drift away from what was heard. The tap runs on this thread and must be quick; the recorder locks.
+            if (Volatile.Read(ref _tap) is not { } tap) return;
+            if (_tapPcm.Length < frames * 2) _tapPcm = new short[frames * 2];
+            var pcm = _tapPcm;
+            for (var i = 0; i < frames * 2; i++) pcm[i] = (short)Math.Clamp((int)Math.Round(interleaved[i] * short.MaxValue), short.MinValue, short.MaxValue);
+            tap(pcm, frames * 2);
+        }
+
         /// <summary>
-        /// Renders one block into the tap only: the synthesiser, the reverb and the receiver, with no waveOut
+        /// Renders one block into the tap only: the synthesiser, the reverb and the receiver, with no device
         /// buffer involved. Whether the machine has an output device makes no difference to what is captured.
         /// </summary>
         internal bool RenderTapBlock()
         {
-            var tap = Volatile.Read(ref _tap);
-            if (tap is null) return false;
-            Synth.Render(_pcm, FramesPerBuffer);
-            _reverb.Process(_pcm, FramesPerBuffer);
-            tap(_pcm, FramesPerBuffer * 2);
+            if (Volatile.Read(ref _tap) is null) return false;
+            Render(_tapSamples, TapBlockFrames);
             return true;
-        }
-
-        public void Start()
-        {
-            var format = new WaveFormatEx { FormatTag = WaveFormatPcm, Channels = 2, SamplesPerSec = SampleRate, BitsPerSample = 16, BlockAlign = 4, AverageBytesPerSecond = SampleRate * 4 };
-            var eventHandle = _ready.SafeWaitHandle.DangerousGetHandle();
-            var result = WaveOutOpen(out _device, WaveMapper, ref format, eventHandle, IntPtr.Zero, CallbackEvent);
-            if (result != 0)
-            {
-                // A machine with no usable playback device (VM, headless CI runner, a sound card claimed
-                // exclusively by another app) must not stop the SoundFont from loading: the stage, the
-                // practice scoring and MIDI keep working and only the speakers stay silent.
-                _device = IntPtr.Zero;
-                OutputError = result == 2
-                    ? Loc.T("Windows reported no audio output device (waveOut error 2).")
-                    : Loc.F("Windows could not open the audio output (waveOut error {0}).", result);
-                return;
-            }
-            try
-            {
-                for (var i = 0; i < BufferCount; i++)
-                {
-                    var buffer = new AudioBuffer { Data = new byte[BytesPerBuffer] };
-                    buffer.DataPin = GCHandle.Alloc(buffer.Data, GCHandleType.Pinned);
-                    buffer.Header = Marshal.AllocHGlobal(Marshal.SizeOf<WaveHeader>());
-                    _buffers.Add(buffer);
-                    Marshal.StructureToPtr(new WaveHeader { Data = buffer.DataPin.AddrOfPinnedObject(), BufferLength = (uint)buffer.Data.Length }, buffer.Header, false);
-                    Check(WaveOutPrepareHeader(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "prepare audio buffer");
-                    RenderBuffer(buffer);
-                    Check(WaveOutWrite(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "queue audio buffer");
-                }
-                // Render ahead of the UI thread so busy frames do not turn into audio drop-outs.
-                _thread = new Thread(Pump) { IsBackground = true, Name = "Keyflow SoundFont audio", Priority = ThreadPriority.Highest };
-                _thread.Start();
-            }
-            // The device opened but rejected the buffers: release it and keep synthesizing silently
-            // instead of failing the whole SoundFont load.
-            catch (Exception ex) { OutputError = Loc.F("Windows rejected the audio buffers: {0}", ex.Message); CloseDevice(); }
-        }
-
-        private void Pump()
-        {
-            while (!_stopping)
-            {
-                _ready.WaitOne(50);
-                if (_stopping) break;
-                foreach (var buffer in _buffers)
-                {
-                    var header = Marshal.PtrToStructure<WaveHeader>(buffer.Header);
-                    if ((header.Flags & HeaderDone) == 0) continue;
-                    try
-                    {
-                        RenderBuffer(buffer);
-                        Check(WaveOutWrite(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "queue audio buffer");
-                    }
-                    catch (Exception ex) { OutputError = Loc.F("Windows stopped accepting audio buffers: {0}", ex.Message); _stopping = true; break; }
-                }
-            }
-        }
-
-        private void RenderBuffer(AudioBuffer buffer)
-        {
-            Synth.Render(_pcm, FramesPerBuffer);
-            _reverb.Process(_pcm, FramesPerBuffer);
-            // The block the device is about to play is also the block the recording keeps, so the WAV cannot
-            // drift away from what was heard. The tap runs on this thread and must be quick; the recorder locks.
-            Volatile.Read(ref _tap)?.Invoke(_pcm, FramesPerBuffer * 2);
-            Buffer.BlockCopy(_pcm, 0, buffer.Data, 0, BytesPerBuffer);
-        }
-
-        private void Check(uint result, string action)
-        {
-            if (result != 0) throw new InvalidOperationException(Loc.F("Could not {0} (waveOut error {1}).", Loc.T(action), result));
         }
 
         public void Dispose()
         {
             if (_disposed) return; _disposed = true;
-            CloseDevice();
-            _ready.Dispose();
-        }
-
-        /// <summary>Tears the waveOut stream down but keeps the pump alive, so the synthesizer can keep running silently.</summary>
-        private void CloseDevice()
-        {
-            _stopping = true;
-            if (_device != IntPtr.Zero) WaveOutReset(_device);
-            _ready.Set(); _thread?.Join(1000); _thread = null;
-            foreach (var buffer in _buffers)
-            {
-                if (_device != IntPtr.Zero) WaveOutUnprepareHeader(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>());
-                if (buffer.Header != IntPtr.Zero) Marshal.FreeHGlobal(buffer.Header);
-                if (buffer.DataPin.IsAllocated) buffer.DataPin.Free();
-            }
-            _buffers.Clear();
-            if (_device != IntPtr.Zero) { WaveOutClose(_device); _device = IntPtr.Zero; }
-            _stopping = false;
+            Sink?.Dispose();
         }
     }
-
-    private sealed class AudioBuffer { public required byte[] Data; public GCHandle DataPin; public IntPtr Header; }
-    [StructLayout(LayoutKind.Sequential)] private struct WaveFormatEx
-    {
-        public ushort FormatTag, Channels;
-        public uint SamplesPerSec, AverageBytesPerSecond;
-        public ushort BlockAlign, BitsPerSample, ExtraSize;
-    }
-    [StructLayout(LayoutKind.Sequential)] private struct WaveHeader
-    {
-        public IntPtr Data;
-        public uint BufferLength, BytesRecorded;
-        public UIntPtr User;
-        public uint Flags, Loops;
-        public IntPtr Next;
-        public UIntPtr Reserved;
-    }
-    [DllImport("winmm.dll", EntryPoint = "waveOutOpen")] private static extern uint WaveOutOpen(out IntPtr device, uint deviceId, ref WaveFormatEx format, IntPtr callback, IntPtr instance, uint flags);
-    [DllImport("winmm.dll", EntryPoint = "waveOutPrepareHeader")] private static extern uint WaveOutPrepareHeader(IntPtr device, IntPtr header, uint size);
-    [DllImport("winmm.dll", EntryPoint = "waveOutUnprepareHeader")] private static extern uint WaveOutUnprepareHeader(IntPtr device, IntPtr header, uint size);
-    [DllImport("winmm.dll", EntryPoint = "waveOutWrite")] private static extern uint WaveOutWrite(IntPtr device, IntPtr header, uint size);
-    [DllImport("winmm.dll", EntryPoint = "waveOutReset")] private static extern uint WaveOutReset(IntPtr device);
-    [DllImport("winmm.dll", EntryPoint = "waveOutClose")] private static extern uint WaveOutClose(IntPtr device);
 }
 
 /// <summary>Low-cost stereo Schroeder room reverb used after SoundFont sample rendering.</summary>
@@ -280,37 +226,67 @@ internal sealed class StereoHallReverb
         _rightDiffusers = [new AllPass(Samples(5.5)), new AllPass(Samples(1.9))];
     }
 
-    public void Process(short[] interleaved, int frames)
+    /// <summary>The float path every live backend uses; output stays within [-1, 1].</summary>
+    public void Process(float[] interleaved, int frames)
     {
-        if (!Enabled)
-        {
-            // Bypass leaves the dry signal untouched. A tail that is still ringing fades out over
-            // ~120 ms instead of cutting abruptly; once silent, the delay lines are cleared once.
-            if (!_wetActive) return;
-        }
-        else { _fade = 1; _wetActive = true; }
+        if (!BeginBlock()) return;
         for (var i = 0; i < frames; i++)
         {
-            var offset = i * 2;
-            var dryLeft = interleaved[offset] / 32768f;
-            var dryRight = interleaved[offset + 1] / 32768f;
-            // While fading out the delay lines keep ringing but no new energy is fed in.
-            var sendLeft = Enabled ? dryLeft + dryRight * .16f : 0f;
-            var sendRight = Enabled ? dryRight + dryLeft * .16f : 0f;
-            var wetLeft = 0f; var wetRight = 0f;
-            foreach (var comb in _leftCombs) wetLeft += comb.Process(sendLeft);
-            foreach (var comb in _rightCombs) wetRight += comb.Process(sendRight);
-            wetLeft *= .25f * (float)_fade; wetRight *= .25f * (float)_fade;
-            foreach (var diffuser in _leftDiffusers) wetLeft = diffuser.Process(wetLeft);
-            foreach (var diffuser in _rightDiffusers) wetRight = diffuser.Process(wetRight);
-            // The enabled path keeps dry at .91 to leave headroom for the wet sum; while the tail
-            // fades, ramp dry back to unity so bypassing never clicks.
-            var dryGain = Enabled ? .91f : .91f + .09f * (1 - (float)_fade);
-            interleaved[offset] = ToPcm(dryLeft * dryGain + wetLeft * .38f);
-            interleaved[offset + 1] = ToPcm(dryRight * dryGain + wetRight * .38f);
-            if (!Enabled) _fade = Math.Max(0, _fade - _fadeStep);
+            var left = interleaved[i * 2]; var right = interleaved[i * 2 + 1];
+            ProcessFrame(ref left, ref right);
+            interleaved[i * 2] = Math.Clamp(left, -1f, 1f);
+            interleaved[i * 2 + 1] = Math.Clamp(right, -1f, 1f);
         }
+        EndBlock();
+    }
+
+    /// <summary>The 16-bit path, kept for the tests that feed PCM impulses; same math as the float path.</summary>
+    public void Process(short[] interleaved, int frames)
+    {
+        if (!BeginBlock()) return;
+        for (var i = 0; i < frames; i++)
+        {
+            var left = interleaved[i * 2] / 32768f; var right = interleaved[i * 2 + 1] / 32768f;
+            ProcessFrame(ref left, ref right);
+            interleaved[i * 2] = ToPcm(left);
+            interleaved[i * 2 + 1] = ToPcm(right);
+        }
+        EndBlock();
+    }
+
+    /// <summary>
+    /// Bypass leaves the dry signal untouched. A tail that is still ringing fades out over ~120 ms instead
+    /// of cutting abruptly; once silent, the delay lines are cleared once (<see cref="EndBlock"/>).
+    /// </summary>
+    private bool BeginBlock()
+    {
+        if (!Enabled) return _wetActive;
+        _fade = 1; _wetActive = true;
+        return true;
+    }
+
+    private void EndBlock()
+    {
         if (!Enabled && _fade == 0) { Reset(); _wetActive = false; }
+    }
+
+    private void ProcessFrame(ref float dryLeft, ref float dryRight)
+    {
+        // While fading out the delay lines keep ringing but no new energy is fed in.
+        var sendLeft = Enabled ? dryLeft + dryRight * .16f : 0f;
+        var sendRight = Enabled ? dryRight + dryLeft * .16f : 0f;
+        var wetLeft = 0f; var wetRight = 0f;
+        foreach (var comb in _leftCombs) wetLeft += comb.Process(sendLeft);
+        foreach (var comb in _rightCombs) wetRight += comb.Process(sendRight);
+        wetLeft *= .25f * (float)_fade; wetRight *= .25f * (float)_fade;
+        foreach (var diffuser in _leftDiffusers) wetLeft = diffuser.Process(wetLeft);
+        foreach (var diffuser in _rightDiffusers) wetRight = diffuser.Process(wetRight);
+        // The enabled path keeps dry at .91 to leave headroom for the wet sum; while the tail
+        // fades, ramp dry back to unity so bypassing never clicks.
+        var dryGain = Enabled ? .91f : .91f + .09f * (1 - (float)_fade);
+        dryLeft = dryLeft * dryGain + wetLeft * .38f;
+        dryRight = dryRight * dryGain + wetRight * .38f;
+        if (!Enabled) _fade = Math.Max(0, _fade - _fadeStep);
     }
 
     private void Reset()

@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -993,6 +993,50 @@ internal static partial class VerificationSuite
         var after = new short[4410 * 2]; ringing.Process(after, 4410);
         Assert(after.All(sample => sample == 0), "A settled bypassed reverb must keep the dry path silent.");
         Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
+    }
+
+    /// <summary>
+    /// The output-backend plumbing that behaves identically on every machine: the stable ids the settings
+    /// file and the output combo share, the settings clamp that normalises hand-edited values, an ASIO
+    /// registry read that must never throw (CI runners have no <c>HKLM\SOFTWARE\ASIO</c> key at all), and
+    /// the float render path's parity with the 16-bit path — what WASAPI and ASIO play must be what the
+    /// recording's WAV stores. Opening real devices is deliberately not attempted here: a headless runner
+    /// has none, and the silent-machine behaviour is already covered by the startup check.
+    /// </summary>
+    private static void VerifyAudioOutputSelection()
+    {
+        Assert(AudioOutputChoice.Parse(AudioOutputChoice.WasapiSharedId) is { Kind: AudioBackendKind.WasapiShared } shared && shared.Id == AudioOutputChoice.WasapiSharedId, "The WASAPI shared id should round-trip through parse.");
+        Assert(AudioOutputChoice.Parse(AudioOutputChoice.WasapiExclusiveId).Kind == AudioBackendKind.WasapiExclusive, "The WASAPI exclusive id should parse to its backend.");
+        Assert(AudioOutputChoice.Parse(AudioOutputChoice.WaveOutId).Kind == AudioBackendKind.WaveOut, "The waveOut id should parse to its backend.");
+        var asio = AudioOutputChoice.Parse("asio:Focusrite USB ASIO");
+        Assert(asio.Kind == AudioBackendKind.Asio && asio.AsioDriver == "Focusrite USB ASIO" && asio.Id == "asio:Focusrite USB ASIO", "An ASIO id should keep the driver name through a parse round-trip.");
+        Assert(AudioOutputChoice.ForAsio("X").Id == "asio:X", "ForAsio should build the same id the combo stores.");
+        Assert(AudioOutputChoice.Parse("qwancy").Kind == AudioBackendKind.Auto && AudioOutputChoice.Parse(null).Id == AudioOutputChoice.AutoId && AudioOutputChoice.Parse("asio:").Kind == AudioBackendKind.Auto, "Unknown or empty output ids must parse as Auto, never throw.");
+        var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400 };
+        settings.Clamp();
+        Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50, "The settings clamp should normalise an unknown backend to Auto and bound the latency target.");
+        _ = AsioDriverRegistry.Names; // most machines have no HKLM\SOFTWARE\ASIO key; reading it must not throw
+        Assert(AsioDriverRegistry.ClassIdOf("keyflow-not-a-driver") is null, "A driver name that is not installed should answer null, not throw.");
+
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(path, CreateTestSoundFont());
+        var font = SoundFontReader.Read(path);
+        var pcmSynth = new SoundFontSynthesizer(font, 22050); var floatSynth = new SoundFontSynthesizer(font, 22050);
+        pcmSynth.NoteOn(0, 69, 100); floatSynth.NoteOn(0, 69, 100);
+        var pcm = new short[2205 * 2]; pcmSynth.Render(pcm, 2205);
+        var floats = new float[2205 * 2]; floatSynth.Render(floats, 2205);
+        Assert(floats.Any(sample => sample != 0) && floats.All(sample => sample is >= -1f and <= 1f), "The float render should produce audio and stay within [-1, 1].");
+        var synthDelta = 0.0;
+        for (var i = 0; i < pcm.Length; i++) synthDelta = Math.Max(synthDelta, Math.Abs(pcm[i] - Math.Round(floats[i] * short.MaxValue)));
+        Assert(synthDelta <= 1, $"The float and 16-bit synthesiser paths should agree to the LSB (max delta {synthDelta}).");
+
+        var pcmReverb = new short[4410 * 2]; pcmReverb[0] = 24000; pcmReverb[1] = 12000;
+        new StereoHallReverb(44100).Process(pcmReverb, 4410);
+        var floatReverb = new float[4410 * 2]; floatReverb[0] = 24000 / 32768f; floatReverb[1] = 12000 / 32768f;
+        new StereoHallReverb(44100).Process(floatReverb, 4410);
+        var reverbDelta = 0.0;
+        for (var i = 0; i < pcmReverb.Length; i++) reverbDelta = Math.Max(reverbDelta, Math.Abs(pcmReverb[i] - Math.Round((double)floatReverb[i] * short.MaxValue)));
+        Assert(reverbDelta <= 1, $"The float and 16-bit reverb paths should agree to the LSB (max delta {reverbDelta}).");
+        Results.Add("PASS audio output: stable backend ids, clamped settings, safe ASIO registry reads, and float/PCM parity for synth and reverb.");
     }
 
     private static void VerifyMidiDevicesAndKeyboardMap()

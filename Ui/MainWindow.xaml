@@ -172,6 +172,14 @@
                                     <ComboBox x:Name="PresetCombo" IsEnabled="False" SelectionChanged="PresetCombo_SelectionChanged" ToolTip="Choose an instrument preset from the loaded SoundFont" local:Loc.Localize="True"/>
                                     <TextBlock Text="EFFECTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <ToggleButton x:Name="ReverbToggle" Content="HALL REVERB" local:Loc.Localize="True" HorizontalAlignment="Left" Height="32" Style="{StaticResource PedalToggleStyle}" IsChecked="True" Checked="ReverbToggle_Changed" Unchecked="ReverbToggle_Changed"/>
+                                    <TextBlock Text="OUTPUT &amp; LATENCY" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
+                                    <TextBlock Text="Auto picks WASAPI and falls back by itself. WASAPI keeps the piano a few milliseconds behind the keys; ASIO talks to a studio interface's own driver; waveOut is the old compatible path." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Audio output" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,2,0,4"/>
+                                    <ComboBox x:Name="AudioOutputCombo" AutomationProperties.Name="Audio output" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="AudioOutputCombo_SelectionChanged"/>
+                                    <TextBlock Text="Target latency" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
+                                    <ComboBox x:Name="AudioLatencyCombo" AutomationProperties.Name="Target latency" local:Loc.Localize="True" SelectionChanged="AudioLatencyCombo_SelectionChanged"><ComboBoxItem Content="Safe · 20 ms" local:Loc.Localize="True"/><ComboBoxItem Content="Balanced · 10 ms" local:Loc.Localize="True"/><ComboBoxItem Content="Low · 5 ms" local:Loc.Localize="True"/><ComboBoxItem Content="Ultra · 3 ms" local:Loc.Localize="True"/></ComboBox>
+                                    <Button x:Name="AsioPanelButton" Content="ASIO control panel" local:Loc.Localize="True" Click="AsioPanel_Click" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="False"/>
+                                    <TextBlock x:Name="AudioOutputHint" Text="Takes effect once a SoundFont is loaded." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,8,0,0"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>

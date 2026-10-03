@@ -109,14 +109,14 @@ Keyflow-1.0.0-win-x64\
 | Để **biên dịch từ mã nguồn** | **.NET 10 SDK** (10.0.100 trở lên), **Git** và **Git LFS** | SoundFont `Assets/ConcertGrand.sf2` (~113 MiB) được lưu bằng Git LFS. |
 | IDE (tuỳ chọn) | Visual Studio 2026 với workload **.NET desktop development**, hoặc VS Code + extension **C# Dev Kit** | .NET 10 cần Visual Studio 2026 (18.0) trở lên; VS 2022 chỉ mở được dự án khi đã cài .NET 10 SDK và không hỗ trợ đầy đủ. |
 | Ổ đĩa | ~1,5 GB cho SDK + ~500 MB cho mã nguồn và bản build | Bản publish self-contained chiếm thêm ~300 MB. |
-| Âm thanh | Card âm thanh bất kỳ được Windows nhận (đầu ra `waveOut`) | |
+| Âm thanh | Card âm thanh bất kỳ được Windows nhận (WASAPI; tuỳ chọn ASIO cho sound card thu âm, `waveOut` làm đường dự phòng) | |
 | Đồ hoạ | GPU hỗ trợ **Direct3D 11** (feature level 11_0 trở lên, shader model 5.0) | Sân khấu mặc định là engine GPU: Keyflow thử card đồ hoạ trước rồi mới tới **WARP** (bộ dựng hình phần mềm của Windows — cùng shader, chỉ chậm hơn card thật); shader HLSL được biên dịch lúc khởi động bằng `d3dcompiler_47.dll` có sẵn trong Windows. Direct3D không khởi động được thì dùng bộ dựng hình WPF và nói lý do ở **General → GRAPHICS ENGINE**. |
 | MIDI (tuỳ chọn) | Đàn/thiết bị MIDI USB được Windows nhận diện | Không có đàn vẫn chơi được bằng bàn phím máy tính hoặc piano ảo. |
 | Python (tuỳ chọn) | Python 3.9+ | Chỉ dùng cho `tools/check_sources.py` (kiểm tra tĩnh, không cần .NET SDK). |
 
 ## Thiết lập lần đầu
 
-1. **Âm thanh**: Keyflow phát qua thiết bị đầu ra mặc định của Windows (`waveOut`). Đổi loa/tai nghe trong *Settings → System → Sound* của Windows trước khi mở ứng dụng.
+1. **Âm thanh**: Keyflow phát qua thiết bị đầu ra mặc định của Windows bằng **WASAPI** (tự lùi về `waveOut` khi cần); mục **OUTPUT & LATENCY** của trang Audio chọn WASAPI shared/exclusive, một driver **ASIO** hoặc `waveOut`, kèm độ trễ mong muốn. Đổi loa/tai nghe trong *Settings → System → Sound* của Windows trước khi mở ứng dụng.
 2. **SoundFont**: grand piano Yamaha đi kèm được nạp tự động khi mở (mất vài giây, nhãn trên trang Audio báo khi xong). Muốn dùng piano khác, mở **SETTINGS → Audio → LOAD SOUNDFONT** và chọn tệp `.sf2`; chọn preset (bank/program) trong danh sách bên dưới. Nút **HALL REVERB** bật/tắt tiếng vang.
 3. **Đàn MIDI**: cắm đàn trước khi mở ứng dụng thì Keyflow tự kết nối ngõ vào đầu tiên. Cắm sau thì mở **SETTINGS → MIDI → Refresh devices**. Nhãn thiết bị phía trên bàn phím chuyển sang `MIDI IN · C4` khi nhận Note On. Cùng trang có ngõ ra MIDI (nếu muốn phát qua synth ngoài), metronome và danh sách track.
 4. **Đồ hoạ**: sân khấu chạy bằng GPU ngay từ lần mở đầu, không phải bật gì. Muốn đổi tốc độ khung hình (60 / 120 / 144 / 240 FPS hoặc không giới hạn), tắt VSync của cửa sổ sân khấu GPU, mở cửa sổ đó cho màn hình thứ hai hoặc xem engine nào đang vẽ thì vào **SETTINGS → General → GRAPHICS ENGINE**. Đây là thiết lập của máy: áp preset không đổi chúng.
@@ -189,7 +189,7 @@ Mọi preset có sẵn, mỗi preset vẽ bằng cả hai engine cạnh nhau (ph
 
 | Nhóm | Chi tiết |
 | --- | --- |
-| SoundFont | Tự nạp grand piano Yamaha đi kèm; cho phép nạp `.sf2` khác, liệt kê bank/program, chọn preset, đa âm và phát PCM stereo 44.1 kHz qua `waveOut`. |
+| SoundFont | Tự nạp grand piano Yamaha đi kèm; cho phép nạp `.sf2` khác, liệt kê bank/program, chọn preset, đa âm và phát stereo 44.1 kHz qua WASAPI shared/exclusive, driver ASIO hoặc `waveOut` — chọn backend và độ trễ mong muốn ở **OUTPUT & LATENCY**, dòng chữ bên dưới ghi đường đang phát và buffer thật. |
 | Reverb | Hall reverb stereo chạy thời gian thực, bật mặc định, có nút bypass độc lập; reverb vẫn vang sau khi nhả phím. |
 | Pedal | Ba pedal MIDI tiêu chuẩn: una corda/soft (CC 67, giảm gain và làm dịu âm), sostenuto (CC 66, giữ những nốt đang nhấn khi pedal xuống), sustain/damper (CC 64, giữ tiếng sau khi nhả phím). Nút trên màn hình, pedal MIDI vào SoundFont và MIDI output đều được kết nối; độ dài thanh nốt live chỉ tăng trong lúc phím được giữ, còn pedal chỉ tác động lên tiếng đàn. |
 | MIDI vào | Phím máy tính, click/giữ phím ảo và WinMM MIDI input; tự mở MIDI input đầu tiên, giữ lựa chọn sau khi làm mới danh sách, hiển thị tín hiệu/nốt nhận được. |

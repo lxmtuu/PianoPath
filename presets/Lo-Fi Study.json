@@ -44,6 +44,8 @@
     "ShowKeyShadow": true,
     "BackgroundAppearanceVersion": 2,
     "Language": "",
+    "AudioOutputMode": "auto",
+    "AudioLatencyMs": 10.0,
     "ShellTheme": "concert-noir",
     "ChromeMotion": "Calm",
     "BackdropDensity": 40,

@@ -72,6 +72,10 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         _visualSettings = PianoVisualSettingsStore.Load();
+        // The output request must be on the engine before the bundled piano loads, so the very first
+        // pipeline already opens the backend the player chose last time instead of opening waveOut and
+        // immediately rebuilding.
+        _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
         BuildVisualSettingsControls();
         // The XAML literals are the translation keys (see Ui/MainWindow.xaml), so the window marks
         // its own tree and paints it once; every later switch repaints through the same registry.
@@ -544,7 +548,26 @@ public partial class MainWindow : Window
         }
         PresetCombo.IsEnabled = loaded;
         if (MetronomeCheck is not null) { MetronomeCheck.IsEnabled = loaded; if (!loaded) MetronomeCheck.IsChecked = false; }
+        UpdateAudioOutputHint();
         UpdatePlaybackLabel();
+    }
+
+    /// <summary>
+    /// The line under the output pickers: the live path and its buffer ("WASAPI shared · 10.7 ms"), the
+    /// explicit request's failure when a fallback answered instead, or why the machine is silent. The ASIO
+    /// control panel button only lights up while an ASIO driver is actually the audible path.
+    /// </summary>
+    private void UpdateAudioOutputHint()
+    {
+        if (AsioPanelButton is null || AudioOutputHint is null) return;
+        AsioPanelButton.IsEnabled = _audio.IsAsioOutput;
+        if (!_audio.HasSoundFont) { Loc.Set(AudioOutputHint, "Takes effect once a SoundFont is loaded."); return; }
+        if (_audio.OutputDescription is { } description)
+        {
+            if (_audio.OutputFallbackNotice is { } notice) Loc.Format(AudioOutputHint, "Output · {0} · {1}", description, notice);
+            else Loc.Format(AudioOutputHint, "Output · {0}", description);
+        }
+        else Loc.Format(AudioOutputHint, "No audio output · {0}", _audio.PlaybackError ?? "");
     }
 
     private void ReverbToggle_Changed(object sender, RoutedEventArgs e)
@@ -1525,9 +1548,75 @@ public partial class MainWindow : Window
             OutputDeviceCombo.ItemsSource = outputItems; OutputDeviceCombo.SelectedIndex = outputIndex;
         }
         finally { _suppressDevices = false; }
+        RefreshAudioOutputs();
         ConnectInput(showErrors: false);
         if (outputIndex > 0) ConnectOutput();
     }
+
+    /// <summary>The latency rungs of the settings combo, in combo order: Safe, Balanced, Low, Ultra.</summary>
+    private static readonly double[] AudioLatencySteps = [20, 10, 5, 3];
+
+    /// <summary>
+    /// Rebuilds the audio-output picker: the four fixed backends plus one row per installed ASIO driver.
+    /// Like the MIDI pickers, rows carry a stable English id and a translated caption, so a refresh or a
+    /// language switch never changes what the settings file remembers.
+    /// </summary>
+    private void RefreshAudioOutputs()
+    {
+        var items = new List<DeviceOption>
+        {
+            new(AudioOutputChoice.AutoId, Loc.T("Auto · WASAPI, then waveOut")),
+            new(AudioOutputChoice.WasapiSharedId, Loc.T("WASAPI shared · low latency")),
+            new(AudioOutputChoice.WasapiExclusiveId, Loc.T("WASAPI exclusive · owns the device")),
+            new(AudioOutputChoice.WaveOutId, Loc.T("waveOut · compatibility")),
+        };
+        foreach (var driver in AsioDriverRegistry.Names) items.Add(new DeviceOption(AudioOutputChoice.ForAsio(driver).Id, Loc.F("ASIO · {0}", driver)));
+        var stored = AudioOutputChoice.Parse(_visualSettings.AudioOutputMode);
+        // A remembered ASIO driver that is missing right now (undocked laptop) keeps its row: the choice
+        // survives, and the engine's factory already answers with the WASAPI fallback while it is gone.
+        if (stored.Kind == AudioBackendKind.Asio && items.All(item => item.Id != stored.Id)) items.Add(new DeviceOption(stored.Id, Loc.F("ASIO · {0}", stored.AsioDriver)));
+        _suppressDevices = true;
+        try
+        {
+            AudioOutputCombo.ItemsSource = items;
+            AudioOutputCombo.SelectedValue = stored.Id;
+            if (AudioOutputCombo.SelectedIndex < 0) AudioOutputCombo.SelectedIndex = 0;
+            var latencyIndex = Array.IndexOf(AudioLatencySteps, _visualSettings.AudioLatencyMs);
+            AudioLatencyCombo.SelectedIndex = latencyIndex >= 0 ? latencyIndex : 1;
+        }
+        finally { _suppressDevices = false; }
+        UpdateAudioOutputHint();
+    }
+
+    private void AudioOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressDevices || AudioOutputCombo.SelectedValue is not string id) return;
+        _visualSettings.AudioOutputMode = id;
+        ApplyAudioOutput();
+    }
+
+    private void AudioLatencyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressDevices || AudioLatencyCombo.SelectedIndex < 0) return;
+        _visualSettings.AudioLatencyMs = AudioLatencySteps[AudioLatencyCombo.SelectedIndex];
+        ApplyAudioOutput();
+    }
+
+    private void AsioPanel_Click(object sender, RoutedEventArgs e) => _audio.ShowAsioControlPanel();
+
+    /// <summary>
+    /// Hands the stored output request to the engine (which rebuilds the live pipeline when a SoundFont is
+    /// playing), re-presses the pedals the player is physically holding — the rebuild replaced the
+    /// synthesiser that knew about them — and schedules the settings write.
+    /// </summary>
+    private void ApplyAudioOutput()
+    {
+        _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
+        foreach (var pedal in _pedalsDown) _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), 127);
+        UpdateSoundFontUi();
+        _settingsSaveTimer.Stop(); _settingsSaveTimer.Start();
+    }
+
     private void InputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (_suppressDevices || InputDeviceCombo.SelectedIndex < 0) return;
