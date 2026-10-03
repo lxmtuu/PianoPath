@@ -1,6 +1,6 @@
 using System;
 
-namespace PianoPath.Audio;
+namespace PianoPath;
 
 /// <summary>
 /// Sympathetic string resonance for the sustain pedal. When the damper rail lifts on a real grand, every
