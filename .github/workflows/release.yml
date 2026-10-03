@@ -122,6 +122,29 @@ jobs:
             installer/Output/Keyflow-Setup-*.exe
           if-no-files-found: error
 
+      # What the release notes link to has to be a copy the reader can open. When a separate public
+      # repository is configured, the changelogs travel there on release/public-<tag> and that copy is the
+      # one to point at; when there is no separate repository (or PUBLIC_REPOSITORY is this repository), the
+      # files on the tag itself are the only copy there is. A note that links to a repository which does
+      # not exist is a 404 in the one place a downloader reads first.
+      - name: Decide where the release notes' changelog links point
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: notes
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $public = "${{ env.PUBLIC_REPOSITORY }}".Trim()
+          $here = "${{ github.repository }}"
+          $base = if ($public -and $public -ine $here) {
+            "https://github.com/$public/blob/release/public-$tag"
+          } else {
+            "https://github.com/$here/blob/$tag"
+          }
+          "changelog_en=$base/CHANGELOG.en.md" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8
+          "changelog_vi=$base/CHANGELOG.md" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8
+          "public_repository=$public" | Add-Content -Path $env:GITHUB_OUTPUT -Encoding utf8
+          "linked to $base" | Write-Host
+
       - name: Attach packages to the GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v3
@@ -151,13 +174,12 @@ jobs:
             The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC"
             on the first launch — choose *More info → Run anyway*.
 
-            What changed: [CHANGELOG.en.md](https://github.com/${{ env.PUBLIC_REPOSITORY }}/blob/release/public-${{ github.ref_name }}/CHANGELOG.en.md) ·
-            [CHANGELOG.md — tiếng Việt](https://github.com/${{ env.PUBLIC_REPOSITORY }}/blob/release/public-${{ github.ref_name }}/CHANGELOG.md)
+            What changed: [CHANGELOG.en.md](${{ steps.notes.outputs.changelog_en }}) ·
+            [CHANGELOG.md — tiếng Việt](${{ steps.notes.outputs.changelog_vi }})
 
-            The same packages and their documentation are published to the public release repository:
-            <https://github.com/${{ env.PUBLIC_REPOSITORY }}/releases>. This repository stays private, so
-            the changelog links above point at the public copy of those files — the only copy a reader
-            without access here can open.
+            When a separate public release repository is configured, the same packages and documents also
+            travel there (<https://github.com/${{ steps.notes.outputs.public_repository }}/releases>); the
+            links above point at whichever copy a reader without access here can open.
           generate_release_notes: true
 
       # The public repository gets documents, and the version of them that goes public has to be reviewable
@@ -277,9 +299,42 @@ jobs:
           try { $latest = "$(& gh api "repos/${{ github.repository }}/releases/latest" --jq .tag_name)".Trim() } catch { }
           $updateMain = ($latest -eq $tag)
 
+          # THE ONE RULE THIS STEP MAY NOT BREAK: main of the source repository is never written here. On
+          # 2026-10-03 a publish run aimed at this repository replaced main with the release documents and
+          # the sources had to be restored from a branch — the tree that main held for half an hour was
+          # ``docs/release`` and nothing else. Two refusals follow from that, and tools/check_sources.py
+          # fails the static check if either is edited away.
+          #
+          # (1) A target that *is* this repository: the documents were already built on $branch here by the
+          # step above, so there is nothing to publish anywhere else. main is not touched.
+          $sourceRepository = "${{ github.repository }}"
+          $publish = $true
+          if ($repository -ieq $sourceRepository) {
+            $updateMain = $false
+            $publish = $false
+            '::notice title=Public release::PUBLIC_REPOSITORY is this repository, so the documents of ' + $tag + ' are already on ' + $branch + ' here; nothing is pushed to a public repository, and main of the source repository is never written.'
+          } else {
+            # (2) A target that does not exist yet is a setup step somebody has not done, not a defect in
+            # the release: the packages, the GitHub Release and the documents branch are all in place in
+            # this repository already, so this is a warning rather than a red run. The token, when there is
+            # one, is scoped to the public repository, so it cannot see an unrelated one: the answer is a
+            # 404 either way, and both mean the same thing here.
+            & gh api "repos/$repository" --silent 2>$null
+            if ($LASTEXITCODE -ne 0) {
+              $publish = $false
+              '::warning title=Public release::' + $repository + ' does not exist (or is not visible to the token that runs this step), so nothing was published there. Create it with `gh repo create ' + $repository + ' --public` and run `pwsh tools/publish_public.ps1 -Tag ' + $tag + '`, or point the PUBLIC_RELEASES_REPOSITORY variable at the repository that should receive the documents.'
+            }
+          }
+
           # The token never appears in a command line — that would print it into the log. gh hands it to git
           # through its credential helper, which reads it from the environment of this step alone.
-          if ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) {
+          if (-not $publish) {
+            @('# Public release', '',
+              'No public repository received these documents. The release and its packages are attached to this',
+              "repository's release page, and the documents are on ``$branch`` here.", '',
+              'When a separate public repository exists, the next step of a release publishes the same tree there',
+              '(`pwsh tools/publish_public.ps1 -Tag ' + $tag + '`).') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          } elseif ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) {
             '::warning title=Public release::No PUBLIC_RELEASES_TOKEN secret: run `pwsh tools/publish_public.ps1 -Tag ' + $tag + '` within the next few minutes to publish ' + $repository + ', or add the secret to let this step do it.'
           } else {
             $env:GH_TOKEN = $env:PUBLIC_RELEASES_TOKEN
@@ -299,6 +354,10 @@ jobs:
             }
             "::notice title=Public release::published $branch$(if ($updateMain) { ' and main' }) to $repository"
             "https://github.com/$repository/tree/$branch" | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          }
+
+          if (-not $publish) {
+            return
           }
 
           # Whether the token was there or the push comes from somebody's desktop, the work is done when the

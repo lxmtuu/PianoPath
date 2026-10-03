@@ -17,7 +17,7 @@ một số: quên một bản sao là kiểm tra tĩnh đỏ, không phải mộ
 Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README và
 không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
-## 1.0.0 — 2026-10-02
+## 1.0.0 — 2026-10-03
 
 Bản phát hành chính thức đầu tiên. Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn,
 luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc, giao diện **hai ngôn ngữ
@@ -93,6 +93,20 @@ phát hành nào, nên lịch sử chi tiết nằm trong log commit và các pu
 - **Lớp phủ camera** (camera trực tiếp hoặc tệp video chạy lặp, đặt theo bốn góc, mirror, opacity, key màu
   xanh lá) và **theo dõi bàn tay** bằng thị giác cổ điển: luật màu da YCbCr có độ nhạy chỉnh được, lưới
   32×24, đếm ngón theo biên dạng cột, vẽ dải sáng trên phím bàn tay đang ở.
+- **Hết đơ và hết tệp hỏng khi ghi** — ba bản vá sau lượt cắt đầu tiên: mỗi khung và mỗi khối âm thanh trả
+  lại bộ đệm COM của Media Foundation ngay trong `finally` (trước đây chúng bị giữ tới lúc GC, RAM phình lên
+  rồi cả cửa sổ đứng khi chúng được giải phóng cùng lúc); khung hình và âm thanh đi qua một hàng đợi có
+  biên tới luồng công nhân làm phần chuyển NV12 và ghi tệp, khung mà bộ mã hoá theo không kịp được gộp vào
+  khung mới nhất thành khung lặp nên tệp vẫn giữ đúng thời gian thực; cả lượt ghi MP4 nằm trên **một luồng
+  duy nhất** (Media Foundation từ chối sink writer tạo ở luồng này rồi gọi ở luồng khác — đó là lý do những
+  lượt ghi trước ra tệp rỗng hoặc thiếu index) và lỗi lúc đóng tệp được báo ra thay vì bỏ qua; AVI cũng ghi
+  trên luồng riêng, khung lặp ghi bằng null frame thay vì nén lại, và lượt ghi bị chặn ở **1080p** theo cả
+  hai chiều.
+- **MP4 nay là định dạng mặc định**, và tệp nó ghi ra mở được ở mọi trình phát: `MF_MT_FRAME_SIZE` xếp
+  chiều rộng vào word cao nhưng bộ ghi lại truyền chiều cao trước, nên bộ mã hoá đọc mọi khung với stride
+  sai và một lượt 1920×1080 bị khai thành 1080×1920 — hình ra thành nhiễu ngang. Kích thước nay được khai
+  đúng `rộng × cao`, `--soak-record` so kích thước tệp tự khai với kích thước đã yêu cầu, và hồ sơ mới mặc
+  định ghi MP4 thay vì AVI (AVI không có codec MJPEG là khung thô, đầy trần 2 GB trong vài giây ở 1080p).
 
 ### Thư viện, hồ sơ & bàn thiết kế
 

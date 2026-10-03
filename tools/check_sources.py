@@ -1159,13 +1159,15 @@ def scan_public_release():
     """The source repository is private and the release repository is public, so what crosses the line has
     to be pinned by something other than good intentions.
 
-    Three things can go wrong here, and none of them shows up in a build: the public page can drift from
+    Four things can go wrong here, and none of them shows up in a build: the public page can drift from
     the README it is generated from (the drift is invisible unless somebody reads both), a source file can
-    be copied into the public tree (a leak nobody notices until a stranger downloads it), and the token
-    that writes to the public repository can be reachable from more of the workflow than the one step that
-    needs it. So this rule compares ``docs/release/`` with its generator byte for byte, keeps the list of
-    files that may travel explicit, checks every link on the generated pages, and asserts that the token
-    is named in exactly one file.
+    be copied into the public tree (a leak nobody notices until a stranger downloads it), the token that
+    writes to the public repository can be reachable from more of the workflow than the one step that
+    needs it, and the documents can be published *into the source repository* — on 2026-10-03 a run aimed
+    at this repository replaced main with them and the sources had to be restored from a branch. So this
+    rule compares ``docs/release/`` with its generator byte for byte, keeps the list of files that may
+    travel explicit, checks every link on the generated pages, asserts that the token is named in exactly
+    one file, and asserts that both places which can push refuse to write main of the source repository.
     """
     import importlib.util
     import tempfile
@@ -1320,6 +1322,29 @@ def scan_public_release():
     if ".github/workflows/build.yml" in holders:
         errors.append(f".github/workflows/build.yml names {token}; the build job must not be able to reach "
                       f"the public repository at all")
+
+    # 7. Neither place that can push release documents may write main of the source repository. It happened
+    # once — on 2026-10-03 `publish_public.ps1 -Repository lxmtuu/PianoPath` replaced main with docs/release
+    # and the sources had to be restored from a branch — and the two refusals that came out of it are
+    # exactly the kind of thing a later edit deletes because it looks like a special case. It is not: the
+    # source repository's main is the product, and no release step has any business writing there.
+    guards = (
+        ("tools/publish_public.ps1",
+         "refusing to push the release documents to refs/heads/main",
+         "the script must refuse to write the release documents to main of the source repository"),
+        (".github/workflows/release.yml",
+         "$repository -ieq $sourceRepository",
+         "the publish step must compare the target with this repository before it pushes anything"),
+        (".github/workflows/release.yml",
+         "$updateMain = $false",
+         "the publish step must clear the main update when the target is this repository"),
+    )
+    for name, marker, why in guards:
+        path = ROOT / name
+        text = path.read_text(encoding="utf-8") if path.exists() else ""
+        if marker not in text:
+            errors.append(f"{name} no longer carries the guard {marker!r} ({why}); a release run pointed at "
+                          f"this repository would replace main with the release documents again")
     return errors
 
 
@@ -1474,7 +1499,8 @@ def main():
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
-    print("checked the public release documents against their generator, their links, and the token that publishes them")
+    print("checked the public release documents against their generator, their links, the token that "
+          "publishes them, and the guards that keep a release run out of main of the source repository")
     if errors:
         print(f"\n{len(errors)} problem(s):")
         for e in errors:

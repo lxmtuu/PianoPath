@@ -185,5 +185,34 @@ Rồi chạy lại `python3 tools/make_public_docs.py` **hai lần** (một lầ
 ## 8. Muốn quay lại mô hình cũ
 
 Đặt kho nguồn về public (`gh repo edit lxmtuu/PianoPath --visibility public`) và bỏ hai bước cuối của
-`release.yml` (hoặc để nguyên: thiếu secret thì chúng chỉ cảnh báo). Hai kho vẫn có thể cùng tồn tại —
-nhánh phát hành chỉ là một bản sao tài liệu, không có gì riêng tư.
+`release.yml` (hoặc để nguyên: thiếu secret, hoặc kho đích không tồn tại, thì chúng chỉ cảnh báo — xem §9).
+Hai kho vẫn có thể cùng tồn tại — nhánh phát hành chỉ là một bản sao tài liệu, không có gì riêng tư. Kho
+nguồn **đang public** (từ 2026-10-03): chừng nào còn như vậy, đặt `PUBLIC_REPOSITORY` trỏ vào chính kho này
+là hợp lệ — bước publish tự bỏ qua, và **không bao giờ** ghi vào `main` của kho nguồn nữa.
+
+## 9. Tai nạn 2026-10-03: tài liệu phát hành đè lên `main`
+
+**Chuyện gì đã xảy ra.** Một lượt `pwsh tools/publish_public.ps1 -Tag v1.0.0 -Repository lxmtuu/PianoPath`
+được chạy với kho đích **là chính kho nguồn**. Script ghi tài liệu vào nhánh `release/public-<tag>`, nhưng
+khi tag ấy đang là bản mới nhất của kho (`gh api repos/<kho>/releases/latest`) thì nó *còn* đẩy cùng commit
+đó vào `refs/heads/main` — và với kho nguồn thì `main` là sản phẩm, không phải trang tài liệu. Kết quả:
+`main` mang cây `docs/release` trong khoảng nửa giờ (commit gốc `692841fe`), rồi được cứu lại bằng cách đẩy
+nhánh `fix/avi-4k-freeze` (`138b0af`) lên `main`, sau đó CI thêm lượt làm mới ảnh xem trước.
+
+**Mất gì, không mất gì.** Không mất một dòng mã nào: cây của `main` trước và sau tai nạn **trùng nhau từng
+byte** (`765f5791`). Thứ bị mất là **hai commit merge** của PR #39 và #40 trong lịch sử. Chúng vẫn nằm
+nguyên trên GitHub và đã lấy lại được bằng `git fetch origin <sha đầy đủ>`, rồi `main` được đẩy về đúng
+commit trước tai nạn (`8e6a706c`) — một commit không còn nhánh nào trỏ tới **vẫn fetch được** theo SHA đầy
+đủ, nên "lỡ force-push mất rồi" không có nghĩa là hết đường.
+
+**Hai hàng rào từ nay** (cả hai đều bị `scan_public_release` trong `tools/check_sources.py` kiểm, nên
+không thể gỡ lặng lẽ):
+
+| Chỗ | Hàng rào |
+| --- | --- |
+| `tools/publish_public.ps1` | Nếu kho đích **chính là kho nguồn** (`-Repository` trùng slug của `origin`): script **từ chối chạy** khi `$updateMain` đang bật, và từ chối mọi `-Branch main`/`master`; nhánh `release/public-*` vẫn đẩy được, kèm cảnh báo rằng `main` sẽ không bao giờ bị ghi. |
+| `release.yml`, bước *Publish to the public release repository* | `PUBLIC_REPOSITORY` trùng `github.repository` → bước **không đẩy đi đâu cả** (nhánh tài liệu đã nằm trong kho này rồi) và `$updateMain` bị đặt về `$false`. Kho đích **không tồn tại** → chỉ **cảnh báo**, không làm đỏ lượt phát hành: gói, GitHub Release và nhánh tài liệu đều đã nằm đúng chỗ trong kho này. |
+
+**Ghi chú phát hành nay tự chọn chỗ trỏ.** Nếu `PUBLIC_REPOSITORY` là một kho khác, link CHANGELOG trỏ vào
+`release/public-<tag>` của kho đó; nếu không — hoặc kho đích chính là kho này — chúng trỏ vào chính tag
+trong kho này, vì một liên kết 404 trong ghi chú phát hành là thứ người tải đọc đầu tiên.
