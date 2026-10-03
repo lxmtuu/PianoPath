@@ -14,8 +14,8 @@ dụng tự đọc nó qua `AppInfo.Version` (nhãn phiên bản của menu kh�
 `/DAppVersion=` trong hai README, mục mới nhất của hai tệp này) được `scan_release_version` ghim vào cùng
 một số: quên một bản sao là kiểm tra tĩnh đỏ, không phải một bản phát hành nói hai số phiên bản.
 
-Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README và
-không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP.md`](docs/ROADMAP.md).
+Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README phát hành
+và không được lặp lại ở đây; tài liệu kế hoạch phát triển nội bộ không nằm trong kho phát hành công khai.
 
 ## 1.0.0 — 2026-10-03
 

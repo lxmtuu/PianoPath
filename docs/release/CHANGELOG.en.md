@@ -15,8 +15,8 @@ application reads it back through `AppInfo.Version` (the start-up menu's version
 of these files) are pinned to the same number by `scan_release_version`: forgetting one turns the static
 check red instead of shipping a release that states two versions.
 
-The product's technical limits live in the README's *[Current limitations](README.en.md#current-limitations)*
-section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](docs/ROADMAP.md).
+The product's technical limits live in the release README's *[Current limitations](README.en.md#current-limitations)*
+section and are not repeated here; the internal development roadmap is not part of the public release repository.
 
 ## 1.0.0 — 2026-10-03
 
