@@ -73,6 +73,7 @@ internal sealed partial class PianoStage : FrameworkElement
     private double _pointerX = .5, _pointerY = .5;
     private IReadOnlyList<NoteEvent> _notes = [];
     private IReadOnlyList<double> _beats = [];
+    private IReadOnlyList<int> _downbeatIndices = [];
     private int _beatsPerBar = 4;
     private IReadOnlySet<int> _pressed = new HashSet<int>();
     private double _position, _elapsed, _maxNoteDuration, _pixelsPerDip, _fps;
@@ -179,9 +180,9 @@ internal sealed partial class PianoStage : FrameworkElement
     /// The song's metronome grid, which the sheet layer draws its bar lines on. It is kept apart from
     /// <see cref="SetState"/> because the grid changes when a song is loaded, not on every frame.
     /// </summary>
-    public void SetSheet(IReadOnlyList<double> beats, int beatsPerBar)
+    public void SetSheet(IReadOnlyList<double> beats, int beatsPerBar, IReadOnlyList<int>? downbeatIndices = null)
     {
-        _beats = beats; _beatsPerBar = Math.Max(1, beatsPerBar);
+        _beats = beats; _beatsPerBar = Math.Max(1, beatsPerBar); _downbeatIndices = downbeatIndices ?? [];
         InvalidateVisual();
     }
 
@@ -961,7 +962,7 @@ internal sealed partial class PianoStage : FrameworkElement
     private SheetCache? _sheetCache;
 
     /// <summary>The sheet's working-out for the open song, kept until the notes, the grid, the split or the key change.</summary>
-    private sealed record SheetCache(IReadOnlyList<NoteEvent> Notes, IReadOnlyList<double> Beats, int PerBar, double Split, MusicKey Key, SheetLayer.SheetPlan Plan);
+    private sealed record SheetCache(IReadOnlyList<NoteEvent> Notes, IReadOnlyList<double> Beats, IReadOnlyList<int> Downbeats, int PerBar, double Split, MusicKey Key, SheetLayer.SheetPlan Plan);
 
     /// <summary>
     /// The sheet's own arithmetic — which accidental every note is written with, which short notes share a beam and
@@ -972,9 +973,10 @@ internal sealed partial class PianoStage : FrameworkElement
     {
         var cache = _sheetCache;
         if (cache is null || !ReferenceEquals(cache.Notes, _notes) || !ReferenceEquals(cache.Beats, _beats)
-            || cache.PerBar != _beatsPerBar || Math.Abs(cache.Split - _visual.HandSplitPitch) > .5 || cache.Key != _sheetKey)
-            _sheetCache = cache = new SheetCache(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey,
-                SheetLayer.Plan(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey));
+            || !ReferenceEquals(cache.Downbeats, _downbeatIndices) || cache.PerBar != _beatsPerBar
+            || Math.Abs(cache.Split - _visual.HandSplitPitch) > .5 || cache.Key != _sheetKey)
+            _sheetCache = cache = new SheetCache(_notes, _beats, _downbeatIndices, _beatsPerBar, _visual.HandSplitPitch, _sheetKey,
+                SheetLayer.Plan(_notes, _beats, _beatsPerBar, _visual.HandSplitPitch, _sheetKey, _downbeatIndices));
         return cache.Plan;
     }
 
@@ -989,7 +991,7 @@ internal sealed partial class PianoStage : FrameworkElement
         if (!ReferenceEquals(_sheetKeyNotes, _notes)) { _sheetKeyNotes = _notes; _sheetKey = MusicKey.Infer(_notes); }
         SheetLayer.Draw(dc, SheetLayer.Band(width, hitY, 34), _notes, _position, _visual.HandSplitPitch, _sheetKey,
             _beats, _beatsPerBar, hitY / Math.Max(1, noteSpeed),
-            Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip, SheetPlan());
+            Color.FromRgb(243, 229, 255), ParseColor(_visual.HaloColor, Color.FromRgb(198, 110, 255)), 1, _pixelsPerDip, SheetPlan(), _downbeatIndices);
     }
 
     private void DrawNotes(DrawingContext dc, double width, double hitY, double lane)

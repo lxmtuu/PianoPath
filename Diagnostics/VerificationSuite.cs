@@ -1959,12 +1959,14 @@ internal static partial class VerificationSuite
 
         for (var index = 0; index < PracticeHistory.Capacity + 3; index++)
             PracticeHistory.Record($"Take {index}", "", 1, 1, 1);
-        Assert(PracticeHistory.Runs.Count == PracticeHistory.Capacity && PracticeHistory.Runs[0].Song == $"Take {PracticeHistory.Capacity + 2}",
-            "The history should keep the newest runs and stop growing at its cap.");
+        Assert(PracticeHistory.Runs.Count == PracticeHistory.Capacity && PracticeHistory.Runs[0].Song == $"Take {PracticeHistory.Capacity + 2}"
+                && PracticeHistory.TotalRuns == PracticeHistory.Capacity + 6 && PracticeHistory.Summary().Count == PracticeHistory.Capacity + 5,
+            "The history should retain only the newest runs in memory while all-time totals and per-song summaries cover the append-only archive.");
         File.AppendAllText(PracticeHistory.FilePath, "{ half a line" + Environment.NewLine);
         PracticeHistory.Reload();
-        Assert(PracticeHistory.Runs.Count == PracticeHistory.Capacity && PracticeHistory.Summary().Count > 1,
-            "A damaged line should be skipped while the rest of the history file still reads.");
+        Assert(PracticeHistory.Runs.Count == PracticeHistory.Capacity && PracticeHistory.TotalRuns == PracticeHistory.Capacity + 6
+                && PracticeHistory.Summary().Count == PracticeHistory.Capacity + 5,
+            "A damaged line should be skipped without losing the rest of the archive's streaming aggregates.");
 
         PracticeHistory.Clear();
         for (var index = 0; index < MainWindow.HistoryRows + 3; index++) PracticeHistory.Record($"Row {index}", "", 8, 2, 4);
@@ -1993,7 +1995,7 @@ internal static partial class VerificationSuite
         SetField(window, "_songLabel", hadLabel); SetField(window, "_songPath", hadPath);
         Assert(PracticeHistory.Runs.Count == 0 && host.Children.Count == 0 && empty.Visibility == Visibility.Visible && PracticeHistory.BestFor(hadPath) is null,
             "Clearing the history should leave no runs behind for the next check.");
-        Results.Add("PASS practice history: isolated history file with one line per run, newest-first cap, damaged line tolerated, best take per song, UTF-8 HTML report with the per-song summary, and the stop-the-transport recording path.");
+        Results.Add("PASS practice history: isolated append-only file with one line per run, bounded newest-first in-memory runs plus all-time summaries, damaged line tolerated, best take per song, UTF-8 HTML report with a recent-runs note and the per-song summary, and the stop-the-transport recording path.");
     }
 
     /// <summary>
@@ -2622,7 +2624,9 @@ internal static partial class VerificationSuite
             "The two staves keep separate bars: the natural C♮ in the treble hand does not change how the bass hand is written.");
         Assert(SheetLayer.BarOf(0, [0, 2, 4]) == 0 && SheetLayer.BarOf(1.9, [0, 2, 4]) == 0 && SheetLayer.BarOf(2, [0, 2, 4]) == 1
                 && SheetLayer.BarOf(-1, [0, 2, 4]) == -1 && SheetLayer.BarOf(2.5, []) == -1
-                && SheetLayer.Downbeats([0, .5, 1, 1.5, 2], 4).SequenceEqual([0, 2]) && SheetLayer.Downbeats([0, .5], 0).SequenceEqual([0, .5]),
+                && SheetLayer.Downbeats([0, .5, 1, 1.5, 2], 4).SequenceEqual([0, 2])
+                && SheetLayer.Downbeats([0, .5, 1, 1.5, 2, 2.5, 3], 4, [0, 4]).SequenceEqual([0, 2])
+                && SheetLayer.Downbeats([0, .5], 0).SequenceEqual([0, .5]),
             "A note belongs to the last downbeat at or before it, with nothing before the first one, and the downbeats of a grid are every fourth beat.");
 
         // ---- Beams and flags: how long a beat is, which notes are short enough to carry a flag, and which of
@@ -3255,6 +3259,20 @@ internal static partial class VerificationSuite
             Assert(chips.Any(chip => (chip.Content as string) == "#chopin"), "A tagged song should show its tag as a chip in the library row.");
             search.Text = "";
 
+            // Bad candidates count against the scan cap too; otherwise a directory full of corrupt files can
+            // make RESCAN read arbitrarily far beyond the advertised limit before finding a readable song.
+            var crowded = Path.Combine(folder, "Crowded");
+            Directory.CreateDirectory(crowded);
+            for (var index = 0; index < SongFolderIndex.MaxFiles; index++)
+                File.WriteAllBytes(Path.Combine(crowded, $"{index:D4}-broken.mid"), []);
+            File.WriteAllBytes(Path.Combine(crowded, "zzzz-readable.mid"), CreateFormatOneMidi());
+            Assert(SongFolderIndex.Scan(crowded).Count == 0,
+                "The scan should stop after trying the first 500 candidates, even when all 500 are corrupt.");
+            Directory.Delete(crowded, true);
+            SongFolderIndex.Scan(folder);
+            SongFolderIndex.Tag(etude, "Chopin");
+            Invoke(window, "RefreshLibrarySongs");
+
             // The watcher: the list follows the disk, and a file added while it watches is indexed.
             Invoke(window, "StartSongFolderWatch", folder);
             var watcher = (SongFolderWatcher)Field(window, "_songWatcher")!;
@@ -3484,6 +3502,17 @@ internal static partial class VerificationSuite
                 "A corrupt theme file should be skipped, and a renamed file should arrive under its new name.");
             Assert(store.Delete("user-renamed") && store.Load().Count == 1 && !store.Delete(ShellThemes.ConcertNoirId),
                 "Deleting a theme removes its file, while a built-in theme cannot be deleted.");
+            var keep = store.Save(new UserShellTheme { Name = "Keep This Theme" });
+            Assert(Throws(() => store.Save(new UserShellTheme { Name = "../library" }, keep.Id))
+                    && store.Load().Any(theme => theme.Id == keep.Id),
+                "An invalid rename target must be refused without deleting the existing theme or escaping the theme folder.");
+            var renamed = store.Save(new UserShellTheme { Name = "Renamed Keep" }, keep.Id);
+            Assert(store.Load().Any(theme => theme.Id == renamed.Id) && !store.Load().Any(theme => theme.Id == keep.Id),
+                "A successful rename should publish the replacement before removing the old theme file.");
+            store.Save(new UserShellTheme { Name = "Warm Theme" });
+            Assert(Throws(() => store.Save(new UserShellTheme { Name = "Warm-theme" }))
+                    && store.Load().Count(theme => theme.Id == UserShellThemes.Id("Warm Theme")) == 1,
+                "Distinct names that normalize to the same theme id must not silently hide one another.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
 
@@ -3509,8 +3538,9 @@ internal static partial class VerificationSuite
             Assert(chips is not null && chips.Children.Count == ShellThemes.Everything.Count()
                     && chips.Children.OfType<Button>().Any(chip => (chip.DataContext as string) == resolved.Id),
                 "Both theme chip rows should offer the themes the user made next to the built-in looks.");
-            Assert(UserThemeStore.NameConflict("Concert Noir") is not null && UserThemeStore.NameConflict("Sunset Glow") is null,
-                "Naming a theme after a built-in look should be refused, while any other name stays free.");
+            Assert(UserThemeStore.NameConflict("Concert Noir") is not null && UserThemeStore.NameConflict("Sunset Glow") is null
+                    && UserThemeStore.NameConflict("sunset-glow") is not null && UserThemeStore.NameConflict("../library") is not null,
+                "Built-in names, path-like names and normalized-id collisions should be refused, while the existing theme name stays editable.");
             PianoVisualSettingsStore.UseDirectory(originalDirectory);
             Invoke(window, "RefreshThemeChips");
             var afterRestore = (WrapPanel?)Field(window, "themeChipHost");
@@ -3537,6 +3567,10 @@ internal static partial class VerificationSuite
         studio.NameBox.Text = "   ";
         Assert(!studio.TryBuild(out _, out var nameError) && nameError == "A theme needs a name.",
             "The studio should refuse to save a theme without a name.");
+        studio.NameBox.Text = "../library";
+        Assert(!studio.TryBuild(out _, out var unsafeName)
+                && unsafeName == "Theme names must be 1–32 characters and cannot contain path separators or reserved filename characters.",
+            "The studio should refuse a path-like theme name before it reaches the store.");
         studio.NameBox.Text = "Sunset Glow"; studio.ColourBox(nameof(UserShellTheme.Glow)).Text = "purple";
         Assert(!studio.TryBuild(out _, out var hexError) && hexError == "One of the colours is not a hex value like #1A2B3C.",
             "The studio should refuse to save a colour that is not a hex value.");
@@ -3544,7 +3578,7 @@ internal static partial class VerificationSuite
         Assert(studio.TryBuild(out var result, out var noError) && noError is null && result is not null
                 && result.Backdrop == nameof(BackdropStyle.Obsidian) && UserShellThemes.Build(result).Backdrop == BackdropStyle.Obsidian,
             "A filled-in studio should hand back the theme the fields describe, backdrop family included.");
-        Results.Add("PASS user themes: five seeds derive a readable twenty-token chrome, files round-trip and are repaired or skipped when damaged, an id resolves and applies through the pickers, and the studio refuses a nameless or non-hex theme.");
+        Results.Add("PASS user themes: five seeds derive a readable twenty-token chrome, files round-trip and are repaired or skipped when damaged, unsafe names and normalized-id collisions are refused without losing a theme during replacement, an id resolves and applies through the pickers, and the studio refuses a nameless or non-hex theme.");
     }
 
     /// <summary>

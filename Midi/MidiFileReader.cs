@@ -25,6 +25,8 @@ internal sealed class MidiSong
     public required IReadOnlyList<double> BeatTimes { get; init; }
     /// <summary>Beats per bar from the first time signature (4 when the file has none).</summary>
     public required int BeatsPerBar { get; init; }
+    /// <summary>Optional beat-grid indices that begin measures; empty means the fixed <see cref="BeatsPerBar"/> meter.</summary>
+    public IReadOnlyList<int> DownbeatIndices { get; init; } = [];
     /// <summary>Optional track names (meta event 0x03) keyed by track index.</summary>
     public required IReadOnlyDictionary<int, string> TrackNames { get; init; }
 }
@@ -77,7 +79,7 @@ internal static class NoteTimeline
 internal static class MidiReader
 {
     private const int PercussionChannel = 9;
-    private const int MaxBeats = 250_000;
+    internal const int MaxBeats = 250_000;
 
     /// <summary>One MTrk chunk as it was written: notes and tempo changes in ticks, on that track's own clock.</summary>
     private sealed class Track
@@ -285,7 +287,8 @@ internal static class MidiReader
             var count = pattern
                 ? (endTick + beatTicks - 1) / beatTicks                  // a pattern's grid covers the pattern, no more
                 : endTick / beatTicks + 2;                               // an arrangement keeps the metronome past its last note
-            for (long beat = 0; beat < Math.Min(MaxBeats, count); beat++) beats.Add(offset + clock.Seconds(beat * beatTicks));
+            // Format 2 calls this once per independent pattern; cap the whole file, not each call.
+            for (long beat = 0; beat < count && beats.Count < MaxBeats; beat++) beats.Add(offset + clock.Seconds(beat * beatTicks));
             return;
         }
         var trackEnd = offset + clock.Seconds(endTick);

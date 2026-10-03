@@ -107,7 +107,7 @@ internal sealed class ThemeStudioWindow : Window
     {
         theme = null; errorKey = null;
         var name = _nameBox.Text.Trim();
-        if (name.Length == 0) { errorKey = "A theme needs a name."; return false; }
+        if (UserThemeStore.NameValidationError(name) is { } nameError) { errorKey = nameError; return false; }
         var seeds = new Dictionary<string, string>();
         foreach (var (property, _, _) in Fields)
         {

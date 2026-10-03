@@ -50,7 +50,7 @@ public partial class MainWindow
         if (HistorySummaryLabel is not null)
         {
             var songs = PracticeHistory.Summary();
-            HistorySummaryLabel.Text = songs.Count == 0 ? "" : Loc.F("{0} songs · {1} runs recorded", songs.Count, PracticeHistory.Runs.Count);
+            HistorySummaryLabel.Text = songs.Count == 0 ? "" : Loc.F("{0} songs · {1} runs recorded", songs.Count, PracticeHistory.TotalRuns);
         }
     }
 

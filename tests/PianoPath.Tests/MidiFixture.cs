@@ -60,6 +60,28 @@ internal static class MidiFixture
         return stream.ToArray();
     }
 
+    /// <summary>Two empty format-2 patterns whose combined grid exceeds the reader's whole-file cap.</summary>
+    internal static byte[] LongFormatTwoPatterns(int beatsPerPattern)
+    {
+        var pattern = new List<byte>();
+        WriteVar(pattern, (long)beatsPerPattern * 480);
+        pattern.AddRange([0xFF, 0x2F, 0]);
+        using var stream = new MemoryStream();
+        using var writer = new BinaryWriter(stream);
+        Header(writer, format: 2, tracks: 2, division: 480);
+        Track(writer, pattern.ToArray());
+        Track(writer, pattern.ToArray());
+        return stream.ToArray();
+    }
+
+    private static void WriteVar(List<byte> output, long value)
+    {
+        var bytes = new List<byte> { (byte)(value & 0x7F) };
+        value >>= 7;
+        while (value > 0) { bytes.Insert(0, (byte)((value & 0x7F) | 0x80)); value >>= 7; }
+        output.AddRange(bytes);
+    }
+
     /// <summary>
     /// An SMPTE division: the high byte is a signed frame rate (-25) and the low one the ticks per
     /// frame (40), so a tick is absolute time and a tempo change moves the metronome but not the notes.

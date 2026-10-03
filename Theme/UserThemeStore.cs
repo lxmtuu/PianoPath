@@ -13,6 +13,7 @@ internal sealed class UserThemeStore(string directory)
     internal string Directory { get; } = directory;
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
+    private static readonly char[] InvalidNameCharacters = "<>:\"/\\|?*".Concat(Path.GetInvalidFileNameChars()).Distinct().ToArray();
     private static UserThemeStore? _default;
 
     /// <summary>The store inside the current settings folder; rebuilt when that folder is redirected.</summary>
@@ -40,24 +41,62 @@ internal sealed class UserThemeStore(string directory)
                     if (themes.Any(existing => string.Equals(existing.Id, theme.Id, StringComparison.OrdinalIgnoreCase))) continue;
                     themes.Add(theme);
                 }
-                catch { /* a corrupt file should not hide the remaining themes */ }
+                catch { /* a corrupt theme file should not hide the remaining themes */ }
             }
         }
         catch { }
         return themes;
     }
 
-    /// <summary>Writes a theme, replacing one with the same name. Returns the theme as it will load back.</summary>
-    internal ShellTheme Save(UserShellTheme theme)
+    /// <summary>Writes a theme, replacing its old file only after the new file has been written successfully.</summary>
+    internal ShellTheme Save(UserShellTheme theme, string? replacingId = null)
     {
+        var name = theme.Name?.Trim() ?? "";
+        if (NameValidationError(name) is { } validationError)
+            throw new ArgumentException(Loc.T(validationError), nameof(theme));
         var built = UserShellThemes.Build(theme);
-        System.IO.Directory.CreateDirectory(Directory);
-        var path = Path.Combine(Directory, built.Name + ".json");
+        var existing = Load();
+        var collision = existing.FirstOrDefault(candidate => string.Equals(candidate.Id, built.Id, StringComparison.OrdinalIgnoreCase));
+        if (collision is not null)
+        {
+            var isReplacement = replacingId is not null
+                && string.Equals(collision.Id, replacingId, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(collision.Name, name, StringComparison.OrdinalIgnoreCase);
+            var sameNameOverwrite = replacingId is null && string.Equals(collision.Name, name, StringComparison.OrdinalIgnoreCase);
+            if (!isReplacement && !sameNameOverwrite)
+                throw new InvalidDataException(Loc.T("Another user theme has the same normalized name. Choose a different name."));
+        }
+
+        var old = replacingId is null
+            ? null
+            : existing.FirstOrDefault(candidate => string.Equals(candidate.Id, replacingId, StringComparison.OrdinalIgnoreCase));
+        var path = PathFor(name);
+        var oldPath = old is null ? null : PathFor(old.Name);
         var temp = path + ".tmp";
         var stored = theme;
-        stored.Name = built.Name;
-        File.WriteAllText(temp, JsonSerializer.Serialize(stored, Options));
-        File.Move(temp, path, true);
+        stored.Name = name;
+        try
+        {
+            System.IO.Directory.CreateDirectory(Directory);
+            File.WriteAllText(temp, JsonSerializer.Serialize(stored, Options));
+            File.Move(temp, path, true);
+        }
+        finally
+        {
+            try { if (File.Exists(temp)) File.Delete(temp); } catch { }
+        }
+
+        if (oldPath is not null && !string.Equals(oldPath, path, StringComparison.OrdinalIgnoreCase) && File.Exists(oldPath))
+        {
+            try { File.Delete(oldPath); }
+            catch
+            {
+                // A rename must not lose the old theme if cleanup is blocked. Roll back the new file when
+                // possible, then let the caller report that the rename did not complete.
+                try { if (File.Exists(path)) File.Delete(path); } catch { }
+                throw;
+            }
+        }
         return built;
     }
 
@@ -73,7 +112,7 @@ internal sealed class UserThemeStore(string directory)
         {
             var theme = Load().FirstOrDefault(candidate => string.Equals(candidate.Id, nameOrId, StringComparison.OrdinalIgnoreCase));
             var name = theme?.Name ?? Path.GetFileNameWithoutExtension(nameOrId);
-            var path = Path.Combine(Directory, name + ".json");
+            var path = PathFor(name);
             if (!File.Exists(path)) return false;
             File.Delete(path);
             return true;
@@ -81,15 +120,45 @@ internal sealed class UserThemeStore(string directory)
         catch { return false; }
     }
 
+    /// <summary>Returns an English-key error when a name cannot safely become a Windows file name.</summary>
+    internal static string? NameValidationError(string? name)
+    {
+        var clean = name?.Trim() ?? "";
+        if (clean.Length == 0) return "A theme needs a name.";
+        if (clean.Length > 32 || clean is "." or ".." || clean[^1] is '.' or ' '
+            || clean.Any(character => char.IsControl(character) || InvalidNameCharacters.Contains(character)))
+            return "Theme names must be 1–32 characters and cannot contain path separators or reserved filename characters.";
+        return null;
+    }
+
     /// <summary>
     /// The message key to show when a theme may not be named <paramref name="name"/>, or null when the name
-    /// is free. A name that collides rewrites the theme of that name instead, so only the built-ins — which
-    /// cannot be rewritten — are refused here.
+    /// is free. A name that exactly matches an existing user theme replaces it; a different name that would
+    /// normalize to the same theme id is refused instead of silently resolving to the other file.
     /// </summary>
-    internal static string? NameConflict(string name)
+    internal static string? NameConflict(string name, string? replacingId = null)
     {
-        if (ShellThemes.All.Any(theme => string.Equals(theme.Name, name?.Trim(), StringComparison.OrdinalIgnoreCase)))
+        if (NameValidationError(name) is { } validationError) return validationError;
+        if (ShellThemes.All.Any(theme => string.Equals(theme.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)))
             return "“{0}” is a built-in theme. Choose another name.";
-        return null;
+
+        var id = UserShellThemes.Id(name);
+        var collision = Default.Load().FirstOrDefault(theme => string.Equals(theme.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (collision is null) return null;
+        if (string.Equals(collision.Name, name.Trim(), StringComparison.OrdinalIgnoreCase)
+            && (replacingId is null || string.Equals(collision.Id, replacingId, StringComparison.OrdinalIgnoreCase)))
+            return null;
+        return "Another user theme has the same normalized name. Choose a different name.";
+    }
+
+    private string PathFor(string name)
+    {
+        if (NameValidationError(name) is { } error) throw new ArgumentException(Loc.T(error), nameof(name));
+        var directory = Path.GetFullPath(Directory);
+        var path = Path.GetFullPath(Path.Combine(directory, name.Trim() + ".json"));
+        var prefix = Path.EndsInDirectorySeparator(directory) ? directory : directory + Path.DirectorySeparatorChar;
+        if (!path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The theme path must remain inside the themes folder.");
+        return path;
     }
 }

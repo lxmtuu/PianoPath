@@ -53,7 +53,7 @@ internal static class SongFolderIndex
 {
     internal const int Version = 1;
 
-    /// <summary>Files one scan will read; a folder deeper than this is indexed by the first part of it.</summary>
+    /// <summary>Song-file candidates one scan will attempt; unreadable candidates count toward the limit too.</summary>
     internal const int MaxFiles = 500;
 
     /// <summary>Folder levels below the chosen one that a scan walks (<c>0</c> is the chosen folder itself).</summary>
@@ -130,7 +130,7 @@ internal static class SongFolderIndex
 
     /// <summary>
     /// Every readable song under <paramref name="folder"/> up to <see cref="MaxDepth"/> levels and
-    /// <see cref="MaxFiles"/> files, with the songs of the previous scan reused when their file did not
+    /// <see cref="MaxFiles"/> song-file candidates, with the songs of the previous scan reused when their file did not
     /// change. Pass <paramref name="force"/> to re-read every file (the RESCAN button).
     /// </summary>
     internal static IReadOnlyList<SongFile> Scan(string folder, bool force = false)
@@ -139,9 +139,11 @@ internal static class SongFolderIndex
         _folder = string.IsNullOrWhiteSpace(folder) ? "" : Path.GetFullPath(folder);
         var previous = Songs_.ToDictionary(song => song.Path, StringComparer.OrdinalIgnoreCase);
         var found = new List<SongFile>();
+        var attempted = 0;
         foreach (var path in Walk(_folder))
         {
-            if (found.Count >= MaxFiles) break;
+            if (attempted >= MaxFiles) break;
+            attempted++; // unreadable candidates count too, so a folder of corrupt files cannot bypass the cap
             var full = Path.GetFullPath(path);
             try
             {
@@ -252,12 +254,12 @@ internal static class SongFolderIndex
         {
             var (directory, depth) = queue.Dequeue();
             string[] files;
-            try { files = Directory.GetFiles(directory); }
+            try { files = Directory.GetFiles(directory).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray(); }
             catch { continue; }
             foreach (var file in files) if (IsSong(file)) yield return file;
             if (depth >= MaxDepth) continue;
             string[] children;
-            try { children = Directory.GetDirectories(directory); }
+            try { children = Directory.GetDirectories(directory).OrderBy(path => path, StringComparer.OrdinalIgnoreCase).ToArray(); }
             catch { continue; }
             foreach (var child in children) queue.Enqueue((child, depth + 1));
         }

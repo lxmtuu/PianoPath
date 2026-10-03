@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using Xunit;
 
 namespace PianoPath.Tests;
@@ -146,6 +147,146 @@ public class MusicXmlReaderTests
         Assert.Equal("Right", score.TrackNames[0]);
         Assert.Equal("Left", score.TrackNames[1]);
         Assert.Equal(60, score.HandSplitPitch);
+    }
+
+    [Fact]
+    public void A_tempo_change_inside_a_measure_only_changes_time_after_its_position()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction><sound tempo="60"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration></note>
+      <direction><sound tempo="120"/></direction>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration></note>
+    </measure>
+    <measure number="2"><note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration></note></measure>
+  </part>
+</score-partwise>
+""");
+
+        Assert.Equal("60@0+1/t0", Describe(score.Notes[0]));
+        Assert.Equal("62@1+0.5/t0", Describe(score.Notes[1]));
+        Assert.Equal("64@2.5+0.5/t0", Describe(score.Notes[2]));
+        Assert.Equal(new[] { 0, 4 }, score.DownbeatIndices.ToArray());
+    }
+
+    [Fact]
+    public void Tempo_marks_in_one_part_apply_to_simultaneous_parts()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Right</part-name></score-part><score-part id="P2"><part-name>Left</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+    <direction><sound tempo="60"/></direction>
+    <note><pitch><step>C</step><octave>5</octave></pitch><duration>1</duration></note>
+  </measure></part>
+  <part id="P2"><measure number="1"><attributes><divisions>1</divisions></attributes>
+    <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration></note>
+  </measure></part>
+</score-partwise>
+""");
+
+        Assert.Equal("48@0+1/t1", Describe(score.Notes[0]));
+        Assert.Equal("72@0+1/t0", Describe(score.Notes[1]));
+    }
+
+    [Fact]
+    public void A_divisions_change_rebases_subsequent_durations_without_moving_the_cursor()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>2</divisions></attributes>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration></note>
+    <attributes><divisions>4</divisions></attributes>
+    <note><pitch><step>D</step><octave>4</octave></pitch><duration>4</duration></note>
+  </measure></part>
+</score-partwise>
+""");
+
+        Assert.Equal("60@0+0.5/t0", Describe(score.Notes[0]));
+        Assert.Equal("62@0.5+0.5/t0", Describe(score.Notes[1]));
+    }
+
+    [Fact]
+    public void A_metronome_mark_converts_its_written_beat_unit_and_dots_to_quarter_bpm()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>2</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+    <direction><direction-type><metronome><beat-unit>eighth</beat-unit><per-minute>120</per-minute></metronome></direction-type></direction>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration></note>
+    <direction><direction-type><metronome><beat-unit>quarter</beat-unit><beat-unit-dot/><per-minute>80</per-minute></metronome></direction-type></direction>
+    <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration></note>
+  </measure></part>
+</score-partwise>
+""");
+
+        Assert.Equal(1, score.Notes[0].Duration, 9);
+        Assert.Equal(.5, score.Notes[1].Duration, 9);
+        Assert.Equal(1, score.BeatTimes[1], 9);
+        Assert.Equal(1.5, score.BeatTimes[2], 9);
+    }
+
+    [Fact]
+    public void Mixed_meter_preserves_each_measure_start_for_the_sheet_and_metronome()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>4</duration></note>
+    </measure>
+    <measure number="2">
+      <attributes><time><beats>3</beats><beat-type>4</beat-type></time></attributes>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>3</duration></note>
+    </measure>
+  </part>
+</score-partwise>
+""");
+
+        Assert.Equal(4, score.BeatsPerBar);
+        Assert.Equal(new[] { 0, 4 }, score.DownbeatIndices.ToArray());
+        Assert.Equal(4, score.ToSong().BeatsPerBar);
+        Assert.True(score.DownbeatIndices.SequenceEqual(score.ToSong().DownbeatIndices));
+    }
+
+    [Fact]
+    public void Compressed_scores_are_rejected_when_the_decompressed_xml_exceeds_the_limit()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"keyflow-tests-oversized-{Guid.NewGuid():N}.mxl");
+        try
+        {
+            using (var archive = ZipFile.Open(path, ZipArchiveMode.Create))
+            using (var writer = new StreamWriter(archive.CreateEntry("oversized.musicxml").Open()))
+                writer.Write(new string(' ', MusicXmlReader.MaxXmlCharacters + 1));
+
+            Assert.Throws<InvalidDataException>(() => MusicXmlReader.ReadCompressed(path));
+        }
+        finally { if (File.Exists(path)) File.Delete(path); }
+    }
+
+    [Fact]
+    public void A_score_that_would_expand_to_too_many_beats_is_refused_safely()
+    {
+        Assert.Throws<InvalidDataException>(() => MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1"><attributes><divisions>1</divisions></attributes>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>300000</duration></note>
+  </measure></part>
+</score-partwise>
+"""));
     }
 
     [Fact]
