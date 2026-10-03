@@ -78,7 +78,7 @@ public class SfzReaderTests : IDisposable
         w.Write((ushort)bits);          // wValidBitsPerSample
         w.Write(4u);                    // dwChannelMask
         w.Write((ushort)(bits == 32 ? 3 : 1)); // SubFormat GUID, first two bytes = the real format tag
-        w.Write((ushort)0); w.Write((ushort)0x10); w.Write((ushort)0x80);
+        w.Write((ushort)0); w.Write((ushort)0); w.Write((ushort)0x10); w.Write((ushort)0x80);
         w.Write((byte)0); w.Write((byte)0xaa); w.Write((byte)0); w.Write((byte)0x38); w.Write((byte)0x9b); w.Write((byte)0x71);
         w.Write("data"u8.ToArray()); w.Write((uint)dataSize);
         for (var i = 0; i < frames; i++)
