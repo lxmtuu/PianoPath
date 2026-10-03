@@ -46,8 +46,9 @@ internal static class WavReader
             {
                 format = reader.ReadUInt16(); channels = reader.ReadUInt16(); sampleRate = (int)reader.ReadUInt32();
                 reader.ReadUInt32(); reader.ReadUInt16(); bits = reader.ReadUInt16();
-                // WAVE_FORMAT_EXTENSIBLE wraps the real format in the first two bytes of its GUID.
-                if (format == 0xFFFE && size >= 26) { reader.ReadUInt16(); reader.ReadUInt32(); format = reader.ReadUInt16(); }
+                // WAVE_FORMAT_EXTENSIBLE wraps the real format in the first two bytes of its SubFormat
+                // GUID, which sits after cbSize (2), wValidBitsPerSample (2) and dwChannelMask (4).
+                if (format == 0xFFFE && size >= 26) { reader.ReadUInt16(); reader.ReadUInt16(); reader.ReadUInt32(); format = reader.ReadUInt16(); }
             }
             else if (id == 0x61746164) // "data"
             {

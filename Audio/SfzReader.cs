@@ -68,6 +68,9 @@ internal static class SfzReader
         var master = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var group = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var region = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        // Opcodes under headers this parser does not model (<curve>, <effect>, SFZ v2 <sample>…) land
+        // here so they can never leak into the next real region or into the control settings.
+        var discard = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var scope = control; var inRegion = false;
         var regions = new List<SfzRegion>();
         var cache = new Dictionary<string, WavData>(StringComparer.OrdinalIgnoreCase);
@@ -94,12 +97,12 @@ internal static class SfzReader
                 FinishRegion();
                 switch (key)
                 {
-                    case "control": case "curve": case "effect": scope = control; break;
+                    case "control": scope = control; break;
                     case "global": global.Clear(); master.Clear(); group.Clear(); scope = global; break;
                     case "master": master.Clear(); group.Clear(); scope = master; break;
                     case "group": group.Clear(); scope = group; break;
                     case "region": inRegion = true; scope = region; break;
-                    default: scope = region; break; // unknown header: swallow its opcodes harmlessly
+                    default: discard.Clear(); scope = discard; break;
                 }
             }
             else scope[key] = value;
@@ -129,7 +132,9 @@ internal static class SfzReader
             if (line.StartsWith("#define", StringComparison.OrdinalIgnoreCase))
             {
                 var parts = line.Split((char[]?)null, 3, StringSplitOptions.RemoveEmptyEntries);
-                if (parts.Length == 3)
+                // The spec requires macro names to start with $; replacing an unprefixed word would
+                // rewrite matching letters inside ordinary opcodes, so such a define is ignored.
+                if (parts.Length == 3 && parts[1].StartsWith('$'))
                 {
                     defines.RemoveAll(pair => pair.Key == parts[1]);
                     defines.Add(new KeyValuePair<string, string>(parts[1], parts[2]));
