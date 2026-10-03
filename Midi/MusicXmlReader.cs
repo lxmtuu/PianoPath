@@ -456,9 +456,23 @@ internal static class MusicXmlReader
         return (top + bottom) / 2;
     }
 
+    private static int? Pitch(XElement note)
+    {
+        var pitch = note.Element(note.Name.Namespace + "pitch");
+        if (pitch is null) return null;
+        var step = Text(pitch.Element(pitch.Name.Namespace + "step")).Trim().ToUpperInvariant();
+        if (!StepSemitones.TryGetValue(step, out var semitone)) return null;
+        var octave = Int(pitch.Element(pitch.Name.Namespace + "octave"), 4);
+        var alter = (int)Math.Round(Double(pitch.Element(pitch.Name.Namespace + "alter"), 0));
+        var value = 12 * (octave + 1) + semitone + alter;
+        return value is >= 0 and <= 127 ? value : null;
+    }
+
     private static string Text(XElement? element) => element?.Value?.Trim() ?? "";
     private static int Int(XElement? element, int fallback) =>
         int.TryParse(Text(element), System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : fallback;
+    private static double Double(XElement? element, double fallback) =>
+        double.TryParse(Text(element), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var value) ? value : fallback;
     private static string ReadBoundedText(Stream stream)
     {
         using var reader = new StreamReader(stream);
