@@ -2,7 +2,7 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:PianoPath"
-        Title="Keyflow — Piano VFX" local:Loc.Localize="True" Icon="pack://application:,,,/Assets/KeyflowLogo.png" Height="920" Width="1600" MinHeight="700" MinWidth="1080"
+        Title="Keyflow — Piano VFX" local:Loc.Localize="True" Height="920" Width="1600" MinHeight="700" MinWidth="1080"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}" WindowStyle="None" ResizeMode="NoResize"
         Foreground="{StaticResource TextBrush}" FontFamily="Segoe UI" WindowState="Maximized"
         PreviewKeyDown="Window_KeyDown" KeyUp="Window_KeyUp" MouseMove="Window_MouseMove" Deactivated="Window_Deactivated" Closed="Window_Closed" AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
@@ -27,7 +27,7 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,16,0">
                     <Border Width="40" Height="40" CornerRadius="13" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#40FFFFFF" BorderThickness="1">
-                        <Image Source="{StaticResource KeyflowLogoImage}" Width="36" Height="36" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Path Data="{StaticResource IconLogo}" Fill="White" Width="21" Height="21" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
@@ -554,131 +554,38 @@
             </Border>
         </Grid>
 
-        <!-- ===================== MAIN MENU (cosmic piano shell) =====================
-             A GPU pixel shader paints the moving nebula and star field; keyboard artwork,
-             language choices and session actions remain native WPF controls above it. -->
+        <!-- ===================== MAIN MENU (concert shell) =====================
+             The opening screen is the concert itself: an animated acoustic chamber backdrop,
+             the Steinway concert grand brand, primary performance actions, a live theme picker and a
+             read-out of the stage look. Every animation is driven by the shared frame clock. -->
         <Grid x:Name="MainMenuOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="30">
             <local:ChromeBackdrop x:Name="MenuBackdrop"/>
-            <Border Background="{StaticResource ConcertVeilBrush}" IsHitTestVisible="False"/>
-            <Grid Margin="56,28,56,34">
-                <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <Grid x:Name="MenuBrand" Grid.Row="0" Margin="8,0,8,0">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        <Border Width="48" Height="48" CornerRadius="15" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#66FFFFFF" BorderThickness="1">
-                            <Image Source="{StaticResource KeyflowLogoImage}" Width="44" Height="44" Stretch="Uniform" RenderOptions.BitmapScalingMode="HighQuality" SnapsToDevicePixels="True" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+            <Border Background="{StaticResource ConcertVeilBrush}"/>
+            <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.4 · Concert Grand Edition" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,42"/>
+            <TextBlock x:Name="MainMenuCopyrightLabel" Text="© 2026 Yami · Neyu — Contributor: Jin" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="9.5" Opacity=".85" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,26"/>
+            <Grid HorizontalAlignment="Left" VerticalAlignment="Center" Margin="96,0,40,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel x:Name="MenuActionStack" Width="388" VerticalAlignment="Center">
+                    <StackPanel x:Name="MenuBrand" Orientation="Horizontal" Margin="8,0,0,26">
+                        <Border Width="62" Height="62" CornerRadius="18" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#55FFFFFF" BorderThickness="1.5">
+                            <Path Data="{StaticResource IconLogo}" Fill="White" Width="32" Height="32" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
-                        <StackPanel Margin="13,0,0,0" VerticalAlignment="Center">
-                            <TextBlock Text="Keyflow" FontSize="19" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                            <TextBlock Text="COSMIC PIANO STUDIO" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="8.5" Margin="1,3,0,0"/>
-                        </StackPanel>
-                    </StackPanel>
-                    <Border Grid.Column="1" Padding="12,8" CornerRadius="14" Background="#4211172C" BorderBrush="#383A4E82" BorderThickness="1" VerticalAlignment="Center">
-                        <StackPanel Orientation="Horizontal">
-                            <Ellipse Width="7" Height="7" Fill="{DynamicResource Accent2Brush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                            <TextBlock Text="NEBULA VISUAL ENGINE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="8.5" VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-                </Grid>
-
-                <Grid Grid.Row="1" Margin="0,22,0,20">
-                    <Grid.ColumnDefinitions><ColumnDefinition Width="370"/><ColumnDefinition Width="*"/><ColumnDefinition Width="340"/></Grid.ColumnDefinitions>
-                    <StackPanel x:Name="MenuActionStack" Grid.Column="0" Width="370" VerticalAlignment="Center">
-                        <TextBlock x:Name="MenuHeroTitle" Text="Make the night your instrument." local:Loc.Localize="True" FontSize="35" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" LineHeight="43" MaxWidth="370"/>
-                        <TextBlock x:Name="MenuHeroDescription" Text="A living piano stage, wrapped in violet nebulae and drifting stardust." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="13" LineHeight="20" TextWrapping="Wrap" MaxWidth="350" Margin="0,9,0,24"/>
-                        <Button x:Name="MenuPlayButton" Content="Perform &amp; Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Open a MIDI score or perform live on the concert stage (Space)" local:Loc.Localize="True"/>
-                        <Button x:Name="MenuQuickAdjustButton" Content="Quick adjustments" Style="{StaticResource MenuCardButtonStyle}" Margin="0,10,0,0" Click="MainMenuQuickAdjust_Click" ToolTip="Quickly adjust common stage controls; use Stage Design Studio for everything else." local:Loc.Localize="True"/>
-                        <StackPanel x:Name="MenuLinkStack" Margin="4,18,0,0">
-                            <Button Content="Piano &amp; Audio Setup" Tag="{StaticResource IconAudio}" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Download Salamander Grand, adjust effects, output and latency" local:Loc.Localize="True"/>
-                            <Button Content="MIDI Devices" Tag="{StaticResource IconMidi}" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuMidi_Click" ToolTip="Choose a MIDI keyboard or output device" local:Loc.Localize="True"/>
-                            <Button Content="Keyboard &amp; Shortcuts" Tag="{StaticResource IconKeyboard}" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuShortcuts_Click" ToolTip="Every shortcut the stage listens to (F1)" local:Loc.Localize="True"/>
-                            <Button Content="About Keyflow Cosmic Nocturne" Tag="{StaticResource IconInfo}" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
-                            <Button Content="Exit Keyflow" Tag="{StaticResource IconExit}" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- Suspended glass keys and falling light bars anchor the cosmic piano illustration. -->
-                    <Grid x:Name="MenuHeroArt" Grid.Column="1" ClipToBounds="True" IsHitTestVisible="False">
-                        <Viewbox MaxWidth="560" MaxHeight="610" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center">
-                            <Canvas Width="540" Height="600">
-                                <Ellipse Width="510" Height="510" Canvas.Left="15" Canvas.Top="28" Stroke="{DynamicResource Accent2Brush}" StrokeThickness="1" Opacity=".12"/>
-                                <Ellipse Width="430" Height="430" Canvas.Left="55" Canvas.Top="68" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1" StrokeDashArray="1,6" Opacity=".17"/>
-                                <Ellipse Width="340" Height="340" Canvas.Left="100" Canvas.Top="112" Stroke="{DynamicResource Accent2Brush}" StrokeThickness="1" Opacity=".16"/>
-                                <Ellipse Width="245" Height="245" Canvas.Left="148" Canvas.Top="160" Fill="{DynamicResource AccentSoftBrush}" Stroke="{DynamicResource Accent2Brush}" StrokeThickness="1" Opacity=".48"/>
-                                <Ellipse Width="190" Height="190" Canvas.Left="175" Canvas.Top="187" Fill="{DynamicResource BackdropTopBrush}" Opacity=".48"/>
-                                <Border Width="21" Height="202" Canvas.Left="143" Canvas.Top="115" CornerRadius="11" Opacity=".66" Background="{DynamicResource AccentGradientBrush}"/>
-                                <Border Width="20" Height="144" Canvas.Left="211" Canvas.Top="198" CornerRadius="10" Opacity=".76" Background="{DynamicResource AccentBrush}"/>
-                                <Border Width="21" Height="230" Canvas.Left="283" Canvas.Top="88" CornerRadius="11" Opacity=".72" Background="{DynamicResource Accent2Brush}"/>
-                                <Border Width="18" Height="118" Canvas.Left="356" Canvas.Top="217" CornerRadius="9" Opacity=".74" Background="{DynamicResource GlowBrush}"/>
-                                <Border Width="17" Height="167" Canvas.Left="397" Canvas.Top="153" CornerRadius="9" Opacity=".58" Background="{DynamicResource MoteBrush}"/>
-                                <Ellipse Width="6" Height="6" Canvas.Left="101" Canvas.Top="207" Fill="{DynamicResource AccentBrush}"/>
-                                <Ellipse Width="4" Height="4" Canvas.Left="410" Canvas.Top="111" Fill="{DynamicResource Accent2Brush}"/>
-                                <Ellipse Width="5" Height="5" Canvas.Left="347" Canvas.Top="57" Fill="{DynamicResource MoteBrush}"/>
-                                <Ellipse Width="4" Height="4" Canvas.Left="180" Canvas.Top="68" Fill="{DynamicResource GlowBrush}"/>
-                                <Ellipse Width="3" Height="3" Canvas.Left="455" Canvas.Top="265" Fill="{DynamicResource Accent2Brush}"/>
-                                <Border Width="476" Height="132" Canvas.Left="32" Canvas.Top="414" CornerRadius="12" Background="#E8101220" BorderBrush="#7A9298C5" BorderThickness="1" Padding="8">
-                                    <Grid>
-                                        <UniformGrid Columns="14">
-                                            <Border Background="#EFE1CD" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F4E8D7" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                            <Border Background="#E7D8C4" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F4E8D7" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                            <Border Background="#EDE0CC" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F7EBDD" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                            <Border Background="#E7D8C4" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F4E8D7" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                            <Border Background="#EDE0CC" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F7EBDD" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                            <Border Background="#E7D8C4" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F4E8D7" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                            <Border Background="#EDE0CC" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/><Border Background="#F7EBDD" BorderBrush="#886A728A" BorderThickness="1,0,1,3"/>
-                                        </UniformGrid>
-                                        <Canvas>
-                                            <Border Width="21" Height="70" Canvas.Left="22" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="55" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="121" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="154" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="187" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="253" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="286" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="352" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="385" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                            <Border Width="21" Height="70" Canvas.Left="418" Canvas.Top="0" CornerRadius="0,0,3,3" Background="#F20A0A12" BorderBrush="#778183A6" BorderThickness="1"/>
-                                        </Canvas>
-                                    </Grid>
+                        <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Keyflow" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                                <Border Margin="10,0,0,0" Padding="7,2" CornerRadius="5" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center">
+                                    <TextBlock Text="CONCERT GRAND" local:Loc.Localize="True" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
                                 </Border>
-                                <Path Data="M 18,3 L 34,8 L 34,31 C 34,39 20,41 20,32 C 20,26 27,23 30,25 L 30,14 L 18,10 L 18,33 C 18,41 4,43 4,34 C 4,28 11,25 14,27 L 14,5 Z" Canvas.Left="425" Canvas.Top="304" Width="38" Height="43" Stretch="Fill" Fill="#FFE2A2"/>
-                                <TextBlock Text="STARDUST IN MOTION" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="8.5" Canvas.Left="182" Canvas.Top="563"/>
-                            </Canvas>
-                        </Viewbox>
-                    </Grid>
-
-                    <StackPanel x:Name="MenuSidePanel" Grid.Column="2" Width="340" VerticalAlignment="Center" Margin="24,0,0,0">
-                        <Border Style="{StaticResource GlassCardStyle}">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconTheme}" Fill="{DynamicResource Accent2Brush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="COSMIC COLORWAYS" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                </StackPanel>
-                                <TextBlock x:Name="MenuThemeBlurb" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,8" TextWrapping="Wrap"/>
-                                <StackPanel x:Name="MenuThemeHost" Margin="0,2,0,0"/>
-                                <Border Height="1" Background="{DynamicResource HairlineBrush}" Margin="0,6,0,12"/>
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconMotion}" Fill="{DynamicResource AccentBrush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="ACTIVE STAGE LOOK" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                </StackPanel>
-                                <TextBlock x:Name="MenuPresetLabel" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,12" TextWrapping="Wrap"/>
-                                <WrapPanel>
-                                    <Button Content="Stage Design Studio" Tag="{StaticResource IconSliders}" Style="{StaticResource AccentIconButtonStyle}" Click="MainMenuDesign_Click" Padding="12,7" Margin="0,0,8,0" ToolTip="Open the full stage settings dock" local:Loc.Localize="True"/>
-                                    <Button Content="Try a look" Tag="{StaticResource IconSparkle}" Style="{StaticResource IconTextButtonStyle}" Click="MenuPresetShuffle_Click" Padding="10,7" ToolTip="Cycle through the built-in stage presets" local:Loc.Localize="True"/>
-                                </WrapPanel>
                             </StackPanel>
-                        </Border>
-                        <Border Style="{StaticResource GlassCardStyle}" Margin="0,14,0,0">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal">
-                                    <Path Data="{StaticResource IconInfo}" Fill="{DynamicResource Accent2Brush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                    <TextBlock Text="INTERFACE LANGUAGE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                </StackPanel>
-                                <TextBlock Style="{StaticResource MutedTextStyle}" Margin="0,6,0,8" TextWrapping="Wrap" Text="Every menu, dock page and dialog follows this choice — no restart, and nothing you saved changes." local:Loc.Localize="True"/>
-                                <WrapPanel x:Name="MenuLanguageHost"/>
+                            <StackPanel Orientation="Horizontal" Margin="2,5,0,0">
+                                <Path Data="{StaticResource IconSparkle}" Fill="{DynamicResource AccentBrush}" Width="11" Height="11" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <TextBlock Text="PIANO PERFORMANCE &amp; VFX STUDIO" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="9"/>
                             </StackPanel>
-                        </Border>
-                        <TextBlock x:Name="MenuQuoteText" Style="{StaticResource MenuQuoteStyle}" Margin="10,15,0,0" Text="The piano keys are black and white, but they sound like a million colors in your mind." local:Loc.Localize="True"/>
+                        </StackPanel>
                     </StackPanel>
                     <Button x:Name="MenuPlayButton" Content="Perform &amp; Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Open a MIDI score or perform live on the concert stage (Space)" local:Loc.Localize="True"/>
                     <Button x:Name="MenuQuickAdjustButton" Content="Quick adjustments" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuQuickAdjust_Click" ToolTip="Quickly adjust common stage controls; use Stage Design Studio for everything else." local:Loc.Localize="True"/>

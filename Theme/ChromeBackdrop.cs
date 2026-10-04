@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Windows;
 using System.Windows.Media;
 
@@ -7,9 +6,12 @@ namespace PianoPath;
 /// <summary>
 /// The animated backdrop behind the interface chrome.
 ///
-/// Nebula themes use a procedural WPF pixel shader for their animated clouds and stardust. The three
-/// legacy concert themes keep their acoustic/obsidian/imperial vector backdrop as a fallback and as
-/// their native look. The animation stops completely when hidden or when the motion level is Off.
+/// Designed with a prestigious piano concert hall aesthetic: deep acoustic chamber gradient,
+/// subtle harmonic resonance ribbons that evoke acoustic standing waves in a grand auditorium,
+/// and delicate microscopic warm stardust motes drifting with organic fluid motion.
+///
+/// Everything is drawn with cached, frozen brushes so a full-screen backdrop costs minimal draw calls,
+/// and the animation stops completely when hidden or when the motion level is Off.
 /// </summary>
 internal sealed class ChromeBackdrop : FrameworkElement
 {
@@ -23,7 +25,6 @@ internal sealed class ChromeBackdrop : FrameworkElement
     private Random _random = new(FieldSeed);
 
     private ShellTheme _theme = ShellThemes.Default;
-    private GalaxyShaderEffect? _galaxyShader;
     private double _motion = 1;
     private double _density = 1;
     private double _time;
@@ -46,49 +47,6 @@ internal sealed class ChromeBackdrop : FrameworkElement
     internal ShellTheme Theme => _theme;
 
     /// <summary>
-    /// Enables the time-driven GPU nebula used by the startup screen. The existing WPF drawing remains
-    /// underneath as a deterministic fallback for unsupported shader tiers and high-contrast mode.
-    /// </summary>
-    internal void EnableGalaxyShader()
-    {
-        if (_galaxyShader is not null) return;
-        try
-        {
-            if (!RenderCapability.IsPixelShaderVersionSupported(3, 0))
-            {
-                Trace.WriteLine("Keyflow: WPF pixel shader 3.0 is unavailable; using the vector backdrop instead.");
-                return;
-            }
-            _galaxyShader = new GalaxyShaderEffect();
-            UpdateShaderPalette();
-        }
-        catch (Exception error)
-        {
-            _galaxyShader = null;
-            Effect = null;
-            Trace.WriteLine($"Keyflow: the WPF nebula shader could not be enabled; using the vector backdrop instead: {error.Message}");
-        }
-    }
-
-    private void UpdateShaderPalette()
-    {
-        if (_galaxyShader is null) return;
-        // Keep the legacy concert backdrops intact; the pixel shader belongs to Nebula themes only.
-        if (_theme.Id == ShellThemes.HighContrastId || _theme.Backdrop != BackdropStyle.Nebula)
-        {
-            Effect = null;
-            return;
-        }
-        _galaxyShader.PrimaryColor = _theme.Accent;
-        _galaxyShader.SecondaryColor = _theme.AccentAlt;
-        _galaxyShader.Time = _time;
-        _galaxyShader.Aspect = ActualHeight > 1 ? ActualWidth / ActualHeight : 16.0 / 9.0;
-        _galaxyShader.Intensity = .96;
-        _galaxyShader.Density = _density;
-        Effect = _galaxyShader;
-    }
-
-    /// <summary>
     /// Publishes the theme, motion budget ("Off", "Calm", "Full") and particle density (0-200 %)
     /// from the visual settings. Off parks the element on a single static frame.
     /// </summary>
@@ -98,7 +56,6 @@ internal sealed class ChromeBackdrop : FrameworkElement
         _motion = motion switch { "Calm" => .5, "Off" => 0, _ => 1 };
         _density = Math.Clamp(density, 0, 200) / 100;
         _skyKey = ""; _vignette = null;
-        UpdateShaderPalette();
         SyncFrameDemand();
         RebuildField();
         InvalidateVisual();
@@ -132,7 +89,6 @@ internal sealed class ChromeBackdrop : FrameworkElement
     {
         _random = new Random(FieldSeed);
         _time = 0;
-        if (_galaxyShader is not null) _galaxyShader.Time = 0;
         RebuildField();
         InvalidateVisual();
     }
@@ -141,8 +97,7 @@ internal sealed class ChromeBackdrop : FrameworkElement
     {
         if (!_wantsFrames) return;
         _time += delta * (.35 + _motion * .65);
-        if (_galaxyShader is not null) _galaxyShader.Time = _time;
-        if (_galaxyShader is null || !ReferenceEquals(Effect, _galaxyShader)) Advance(_time, delta);
+        Advance(_time, delta);
         InvalidateVisual();
     }
 
@@ -167,14 +122,13 @@ internal sealed class ChromeBackdrop : FrameworkElement
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
     {
         base.OnRenderSizeChanged(sizeInfo);
-        RebuildField(); UpdateShaderPalette(); SyncFrameDemand();
+        RebuildField(); SyncFrameDemand();
     }
 
     /// <summary>Scatters the particle field for the current size; called on resize and on a theme or density change.</summary>
     private void RebuildField()
     {
         _motes.Clear();
-        if (_galaxyShader is not null && ReferenceEquals(Effect, _galaxyShader)) return;
         var width = ActualWidth; var height = ActualHeight;
         if (width < 2 || height < 2) return;
         var count = (int)ParticleCount;
@@ -201,13 +155,6 @@ internal sealed class ChromeBackdrop : FrameworkElement
     {
         var width = ActualWidth; var height = ActualHeight;
         if (width < 2 || height < 2) return;
-        if (_galaxyShader is not null && ReferenceEquals(Effect, _galaxyShader))
-        {
-            // Keep only a solid, opaque input surface: the pixel shader paints the Nebula backdrop itself.
-            // Skipping the legacy wave/mote draw loop avoids doing duplicate per-frame work on the CPU.
-            dc.DrawRectangle(Brushes.White, null, new Rect(0, 0, width, height));
-            return;
-        }
         dc.DrawDrawing(Sky(width, height));
         DrawAcousticWaves(dc, width, height);
         DrawMotes(dc, width, height);

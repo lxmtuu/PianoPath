@@ -102,7 +102,7 @@ quên cập nhật tài liệu.
 - Thẻ phím tắt liệt kê `A · B · ×` cho vòng lặp A–B: đây là **ba nút trên thanh thời gian**, không phải
   phím tắt toàn cục (các phím chữ đã dành cho bàn phím đàn). Nhãn được viết ở dạng thao tác để không
   gây hiểu nhầm là hotkey; `VerificationSuite` kiểm cấu trúc thẻ, không kiểm nội dung từng dòng.
-- Bảng màu mặc định trong `App.xaml` (tím nebula / cyan) trùng **Cosmic Nocturne** để khung đầu tiên
+- Mau sắc mặc định trong `App.xaml` (champagne gold) trùng bảng màu **Concert Grand** để khung đầu tiên
   trước khi `ShellThemeManager` phát theme không bị nháy màu khác.
 - Nhóm "SOUND & INPUT" hiện có 2 trang; nếu sau này thêm trang thiết bị (ví dụ Bluetooth MIDI, thiết bị
   vào riêng cho từng tay) thì đó là chỗ nên đặt.
