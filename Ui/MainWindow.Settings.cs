@@ -182,15 +182,15 @@ public partial class MainWindow
     /// </summary>
     private void BuildThemePage()
     {
-        var shell = Card(ThemeSettingsHost, "INTERFACE THEME", "The chrome around the stage: surfaces, accents and the animated acoustic backdrop. Applying a stage preset also switches the theme that belongs to it.");
+        var shell = Card(ThemeSettingsHost, "INTERFACE THEME", "The chrome around the stage: surfaces, accents and the animated nebula backdrop. Applying a stage preset also switches the theme that belongs to it.");
         var chips = new WrapPanel { Margin = new Thickness(0, 4, 0, 4) };
         themeChipHost = chips;
-        Register(shell, chips, nameof(PianoVisualSettings.ShellTheme), "interface theme shell concert grand noir obsidian velvet gold backdrop");
+        Register(shell, chips, nameof(PianoVisualSettings.ShellTheme), "interface theme shell cosmic nocturne nebula concert grand noir obsidian velvet gold backdrop");
         themeBlurbLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 8) };
         Register(shell, themeBlurbLabel, null, "theme description");
-        Choice(shell, "Motion", nameof(PianoVisualSettings.ChromeMotion), "How much the interface moves: animated acoustic backdrop, panel transitions and button response. Off keeps everything still.",
+        Choice(shell, "Motion", nameof(PianoVisualSettings.ChromeMotion), "How much the interface moves: animated nebula or concert backdrop, panel transitions and button response. Off keeps everything still.",
             ("Off", "Off"), ("Calm", "Calm"), ("Full", "Full"));
-        SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of the floating concert dust motes and acoustic waves in the backdrop.");
+        SliderRow(shell, "Backdrop density", nameof(PianoVisualSettings.BackdropDensity), 0, 200, "Density of drifting stardust and ambient motes in the backdrop.");
 
         var custom = Card(ThemeSettingsHost, "USER THEMES", "Themes you made: pick five colours and a backdrop family, and the rest of the chrome follows. They live in the settings folder as small JSON files and show up in both theme chip rows.");
         ButtonRow(custom,
