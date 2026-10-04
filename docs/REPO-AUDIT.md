@@ -1,9 +1,8 @@
-# Rà soát toàn kho — 2026‑09
+# Rà soát toàn kho — 2026‑09 (ảnh chụp lịch sử)
 
-Ghi lại **kết quả rà soát toàn bộ mã nguồn** (đợt 2026‑09) và những hạn chế còn lại, để lần sau
-không phải đọc lại từ đầu. Đây là tài liệu *trạng thái*, không phải kế hoạch: kế hoạch nằm ở
-`docs/ROADMAP.md`, kiến trúc đa ngôn ngữ ở `docs/LOCALIZATION.md`, ảnh giao diện ở
-`docs/LOCALIZATION.md` §10.
+Ghi lại **kết quả rà soát toàn bộ mã nguồn** (đợt 2026‑09). Các kết luận dưới đây là trạng thái tại thời điểm đó, không phải mô tả hiện hành: những đoạn về SoundFont/SF2, Git LFS và tài sản piano đóng gói đã được thay thế bằng mô hình Salamander Grand Piano V3 tải riêng, SFZ-only. Xem `README.md`, `CHANGELOG.md` và `docs/ROADMAP.md` để biết trạng thái mới nhất.
+
+Đây là tài liệu *trạng thái lịch sử*, không phải kế hoạch: kế hoạch hiện tại nằm ở `docs/ROADMAP.md`, kiến trúc đa ngôn ngữ ở `docs/LOCALIZATION.md`, ảnh giao diện ở `docs/LOCALIZATION.md` §10.
 
 ## 1. Phương pháp
 

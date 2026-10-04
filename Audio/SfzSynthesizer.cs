@@ -5,16 +5,11 @@ using System.Linq;
 namespace PianoPath;
 
 /// <summary>
-/// Sample playback for SFZ instruments — the engine behind the downloadable Steinway sets. Where the
-/// SoundFont synthesiser reads one bank file, this one plays the flattened region list of an
-/// <see cref="SfzInstrumentData"/>: velocity layers pick the right recording per keystroke, round-robins
-/// alternate takes so repeated notes stop sounding machine-gunned, and <c>trigger=release</c> regions add
-/// the damper-fall noise of a real action when a string is actually damped (attenuated by
-/// <c>rt_decay</c> for notes that had already rung out). The continuous damper model is byte-for-byte the
-/// same behaviour as the SoundFont engine's: CC 64 below the free zone releases normally, the half-pedal
-/// zone stretches releases up to six times, 64 and up holds, a pressed pedal catches still-audible
-/// strings (repedalling), and <see cref="DamperLevel"/> drives the shared sympathetic-resonance bank.
-/// Audio renders straight to float32 for the low-latency pipeline.
+/// Sample playback for the Salamander Grand SFZ: velocity layers pick the right recording per keystroke,
+/// round-robins alternate takes, and <c>trigger=release</c> regions add damper-fall noise when a string is
+/// actually damped (attenuated by <c>rt_decay</c> for notes that had already rung out). The continuous
+/// damper model handles CC 64 half-pedalling and repedal catch; <see cref="DamperLevel"/> drives the shared
+/// sympathetic-resonance bank. Audio renders straight to float32 for the low-latency pipeline.
 /// </summary>
 internal sealed class SfzSynthesizer : IPianoSynthesizer
 {
@@ -31,7 +26,7 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
     private readonly int _sampleRate;
     private readonly object _gate = new();
     private readonly List<Voice> _voices = [];
-    /// <summary>Damper position per channel, 0..1 from CC 64 — the same three zones as the SF2 engine.</summary>
+    /// <summary>Damper position per channel, 0..1 from CC 64 — free, catch and fully engaged.</summary>
     private readonly double[] _damper = new double[16];
     private const double DamperFree = .25;
     private const double DamperCatch = .5;
@@ -130,8 +125,9 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
     private void StartVoice(SfzRegion region, int channel, int pitch, int key, int velocity, double extraGain)
     {
         if (_voices.Count >= VoiceLimit) StealVoice();
-        // amp_veltrack: 1 tracks velocity fully with the spec's squared curve, 0 plays flat.
-        var track = region.AmpVeltrack; var curve = velocity / 127.0; curve *= curve;
+        // amp_veltrack still controls the depth of the response; a softened curve keeps real piano
+        // velocities in the middle of the range present without changing raw velocity-layer selection.
+        var track = region.AmpVeltrack; var curve = Math.Pow(velocity / 127.0, 1.45);
         var velocityGain = Math.Clamp(1 - track + track * curve, 0, 1);
         var pan = region.Pan / 100.0;
         var semitones = key - region.Root + region.Transpose + region.TuneCents / 100.0;
@@ -212,7 +208,7 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
     private static double ReleaseScaleFor(double damper) =>
         damper <= DamperFree ? 1 : 1 + (Math.Min(damper, DamperCatch) - DamperFree) / (DamperCatch - DamperFree) * 5;
 
-    /// <summary>Continuous CC 64 — identical three-zone behaviour to the SoundFont engine's damper.</summary>
+    /// <summary>Continuous CC 64 with a free, half-pedal and fully-damped zone.</summary>
     private void SetDamper(int channel, int value)
     {
         lock (_gate)
@@ -351,6 +347,6 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
         }
     }
 
-    /// <summary>The same gentle tanh limiter as the SoundFont engine, so switching formats keeps one loudness.</summary>
+    /// <summary>A gentle tanh limiter keeps the per-voice sum within the float audio range.</summary>
     private static float SoftClip(double sample) => (float)Math.Tanh(sample * 1.45);
 }

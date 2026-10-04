@@ -62,9 +62,8 @@ else's artwork.*
 Already know .NET? The whole flow fits in a few PowerShell commands (each step is explained below):
 
 ```powershell
-winget install --id Git.Git -e; winget install --id GitHub.GitLFS -e; winget install --id Microsoft.DotNet.SDK.10 -e
-git lfs install
-git clone https://github.com/lxmtuu/PianoPath.git; cd PianoPath; git lfs pull
+winget install --id Git.Git -e; winget install --id Microsoft.DotNet.SDK.10 -e
+git clone https://github.com/lxmtuu/PianoPath.git; cd PianoPath
 dotnet run --project .\PianoPath.csproj -c Release    # build, then open the application
 .\publish.ps1 -Zip                                    # package publish\win-x64\PianoPath.exe + a ZIP to send around
 ```
@@ -78,9 +77,9 @@ If the machine blocks PowerShell scripts, run `Set-ExecutionPolicy -Scope Proces
 | --- | --- | --- |
 | Operating system | Windows 10 (22H2 recommended) or Windows 11, 64-bit | The application uses WPF and WinMM, so it runs on Windows only. |
 | To **run a packaged build** | Nothing extra for the self-contained build; the framework-dependent build needs the **.NET 10 Desktop Runtime (x64)** | See [Packaging and shipping the .exe](#packaging-and-shipping-the-exe). |
-| To **build from source** | **.NET 10 SDK** (10.0.100 or newer), **Git** and **Git LFS** | The SoundFont `Assets/ConcertGrand.sf2` (~113 MiB) is stored through Git LFS. |
+| To **build from source** | **.NET 10 SDK** (10.0.100 or newer) and **Git** | The .NET SDK and Git are sufficient; the app downloads Salamander only when requested. |
 | IDE (optional) | Visual Studio 2026 with the **.NET desktop development** workload, or VS Code + the **C# Dev Kit** extension | .NET 10 needs Visual Studio 2026 (18.0) or newer; VS 2022 can open the project once the .NET 10 SDK is installed but is not fully supported. |
-| Disk | ~1.5 GB for the SDK + ~500 MB for sources and build output | A self-contained publish adds ~300 MB. |
+| Disk | ~1.5 GB for the SDK + ~500 MB for sources and build output | Allow another ~748 MB to install Salamander Grand if you want piano sound. |
 | Audio | Any sound card Windows recognises (WASAPI; optional ASIO for studio interfaces, `waveOut` as the fallback) | |
 | Graphics | A GPU with **Direct3D 11** (feature level 11_0 or newer, shader model 5.0) | The default stage is the GPU engine: Keyflow tries the graphics card first and only then **WARP**, Windows' software rasterizer (the same shaders, just slower than a real card); the HLSL shaders are compiled at startup with the `d3dcompiler_47.dll` that ships with Windows. If Direct3D cannot start, the WPF renderer takes over and the reason is shown under **General → GRAPHICS ENGINE**. |
 | MIDI (optional) | A USB piano/keyboard that Windows recognises | Without one you can still play with the computer keyboard or the on-screen piano. |
@@ -91,20 +90,13 @@ If the machine blocks PowerShell scripts, run `Set-ExecutionPolicy -Scope Proces
 Open **PowerShell** (no administrator rights needed) and install the tools in order. Skip anything you
 already have.
 
-1. **Git and Git LFS**
+1. **Git**
 
    ```powershell
    winget install --id Git.Git -e
-   winget install --id GitHub.GitLFS -e
    ```
 
-   Close and reopen PowerShell, then enable LFS once for the current Windows account:
-
-   ```powershell
-   git lfs install
-   ```
-
-   Without winget, download Git from <https://git-scm.com/download/win> and Git LFS from <https://git-lfs.com>.
+   Without winget, download Git from <https://git-scm.com/download/win>.
 
 2. **.NET 10 SDK** (it already includes the runtime needed to run the app)
 
@@ -116,7 +108,6 @@ already have.
 
    ```powershell
    dotnet --list-sdks      # one line must read 10.0.xxx
-   git lfs version         # must print git-lfs/x.y.z
    ```
 
 3. **IDE (optional)**
@@ -133,22 +124,12 @@ is for contributors who have been given access.
 cd $HOME\source            # or any folder; avoid paths with special characters
 git clone https://github.com/lxmtuu/PianoPath.git
 cd PianoPath
-git lfs pull               # downloads the real SoundFont (~113 MiB) if the clone did not
 ```
 
-Check the SoundFont is the real thing (it must be 118,398,836 bytes ≈ 113 MiB, not 134 bytes):
-
-```powershell
-(Get-Item .\Assets\ConcertGrand.sf2).Length
-```
-
-If the number is only a few hundred bytes the file is still an **LFS pointer**: run `git lfs install`
-again and then `git lfs pull`. The application still opens with the pointer but reports that it could
-not load a SoundFont; in that case load another `.sf2` for the session with **LOAD SOUNDFONT** (Audio
-page).
-
-Downloading the ZIP from GitHub ("Code → Download ZIP") does **not** include LFS files; use
-`git clone`, or download the SoundFont separately and copy it to `Assets\ConcertGrand.sf2`.
+No audio library is needed to build. When you want piano sound, open **SETTINGS → Audio** and select
+**DOWNLOAD PIANO · 748 MB**. The download only starts after this explicit action and can be cancelled
+and resumed later. A GitHub ZIP ("Code → Download ZIP") is also enough to build the source; piano
+the source repository contains no piano samples.
 
 ## Building and running
 
@@ -161,7 +142,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # build (if needed) and
 ```
 
 - `dotnet run` without `-c Release` uses the Debug configuration (`bin\Debug\net10.0-windows\PianoPath.exe`), which is slower when drawing many particles.
-- You can also run the `.exe` from the `bin\...` folder directly; the `Assets\` folder (SoundFont, attribution) is copied next to it automatically.
+- You can also run the `.exe` from the `bin\...` folder directly. Piano samples are not copied into the build; download Salamander from the Audio page when you want sound.
 - On first launch Windows may ask about the firewall or show SmartScreen, because the file is not code-signed; choose *More info → Run anyway*.
 
 ### Command line switches
@@ -224,14 +205,13 @@ foreach ($lang in @('en', 'vi')) {
 
 ```powershell
 git pull
-git lfs pull
 dotnet build .\PianoPath.csproj -c Release
 ```
 
 ## First-time setup
 
 1. **Audio**: Keyflow plays through the default Windows output device over **WASAPI** (falling back to `waveOut` when needed); the Audio page's **OUTPUT & LATENCY** section picks WASAPI shared/exclusive, an **ASIO** driver or `waveOut`, plus a target latency. Change speakers/headphones in Windows *Settings → System → Sound* before opening the app.
-2. **SoundFont**: the bundled Yamaha grand loads automatically at startup (it takes a few seconds; the label on the Audio page tells you when it is ready). To use another piano, open **SETTINGS → Audio → LOAD SOUNDFONT** and pick a `.sf2`; choose a preset (bank/program) in the list below it. **HALL REVERB** toggles the room reverb; the combo below it switches the room itself — the classic hall, a convolution concert hall or soundboard, or an impulse response (`.wav`/`.flac`) you load through **IR FILE…**.
+2. **Piano**: Salamander Grand Piano V3 is the only supported piano. The app does not download samples in the background; open **SETTINGS → Audio** and choose **DOWNLOAD PIANO · 748 MB** for the one-time install. Every FLAC is verified, progress can be cancelled/resumed, and the instrument loads after installation. **HALL REVERB** toggles reverb; choose a room (hall, concert hall, soundboard or a WAV/FLAC impulse response) and toggle string resonance.
 3. **MIDI piano**: plug the instrument in before starting the app and Keyflow connects to the first input by itself. Plugged in later? Open **SETTINGS → MIDI → Refresh devices**. The badge above the keyboard switches to `MIDI IN · C4` when a Note On arrives. The same page holds the MIDI output (to play through an external synth), the metronome and the track list.
 4. **Graphics**: the stage runs on the GPU from the very first launch, with nothing to switch on. To change the frame rate (60 / 120 / 144 / 240 FPS or unlimited), turn off VSync in the GPU stage window, open that window for a second monitor, or see which engine is drawing, open **SETTINGS → General → GRAPHICS ENGINE**. These are settings of the computer: applying a preset does not change them.
 5. **Look**: pick a preset in **SETTINGS → Style** (default *Neon Violet*), pick the concert interface in **SETTINGS → Theme** (Concert Grand / Concert Noir / Velvet Gold — Concert Grand is the default), then fine-tune on the Notes / Particles / Keyboard / Background / Camera & FX pages. Every change applies live and saves itself.
@@ -240,18 +220,13 @@ dotnet build .\PianoPath.csproj -c Release
 
 ## Getting started
 
-1. The app opens on the **concert menu** (Perform & Play / Quick Adjustments / Stage Design Studio / Audio & MIDI Hardware Setup / Keyboard & Shortcuts / About / Exit). **Quick Adjustments** opens the most-used stage controls directly; **Stage Design Studio** remains the full dock. The **HOME** button on the header returns to the menu at any time.
-2. **Live Play**: press a key on the piano, the computer keyboard or a MIDI instrument to show just the notes you play. The Yamaha grand SoundFont loads automatically when the app opens, so computer keys, the on-screen piano and MIDI all sound immediately. The **HALL** button toggles the concert-hall reverb.
+1. The app opens on the **concert menu** (Perform & Play / Quick Adjustments / Piano & Audio Setup / MIDI Devices / Keyboard & Shortcuts / About / Exit). **Piano & Audio Setup** and **MIDI Devices** open their respective settings pages directly; **Quick Adjustments** opens the most-used stage controls, while **Stage Design Studio** opens the full dock. The **HOME** button on the header returns to the menu at any time.
+2. **Live Play**: press a key on the piano, computer keyboard or a MIDI instrument to show the notes you play. Before Salamander is installed, the stage and MIDI work but there is no piano sound; open **Piano & Audio Setup** to download the instrument. After installation, computer keys, the on-screen piano and MIDI all play through Salamander. The **HALL** button toggles reverb.
 3. Click **Play** in the header (or **Perform & Play** on the main menu) to open the session dialog. Choose **MIDI File** to load a `.mid`/`.midi` file or a **MusicXML** score (`.musicxml`, `.xml`, `.mxl` — compressed files are read through `META-INF/container.xml`), or choose **Live Play** to perform right away. For MusicXML, the **hand split is read from the staves** (staff 1 = right hand, staff 2 = left, or one `part` per hand), so nothing is guessed, and that value is remembered for the file in `library.json`. With no score loaded, the compact session action says **Choose a MIDI file**; with a score loaded it says **Start playback** (the adjacent MIDI button can replace that score); while playback is running it says **Return to playback**. The large gold **Live Play** button keeps its direct-performance action. The Left Hand and Right Hand cards open a dedicated preset chooser for that hand, with a custom color option. **QUICK ADJUST** opens common note-style, color, speed, glow and stage-layer controls that stay in sync with the Design dock; **Advanced settings…** opens the full dock. **RECENT** keeps the songs you opened with their note and track counts, tempo and last preset; click a row to reopen the song with its saved values, or **×** to forget it. **LIBRARY** can index a folder, search by name/tag and open a song directly in the dialog.
 4. While the score runs the notes travel down and touch the glowing line just above the keys. Play along on the keyboard and get hit/miss feedback.
 5. If a MIDI piano was plugged in when the app started, Keyflow connects to the first input it finds. If you plug it in later, open **SETTINGS → MIDI → Refresh devices** and the app selects and connects the new instrument. The blue badge above the keyboard becomes `MIDI IN · C4` when a Note On arrives. In the settings dock (the **SETTINGS** button or `Esc`) you can choose other input/output devices, the practice mode, tempo, tracks, the metronome and the loop points. `Esc` follows the open surface back (Quick Adjust, Play, settings, menu); on the live stage it opens the dock.
 
-Keyflow bundles the YDP Grand Piano SF2 from FreePats, built from a Yamaha Disklavier Pro multisample;
-the acoustic-grand preset is selected for you. The engine renders stereo 44.1 kHz, responds to note
-on/off and all three MIDI pedals, and includes a switchable hall reverb. You can replace it with your
-own `.sf2` SoundFont or an **SFZ instrument** (`.sfz` plus WAV samples — the format the big free piano
-sets such as Ivy Audio's Steinway ship in, with velocity layers, round-robins and release samples).
-MIDI output is an extra audio path when you pick an external MIDI device.
+Keyflow uses **only Salamander Grand Piano V3**: a Yamaha C5 recorded at 48 kHz/24-bit by Alexander Holm, licensed CC BY 3.0. Its 641 FLAC samples (748,397,030 bytes, about 748 MB) are downloaded on request to `%LocalAppData%\Keyflow\Instruments\SalamanderGrandPiano`; the source commit is pinned, each file is verified against its Git blob SHA-1, valid local files are reused, and interrupted downloads can resume safely. Keyflow generates the SFZ mapping for this one library; it does not import SF2 or let users choose other instruments. Audio renders stereo at 44.1 kHz and supports Note On/Off, all three MIDI pedals, reverb and sympathetic string resonance. MIDI output is an additional audio path when an external MIDI device is selected.
 
 ## Keyboard & shortcuts
 
@@ -309,7 +284,7 @@ Every built-in preset, drawn by both engines side by side (software | GPU), is i
 
 | Group | Details |
 | --- | --- |
-| SoundFont | Loads the bundled Yamaha grand automatically; loads another `.sf2` (bank/program listed, preset selectable) or an **SFZ instrument** `.sfz` with velocity layers, round-robins and release samples; polyphonic stereo 44.1 kHz output through WASAPI shared/exclusive, an ASIO driver or `waveOut` — backend and target latency are picked under **OUTPUT & LATENCY**, and the line below it names the live path and its real buffer. |
+| Piano | Salamander Grand Piano V3 (Yamaha C5) only: one-time download of about 748 MB from **SETTINGS → Audio**; progress is shown, every file is verified, downloads can be cancelled/resumed, and the piano loads automatically after installation and on later launches. No piano samples are packaged; there is no SF2 import or external instrument selection. Stereo 44.1 kHz output through WASAPI shared/exclusive, ASIO or `waveOut`; Audio settings also provide gain, reverb, string resonance and live output/buffer status. |
 | Reverb | Real-time stereo hall reverb, on by default, with its own bypass button; the tail keeps ringing after you release the keys. Beyond the classic hall there is a **convolution reverb** (partitioned FFT, overlap-save): a ~2.8 s concert hall and a close soundboard generated inside the app, or a user-loaded `.wav`/`.flac` impulse response. |
 | Pedals | All three standard MIDI pedals: una corda/soft (CC 67, lowers gain and softens the tone), sostenuto (CC 66, holds the notes that were down when the pedal was pressed), sustain/damper (CC 64, keeps the sound after the key is released). The sustain pedal is a **continuous damper**: half-pedalling stretches the release tail instead of holding it outright, and repedalling in time catches strings that are still ringing — the raw CC 64 value of a continuous pedal goes straight to the synthesizer. While the pedal is down, a **sympathetic string resonance** bank (64 waveguides, one per string) rings along like on a real grand and chokes the moment the pedal lifts; the STRING RESONANCE button under Settings → Audio toggles it. The on-screen buttons, MIDI input and MIDI output are all wired up; a live note bar only grows while the key is physically held, and the pedal only affects the sound. |
 | MIDI input | Computer keyboard, clicking/holding the on-screen keys and WinMM MIDI input; opens the first MIDI input automatically, keeps your choice after refreshing the list, and shows the incoming signal/note. |
@@ -333,7 +308,7 @@ Every built-in preset, drawn by both engines side by side (software | GPU), is i
 | Settings profile | **IMPORT/EXPORT PROFILE…** on the General page packs three things into one `Keyflow.profile.json`: the stage settings, the interface language and the shell theme. Drop a profile on the window to apply it, drop a `.mid`/`.midi` file to open the song, drop an image to set the stage background. A language this build does not ship falls back to English instead of leaving the UI half-translated. |
 | Accessibility | Every glyph-only button (the **A**/**B**/**×** loop buttons, ↺, the window buttons, the Play dialog chevrons) carries an **accessible name for screen readers**, taken from its already-translated tooltip, so it follows the interface language; the generated dock rows (sliders, number boxes, pickers, colour swatches) are named after their own row label too. **Tab** keeps focus inside the dock (`KeyboardNavigation.TabNavigation="Cycle"`) and walks every page in the order its rows are printed; at the compact window size (1080×700) every row stays inside the scroll column and every control inside its own card (`VerifyDockAccessibility`), and when Windows turns on **high contrast** the chrome is painted from the system colours (`SystemColors`) while the theme you chose stays as it is in the settings file, and Windows reports the switch so the window repaints the moment it changes (`SystemParameters.StaticPropertyChanged`). |
 | Languages | Two bundled languages: **English** and **Tiếng Việt**, chosen on the General page or with a chip on the startup menu; switching repaints every label, dialog, error message and menu inside the current frame. No English label leaks into Vietnamese: `tools/check_sources.py` proves the two tables hold the same keys and `--verify` switches language on an open window. |
-| Recording | REC writes stage frames at the chosen resolution (window/720p/1080p) and 15–60 fps, paced by a real clock: **AVI** as one file, or a **32-bit PNG sequence** into a folder (one `frame-000001.png` per frame, plus `sequence.json` naming the size, rate, frame count and the ffmpeg line that turns the folder back into alpha video). **Transparent background** drops the opaque fills for the sequence — the captured picture is see-through while the piano and its effects stay (turn the Background layer off for the piano alone). **Audio track**: with **Record audio** on (the default, on the Recording page) REC also writes a **16-bit 44.1 kHz stereo WAV** beside the video (inside the frame folder for a PNG sequence) — exactly the PCM blocks the engine renders, including the blocks it renders itself when the machine has no audio output, so the track is always as long as the take — and the dialog after stopping prints its length with the **ffmpeg line** that muxes the two into an MP4. **MP4 (H.264 + AAC)** is written by the **Media Foundation sink writer** that ships with Windows — no extra library and no ffmpeg: the stage's pixels are converted to **NV12** (BT.601) and encoded as H.264 at a bitrate taken from the frame size and rate (2 Mbps floor, 24 Mbps ceiling) while the engine's PCM is encoded as AAC into the same file, every sample stamped with its own place on the recording's clock (`Mp4Recorder.FrameTime`/`AudioTime`). A machine with no H.264 encoder says so in a sentence carrying the HRESULT instead of writing a broken file; a machine that has H.264 but no AAC encoder still records the **picture** and the dialog says why the sound stayed out. Before the first frame is handed over, the take attempt asks the media stack one question — will it hold the **H.264 stream** the take is going to ask for? (`Mf.EncodeSinkProbe`: it opens a writer, offers that very stream description and stops there, writing no frame, so a machine with no encoder says so in one sentence instead of waiting out a take that was never going to be written.) When a run produces no take, a second child then writes three pictures into an **uncompressed AVI through the same sample plumbing** (`Mf.EncodeAviProbe`, `--encode-probe`): an AVI needs no encoder at all, so that verdict tells this machine's file handling and the app's own buffers apart from the codecs — and it runs after the take, never before it. **Hand tracking** reads the camera directly with arithmetic — the skin rule in YCbCr with a sensitivity of its own, a 32×24 grid, the biggest group of touching cells taken as the hand (centre, width and height as shares of the frame), and the **finger count** from the column profile: the palm line is the height the hand holds in most of its columns and a finger is a stretch reaching past the line halfway to the fingertips, so a closed hand counts as none rather than one. The **HAND TRACKING** card on the Camera & FX page holds the switch and a **Skin sensitivity** slider; the camera opens for this layer even while the picture layer is off, and the stage paints a **band over the key the hand is over**, a disc where across the key it really is, and a pip per finger. And because the encoders are **native code that can stop answering** rather than fail, the window opens an MP4 take **on a thread of its own with a ten-second limit** (`Video/HangGuard.cs` + `Mp4Recorder.TryOpen`): a machine that does not answer inside it records an **AVI** instead and is told so, rather than freezing the whole window — which is the kind of machine this verification met on CI, where the media stack wedges inside stamping a sample and **no real MP4 take has yet been produced anywhere** (see `docs/REPO-AUDIT.md`). A machine without a SoundFont records video only and says so. The **Green Screen** preset paints a pure green background for keying in OBS. On a machine without an MJPEG codec the AVI frames are uncompressed RGB and recording stops by itself at the 2 GB limit. |
+| Recording | REC writes stage frames at the chosen resolution (window/720p/1080p) and 15–60 fps, paced by a real clock: **AVI** as one file, or a **32-bit PNG sequence** into a folder (one `frame-000001.png` per frame, plus `sequence.json` naming the size, rate, frame count and the ffmpeg line that turns the folder back into alpha video). **Transparent background** drops the opaque fills for the sequence — the captured picture is see-through while the piano and its effects stay (turn the Background layer off for the piano alone). **Audio track**: with **Record audio** on (the default, on the Recording page) REC also writes a **16-bit 44.1 kHz stereo WAV** beside the video (inside the frame folder for a PNG sequence) — exactly the PCM blocks the engine renders, including the blocks it renders itself when the machine has no audio output, so the track is always as long as the take — and the dialog after stopping prints its length with the **ffmpeg line** that muxes the two into an MP4. **MP4 (H.264 + AAC)** is written by the **Media Foundation sink writer** that ships with Windows — no extra library and no ffmpeg: the stage's pixels are converted to **NV12** (BT.601) and encoded as H.264 at a bitrate taken from the frame size and rate (2 Mbps floor, 24 Mbps ceiling) while the engine's PCM is encoded as AAC into the same file, every sample stamped with its own place on the recording's clock (`Mp4Recorder.FrameTime`/`AudioTime`). A machine with no H.264 encoder says so in a sentence carrying the HRESULT instead of writing a broken file; a machine that has H.264 but no AAC encoder still records the **picture** and the dialog says why the sound stayed out. Before the first frame is handed over, the take attempt asks the media stack one question — will it hold the **H.264 stream** the take is going to ask for? (`Mf.EncodeSinkProbe`: it opens a writer, offers that very stream description and stops there, writing no frame, so a machine with no encoder says so in one sentence instead of waiting out a take that was never going to be written.) When a run produces no take, a second child then writes three pictures into an **uncompressed AVI through the same sample plumbing** (`Mf.EncodeAviProbe`, `--encode-probe`): an AVI needs no encoder at all, so that verdict tells this machine's file handling and the app's own buffers apart from the codecs — and it runs after the take, never before it. **Hand tracking** reads the camera directly with arithmetic — the skin rule in YCbCr with a sensitivity of its own, a 32×24 grid, the biggest group of touching cells taken as the hand (centre, width and height as shares of the frame), and the **finger count** from the column profile: the palm line is the height the hand holds in most of its columns and a finger is a stretch reaching past the line halfway to the fingertips, so a closed hand counts as none rather than one. The **HAND TRACKING** card on the Camera & FX page holds the switch and a **Skin sensitivity** slider; the camera opens for this layer even while the picture layer is off, and the stage paints a **band over the key the hand is over**, a disc where across the key it really is, and a pip per finger. And because the encoders are **native code that can stop answering** rather than fail, the window opens an MP4 take **on a thread of its own with a ten-second limit** (`Video/HangGuard.cs` + `Mp4Recorder.TryOpen`): a machine that does not answer inside it records an **AVI** instead and is told so, rather than freezing the whole window — which is the kind of machine this verification met on CI, where the media stack wedges inside stamping a sample and **no real MP4 take has yet been produced anywhere** (see `docs/REPO-AUDIT.md`). If Salamander is not loaded, the recording contains video only and the status says so. The **Green Screen** preset paints a pure green background for keying in OBS. On a machine without an MJPEG codec the AVI frames are uncompressed RGB and recording stops by itself at the 2 GB limit. |
 
 ## Languages
 
@@ -377,7 +352,7 @@ code, the XAML and the verification suite all read from the same place (see `Ui/
 | | Keyboard | Keyboard style, key labels, red felt, lighting and the **RAY-TRACED SHADING** group. |
 | | Background | Colour/image/green screen, atmosphere, guide lanes, halo, 4 ambient layers. |
 | | Camera & FX | Parallax, zoom, framing, saturation, contrast, bloom, **camera overlay** (live camera or a clip + green key). |
-| **SOUND & INPUT** | Audio | Load a SoundFont, pick the instrument preset, reverb (classic hall, convolution or a loaded IR), string resonance, output backend and latency. |
+| **SOUND & INPUT** | Audio | Download and load the one Salamander piano, reverb (classic hall, convolution or a loaded IR), string resonance, gain, output backend and latency. |
 | | MIDI | Input/output devices, track list (solo/mute/colour), metronome. |
 | **SESSION** | Practice | Practice modes, tempo, A–B loop, and the **auto practice tempo**: a run of misses past the threshold steps the song down five percent at a time, four correct notes in a row give two percent back and never past one hundred. |
 | | History | **Practice history**: every run of the open song (when, accuracy, hits/missed, longest streak), the best take of that song, **EXPORT HTML** for the report and **CLEAR HISTORY** to wipe it. |
@@ -398,7 +373,7 @@ The rest of the interface:
 | --- | --- |
 | Sheet layer | **Sheet music** (LAYERS card, off by default) draws a grand staff above the piano roll and follows the playhead: every note sits on the staff its **hand split** puts it on, the clefs are 𝄞/𝄢 (or the letters G/F when the installed font has no glyph), the **key signature is inferred from the song itself** (a Krumhansl–Kessler correlation over how long each pitch class sounds; a song that fits no key is written in C major), so the notes are spelled the way that key spells them — F major writes B♭ on the B line rather than A♯ on the A line — and a sign is drawn only where its bar really needs one: a note the signature already alters stays bare, a sharp or a flat holds to the end of its own staff's bar, and a natural takes it back, notes outside the staff get ledger lines, bar lines follow the song's own beat grid (downbeats heavier), a ring marks whatever is sounding and played or missed notes change colour. Short notes are **beamed by beat** the way an engraving beams them: the beat's length comes from the song's own grid, a note short enough grows a **flag** (one, two or three), two neighbours inside the same beat and hand **share a stem** with a beam over it, anything written between them breaks the run, and a hollow note — a half note or longer — never joins one however fast the song looks. Each hand is a voice, so **wherever one hand is silent a rest is written on that hand's own staff**, in the shape that lasts as long as the silence does (counted in beats of the song's grid: sixteenth, eighth, quarter, half, whole), and a silence that carries on across the other hand's notes is written as **one** rest rather than one per note. The sheet's whole working-out — accidentals, beams and rests (`SheetLayer.Plan`) — is **kept between frames** and only built again when the song, its grid, the hand split or the key changes, so drawing sixty frames a second does not redo it. A note **carried across a bar line** — the same pitch starting exactly where the previous one stopped — is written with a **tie**: a curve joining the two heads, drawn away from the stems, and the tied note is **never signed again**, because the accidental travels with the tie and everything after it in the new bar is written as if the sign had been put there. A **chord is one column of heads**: the notes written at one moment in one hand are a single event, with one head per pitch but **one stem for the whole column** (running from the far head through the middle, with the shortest note's flags), and a beam walks through chords as if they were single notes. `SheetLayer.Chords`/`Streams` also read the song as **two streams**, one per hand, each event a group of notes in pitch order, kept in the plan — the groundwork for marking hands on the roll. **Where the line changes hands** it is written out: a note of one hand stopping exactly where a note of the other starts — within the air a tie tolerates — is **one line handed over**, so the two heads are joined by **a curve across the gap between the staves** (`SheetLayer.Slurs`/`Slur`), bowing the way the line travels so it hugs that gap instead of cutting through either staff. Two notes an octave or more apart are a bass line and a tune rather than a hand-off, and **a chord does not change hands**: a block of notes is a new chord, not a line carrying on. It is still a note reader rather than a full engraving: no layered rests. |
 | Library of a folder | The Play dialog has a **LIBRARY** section: **CHOOSE FOLDER** indexes a folder (each MIDI/MusicXML file is read by the app's own reader for its notes, tracks, length and tempo), **RESCAN** reads it again (only the files that changed), a search box filters by title, file name or tag, and every row opens the song, states its facts and carries its **tags** (`+ TAG…` to add, click a tag to remove). The folder is **watched**, so adding, editing or deleting a file updates the list; the index and its tags live in `library-index.json`, and a damaged file reads as an empty library instead of failing. |
-| Audio track | The Recording page carries **Record audio**: a take also leaves a 16-bit stereo WAV next to the video (`take.wav`, or `audio.wav` in the PNG frame folder) written from the very blocks the engine renders — the tap exists only while recording, so ordinary playing pays nothing for it — and the line under the button tells the truth about this machine (**SoundFont loaded** → the take will have a WAV; **none** → the recording will have no audio). With **MP4** the same samples go straight into the file as AAC, so there is nothing left to mux; an AVI still gets the `ffmpeg -i video.avi -i take.wav -c:v copy -c:a aac take.mp4` line in the dialog. |
+| Audio track | The Recording page carries **Record audio**: a take also leaves a 16-bit stereo WAV next to the video (`take.wav`, or `audio.wav` in the PNG frame folder) written from the very blocks the engine renders — the tap exists only while recording, so ordinary playing pays nothing for it — and the line under the button tells the truth about this machine (**Salamander loaded** → the take will have a WAV; **not loaded** → the recording will have no piano audio). With **MP4** the same samples go straight into the file as AAC, so there is nothing left to mux; an AVI still gets the `ffmpeg -i video.avi -i take.wav -c:v copy -c:a aac take.mp4` line in the dialog. |
 | Ghost & chart | The History page carries **PRACTICE CHART** (one bar per day over the last fourteen days, as tall as that day's accuracy, days without practice still on the axis, the line below naming the runs and the window's average) and **GHOST OF THIS SONG** (every dot is a graded note of a take: across by its place in the song, up by its pitch, cyan landed and red was missed; the best take and the latest one share their axes so they can be read against each other; a song never played prints why instead of an empty box). |
 | Header | Logo + brand, the open score, the **LOOK** chip (current preset + a Change button), HOME, **Play** (opens songs, Live Play and quick setup), SETTINGS, minimise/full screen/exit. |
 | Stage | Notes, effects, keyboard, device badges, the REC button, the MENU button. |
@@ -407,9 +382,9 @@ The rest of the interface:
 
 ## Current limitations
 
-- The default SoundFont is FreePats' YDP Grand Piano, built from a Yamaha Disklavier Pro multisample. See `Assets/ATTRIBUTION.txt` for the authors, source and CC BY 3.0 licence. The SF2 file is about 113 MiB.
-- The built-in audio engine reads uncompressed SoundFont 2 (`.sf2`). `.sf3` is not supported; some advanced SF2 parts such as modulators, instrument filters and the reverb/chorus effects are not fully reproduced. The sound can therefore differ from dedicated SoundFont synthesizers, depending on the file.
-- SFZ instruments (`.sfz`) read the opcode subset the big piano sets rely on: `<control>/<global>/<master>/<group>/<region>` headers with opcode inheritance, `#define`/`#include`, `default_path`, velocity layers, round-robins (`seq_length`), release samples (`trigger=release` with `rt_decay`), loops, tuning and the amp envelope; unknown opcodes (ARIA extensions such as curves and CC labels) are ignored on purpose. Sample audio currently has to be WAV PCM 16/24/32-bit or float32 (FLAC is not decoded yet) and is loaded fully into RAM — a multi-gigabyte set needs the memory to match.
+- **Salamander Grand Piano V3 is the only instrument**: a Yamaha C5 recorded by Alexander Holm at 48 kHz/24-bit, under CC BY 3.0. Its 641 FLAC files total 748,397,030 bytes (about 748 MB), are fetched from a pinned `sfzinstruments` commit into `%LocalAppData%\Keyflow\Instruments\SalamanderGrandPiano`, and are never included in Git, ZIPs or the installer. The app downloads them only after the user presses the Audio-page button.
+- The downloader checks each local and new file against its Git blob SHA-1; new samples are written to temporary files and renamed only after verification. Valid files survive cancellation and are rechecked on resume. The SFZ mapping and CC BY attribution are written only after the full library verifies.
+- Keyflow generates the SFZ mapping for Salamander itself (16 velocity layers, hammer/release samples, pedal sounds and string resonance). Its parser reads the opcodes needed by this mapping and WAV PCM 16/24/32-bit, float32 or FLAC. Decoded samples are held in RAM. There is no general SFZ file picker, external-instrument import or SF2 support.
 - The hand split point defaults to C4 = MIDI 60 (Notes → Hand split point) and is shared by the per-hand colours and the one-hand practice modes. With **Infer hand split from the song** on, opening a MIDI file picks the split from how its notes are spread over the keyboard (two clusters weighted by sounding time, accepted only when at least five empty semitones separate the hands and each carries ten percent of the sounding time, then settled at middle C inside the gap) and **remembers it for that song**, so reopening never changes it; a one-hand song keeps the split you chose.
 - MIDI **formats 0/1/2 and both time divisions, PPQ and SMPTE, read**; what the import side still lacks is advanced MusicXML (slurs, repeats, voices joined into beats) — plain MusicXML reads, `.mxl` included, the hand split comes from the staves, and a **staff layer is drawn on the stage** — switch **Sheet music** on in the LAYERS card; that staff places notes by pitch, infers the song's key signature, beams its short notes by beat, rests the hand that is silent, ties notes carried across a bar line, joins a chord into one column of heads and draws the curve of a line changing hands; the **practice history** records each run (when, accuracy, hits/missed, longest streak) **together with every graded note** (its place in the song, its pitch, whether it landed, capped at 256 notes per run), so the History page draws a **fourteen-day chart** and the **ghost of the open song** — best take above, latest below, cyan for a hit and red for a miss — and the exported HTML carries the day table as well. The **song library** now has two halves: the **RECENT** list (`library.json`, the twelve newest songs with their metadata) and a **library of a folder** — pick a folder and every MIDI file and MusicXML score under it (three levels deep, 500 files) is indexed with its notes, tracks, length and tempo, with a search box (matching file names, titles and **tags**) and a **folder watcher** that keeps the list current when you add or edit a file; the index lives in `library-index.json` and only re-reads the files that changed.
 - A physical MIDI input needs an instrument/device that Windows recognises. Without one, use the computer keyboard or the on-screen piano.
@@ -462,12 +437,11 @@ To send it to somebody — or to publish a release — **publish** it. There are
 
 | Kind | Quick command | Size | What the target machine needs | When to use it |
 | --- | --- | --- | --- | --- |
-| **Self-contained** (recommended) | `.\publish.ps1` | `PianoPath.exe` ~150–190 MB + 113 MiB SoundFont | Nothing | Public releases, machines that may not have .NET |
-| **Framework-dependent** | `.\publish.ps1 -Mode FrameworkDependent` | `PianoPath.exe` ~1–2 MB + 113 MiB SoundFont | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) | Internal use, many machines already have .NET, smaller package |
+| **Self-contained** (recommended) | `.\publish.ps1` | `PianoPath.exe` ~150–190 MB | Nothing; download Salamander separately if desired (~748 MB) | Public releases, machines that may not have .NET |
+| **Framework-dependent** | `.\publish.ps1 -Mode FrameworkDependent` | `PianoPath.exe` ~1–2 MB | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0); download Salamander separately if desired (~748 MB) | Internal use, many machines already have .NET, smaller package |
 
-Both kinds produce **a single `.exe`** (`PublishSingleFile`) next to an `Assets\` folder holding the
-SoundFont and the attribution file. WPF supports neither trimming nor Native AOT, so those options are
-not used.
+Both kinds produce **a single `.exe`** (`PublishSingleFile`) next to `LICENSE.txt`; no `Assets` folder or
+piano samples are packaged. WPF supports neither trimming nor Native AOT, so those options are not used.
 
 ### Option 1 · the `publish.ps1` script (one command)
 
@@ -481,9 +455,8 @@ Set-ExecutionPolicy -Scope Process Bypass      # for the current PowerShell sess
 .\publish.ps1 -Clean                           # delete bin/, obj/ and the target folder before publishing
 ```
 
-The script checks the SDK version, **refuses to publish while `Assets\ConcertGrand.sf2` is still an LFS
-pointer** (so a silent piano is never shipped; pass `-AllowLfsPointer` to do it on purpose), runs
-`dotnet publish` with the parameters below and prints the resulting paths and sizes.
+The script checks the SDK version, runs `dotnet publish` and verifies that no SF2 file has entered the
+publish folder. Salamander is downloaded by the app after installation, not during build or publish.
 
 ### Option 2 · the `dotnet publish` command by hand
 
@@ -518,19 +491,19 @@ first launch); `PublishReadyToRun` pre-compiles for a faster start; `DebugType=N
 ```
 publish\win-x64\
 ├── PianoPath.exe              ← the single executable
-├── LICENSE.txt                ← the MIT licence, which has to travel with copies
-└── Assets\
-    ├── ConcertGrand.sf2       ← SoundFont, must always stay next to the .exe in the Assets folder
-    └── ATTRIBUTION.txt        ← credits FreePats (CC BY 3.0); keep it when redistributing
+└── LICENSE.txt                ← the MIT licence, which has to travel with copies
+
+Salamander samples are not packaged. After an explicit download, the user's separate piano data folder
+contains the sample files, generated SFZ mapping and `ATTRIBUTION.txt`.
 ```
 
-- **Sending a ZIP**: compress the whole folder (`.\publish.ps1 -Zip` or `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). The recipient unzips it and runs `PianoPath.exe`; never separate the `.exe` from the `Assets\` folder.
+- **Sending a ZIP**: compress the whole folder (`.\publish.ps1 -Zip` or `Compress-Archive -Path .\publish\win-x64\* -DestinationPath Keyflow-win-x64.zip`). The recipient unzips it and runs `PianoPath.exe`; to play piano, they download Salamander once from Audio settings.
 - **The `.exe` installer (optional)**: install [Inno Setup 6.3+](https://jrsoftware.org/isinfo.php), publish the self-contained build and run `iscc .\installer\Keyflow.iss` (or open the file in the Inno Setup Compiler and press F9). The result is `installer\Output\Keyflow-Setup-<version>.exe`, which creates Start Menu/Desktop shortcuts and an uninstall entry. Override the version with `iscc /DAppVersion=1.0.0 .\installer\Keyflow.iss`. The installer ships English and Vietnamese wizard text: it picks the language from Windows, and the Vietnamese wording is a *partial* file (`installer\Languages\Vietnamese.isl`) that overrides the messages this wizard actually shows while the rest falls back to `Default.isl`. Run `pwsh tools/build_installer.ps1` instead of calling `iscc` by hand when you want CI to check the translation — add `-Stub` if you have not published yet; the script fails the moment ISCC warns about anything but the expected "this message stays English" notice of a partial translation.
 - **The `win-arm64` build**: `publish.ps1 -Runtime win-arm64` (or the ZIP `release.yml` attaches to the GitHub Release) is for Windows on ARM; the `.exe` installer exists for x64 only, because `Keyflow.iss` sets `ArchitecturesAllowed=x64compatible`. CI publishes the ARM package, but no ARM machine has run it yet.
 - **Checking a download**: every GitHub Release — in [the public release repository](https://github.com/lxmtuu/KeyFlow/releases) — carries a `SHA256SUMS.txt` of each attached file; compare with `Get-FileHash .\Keyflow-<version>-win-x64.zip -Algorithm SHA256`. The packages are not code-signed, so this is how a downloader checks that they received what the repository built.
 - **Version number**: edit `<Version>` in `PianoPath.csproj` before publishing; the script and the installer read that value, the application prints it on the start-up menu and in the About box through `AppInfo.Version`, and `tools/check_sources.py` pins every remaining mirror (the installer, both READMEs, both changelogs) to the same number.
 - **SmartScreen**: the file is not code-signed, so Windows shows "Windows protected your PC" on first launch; choose *More info → Run anyway*. Removing the warning needs a code-signing certificate, for example: `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /a .\publish\win-x64\PianoPath.exe`.
-- **Antivirus** sometimes scans a single-file self-contained build slowly on first launch; that is normal for .NET packages that unpack themselves.
+- **Antivirus** sometimes scans a single-file self-contained build slowly on first launch; that is normal for .NET packages that unpack themselves. Salamander is a separate download started only from Audio settings. The Salamander download is a separate step started only by the Audio-page button.
 
 ### Checking a published build
 
@@ -550,17 +523,15 @@ Two workflows live in `.github/workflows/`:
 
 | Workflow | Trigger | Contents |
 | --- | --- | --- |
-| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render **both README picture sets** — one picture per subject in `$shots` per language — and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so the difference between the working tree and the commit this run started from is the comparison itself — `git status` cannot be used, because the commit step above commits before it pushes and a declined push leaves a clean tree while the branch still carries the old pictures; any file that drifted without the refresh reaching the branch is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact) → **one real publish** (`publish.ps1 -Mode FrameworkDependent -AllowLfsPointer -Zip`; CI does not fetch LFS, so the SoundFont stays a pointer) and then checks that the publish folder holds `PianoPath.exe`, `LICENSE.txt` and `Assets\` — so a defect in the packaging path turns red at push time instead of waiting for a release to be cut. |
-| `release.yml` | tag `v*` or **Run workflow** | Checkout with LFS, publish **three packages** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke-test the published self-contained `win-x64` build with `--verify`, compile the `.exe` installer from that same publish folder, compute a **`SHA256SUMS.txt`** of every attached file, upload all of them as artifacts and (for a tag) attach them to the GitHub Release with generated notes. The installer exists for `win-x64` only; the `win-arm64` package is not smoke tested, because the runner is an x64 machine. For a tag it also **builds the public release branch**: an *orphan* branch `release/public-<tag>` in this repository (holding only `docs/release/`, which `tools/make_public_docs.py` writes, and `docs/previews/` — none of the source repository's history) which is then **pushed to [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow)** — with the `PUBLIC_RELEASES_TOKEN` secret when it is configured, or by waiting for whoever is on release duty to run `pwsh tools/publish_public.ps1 -Tag <tag>` (no stored credential at all; `build.yml` never reaches the public repository). |
+| `build.yml` | push to `main`/`arena/**`, every pull request | **job `static` on `ubuntu-latest`** runs the static checks (`tools/check_sources.py`, ~10 s) → **job `test` on `ubuntu-latest`** (the `tests/PianoPath.Tests` xUnit project, running **beside** the Windows branch) and **job `build` on `windows-latest`** (scheduled only once `static` is green): Release build → `--verify` (**a FAIL turns the build red**) → **compile the installer** against a stub `publish\win-x64` (any unexpected ISCC warning turns the build red) → render **both README picture sets** — one picture per subject in `$shots` per language — and the preset gallery `presets.jpg`, upload the `keyflow-previews` artifact (both PNG sets and `presets.jpg`), **report preview drift** (`Report preview drift`: the two render steps have just overwritten `docs/previews` with this build's own pictures, so the difference between the working tree and the commit this run started from is the comparison itself — `git status` cannot be used, because the commit step above commits before it pushes and a declined push leaves a clean tree while the branch still carries the old pictures; any file that drifted without the refresh reaching the branch is named in a warning, including on pull requests where the commit step is skipped) and commit the new pictures into the branch being built (skipped for pull requests; on a branch that only takes pull requests it just warns and the pictures stay in the artifact) → **one real publish** (`publish.ps1 -Mode FrameworkDependent -Zip`; the piano samples are downloaded by the app only when requested) and then checks that the publish folder holds `PianoPath.exe` and `LICENSE.txt` but no piano data — so a defect in the packaging path turns red at push time instead of waiting for a release to be cut. |
+| `release.yml` | tag `v*` or **Run workflow** | Checkout source only, publish **three packages** (self-contained `win-x64`, framework-dependent `win-x64`, self-contained `win-arm64`), smoke-test the published self-contained `win-x64` build with `--verify`, compile the `.exe` installer from that same publish folder, compute a **`SHA256SUMS.txt`** of every attached file, upload all of them as artifacts and (for a tag) attach them to the GitHub Release with generated notes. The installer exists for `win-x64` only; the `win-arm64` package is not smoke tested, because the runner is an x64 machine. Salamander Grand Piano V3 downloads only when requested (about 748 MB, CC BY 3.0). For a tag it also **builds the public release branch**: an *orphan* branch `release/public-<tag>` in this repository (holding only `docs/release/`, which `tools/make_public_docs.py` writes, and `docs/previews/` — none of the source repository's history) which is then **pushed to [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow)** — with the `PUBLIC_RELEASES_TOKEN` secret when it is configured, or by waiting for whoever is on release duty to run `pwsh tools/publish_public.ps1 -Tag <tag>` (no stored credential at all; `build.yml` never reaches the public repository). |
 
 ```powershell
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Every `release.yml` run downloads ~113 MiB from Git LFS and counts against the account's LFS bandwidth,
-so only run it when releasing. `build.yml` does not download LFS at all (the checks that need the
-SoundFont report `SKIP` by themselves).
+Neither workflow downloads piano samples. The verification suite creates small local fixtures; it never downloads Salamander's 748 MB library.
 
 **Two repositories, one product.** This repository is the source (private); [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow) is the public one:
 every tag gets a `release/public-<tag>` branch holding the bilingual product page, the changelogs, the
@@ -575,11 +546,11 @@ away are in [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLI
 
 | Symptom | Cause / fix |
 | --- | --- |
-| `publish.ps1` reports the SoundFont is only a few hundred bytes | LFS was not fetched: `git lfs install` then `git lfs pull`. |
+| The Audio page says `SETUP REQUIRED` | Open **SETTINGS → Audio** and press **DOWNLOAD PIANO · 748 MB**; an internet connection is needed for first-time setup. You can cancel and resume later. |
 | `NETSDK1045: The current .NET SDK does not support targeting .NET 10.0` | Install the .NET 10 SDK, or an older SDK is being preferred by `global.json`; check `dotnet --list-sdks`. |
 | The target machine says "To run this application, you must install .NET Desktop Runtime" | It is the framework-dependent build; install the .NET 10 Desktop Runtime x64 or use the self-contained build. |
-| The app opens but stays silent and the Audio page cannot load a SoundFont | The `Assets\` folder is not next to the `.exe`, or the file is an LFS pointer. |
-| The Audio page shows `NO AUDIO DEVICE` although the SoundFont loaded | Windows could not open an output device on any path (WASAPI, then `waveOut`): no sound card, or another application holds it in exclusive mode. Everything else works, it just does not make a sound; the line under **OUTPUT & LATENCY** states the exact reason. |
+| The app opens but has no piano sound | Salamander is not installed or loaded yet: open **Piano & Audio Setup**, download the piano, then use **LOAD INSTALLED PIANO** if needed. |
+| Salamander is loaded but Audio reports `NO AUDIO DEVICE` | Windows could not open the selected output; choose **Auto** or an available device under **OUTPUT & LATENCY**. The app still runs, and the status line names the active path and reason. |
 | `PublishTrimmed`/`PublishAot` errors, or the app crashes at start | WPF supports neither; drop both options. |
 | Publishing `win-x86` fails with a runtime-pack error | Only `win-x64` and `win-arm64` are used; 32-bit builds are not tested. |
 
@@ -606,15 +577,15 @@ buffers can write at all. That probe gets twenty seconds and runs after the take
 stand in front of the thing it exists to explain.
 
 Exit code `0` means passed, `1` means a failure; the log lists every PASS/FAIL item. The suite creates
-a small MIDI file, SoundFont SF2 and AVI in a temporary folder; it checks the MIDI parser (multiple
+a small MIDI file, SFZ/WAV fixtures and an AVI in a temporary folder; it checks the MIDI parser (multiple
 tracks, tempo map, beat grid, track names, drum channel skipped, **the beats of a bar grouped by its signature
 (`Meter.Of`): a simple meter beats on the written beat-type (4/4 four quarters, 3/4 three, 2/2 two halves,
 3/8 three eighths) while a compound one — six, nine or twelve — is felt in threes (6/8 two dotted quarters,
 9/8 three, 12/8 four, 6/4 two dotted halves, 7/8 still seven), the grid of a 6/8 file falling on the dotted
 quarter with `BeatsPerBar` counting the felt beats so the bar lines still land once a bar**, **format 2 patterns played end to
 end over one running beat grid**, **an SMPTE division read as absolute time with the beat grid
-following the tempo map**, an unknown format and an unusable division refused, broken files), preset/zone/sample
-decoding and SF2 generator semantics (instrument overrides, preset accumulation), looping through the
+following the tempo map**, an unknown format and an unusable division refused, broken files), SFZ region/sample
+decoding, opcode inheritance, velocity layers, round-robins, release samples and pedal triggers, looping through the
 release stage, polyphony limits, audio signal and Note Off, sustain/sostenuto/soft, saving and
 clamping effect settings, built-in and user presets (save, import, export, delete, broken file), **the
 dock catalogue: 13 pages in 4 groups matching between the catalogue, the XAML and the group
@@ -701,7 +672,7 @@ The project **links the source files** instead of referencing `PianoPath.csproj`
 
 Making that possible took one seam: `Loc` was split into two `partial` halves — `Localization/Loc.cs` is the string table and the look-ups (pure computation), `Localization/Localizer.cs` is the half that writes live labels onto WPF elements. They meet through a **partial method**, so a build that does not link the WPF half has the call **removed by the compiler** instead of needing WindowsBase.
 
-Not in this suite yet: SoundFont (its test `.sf2` builder is a block of helpers of its own, still in `VerifySoundFontEngine`), plus the settings JSON, the settings profile, the song library and the practice history — the last four all bottom out at `PianoVisualSettingsStore` → `ShellThemes`, whose `ShellTheme` record is declared in `System.Windows.Media.Color` (see `docs/ROADMAP.md` §4 item 2).
+The audio tests cover the SFZ reader/synthesizer, FLAC decoder and Salamander manifest with local fixtures; the settings JSON, the settings profile, the song library and the practice history — the last four all bottom out at `PianoVisualSettingsStore` → `ShellThemes`, whose `ShellTheme` record is declared in `System.Windows.Media.Color` (see `docs/ROADMAP.md` §4 item 2).
 
 ### Static checks (run anywhere, even without the .NET SDK)
 
@@ -732,12 +703,11 @@ the sources can print (including marked XAML strings, page names, themes, preset
 card) is a key of the inventory. CI runs this script before the Windows build.
 
 The `--verify` log uses four prefixes: `PASS` (checked and passed), `FAIL` (a defect, exit code `1`),
-`SKIP` (the environment cannot run that check) and `NOTE` (environment information). The suite skips
-instead of failing when hardware is missing: if `Assets\ConcertGrand.sf2` is still an LFS pointer
-(a clone without `git lfs pull`, or a CI checkout with `lfs: false`) the bundled-piano items are
-`SKIP`ped and the app is verified in silent mode instead; if Windows cannot open an audio device
-on any path (WASAPI and `waveOut` both refuse) or a MIDI output port, the engine still loads the SoundFont and runs silently, and
-the result is a `NOTE`, not a `FAIL`.
+`SKIP` (the environment cannot run that check) and `NOTE` (environment information). The suite never
+downloads the piano: it checks the Salamander manifest and generated SFZ mapping, uses small local
+SFZ/WAV fixtures, and deliberately opens the onboarding window without a loaded piano to verify first-run
+setup. If Windows cannot open an output device (WASAPI, ASIO and `waveOut`) or a MIDI output port, the app
+still runs silently and records a `NOTE`, not a `FAIL`.
 
 ## Technical documentation
 
@@ -764,7 +734,7 @@ the result is a `NOTE`, not a `FAIL`.
 - `Gpu/`: the Direct3D 11 graphics engine — `StageShaders.hlsl` (every shader, embedded in the build), `GpuLook.cs` (immutable snapshot of the settings), `GpuStageFeed.cs` (UI thread → render thread bridge, song-clock extrapolation), `GpuStageSimulation.cs` (particles, trails, keys) with its two extensions `GpuStageSimulation.Ambient.cs` (guide lanes, petals, the four ambient layers, the trails behind notes) and `GpuStageSimulation.Effects.cs` (impact waves/flashes, morphs, release effects, electric arcs, note names on the keys), `GpuStageRenderer.cs` (device, HDR pipeline, bloom), `GpuRenderLoop.cs` (game loop, swap chain, frame read-back for the embedded stage, and per-frame timing samples for `--bench`), `GpuRecordingTap.cs` (the off-screen frame at the take's exact size and rate), `SwapChainHost.cs`; `Ui/GpuStageWindow.cs` and `Ui/MainWindow.Gpu.cs` wire it into the interface.
 - `Stage/Effects/EffectCatalog.cs`: the effects catalogue — the single source for the stage's 87 effects, arranged by the four phases of a note (falling, impact, hold, release), the ambient layers, the modulators and seven combo themes; every effect carries a status of `Available` or `Planned`, and only `Available` effects appear in the UI. The full design is in `docs/EFFECTS-REDESIGN.md`.
 - `Profile/SettingsProfile.cs`: the settings profile — `Keyflow.profile.json` packs the stage settings, the interface language and the shell theme into one file (import/export on the General page, and it also accepts a file dropped onto the window); it rejects foreign JSON, and a language that is not in the build falls back to `en`.
-- `Audio/`: `PianoAudioEngine.cs` (float32 pipeline synth → hall reverb → sink, plus the **tap** that hands each rendered block to a recording), `IPianoSynthesizer.cs` (the contract both sample engines implement), `AudioSink.cs` (`IAudioSink` and the fallback ladder), `WasapiAudioSink.cs` (event-driven WASAPI shared/exclusive), `AsioAudioSink.cs` (ASIO drivers through the raw COM vtable, no Steinberg SDK), `WaveOutAudioSink.cs` (the old WinMM path as the last rung), `StringResonance.cs` (pedal-driven sympathetic string resonance, 64 waveguides), `Fft.cs` (hand-rolled radix-2 FFT), `ReverbImpulse.cs` (generates the concert-hall/soundboard impulse responses from seeded noise), `ConvolutionReverb.cs` (real-time convolution reverb, partitioned overlap-save FFT), `WavWriter.cs` (streaming 16-bit PCM WAVE writer that patches its sizes on close), `WavReader.cs` (reads 16/24/32-bit PCM and float32 WAV for sample sets), `SfzReader.cs` (the `.sfz` instrument parser: header inheritance, `#define`/`#include`), `SfzSynthesizer.cs` (the SFZ engine: velocity layers, round-robins, release samples, the same continuous damper model) and `SoundFontSynthesizer.cs` (reads `.sf2` sample zones to the SF2 specification, with a continuous damper for half-pedalling and repedalling).
+- `Audio/`: `PianoAudioEngine.cs` (float32 SFZ synth → hall reverb → sink, plus the **tap** that hands each rendered block to a recording), `IPianoSynthesizer.cs` (the single synthesizer contract used by the SFZ engine), `AudioSink.cs` (`IAudioSink` and the fallback ladder), `WasapiAudioSink.cs` (event-driven WASAPI shared/exclusive), `AsioAudioSink.cs` (ASIO drivers through the raw COM vtable, no Steinberg SDK), `WaveOutAudioSink.cs` (the old WinMM path as the last rung), `StringResonance.cs` (pedal-driven sympathetic string resonance, 64 waveguides), `Fft.cs` (hand-rolled radix-2 FFT), `ReverbImpulse.cs` (generates the concert-hall/soundboard impulse responses from seeded noise), `ConvolutionReverb.cs` (real-time convolution reverb, partitioned overlap-save FFT), `WavWriter.cs` (streaming 16-bit PCM WAVE writer that patches its sizes on close), `WavReader.cs` (reads 16/24/32-bit PCM and float32 WAV for sample sets), `SfzReader.cs` (the `.sfz` instrument parser: header inheritance, `#define`/`#include`), `SfzSynthesizer.cs` (the engine for Salamander: velocity layers, round-robins, release/pedal samples and a continuous damper model) and `SalamanderPiano.cs` (manifest, resumable download, SHA-1 verification, generated SFZ mapping and attribution).
 - `Camera/`: `MediaFoundation.cs` (the part of Media Foundation the overlay needs, declared by hand — `mfplat.dll`/`mf.dll`/`mfreadwrite.dll`, with the vtable order documented where it matters), `CameraFrameReader.cs` (enumerates the cameras, opens a camera or a video file as an RGB32 source reader, reads frames on its own thread, and turns every failure into a sentence) and `CameraOverlay.cs` (pure arithmetic: where the picture sits per corner, bottom-up and mirrored frames, the green key by tolerance, the opacity factor), `HandTracker.cs` (hand tracking — pure arithmetic on pixels, no model: it reads a frame on a 32×24 grid, finds skin in YCbCr with a chroma window set by the **Skin sensitivity** slider, takes the biggest group of touching skin cells as the hand, counts fingers from the column profile and turns the horizontal position into a key of the stage) and `MediaFoundation.Encode.cs` (the COM declarations of the MP4 sink writer, in exactly the vtable order).
 - `Midi/`: `Meter.cs` (a simple meter beats on its written beat-type, a compound 6/8–12/8 one in threes, and a bar's beats come back with it), `MidiFileReader.cs` (Standard MIDI File, formats 0/1/2 with a PPQ or an SMPTE division → notes, tempo map, beat grid, track names), `MusicXmlReader.cs` (MusicXML/MXL → notes, beat grid, part names and the **hand split the staves state**) and `HandSplit.cs` (inferring a split from pitches for MIDI files), plus `MidiDeviceService.cs` (WinMM devices).
 - `Midi/HandSplit.cs`: hand-split inference for a song (two clusters by sounding time, middle C in a wide gap, one-hand songs left alone).
@@ -785,11 +755,10 @@ the result is a `NOTE`, not a `FAIL`.
 - `docs/samples/`: the sample backdrop the repository generates for itself (`tools/make_stage_background.py`), used by the background-feature screenshot and by anybody who wants to try the feature without hunting for a picture online.
 - `CHANGELOG.md` / `CHANGELOG.en.md`: the bilingual changelog — each README links to its own edition, and `scan_release_version` keeps the version list of both equal to `<Version>`;
   `publish.ps1`: the publish/packaging script (self-contained or framework-dependent, ZIP); `Properties/PublishProfiles/*.pubxml`: Visual Studio publish profiles; `Properties/AssemblyInfo.cs`: WPF's `ThemeInfo` attribute (where theme resource dictionaries are looked up); `installer/Keyflow.iss`: the Inno Setup script that builds the installer; `installer/Languages/`: the partial Vietnamese wizard text (`Vietnamese.isl`) and the list of valid message names (`messages.txt`).
-- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, a `test` job on Ubuntu for the portable xUnit project, then a `build` job on Windows: Release build, `--verify`, **the frame budget measured with `--bench` and compared with the previous run from the cache**, a trial installer build against a stub folder, rendering **both README picture sets** — one picture per subject per language — and the preset gallery, committing them back to the branch when it accepts the push, and finally **one trial framework-dependent publish** so a defect in the packaging path turns red at push time) and `release.yml` (checkout with LFS, publish three packages, smoke-test the published build, compile the installer from that same folder, hash every package into `SHA256SUMS.txt`, then attach all of it to the GitHub Release when a `v*` tag is pushed).
+- `.github/workflows/`: `build.yml` (a `static` job on Ubuntu for the source checks, a `test` job on Ubuntu for the portable xUnit project, then a `build` job on Windows: Release build, `--verify`, **the frame budget measured with `--bench` and compared with the previous run from the cache**, a trial installer build against a stub folder, rendering **both README picture sets** — one picture per subject per language — and the preset gallery, committing them back to the branch when it accepts the push, and finally **one trial framework-dependent publish** so a defect in the packaging path turns red at push time) and `release.yml` (source-only checkout, publish three packages, smoke-test the published build, compile the installer from that same folder, hash every package into `SHA256SUMS.txt`, then attach all of it to the GitHub Release when a `v*` tag is pushed).
 
 ## Licence
 
-The source code is released under the MIT licence (see `LICENSE`). The bundled SoundFont belongs to
-FreePats under the CC BY 3.0 licence (see `Assets/ATTRIBUTION.txt`).
+The source code is released under the MIT licence (see `LICENSE`). Salamander Grand Piano V3 is not bundled; the app downloads its samples on request under CC BY 3.0 and writes the attribution notice into the user's piano data folder.
 
 Copyright belongs to the authors **Yami** and **Neyu**; **Jin** contributes to the project.

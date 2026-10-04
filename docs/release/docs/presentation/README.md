@@ -1,8 +1,9 @@
-# Bản thuyết trình sản phẩm · Keyflow v1.0.0
+# Bản thuyết trình sản phẩm · Keyflow v1.0.0 (lưu trữ)
 
-Bộ slide thuyết trình chính thức cho bản phát hành **Keyflow 1.0.0** (02/10/2026),
-dựng từ đúng nội dung tài liệu phát hành ([README.md](../../README.md),
-[CHANGELOG.md](../../CHANGELOG.md)). Mỗi slide là một trang, khổ 16:9.
+Bộ slide lưu trữ cho bản phát hành **Keyflow 1.0.0** (02/10/2026), phản ánh đúng phiên bản tại ngày đó.
+Bản v1.0.0 còn mô tả piano SF2 đóng gói; **đây không phải tài liệu sản phẩm hiện hành**. Mô hình âm thanh
+hiện tại là Salamander Grand Piano V3 tải riêng, SFZ-only; xem [README](../../README.md) và
+[CHANGELOG](../../CHANGELOG.md). Mỗi slide là một trang, khổ 16:9.
 
 | Tệp | Định dạng | Nội dung |
 | --- | --- | --- |

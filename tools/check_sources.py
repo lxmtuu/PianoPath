@@ -1151,7 +1151,7 @@ def scan_project_files():
 # either a mistake or a leak, and the release branch is the one place where a mistake is public for ever.
 PUBLIC_RELEASE_FILES = {
     "README.md", "README.en.md", "CHANGELOG.md", "CHANGELOG.en.md", "LICENSE",
-    "Assets/ATTRIBUTION.txt", "docs/LOCALIZATION.md", "VERSION",
+    "docs/LOCALIZATION.md", "VERSION",
     # The product presentation. It used to live only in the public repository — made there, committed
     # there, mentioned nowhere in this one — which is the one arrangement the release branch cannot
     # keep: the branch is rebuilt from this repository on every release, so the next publish would have
@@ -1295,10 +1295,15 @@ def scan_public_release():
     for name, language in (("README.md", "vi"), ("README.en.md", "en")):
         text = committed.get(name, b"").decode("utf-8")
         for fragment in ("SHA256SUMS.txt", "Keyflow-Setup-", "win-x64.zip", "win-x64-fd.zip", "win-arm64.zip",
-                         "Get-FileHash", "SmartScreen", "LICENSE.txt", "Assets\\ATTRIBUTION.txt", "Assets\\"):
+                         "Get-FileHash", "SmartScreen", "LICENSE.txt", "PianoPath.exe",
+                         "Salamander Grand Piano V3", "748 MB", "CC BY 3.0"):
             if fragment not in text:
                 errors.append(f"docs/release/{name} ({language}) does not mention {fragment!r}; the download "
-                              f"section has to name the packages, the hashes and the files that travel with them")
+                              f"section has to name the packages, hashes, MIT licence and optional piano download")
+        for obsolete in ("Assets\\ATTRIBUTION.txt", "Assets\\ConcertGrand.sf2", "113 MiB", "Git LFS",
+                         "FreePats", "Disklavier Pro"):
+            if obsolete in text:
+                errors.append(f"docs/release/{name} ({language}) still documents obsolete piano packaging: {obsolete!r}")
 
     # 6. The token that writes to the public repository is named in one workflow and nothing else.
     token = "PUBLIC_RELEASES_TOKEN"

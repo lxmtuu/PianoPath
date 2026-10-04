@@ -2,7 +2,7 @@
 ; self-contained build into a classic Windows installer, in English and Vietnamese (the wizard text
 ; lives in Languages\Vietnamese.isl — see the [Languages] section below).
 ;
-;   1. .\publish.ps1                       (creates publish\win-x64\PianoPath.exe + Assets\)
+;   1. .\publish.ps1                       (creates publish\win-x64\PianoPath.exe; no piano samples are bundled)
 ;   2. iscc installer\Keyflow.iss          (or open this file in the Inno Setup Compiler and press F9)
 ;   → installer\Output\Keyflow-Setup-<version>.exe
 ;
@@ -70,7 +70,7 @@ vietnamese.LanguageCodePage=1258
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-; Everything dotnet publish produced: PianoPath.exe plus Assets\ConcertGrand.sf2 and Assets\ATTRIBUTION.txt.
+; Everything dotnet publish produced. Salamander samples are downloaded by the app after the user requests audio setup.
 Source: "{#SourceDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]

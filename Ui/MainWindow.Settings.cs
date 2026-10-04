@@ -656,7 +656,7 @@ public partial class MainWindow
         Choice(output, "Resolution", nameof(PianoVisualSettings.RecordingResolution), "Match the window, or render to a fixed 16:9 size.", ("Window", "Match window"), ("720p", "1280 × 720"), ("1080p", "1920 × 1080"));
         SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the recording.");
         Toggle(output, "Record audio", nameof(PianoVisualSettings.RecordAudio),
-            "Write the piano's own audio — the exact blocks the engine renders. An AVI or a PNG sequence gets a 16-bit stereo WAV beside it to mux with the ffmpeg line below the button; an MP4 takes the same samples straight into the file as AAC. A machine with no SoundFont records video only.");
+            "Record Salamander piano audio with the video. AVI and PNG sequence recordings get a stereo WAV; MP4 embeds AAC. Without the piano, recording is video-only.");
         Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
             "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
     }
@@ -1744,11 +1744,11 @@ public partial class MainWindow
                 ? Loc.T("MP4 (H.264 + AAC)")
                 : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
         var audio = _visualSettings.RecordAudio
-            ? _audio.HasSoundFont
+            ? _audio.HasInstrument
                 ? mp4
                     ? Loc.T("audio is written inside the file as AAC")
                     : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
-                : Loc.T("no SoundFont is loaded, so this recording will have no audio")
+                : Loc.T("Salamander Grand is not loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
         // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
         var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null) && !(sequence && _visualSettings.RecordingTransparent);

@@ -16,7 +16,7 @@ honest, and this script holds the compiler to the same promise — every warning
 documented "falls back to Default.isl" notice of the partial Vietnamese translation fails the build.
 
 The compiler also only checks that every Source: file exists, which is why -Stub can compile the
-installer on every push without the 113 MiB SoundFont.
+installer on every push without downloading the 748 MB Salamander sample set.
 #>
 [CmdletBinding()]
 param(
@@ -72,12 +72,18 @@ Write-Host "compiling with $iscc"
 $sourceFull = [IO.Path]::GetFullPath($SourceDir)
 
 if ($Stub) {
-    New-Item -ItemType Directory -Force -Path (Join-Path $sourceFull 'Assets') | Out-Null
-    foreach ($file in 'PianoPath.exe', 'Assets/ConcertGrand.sf2', 'Assets/ATTRIBUTION.txt') {
-        Set-Content -Path (Join-Path $sourceFull $file) -Value 'stub for the installer check'
+    New-Item -ItemType Directory -Force -Path $sourceFull | Out-Null
+    Set-Content -Path (Join-Path $sourceFull 'PianoPath.exe') -Value 'stub for the installer check'
+    # Older local publish folders may still contain the retired SF2 and attribution; never let the stub
+    # accidentally package them in a release installer.
+    foreach ($file in 'Assets/ConcertGrand.sf2', 'Assets/ATTRIBUTION.txt') {
+        $retired = Join-Path $sourceFull $file
+        if (Test-Path $retired) { Remove-Item $retired -Force }
     }
 }
 if (-not (Test-Path $sourceFull)) { throw "$sourceFull does not exist — run .\publish.ps1 first" }
+$sf2Files = @(Get-ChildItem -Path $sourceFull -Filter '*.sf2' -File -Recurse -ErrorAction SilentlyContinue)
+if ($sf2Files.Count -gt 0) { throw "The installer source unexpectedly contains an SF2 instrument: $($sf2Files[0].FullName)" }
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 # What the output folder already holds, so the check below can tell a freshly written installer from one

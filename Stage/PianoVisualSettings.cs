@@ -87,13 +87,15 @@ internal sealed class PianoVisualSettings
     /// </summary>
     public string Language { get; set; } = "";
     /// <summary>
-    /// Audio output backend id (<see cref="AudioOutputChoice"/>): <c>auto</c>, <c>wasapi</c>,
-    /// <c>wasapi-exclusive</c>, <c>waveout</c> or <c>asio:&lt;driver&gt;</c>. Unknown values parse as
-    /// <c>auto</c>, so a profile moved from a machine whose ASIO driver is absent still plays.
+    /// Machine-local output id: Auto, WASAPI shared/exclusive, a named WASAPI endpoint, waveOut, or
+    /// <c>asio:&lt;driver&gt;</c>. A named WASAPI endpoint is stored by its stable Windows device id, so virtual
+    /// targets such as Voicemeeter VAIO/AUX/VAIO3 survive a rename. Unknown values parse as Auto.
     /// </summary>
     public string AudioOutputMode { get; set; } = "auto";
-    /// <summary>WASAPI buffer target in milliseconds (2–50); ASIO uses the driver's own preferred buffer.</summary>
-    public double AudioLatencyMs { get; set; } = 10;
+    /// <summary>Requested WASAPI/ASIO callback period in milliseconds (2–50); the active backend reports what it obtained.</summary>
+    public double AudioLatencyMs { get; set; } = 5;
+    /// <summary>Master piano output gain, 0.5–2.0; applied before the output limiter and the recording tap.</summary>
+    public double AudioMasterGain { get; set; } = 1.25;
     /// <summary>Reverb character: <c>hall</c> (classic algorithmic), <c>concert</c> or <c>soundboard</c>
     /// (built-in convolution responses) or <c>custom</c> (the impulse file below). Unknown values fall
     /// back to <c>hall</c>.</summary>
@@ -447,7 +449,7 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(RenderBackend) or nameof(GpuFrameRate) or nameof(GpuVSync)) continue;
             // And the audio output: the backend and its buffer belong to this machine's sound hardware,
             // so applying a community look can never switch the player off their ASIO interface.
-            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs)) continue;
+            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
             // The reverb room and its impulse file follow the machine too: the file path would not exist
             // on another computer, and a look should not silently change how the piano sounds.
             if (property.Name is nameof(ReverbStyle) or nameof(ReverbImpulseFile)) continue;
@@ -494,6 +496,7 @@ internal sealed class PianoVisualSettings
         PedalGlowIntensity = Math.Clamp(PedalGlowIntensity, 0, 100); TempoSyncAmount = Math.Clamp(TempoSyncAmount, 0, 100);
         AudioReactiveAmount = Math.Clamp(AudioReactiveAmount, 0, 100);
         AudioLatencyMs = Math.Clamp(AudioLatencyMs, 2, 50);
+        AudioMasterGain = Math.Clamp(AudioMasterGain, .5, 2);
         // An id this build does not know (hand-edited file, newer profile) normalises to Auto now instead
         // of surprising whoever later parses it.
         AudioOutputMode = AudioOutputChoice.Parse(AudioOutputMode).Id;

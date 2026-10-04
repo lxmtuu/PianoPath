@@ -17,6 +17,15 @@ một số: quên một bản sao là kiểm tra tĩnh đỏ, không phải mộ
 Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README phát hành
 và không được lặp lại ở đây; tài liệu kế hoạch phát triển nội bộ không nằm trong kho phát hành công khai.
 
+## Unreleased
+
+### Âm thanh & trải nghiệm thiết lập
+
+- Thay toàn bộ nhạc cụ SF2 đóng gói và engine SF2 bằng **Salamander Grand Piano V3 duy nhất**, phát qua SFZ; bỏ chức năng nhập SF2 và chọn nhạc cụ ngoài.
+- Salamander không còn nằm trong Git, ZIP hoặc installer: người dùng chủ động tải một lần khoảng **748 MB** từ trang Audio. Downloader ghim commit, xác minh Git blob SHA-1 từng mẫu FLAC, hỗ trợ huỷ/tiếp tục và ghi mapping/attribution sau khi xác minh xong.
+- Menu khởi động tách **Piano & Audio Setup** và **MIDI Devices** để vào đúng trang cài đặt nhanh hơn; trang Audio có trạng thái rõ ràng, tiến độ tải, nạp/kiểm tra lại đàn và lựa chọn đầu ra.
+- Cập nhật README, hướng dẫn phát hành, kiểm tra nguồn và trang phát hành công khai theo mô hình tải đàn riêng; bỏ hướng dẫn Git LFS, thư mục `Assets/` và kích thước SF2 cũ.
+
 ## 1.0.0 — 2026-10-03
 
 Bản phát hành chính thức đầu tiên. Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn,

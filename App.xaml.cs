@@ -76,7 +76,7 @@ public partial class App : Application
         // they may ask for a specific surface with --menu / --show-settings / --play-dialog / --shortcuts.
         var soak = e.Args.Any(argument => argument.StartsWith("--soak-record=", StringComparison.Ordinal));
         var automated = soak || snapshotIndex >= 0 || e.Args.Contains("--show-settings") || e.Args.Contains("--play-dialog") || e.Args.Contains("--shortcuts");
-        // Automated captures wait several seconds for the SoundFont and must not animate:
+        // Automated captures wait for an already-installed Salamander piano to load and must not animate:
         // a frozen chrome keeps every screenshot identical and the run inexpensive.
         if (automated) { window.AutoHideChrome = false; window.DisableChromeMotion(); }
         // Normal launches open on the concert main menu; automated captures go straight to the stage
@@ -133,7 +133,7 @@ public partial class App : Application
                 // --play-chord holds a spread chord as well, so the hold effects that link keys (electric arcs) show
                 if (e.Args.Contains("--play-chord")) foreach (var pitch in new[] { 48, 55, 64, 67, 72 }) VerificationSuite.PressPreviewNote(window, pitch);
             }
-            // The SoundFont scan and the first render both settle over a few seconds; the timer waits for the
+            // The installed SFZ samples and the first render may take a few seconds; the timer waits for the
             // instrument (bounded, so a silent CI runner still gets its screenshot) and the watchdog guarantees a
             // file even in a session that never raises ContentRendered.
             var settle = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
@@ -170,7 +170,7 @@ public partial class App : Application
             }
             void TryCapture()
             {
-                if (captured || (!window.HasSoundFont && loadedWait.Elapsed < TimeSpan.FromSeconds(8))) return;
+                if (captured || (!window.HasInstrument && loadedWait.Elapsed < TimeSpan.FromSeconds(8))) return;
                 Shoot("settled");
             }
             settle.Tick += (_, _) => TryCapture();
@@ -205,7 +205,7 @@ public partial class App : Application
             var name = $"{Path.GetFileName(Path.GetDirectoryName(full))}-{Path.GetFileName(full)}";
             var engine = window.GpuStageActive ? $"{window.GpuLoop?.AdapterName ?? "gpu"} warp={window.GpuLoop?.IsWarp}" : "software";
             Directory.CreateDirectory(folder);
-            File.WriteAllText(Path.Combine(folder, name + ".txt"), $"{name} sha={hash} how={how} engine={engine} soundfont={window.HasSoundFont} seconds={seconds:F1} timings={timings}");
+            File.WriteAllText(Path.Combine(folder, name + ".txt"), $"{name} sha={hash} how={how} engine={engine} instrument={window.HasInstrument} seconds={seconds:F1} timings={timings}");
         }
         catch (Exception)
         {

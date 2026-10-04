@@ -1,12 +1,10 @@
 namespace PianoPath;
 
 /// <summary>
-/// What the audio pipeline needs from an instrument synthesiser, so the same float32 path — sympathetic
-/// string resonance, hall reverb, output sink and the recording tap — plays whichever sample engine is
-/// loaded. Implemented by <see cref="SoundFontSynthesizer"/> (SoundFont 2, the bundled Yamaha grand) and
-/// <see cref="SfzSynthesizer"/> (SFZ instruments such as the Steinway sample sets). Both engines share the
-/// continuous damper model: CC 64 half-pedalling, repedal catch and the damper level that drives the
-/// resonance bank behave identically whichever format the piano came from.
+/// What the audio pipeline needs from the Salamander Grand SFZ synthesiser, so the same float32 path —
+/// sympathetic string resonance, hall reverb, output sink and the recording tap — is shared by playback,
+/// MIDI input and recording. Its continuous damper model covers CC 64 half-pedalling and repedal catch; the
+/// pedal level also drives the sympathetic-resonance bank.
 /// </summary>
 internal interface IPianoSynthesizer
 {

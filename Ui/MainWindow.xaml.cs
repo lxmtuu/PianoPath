@@ -1,4 +1,5 @@
 using Microsoft.Win32;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO;
 using System.Windows;
@@ -26,6 +27,13 @@ public partial class MainWindow : Window
     private readonly Stopwatch _recordClock = new();
     private readonly MidiDeviceService _midi = new();
     private readonly PianoAudioEngine _audio = new();
+    private readonly ConcurrentQueue<PendingMidiUiEvent> _pendingMidiUi = new();
+    private int _midiUiDispatchPending;
+    private int _audioOutputCatalogVersion, _audioOutputCatalogRefreshPending;
+    private IReadOnlyList<AudioOutputEndpoint> _audioOutputEndpoints = [];
+    private Task _storedReverbTask = Task.CompletedTask;
+    private int _reverbUiRequestVersion;
+    private readonly record struct PendingMidiUiEvent(int Pitch, int Velocity, bool On, bool GpuAlreadyForwarded);
     private readonly Dictionary<string, Slider> _visualSliders = [];
     private readonly Dictionary<string, TextBox> _visualColorInputs = [];
     private readonly Dictionary<string, Button> _visualColorButtons = [];
@@ -45,7 +53,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<Key, int> _keyDownPitches = [];
     private int _hits, _misses, _streak, _bestStreak, _activeTrack = -1;
     private double _position, _tempo = 1, _loopA = -1, _loopB = -1, _metronomeOffAt = -1;
-    private bool _playing, _isSeeking, _updatingSeek, _updatingPedals, _suppressDevices, _suppressTracks, _suppressPreset, _processCurrentOnsets, _fullScreen = true, _uiReady, _isBuiltInSoundFont, _closing, _chromeVisible = true, _loadingVisualSettings;
+    private bool _playing, _isSeeking, _updatingSeek, _updatingPedals, _suppressDevices, _suppressTracks, _processCurrentOnsets, _fullScreen = true, _uiReady, _closing, _chromeVisible = true, _loadingVisualSettings;
     /// <summary>True once the user deliberately picked a MIDI input; until then refreshes auto-connect the first keyboard.</summary>
     private bool _inputChoiceByUser;
     private DateTime _lastPointerActivity = DateTime.UtcNow;
@@ -68,7 +76,7 @@ public partial class MainWindow : Window
     private static readonly int[] ComputerMap = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
     private static readonly Key[] ComputerKeys = [Key.A, Key.W, Key.S, Key.E, Key.D, Key.F, Key.T, Key.G, Key.Y, Key.H, Key.U, Key.J, Key.K];
 
-    public MainWindow(bool loadBuiltInSoundFont = true)
+    public MainWindow(bool loadSalamanderOnStart = true)
     {
         InitializeComponent();
         _visualSettings = PianoVisualSettingsStore.Load();
@@ -76,8 +84,11 @@ public partial class MainWindow : Window
         // pipeline already opens the backend the player chose last time instead of opening waveOut and
         // immediately rebuilding.
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
+        _audio.MasterGain = _visualSettings.AudioMasterGain;
+        _audio.OutputChanged += AudioEngine_OutputChanged;
+        SourceInitialized += (_, _) => _audio.SetAsioSystemHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle);
         // Same for the reverb room, which also shapes the very first pipeline.
-        ApplyStoredReverb();
+        _storedReverbTask = ApplyStoredReverbAsync();
         RefreshReverbStyleCombo();
         Loc.OnChanged(RefreshReverbStyleCombo);
         BuildVisualSettingsControls();
@@ -97,29 +108,12 @@ public partial class MainWindow : Window
         FrameClock.Shared.Tick += OnFrame;
         _midi.NoteChanged += (pitch, velocity, on) =>
         {
-            // The GPU engine hears the note on the MIDI callback thread itself, so its trail and burst
-            // never wait for the dispatcher; the stage then skips re-queuing the same note.
-            var direct = ForwardMidiToGpu(pitch, velocity, on);
-            // The synthesizer is locked internally, so the note sounds from this thread too: a busy UI frame
-            // (a dock rebuild, a layout pass) can no longer sit between the key and the sound. Notes and pedals
-            // both go this way, in arrival order, so a note released under a just-pressed pedal still sustains.
+            // Audio note events are queued without taking the synth's render lock. The audio thread consumes
+            // them at the next buffer, so a heavy sample block cannot stall WinMM's MIDI callback.
             if (on) _audio.NoteOn(pitch, velocity); else _audio.NoteOff(pitch);
-            Dispatcher.BeginInvoke(() =>
-            {
-                Stage.SuppressGpuForward = direct;
-                _liveAudioSent = true;
-                try
-                {
-                    if (on)
-                    {
-                        Loc.Format(DeviceLabel, "MIDI IN · {0}", NoteLabel(pitch));
-                        DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(75, 244, 187));
-                        PressNote(pitch, velocity);
-                    }
-                    else ReleaseNote(pitch);
-                }
-                finally { Stage.SuppressGpuForward = false; _liveAudioSent = false; }
-            });
+            // The GPU gets the note immediately; only its WPF overlay work is batched below.
+            var direct = ForwardMidiToGpu(pitch, velocity, on);
+            QueueMidiUiEvent(new PendingMidiUiEvent(pitch, velocity, on, direct));
         };
         // The raw controller value reaches the synthesiser so a continuous pedal can half-pedal; it is sent
         // from the MIDI thread for the same latency reason as the notes above.
@@ -130,7 +124,7 @@ public partial class MainWindow : Window
             try { SetPedalState(pedal, down); }
             finally { _liveAudioSent = false; }
         });
-        PopulateTracks(); RefreshDevices(); UpdateSoundFontUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
+        PopulateTracks(); RefreshDevices(); UpdateInstrumentUi(); RefreshPracticeHistory(); UpdateSongUi(); UpdateStage(); UpdateStats(); UpdateTime();
         // A folder indexed in an earlier session is watched from the start, so the library is live whether or
         // not the Play dialog has been opened yet.
         RefreshLibrarySongs(); StartSongFolderWatch(SongFolderIndex.Folder);
@@ -140,29 +134,76 @@ public partial class MainWindow : Window
         // The GPU stage is the main stage: the render loop starts with the window and the software
         // renderer only steps in if Direct3D cannot start (or for a --software run).
         ApplyRenderBackend();
-        UpdateSalamanderUi();
-        if (loadBuiltInSoundFont) Loaded += MainWindow_Loaded;
+        UpdateInstrumentUi();
+        if (loadSalamanderOnStart) Loaded += MainWindow_Loaded;
     }
-    internal bool HasSoundFont => _audio.HasSoundFont;
+    internal bool HasInstrument => _audio.HasInstrument;
+
+    private void AudioEngine_OutputChanged()
+    {
+        if (_closing || Dispatcher.HasShutdownStarted) return;
+        try
+        {
+            Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+            {
+                if (_closing) return;
+                // A device/effect rebuild creates a fresh synthesiser. Restore pedal positions once it is live.
+                if (_audio.HasInstrument)
+                    foreach (var pedal in _pedalsDown) _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), 127);
+                UpdateInstrumentUi();
+            }));
+        }
+        catch (InvalidOperationException) { }
+    }
+
+    private void QueueMidiUiEvent(PendingMidiUiEvent midiEvent)
+    {
+        if (_closing) return;
+        _pendingMidiUi.Enqueue(midiEvent);
+        if (Interlocked.CompareExchange(ref _midiUiDispatchPending, 1, 0) == 0) ScheduleMidiUiDrain();
+    }
+
+    private void ScheduleMidiUiDrain()
+    {
+        try { Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(DrainMidiUiEvents)); }
+        catch (InvalidOperationException) { Interlocked.Exchange(ref _midiUiDispatchPending, 0); }
+    }
+
+    private void DrainMidiUiEvents()
+    {
+        var handled = 0;
+        while (handled++ < 256 && _pendingMidiUi.TryDequeue(out var midiEvent))
+        {
+            Stage.SuppressGpuForward = midiEvent.GpuAlreadyForwarded;
+            _liveAudioSent = true;
+            try
+            {
+                if (midiEvent.On)
+                {
+                    Loc.Format(DeviceLabel, "MIDI IN · {0}", NoteLabel(midiEvent.Pitch));
+                    DeviceDot.Fill = new SolidColorBrush(Color.FromRgb(75, 244, 187));
+                    PressNote(midiEvent.Pitch, midiEvent.Velocity);
+                }
+                else ReleaseNote(midiEvent.Pitch);
+            }
+            finally { Stage.SuppressGpuForward = false; _liveAudioSent = false; }
+        }
+
+        if (!_pendingMidiUi.IsEmpty) { ScheduleMidiUiDrain(); return; }
+        Interlocked.Exchange(ref _midiUiDispatchPending, 0);
+        if (!_pendingMidiUi.IsEmpty && Interlocked.CompareExchange(ref _midiUiDispatchPending, 1, 0) == 0)
+            ScheduleMidiUiDrain();
+    }
 
     private async void MainWindow_Loaded(object sender, RoutedEventArgs e)
     {
         Loaded -= MainWindow_Loaded;
-        // Once the downloaded concert grand is installed it outranks the bundled SoundFont at startup.
-        if (SalamanderPiano.IsInstalled)
-        {
-            await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
-            if (_audio.HasSoundFont) return; // otherwise (deleted samples, bad disk) fall back to the bundled grand
-        }
-        var bundled = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
-        if (SoundFontReader.IsLfsPointer(bundled))
-        {
-            // The checkout skipped Git LFS. Report the fix instead of a confusing "not an SF2 file" parse error.
-            UpdateSoundFontUi();
-            Loc.Set(SoundFontHint, "ConcertGrand.sf2 is a Git LFS pointer · run 'git lfs install' then 'git lfs pull', or load another .sf2");
-            return;
-        }
-        await LoadSoundFontAsync(bundled, builtIn: true);
+        await _storedReverbTask; // a custom impulse may be large; never read or decode it on the WPF thread
+        if (_closing) return;
+        // Salamander is the sole piano. It is downloaded only by explicit request; a fresh install stays silent
+        // until the user starts the one-time, resumable 748 MB setup from Audio settings.
+        if (SalamanderPiano.IsInstalled) await LoadSalamanderAsync();
+        else UpdateInstrumentUi();
     }
 
     private void Play_Click(object sender, RoutedEventArgs e) => TogglePlay();
@@ -400,7 +441,7 @@ public partial class MainWindow : Window
             _nextBeat++;
         }
         if (click) Stage.PulseBeat(downbeat ? 1 : .6); // Tempo Sync follows the MIDI tempo map even when the click is muted.
-        if (click && MetronomeCheck.IsChecked == true && _audio.HasSoundFont) { _audio.NoteOn(MetronomePitch, downbeat ? 84 : 62); _metronomeOffAt = _position + .08; }
+        if (click && MetronomeCheck.IsChecked == true && _audio.HasInstrument) { _audio.NoteOn(MetronomePitch, downbeat ? 84 : 62); _metronomeOffAt = _position + .08; }
     }
 
     private bool IsDownbeat(int beatIndex)
@@ -482,112 +523,113 @@ public partial class MainWindow : Window
         RememberSong(path, song);
     }
 
-    private async void LoadSoundFont_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFileDialog { Filter = Loc.T("Piano instruments (*.sf2, *.sfz)|*.sf2;*.sfz|SoundFont 2 files (*.sf2)|*.sf2|SFZ instruments (*.sfz)|*.sfz|All files (*.*)|*.*"), Title = Loc.T("Choose a piano instrument") };
-        if (dialog.ShowDialog(this) != true) return;
-        await LoadSoundFontAsync(dialog.FileName, builtIn: false);
-    }
+    private CancellationTokenSource? _salamanderCancel;
+    private bool _instrumentLoading;
+    private string? _instrumentLoadError;
 
-    private async Task LoadSoundFontAsync(string path, bool builtIn)
+    /// <summary>Loads the one supported instrument off the UI thread; FLAC decoding can take a moment.</summary>
+    private async Task LoadSalamanderAsync()
     {
-        if (_closing) return;
-        SoundFontButton.IsEnabled = false;
-        Loc.Set(SoundFontLabel, "LOADING SOUNDFONT…");
-        Loc.Set(SoundFontHint, "Large sample banks may take a few seconds");
+        if (_closing || _instrumentLoading || _audio.HasInstrument || !SalamanderPiano.IsInstalled) return;
+        _instrumentLoading = true;
+        _instrumentLoadError = null;
+        UpdateInstrumentUi();
         try
         {
-            await Task.Run(() => _audio.LoadInstrument(path));
-            if (_closing) { _audio.UnloadSoundFont(); return; }
+            await Task.Run(() => _audio.LoadSfzInstrument(SalamanderPiano.SfzPath));
+            if (_closing) return;
             foreach (var pedal in _pedalsDown) _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), 127);
-            _isBuiltInSoundFont = builtIn;
-            _suppressPreset = true;
-            try
-            {
-                if (_audio.Presets.Count > 0)
-                {
-                    PresetCombo.ItemsSource = _audio.Presets.Select(p => $"{p.Bank:000} · {p.Program:000}  {p.Name}").ToList();
-                    var preset = _audio.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0) ?? _audio.Presets.First();
-                    PresetCombo.SelectedIndex = _audio.Presets.ToList().IndexOf(preset);
-                }
-                else
-                {
-                    // An SFZ set is one instrument, not a bank: the combo says so instead of listing presets.
-                    PresetCombo.ItemsSource = new[] { Loc.T("SFZ · SINGLE INSTRUMENT") };
-                    PresetCombo.SelectedIndex = 0;
-                }
-            }
-            finally { _suppressPreset = false; }
-            UpdateSoundFontUi();
         }
         catch (Exception ex)
         {
             if (_closing) return;
-            Loc.Set(SoundFontLabel, _audio.HasSoundFont ? "PREVIOUS SOUNDFONT STILL ACTIVE" : "NO SOUNDFONT · SILENT");
-            Loc.Bind(SoundFontHint, () => ex.Message); ShowError(Loc.F("Could not load this SoundFont.\n{0}", ex.Message), "SoundFont");
+            _instrumentLoadError = ex.Message;
         }
-        finally { if (!_closing) SoundFontButton.IsEnabled = true; }
+        finally
+        {
+            _instrumentLoading = false;
+            if (!_closing) UpdateInstrumentUi();
+        }
     }
 
-    private void PresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    /// <summary>One status line and one primary action keep install, download, and playback state together.</summary>
+    private void UpdateInstrumentUi()
     {
-        if (_suppressPreset || PresetCombo.SelectedIndex < 0 || PresetCombo.SelectedIndex >= _audio.Presets.Count) return;
-        var preset = _audio.Presets[PresetCombo.SelectedIndex]; _audio.SelectPreset(preset.Bank, preset.Program);
-        Loc.Format(SoundFontHint, "Instrument · {0}", preset.Name);
-    }
-    private void UnloadSoundFont_Click(object sender, RoutedEventArgs e) { _audio.UnloadSoundFont(); _isBuiltInSoundFont = false; _suppressPreset = true; PresetCombo.ItemsSource = null; PresetCombo.SelectedIndex = -1; _suppressPreset = false; UpdateSoundFontUi(); }
-
-    // =============================================================================================
-    // The downloadable Salamander concert grand (SalamanderPiano owns the manifest and the files)
-    // =============================================================================================
-
-    private System.Threading.CancellationTokenSource? _salamanderCancel;
-
-    private void UpdateSalamanderUi()
-    {
+        if (InstrumentStatusLabel is null) return;
+        var loaded = _audio.HasInstrument;
+        var audible = loaded && _audio.HasAudioOutput;
         var downloading = _salamanderCancel is not null;
+        var installed = SalamanderPiano.IsInstalled;
+
         SalamanderProgress.Visibility = downloading ? Visibility.Visible : Visibility.Collapsed;
-        SalamanderPlayButton.Visibility = !downloading && SalamanderPiano.IsInstalled ? Visibility.Visible : Visibility.Collapsed;
-        Loc.Set(SalamanderButton, downloading ? "CANCEL DOWNLOAD" : "⬇  DOWNLOAD · 750 MB");
-        if (downloading) { Loc.Set(SalamanderLabel, "SALAMANDER GRAND PIANO · DOWNLOADING"); return; }
-        Loc.Set(SalamanderLabel, SalamanderPiano.IsInstalled ? "SALAMANDER GRAND PIANO · INSTALLED" : "SALAMANDER GRAND PIANO · NOT DOWNLOADED");
-        Loc.Set(SalamanderHint, "Yamaha C5 concert grand · 48 kHz / 24-bit · 16 velocity layers, release samples, string resonance and pedal noise · recorded by Alexander Holm, CC BY");
+        SalamanderButton.IsEnabled = ! _instrumentLoading;
+        SalamanderButton.Visibility = loaded ? Visibility.Collapsed : Visibility.Visible;
+        SalamanderPlayButton.Visibility = installed && !loaded && !downloading && !_instrumentLoading ? Visibility.Visible : Visibility.Collapsed;
+        Loc.Set(SalamanderButton, downloading ? "CANCEL DOWNLOAD" : installed ? "VERIFY / REPAIR PIANO FILES" : "⬇  DOWNLOAD PIANO · 748 MB");
+        SalamanderPlayButton.IsEnabled = !_instrumentLoading && !downloading;
+
+        if (downloading) Loc.Set(InstrumentStatusLabel, "SALAMANDER GRAND · DOWNLOADING");
+        else if (_instrumentLoading) Loc.Set(InstrumentStatusLabel, "SALAMANDER GRAND · LOADING SAMPLES");
+        else if (loaded) Loc.Set(InstrumentStatusLabel, audible ? "SALAMANDER GRAND · READY" : "SALAMANDER GRAND · NO AUDIO DEVICE");
+        else if (installed && _instrumentLoadError is not null) Loc.Set(InstrumentStatusLabel, "SALAMANDER GRAND · CHECK FILES");
+        else if (installed) Loc.Set(InstrumentStatusLabel, "SALAMANDER GRAND · INSTALLED");
+        else Loc.Set(InstrumentStatusLabel, "SALAMANDER GRAND · SETUP REQUIRED");
+
+        if (downloading)
+        {
+            // The progress callback owns the changing byte count; keep this label steady between callbacks.
+        }
+        else if (_instrumentLoading) Loc.Set(InstrumentHint, "Loading the verified samples; the window remains responsive.");
+        else if (loaded && _audio.PlaybackError is { } playbackError) Loc.Format(InstrumentHint, "Instrument loaded, but no audio output is available · {0}", playbackError);
+        else if (loaded) Loc.Set(InstrumentHint, "Yamaha C5 · 16 velocity layers · release and pedal samples · CC BY 3.0");
+        else if (_instrumentLoadError is { } loadError) Loc.Format(InstrumentHint, "Could not load the piano samples · {0}", loadError);
+        else if (installed) Loc.Set(InstrumentHint, "The piano is installed. Load it now, or verify/repair the sample files.");
+        else Loc.Set(InstrumentHint, "One-time download · about 748 MB. Each sample is verified; interrupted setup can resume.");
+
+        InstrumentStatusLabel.Foreground = audible
+            ? new SolidColorBrush(Color.FromRgb(112, 242, 213))
+            : new SolidColorBrush(Color.FromRgb(255, 180, 209));
+        if (MetronomeCheck is not null) { MetronomeCheck.IsEnabled = loaded; if (!loaded) MetronomeCheck.IsChecked = false; }
+        UpdateAudioOutputHint();
+        UpdatePlaybackLabel();
     }
 
     private async void SalamanderButton_Click(object sender, RoutedEventArgs e)
     {
         if (_salamanderCancel is { } running) { running.Cancel(); return; }
-        using var cancel = _salamanderCancel = new System.Threading.CancellationTokenSource();
-        UpdateSalamanderUi();
+        if (_audio.HasInstrument || _instrumentLoading) return;
+
+        using var cancel = _salamanderCancel = new CancellationTokenSource();
+        SalamanderProgress.Value = 0;
+        UpdateInstrumentUi();
         try
         {
             var total = (SalamanderPiano.TotalBytes / 1_000_000).ToString();
             var progress = new Progress<long>(done =>
             {
                 SalamanderProgress.Value = done * 1000.0 / SalamanderPiano.TotalBytes;
-                Loc.Format(SalamanderHint, "Downloaded {0} of {1} MB · the piano loads as soon as it finishes", (done / 1_000_000).ToString(), total);
+                Loc.Format(InstrumentHint, "Downloaded {0} of {1} MB · samples are verified before use", (done / 1_000_000).ToString(), total);
             });
             await SalamanderPiano.DownloadAsync(progress, cancel.Token);
             _salamanderCancel = null;
-            UpdateSalamanderUi();
-            if (!_closing) await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
+            UpdateInstrumentUi();
+            if (!_closing) await LoadSalamanderAsync();
         }
         catch (OperationCanceledException)
         {
             _salamanderCancel = null;
-            UpdateSalamanderUi();
-            Loc.Set(SalamanderHint, "Download cancelled · finished files are kept, download again to resume");
+            UpdateInstrumentUi();
+            Loc.Set(InstrumentHint, "Download cancelled · completed files are kept so setup can resume.");
         }
         catch (Exception ex)
         {
             _salamanderCancel = null;
-            UpdateSalamanderUi();
-            Loc.Format(SalamanderHint, "Download failed · {0}", ex.Message);
+            UpdateInstrumentUi();
+            Loc.Format(InstrumentHint, "Download failed · {0}", ex.Message);
         }
     }
 
-    private async void SalamanderPlay_Click(object sender, RoutedEventArgs e) =>
-        await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
+    private async void SalamanderPlay_Click(object sender, RoutedEventArgs e) => await LoadSalamanderAsync();
 
     // =============================================================================================
     // Reverb style (classic hall, built-in convolution rooms, or a user impulse response)
@@ -596,20 +638,42 @@ public partial class MainWindow : Window
     private static readonly string[] ReverbStyleIds = ["hall", "concert", "soundboard", "custom"];
     private bool _suppressReverbStyle;
 
-    /// <summary>Hands the stored reverb choice to the engine at startup; a vanished custom file falls back.</summary>
-    private void ApplyStoredReverb()
+    /// <summary>Hands the stored reverb choice to the engine; custom impulse decoding runs away from the UI.</summary>
+    private Task ApplyStoredReverbAsync()
     {
-        if (_visualSettings.ReverbStyle == "custom")
-        {
-            try { _audio.SetReverb(PianoReverbStyle.CustomImpulse, _visualSettings.ReverbImpulseFile); return; }
-            catch { _visualSettings.ReverbStyle = "hall"; _visualSettings.ReverbImpulseFile = ""; }
-        }
+        if (_visualSettings.ReverbStyle == "custom") return ApplyStoredCustomReverbAsync(_visualSettings.ReverbImpulseFile);
         _audio.SetReverb(_visualSettings.ReverbStyle switch
         {
             "concert" => PianoReverbStyle.ConcertHall,
             "soundboard" => PianoReverbStyle.Soundboard,
             _ => PianoReverbStyle.Hall,
         });
+        return Task.CompletedTask;
+    }
+
+    private async Task ApplyStoredCustomReverbAsync(string? path)
+    {
+        var requestVersion = Interlocked.Increment(ref _reverbUiRequestVersion);
+        try
+        {
+            if (await _audio.SetReverbAsync(PianoReverbStyle.CustomImpulse, path)) return;
+        }
+        catch
+        {
+            if (_closing || requestVersion != Volatile.Read(ref _reverbUiRequestVersion) || Dispatcher.HasShutdownStarted) return;
+            try
+            {
+                await Dispatcher.InvokeAsync((Action)(() =>
+                {
+                    if (requestVersion != Volatile.Read(ref _reverbUiRequestVersion)) return;
+                    _visualSettings.ReverbStyle = "hall";
+                    _visualSettings.ReverbImpulseFile = "";
+                    _audio.SetReverb(PianoReverbStyle.Hall);
+                    RefreshReverbStyleCombo();
+                }));
+            }
+            catch (InvalidOperationException) { }
+        }
     }
 
     /// <summary>(Re)fills the style list — called at startup and on every language switch.</summary>
@@ -634,6 +698,7 @@ public partial class MainWindow : Window
         if (_suppressReverbStyle || ReverbStyleCombo.SelectedIndex < 0) return;
         var id = ReverbStyleIds[ReverbStyleCombo.SelectedIndex];
         if (id == "custom") { ChooseReverbImpulse(); return; } // picking the entry asks for the file
+        Interlocked.Increment(ref _reverbUiRequestVersion);
         _audio.SetReverb(id switch { "concert" => PianoReverbStyle.ConcertHall, "soundboard" => PianoReverbStyle.Soundboard, _ => PianoReverbStyle.Hall });
         _visualSettings.ReverbStyle = id;
         AfterReverbChange();
@@ -641,21 +706,34 @@ public partial class MainWindow : Window
 
     private void ReverbImpulse_Click(object sender, RoutedEventArgs e) => ChooseReverbImpulse();
 
-    private void ChooseReverbImpulse()
+    private async void ChooseReverbImpulse()
     {
         var dialog = new OpenFileDialog { Filter = Loc.T("Impulse responses (*.wav, *.flac)|*.wav;*.flac|All files (*.*)|*.*"), Title = Loc.T("Choose an impulse response") };
         if (dialog.ShowDialog(this) != true) { RefreshReverbStyleCombo(); return; } // put the combo back
+        var requestVersion = Interlocked.Increment(ref _reverbUiRequestVersion);
+        ReverbStyleCombo.IsEnabled = false;
+        ReverbImpulseButton.IsEnabled = false;
         try
         {
-            _audio.SetReverb(PianoReverbStyle.CustomImpulse, dialog.FileName);
+            if (!await _audio.SetReverbAsync(PianoReverbStyle.CustomImpulse, dialog.FileName)) return;
+            if (_closing || requestVersion != Volatile.Read(ref _reverbUiRequestVersion)) return;
             _visualSettings.ReverbStyle = "custom";
             _visualSettings.ReverbImpulseFile = dialog.FileName;
             AfterReverbChange();
         }
         catch (Exception ex)
         {
+            if (_closing || requestVersion != Volatile.Read(ref _reverbUiRequestVersion)) return;
             RefreshReverbStyleCombo();
             ShowError(Loc.F("Could not load this impulse response.\n{0}", ex.Message), "Audio");
+        }
+        finally
+        {
+            if (!_closing)
+            {
+                ReverbStyleCombo.IsEnabled = true;
+                ReverbImpulseButton.IsEnabled = true;
+            }
         }
     }
 
@@ -670,38 +748,6 @@ public partial class MainWindow : Window
     private void ShowError(string message, string titleKey, MessageBoxImage icon = MessageBoxImage.Warning) =>
         ShowMessage(message, titleKey, icon);
 
-    private void UpdateSoundFontUi()
-    {
-        var loaded = _audio.HasSoundFont;
-        // A loaded SoundFont without a usable playback device still drives the stage and scoring, but must not claim to be audible.
-        var audible = loaded && _audio.HasAudioOutput;
-        if (loaded)
-        {
-            if (_isBuiltInSoundFont) Loc.Format(SoundFontLabel, "BUILT-IN YAMAHA GRAND · {0}", Loc.T(audible ? "READY" : "NO AUDIO DEVICE"));
-            else if (_audio.IsSfzInstrument) Loc.Format(SoundFontLabel, "SFZ INSTRUMENT {0} · {1}", Loc.T(audible ? "READY" : "LOADED · NO AUDIO DEVICE"), _audio.LoadedName);
-            else Loc.Format(SoundFontLabel, "SOUNDFONT {0} · {1}", Loc.T(audible ? "READY" : "LOADED · NO AUDIO DEVICE"), _audio.LoadedName);
-        }
-        else Loc.Set(SoundFontLabel, "NO SOUNDFONT · SILENT");
-        SoundFontLabel.Foreground = audible ? new SolidColorBrush(Color.FromRgb(112, 242, 213)) : new SolidColorBrush(Color.FromRgb(255, 180, 209));
-        if (loaded)
-        {
-            if (_audio.PlaybackError is { } playbackError) Loc.Format(SoundFontHint, "No audio output · {0}", playbackError);
-            else Loc.Format(SoundFontHint, "{0} · Hall reverb {1}", _isBuiltInSoundFont ? Loc.T("Yamaha grand") : _audio.LoadedName, Loc.T(_audio.ReverbEnabled ? "ON" : "OFF"));
-        }
-        else Loc.Set(SoundFontHint, "Load a .sf2 SoundFont or .sfz instrument to enable piano audio");
-        if (!loaded && PresetCombo.Items.Count == 0)
-        {
-            _suppressPreset = true;
-            PresetCombo.ItemsSource = new[] { Loc.T("NO PRESET · LOAD .SF2") };
-            PresetCombo.SelectedIndex = 0;
-            _suppressPreset = false;
-        }
-        PresetCombo.IsEnabled = loaded;
-        if (MetronomeCheck is not null) { MetronomeCheck.IsEnabled = loaded; if (!loaded) MetronomeCheck.IsChecked = false; }
-        UpdateAudioOutputHint();
-        UpdatePlaybackLabel();
-    }
-
     /// <summary>
     /// The line under the output pickers: the live path and its buffer ("WASAPI shared · 10.7 ms"), the
     /// explicit request's failure when a fallback answered instead, or why the machine is silent. The ASIO
@@ -711,7 +757,7 @@ public partial class MainWindow : Window
     {
         if (AsioPanelButton is null || AudioOutputHint is null) return;
         AsioPanelButton.IsEnabled = _audio.IsAsioOutput;
-        if (!_audio.HasSoundFont) { Loc.Set(AudioOutputHint, "Takes effect once a SoundFont is loaded."); return; }
+        if (!_audio.HasInstrument) { Loc.Set(AudioOutputHint, "Download Salamander Grand to enable piano audio."); return; }
         if (_audio.OutputDescription is { } description)
         {
             if (_audio.OutputFallbackNotice is { } notice) Loc.Format(AudioOutputHint, "Output · {0} · {1}", description, notice);
@@ -724,7 +770,7 @@ public partial class MainWindow : Window
     {
         if (sender is not ToggleButton toggle) return;
         _audio.ReverbEnabled = toggle.IsChecked == true;
-        if (_uiReady) UpdateSoundFontUi();
+        if (_uiReady) UpdateInstrumentUi();
     }
 
     private void ResonanceToggle_Changed(object sender, RoutedEventArgs e)
@@ -746,9 +792,9 @@ public partial class MainWindow : Window
 
     private void UpdatePlaybackLabel()
     {
-        if (_playing) Loc.Set(NowPlayingLabel, _audio.HasSoundFont ? "PLAYING · NOTES FALLING" : "PLAYING · SILENT WITHOUT SOUNDFONT");
-        else if (_notes.Count == 0) Loc.Set(NowPlayingLabel, _audio.HasSoundFont ? "LIVE PLAY · SOUNDFONT READY" : "LIVE PLAY · PRESS A KEY");
-        else Loc.Set(NowPlayingLabel, _audio.HasSoundFont ? "MIDI LOADED · READY TO PLAY" : "MIDI LOADED · SILENT UNTIL SF2");
+        if (_playing) Loc.Set(NowPlayingLabel, _audio.HasInstrument ? "PLAYING · NOTES FALLING" : "PLAYING · AUDIO SETUP NEEDED");
+        else if (_notes.Count == 0) Loc.Set(NowPlayingLabel, _audio.HasInstrument ? "LIVE PLAY · PIANO READY" : "LIVE PLAY · SET UP PIANO IN AUDIO SETTINGS");
+        else Loc.Set(NowPlayingLabel, _audio.HasInstrument ? "MIDI LOADED · READY TO PLAY" : "MIDI LOADED · SET UP PIANO AUDIO");
     }
 
     private void Window_KeyDown(object sender, KeyEventArgs e)
@@ -1033,7 +1079,7 @@ public partial class MainWindow : Window
         {
             // The MP4 writer owns its audio stream, so it has to know before it opens the file whether the
             // engine will hand it samples.
-            var withAudio = _visualSettings.RecordAudio && _audio.HasSoundFont;
+            var withAudio = _visualSettings.RecordAudio && _audio.HasInstrument;
             var path = target!;
             var mp4Fallback = false;
             if (target.Length > 0 && sequence)
@@ -1364,13 +1410,13 @@ public partial class MainWindow : Window
 
     /// <summary>
     /// Opens the WAV for this take and attaches the engine's tap to it. Returns false when there is nothing to
-    /// record — the setting is off, no SoundFont is loaded, or the file cannot be written — in which case the
+    /// record — the setting is off, the Salamander piano is not loaded, or the file cannot be written — in which case the
     /// video records alone, exactly as it did before the audio track existed.
     /// </summary>
     internal bool BeginAudioTrack()
     {
         EndAudioTrack();
-        if (!_visualSettings.RecordAudio || !_audio.HasSoundFont || _recordingPath is null) return false;
+        if (!_visualSettings.RecordAudio || !_audio.HasInstrument || _recordingPath is null) return false;
         // An MP4 carries its own audio stream, so the same tap goes straight into the file being written;
         // every other format gets a WAV beside the video to mux afterwards.
         IAudioTrack? track = _videoRecorder is Mp4Recorder { HasAudio: true } mp4
@@ -1380,6 +1426,7 @@ public partial class MainWindow : Window
         _audioTrack = track; _audioTrackSeconds = 0;
         // The tap runs on the audio thread, so the writer is only ever touched under its lock.
         _audio.SetTap((samples, count) => { lock (_audioTrackLock) _audioTrack?.Append(samples, count); });
+        _audio.SetTapClockEnabled(true);
         return true;
     }
 
@@ -1389,7 +1436,9 @@ public partial class MainWindow : Window
     /// </summary>
     internal string? EndAudioTrack()
     {
+        _audio.SetTapClockEnabled(false);
         _audio.SetTap(null);
+        _audio.FlushTap(); // all background audio-writer blocks are done before the WAV/MP4 is closed
         IAudioTrack? track;
         lock (_audioTrackLock) { track = _audioTrack; _audioTrack = null; }
         if (track is null) return null;
@@ -1403,25 +1452,20 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Keeps the WAV as long as the video while no sound device is rendering: with no output device the pump
-    /// thread never runs, so the recording clock drives the synthesiser in step with the recording clock. With
-    /// a device the pump already fills the track, and this only remembers how long it has grown.
+    /// Keeps the audio track clocked while recording. A live device fills it from its audio callback; with no
+    /// output device, PianoAudioEngine runs a separate 44.1 kHz tap clock so synthesis and file writes never
+    /// hitch the WPF frame loop.
     /// </summary>
     private void PumpAudioTrack(TimeSpan elapsed)
     {
         if (!_audioTrackStarted) return;
-        if (_audio.HasAudioOutput)
+        if (_audio.HasAudioOutput || _audio.HasTap)
         {
-            // The pump thread is already rendering, so the track follows the clock on its own.
             _audioTrackSeconds = AudioTrackSeconds();
             return;
         }
-        while (true)
-        {
-            var due = (long)(elapsed.TotalSeconds * 44100) - (long)(AudioTrackSeconds() * 44100);
-            if (due < AudioTrackBlockFrames) break;
-            if (!_audio.PumpTapBlock()) { lock (_audioTrackLock) _audioTrack?.AppendSilence(due); break; }
-        }
+        var due = (long)(elapsed.TotalSeconds * 44100) - (long)(AudioTrackSeconds() * 44100);
+        if (due > 0) { lock (_audioTrackLock) _audioTrack?.AppendSilence(due); }
         _audioTrackSeconds = AudioTrackSeconds();
     }
 
@@ -1430,9 +1474,6 @@ public partial class MainWindow : Window
     {
         lock (_audioTrackLock) return _audioTrack?.Seconds ?? _audioTrackSeconds;
     }
-
-    /// <summary>Frames one rendered block holds; the same block size the engine's pump uses.</summary>
-    private const int AudioTrackBlockFrames = 512;
 
     private RenderTargetBitmap? _captureBitmap;
     private byte[]? _captureSource, _captureTarget;
@@ -1705,6 +1746,7 @@ public partial class MainWindow : Window
         }
         finally { _suppressDevices = false; }
         RefreshAudioOutputs();
+        RefreshAudioOutputCatalog(); // MMDevice COM enumeration can be slow; never hold up the WPF input thread.
         ConnectInput(showErrors: false);
         if (outputIndex > 0) ConnectOutput();
     }
@@ -1713,9 +1755,9 @@ public partial class MainWindow : Window
     private static readonly double[] AudioLatencySteps = [20, 10, 5, 3];
 
     /// <summary>
-    /// Rebuilds the audio-output picker: the four fixed backends plus one row per installed ASIO driver.
-    /// Like the MIDI pickers, rows carry a stable English id and a translated caption, so a refresh or a
-    /// language switch never changes what the settings file remembers.
+    /// Shows every active Windows playback endpoint (including Voicemeeter virtual inputs), both shared and
+    /// exclusive WASAPI, plus the installed ASIO drivers. Entries keep stable ids while their friendly names
+    /// remain exactly as Windows reports them.
     /// </summary>
     private void RefreshAudioOutputs()
     {
@@ -1726,11 +1768,26 @@ public partial class MainWindow : Window
             new(AudioOutputChoice.WasapiExclusiveId, Loc.T("WASAPI exclusive · owns the device")),
             new(AudioOutputChoice.WaveOutId, Loc.T("waveOut · compatibility")),
         };
-        foreach (var driver in AsioDriverRegistry.Names) items.Add(new DeviceOption(AudioOutputChoice.ForAsio(driver).Id, Loc.F("ASIO · {0}", driver)));
+        foreach (var endpoint in _audioOutputEndpoints)
+        {
+            var name = endpoint.IsDefault ? Loc.F("{0} · default", endpoint.FriendlyName) : endpoint.FriendlyName;
+            var shared = AudioOutputChoice.ForWasapiEndpoint(endpoint.Id);
+            var exclusive = AudioOutputChoice.ForWasapiEndpoint(endpoint.Id, exclusive: true);
+            items.Add(new DeviceOption(shared.Id, Loc.F("WASAPI shared · {0}", name)));
+            items.Add(new DeviceOption(exclusive.Id, Loc.F("WASAPI exclusive · {0}", name)));
+        }
+        foreach (var driver in AsioDriverRegistry.Names)
+            items.Add(new DeviceOption(AudioOutputChoice.ForAsio(driver).Id, Loc.F("ASIO · {0}", driver)));
+
         var stored = AudioOutputChoice.Parse(_visualSettings.AudioOutputMode);
-        // A remembered ASIO driver that is missing right now (undocked laptop) keeps its row: the choice
-        // survives, and the engine's factory already answers with the WASAPI fallback while it is gone.
-        if (stored.Kind == AudioBackendKind.Asio && items.All(item => item.Id != stored.Id)) items.Add(new DeviceOption(stored.Id, Loc.F("ASIO · {0}", stored.AsioDriver)));
+        if (items.All(item => item.Id != stored.Id))
+        {
+            if (stored.Kind == AudioBackendKind.Asio)
+                items.Add(new DeviceOption(stored.Id, Loc.F("ASIO · {0}", stored.AsioDriver)));
+            else if (stored.EndpointId.Length > 0)
+                items.Add(new DeviceOption(stored.Id, Loc.F("Unavailable audio output · {0}", stored.EndpointId)));
+        }
+
         _suppressDevices = true;
         try
         {
@@ -1738,10 +1795,41 @@ public partial class MainWindow : Window
             AudioOutputCombo.SelectedValue = stored.Id;
             if (AudioOutputCombo.SelectedIndex < 0) AudioOutputCombo.SelectedIndex = 0;
             var latencyIndex = Array.IndexOf(AudioLatencySteps, _visualSettings.AudioLatencyMs);
-            AudioLatencyCombo.SelectedIndex = latencyIndex >= 0 ? latencyIndex : 1;
+            AudioLatencyCombo.SelectedIndex = latencyIndex >= 0 ? latencyIndex : 2;
+            AudioGainSlider.Value = Math.Clamp(_visualSettings.AudioMasterGain * 100, 50, 200);
+            AudioGainValue.Text = $"{AudioGainSlider.Value:0}%";
         }
         finally { _suppressDevices = false; }
         UpdateAudioOutputHint();
+    }
+
+    private void RefreshAudioOutputCatalog()
+    {
+        Interlocked.Increment(ref _audioOutputCatalogVersion);
+        StartAudioOutputCatalogRefresh();
+    }
+
+    private void StartAudioOutputCatalogRefresh()
+    {
+        if (Interlocked.CompareExchange(ref _audioOutputCatalogRefreshPending, 1, 0) != 0) return;
+        var version = Volatile.Read(ref _audioOutputCatalogVersion);
+        _ = Task.Run(WasapiDeviceCatalog.GetActiveRenderEndpoints).ContinueWith(task =>
+        {
+            Interlocked.Exchange(ref _audioOutputCatalogRefreshPending, 0);
+            if (_closing || Dispatcher.HasShutdownStarted) return;
+            if (version != Volatile.Read(ref _audioOutputCatalogVersion)) { StartAudioOutputCatalogRefresh(); return; }
+            if (task.Status != TaskStatus.RanToCompletion) return;
+            try
+            {
+                Dispatcher.BeginInvoke(DispatcherPriority.Background, new Action(() =>
+                {
+                    if (_closing || version != Volatile.Read(ref _audioOutputCatalogVersion)) return;
+                    _audioOutputEndpoints = task.Result;
+                    RefreshAudioOutputs(); // repaint from the cache; translation changes do not rescan Windows
+                }));
+            }
+            catch (InvalidOperationException) { }
+        }, TaskScheduler.Default);
     }
 
     private void AudioOutputCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1760,16 +1848,21 @@ public partial class MainWindow : Window
 
     private void AsioPanel_Click(object sender, RoutedEventArgs e) => _audio.ShowAsioControlPanel();
 
-    /// <summary>
-    /// Hands the stored output request to the engine (which rebuilds the live pipeline when a SoundFont is
-    /// playing), re-presses the pedals the player is physically holding — the rebuild replaced the
-    /// synthesiser that knew about them — and schedules the settings write.
-    /// </summary>
+    private void AudioGainSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_suppressDevices || sender is not Slider slider) return;
+        var percent = (int)Math.Round(slider.Value);
+        _visualSettings.AudioMasterGain = percent / 100.0;
+        _audio.MasterGain = _visualSettings.AudioMasterGain;
+        if (AudioGainValue is not null) AudioGainValue.Text = $"{percent}%";
+        if (_uiReady) { _settingsSaveTimer.Stop(); _settingsSaveTimer.Start(); }
+    }
+
+    /// <summary>Applies a device choice asynchronously; the status refresh and pedal restore happen when it is live.</summary>
     private void ApplyAudioOutput()
     {
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
-        foreach (var pedal in _pedalsDown) _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), 127);
-        UpdateSoundFontUi();
+        UpdateAudioOutputHint();
         _settingsSaveTimer.Stop(); _settingsSaveTimer.Start();
     }
 

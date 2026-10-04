@@ -52,54 +52,31 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
-        var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
-        var bundledPianoAvailable = File.Exists(bundledPiano) && !SoundFontReader.IsLfsPointer(bundledPiano);
-        // A real ~113 MiB bank needs a few seconds to decode; a checkout without Git LFS settles at once.
-        var deadline = DateTime.UtcNow.Add(bundledPianoAvailable ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(1.5));
-        var startupWindow = new MainWindow { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
-        // The suite pins the culture and uses a private settings folder for the same reason: its checks read
-        // state, not pixels, so the windows run on the deterministic software renderer instead of keeping a
-        // WARP render thread busy for the whole run. The real embedded GPU stage is exercised for picture by
-        // CI's --gpu preview captures and for parts by VerifyGpuStage.
+        var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+        // These checks verify the first-run onboarding without touching a user's 748 MB install. Audio itself
+        // is exercised below with generated SFZ/WAV fixtures, so the smoke test never downloads anything.
         startupWindow.UseSoftwareForSession();
         startupWindow.ContentRendered += (_, _) =>
         {
-            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(80) };
+            var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(120) };
             timer.Tick += (_, _) =>
             {
-                var audio = (PianoAudioEngine)Field(startupWindow, "_audio");
-                var soundFontLabel = (TextBlock)startupWindow.FindName("SoundFontLabel");
-                if (bundledPianoAvailable)
-                {
-                    if (audio.HasSoundFont && soundFontLabel.Text != Loc.T("NO SOUNDFONT · SILENT"))
-                    {
-                        timer.Stop();
-                        try
-                        {
-                            Assert(soundFontLabel.Text != Loc.T("NO SOUNDFONT · SILENT"), "A normal app startup should show the bundled piano as its active SoundFont.");
-                            Assert(((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled && ((ComboBox)startupWindow.FindName("PresetCombo")).SelectedIndex == 0, "Startup should select the bundled acoustic-grand preset.");
-                            Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The bundled piano should start with hall reverb active in the UI and audio engine.");
-                            Assert(((ToggleButton)startupWindow.FindName("ResonanceToggle")).IsChecked == true && audio.StringResonanceEnabled, "The bundled piano should start with sympathetic string resonance active in the UI and audio engine.");
-                            Results.Add($"PASS WPF startup: bundled grand loads automatically, its preset is selected and room reverb starts enabled{(audio.HasAudioOutput ? "" : $"; no audio device here ({audio.PlaybackError}) so playback is silent")}.");
-                            startupWindow.Close();
-                            VerifyPracticeWindow(args, app);
-                        }
-                        catch (Exception ex) { Finish(app, args, ex); }
-                    }
-                    else if (DateTime.UtcNow >= deadline) { timer.Stop(); Finish(app, args, new TimeoutException("The bundled grand did not finish loading during the startup smoke check.")); }
-                    return;
-                }
-                // Git LFS was skipped, so there is no bank to load: the app must degrade to silent mode.
-                if (DateTime.UtcNow < deadline) return;
                 timer.Stop();
                 try
                 {
-                    Assert(!audio.HasSoundFont && soundFontLabel.Text == Loc.T("NO SOUNDFONT · SILENT"), "Without the bundled SoundFont the app must start in silent mode instead of failing.");
-                    Assert(!((ComboBox)startupWindow.FindName("PresetCombo")).IsEnabled, "The instrument picker must stay disabled while no SoundFont is loaded.");
-                    Results.Add("SKIP WPF startup bundled-piano checks: Assets/ConcertGrand.sf2 is a Git LFS pointer; verified the silent-mode startup path instead.");
+                    var audio = (PianoAudioEngine)Field(startupWindow, "_audio");
+                    var instrumentLabel = (TextBlock)startupWindow.FindName("InstrumentStatusLabel");
+                    var downloadButton = (Button)startupWindow.FindName("SalamanderButton");
+                    var installed = SalamanderPiano.IsInstalled;
+                    var expectedStatus = installed ? "SALAMANDER GRAND · INSTALLED" : "SALAMANDER GRAND · SETUP REQUIRED";
+                    Assert(!audio.HasInstrument && instrumentLabel.Text == Loc.T(expectedStatus), "A deliberately unloaded first-run window should show the Salamander setup state, never a fallback instrument.");
+                    Assert(downloadButton.IsVisible && downloadButton.IsEnabled, "The Salamander download/repair action should be visible and available in Audio settings.");
+                    Assert(((ToggleButton)startupWindow.FindName("ReverbToggle")).IsChecked == true && audio.ReverbEnabled, "The piano should start with hall reverb active in the UI and audio engine.");
+                    Assert(((ToggleButton)startupWindow.FindName("ResonanceToggle")).IsChecked == true && audio.StringResonanceEnabled, "The piano should start with sympathetic string resonance active in the UI and audio engine.");
+                    Results.Add("PASS WPF startup: first-run Salamander onboarding is explicit, does not auto-download, and starts without any fallback instrument.");
                     startupWindow.Close();
                     VerifyPracticeWindow(args, app);
                 }
@@ -112,7 +89,7 @@ internal static partial class VerificationSuite
 
     private static void VerifyPracticeWindow(string[] args, App app)
     {
-        var window = new MainWindow(loadBuiltInSoundFont: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
+        var window = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
         window.UseSoftwareForSession(); // same determinism as the startup window above
         // The checks below read the layout right after a change. With Windows animations on (every normal desktop)
         // the chrome rows are still easing towards their target at that moment, so the checks failed there while a CI
@@ -874,119 +851,9 @@ internal static partial class VerificationSuite
         Results.Add("PASS camera overlay dock: the switch, the camera and corner pickers, the size/opacity/key sliders, the clamp and the corner fallback, the pump's key and the frame drawn in the chosen corner of the rendered stage.");
     }
 
-    private static void VerifySoundFontEngine()
-    {
-        var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(path, CreateTestSoundFont());
-        var font = SoundFontReader.Read(path);
-        Assert(font.Name == "Keyflow test piano" && font.Presets.Count == 1 && font.Presets[0].Name == "Test Grand", "SF2 metadata and instrument zones should load.");
-        Assert(font.Presets[0].Regions.Count == 1 && font.Presets[0].Regions[0].RootKey == 69, "Preset zones should map a sample to its root note.");
-        Assert(font.SampleCount > 1000 && font.ReadSample(1) != 0 && font.Presets[0].Regions[0].Start == 0 && font.Presets[0].Regions[0].End > 1000, "SF2 sample bytes and sample boundaries should be retained.");
-        var synth = new SoundFontSynthesizer(font, 22050); synth.NoteOn(0, 69, 100);
-        var first = new short[4410 * 2]; synth.Render(first, 4410);
-        var testRegion = font.Presets[0].Regions[0];
-        Assert(first.Any(sample => sample != 0), $"A loaded SoundFont should render non-silent sampled audio (voices={synth.ActiveVoiceCount}, sample1={font.ReadSample(1)}, sampleCount={font.SampleCount}, range={testRegion.Start}..{testRegion.End}, rate={testRegion.SampleRate}, attack={testRegion.AttackSeconds}, sustain={testRegion.SustainLevel}, gain={testRegion.Attenuation}, pan={testRegion.Pan}).");
-        synth.NoteOff(0, 69); var release = new short[4410 * 2]; synth.Render(release, 4410);
-        Assert(release.Any(sample => sample != 0), "SoundFont Note Off should preserve the release tail.");
-        var tail = new short[22050 * 2]; synth.Render(tail, 22050);
-        Assert(tail.All(sample => sample == 0), "A released SoundFont note should eventually stop consuming voices.");
-
-        var sustainSynth = new SoundFontSynthesizer(font, 22050);
-        sustainSynth.ProcessMidi(0, 0xB0, 64, 127); sustainSynth.NoteOn(0, 69, 100);
-        var heldAudio = new short[2205 * 2]; sustainSynth.Render(heldAudio, 2205); sustainSynth.NoteOff(0, 69);
-        var sustainAudio = new short[2205 * 2]; sustainSynth.Render(sustainAudio, 2205);
-        Assert(sustainAudio.Any(sample => sample != 0) && sustainSynth.ActiveVoiceCount == 1, "Sustain CC 64 should keep a released key sounding.");
-        sustainSynth.ProcessMidi(0, 0xB0, 64, 0); var sustainTail = new short[22050 * 2]; sustainSynth.Render(sustainTail, 22050);
-        Assert(sustainSynth.ActiveVoiceCount == 0, "Releasing sustain CC 64 should release held voices.");
-
-        var layeredPath = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont-layered.sf2"); File.WriteAllBytes(layeredPath, CreateTestSoundFont(layered: true));
-        var layered = SoundFontReader.Read(layeredPath).Presets[0].Regions[0];
-        Assert(Math.Abs(layered.Attenuation - Math.Pow(10, -90 / 200.0)) < 1e-6, "Instrument-local generators should replace global ones and preset generators should be added on top (SF2 §8.5 / §9.4).");
-        Assert(layered.SampleMode == 1 && Math.Abs(layered.ReleaseSeconds - 1) < .01, "Instrument global generators should apply, and a preset offset should add to the generator default.");
-        var loopSynth = new SoundFontSynthesizer(SoundFontReader.Read(layeredPath), 22050); loopSynth.NoteOn(0, 69, 100);
-        var loopHeld = new short[4410 * 2]; loopSynth.Render(loopHeld, 4410); loopSynth.NoteOff(0, 69);
-        var loopRelease = new short[8820 * 2]; loopSynth.Render(loopRelease, 8820);
-        Assert(loopRelease.Skip(8820 * 2 - 400).Any(sample => sample != 0), "A continuously looped sample should keep looping through its release tail instead of running off the sample end.");
-        var loopTail = new short[22050 * 2]; loopSynth.Render(loopTail, 22050);
-        Assert(loopSynth.ActiveVoiceCount == 0, "A looped voice should still be freed once its release envelope finishes.");
-        var polySynth = new SoundFontSynthesizer(font, 22050); for (var i = 0; i < 120; i++) polySynth.NoteOn(0, 60 + i % 12, 100);
-        Assert(polySynth.ActiveVoiceCount <= 96, "Voice stealing should keep polyphony within the voice limit.");
-
-        var sostenutoSynth = new SoundFontSynthesizer(font, 22050); sostenutoSynth.NoteOn(0, 60, 100);
-        var beforeCapture = new short[2205 * 2]; sostenutoSynth.Render(beforeCapture, 2205);
-        sostenutoSynth.ProcessMidi(0, 0xB0, 66, 127); sostenutoSynth.NoteOff(0, 60);
-        sostenutoSynth.NoteOn(0, 64, 100); var laterVoice = new short[2205 * 2]; sostenutoSynth.Render(laterVoice, 2205); sostenutoSynth.NoteOff(0, 64);
-        var sostenutoAudio = new short[4410 * 2]; sostenutoSynth.Render(sostenutoAudio, 4410);
-        Assert(sostenutoSynth.ActiveVoiceCount == 1, "Sostenuto CC 66 should hold notes already down, but release notes played afterward.");
-        sostenutoSynth.ProcessMidi(0, 0xB0, 66, 0); var sostenutoTail = new short[22050 * 2]; sostenutoSynth.Render(sostenutoTail, 22050);
-        Assert(sostenutoSynth.ActiveVoiceCount == 0, "Releasing sostenuto CC 66 should release captured voices.");
-
-        var normalSynth = new SoundFontSynthesizer(font, 22050); var normalAudio = new short[2205 * 2]; normalSynth.NoteOn(0, 69, 100); normalSynth.Render(normalAudio, 2205);
-        var softSynth = new SoundFontSynthesizer(font, 22050); softSynth.ProcessMidi(0, 0xB0, 67, 127); var softAudio = new short[2205 * 2]; softSynth.NoteOn(0, 69, 100); softSynth.Render(softAudio, 2205);
-        var normalLevel = normalAudio.Select(x => Math.Abs((int)x)).Average(); var softLevel = softAudio.Select(x => Math.Abs((int)x)).Average();
-        Assert(softLevel < normalLevel * .82, "Soft CC 67 should reduce volume and mellow the rendered sample.");
-        var rejected = false;
-        try { _ = SoundFontReader.Read(Path.Combine(Path.GetTempPath(), "missing-soundfont.sf2")); } catch (FileNotFoundException) { rejected = true; }
-        Assert(rejected, "A missing SoundFont should be reported rather than replaced by a fallback tone.");
-        bool engineOutputAvailable;
-        using (var engine = new PianoAudioEngine())
-        {
-            Assert(!engine.HasSoundFont, "Integrated piano audio must stay silent before a SoundFont is loaded.");
-            engine.LoadSoundFont(path); Assert(engine.HasSoundFont && engine.Presets.Count == 1, "Loading an SF2 should activate its presets and audio stream.");
-            Assert(engine.HasAudioOutput || engine.PlaybackError is not null, "Without an audio device the engine must say why it is silent instead of pretending to play.");
-            engineOutputAvailable = engine.HasAudioOutput;
-            if (engineOutputAvailable) { engine.NoteOn(69, 95); Thread.Sleep(110); engine.NoteOff(69); Thread.Sleep(60); }
-            else Results.Add($"NOTE audio device unavailable here ({engine.PlaybackError}); the engine stayed loaded and playable in silent mode.");
-            engine.UnloadSoundFont(); Assert(!engine.HasSoundFont, "Unloading the SoundFont should return to silent mode.");
-        }
-        Results.Add($"PASS SoundFont: SF2 playback, generator override/offset semantics, loop-through-release, voice stealing, held-note release, sustain/sostenuto/soft pedal synthesis, {(engineOutputAvailable ? "waveOut output" : "silent-mode fallback")} and silent unload.");
-    }
-
-    /// <summary>
-    /// The continuous damper model behind CC 64: values in the half-pedal zone stretch a release instead
-    /// of merely holding or dropping it, pressing the pedal catches strings that are still audible
-    /// (repedalling), and the sympathetic-resonance bank rings only while the pedal is down. Uses the
-    /// looped test font because an unlooped voice runs off its half-second sample long before these
-    /// timings play out. The 0/127 edges every switch pedal and MIDI file sends are covered by
-    /// VerifySoundFontEngine and must behave exactly as before.
-    /// </summary>
+    /// <summary>Checks the shared sympathetic string-resonance stage; CC 64 damper behaviour is covered by the SFZ engine fixture.</summary>
     private static void VerifyPianoPedalModel()
     {
-        var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont-pedal.sf2"); File.WriteAllBytes(path, CreateTestSoundFont(layered: true));
-        var font = SoundFontReader.Read(path);
-
-        // CC 64 at 40 is in the half-pedal zone: the released key must outlive a normal release (which the
-        // 1-second envelope ends inside 1.5 s) but still die eventually instead of being held outright.
-        var half = new SoundFontSynthesizer(font, 22050); var plain = new SoundFontSynthesizer(font, 22050);
-        half.NoteOn(0, 69, 100); plain.NoteOn(0, 69, 100);
-        var attack = new short[2205 * 2]; half.Render(attack, 2205); plain.Render(attack, 2205);
-        half.ProcessMidi(0, 0xB0, 64, 40); half.NoteOff(0, 69); plain.NoteOff(0, 69);
-        var halfTail = new short[33075 * 2]; var plainTail = new short[33075 * 2];
-        half.Render(halfTail, 33075); plain.Render(plainTail, 33075);
-        Assert(plain.ActiveVoiceCount == 0, "A release with the pedal up should still end within the normal envelope time.");
-        Assert(half.ActiveVoiceCount == 1 && halfTail.Skip(33075 * 2 - 400).Any(sample => sample != 0), "Half-pedalling (CC 64 below the catch point) should stretch the release past its normal length.");
-        half.ProcessMidi(0, 0xB0, 64, 0);
-        var damped = new short[22050 * 2]; half.Render(damped, 22050);
-        Assert(half.ActiveVoiceCount == 0, "Dropping the pedal mid-release should let the dampers end the stretched tail quickly.");
-
-        // Repedalling: the pedal pressed after a release catches the string at its current loudness.
-        var catchSynth = new SoundFontSynthesizer(font, 22050);
-        catchSynth.NoteOn(0, 69, 100); catchSynth.Render(attack, 2205);
-        catchSynth.NoteOff(0, 69); catchSynth.Render(attack, 2205);
-        catchSynth.ProcessMidi(0, 0xB0, 64, 127);
-        var caught = new short[44100 * 2]; catchSynth.Render(caught, 44100);
-        Assert(catchSynth.ActiveVoiceCount == 1 && caught.Skip(44100 * 2 - 400).Any(sample => sample != 0), "Repedalling should catch a still-audible string and hold it at its caught loudness.");
-        catchSynth.ProcessMidi(0, 0xB0, 64, 0);
-        var released = new short[33075 * 2]; catchSynth.Render(released, 33075);
-        Assert(catchSynth.ActiveVoiceCount == 0, "Releasing the pedal should release a repedalled string normally.");
-
-        // A string that has already faded below audibility must not come back when the pedal goes down.
-        var fadedSynth = new SoundFontSynthesizer(font, 22050);
-        fadedSynth.NoteOn(0, 69, 100); fadedSynth.Render(attack, 2205); fadedSynth.NoteOff(0, 69);
-        var fadeOut = new short[15435 * 2]; fadedSynth.Render(fadeOut, 15435);
-        fadedSynth.ProcessMidi(0, 0xB0, 64, 127);
-        var silentCatch = new short[22050 * 2]; fadedSynth.Render(silentCatch, 22050);
-        Assert(fadedSynth.ActiveVoiceCount == 0, "A string that has faded out should not be revived by the pedal.");
-
         // Sympathetic resonance: the string bank rings after the dry burst stops while the pedal is down,
         // chokes as soon as the pedal lifts, and is bit-identical dry when the feature is off.
         var resonance = new StringResonance(22050);
@@ -1016,15 +883,13 @@ internal static partial class VerificationSuite
             engine.StringResonanceEnabled = false;
             Assert(!engine.StringResonanceEnabled, "The string-resonance toggle should reach the audio engine.");
         }
-        Results.Add("PASS piano pedal model: half-pedal release stretching, repedal catch of audible strings, no revival of faded strings, and sympathetic string resonance that rings under the pedal, chokes on release and bypasses cleanly.");
+        Results.Add("PASS piano effects: sympathetic string resonance rings under the pedal, damps on release and bypasses bit-identically when disabled.");
     }
 
     /// <summary>
-    /// The SFZ sample engine end to end: WAV decoding (16/24-bit PCM and float32), the parser's header
-    /// inheritance, #define/#include and note-name spellings, then playback — velocity layers picking
-    /// different recordings, round-robins alternating takes, trigger=release noises fired only when a
-    /// string is actually damped, loops outliving their sample, and the same continuous damper model as
-    /// the SF2 engine. All fixtures are generated into the temp folder so the check needs no sample set.
+    /// The SFZ sample engine end to end: WAV decoding (16/24-bit PCM and float32), parser inheritance,
+    /// #define/#include and note-name spellings, velocity layers, round-robins, release samples, loops and
+    /// continuous damper behaviour. Fixtures are generated into the temp folder, so verification needs no sample set.
     /// </summary>
     private static void VerifySfzEngine()
     {
@@ -1087,7 +952,7 @@ internal static partial class VerificationSuite
         var half = new SfzSynthesizer(instrument, 22050);
         half.ProcessMidi(0, 0xB0, 64, 40); half.NoteOn(0, 50, 100); half.Render(block, 2205); half.NoteOff(0, 50);
         half.Render(tail, 33075);
-        Assert(half.ActiveVoiceCount == 1, "The SFZ engine should honour the same half-pedal release stretching as the SF2 engine.");
+        Assert(half.ActiveVoiceCount == 1, "The SFZ engine should honour the same half-pedal release stretching as the piano engine.");
         half.ProcessMidi(0, 0xB0, 64, 0);
         var drain = new float[22050 * 2]; half.Render(drain, 22050);
         Assert(half.ActiveVoiceCount == 0, "Dropping the pedal should let the dampers end the stretched SFZ tail quickly.");
@@ -1106,10 +971,11 @@ internal static partial class VerificationSuite
 
         using (var engine = new PianoAudioEngine())
         {
-            engine.LoadInstrument(Path.Combine(dir, "piano.sfz"));
-            Assert(engine.HasSoundFont && engine.IsSfzInstrument && engine.Presets.Count == 0 && engine.LoadedName == "piano", "The audio engine should load SFZ instruments through the same pipeline as SF2 banks.");
-            engine.UnloadSoundFont();
-            Assert(!engine.HasSoundFont, "Unloading an SFZ instrument should return to silent mode.");
+            Assert(!engine.HasInstrument, "The audio engine should remain silent until its SFZ instrument is loaded.");
+            engine.LoadSfzInstrument(Path.Combine(dir, "piano.sfz"));
+            Assert(engine.HasInstrument && engine.InstrumentName == "piano", "The audio engine should load the SFZ instrument into the live pipeline.");
+            engine.UnloadInstrument();
+            Assert(!engine.HasInstrument, "Unloading the piano should return to silent mode.");
         }
         File.WriteAllText(Path.Combine(dir, "broken.sfz"), "<region> sample=missing.wav\n");
         var missing = false;
@@ -1234,34 +1100,6 @@ internal static partial class VerificationSuite
         }
     }
 
-    private static void VerifyBundledPiano()
-    {
-        var path = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
-        Assert(File.Exists(path), "The bundled Yamaha grand SoundFont should be copied beside the built application.");
-        if (SoundFontReader.IsLfsPointer(path))
-        {
-            // CI checks out with `lfs: false` and a plain clone may skip `git lfs pull`; the 134-byte
-            // pointer is not a bank, so report a skip instead of failing the whole suite over it.
-            Results.Add("SKIP bundled piano: Assets/ConcertGrand.sf2 is a Git LFS pointer. Run 'git lfs install' then 'git lfs pull' to verify the real Yamaha grand.");
-            return;
-        }
-        var font = SoundFontReader.Read(path);
-        Assert(font.Name.Contains("Grand Piano", StringComparison.OrdinalIgnoreCase), "The bundled SoundFont should identify its grand-piano program in the SF2 metadata.");
-        var piano = font.Presets.FirstOrDefault(p => p.Bank == 0 && p.Program == 0);
-        Assert(piano is not null && piano.Regions.Count > 0, "The bundled SF2 should contain the standard acoustic-grand preset.");
-        var synth = new SoundFontSynthesizer(font, 22050); synth.NoteOn(0, 60, 96);
-        var attack = new short[4410 * 2]; synth.Render(attack, 4410);
-        Assert(attack.Any(sample => sample != 0), "The bundled Yamaha grand preset should produce audio for middle C.");
-        synth.NoteOff(0, 60); var release = new short[4410 * 2]; synth.Render(release, 4410);
-        Assert(release.Any(sample => sample != 0), "The bundled piano should keep its recorded release after key-up.");
-        using var engine = new PianoAudioEngine();
-        engine.SetReverb(PianoReverbStyle.ConcertHall); // the convolver must survive the production pipeline
-        engine.LoadSoundFont(path);
-        Assert(engine.HasSoundFont && engine.Presets.Any(p => p.Program == 0), "The real bundled piano SF2 should open in the production waveOut engine.");
-        engine.NoteOn(60, 96); Thread.Sleep(80); engine.NoteOff(60); Thread.Sleep(60); engine.UnloadSoundFont();
-        Results.Add($"PASS built-in piano: {font.Name}, {font.Presets.Count} preset(s), {font.SampleCount:N0} samples, acoustic-grand audio and live waveOut playback.");
-    }
-
     private static void VerifyStereoHallReverb()
     {
         var impulse = new short[4410 * 2]; impulse[0] = 24000; impulse[1] = 12000;
@@ -1359,23 +1197,26 @@ internal static partial class VerificationSuite
         var asio = AudioOutputChoice.Parse("asio:Focusrite USB ASIO");
         Assert(asio.Kind == AudioBackendKind.Asio && asio.AsioDriver == "Focusrite USB ASIO" && asio.Id == "asio:Focusrite USB ASIO", "An ASIO id should keep the driver name through a parse round-trip.");
         Assert(AudioOutputChoice.ForAsio("X").Id == "asio:X", "ForAsio should build the same id the combo stores.");
+        const string endpointId = @"\\?\SWD#MMDEVAPI#{voicemeeter}:capture";
+        var endpointChoice = AudioOutputChoice.ForWasapiEndpoint(endpointId, exclusive: true);
+        Assert(AudioOutputChoice.Parse(endpointChoice.Id) is { Kind: AudioBackendKind.WasapiExclusive, EndpointId: endpointId }, "A named Windows/Voicemeeter endpoint should round-trip by stable id.");
         Assert(AudioOutputChoice.Parse("qwancy").Kind == AudioBackendKind.Auto && AudioOutputChoice.Parse(null).Id == AudioOutputChoice.AutoId && AudioOutputChoice.Parse("asio:").Kind == AudioBackendKind.Auto, "Unknown or empty output ids must parse as Auto, never throw.");
-        var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400 };
+        var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400, AudioMasterGain = 8 };
         settings.Clamp();
-        Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50, "The settings clamp should normalise an unknown backend to Auto and bound the latency target.");
+        Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50 && settings.AudioMasterGain == 2, "The settings clamp should normalize the backend, latency target and output gain.");
         _ = AsioDriverRegistry.Names; // most machines have no HKLM\SOFTWARE\ASIO key; reading it must not throw
         Assert(AsioDriverRegistry.ClassIdOf("keyflow-not-a-driver") is null, "A driver name that is not installed should answer null, not throw.");
 
-        var path = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(path, CreateTestSoundFont());
-        var font = SoundFontReader.Read(path);
-        var pcmSynth = new SoundFontSynthesizer(font, 22050); var floatSynth = new SoundFontSynthesizer(font, 22050);
-        pcmSynth.NoteOn(0, 69, 100); floatSynth.NoteOn(0, 69, 100);
-        var pcm = new short[2205 * 2]; pcmSynth.Render(pcm, 2205);
-        var floats = new float[2205 * 2]; floatSynth.Render(floats, 2205);
-        Assert(floats.Any(sample => sample != 0) && floats.All(sample => sample is >= -1f and <= 1f), "The float render should produce audio and stay within [-1, 1].");
-        var synthDelta = 0.0;
-        for (var i = 0; i < pcm.Length; i++) synthDelta = Math.Max(synthDelta, Math.Abs(pcm[i] - Math.Round(floats[i] * short.MaxValue)));
-        Assert(synthDelta <= 1, $"The float and 16-bit synthesiser paths should agree to the LSB (max delta {synthDelta}).");
+        var fixtureDirectory = Path.Combine(Path.GetTempPath(), "keyflow-audio-output-sfz");
+        Directory.CreateDirectory(fixtureDirectory);
+        var samplePath = Path.Combine(fixtureDirectory, "a4.wav");
+        WriteTestWav(samplePath, channels: 2, bits: 16, rate: 22050, frames: 11025, wave: i => Math.Sin(i * 2 * Math.PI * 440 / 22050) * .33);
+        var sfzPath = Path.Combine(fixtureDirectory, "audio-output.sfz");
+        File.WriteAllText(sfzPath, "<region> sample=a4.wav key=69 pitch_keycenter=69 amp_veltrack=0 ampeg_release=0.2");
+        var synth = new SfzSynthesizer(SfzReader.Read(sfzPath), 22050);
+        synth.NoteOn(0, 69, 100);
+        var floats = new float[2205 * 2]; synth.Render(floats, 2205);
+        Assert(floats.Any(sample => sample != 0) && floats.All(sample => float.IsFinite(sample) && sample is >= -1f and <= 1f), "The SFZ float render should produce finite audio within [-1, 1].");
 
         var pcmReverb = new short[4410 * 2]; pcmReverb[0] = 24000; pcmReverb[1] = 12000;
         new StereoHallReverb(44100).Process(pcmReverb, 4410);
@@ -1384,7 +1225,7 @@ internal static partial class VerificationSuite
         var reverbDelta = 0.0;
         for (var i = 0; i < pcmReverb.Length; i++) reverbDelta = Math.Max(reverbDelta, Math.Abs(pcmReverb[i] - Math.Round((double)floatReverb[i] * short.MaxValue)));
         Assert(reverbDelta <= 1, $"The float and 16-bit reverb paths should agree to the LSB (max delta {reverbDelta}).");
-        Results.Add("PASS audio output: stable backend ids, clamped settings, safe ASIO registry reads, and float/PCM parity for synth and reverb.");
+        Results.Add("PASS audio output: stable backend ids, clamped settings, safe ASIO registry reads, an audible bounded SFZ float path, and float/PCM parity for reverb.");
     }
 
     private static void VerifyMidiDevicesAndKeyboardMap()
@@ -1499,7 +1340,7 @@ internal static partial class VerificationSuite
         Assert(stage.SparkCount == 0, "Turning off the ember layer should stop new particle bursts.");
         visualSettings.ShowEmbers = wasShowingEmbers; stage.SetVisualSettings(visualSettings);
         Run(nameof(VerifyEmbersShell), () => VerifyEmbersShell(window, visualSettings));
-        var piano = (PianoAudioEngine)Field(window, "_audio"); var silentLabel = (TextBlock)window.FindName("SoundFontLabel");
+        var piano = (PianoAudioEngine)Field(window, "_audio"); var instrumentLabel = (TextBlock)window.FindName("InstrumentStatusLabel");
         var midi = (MidiDeviceService)Field(window, "_midi"); var inputCombo = (ComboBox)window.FindName("InputDeviceCombo");
         Assert(MidiDeviceService.Inputs.Count == 0 ? inputCombo.SelectedIndex == 0 && !midi.InputOpen : inputCombo.SelectedIndex > 0 && midi.InputOpen,
             "The first detected physical MIDI input should be opened automatically and remain visibly selected.");
@@ -1510,7 +1351,9 @@ internal static partial class VerificationSuite
         Invoke(window, "RefreshDevices_Click", window, new RoutedEventArgs());
         Assert(inputCombo.SelectedIndex == 0 && !midi.InputOpen,
             "An explicit 'Computer keyboard only' choice must survive a device refresh instead of snapping back to a MIDI input.");
-        Assert(!piano.HasSoundFont && !((ComboBox)window.FindName("PresetCombo")).IsEnabled && silentLabel.Text == Loc.T("NO SOUNDFONT · SILENT"), "The initial UI must expose silent mode until a SoundFont is loaded.");
+        var expectedInstrumentStatus = SalamanderPiano.IsInstalled ? "SALAMANDER GRAND · INSTALLED" : "SALAMANDER GRAND · SETUP REQUIRED";
+        Assert(!piano.HasInstrument && instrumentLabel.Text == Loc.T(expectedInstrumentStatus) && ((Button)window.FindName("SalamanderButton")).IsVisible,
+            "The initial UI must clearly offer Salamander setup and remain silent without the single supported piano.");
         var reverb = (ToggleButton)window.FindName("ReverbToggle");
         Assert(reverb.IsChecked == true && piano.ReverbEnabled, "The built-in concert room reverb should start enabled.");
         reverb.IsChecked = false; Assert(!piano.ReverbEnabled, "The reverb control should bypass the live audio effect.");
@@ -1519,7 +1362,7 @@ internal static partial class VerificationSuite
         Invoke(window, "PressNote", 60, 90);
         Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position")) < .001, "A live piano key must not start or advance MIDI playback.");
         Assert(stage.LiveTrailCount == 1 && stage.SparkCount >= 12, "A keypress should create a short falling note and a neon impact burst.");
-        Assert(!piano.HasSoundFont, "Keyboard input should not synthesize a replacement piano voice in silent mode.");
+        Assert(!piano.HasInstrument, "Keyboard input should not synthesize a replacement piano voice in silent mode.");
         Assert((int)Field(window, "_hits") == 0 && (int)Field(window, "_misses") == 0, "Free-play notes should not affect song practice scoring.");
         midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackNoteMessage(61, 90, true));
         midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackControllerMessage(67, 127));
@@ -3707,7 +3550,7 @@ internal static partial class VerificationSuite
     /// <summary>
     /// The audio track of a recording: the bytes of the WAV header against the specification, sizes that are
     /// only known at the end, silence and signal, a file that cannot be written, and then the real path — the
-    /// engine's tap rendering the loaded SoundFont into a writer, which is exactly what the recorder attaches
+    /// engine's tap rendering the loaded SFZ piano into a writer, which is exactly what the recorder attaches
     /// when the REC button starts, plus where the recorder puts the file and what the dock promises it will do.
     /// </summary>
     private static void VerifyRecordingAudioTrack(MainWindow window)
@@ -3777,30 +3620,31 @@ internal static partial class VerificationSuite
                     && MainWindow.MuxedName(null) == "" && MainWindow.MuxedName("") == "",
                 "The audio track should land beside an AVI (and inside the PNG folder), and the muxed copy should be named next to it — a take with no name at all names nothing instead of throwing.");
 
-            // The real path: the engine renders the loaded SoundFont into the writer, block by block.
-            var font = Path.Combine(Path.GetTempPath(), "keyflow-test-soundfont.sf2"); File.WriteAllBytes(font, CreateTestSoundFont());
+            // The real path: the engine renders an SFZ piano into the writer, block by block.
+            var sample = Path.Combine(folder, "recording-source.wav");
+            WriteTestWav(sample, channels: 2, bits: 16, rate: 44100, frames: 22050, wave: i => Math.Sin(i * 2 * Math.PI * 440 / 44100) * .33);
+            var sfz = Path.Combine(folder, "recording-source.sfz");
+            File.WriteAllText(sfz, "<region> sample=recording-source.wav key=69 pitch_keycenter=69 amp_veltrack=0 ampeg_release=0.2");
             using (var engine = new PianoAudioEngine())
             {
                 Assert(!engine.PumpTapBlock() && !engine.HasTap, "Nothing should be rendered while no track is attached.");
-                engine.LoadSoundFont(font);
+                engine.LoadSfzInstrument(sfz);
                 engine.NoteOn(69, 110);
                 using var wav = WavWriter.TryCreate(Path.Combine(folder, "engine.wav"))!;
                 var blocks = 0;
                 engine.SetTap((samples, count) => { wav!.Append(samples, count); blocks++; });
                 Assert(engine.HasTap, "Attaching a tap should be visible on the engine, which is what the recorder asks before it promises audio.");
                 for (var i = 0; i < 8; i++) Assert(engine.PumpTapBlock(), "A block should render into the attached tap whether or not the machine has an audio device.");
-                var energy = 0L;
-                {
-                    var probe = new short[512 * 2];
-                    var synthesizer = new SoundFontSynthesizer(SoundFontReader.Read(font), 44100);
-                    synthesizer.NoteOn(0, 69, 110); synthesizer.Render(probe, 512);
-                    foreach (var sample in probe) energy += Math.Abs((int)sample);
-                }
+                Assert(engine.FlushTap(), "The asynchronous recording writer should drain its blocks before verification reads the file.");
+                var probe = new float[512 * 2];
+                var synthesizer = new SfzSynthesizer(SfzReader.Read(sfz), 44100);
+                synthesizer.NoteOn(0, 69, 110); synthesizer.Render(probe, 512);
+                var energy = probe.Sum(sampleValue => Math.Abs(sampleValue));
                 Assert(blocks == 8 && wav!.Frames == 8 * 512 && energy > 0,
                     $"Eight rendered blocks should become eight blocks of frames in the file ({blocks} blocks, {wav!.Frames} frames).");
                 engine.SetTap(null);
                 Assert(!engine.HasTap && !engine.PumpTapBlock(), "Detaching the tap should stop the rendering that only existed for the recording.");
-                engine.UnloadSoundFont();
+                engine.UnloadInstrument();
             }
             var engineBytes = File.ReadAllBytes(Path.Combine(folder, "engine.wav"));
             Assert(engineBytes.Length == WavWriter.HeaderBytes + 8 * 512 * 4 && BitConverter.ToInt32(engineBytes, 40) == 8 * 512 * 4
@@ -3827,12 +3671,12 @@ internal static partial class VerificationSuite
             var started = (bool)window.GetType().GetMethod("BeginAudioTrack", BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public)!.Invoke(window, null)!;
             var audio = (PianoAudioEngine)Field(window, "_audio");
             Assert(!started && !audio.HasTap && Field(window, "_audioTrack") is null,
-                "A machine with no SoundFont loaded should record video only instead of writing an empty WAV.");
+                "A machine with no Salamander piano loaded should record video only instead of writing an empty WAV.");
             SetField(window, "_recordingPath", hadPath);
             Invoke(window, "UpdateRecordingInfo");
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
-        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine with no SoundFont.");
+        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine without the Salamander piano.");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>
@@ -4945,60 +4789,6 @@ internal static partial class VerificationSuite
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         using var file = File.Create(path); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); encoder.Save(file);
     }
-
-    private static byte[] CreateTestSoundFont(bool layered = false)
-    {
-        const int sampleCount = 11025; var pcm = new byte[(sampleCount + 46) * 2];
-        for (var i = 0; i < sampleCount; i++) { var value = (short)(Math.Sin(i * 2 * Math.PI * 440 / 22050) * 11000); BitConverter.GetBytes(value).CopyTo(pcm, i * 2); }
-        var info = List("INFO", list => { Chunk(list, "ifil", Bytes(w => { U16(w, 2); U16(w, 1); })); Chunk(list, "isng", Encoding.ASCII.GetBytes("EMU8000\0")); Chunk(list, "INAM", Encoding.ASCII.GetBytes("Keyflow test piano\0")); });
-        var sdta = List("sdta", list => Chunk(list, "smpl", pcm));
-        var pdta = List("pdta", list =>
-        {
-            Chunk(list, "phdr", Bytes(w => { PresetHeader(w, "Test Grand", 0, 0, 0); PresetHeader(w, "EOP", 0, 0, 1); }));
-            if (layered)
-            {
-                // Preset zone: +50 cB attenuation and +12000 timecents release (relative to the -12000 default → 1 s).
-                Chunk(list, "pbag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 3); U16(w, 0); }));
-                Chunk(list, "pmod", new byte[10]);
-                Chunk(list, "pgen", Bytes(w => { Generator(w, 48, 50); Generator(w, 38, 12000); Generator(w, 41, 0); }));
-                Chunk(list, "inst", Bytes(w => { InstrumentHeader(w, "Piano", 0); InstrumentHeader(w, "EOI", 2); }));
-                // Instrument global zone: 100 cB attenuation + continuous loop. Local zone overrides attenuation to 40 cB.
-                Chunk(list, "ibag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 2); U16(w, 0); U16(w, 4); U16(w, 0); }));
-                Chunk(list, "imod", new byte[10]);
-                Chunk(list, "igen", Bytes(w => { Generator(w, 48, 100); Generator(w, 54, 1); Generator(w, 48, 40); Generator(w, 53, 0); }));
-            }
-            else
-            {
-                Chunk(list, "pbag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
-                Chunk(list, "pmod", new byte[10]);
-                Chunk(list, "pgen", Bytes(w => { Generator(w, 41, 0); Generator(w, 0, 0); }));
-                Chunk(list, "inst", Bytes(w => { InstrumentHeader(w, "Piano", 0); InstrumentHeader(w, "EOI", 1); }));
-                Chunk(list, "ibag", Bytes(w => { U16(w, 0); U16(w, 0); U16(w, 1); U16(w, 0); }));
-                Chunk(list, "imod", new byte[10]);
-                Chunk(list, "igen", Bytes(w => { Generator(w, 53, 0); Generator(w, 0, 0); }));
-            }
-            Chunk(list, "shdr", Bytes(w => { SampleHeader(w, "Test sine", 0, sampleCount, 512, sampleCount - 512, 22050, 69); SampleHeader(w, "EOS", sampleCount, sampleCount, sampleCount, sampleCount, 0, 0); }));
-        });
-        using var body = new MemoryStream(); using (var writer = new BinaryWriter(body, Encoding.ASCII, true)) { writer.Write(Encoding.ASCII.GetBytes("sfbk")); WriteChunk(writer, "LIST", info); WriteChunk(writer, "LIST", sdta); WriteChunk(writer, "LIST", pdta); }
-        using var result = new MemoryStream(); using (var writer = new BinaryWriter(result, Encoding.ASCII, true)) { writer.Write(Encoding.ASCII.GetBytes("RIFF")); writer.Write((uint)body.Length); body.Position = 0; body.CopyTo(result); }
-        return result.ToArray();
-    }
-    private static byte[] List(string type, Action<BinaryWriter> children)
-    {
-        using var stream = new MemoryStream(); using var writer = new BinaryWriter(stream, Encoding.ASCII, true); writer.Write(Encoding.ASCII.GetBytes(type)); children(writer); return stream.ToArray();
-    }
-    private static void Chunk(BinaryWriter writer, string id, byte[] data) => WriteChunk(writer, id, data);
-    private static void WriteChunk(BinaryWriter writer, string id, byte[] data) { writer.Write(Encoding.ASCII.GetBytes(id)); writer.Write((uint)data.Length); writer.Write(data); if ((data.Length & 1) != 0) writer.Write((byte)0); }
-    private static byte[] Bytes(Action<BinaryWriter> action) { using var stream = new MemoryStream(); using (var writer = new BinaryWriter(stream, Encoding.ASCII, true)) action(writer); return stream.ToArray(); }
-    private static void PresetHeader(BinaryWriter w, string name, int program, int bank, int bag) { FixedName(w, name, 20); U16(w, program); U16(w, bank); U16(w, bag); w.Write(0u); w.Write(0u); w.Write(0u); }
-    private static void InstrumentHeader(BinaryWriter w, string name, int bag) { FixedName(w, name, 20); U16(w, bag); }
-    private static void SampleHeader(BinaryWriter w, string name, int start, int end, int loopStart, int loopEnd, int rate, int root)
-    {
-        FixedName(w, name, 20); w.Write((uint)start); w.Write((uint)end); w.Write((uint)loopStart); w.Write((uint)loopEnd); w.Write((uint)rate); w.Write((byte)root); w.Write((sbyte)0); U16(w, 0); U16(w, 1);
-    }
-    private static void Generator(BinaryWriter w, int op, int amount) { U16(w, op); U16(w, amount); }
-    private static void FixedName(BinaryWriter w, string value, int length) { var bytes = new byte[length]; Encoding.ASCII.GetBytes(value).AsSpan(0, Math.Min(value.Length, length - 1)).CopyTo(bytes); w.Write(bytes); }
-    private static void U16(BinaryWriter w, int value) => w.Write((ushort)value);
 
     private static void Finish(App app, string[] args, Exception? failure)
     {

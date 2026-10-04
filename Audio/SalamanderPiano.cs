@@ -43,10 +43,10 @@ internal static class SalamanderPiano
             .ToArray();
 
     /// <summary>
-    /// Downloads every missing sample, four at a time, reporting cumulative verified bytes. Files already
-    /// on disk with the right size are skipped, so a cancelled download resumes where it stopped. Each
-    /// fresh file is checked against the manifest's git blob SHA-1 before it is moved into place, and the
-    /// SFZ mapping — whose presence marks the install as complete — is written only after all of them pass.
+    /// Downloads every missing sample, four at a time, reporting cumulative verified bytes. Complete local
+    /// files are hash-checked before reuse; interrupted setup therefore resumes safely without trusting size
+    /// alone. New downloads are streamed to temporary files and verified against Git's blob SHA-1 before
+    /// they are moved into place. The SFZ mapping is written last and marks installation as complete.
     /// </summary>
     public static async Task DownloadAsync(IProgress<long> progress, CancellationToken cancel)
     {
@@ -60,30 +60,56 @@ internal static class SalamanderPiano
             try
             {
                 var target = System.IO.Path.Combine(InstallDirectory, entry.Path.Replace('/', System.IO.Path.DirectorySeparatorChar));
-                if (new System.IO.FileInfo(target) is { Exists: true } existing && existing.Length == entry.Size)
+                if (new System.IO.FileInfo(target) is { Exists: true } existing && existing.Length == entry.Size
+                    && await IsVerifiedFileAsync(target, entry, cancel).ConfigureAwait(false))
                 {
                     progress.Report(Interlocked.Add(ref done, entry.Size));
                     return;
                 }
+
                 var url = BaseUrl + string.Join('/', entry.Path.Split('/').Select(Uri.EscapeDataString));
-                byte[]? bytes = null;
-                for (var attempt = 1; bytes is null; attempt++)
-                {
-                    try { bytes = await Http.GetByteArrayAsync(url, cancel).ConfigureAwait(false); }
-                    catch (HttpRequestException) when (attempt < 3) { await Task.Delay(1000 * attempt, cancel).ConfigureAwait(false); }
-                }
-                // Git hashes blobs as "blob <length>\0<content>"; matching it proves the bytes arrived intact.
-                var header = Encoding.ASCII.GetBytes($"blob {bytes.Length}\0");
-                var payload = new byte[header.Length + bytes.Length];
-                header.CopyTo(payload, 0);
-                bytes.CopyTo(payload, header.Length);
-                var hash = Convert.ToHexStringLower(SHA1.HashData(payload));
-                if (bytes.LongLength != entry.Size || hash != entry.BlobSha)
-                    throw new System.IO.InvalidDataException($"{entry.Path} failed verification after download.");
                 var temporary = target + ".part";
-                await System.IO.File.WriteAllBytesAsync(temporary, bytes, cancel).ConfigureAwait(false);
-                System.IO.File.Move(temporary, target, overwrite: true);
-                progress.Report(Interlocked.Add(ref done, entry.Size));
+                System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(target)!);
+                for (var attempt = 1; ; attempt++)
+                {
+                    try
+                    {
+                        using var response = await Http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead, cancel).ConfigureAwait(false);
+                        response.EnsureSuccessStatusCode();
+                        await using var source = await response.Content.ReadAsStreamAsync(cancel).ConfigureAwait(false);
+                        await using var destination = new System.IO.FileStream(temporary, System.IO.FileMode.Create, System.IO.FileAccess.Write,
+                            System.IO.FileShare.None, 131072, System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan);
+                        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
+                        hash.AppendData(Encoding.ASCII.GetBytes($"blob {entry.Size}\0"));
+                        var buffer = new byte[131072]; long received = 0;
+                        while (true)
+                        {
+                            var read = await source.ReadAsync(buffer.AsMemory(0, buffer.Length), cancel).ConfigureAwait(false);
+                            if (read == 0) break;
+                            received += read;
+                            if (received > entry.Size) throw new System.IO.InvalidDataException($"{entry.Path} is larger than its manifest entry.");
+                            hash.AppendData(buffer, 0, read);
+                            await destination.WriteAsync(buffer.AsMemory(0, read), cancel).ConfigureAwait(false);
+                        }
+                        await destination.FlushAsync(cancel).ConfigureAwait(false);
+                        var actualHash = Convert.ToHexStringLower(hash.GetHashAndReset());
+                        if (received != entry.Size || actualHash != entry.BlobSha)
+                            throw new System.IO.InvalidDataException($"{entry.Path} failed verification after download.");
+                        System.IO.File.Move(temporary, target, overwrite: true);
+                        progress.Report(Interlocked.Add(ref done, entry.Size));
+                        break;
+                    }
+                    catch (HttpRequestException) when (attempt < 3)
+                    {
+                        try { System.IO.File.Delete(temporary); } catch { }
+                        await Task.Delay(1000 * attempt, cancel).ConfigureAwait(false);
+                    }
+                    catch
+                    {
+                        try { System.IO.File.Delete(temporary); } catch { }
+                        throw;
+                    }
+                }
             }
             finally { throttle.Release(); }
         }).ToArray();
@@ -94,6 +120,23 @@ internal static class SalamanderPiano
             "Source: https://github.com/sfzinstruments/SalamanderGrandPiano (commit " + Commit + ")\n" +
             "The .sfz mapping in this folder was generated by Keyflow for its own playback engine.\n", cancel).ConfigureAwait(false);
         await System.IO.File.WriteAllTextAsync(SfzPath, BuildSfz(), cancel).ConfigureAwait(false);
+    }
+
+    private static async Task<bool> IsVerifiedFileAsync(string path, Entry entry, CancellationToken cancel)
+    {
+        await using var stream = new System.IO.FileStream(path, System.IO.FileMode.Open, System.IO.FileAccess.Read,
+            System.IO.FileShare.Read, 131072, System.IO.FileOptions.Asynchronous | System.IO.FileOptions.SequentialScan);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA1);
+        hash.AppendData(Encoding.ASCII.GetBytes($"blob {entry.Size}\0"));
+        var buffer = new byte[131072]; long readTotal = 0;
+        while (true)
+        {
+            var read = await stream.ReadAsync(buffer.AsMemory(0, buffer.Length), cancel).ConfigureAwait(false);
+            if (read == 0) break;
+            readTotal += read;
+            hash.AppendData(buffer, 0, read);
+        }
+        return readTotal == entry.Size && Convert.ToHexStringLower(hash.GetHashAndReset()) == entry.BlobSha;
     }
 
     /// <summary>The 30 sampled keys: every minor third from A0 to C8, each covering its neighbours.</summary>

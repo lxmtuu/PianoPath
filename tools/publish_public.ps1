@@ -241,8 +241,10 @@ try {
         } else {
             $notes = @(
                 "**Keyflow $version** for Windows 10/11 (64-bit). Pick one package: the installer, or a ZIP",
-                "you unzip and run `PianoPath.exe` from. Keep `Assets\` next to the .exe, and keep",
-                "`LICENSE.txt` and `Assets\ATTRIBUTION.txt` that ship inside every package.",
+                "you unzip and run `PianoPath.exe` from. Keep `LICENSE.txt` (MIT) with the application.",
+                '',
+                'Salamander Grand Piano V3 is downloaded only when requested (about 748 MB); its CC BY 3.0',
+                'attribution is written beside the sample files in the local piano installation folder.',
                 '',
                 'The packages are **not code-signed**, so SmartScreen shows "Windows protected your PC" on',
                 'the first launch — choose More info → Run anyway. `SHA256SUMS.txt` covers every file above.',

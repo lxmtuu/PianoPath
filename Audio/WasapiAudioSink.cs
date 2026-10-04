@@ -28,30 +28,32 @@ internal sealed class WasapiAudioSink : IAudioSink
     private readonly AudioRenderCallback _render;
     private readonly bool _exclusive;
     private readonly double _requestedMilliseconds;
+    private readonly string _endpointId;
     private readonly ManualResetEventSlim _started = new(false);
     private readonly AutoResetEvent _deviceEvent = new(false);
     private Thread? _thread;
     private volatile bool _stopping;
     private volatile string? _initError;
     private double _bufferMilliseconds;
-    private bool _disposed;
+    private int _disposed, _eventsDisposed;
 
     public string Description => _exclusive
         ? Loc.F("WASAPI exclusive · {0:0.#} ms", _bufferMilliseconds)
         : Loc.F("WASAPI shared · {0:0.#} ms", _bufferMilliseconds);
     public double BufferMilliseconds => _bufferMilliseconds;
 
-    private WasapiAudioSink(bool exclusive, double latencyMilliseconds, AudioRenderCallback render)
+    private WasapiAudioSink(bool exclusive, double latencyMilliseconds, string? endpointId, AudioRenderCallback render)
     {
         _exclusive = exclusive;
         _requestedMilliseconds = Math.Clamp(latencyMilliseconds, 2, 50);
+        _endpointId = endpointId ?? "";
         _render = render;
     }
 
-    /// <summary>Returns a streaming sink, or <c>null</c> with the reason the device refused.</summary>
-    internal static WasapiAudioSink? TryCreate(bool exclusive, double latencyMilliseconds, AudioRenderCallback render, out string? failure)
+    /// <summary>Returns a streaming sink for the selected (or default) render endpoint, or a reason it refused.</summary>
+    internal static WasapiAudioSink? TryCreate(bool exclusive, double latencyMilliseconds, AudioRenderCallback render, out string? failure, string? endpointId = null)
     {
-        var sink = new WasapiAudioSink(exclusive, latencyMilliseconds, render);
+        var sink = new WasapiAudioSink(exclusive, latencyMilliseconds, endpointId, render);
         sink._thread = new Thread(sink.Pump) { IsBackground = true, Name = "Keyflow WASAPI audio", Priority = ThreadPriority.Highest };
         sink._thread.Start();
         // The thread opens the device in well under a second on any healthy machine; five is paranoia
@@ -71,8 +73,20 @@ internal sealed class WasapiAudioSink : IAudioSink
         try
         {
             var enumerator = (IMMDeviceEnumerator)(enumeratorObject = new MMDeviceEnumeratorComObject());
-            var hr = enumerator.GetDefaultAudioEndpoint(DataFlowRender, RoleConsole, out var device);
-            if (hr != 0 || device is null) { _initError = Loc.T("Windows reported no default audio output device."); return; }
+            IMMDevice? device;
+            int hr;
+            if (_endpointId.Length == 0)
+            {
+                hr = enumerator.GetDefaultAudioEndpoint(DataFlowRender, RoleConsole, out device);
+                if (hr != 0 || device is null) { _initError = Loc.T("Windows reported no default audio output device."); return; }
+            }
+            else
+            {
+                hr = enumerator.GetDevice(_endpointId, out var devicePointer);
+                if (hr != 0 || devicePointer == IntPtr.Zero) { _initError = Loc.T("Windows could not find the selected audio output device."); return; }
+                try { device = (IMMDevice)Marshal.GetObjectForIUnknown(devicePointer); }
+                finally { Marshal.Release(devicePointer); }
+            }
             deviceObject = device;
 
             var clientId = IidAudioClient;
@@ -150,6 +164,7 @@ internal sealed class WasapiAudioSink : IAudioSink
             if (client is not null) Marshal.ReleaseComObject(client);
             if (deviceObject is not null) Marshal.ReleaseComObject(deviceObject);
             if (enumeratorObject is not null) Marshal.ReleaseComObject(enumeratorObject);
+            if (Volatile.Read(ref _disposed) != 0) DisposeEvents();
         }
     }
 
@@ -178,10 +193,21 @@ internal sealed class WasapiAudioSink : IAudioSink
 
     public void Dispose()
     {
-        if (_disposed) return; _disposed = true;
+        if (Interlocked.Exchange(ref _disposed, 1) != 0) return;
         _stopping = true;
-        _deviceEvent.Set();
-        _thread?.Join(1500); _thread = null;
+        try { _deviceEvent.Set(); } catch (ObjectDisposedException) { }
+        var thread = _thread;
+        if (thread is null || thread.Join(1500))
+        {
+            _thread = null;
+            DisposeEvents();
+        }
+        // A stuck driver can outlive the bounded join. Pump() releases its handles after it eventually exits.
+    }
+
+    private void DisposeEvents()
+    {
+        if (Interlocked.Exchange(ref _eventsDisposed, 1) != 0) return;
         _deviceEvent.Dispose();
         _started.Dispose();
     }

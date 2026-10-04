@@ -43,7 +43,7 @@ internal sealed class WaveOutAudioSink : IAudioSink
         if (result != 0)
         {
             // A machine with no usable playback device (VM, headless CI runner, a sound card claimed
-            // exclusively by another app) must not stop the SoundFont from loading: the stage, the
+            // exclusively by another app) must not stop the instrument from loading: the stage, the
             // practice scoring and MIDI keep working and only the speakers stay silent.
             sink._device = IntPtr.Zero;
             failure = result == 2
@@ -72,7 +72,7 @@ internal sealed class WaveOutAudioSink : IAudioSink
             return sink;
         }
         // The device opened but rejected the buffers: release it and report, instead of failing the
-        // whole SoundFont load.
+        // whole sample-library load.
         catch (Exception ex)
         {
             failure = Loc.F("Windows rejected the audio buffers: {0}", ex.Message);

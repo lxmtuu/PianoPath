@@ -10,7 +10,7 @@ cột "Logic tiêu thụ" chỉ đúng file:line nơi giá trị thực sự ả
 Phương pháp:
 1. Lấy toàn bộ ~100 thuộc tính của `PianoVisualSettings` (model cài đặt sân khấu) và grep từng
    thuộc tính trong toàn bộ code logic (`PianoStage.cs`, `Shading/*`, `MainWindow*.cs`,
-   `PianoAudioEngine.cs`, `SoundFontSynthesizer.cs`, `AviVideoRecorder.cs`…); loại các tham chiếu
+   `PianoAudioEngine.cs`, `SfzSynthesizer.cs`, `SalamanderPiano.cs`, `AviVideoRecorder.cs`…); loại các tham chiếu
    chỉ thuộc về UI (sinh control, lưu/hiển thị giá trị).
 2. Kiểm tra từng control tĩnh trong XAML (tab Audio/MIDI/Practice/Recording, header, footer,
    Play dialog, main menu) xem handler của nó có thực sự thay đổi trạng thái/logic không.
@@ -118,29 +118,35 @@ Phương pháp:
 
 | Chức năng cài đặt | Logic tiêu thụ |
 |---|---|
-| LOAD SOUNDFONT / Unload (silent) | `MainWindow.xaml.cs:223-265` → `PianoAudioEngine.LoadSoundFont/UnloadSoundFont` |
-| Preset instrument (bank/program) | `MainWindow.xaml.cs:259-264` → `SoundFontSynthesizer.SelectPreset` (`SoundFontSynthesizer.cs:333-336`) |
-| HALL REVERB | `MainWindow.xaml.cs:297-300` → `PianoAudioEngine.ReverbEnabled` (`PianoAudioEngine.cs:22-30, :126`) → bộ reverb Schroeder stereo chạy trên mọi buffer PCM (`StereoHallReverb`, `RenderBuffer`) |
-| MIDI input / output / Refresh | `MainWindow.xaml.cs:602-676` + `MidiDeviceService.cs` (WinMM in/out, Note On/Off, pedal CC vào app) |
-| Track solo (TrackCombo) + mute/đổi màu từng track | `MainWindow.xaml.cs:678-684` (ApplyTrackFilter) + `MainWindow.Settings.cs` RebuildTrackList/TrackMute_Changed |
-| Metronome | `MainWindow.xaml.cs:187-197` (TickMetronome theo tempo map + time signature; bật khi có SoundFont, điểm click phát bằng chính SoundFont pitch 77) |
-| Practice mode (4 chế độ) | `MainWindow.xaml.cs:203` (ModeCombo) → `:175` (Wait for my note giữ playhead), `:695-697` (solo tay phải/trái dùng chung Hand split) |
-| Infer hand split from the song | `Ui/MainWindow.Library.cs` (`ApplyInferredHandSplit` → `HandSplit.Infer`) → slider **Hand split point** (nên màu theo tay và chế độ tập từng tay dùng ngay), ghi vào `library.json` kèm `SplitInferred` |
-| Auto practice tempo | `MainWindow.Practice.cs` (`AutoPracticeTempo_Changed` → `PracticeAutoTempo`) → `RecordPracticeNote` ở ba điểm chấm điểm (`MainWindow.xaml.cs`), bước qua `TempoSlider` |
-| Misses before slowing down (1–6) | `MainWindow.Practice.cs` (`AutoPracticeMiss_Changed` → `PracticeMissThreshold`, `Clamp()` trong `Stage/PianoVisualSettings.cs`) → ngưỡng của `RecordPracticeNote` |
-| Playback tempo 50–150% | `MainWindow.xaml.cs:199-201` → `:165` (`_position += elapsed * _tempo`) |
-| Loop A / B / × | `MainWindow.xaml.cs:592-601` (đặt/xóa), `:167-173` (quay vòng B→A, reset điểm số trong vùng loop) |
-| Recording format (AVI / PNG sequence / MP4) | `MainWindow.Settings.cs` (Choice `RecordingFormat`) → `MainWindow.xaml.cs` (`RecordVideo_Click`: `AviVideoRecorder` / `PngSequenceRecorder` / `Mp4Recorder`), `UpdateRecordingInfo` cho dòng trạng thái |
-| Record audio | `MainWindow.Settings.cs` (Toggle `RecordAudio`) → `MainWindow.xaml.cs` (`BeginAudioTrack`: WAV cạnh video, hoặc luồng AAC của `Mp4Recorder`), `PianoAudioEngine.SetTap` |
-| Recording resolution / fps | `MainWindow.Settings.cs:901-924` (RecordingSize) → `MainWindow.xaml.cs:404-405` (tạo `AviVideoRecorder` đúng kích thước + frame rate) |
-| START/STOP RECORDING | `MainWindow.xaml.cs:397-472` (SaveFileDialog, ghi frame theo đồng hồ thật, tự dừng ở 2 GB) |
-| Shortcuts (A W S E… / Space / F11 / Esc / chuột) | `MainWindow.xaml.cs:322-352` (MapComputerKey → PressNote), `:384-400` (F11/Esc), `:354-364` (chỉ hiện chrome), click phím ảo `PianoStage.PianoKeyChanged` |
+| Tải / huỷ / xác minh lại Salamander | `Ui/MainWindow.xaml` (`SalamanderButton`, progress bar) → `MainWindow.xaml.cs` (`SalamanderButton_Click`) → `SalamanderPiano.DownloadAsync`; tiến độ báo theo byte đã xác minh, huỷ giữ lại tệp hoàn chỉnh để lần sau tiếp tục |
+| Nạp đàn đã cài | `SalamanderPlayButton` → `SalamanderPlay_Click` → `LoadSalamanderAsync` → `PianoAudioEngine.LoadSfzInstrument`; cùng luồng nạp chạy sau khi tải đủ và khi khởi động nếu mapping đã cài |
+| SFZ/Sample pipeline (instrument duy nhất) | `PianoAudioEngine.LoadSfzInstrument` → `SfzReader.Read` → `SfzSynthesizer`; engine chỉ nhận mapping SFZ do `SalamanderPiano` sinh, không có API nhập SF2 hoặc chọn nhạc cụ ngoài |
+| HALL REVERB | `ReverbToggle_Changed` → `PianoAudioEngine.ReverbEnabled`; bypass tác động lên pipeline live mà không cắt đột ngột đuôi reverb |
+| Reverb style / custom IR | `ReverbStyleCombo_SelectionChanged` / `ReverbImpulse_Click` → `SetReverbAsync` / `PianoAudioEngine.SetReverbAsync`; WAV/FLAC đọc trên worker, request cũ bị bỏ qua khi người dùng chọn phòng mới |
+| STRING RESONANCE | `ResonanceToggle_Changed` → `PianoAudioEngine.StringResonanceEnabled` → bank 64 waveguide được bật/tắt theo pedal sustain |
+| Chọn đầu ra âm thanh | `AudioOutputCombo_SelectionChanged` lưu `AudioOutputMode` rồi gọi `ApplyAudioOutput` → `PianoAudioEngine.ConfigureOutput`; lựa chọn hỗ trợ Auto, WASAPI shared/exclusive (endpoint cụ thể), ASIO và waveOut |
+| Danh sách thiết bị | `RefreshAudioOutputCatalog` gọi `WasapiDeviceCatalog.GetActiveRenderEndpoints` trên worker; ASIO lấy từ `AsioDriverRegistry`; kết quả được gắn lại vào UI dispatcher và giữ ID ổn định |
+| Bảng điều khiển ASIO | `AsioPanelButton` → `AsioPanel_Click` → `PianoAudioEngine.ShowAsioControlPanel`; chỉ bật khi pipeline thực sự đang phát qua ASIO và panel chạy trên luồng sở hữu driver |
+| Độ trễ mục tiêu | `AudioLatencyCombo_SelectionChanged` → `AudioLatencySteps` (20/10/5/3 ms) → `ConfigureOutput`; backend được mở lại bất đồng bộ trên luồng điều khiển, không giữ WPF input thread |
+| Master piano level | `AudioGainSlider_ValueChanged` → `AudioMasterGain` + `PianoAudioEngine.MasterGain`; gain áp sau synth với soft limiter để nâng mức đàn mà giữ an toàn peak |
+| Trạng thái đầu ra | `UpdateAudioOutputHint` báo đầu ra/buffer đang hoạt động, fallback nếu lựa chọn không mở được hoặc nguyên nhân im lặng; không hiện tên ASIO như đường ra nếu ASIO không thực sự active |
+| MIDI input / output / Refresh | `MainWindow.xaml.cs` + `MidiDeviceService.cs` (WinMM in/out, Note On/Off, pedal CC vào app) |
+| Track solo + mute/đổi màu | `MainWindow.xaml.cs` (`ApplyTrackFilter`) + `MainWindow.Settings.cs` (`RebuildTrackList`/`TrackMute_Changed`) |
+| Metronome | `TickMetronome` theo tempo map + time signature; chỉ bật khi có piano đã nạp, click pitch 77 đi qua cùng Salamander SFZ engine |
+| Practice mode (4 chế độ) | `ModeCombo` → Follow along / Wait for my note / solo tay phải/trái, dùng chung Hand split |
+| Infer hand split from the song | `Ui/MainWindow.Library.cs` (`ApplyInferredHandSplit` → `HandSplit.Infer`) → slider **Hand split point**, ghi vào `library.json` kèm `SplitInferred` |
+| Auto practice tempo / miss threshold | `MainWindow.Practice.cs` → `PracticeAutoTempo`/`PracticeMissThreshold` → chấm điểm nốt và `TempoSlider` |
+| Playback tempo / loop | `TempoSlider`, loop A/B/× và seek được xử lý trong `MainWindow.xaml.cs`; pedal CC gửi vào `PianoAudioEngine` và MIDI output |
+| Recording format / audio / resolution / fps | `MainWindow.Settings.cs` cài `RecordingFormat`/`RecordAudio`/`RecordingSize`; `RecordVideo_Click` chọn AVI/PNG/MP4, `PianoAudioEngine.SetTap` đưa block PCM vào WAV hoặc AAC |
+| START/STOP RECORDING | `MainWindow.xaml.cs` ghi frame theo đồng hồ thật, dừng gần giới hạn 2 GB đối với AVI |
+| Shortcuts | `MainWindow.xaml.cs` (`MapComputerKey`, F11/Esc, auto-hide) + `PianoStage.PianoKeyChanged` cho piano ảo |
 
 ## 7. Shell: main menu, Play dialog, header, footer
 
 | Chức năng | Logic tiêu thụ |
 |---|---|
-| Main menu Play / Design / Settings / About / Exit | `MainWindow.Menu.cs` (MainMenuPlay/Design/Settings/About/Exit_Click) |
+| Main menu Play / Quick Adjustments / Piano & Audio Setup / MIDI Devices / About / Exit | `MainWindow.Menu.cs` opens the matching menu surface; setup shortcuts jump directly to the Audio or MIDI settings page |
+| Main menu MIDI Devices shortcut | `MainMenuMidi_Click` selects `SettingsPages.Midi` and opens the dock |
 | HOME (header) | `MainWindow.xaml:55` → `MainMenu_Click` (`MainWindow.Menu.cs`) |
 | PLAY / SETTINGS / thu nhỏ / toàn màn hình / thoát (header) | Header **PLAY** mở `OpenPlayDialog`; **MIDI File** bên trong hộp thoại gọi `OpenMidi_Click`; dock dùng `Settings_Click`, các nút cửa sổ giữ handler riêng |
 | Play dialog: Back / Close / MIDI File / Live Play / CTA | `MainWindow.Menu.cs`: Back trở về bề mặt gọi hộp thoại, Close đóng về sân khấu, CTA đổi giữa chọn tệp và bắt đầu phát, Live Play chuyển sang biểu diễn trực tiếp |
@@ -148,8 +154,8 @@ Phương pháp:
 | Play dialog: toggle lớp Background/Notes/Embers/Halo/Flame/Keys | `MainWindow.Menu.cs:66-90` — mỗi toggle Tag = thuộc tính thật, dùng chung handler `VisualToggle_Changed` nên dialog và dock luôn khớp; đồng bộ ngược qua `SyncPlayDialogToggle` |
 | Play dialog: Speed + reset | `NoteFallSpeed` hai chiều (PlaySpeed_Changed ↔ slider dock) |
 | Play dialog: màu halo, chevron deep-link 8 mục, card tay | `MainWindow.Menu.cs` (PlayDialogHaloColor_Click → `HaloColor`; PlayDialogDeepLink_Click mở đúng tab theo index; card biên màu `LeftHandColor/RightHandColor` hoặc gradient nốt) |
-| Play / Restart / seek / 3 pedal / accuracy-score-streak | `MainWindow.xaml.cs` (TogglePlay/Restart/SeekToSlider, PedalToggle_Changed → CC 67/66/64 vào SoundFont + MIDI output, UpdateStats) |
-| Pedal MIDI vào → SoundFont & output | `MidiDeviceService.PedalChanged` → `SetPedalState` (`MainWindow.xaml.cs:533-548`) → `SoundFontSynthesizer.ProcessMidi` CC 64/66/67 (`SoundFontSynthesizer.cs:346-358`) |
+| Play / Restart / seek / 3 pedal / accuracy-score-streak | `MainWindow.xaml.cs` (TogglePlay/Restart/SeekToSlider, PedalToggle_Changed → CC 67/66/64 vào Salamander SFZ + MIDI output, UpdateStats) |
+| Pedal MIDI vào → Salamander SFZ & output | `MidiDeviceService.PedalChanged` → `SetPedalState` (`MainWindow.xaml.cs:533-548`) → `SfzSynthesizer.ProcessMidi` CC 64/66/67 (`Audio/SfzSynthesizer.cs`) |
 
 ## 8. Các ghi chú (không phải lỗi liên kết)
 
@@ -158,32 +164,31 @@ Phương pháp:
 2. Palette `Spectrum` — là palette duy nhất không có nhánh tường minh trong `NoteColor`
    (`PianoStage.cs:620`), nó đi vào nhánh mặc định `_ =>` (hue theo cao độ) và vẫn render đúng;
    `Clamp()` giữ giá trị hợp lệ.
-3. Ô tìm kiếm chỉ lọc 7 trang sinh động (Style…Camera + Recording); 4 trang tĩnh
-   (Audio/MIDI/Practice/Recording) không có hàng nào đăng ký vào hệ tìm kiếm — tooltip
-   "Filter the settings on every page" hơi rộng hơn phạm vi thật. Đây là giới hạn UX, không phải cài đặt chết.
+3. Ô tìm kiếm chỉ lọc hàng đã đăng ký trên Style/Theme/Notes/Particles/Keyboard/Background/Camera/Recording/General;
+   các trang Audio/MIDI/Practice/History dựng tĩnh từ XAML nên chưa được lọc. Tooltip “Filter the settings on every page”
+   vì thế rộng hơn phạm vi thật; đây là giới hạn UX, không phải cài đặt chết.
 4. Metronome chỉ bật điểm click khi **có bài MIDI** (cần tempo map `_beatTimes`); checkbox được
-   kích hoạt theo SoundFont. Đúng thiết kế vì click phát bằng chính tiếng SoundFont.
+   kích hoạt theo piano đã nạp. Click phát bằng cùng Salamander SFZ engine.
 5. `RESET PAGE` trên các trang tĩnh hiển thị "This page has no visual settings to reset" — đúng
    thiết kế vì các trang đó không có tham số visual.
 
 ## 9. Bằng chứng kiểm thử
 
-- `python tools/check_sources.py` → **PASS**: 19 file C# cân bằng ngoặc/nháy; 2 file XAML hợp lệ,
-  85 resource key, mọi tham chiếu `StaticResource` có định nghĩa, **mọi event handler trong XAML
-  đều tồn tại trong C#** (không có nút nào gán handler ảo).
-- `VerificationSuite` (`PianoPath.exe --verify`, chạy CI trên Windows) bao phủ: dock 10 trang,
-  đổi color mode → màu nốt thật (`stage.NoteColor`), hàng phụ thuộc ẩn/hiện, tìm kiếm, áp preset
-  tại chỗ, công tắc shader đổi đúng stage vẽ + cache bake, Play dialog mirror cài đặt, chế độ tập/
-  loop/tempo/tua, reverb stereo, metronome, pedal CC, AVI, nhập MIDI. Xem `docs/UI-SHADER-REVIEW.md`
-  và README mục Kiểm thử.
+- `python3 tools/check_sources.py` → **PASS (2026‑10‑04)**: 116 file C# và 2 file XAML được quét,
+  99 resource key, 159 phần tử có tên; XML hợp lệ, mọi `StaticResource` và event handler đều phân giải,
+  hai bảng dịch đồng bộ và tài liệu phát hành khớp generator.
+- `VerificationSuite` (`PianoPath.exe --verify`, chạy CI trên Windows) có kiểm thử cho dock 13 trang,
+  tìm kiếm, preset, accessibility, dialog/menu, MIDI/practice, pedal, Salamander/SFZ, output/reverb và recording.
+  **Không chạy được trong sandbox Linux của lượt này** (không có .NET SDK/WPF); cần job Windows/CI để xác nhận runtime.
+  Xem `docs/UI-SHADER-REVIEW.md` và README mục Kiểm thử.
 
-**Kết luận: không có chức năng cài đặt nào thiếu logic — mọi mũi tên trong sơ đồ dòng cài đặt
-(10 trang dock + 4 nhóm control tĩnh + Play dialog + menu/footer) đều đã có code liên kết thật.**
+**Kết luận theo đối chiếu mã:** mọi mũi tên trong sơ đồ 13 trang dock + các nhóm điều khiển XAML tĩnh +
+Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm; hành vi thiết bị thật vẫn cần xác nhận trên Windows.
 
 ## 10. Bổ sung: trang Theme và việc bỏ số tab "magic" (đợt nâng cấp giao diện hoà nhạc)
 
 - **Thứ tự trang giờ nằm một chỗ**: `Ui/SettingsPages.cs` giữ tên trang và mảng `Order`
-  (11 trang, **Theme ở vị trí 1**); mọi chỗ trước đây dùng số nguyên (`= 1 // Notes`, `= 6 // Audio`,
+  (13 trang, **Theme ở vị trí 1**); mọi chỗ trước đây dùng số nguyên (`= 1 // Notes`, `= 6 // Audio`,
   `Math.Clamp(tab, 0, 9)`, mảng `pages` trong tìm kiếm, bảng `--settings-tab`) đều gọi
   `SettingsPages.IndexOf(name)` / `SettingsPageHost(index)`. Thêm trang mới = 1 dòng trong
   `SettingsPages` + 1 `TabItem` trong XAML.
@@ -197,7 +202,7 @@ Phương pháp:
 - **Mỗi preset có sẵn khai báo giao diện hợp nhất** (`ShellTheme`), nên áp preset đổi cả sân khấu lẫn
   vỏ app; preset của người dùng vẫn giữ nguyên hành vi cũ.
 - **Bằng chứng kiểm thử mới** (trong `VerificationSuite`):
-  - `tabs.Items.Count == SettingsPages.Order.Length` (11), tiêu đề tab 0 = Style, tab 1 = Theme,
+  - `tabs.Items.Count == SettingsPages.Order.Length` (13), tiêu đề tab 0 = Style, tab 1 = Theme,
     tab cuối = Recording, và `IndexOf` trả đúng chỉ số / `-1` cho tên lạ;
   - **điều hướng ba nhóm**: thứ tự tab bằng đúng `SettingsPages.Order`, `Order` bằng đúng chuỗi trang
     của `Sections`, mỗi nhãn nhóm nằm trên trang đầu của nhóm đó và `SectionOf("Nope")` là `null`;
