@@ -11,9 +11,7 @@ internal enum BackdropStyle
     /// <summary>Deep obsidian recital hall with silvery acoustic waves and stardust motes.</summary>
     Obsidian,
     /// <summary>Rich mahogany concert hall with warm burnished brass reflections and golden dust.</summary>
-    Imperial,
-    /// <summary>Deep violet nebulae and cyan stardust, shaped by the animated pixel shader.</summary>
-    Nebula
+    Imperial
 }
 
 /// <summary>
@@ -51,11 +49,10 @@ internal sealed record ShellTheme(
 }
 
 /// <summary>
-/// The built-in piano interface themes.
+/// The three built-in piano concert interface themes.
 ///
 /// <list type="bullet">
-/// <item><b>Cosmic Nocturne</b> — a violet nebula, cyan stardust and piano-key gold; the new-install default.</item>
-/// <item><b>Concert Grand</b> — Steinway ebony lacquer, warm champagne gold and ivory sheen.</item>
+/// <item><b>Concert Grand</b> — the flagship concert look: Steinway ebony lacquer, warm champagne gold and ivory sheen.</item>
 /// <item><b>Concert Noir</b> — midnight obsidian slate with silvery acoustic platinum accents.</item>
 /// <item><b>Velvet Gold</b> — deep mahogany, imperial concert velvet and burnished antique brass.</item>
 /// </list>
@@ -68,12 +65,11 @@ internal sealed record ShellTheme(
 /// </summary>
 internal static class ShellThemes
 {
-    internal const string CosmicNocturneId = "cosmic-nocturne";
     internal const string ConcertGrandId = "concert-grand";
     internal const string ConcertNoirId = "concert-noir";
     internal const string VelvetGoldId = "velvet-gold";
 
-    internal const string DefaultId = CosmicNocturneId;
+    internal const string DefaultId = ConcertGrandId;
 
     /// <summary>The palette published while Windows runs in high-contrast mode; not a user choice.</summary>
     internal const string HighContrastId = "high-contrast";
@@ -87,26 +83,6 @@ internal static class ShellThemes
         ["noir"] = ConcertNoirId,
         ["velvet"] = VelvetGoldId,
     };
-
-    internal static readonly ShellTheme CosmicNocturne = new(
-        CosmicNocturneId, "Cosmic Nocturne", "Midnight violet nebula, drifting stardust and piano-key gold.", BackdropStyle.Nebula,
-        Accent: Color.FromRgb(0x9A, 0x7B, 0xFF),
-        AccentAlt: Color.FromRgb(0x78, 0xE7, 0xFF),
-        AccentSoft: Color.FromArgb(0x38, 0x9A, 0x7B, 0xFF),
-        Glow: Color.FromRgb(0xD1, 0xA5, 0xFF),
-        Window: Color.FromRgb(0x05, 0x06, 0x10),
-        Panel: Color.FromArgb(0xF0, 0x0D, 0x0F, 0x1C),
-        PanelTop: Color.FromArgb(0xF6, 0x17, 0x19, 0x2D),
-        PanelBottom: Color.FromArgb(0xEE, 0x0A, 0x0B, 0x15),
-        PanelAlt: Color.FromRgb(0x10, 0x12, 0x20),
-        Control: Color.FromRgb(0x13, 0x16, 0x27),
-        ControlHover: Color.FromRgb(0x20, 0x20, 0x38),
-        Border: Color.FromRgb(0x2A, 0x2D, 0x4A),
-        ControlBorder: Color.FromRgb(0x40, 0x43, 0x69),
-        Track: Color.FromRgb(0x1D, 0x21, 0x38),
-        Popup: Color.FromArgb(0xFA, 0x0D, 0x0F, 0x1C),
-        Mote: Color.FromRgb(0xB4, 0xA5, 0xFF),
-        MoteAlt: Color.FromRgb(0xC9, 0xF4, 0xFF));
 
     internal static readonly ShellTheme ConcertGrand = new(
         ConcertGrandId, "Concert Grand", "Steinway ebony lacquer & warm champagne gold — the prestigious concert grand look.", BackdropStyle.Acoustic,
@@ -168,9 +144,9 @@ internal static class ShellThemes
         Mote: Color.FromRgb(0xFF, 0xD4, 0x80),
         MoteAlt: Color.FromRgb(0xFF, 0xF2, 0xD1));
 
-    internal static readonly ShellTheme[] All = [CosmicNocturne, ConcertGrand, ConcertNoir, VelvetGold];
+    internal static readonly ShellTheme[] All = [ConcertGrand, ConcertNoir, VelvetGold];
 
-    internal static ShellTheme Default => CosmicNocturne;
+    internal static ShellTheme Default => ConcertGrand;
 
     /// <summary>
     /// Everything the pickers offer: the built-in themes first, then the ones the user made
@@ -203,7 +179,7 @@ internal static class ShellThemes
     /// </summary>
     internal static ShellTheme HighContrast() => new(
         HighContrastId, "High Contrast",
-        "Windows high-contrast colours: system window, text, control and highlight colours replace the selected interface palette.",
+        "Windows high-contrast colours: system window, text, control and highlight colours replace the concert palette.",
         BackdropStyle.Obsidian,
         Accent: SystemColors.HighlightColor,
         AccentAlt: SystemColors.HotTrackColor,
@@ -279,7 +255,7 @@ internal static class ShellThemeManager
     internal static ShellTheme Apply(ShellTheme theme)
     {
         Current = theme;
-        // High contrast wins over the selected palette while it is on, but the user's choice is kept in
+        // High contrast wins over the concert palette while it is on, but the user's choice is kept in
         // Current: turning the system setting off (and re-applying) brings the chosen theme straight back.
         var published = IsHighContrast ? ShellThemes.HighContrast() : theme;
         var resources = Application.Current?.Resources;

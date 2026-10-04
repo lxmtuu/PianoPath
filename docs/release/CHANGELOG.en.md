@@ -22,10 +22,8 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ### Interface & graphics
 
-- Reworked the home screen around **Cosmic Nocturne**: a violet nebula, cyan stardust and a suspended glass piano. It is the default for new settings profiles; a theme a returning user already chose is preserved.
-- Added an HLSL WPF `ps_3_0` pixel shader for the animated nebula clouds and stardust. It advances on the shared `FrameClock`, respects reduced/disabled motion and keeps the vector backdrop as a fallback.
-- Added the **Nebula** backdrop family, expanded the interface picker to four built-in looks, localized its labels and About text in English and Vietnamese, and updated the theme-studio documentation.
-- Use the supplied **Keyflow Visualizer Piano** artwork as the in-app brand mark and window icon, the multi-size Windows executable icon, and the Inno Setup installer icon.
+- Restored the concert-grand home screen, its three built-in themes, localized labels and icon-button UI from `arena/01a107ec-pianopath` when resolving the merge with `main`.
+- Kept the supplied **Keyflow Visualizer Piano** artwork and the Windows executable/installer icons from `main`. The Cosmic Nocturne shader source and embedded resource are retained but are not enabled on the restored home screen; the in-app layout and branding follow the concert-grand version.
 
 ### Audio & setup experience
 

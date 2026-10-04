@@ -7,8 +7,8 @@ using System.Windows.Media;
 namespace PianoPath;
 
 /// <summary>
-/// Cosmic startup shell: Play / Design / Quick Adjust / Settings / About / Exit, with a live theme
-/// picker and stage-look read-out, a shared contextual quick-adjust surface, and the pre-flight
+/// Concert shell: the startup menu (Play / Design / Quick Adjust / Settings / About / Exit, with a live
+/// theme picker and stage-look read-out), a shared contextual quick-adjust surface, and the pre-flight
 /// Play dialog with per-hand style cards and quick layer switches. Navigation has explicit return
 /// surfaces, and every quick control writes through the same live settings path as the Design dock.
 /// </summary>
@@ -45,7 +45,7 @@ public partial class MainWindow
     internal void ShowStartupMenu()
     {
         SetChromeVisible(false);
-        Loc.Format(MainMenuVersionLabel, "Keyflow {0} · Cosmic Nocturne", AppInfo.Version);
+        Loc.Format(MainMenuVersionLabel, "Keyflow {0} · Concert Grand Edition", AppInfo.Version);
         RefreshMenuThemeChips();
         RefreshMenuStageLook();
         MainMenuOverlay.Visibility = Visibility.Visible;
@@ -100,8 +100,8 @@ public partial class MainWindow
     }
 
     private void MainMenuAbout_Click(object sender, RoutedEventArgs e) => ShowMessage(
-        Loc.F("Keyflow · Piano Performance & Cosmic VFX Studio\n\nA real-time MIDI piano visualizer and practice studio: GPU-shaded keys, flowing note effects, a concert stage designer and a living nebula on the home screen.\n\nInterface themes: Cosmic Nocturne (violet nebula and cyan stardust), Concert Grand (ebony and champagne), Concert Noir (obsidian and platinum), and Velvet Gold (mahogany and brass).\n\nThe home-screen stardust is a time-driven WPF pixel shader; the piano stage uses the Direct3D 11 HLSL renderer.\nPiano: Salamander Grand Piano V3, an optional one-time 748 MB download (CC BY 3.0).\nKeyflow {0} · shipped languages: English and Tiếng Việt.\n\n© 2026 Yami · Neyu · Keyflow — released under the MIT license. Contributor: Jin", AppInfo.Version),
-        "About Keyflow Cosmic Nocturne", MessageBoxImage.Information);
+        Loc.F("Keyflow · Piano Performance & Concert VFX Studio\n\nA professional real-time MIDI piano visualizer: ray-traced keyboard shading, thermal sparks & embers, acoustic resonance waves, flames, and a full concert stage designer.\n\nInterface themes: Concert Grand (Steinway ebony & champagne gold), Concert Noir (obsidian slate with silvery platinum) and Velvet Gold (mahogany velvet & burnished brass).\n\nThemes and stage effects are driven by the shared vsync clock for fluid 60+ FPS motion.\nPiano: Salamander Grand Piano V3, an optional one-time 748 MB download (CC BY 3.0).\nShading model: Cook-Torrance GGX + ACES filmic tone mapping.\nKeyflow {0} · shipped languages: English and Tiếng Việt.\n\n© 2026 Yami · Neyu · Keyflow — released under the MIT license.\nContributor: Jin", AppInfo.Version),
+        "About Keyflow Concert Grand", MessageBoxImage.Information);
 
     private void MainMenuExit_Click(object sender, RoutedEventArgs e) => Close();
 

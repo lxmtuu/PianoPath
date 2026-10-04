@@ -79,7 +79,6 @@ public partial class MainWindow : Window
     public MainWindow(bool loadSalamanderOnStart = true)
     {
         InitializeComponent();
-        MenuBackdrop.EnableGalaxyShader();
         _visualSettings = PianoVisualSettingsStore.Load();
         // The output request must be on the engine before the bundled piano loads, so the very first
         // pipeline already opens the backend the player chose last time instead of opening waveOut and

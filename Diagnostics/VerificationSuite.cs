@@ -331,17 +331,6 @@ internal static partial class VerificationSuite
         Assert(ShaderMath.Hash(11, 23, 5) == ShaderMath.Hash(11, 23, 5) && ShaderMath.Hash(11, 23, 5) != ShaderMath.Hash(11, 24, 5),
             "Shadow and occlusion jitter must be deterministic so a cached bake does not shimmer between frames.");
 
-        // The startup backdrop is an independent WPF ps_3_0 shader, not part of the D3D11 stage.
-        var nebulaSource = GalaxyShaderEffect.ShaderSource;
-        Assert(nebulaSource.Contains("PsNebula(", StringComparison.Ordinal)
-                && nebulaSource.Contains("ValueNoise(", StringComparison.Ordinal)
-                && nebulaSource.Contains("starGrid", StringComparison.Ordinal),
-            "The embedded home-screen shader should contain procedural nebula noise and a star field.");
-        var nebulaEffect = new GalaxyShaderEffect { Time = 2.5, Aspect = 16.0 / 9.0, Intensity = .9, Density = 1.5 };
-        Assert(Math.Abs(nebulaEffect.Time - 2.5) < 1e-9 && Math.Abs(nebulaEffect.Aspect - 16.0 / 9.0) < 1e-9
-                && Math.Abs(nebulaEffect.Density - 1.5) < 1e-9 && nebulaSource.Contains("float Density", StringComparison.Ordinal),
-            "The animated home shader should expose time, viewport and stardust-density uniforms to the shared chrome settings.");
-
         // ---- scene and bake cache key --------------------------------------------------------
         var look = VisualPresets.NeonViolet();
         var scene = PianoShaderScene.From(look, 640, 160, "Balanced");
@@ -426,7 +415,7 @@ internal static partial class VerificationSuite
         }
         Assert(compared > 100 && warmth / (double)compared > 10,
             $"A sounding key must come out warmer in its overlay tile than in the unlit base bake (delta={warmth / (double)Math.Max(1, compared):0.0} over {compared} pixels).");
-        Results.Add("PASS shader pipeline: procedural WPF nebula/stardust shader, sRGB/ACES/GGX maths, deterministic jitter, bake cache signature, opaque shaded keyboard bake, ebony-vs-ivory light transport and per-key emissive overlay tiles.");
+        Results.Add("PASS shader pipeline: sRGB/ACES/GGX maths, deterministic jitter, bake cache signature, opaque shaded keyboard bake, ebony-vs-ivory light transport and per-key emissive overlay tiles.");
     }
 
     /// <summary>
@@ -1586,19 +1575,12 @@ internal static partial class VerificationSuite
             "The Theme page should offer one palette chip per built-in interface theme.");
         // Ids are slugs derived from the theme name. Older releases stored sakura / noir / velvet and
         // the retired "Sakura Nocturne" name; those must still resolve and be rewritten on load.
-        Assert(ShellThemes.Find("sakura").Id == ShellThemes.ConcertGrandId && ShellThemes.Find(ShellThemes.ConcertGrandId).Id == ShellThemes.ConcertGrandId
-                && ShellThemes.Find("noir").Id == ShellThemes.ConcertNoirId && ShellThemes.Find("velvet").Id == ShellThemes.VelvetGoldId
-                && ShellThemes.Find("Sakura Nocturne").Id == ShellThemes.ConcertGrandId
+        Assert(ShellThemes.Find("sakura").Id == ShellThemes.ConcertGrandId && ShellThemes.Find("noir").Id == ShellThemes.ConcertNoirId
+                && ShellThemes.Find("velvet").Id == ShellThemes.VelvetGoldId && ShellThemes.Find("Sakura Nocturne").Id == ShellThemes.ConcertGrandId
                 && ShellThemes.Find("Concert Noir").Id == ShellThemes.ConcertNoirId && ShellThemes.Find("nonsense").Id == ShellThemes.DefaultId,
             "Legacy theme ids and display names should resolve to the canonical concert themes.");
-        Assert(PianoVisualSettings.FromJson("{\"ShellTheme\":\"sakura\"}").ShellTheme == ShellThemes.ConcertGrandId
-                && PianoVisualSettings.FromJson("{\"ShellTheme\":\"concert-grand\"}").ShellTheme == ShellThemes.ConcertGrandId
-                && ShellThemes.DefaultId == ShellThemes.All[0].Id,
-            "Loading persisted settings should preserve concert-grand and rewrite the sakura alias to the canonical slug.");
-        Assert(ShellThemes.Default.Id == ShellThemes.CosmicNocturneId && ShellThemes.Default.Backdrop == BackdropStyle.Nebula
-                && ShellThemes.All.Length == 4 && ShellThemes.All[0].Id == ShellThemes.CosmicNocturneId
-                && ShellThemes.Everything.Count() >= 4,
-            "A fresh install should default to Cosmic Nocturne and the theme shelf should include the shader-driven nebula family.");
+        Assert(PianoVisualSettings.FromJson("{\"ShellTheme\":\"sakura\"}").ShellTheme == ShellThemes.ConcertGrandId && ShellThemes.DefaultId == ShellThemes.All[0].Id,
+            "Loading persisted settings should rewrite a legacy theme id to the canonical slug.");
         var beforeTheme = visualSettings.ShellTheme;
         visualSettings.ShellTheme = "velvet";
         Invoke(window, "ApplyChromeTheme");
