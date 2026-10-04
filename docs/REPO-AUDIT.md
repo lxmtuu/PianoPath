@@ -564,3 +564,73 @@ job Windows được xếp lịch.
 3. Secret `PUBLIC_RELEASES_TOKEN` (fine-grained, chỉ repo phát hành, Contents: read/write) nếu muốn tự động hoàn toàn; không đặt cũng chạy được bằng `tools/publish_public.ps1`.
 4. Phát hành lại `v1.0.0` sang kho công khai: **Run workflow** cho `release.yml`, hoặc `pwsh tools/publish_public.ps1 -Tag v1.0.0 -Packages publish` nếu đã có ba gói trong `publish\`.
 5. Dọn nhánh cũ (tuỳ): `git fetch --prune && git branch -r --merged origin/main | grep -E 'origin/(arena/|docs/|feature/|fix/)' | sed 's|origin/||' | xargs -n1 git push origin --delete` — chỉ xoá nhánh **đã merge**; nhánh của pull request #6 còn mở thì để lại.
+
+## 9. Đợt rà soát lần tư — 2026‑10‑04
+
+Sandbox này **không có .NET SDK** và egress chỉ mở tới `github.com` (`nuget.org`, `dot.net` và
+`raw.githubusercontent.com` đều bị chặn), nên lớp biên dịch/`--verify` không chạy được tại chỗ và được
+đọc từ CI như đợt §6. Ba lớp còn lại đã chạy hết, cộng thêm những phép đếm mà ba lớp ấy không có — và
+chúng lộ ra hai lỗi mà cả sáu đợt trước chưa bắt.
+
+### 9.1 Ba lớp, số liệu đo được
+
+| Lớp | Kết quả lần này |
+|---|---|
+| `python3 tools/check_sources.py` | **xanh**, exit 0, ~10 s: "checked 117 C# files and 2 XAML files, 109 resource keys, 162 named elements … 1211 keys the sources print (1313 in the inventory)" |
+| `python3 -m py_compile tools/*.py` | sạch (7 script) |
+| `--verify` (CI) | lượt `build` mới nhất trên `main` tại thời điểm rà soát — run **37229951265** — đang chạy: `static` ✅ (11 s), `test` ✅ (18 s), job Windows còn lại; bốn lượt gần nhất trước đó trên `main` (37228710409, 37229007238, 37229015974, 37227753693) xanh cả ba job |
+| Ảnh CI | `$shots` của `build.yml` có **14** mục và `docs/previews/vi` lẫn `docs/previews/en` mỗi thư mục đúng 14 tệp — khớp bảng đối chiếu §7.1 |
+
+### 9.2 Đã sửa trong đợt này
+
+| Việc | Bằng chứng |
+|---|---|
+| **Khoá `"Nebula"` được viết hai lần trong *cả hai* bảng chuỗi** (`Strings.English.cs`, `Strings.Vietnamese.cs`, hai dòng liền nhau, giá trị giống hệt nhau). Bảng là bộ khởi tạo bằng indexer (`["k"] = v`) nên dòng thứ hai **không** ném lỗi như `Add` sẽ ném: nó lặng lẽ thắng, dòng kia thành câu mà người dịch vẫn phải giữ cho khớp — đúng loại lỗi mà §5.1 đã dọn một lần. Đã xoá một dòng ở mỗi bảng (1314 → 1313 dòng) | đếm lại bằng script: `1314 entries, 1313 unique -> duplicates: ['Nebula']` trước khi sửa, `none` sau khi sửa; `tools/check_sources.py` vẫn xanh |
+| **Sáu tài nguyên có khoá trong `App.xaml` không nơi nào chạm tới**: `StageScrimBrush`, `IconPetal`, `IconButtonStyle`, `TransportButtonStyle`, `DangerButtonStyle`, `CompactCheckBoxStyle` — dấu vết của đợt đổi giao diện (nút icon thay hàng chữ hoa, transport chuyển sang `TransportPlayStyle`/`RoundGlyphButtonStyle`). Đã xoá cả sáu, kèm dòng chú thích "concert icons" nay chỉ còn ba biểu tượng thật sự được dùng | quét cả kho (mọi tệp được git theo dõi, kể cả `tools/*.py`) bằng so khớp **trọn định danh**: mỗi tên chỉ xuất hiện đúng một lần, tại chính dòng khai báo; `AccentIconButtonStyle`/`DangerIconButtonStyle` không tính là `IconButtonStyle` nhờ `\b`. Sau khi xoá, phép quét còn lại **0** tài nguyên chết (108 khoá trong `App.xaml`) và `AccentGradientBrush` vẫn được dùng ở chỗ khác nên không mất theo |
+| **`Video/PngSequenceRecorder._row`** — trường `private readonly byte[] _row = []` được khai báo rồi không ai đọc | quét trường private trên toàn kho: đây là **trường duy nhất** chỉ xuất hiện tại chỗ khai báo; đã xoá |
+| **Luật tĩnh mới `scan_dead_resources(cs_files, xaml_files)`**: mọi tài nguyên có `x:Key` phải được ít nhất một tệp nguồn, một tệp XAML hoặc một script trong `tools/` nhắc tới (khớp trọn định danh); khoá lấy qua XML parser nên markup extension trong `x:Key` không bị nhầm thành tên | mutation test trên bản sao repo: thả lại một `LinearGradientBrush x:Key="OrphanScrimBrush"` vào `App.xaml` → đỏ kèm câu `resource 'OrphanScrimBrush' is defined but no source, markup or tool reaches it` |
+| **Luật tĩnh thứ hai trong `scan_localization`**: không bảng nào được liệt kê một khoá hai lần (bộ khởi tạo indexer không ném lỗi, nên trước đây phép kiểm "hai bảng cùng tập khoá" vẫn xanh vì `dict` đã gộp khoá trùng) | mutation test: chèn lại `["Nebula"]` vào bảng tiếng Việt → đỏ kèm câu `Strings.Vietnamese.cs: 'Nebula' is listed twice; the table is an indexer initialiser, so the later line wins silently and the other one is dead weight` |
+
+Cả hai luật được viết theo đúng hình mẫu `scan_dead_keys` (§5.1): câu lỗi nói việc phải làm, và mỗi luật
+có mutation chứng minh nó bắt được lỗi thật chứ không chỉ chạy xanh trên cây sạch.
+
+### 9.3 Đã kiểm, không thấy vấn đề
+
+* **XAML**: 96 handler mà `Ui/MainWindow.xaml` gọi đều có mặt trong các tệp `MainWindow.*.cs` (không handler
+  nào trỏ vào hư không); không `ElementName` nào trỏ sai; 162 `x:Name` không trùng; không `x:Key` trùng;
+  `App.xaml` có 26 style ngầm nhưng mọi cặp trùng `TargetType` đều nằm trong **scope template khác nhau**
+  (hai `TextBlock` ở `App.xaml:304`/`:1012` là style không khoá bên trong hai `ControlTemplate` riêng), nên
+  không có chuyện style này đè style kia; toàn kho **không** có chỗ nào tra tài nguyên bằng tên tính toán
+  (`FindResource`/`Resources[…]` đều dùng literal) — đó là lý do luật `scan_dead_resources` ở trên là chính xác.
+* **Không có chức năng chết**: 213 thuộc tính của `PianoVisualSettings` đều được nhắc ngoài lớp ấy; không
+  `catch` rỗng; không `unsafe`; `async void` chỉ có 4 handler WPF (`MainWindow_Loaded`, `SalamanderButton_Click`,
+  `SalamanderPlay_Click`, `ChooseReverbImpulse`); `Thread.Sleep` chỉ nằm trong `Diagnostics/` và nhịp chờ của
+  `GpuRenderLoop`; ngoài `_row` đã sửa, không phương thức private nào bị bỏ rơi.
+* **Bộ đàn tải riêng**: manifest 641 dòng, tổng kích thước **đúng** `TotalBytes = 748 397 030`, commit ghim
+  `3382bf9…`, đường dẫn đều `Samples/*.flac`; mọi opcode mà `SalamanderPiano.BuildSfz` sinh ra
+  (`lokey/hikey/pitch_keycenter/lovel/hivel/lokey… on_locc64/on_hicc64/lorand/hirand/trigger/rt_decay/volume/
+  amp_veltrack/ampeg_release/default_path/sample`) đều có trong `Audio/SfzReader.cs` — không có opcode nào
+  được sinh ra mà engine bỏ qua.
+* **Toán chuyển đổi/định dạng đọc lại bằng tay**: hệ số BT.601 video-range của `Video/Nv12Frame.cs` cộng
+  đúng bằng 0 ở hai hàng màu (đen → 16, trắng → 235, xám trung tính → 128) và chỉ số mặt phẳng UV đúng
+  stride; `Audio/WavWriter.cs` vá đủ hai trường kích thước trên **mọi** đường đóng tệp, kể cả đường ghi lỗi;
+  `Audio/AsioBufferSizing.SelectFrames` xử đúng cả ba kiểu granularity ASIO (−1, dương, 0).
+* **Tài liệu đối chiếu**: hai CHANGELOG có cùng 16 tiêu đề và cùng 56 gạch đầu dòng; cây tiêu đề của hai
+  README khớp 1‑1 (chênh một dòng là do một tiêu đề tiếng Anh xuống hàng, không phải mục bị thiếu); 104 liên
+  kết tương đối trong mọi tệp `.md` đều có đích, trừ những liên kết trong `docs/release/` trỏ tới
+  `docs/previews/` — đúng thiết kế, vì lượt phát hành mới chép thư mục ảnh sang đó (`scan_public_release` giữ luật ấy).
+  Các con số tài liệu đang tuyên bố đều là **số đo có ngày** (174 test/131 hàm/2 292 dòng đếm 2026‑10‑04 —
+  đếm lại vẫn đúng; "58 hàm `Verify*` trong 5 150 dòng" là số của 2026‑10‑01, hôm nay là 62 hàm) nên không
+  phải chỗ lệch cần sửa.
+
+### 9.4 Ghi nhận, chưa sửa
+
+* **Con số 748 MB được gõ trong câu chữ, không suy ra từ manifest**: nhãn nút `Download piano · 748 MB`
+  (`Localization/Strings.*.cs:291`), hai câu gợi ý (`:745`, `:746`) và câu About đều là literal; chỉ
+  `Ui/MainWindow.xaml.cs:610` chia `SalamanderPiano.TotalBytes` để in tiến độ. Cùng loại với số phiên bản
+  mà `scan_release_version` đã xử (§7.2), nhưng lần này cái được ghim là **nội dung bộ mẫu** — đổi nó là
+  thao tác có chủ đích đã có test ghim 641 tệp và `TotalBytes`, nên sửa ba câu chữ tốn hơn giá trị; ghi lại
+  để lần đổi bộ mẫu sau biết phải đi tìm.
+* **README tiếng Anh thiếu tiêu đề con `### Piano`** dưới `## Current limitations` (bản tiếng Việt có).
+  Nội dung hai bản vẫn đủ và khớp từng gạch đầu dòng; chỉ là một tiêu đề không ai link tới, nên để nguyên
+  cũng không sai — nhưng nếu sửa thì sửa luôn cả cặp.

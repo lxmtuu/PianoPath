@@ -686,7 +686,6 @@ internal static class StringsEnglish
         ["Nature layer"] = "Nature layer",
         ["Nature speed"] = "Nature speed",
         ["Nebula"] = "Nebula",
-        ["Nebula"] = "Nebula",
         ["Negative values make sparks float upward."] = "Negative values make sparks float upward.",
         ["Neon Violet"] = "Neon Violet",
         ["Neon outline"] = "Neon outline",

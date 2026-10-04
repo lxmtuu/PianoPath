@@ -686,7 +686,6 @@ internal static class StringsVietnamese
         ["Nature layer"] = "Lớp thiên nhiên",
         ["Nature speed"] = "Tốc độ thiên nhiên",
         ["Nebula"] = "Tinh vân",
-        ["Nebula"] = "Tinh vân",
         ["Negative values make sparks float upward."] = "Giá trị âm làm tia lửa bay lên.",
         ["Neon Violet"] = "Neon Violet",
         ["Neon outline"] = "Viền neon",

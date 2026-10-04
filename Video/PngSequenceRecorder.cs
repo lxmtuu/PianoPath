@@ -25,7 +25,6 @@ namespace PianoPath;
 internal sealed class PngSequenceRecorder : IFrameRecorder
 {
     private readonly string _directory;
-    private readonly byte[] _row = [];
     private bool _disposed;
 
     internal const string Pattern = "frame-000001.png";

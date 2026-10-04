@@ -8,12 +8,14 @@ checks that do not need a compiler:
   * XML well-formedness of every XAML file, plus unique resource keys, unique x:Name per file and a
     code-behind file for every x:Class;
   * every ``{StaticResource}``/``{DynamicResource}`` reference and every ``FindName``/``FindResource``
-    target resolves to something that actually exists;
+    target resolves to something that actually exists, and every keyed resource in the markup is
+    reached by something — markup, code or a tool;
   * every event handler named in XAML exists in the C# sources;
   * the localization tables: every language translates exactly the keys of the English inventory,
-    placeholders and line breaks survive a translation, every literal the sources can print is a key
-    of that inventory, and every key of the inventory is still held by a source file — a key that
-    nothing prints is a sentence a translator carries for nothing (see ``docs/LOCALIZATION.md``);
+    placeholders and line breaks survive a translation, no table lists a key twice, every literal the
+    sources can print is a key of that inventory, and every key of the inventory is still held by a
+    source file — a key that nothing prints is a sentence a translator carries for nothing (see
+    ``docs/LOCALIZATION.md``);
   * the command line: every switch the app parses is in the README table and vice versa, and every
     switch and path the preview workflow passes to the executable really exists;
   * the installer: every message name the Vietnamese wizard text overrides exists in the Inno Setup
@@ -361,6 +363,34 @@ def scan_theme_tokens():
     return errors
 
 
+def scan_dead_resources(cs_files, xaml_files):
+    """A keyed resource that nothing reaches is a leftover from an interface that has moved on.
+
+    ``App.xaml`` is the application-wide dictionary, so a brush, geometry or style no markup, no code
+    and no tool names still travels in every build — and, worse, reads as a supported surface to
+    whoever opens the file next. The reference count is a whole-identifier search over the C# sources,
+    the markup and the tools, so a key that only appears where it is defined is defined for nobody.
+    Keys come from the XML parser rather than a pattern, so a markup extension in an ``x:Key`` cannot
+    be mistaken for a name.
+    """
+    errors = []
+    corpus = "\n".join(path.read_text(encoding="utf-8")
+                       for path in [*cs_files, *xaml_files, *sorted((ROOT / "tools").glob("*.py"))])
+    for path in xaml_files:
+        try:
+            root = ET.parse(path).getroot()
+        except ET.ParseError:
+            continue  # scan_xaml already reports the parse error
+        for element in root.iter():
+            key = element.get("Key") or element.get("{http://schemas.microsoft.com/winfx/2006/xaml}Key")
+            if not key or key.startswith("{") or "." in key:
+                continue
+            if len(re.findall(rf"(?<![\w.]){re.escape(key)}(?![\w])", corpus)) <= 1:
+                errors.append(f"{path}: resource '{key}' is defined but no source, markup or tool reaches it; "
+                              "delete it or name the surface that uses it")
+    return errors
+
+
 # ==================================================================================================
 # Localization: the string tables are the product's surface, so they are checked like source.
 # ==================================================================================================
@@ -483,11 +513,13 @@ def read_table(path: Path):
 def scan_localization(cs_files):
     """Prove the tables are complete, consistent and in step with the sources.
 
-    Three directions, because each one fails differently: the two tables must hold the same keys (a
+    Four directions, because each one fails differently: the two tables must hold the same keys (a
     missing translation is invisible in the language it does not affect), the English table must map
-    every key to itself (it is the inventory, and a reworded key is a lost translation), and every
+    every key to itself (it is the inventory, and a reworded key is a lost translation), every
     literal the sources can print must be a key of that inventory (a typo prints raw template text
-    and no language can fix it).
+    and no language can fix it), and no table may list one key twice — the rows are written as an
+    indexer initialiser, so a repeat does not throw the way ``Add`` would: the later line silently
+    wins and the earlier one is a sentence a translator keeps in step for nothing.
     """
     errors = []
     root = ROOT / "Localization"
@@ -510,6 +542,9 @@ def scan_localization(cs_files):
             continue
         if order != sorted(order, key=lambda key: [ord(c) for c in key]):
             errors.append(f"{path.name}: entries are not in ordinal order; a checklist has to diff cleanly")
+        for key in sorted({key for key in order if order.count(key) > 1}, key=lambda key: [ord(c) for c in key]):
+            errors.append(f"{path.name}: '{key}' is listed twice; the table is an indexer initialiser, so the "
+                          "later line wins silently and the other one is dead weight")
         tables[code] = rows
         sheet[code] = path.name
 
@@ -1491,6 +1526,7 @@ def main():
     errors.extend(scan_icon_glyphs())
     errors.extend(scan_accessible_names())
     errors.extend(scan_theme_tokens())
+    errors.extend(scan_dead_resources(cs_files, xaml_files))
     errors.extend(scan_installer())
     errors.extend(scan_readme())
     errors.extend(scan_previews_folder())
@@ -1505,6 +1541,7 @@ def main():
     errors.extend(scan_public_release())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
+    print("checked every keyed XAML resource against the sources, markup and tools that reach it")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
     print("checked the community preset shelf against the settings class and against tools/make_presets.py, the script that writes it")
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
