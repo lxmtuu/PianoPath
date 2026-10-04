@@ -26,6 +26,13 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 - Menu khởi động tách **Piano & Audio Setup** và **MIDI Devices** để vào đúng trang cài đặt nhanh hơn; trang Audio có trạng thái rõ ràng, tiến độ tải, nạp/kiểm tra lại đàn và lựa chọn đầu ra.
 - Cập nhật README, hướng dẫn phát hành, kiểm tra nguồn và trang phát hành công khai theo mô hình tải đàn riêng; bỏ hướng dẫn Git LFS, thư mục `Assets/` và kích thước SF2 cũ.
 
+### Giao diện & hộp thoại
+
+- Nút icon thay cho hàng chữ hoa toàn bộ trong dock cài đặt: hàng nút preset (lưu, xoá, nhập, xuất, đặt lại), hàng mã chia sẻ (sao chép), trang History (xuất HTML, xoá lịch sử), các thao tác tệp Nền/Camera/Hồ sơ và tạo/sửa/xoá theme giờ là nút icon kèm tooltip đã dịch. Hành động chính vẫn giữ nhãn (“Áp dụng preset”, “Áp mã”, “Lưu”).
+- Nút **SETTINGS** trên header thành nút bánh răng icon; nhãn “Change” của chip LOOK thành icon gọn; năm liên kết của menu khởi động (đàn & âm thanh, MIDI, phím tắt, giới thiệu, thoát) có icon tương ứng.
+- Bỏ ký tự Unicode trong nhãn nút (⬇, ⟳, ●, ↺, ×) — chúng không theo màu theme và render không nhất quán; tải đàn, làm mới thiết bị, ghi hình, xoá vòng lặp và reset từng slider dùng bộ icon riêng của app.
+- Nhãn nút phụ thống nhất về chữ thường có hoa đầu; mọi nút chỉ có icon giữ tooltip — đồng thời là tên đọc cho trình đọc màn hình.
+
 ## 1.0.0 — 2026-10-03
 
 Bản phát hành chính thức đầu tiên. Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn,

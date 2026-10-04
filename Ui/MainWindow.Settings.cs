@@ -10,6 +10,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
 
 namespace PianoPath;
 
@@ -194,16 +195,16 @@ public partial class MainWindow
 
         var custom = Card(ThemeSettingsHost, "USER THEMES", "Themes you made: pick five colours and a backdrop family, and the rest of the chrome follows. They live in the settings folder as small JSON files and show up in both theme chip rows.");
         ButtonRow(custom,
-            ("Create theme", CreateTheme_Click),
-            ("Edit theme", EditTheme_Click),
-            ("Delete theme", DeleteTheme_Click));
+            ("Create theme", CreateTheme_Click, "IconPlus"),
+            ("Edit theme", EditTheme_Click, "IconPen"),
+            ("Delete theme", DeleteTheme_Click, "IconTrash"));
         Note(custom, "Only themes you made can be edited or deleted; the three built-in looks stay as they are. A theme named after a built-in one is refused, and saving over one of your own names updates it.");
 
         var looks = Card(ThemeSettingsHost, "QUICK LOOKS", "One click applies a complete concert look: stage preset plus matching interface theme.");
         ButtonRow(looks,
-            ("Concert Grand", (_, _) => ApplyBuiltInPreset("Neon Violet")),
-            ("Concert Gold", (_, _) => ApplyBuiltInPreset("Concert Gold")),
-            ("Moonlight", (_, _) => ApplyBuiltInPreset("Moonlight Sonata")));
+            ("Concert Grand", (_, _) => ApplyBuiltInPreset("Neon Violet"), null),
+            ("Concert Gold", (_, _) => ApplyBuiltInPreset("Concert Gold"), null),
+            ("Moonlight", (_, _) => ApplyBuiltInPreset("Moonlight Sonata"), null));
         Note(looks, "Every preset can be edited afterwards; the pages next to this one keep the piano roll, keyboard and camera in sync with the new theme.");
     }
 
@@ -460,8 +461,8 @@ public partial class MainWindow
         Choice(background, "Mode", nameof(PianoVisualSettings.BackgroundMode), "Solid color, your own image, or a pure green stage for chroma keying in OBS.", ("Solid", "Solid color"), ("Image", "Image"), ("ChromaGreen", "Green screen (chroma key)"));
         ColorRow(background, "Background color", nameof(PianoVisualSettings.BackgroundColor), "Base color of the stage.").VisibleWhen = () => _visualSettings.BackgroundMode == "Solid";
         var imageButtons = ButtonRow(background,
-            ("CHOOSE IMAGE…", ChooseStageBackground),
-            ("CLEAR IMAGE", (_, _) => { _visualSettings.BackgroundImagePath = ""; if (_visualSettings.BackgroundMode == "Image") _visualSettings.BackgroundMode = "Solid"; RefreshSettingControls(); ApplyVisualSettings("Background image removed"); }));
+            ("CHOOSE IMAGE…", ChooseStageBackground, "IconBackground"),
+            ("CLEAR IMAGE", (_, _) => { _visualSettings.BackgroundImagePath = ""; if (_visualSettings.BackgroundMode == "Image") _visualSettings.BackgroundMode = "Solid"; RefreshSettingControls(); ApplyVisualSettings("Background image removed"); }, "IconTrash"));
         imageButtons.VisibleWhen = () => _visualSettings.BackgroundMode == "Image";
         SliderRow(background, "Image dim", nameof(PianoVisualSettings.BackgroundDim), 0, 100, "Darkens the image so the notes stay readable.").VisibleWhen = () => _visualSettings.BackgroundMode == "Image";
         Note(background, "Green screen mode disables vignette, beams and decorative layers so the key can be pulled cleanly.").VisibleWhen = () => _visualSettings.BackgroundMode == "ChromaGreen";
@@ -531,7 +532,7 @@ public partial class MainWindow
 
         var overlay = Card(CameraSettingsHost, "WEBCAM OVERLAY", "A live camera or a video file drawn over the stage, keyed against pure green. Use a green screen behind you (or the Green Screen preset on the stage) and the background of the picture disappears.");
         Toggle(overlay, "Camera overlay", nameof(PianoVisualSettings.ShowCameraOverlay), "Draw the source below over the stage as a picture-in-picture.");
-        ButtonRow(overlay, ("CHOOSE VIDEO…", ChooseCameraVideo_Click), ("USE CAMERA", UseCameraOverlay_Click), ("REFRESH CAMERAS", RefreshCameraOverlay_Click));
+        ButtonRow(overlay, ("CHOOSE VIDEO…", ChooseCameraVideo_Click, "IconCamera"), ("USE CAMERA", UseCameraOverlay_Click, "IconCamera"), ("REFRESH CAMERAS", RefreshCameraOverlay_Click, "IconRefresh"));
         Choice(overlay, "Camera", nameof(PianoVisualSettings.CameraSourceLink), "Which camera the overlay opens; the list is read from the machine when the page opens and when REFRESH is pressed.",
             CameraChoices());
         Choice(overlay, "Corner", nameof(PianoVisualSettings.CameraCorner), "Which corner of the stage the picture sits in.",
@@ -688,7 +689,7 @@ public partial class MainWindow
         RefreshGpuStatus();
 
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
-        ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click), ("IMPORT PROFILE…", ImportProfile_Click));
+        ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));
         Note(profile, "A profile is plain JSON: dropping one on the window applies it, a dropped MIDI file opens the song and a dropped image becomes the stage background.");
     }
 
@@ -834,9 +835,11 @@ public partial class MainWindow
         Loc.Set(box, "Type a value and press Enter", FrameworkElement.ToolTipProperty);
         Loc.Set(box, label, AutomationProperties.NameProperty);
         box.LostFocus += VisualValueBox_Commit; box.KeyDown += VisualValueBox_KeyDown;
-        var reset = new Button { Content = "↺", Tag = property, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0) };
+        // A reset is a small glyph, not a caption: the target value lives in the tooltip instead.
+        var reset = new Button { Tag = property, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0) };
+        reset.Content = new Path { Data = (Geometry)FindResource("IconReset"), Stroke = new SolidColorBrush(Color.FromRgb(0xA5, 0xAC, 0xB9)), StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, Width = 11, Height = 11, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var resetValue = FormatSetting(property, (double)prop.GetValue(DefaultVisualSettings)!);
-        Loc.Format(reset, "Reset to {0}", resetValue);
+        Loc.Format(reset, "Reset to {0}", FrameworkElement.ToolTipProperty, resetValue);
         reset.Click += VisualReset_Click;
         var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = Math.Clamp(current, minimum, maximum), Tag = property, Margin = new Thickness(0, 2, 0, 0) };
         Loc.Set(slider, label, AutomationProperties.NameProperty);
@@ -935,13 +938,25 @@ public partial class MainWindow
         return Register(body, stack, nameof(PianoVisualSettings.TrackColors), "track colors palette per track");
     }
 
-    private SettingRow ButtonRow(Panel body, params (string Text, RoutedEventHandler Click)[] buttons)
+    /// <summary>
+    /// A row of small actions. With an icon key the button becomes a glyph tile and the text moves to
+    /// its tooltip (the text also stays the search key, so the dock search still finds it); without one
+    /// it keeps the labelled chip — the QUICK LOOKS row is that case, where the name is the action.
+    /// </summary>
+    private SettingRow ButtonRow(Panel body, params (string Text, RoutedEventHandler Click, string? Icon)[] buttons)
     {
         var wrap = new WrapPanel { Margin = new Thickness(0, 6, 0, 4) };
-        foreach (var (text, click) in buttons)
+        foreach (var (text, click, icon) in buttons)
         {
             var button = new Button { Margin = new Thickness(0, 0, 8, 4) };
-            Loc.Set(button, text);
+            if (icon is null) Loc.Set(button, text);
+            else
+            {
+                button.Style = (Style)FindResource("GlyphButtonStyle");
+                button.Tag = FindResource(icon);
+                button.ToolTip = text;
+                Loc.Bind(button, () => Loc.T(text), FrameworkElement.ToolTipProperty);
+            }
             button.Click += click; wrap.Children.Add(button);
         }
         return Register(body, wrap, null, [.. buttons.Select(b => b.Text)]);

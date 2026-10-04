@@ -565,7 +565,9 @@ public partial class MainWindow : Window
         SalamanderButton.IsEnabled = ! _instrumentLoading;
         SalamanderButton.Visibility = loaded ? Visibility.Collapsed : Visibility.Visible;
         SalamanderPlayButton.Visibility = installed && !loaded && !downloading && !_instrumentLoading ? Visibility.Visible : Visibility.Collapsed;
-        Loc.Set(SalamanderButton, downloading ? "CANCEL DOWNLOAD" : installed ? "VERIFY / REPAIR PIANO FILES" : "⬇  DOWNLOAD PIANO · 748 MB");
+        Loc.Set(SalamanderButton, downloading ? "Cancel download" : installed ? "Verify / repair piano files" : "Download piano · 748 MB");
+        // The glyph follows the state too: a stop square while cancelling, a refresh ring while verifying.
+        SalamanderButton.Tag = FindResource(downloading ? "IconStop" : installed ? "IconRefresh" : "IconDownload");
         SalamanderPlayButton.IsEnabled = !_instrumentLoading && !downloading;
 
         if (downloading) Loc.Set(InstrumentStatusLabel, "SALAMANDER GRAND · DOWNLOADING");

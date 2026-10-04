@@ -27,6 +27,13 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - Split the startup menu into **Piano & Audio Setup** and **MIDI Devices** shortcuts; Audio settings now show clearer status, download progress, piano load/repair actions and output selection.
 - Updated the READMEs, release instructions, source checks and generated public release page for the separate piano download; removed obsolete Git LFS, `Assets/` and old SF2-size guidance.
 
+### Interface & dialogs
+
+- Icon buttons replace the wall of all-caps labels in the settings dock: the preset toolbar (save as, delete, import, export, reset), the share-code row (copy), the History page (export HTML, clear), the Background/Camera/Profile file actions and theme create/edit/delete are now glyph tiles with localized tooltips. Primary actions keep their labels (“Apply preset”, “Apply code”, “Save”).
+- The header’s **SETTINGS** label becomes a gear icon button and the LOOK chip’s “Change” label becomes a compact icon; the startup menu’s five links (Piano & Audio, MIDI, shortcuts, about, exit) gain matching icons.
+- Unicode glyphs (⬇, ⟳, ●, ↺, ×) are gone from button labels — they never followed the theme and rendered inconsistently; the piano download, device refresh, recording, loop clear and per-slider resets now use the app’s own icon set.
+- Secondary action labels are unified to sentence case; every icon-only button keeps its tooltip, which is also the accessible name screen readers announce.
+
 ## 1.0.0 — 2026-10-03
 
 The first official release. Keyflow is a Windows desktop application (C# · WPF · .NET 10) to **play, practise
