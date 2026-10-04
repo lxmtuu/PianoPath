@@ -22,6 +22,7 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ### Interface & graphics
 
+- Live camera: the app picks the mode nearest 720p at the highest rate the camera has (up to 60 fps), reads at the camera's own pace instead of a fixed 30 fps cap, and shows the real mode (`720p · 60 fps · MJPG`) in the status line. Frames travel through a three-buffer ring, so a slow draw can no longer tear a picture.
 - **88/76/61/49-key keyboards**: pick the size in Settings → Keyboard. The stage, falling notes, lit keys and the GPU engine all draw the chosen size, and song notes outside its range are not drawn. Presets leave the keyboard size alone. The page also suggests the size that fits the notes played on the real instrument.
 - Restored the concert-grand home screen, its three built-in themes, localized labels and icon-button UI from `arena/01a107ec-pianopath` when resolving the merge with `main`.
 - Kept the supplied **Keyflow Visualizer Piano** artwork and the Windows executable/installer icons from `main`. The Cosmic Nocturne shader source and embedded resource are retained but are not enabled on the restored home screen; the in-app layout and branding follow the concert-grand version.

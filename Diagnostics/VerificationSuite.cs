@@ -710,8 +710,8 @@ internal static partial class VerificationSuite
         Assert(CameraOverlay.ApplyKey(keying, 3, 0) == 0, "With the key off nothing may be cleared, not even a pure green.");
         Assert(Math.Abs(CameraOverlay.OpacityFactor(0)) < 1e-9 && Math.Abs(CameraOverlay.OpacityFactor(100) - 1) < 1e-9 && Math.Abs(CameraOverlay.OpacityFactor(250) - 1) < 1e-9,
             "The opacity percent should map onto a 0–1 factor and clamp anything above 100.");
-        Assert(CameraFrameReader.FrameRate == 30 && Math.Abs(CameraFrameReader.FrameSeconds - 1.0 / 30) < 1e-9,
-            "The overlay should pace itself at the 30 frames per second it documents.");
+        Assert(CameraFrameReader.DisplayRate == 60 && Math.Abs(CameraFrameReader.FileFrameSeconds - 1.0 / 30) < 1e-9,
+            "The window should show a new picture at most 60 times a second, and a file with no times of its own should be read at 30 fps.");
 
         var missing = Path.Combine(Path.GetTempPath(), $"keyflow-no-such-video-{Guid.NewGuid():N}.mp4");
         Assert(CameraFrameReader.OpenFile(missing, out var missingError) is null && missingError is { Length: > 0 },
@@ -746,6 +746,14 @@ internal static partial class VerificationSuite
                     Assert(got && width == 64 && height == 48 && reader.Frames == 1 && pixels[3] == 255,
                         $"The overlay reader should read an opaque frame out of the application's own clip ({reader.Width} × {reader.Height}, frame={reader.Frames}, alpha={pixels[3]}, error=“{reader.Error}”).");
                     Assert(pixels[0] > 150 && pixels[1] < 120 && pixels[2] < 120, "A frame should arrive as BGRA in the order the clip was written in.");
+                    Assert(reader.Mode.Width == 64 && reader.Mode.Height == 48 && reader.Mode.Label.Length > 0,
+                        $"The reader should report the mode it delivers, 64 × 48 here (got “{reader.Mode.Label}”).");
+                    Assert(reader.LastFrameTicks > 0 && reader.LastFrameTicks <= System.Diagnostics.Stopwatch.GetTimestamp(),
+                        "A frame should be stamped with the clock reading at which it arrived.");
+                    var firstTime = reader.LastSampleTime;
+                    var more = reader.TryReadFrame(pixels, mirror: false, out _, out _);
+                    Assert(!more || reader.LastSampleTime >= firstTime && reader.Frames == 2,
+                        $"The time Media Foundation writes on a frame should not go backwards ({firstTime} then {reader.LastSampleTime}).");
                     var keyed = CameraOverlay.ApplyKey(pixels, width * height, 30);
                     Assert(keyed == 0, "A picture with no green in it must survive the key untouched.");
                 }
@@ -798,8 +806,8 @@ internal static partial class VerificationSuite
                 }
         }
         Paint(50, 60, 110, 110); Paint(55, 20, 65, 60); Paint(75, 20, 85, 60); Paint(95, 20, 105, 60);
-        SetField(window, "_cameraFrame", frame);
-        SetField(window, "_cameraFrameWidth", 160); SetField(window, "_cameraFrameHeight", 120); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "InjectCameraFrame", frame, 160, 120);
+        SetField(window, "_lastHandTrackTicks", 0L); // the tracker runs at most 30 times a second: let this frame through
         Invoke(window, "PumpCameraFrame");
         Assert(stage.HasHand || Field(stage, "_hand") is not null,
             "A frame with a hand in it, pumped the way the camera pumps frames, should reach the stage.");
@@ -830,7 +838,6 @@ internal static partial class VerificationSuite
         visualSettings.ShowHandTracking = true; stage.SetVisualSettings(visualSettings);
         stage.SetHandReading(null);
         Assert(!stage.HasHand && MarkerInk() == 0, "With no hand found there should be no marker at all.");
-        SetField(window, "_cameraFrameFresh", false);
 
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         SetField(window, "_cameraSignature", "");
@@ -877,8 +884,7 @@ internal static partial class VerificationSuite
         // frame filled with the key colour comes back see-through, and the stage paints it in the chosen corner.
         var red = new byte[64 * 36 * 4];
         for (var index = 0; index < red.Length; index += 4) { red[index + 2] = 255; red[index + 3] = 255; }
-        SetField(window, "_cameraFrame", red);
-        SetField(window, "_cameraFrameWidth", 64); SetField(window, "_cameraFrameHeight", 36); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "InjectCameraFrame", red, 64, 36);
         Invoke(window, "PumpCameraFrame");
         var painted = (WriteableBitmap?)Field(window, "_cameraBitmap");
         Assert(painted is { PixelWidth: 64, PixelHeight: 36 }, "The pump should build a bitmap the size of the frame the reader produced.");
@@ -899,7 +905,7 @@ internal static partial class VerificationSuite
             "Nothing of the overlay may be painted outside its rectangle.");
         var green = new byte[64 * 36 * 4];
         for (var index = 0; index < green.Length; index += 4) { green[index + 1] = 255; green[index + 3] = 255; }
-        SetField(window, "_cameraFrame", green); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "InjectCameraFrame", green, 64, 36);
         Invoke(window, "PumpCameraFrame");
         painted.CopyPixels(pixels, 64 * 4, 0);
         Assert(pixels[3] == 0 && pixels[1] == 0, "The key should make a green frame see-through before it reaches the stage.");
@@ -908,7 +914,6 @@ internal static partial class VerificationSuite
         using (var dc = keyedVisual.RenderOpen()) Invoke(stage, "DrawCameraOverlay", dc, 1000d, 600d);
         var keyedShot = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32); keyedShot.Render(keyedVisual); keyedShot.CopyPixels(keyed, 4000, 0);
         Assert(keyed[inside + 3] == 0, "A keyed frame must leave the stage behind it visible.");
-        SetField(window, "_cameraFrameFresh", false);
         stage.SetCameraFrame(null);
         Assert(!stage.HasCameraFrame, "Clearing the frame should stop the overlay from drawing.");
         toggles[nameof(PianoVisualSettings.ShowCameraOverlay)].IsChecked = wasShowing;

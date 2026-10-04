@@ -56,6 +56,9 @@
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
     <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
+    <Compile Include="..\..\Camera\CameraMode.cs" Link="Product\Camera\CameraMode.cs" />
+    <Compile Include="..\..\Camera\CameraFrameRing.cs" Link="Product\Camera\CameraFrameRing.cs" />
+    <Compile Include="..\..\Camera\FramePacer.cs" Link="Product\Camera\FramePacer.cs" />
   </ItemGroup>
 
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->

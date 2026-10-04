@@ -21,6 +21,7 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 
 ### Giao diện & đồ hoạ
 
+- Camera trực tiếp: app chọn chế độ gần 720p nhất ở tốc độ cao nhất camera có (tối đa 60 fps), đọc theo nhịp camera thay vì trần 30 fps, và hiện chế độ thật (`720p · 60 fps · MJPG`) ở dòng trạng thái. Khung hình đi qua bộ đệm 3 ô, không còn bị xé khi vẽ chậm.
 - Bàn phím **88/76/61/49 phím**: chọn cỡ ở Settings → Keyboard; sân khấu, nốt rơi, phím sáng và động cơ GPU đều vẽ đúng cỡ đã chọn, nốt ngoài tầm phím không được vẽ. Preset không đổi cỡ đàn. Trang đó còn gợi ý cỡ vừa với các nốt đã chơi trên đàn thật.
 - Khôi phục trang chủ hoà nhạc, ba giao diện có sẵn, nhãn đã dịch và các nút icon từ `arena/01a107ec-pianopath` khi giải quyết xung đột hợp nhất với `main`.
 - Giữ artwork **Keyflow Visualizer Piano** và icon EXE Windows/bộ cài từ `main`. Mã nguồn và tài nguyên nhúng của shader Cosmic Nocturne vẫn được giữ nhưng không bật trên trang chủ đã khôi phục; bố cục và dấu hiệu thương hiệu trong app theo bản hoà nhạc.

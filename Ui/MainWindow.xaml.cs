@@ -1223,10 +1223,9 @@ public partial class MainWindow : Window
     private CameraFrameReader? _camera;
     private Thread? _cameraThread;
     private volatile bool _cameraStop;
-    private readonly Lock _cameraFrameLock = new();
-    private byte[] _cameraFrame = [];
-    private int _cameraFrameWidth, _cameraFrameHeight;
-    private bool _cameraFrameFresh;
+    /// <summary>The frames from the camera thread to the drawing thread: three buffers, no copy.</summary>
+    private readonly CameraFrameRing _cameraFrames = new();
+    private long _lastHandTrackTicks;
     private WriteableBitmap? _cameraBitmap;
     private DispatcherTimer? _cameraUiTimer;
     private string _cameraSignature = "";
@@ -1279,18 +1278,20 @@ public partial class MainWindow : Window
         }
         _camera = reader;
         CameraStatus = live
-            ? Loc.F("Live: {0}", reader.Label)
+            ? Loc.F("Live: {0} · {1}", reader.Label, reader.Mode.Label)
             : Loc.F("Video: {0} · {1} × {2}", reader.Label, reader.Width, reader.Height);
-        // A reader that opened but had something to add (the stored camera is gone, say) is heard too.
+        // A reader that opened but had something to add (the stored camera is gone, or it would not take the
+        // mode that was chosen) is heard too.
         if (error is { Length: > 0 } note) CameraStatus = $"{CameraStatus} {note}";
+        if (reader.ModeNote.Length > 0) CameraStatus = $"{CameraStatus} {reader.ModeNote}";
         _cameraStop = false;
-        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        _cameraFrames.Clear();
         _cameraThread = new Thread(CameraLoop) { IsBackground = true, Name = "Keyflow camera overlay" };
         _cameraThread.Start();
         // The frames are turned into a bitmap on the UI thread, once per frame time at most.
         if (_cameraUiTimer is null)
         {
-            _cameraUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / CameraFrameReader.FrameRate) };
+            _cameraUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / CameraFrameReader.DisplayRate) };
             _cameraUiTimer.Tick += (_, _) => PumpCameraFrame();
         }
         _cameraUiTimer.Start();
@@ -1308,47 +1309,55 @@ public partial class MainWindow : Window
         _camera?.Dispose();
         _camera = null;
         if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
-        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        _cameraFrames.Clear();
         Stage.SetCameraFrame(null);
         Stage.SetHandReading(null);
         HandStatus = "";
     }
 
     /// <summary>
-    /// The reading thread: one frame at a time into the shared buffer, paced to the overlay's frame rate, with
-    /// a file rewound when it ends and a reader that fails reported instead of spinning.
+    /// The reading thread: one frame at a time into a free buffer of the ring, with a file rewound when it ends and a
+    /// reader that fails reported instead of spinning. A live camera is read as fast as it delivers — asking for a
+    /// frame returns when there is one, so a 60 fps mode gives 60 frames a second and no sleep gets in the way. Only a
+    /// video file is held back, to the times written in it.
     /// </summary>
     private void CameraLoop()
     {
         var reader = _camera;
         if (reader is null) return;
+        var pacer = new FramePacer();
         try
         {
             while (!_cameraStop && reader.Error is null)
             {
                 var size = reader.Width * reader.Height * 4;
                 if (size <= 0) { Thread.Sleep(20); continue; }
-                byte[] buffer;
-                lock (_cameraFrameLock)
-                {
-                    if (_cameraFrame.Length < size) _cameraFrame = new byte[size];
-                    buffer = _cameraFrame;
-                }
+                var buffer = _cameraFrames.BeginWrite(size, out var slot);
                 if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror, out var width, out var height))
                 {
-                    if (reader.AtEnd) { reader.Rewind(); Thread.Sleep(20); continue; }
+                    if (reader.AtEnd) { reader.Rewind(); pacer.Reset(); Thread.Sleep(20); continue; }
                     if (reader.Error is null) { Thread.Sleep(5); continue; }
                     break;
                 }
-                lock (_cameraFrameLock)
-                {
-                    _cameraFrameWidth = width; _cameraFrameHeight = height; _cameraFrameFresh = true;
-                }
-                Thread.Sleep((int)(CameraFrameReader.FrameSeconds * 1000));
+                _cameraFrames.Publish(slot, width, height, reader.LastFrameTicks);
+                if (reader.IsLive) continue;
+                var wait = pacer.WaitSeconds(reader.LastSampleTime, System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency);
+                if (wait > 0) Thread.Sleep((int)Math.Ceiling(wait * 1000));
             }
             if (reader.Error is { Length: > 0 } failure) CameraStatus = failure;
         }
         catch (Exception ex) { CameraStatus = ex.Message; }
+    }
+
+    /// <summary>
+    /// Hands the pump a frame the way the camera thread does. The checks use it to put a known picture on the stage
+    /// without a camera; it is the same ring the real frames go through.
+    /// </summary>
+    internal void InjectCameraFrame(byte[] bgra, int width, int height)
+    {
+        var buffer = _cameraFrames.BeginWrite(width * height * 4, out var slot);
+        Buffer.BlockCopy(bgra, 0, buffer, 0, Math.Min(bgra.Length, width * height * 4));
+        _cameraFrames.Publish(slot, width, height, System.Diagnostics.Stopwatch.GetTimestamp());
     }
 
     /// <summary>
@@ -1357,27 +1366,26 @@ public partial class MainWindow : Window
     /// </summary>
     private void PumpCameraFrame()
     {
-        byte[] frame;
-        int width, height;
-        lock (_cameraFrameLock)
-        {
-            if (!_cameraFrameFresh || _cameraFrameWidth <= 0 || _cameraFrameHeight <= 0) return;
-            _cameraFrameFresh = false;
-            frame = _cameraFrame; width = _cameraFrameWidth; height = _cameraFrameHeight;
-        }
-        if (frame.Length < width * height * 4) return;
+        if (!_cameraFrames.TryTake(out var taken)) return;
+        var frame = taken.Pixels; var width = taken.Width; var height = taken.Height;
+        if (width <= 0 || height <= 0 || frame.Length < width * height * 4) return;
         // The tracker reads the frame before the key is applied: it wants the colours the camera really saw, and
         // making the green see-through would only take pixels away from the count. It runs whatever the picture
         // layer is set to, because the key markers are a layer of their own.
-        if (_visualSettings.ShowHandTracking)
+        // At most 30 times a second however fast the camera is: a 60 fps mode is for the picture and the latency
+        // probe, not a reason to run the tracker twice as often.
+        var trackNow = System.Diagnostics.Stopwatch.GetTimestamp();
+        var trackDue = trackNow - _lastHandTrackTicks >= System.Diagnostics.Stopwatch.Frequency / 30 * 9 / 10;
+        if (_visualSettings.ShowHandTracking && trackDue)
         {
+            _lastHandTrackTicks = trackNow;
             var reading = HandTracker.Track(frame, width, height, _visualSettings.HandTrackingSensitivity);
             Stage.SetHandReading(reading);
             HandStatus = reading.Found
                 ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, KeyboardLayout.Active)), reading.Coverage * 100)
                 : Loc.T("Hand: nothing found in the newest frame.");
         }
-        else if (Stage.HasHand)
+        else if (!_visualSettings.ShowHandTracking && Stage.HasHand)
         {
             Stage.SetHandReading(null);
             HandStatus = "";

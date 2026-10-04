@@ -24,13 +24,16 @@ internal sealed record CameraInfo(string Name, string Link);
 /// or through <see cref="Error"/>, and the dock prints them.
 /// </para>
 /// </summary>
-internal sealed class CameraFrameReader : IDisposable
+internal sealed partial class CameraFrameReader : IDisposable
 {
-    /// <summary>Frames are paced at this rate; the overlay is a picture-in-picture, not a film viewer.</summary>
-    internal const int FrameRate = 30;
+    /// <summary>
+    /// How often the window turns the newest frame into a picture, at most. It is not the camera's rate — a live
+    /// camera is read as fast as it delivers, whatever its mode — only how often the screen is given a new one.
+    /// </summary>
+    internal const int DisplayRate = 60;
 
-    /// <summary>Seconds one frame is shown, for the pump that reads ahead.</summary>
-    internal static double FrameSeconds => 1.0 / FrameRate;
+    /// <summary>The longest a video file waits between two frames when its own times say so, and the pace it falls back to.</summary>
+    internal static double FileFrameSeconds => FramePacer.FallbackSeconds;
 
     private static readonly Lock StartupLock = new();
     private static bool _started;
@@ -64,6 +67,24 @@ internal sealed class CameraFrameReader : IDisposable
 
     /// <summary>Frames delivered so far, which is what the checks count instead of guessing.</summary>
     internal int Frames { get; private set; }
+
+    /// <summary>
+    /// The mode the source delivers frames in, once it is open: the camera mode the reader asked for when it chose
+    /// one, otherwise the size and rate the reader settled on. Its <see cref="CameraMode.Label"/> is what the dock shows.
+    /// </summary>
+    internal CameraMode Mode { get; private set; }
+
+    /// <summary>
+    /// A sentence about the camera's mode that the dock should add: the camera offered no modes, or refused the one
+    /// chosen, and the reader is using the camera's own default. Empty when all went as chosen.
+    /// </summary>
+    internal string ModeNote { get; private set; } = "";
+
+    /// <summary>The time the source wrote on the newest frame, in 100 ns units; 0 before the first frame.</summary>
+    internal long LastSampleTime { get; private set; }
+
+    /// <summary><see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> as the newest frame arrived; 0 before the first frame.</summary>
+    internal long LastFrameTicks { get; private set; }
 
     /// <summary>
     /// True when Media Foundation started, which is what tells a caller an overlay can work at all. The reason
@@ -106,7 +127,7 @@ internal sealed class CameraFrameReader : IDisposable
                 chosen = found.First();
                 if (!string.IsNullOrEmpty(link)) error = Loc.T("That camera is gone, so the first camera on the machine is used instead.");
             }
-            var reader = Attach(readerAttributes => DeviceReader(chosen.Activate!, readerAttributes), out var openError);
+            var reader = Attach(readerAttributes => DeviceReader(chosen.Activate!, readerAttributes), out var openError, live: true);
             error = openError ?? error;
             if (reader is not null)
             {
@@ -150,10 +171,12 @@ internal sealed class CameraFrameReader : IDisposable
         try
         {
             var flags = 0;
-            var hr = _reader.ReadSample(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out flags, out _, out sample);
+            var hr = _reader.ReadSample(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out flags, out var sampleTime, out sample);
+            var arrived = System.Diagnostics.Stopwatch.GetTimestamp();
             if (hr == Mf.MF_E_END_OF_STREAM || (flags & Mf.MF_SOURCE_READERF_ENDOFSTREAM) != 0) { AtEnd = true; return false; }
             if (hr != Mf.S_OK) { Error = Loc.F("Reading a frame failed ({0}).", Mf.Describe(hr)); return false; }
             if (sample is null) return false;      // a stream tick: time passed, no picture
+            LastSampleTime = sampleTime; LastFrameTicks = arrived;
             if (sample.ConvertToContiguousBuffer(out var buffer) != Mf.S_OK || buffer is null)
             {
                 Error = Loc.T("The frame carried no picture buffer.");
@@ -236,7 +259,7 @@ internal sealed class CameraFrameReader : IDisposable
     /// Creates a source reader with the options the overlay needs and configures it for RGB32. The attach
     /// function builds the reader for one particular source: a camera or a file.
     /// </summary>
-    private static CameraFrameReader? Attach(Func<Mf.IMFAttributes?, Mf.IMFSourceReader?> attach, out string? error)
+    private static CameraFrameReader? Attach(Func<Mf.IMFAttributes?, Mf.IMFSourceReader?> attach, out string? error, bool live = false)
     {
         EnsureStarted();
         if (!_started) { error = _startupError; return null; }
@@ -258,7 +281,7 @@ internal sealed class CameraFrameReader : IDisposable
                 error = Loc.T("The source could not be opened.");
                 return null;
             }
-            var result = new CameraFrameReader { _reader = reader };
+            var result = new CameraFrameReader { _reader = reader, IsLive = live };
             reader = null;                       // the reader object owns it from here
             if (result.Configure() is { } configureError) { error = configureError; result.Dispose(); return null; }
             error = null;
@@ -289,6 +312,10 @@ internal sealed class CameraFrameReader : IDisposable
         var reader = _reader!;
         var hr = reader.SetStreamSelection(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 1);
         if (hr != Mf.S_OK) return Loc.F("This source has no video stream ({0}).", Mf.Describe(hr));
+        // A live camera is first switched to the mode the overlay wants (720p at the highest rate it has); the reader
+        // then converts whatever the camera sends to RGB32 below. A file has no modes to choose from.
+        CameraMode? chosen = IsLive ? ChooseCameraMode() : null;
+        var rate = (High: 0, Low: 0);
         Mf.IMFMediaType? type = null;
         try
         {
@@ -307,9 +334,11 @@ internal sealed class CameraFrameReader : IDisposable
                     Width = high; Height = low;
                 }
                 Stride = current.GetUINT32Key(Mf.DefaultStride, out var stride) == Mf.S_OK && stride != 0 ? stride : Width * 4;
+                if (current.GetUINT64Key(Mf.FrameRateKey, out var packedRate) == Mf.S_OK) rate = Mf.Split(packedRate);
             }
             finally { Release(current); }
             if (Width <= 0 || Height <= 0) return Loc.T("The reader reported a video stream with no frame size.");
+            Mode = new CameraMode(Width, Height, rate.High, rate.Low, chosen?.Format ?? "");
             return null;
         }
         finally { Release(type); }
