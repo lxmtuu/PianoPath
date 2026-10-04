@@ -3635,10 +3635,10 @@ internal static partial class VerificationSuite
             {
                 Assert(!engine.PumpTapBlock() && !engine.HasTap, "Nothing should be rendered while no track is attached.");
                 engine.LoadSfzInstrument(sfz);
-                engine.NoteOn(69, 110);
                 using var wav = WavWriter.TryCreate(Path.Combine(folder, "engine.wav"))!;
                 var blocks = 0;
                 engine.SetTap((samples, count) => { wav!.Append(samples, count); blocks++; });
+                engine.NoteOn(69, 110); // With no live sink, note commands start queuing once the recording tap is attached.
                 Assert(engine.HasTap, "Attaching a tap should be visible on the engine, which is what the recorder asks before it promises audio.");
                 for (var i = 0; i < 8; i++) Assert(engine.PumpTapBlock(), "A block should render into the attached tap whether or not the machine has an audio device.");
                 Assert(engine.FlushTap(), "The asynchronous recording writer should drain its blocks before verification reads the file.");
