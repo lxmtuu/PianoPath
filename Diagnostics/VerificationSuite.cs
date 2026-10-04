@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -424,6 +424,30 @@ internal static partial class VerificationSuite
     /// on. The frame is the same shape a camera hands over — 32-bit pixels, top row first — so what is measured
     /// here is what the pump measures from a real camera.
     /// </summary>
+    /// <summary>
+    /// The keyboard geometry has one home, <see cref="KeyboardLayout"/>, and the stage, the GPU engine and the shaded
+    /// keys must keep agreeing with it: same key range as the stage's constants, same white-key count as the shader
+    /// scene, and every key centre the stage lands notes on equal to the layout's. (The geometry itself is checked on
+    /// any machine by <c>KeyboardLayoutTests</c>.)
+    /// </summary>
+    private static void VerifyKeyboardLayout()
+    {
+        var full = KeyboardLayout.Standard88;
+        Assert(full.FirstPitch == PianoStage.FirstPitch && full.KeyCount == PianoStage.KeyCount,
+            "The full layout should cover the same keys as the stage's constants.");
+        Assert(full.WhiteCount == PianoShaderScene.WhiteKeys && full.FirstPitch == PianoShaderScene.FirstPitch && full.KeyCount == PianoShaderScene.KeyCount,
+            "The full layout should have the same range and white-key count as the shaded keyboard.");
+        for (var pitch = 0; pitch < 128; pitch++)
+        {
+            Assert(Math.Abs(PianoStage.KeyCenterOf(pitch) - full.CenterX(pitch)) < 1e-12,
+                $"The stage should land pitch {pitch} where the layout puts it.");
+            // The shaded keyboard measures in white keys; one white key is 1/52 of the width.
+            Assert(Math.Abs(PianoShaderScene.KeyCenterX[pitch] / PianoShaderScene.WorldWidth - full.CenterX(pitch)) < 1e-9,
+                $"The shaded keyboard should put pitch {pitch} where the layout puts it.");
+        }
+        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the key range, the white-key count and the centre of every key.");
+    }
+
     private static void VerifyHandTracking()
     {
         // The skin rule: a light skin tone is skin, and the colours a stage or a wall is made of are not.

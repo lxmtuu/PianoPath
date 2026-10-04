@@ -28,7 +28,7 @@
          Diagnostics/FrameBenchmark.cs - the half of the perf gate that runs the Direct3D render loop; its
                                        arithmetic, budgets and report live in Diagnostics/FrameBudget.cs,
                                        which is linked below and needs nothing but the base class library
-         Stage/, Theme/, Library/, Profile/, Practice/
+         Stage/ (except KeyboardLayout.cs, which is pure), Theme/, Library/, Profile/, Practice/
                                      - all bottom out in ShellThemes, whose record is declared in terms
                                        of System.Windows.Media.Color, or in PianoVisualSettingsStore
        Adding a file to this list is the whole act of widening the coverage; if it drags WPF in, the
@@ -54,6 +54,7 @@
     <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />
     <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
+    <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
   </ItemGroup>
 
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->

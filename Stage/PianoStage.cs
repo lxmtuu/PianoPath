@@ -2835,37 +2835,23 @@ internal sealed partial class PianoStage : FrameworkElement
         return whites[Math.Clamp((int)(point.X / keyWidth), 0, whites.Length - 1)];
     }
     protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo) { _stars.Clear(); _petals.Clear(); _petalCount = -1; base.OnRenderSizeChanged(sizeInfo); ReportGpuSize(); PublishGpuLook(); InvalidateVisual(); }
-    private static bool IsBlack(int pitch) => pitch % 12 is 1 or 3 or 6 or 8 or 10;
+    private static bool IsBlack(int pitch) => KeyboardLayout.IsBlack(pitch);
     /// <summary>Normalised centre (0..1 of the stage width) of a key; the GPU stage lays its lanes and keys out with the same numbers.</summary>
     internal static double KeyCenterOf(int pitch) => KeyCenters[Math.Clamp(pitch, 0, 127)];
     /// <summary>True for the five black keys of every octave.</summary>
     internal static bool IsBlackKey(int pitch) => IsBlack(pitch);
-    internal static double BlackKeyOffset(int pitch) => (pitch % 12) switch
-    {
-        1 => -0.08,
-        3 => 0.08,
-        6 => -0.10,
-        8 => 0.00,
-        10 => 0.10,
-        _ => 0.0
-    };
+    internal static double BlackKeyOffset(int pitch) => KeyboardLayout.BlackKeyOffset(pitch);
+    /// <summary>The geometry itself lives in <see cref="KeyboardLayout"/>; the stage still draws the full keyboard.</summary>
     private static int[] BuildWhitesBelow()
     {
-        var result = new int[128]; var count = 0;
-        for (var pitch = 0; pitch < 128; pitch++)
-        {
-            result[pitch] = count;
-            if (pitch >= FirstPitch && pitch < FirstPitch + KeyCount && !IsBlack(pitch)) count++;
-        }
+        var result = new int[128];
+        for (var pitch = 0; pitch < 128; pitch++) result[pitch] = KeyboardLayout.Standard88.WhitesBelow(pitch);
         return result;
     }
     private static double[] BuildKeyCenters()
     {
-        var result = new double[128]; var whiteWidth = 1.0 / WhitePitches.Length;
-        for (var pitch = 0; pitch < 128; pitch++)
-            result[pitch] = IsBlack(pitch)
-                ? (WhitesBelow[pitch] + BlackKeyOffset(pitch)) * whiteWidth
-                : (WhitesBelow[pitch] + .5) * whiteWidth;
+        var result = new double[128];
+        for (var pitch = 0; pitch < 128; pitch++) result[pitch] = KeyboardLayout.Standard88.CenterX(pitch);
         return result;
     }
 

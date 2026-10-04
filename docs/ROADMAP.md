@@ -77,6 +77,9 @@ mục *Giới hạn hiện tại* của README; kiến trúc đa ngôn ngữ ở
 | 6 | **Nhánh portability** | 🟡 **nửa âm thanh đã có interface (2026‑10‑04)**: `Audio/AudioSink.cs` định nghĩa `IAudioSink`; engine hỗ trợ WASAPI shared/exclusive, thiết bị Windows cụ thể, ASIO và waveOut. Audio settings có Auto, latency target 20/10/5/3 ms, gain, ASIO control panel và trạng thái buffer/đường ra; thay đổi thiết bị được áp trên luồng điều khiển thay vì khóa UI. Voicemeeter endpoint có thể chọn như thiết bị WASAPI. Phần hình chưa làm: chưa có `IStageRenderer`; `MainWindow` còn tạo thẳng `PianoAudioEngine`, còn `PianoStage` giữ nhánh GPU nội bộ. **Còn cần đo/kiểm tra trên Windows thật** với driver ASIO, Voicemeeter và nhiều thiết bị để xác nhận latency, dropout và chuyển đổi thiết bị — sandbox không có phần cứng này. |
 | 7 | **Kiểm chứng đường phát hành** | 🟡 **đã chuẩn bị cho 1.0.0; còn kiểm trên Windows sạch**: `scan_release_version` ghim phiên bản, CHANGELOG song ngữ, `build.yml` publish thử mỗi push, `release.yml` phát hành 3 ZIP + installer + checksum, và `scan_public_release` kiểm nội dung public branch. Publish kiểm có `PianoPath.exe`/`LICENSE.txt`, không có mẫu SF2; installer stub dọn asset piano SF2 cũ ở thư mục local và từ chối source installer chứa `.sf2`. Không cần LFS. Bản phát hành vẫn cần cài thử trên máy Windows sạch; `win-arm64` cũng chưa chạy trên máy ARM thật. |
 
+> **Lộ trình riêng — AR piano overlay & live play:** xem [`docs/AR-OVERLAY-ROADMAP.md`](AR-OVERLAY-ROADMAP.md)
+> (camera làm nền, nốt rơi lên đàn thật, calibrate, bù độ trễ, che tay, Learn/Perform, OBS/webcam ảo).
+
 ## 5. Những việc đã cân nhắc và **không** làm
 
 | Việc | Lý do không làm |
