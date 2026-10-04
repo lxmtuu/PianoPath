@@ -22,7 +22,8 @@ ngôn ngữ là **một tệp bảng**, và mọi nhãn trên màn hình **tự 
 
 | Tệp | Vai trò |
 |---|---|
-| `Localization/Localizer.cs` | `AppLanguage`, `Languages` (danh sách ngôn ngữ + cách giải một giá trị đã lưu), và `Loc`: tra bảng, đăng ký nhãn sống, marker XAML, chuẩn đoán cho `--verify` |
+| `Localization/Loc.cs` | `AppLanguage`, `Languages` và phần lõi `Loc` (tra bảng/format/diagnostics), thuần .NET để project test portable có thể link |
+| `Localization/Localizer.cs` | Phần WPF của `partial Loc`: đăng ký nhãn sống, marker XAML và vẽ lại nhãn khi đổi ngôn ngữ |
 | `Localization/Strings.English.cs` | **Inventory**: mọi khoá ứng dụng có thể in ra, ánh xạ tới chính nó. Là danh sách việc của dịch giả |
 | `Localization/Strings.Vietnamese.cs` | Bảng tiếng Việt, đúng cùng tập khoá, theo cùng thứ tự |
 | `Ui/DeviceOption.cs` | Bản ghi `(Id, Display)`: hai hàng "Computer keyboard only" / "No MIDI output" dịch được, thiết bị thật do Windows đặt tên thì giữ nguyên |
@@ -55,7 +56,7 @@ Ba điều đáng nhớ khi dùng:
   `Loc.T(description + path)` thì không, và bộ kiểm tĩnh sẽ báo khoá lạ.
 * **Đừng so sánh văn bản đã dịch.** Muốn biết trạng thái, so sánh giá trị đã lưu
   (`_visualSettings.BackgroundMode == "Image"`), đừng so sánh `label.Text == "Image"`.
-  `VerificationSuite` đã được viết lại theo quy tắc này: nó so với `Loc.T("NO SOUNDFONT · SILENT")`
+  `VerificationSuite` đã được viết lại theo quy tắc này: nó so với `Loc.T("SALAMANDER GRAND · SETUP REQUIRED")`
   và `Loc.T("Style")` chứ không so với chuỗi tiếng Anh cứng.
 
 ### Marker trong XAML
@@ -75,7 +76,7 @@ Literal tiếng Anh vẫn nằm trong XAML nên markup đọc tự nhiên và th
 
 1. **Tạo bảng** — sao chép `Strings.English.cs` thành `Localization/Strings.Japanese.cs`, đổi tên lớp
    thành `StringsJapanese`. Inventory đã là danh sách khoá; giữ nguyên thứ tự từ điển ordinal.
-2. **Đăng ký** — trong `Localization/Localizer.cs`:
+2. **Đăng ký** — trong `Localization/Loc.cs`:
 
    ```csharp
    internal static readonly AppLanguage Japanese = new("ja", "Japanese", "日本語", StringsJapanese.Table);
@@ -105,7 +106,7 @@ Không có bước nào sửa renderer, `App.xaml`, `PianoVisualSettings` hay `v
 
 | Loại | Cách xử lý |
 |---|---|
-| Thuật ngữ kỹ thuật | Giữ nguyên: MIDI, SMF, SoundFont (`.sf2`), AVI, OBS, FPS, GPU, RGB, HEX, pedal, preset, theme, slider, timeline, note, hit/miss/streak |
+| Thuật ngữ kỹ thuật | Giữ nguyên: MIDI, SMF, SFZ, FLAC, AVI, OBS, FPS, GPU, RGB, HEX, pedal, preset, theme, slider, timeline, note, hit/miss/streak |
 | Tên riêng của sản phẩm | Không dịch: Keyflow, Concert Grand, Concert Noir, Velvet Gold, Neon Violet, Concert Gold, Sakura Nocturne…; `Moonlight Sonata` → `Ánh Trăng`, `Galaxy Voyage` → `Du Hành Thiên Hà` cho nhãn mô tả, còn *id/tên đã lưu* vẫn là tiếng Anh |
 | Tiêu đề in hoa | Viết hoa tiếng Việt có dấu: `KEYBOARD & SHORTCUTS` → `BÀN PHÍM & PHÍM TẮT`, `SESSION & CAPTURE` → `BUỔI TẬP & GHI HÌNH` |
 | Xưng hô | Trung tính, gần: "bạn" cho người dùng, không "quý khách"; câu mệnh lệnh ngắn ("Chọn MIDI File", "Giữ phím để note ngân dài") |

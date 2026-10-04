@@ -11,9 +11,8 @@
         .\publish.ps1 -Zip                    # also creates Keyflow-<version>-<runtime>[-fd].zip
         .\publish.ps1 -Clean                  # deletes bin/, obj/ and the target folder first
 
-    The script refuses to publish while Assets\ConcertGrand.sf2 is still a Git LFS pointer
-    (a 134-byte text file) unless -AllowLfsPointer is given, because the resulting build
-    would start without its piano sound.
+    Piano audio is provided by Salamander Grand Piano SFZ. Its approximately 748 MB of sample data
+    is downloaded on request after installation; no instrument samples are bundled in the release.
 
 .NOTES
     Requires the .NET 10 SDK (https://dotnet.microsoft.com/download/dotnet/10.0) on Windows.
@@ -34,8 +33,7 @@ param(
 
     [switch] $Zip,
     [switch] $Clean,
-    [switch] $NoReadyToRun,
-    [switch] $AllowLfsPointer
+    [switch] $NoReadyToRun
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,7 +41,6 @@ Set-StrictMode -Version Latest
 
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $project = Join-Path $root 'PianoPath.csproj'
-$soundFont = Join-Path $root 'Assets\ConcertGrand.sf2'
 
 function Write-Step([string] $text) { Write-Host "`n==> $text" -ForegroundColor Cyan }
 
@@ -57,16 +54,6 @@ $sdkVersion = (& dotnet --version).Trim()
 Write-Host "dotnet SDK $sdkVersion"
 if ([version]($sdkVersion -replace '-.*$', '') -lt [version]'10.0.0') {
     throw "Keyflow targets net10.0-windows and needs the .NET 10 SDK; found $sdkVersion."
-}
-
-Write-Step 'Checking the bundled SoundFont'
-if (-not (Test-Path $soundFont)) { throw "Missing $soundFont. Run 'git lfs pull' (after 'git lfs install')." }
-$soundFontSize = (Get-Item $soundFont).Length
-if ($soundFontSize -lt 1MB) {
-    $message = "Assets\ConcertGrand.sf2 is only $soundFontSize bytes - it is a Git LFS pointer, not the real ~113 MiB SoundFont. Run 'git lfs install' then 'git lfs pull'."
-    if ($AllowLfsPointer) { Write-Warning $message } else { throw $message }
-} else {
-    Write-Host ('SoundFont OK ({0:N1} MiB)' -f ($soundFontSize / 1MB))
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -104,6 +91,8 @@ Write-Step "Publishing Keyflow $version ($Mode, $Runtime, $Configuration)"
 Write-Host "dotnet $($arguments -join ' ')" -ForegroundColor DarkGray
 & dotnet @arguments
 if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
+$sf2Files = @(Get-ChildItem -Path $Output -Filter '*.sf2' -File -Recurse -ErrorAction SilentlyContinue)
+if ($sf2Files.Count -gt 0) { throw "The publish output unexpectedly contains an SF2 instrument: $($sf2Files[0].FullName)" }
 
 # ---------------------------------------------------------------------------------------------
 # 3. Summary (+ optional zip)

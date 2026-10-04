@@ -11,7 +11,7 @@ script đó, và `release.yml` chỉ chép đúng thư mục ấy (cộng `docs/
 ## 1. Mô hình
 
 ```
-lxmtuu/PianoPath  (nguồn, lịch sử, LFS, CI, dock, mọi thứ — public từ 2026-10-03, xem §2a)
+lxmtuu/PianoPath  (nguồn, lịch sử, CI, dock, mã ứng dụng — public từ 2026-10-03, xem §2a; piano tải riêng)
         │
         │  tag v1.0.0  ──►  release.yml
         │                      │
@@ -49,7 +49,7 @@ phát hành đã nằm đúng chỗ của chúng trong kho nguồn rồi.
 
 | Kho | Vai trò | Trạng thái |
 | --- | --- | --- |
-| `lxmtuu/PianoPath` | **nguồn**: mã, lịch sử, LFS, CI, và một bản sao các gói trong Release của chính nó | **public** (mô hình này giả định private — xem *a*) |
+| `lxmtuu/PianoPath` | **nguồn**: mã, lịch sử, CI, và một bản sao các gói trong Release của chính nó; không chứa thư viện piano | **public** (mô hình này giả định private — xem *a*) |
 | `lxmtuu/KeyFlow` | **phát hành**: trang sản phẩm song ngữ, ảnh giao diện, bộ slide, các gói trong GitHub Release | public; `main` đang giữ tài liệu `v1.0.0` |
 
 **a. (Tuỳ chọn, nhưng là mô hình) đưa kho nguồn về private**
@@ -135,8 +135,8 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
 ## 4. Kiểm sau khi phát hành
 
 - Nhánh công khai có: `README.md`, `README.en.md`, `CHANGELOG.md`, `CHANGELOG.en.md`, `LICENSE`,
-  `Assets/ATTRIBUTION.txt`, `docs/LOCALIZATION.md`, `docs/presentation/…` (bộ slide), `docs/previews/…`,
-  `VERSION`.
+  `docs/LOCALIZATION.md`, `docs/presentation/…` (bộ slide), `docs/previews/…`, `VERSION`. Không có thư mục
+  `Assets/` hoặc mẫu piano; sau khi người dùng tải Salamander, `ATTRIBUTION.txt` nằm trong thư mục piano riêng.
 - **Không** có: bất kỳ `*.cs`, `*.xaml`, `*.csproj`, `*.iss`, `*.ps1`, `*.py`, `*.hlsl`, `*.sf2`, `.github/`.
   (Lớp kiểm tĩnh khẳng định danh sách này trên `docs/release/` đã commit; bước dựng nhánh lặp lại phép
   kiểm trên cả `docs/previews/`.)
@@ -157,8 +157,8 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
    README và tài liệu này phải trỏ cùng một kho công khai.
 2. **Tài liệu khớp máy sinh ra nó**: `docs/release/` so từng byte với `write_all()` của
    `tools/make_public_docs.py`; thiếu tệp, thừa tệp hay lệch một ký tự đều đỏ, kèm đúng câu lệnh phải chạy.
-3. **Danh sách tệp được đi là danh sách đóng**: chỉ 11 đường dẫn (8 tài liệu ở §4, bộ slide 3 tệp),
-   cộng `docs/previews/`.
+3. **Danh sách tệp được đi là danh sách đóng**: chỉ 10 tệp tài liệu được sinh/chép (7 tài liệu ở §4,
+   bộ slide 3 tệp), cộng `docs/previews/`; không sao chép piano samples hoặc attribution người dùng.
 4. **Mọi liên kết trên trang công khai có đích**: anchor phải là một tiêu đề của chính trang đó, liên kết
    tệp phải là tệp được chép, ảnh phải đúng bộ ảnh của ngôn ngữ đó (trừ gallery `presets.jpg` dùng chung).
 5. **Trang tải phải nói đúng thứ release đính kèm**: bảng gói nhắc đủ ZIP/Setup/SHA256SUMS và
@@ -169,9 +169,10 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
 
 ## 6. Mô hình này đánh đổi gì
 
-- **Giấy phép**: mã nguồn theo MIT, và bản MIT đòi giấy phép **đi kèm bản sao**. Mỗi gói đã mang
-  `LICENSE.txt` + `Assets/ATTRIBUTION.txt` (CC BY 3.0 của SoundFont), nên nghĩa vụ đó vẫn đủ — nhưng dự
-  án **không còn là "source available"**: người ngoài không đọc được mã nguồn nữa, và bất kỳ ai muốn
+- **Giấy phép**: mã nguồn theo MIT, và bản MIT đòi giấy phép **đi kèm bản sao**; mỗi gói mang
+  `LICENSE.txt`. Salamander Grand Piano V3 không nằm trong gói: ứng dụng tải bộ mẫu riêng theo CC BY 3.0
+  khi người dùng chủ động yêu cầu, rồi ghi attribution cạnh mẫu trong thư mục piano của họ. Dự án
+  **không còn là "source available"**: người ngoài không đọc được mã nguồn nữa, và bất kỳ ai muốn
   dịch/nhúng mã phải xin quyền truy cập. Nếu muốn giữ tinh thần MIT đầy đủ, cách duy nhất là mở lại repo.
 - **Sao và fork**: kho private giữ nguyên số sao (1) nhưng 0 fork nghĩa là không mất gì. Kho công khai
   mới bắt đầu từ 0 sao — nếu muốn "ngôi sao" thuộc về trang sản phẩm, hãy để người dùng sao kho phát hành.
@@ -180,7 +181,7 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
   hơn nữa: giới hạn job `build` (Windows) chỉ chạy trên `main` và pull request, để push lên `arena/**`
   chỉ chạy `static` + `test` (~1 phút) — đổi `on.push.branches` thành `["main"]` và thêm nhánh vào
   `pull_request` nếu cần.
-- **Băng thông LFS**: không đổi — `release.yml` vẫn tải ~113 MiB mỗi lần chạy.
+- **Băng thông thư viện piano**: CI và release không tải mẫu; mỗi người dùng chỉ tải Salamander theo yêu cầu (~748 MB, một lần). Đây không còn là lưu lượng Git LFS.
 - **Bộ kiểm chứng**: `--verify` chạy trên chính file `.exe` đã phát hành, không cần mã nguồn. `tests/`
   (xUnit) và `tools/` (Python) thì chỉ chạy được khi có mã nguồn — trang công khai nói rõ phần nào cần gì.
 - **Nếu secret hết hạn hoặc bị thu hồi**: không có gì hỏng. Bước tự động chỉ cảnh báo, và đường thủ công

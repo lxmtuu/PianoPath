@@ -12,8 +12,8 @@ One public page is assembled like this:
 
 * the head of the README (title, introduction, pictures) is kept as it is;
 * a banner is added saying this is the release repository and the source lives elsewhere;
-* a **Downloading a release** section is added: the four packages, ``SHA256SUMS.txt``, SmartScreen, and
-  the files that have to stay next to ``PianoPath.exe``;
+* a **Downloading a release** section is added: the four packages, ``SHA256SUMS.txt``, SmartScreen,
+  the MIT licence, and the optional Salamander piano download;
 * the table of contents is rebuilt from the sections that survive;
 * the sections that describe the *product* survive (system requirements, first-time setup, features,
   languages, interface map, limitations, testing, licence) and the ones that only make sense with the
@@ -94,13 +94,13 @@ DOCUMENTS = {
 }
 
 # Files copied across verbatim. Deliberately short: everything here is something a person who downloaded
-# a package needs to read (the licence, the attribution, the changelog, the document about the two
-# languages), and nothing here is source code.
+# a package needs to read (the MIT licence, the changelog, the document about the two languages, and the
+# product presentation), and nothing here is source code. Salamander's CC BY notice is generated beside
+# the samples in the user's local piano installation, not copied into the public source or package.
 COPIES = (
     ("CHANGELOG.md", "CHANGELOG.md"),
     ("CHANGELOG.en.md", "CHANGELOG.en.md"),
     ("LICENSE", "LICENSE"),
-    ("Assets/ATTRIBUTION.txt", "Assets/ATTRIBUTION.txt"),
     ("docs/LOCALIZATION.md", "docs/LOCALIZATION.md"),
     # The product presentation: twenty 16:9 slides in PDF and DOCX, plus the README that lists them.
     # It was made for the public repository — the first copy of it lived there and nowhere else — which
@@ -342,24 +342,25 @@ Mỗi mốc phát hành (`v{version}` và các bản sau) là một mục trong 
 | `Keyflow-{version}-win-arm64.zip` | Windows on ARM, self-contained (CI publish; chưa máy ARM nào chạy thử) | Không cần cài gì thêm |
 
 Cài bằng bộ cài thì xong; dùng bản ZIP thì **giải nén cả thư mục rồi chạy `PianoPath.exe`** — đừng
-tách `.exe` ra khỏi thư mục của nó:
+tách `.exe` khỏi `LICENSE.txt`:
 
 ```
 Keyflow-{version}-win-x64\\
 ├── PianoPath.exe              ← file chạy duy nhất
-├── LICENSE.txt                ← giấy phép MIT, phải đi kèm bản sao
-└── Assets\\
-    ├── ConcertGrand.sf2       ← SoundFont ~113 MiB, phải nằm cạnh .exe
-    └── ATTRIBUTION.txt        ← ghi công FreePats (CC BY 3.0)
+└── LICENSE.txt                ← giấy phép MIT, phải đi kèm bản sao
 ```
+
+Salamander Grand Piano V3 không nằm trong gói. Khi muốn có tiếng đàn, mở **SETTINGS → Audio** và chủ
+động tải bộ mẫu khoảng 748 MB; các mẫu được xác minh trước khi sử dụng, có thể huỷ/tiếp tục, và thông
+tin ghi công CC BY 3.0 được lưu cạnh bộ mẫu trong thư mục cài piano của người dùng.
 
 - **Kiểm tệp tải về**: mỗi release kèm `SHA256SUMS.txt`; đối chiếu bằng
   `Get-FileHash .\\Keyflow-{version}-win-x64.zip -Algorithm SHA256`. Các gói **chưa ký số** nên đây là
   cách duy nhất để chắc tệp nhận được đúng là tệp quy trình trên build ra.
 - **SmartScreen**: vì chưa ký số, lần chạy đầu Windows hiện *"Windows protected your PC"* — chọn
   **More info → Run anyway**.
-- **Giữ giấy phép**: `LICENSE.txt` (MIT) và `Assets\\ATTRIBUTION.txt` (CC BY 3.0 của SoundFont) đã nằm
-  trong mỗi gói; đừng xoá chúng khi chia sẻ lại.
+- **Giữ giấy phép**: `LICENSE.txt` (MIT) phải đi cùng bản sao. Thông báo CC BY 3.0 của Salamander nằm
+  trong thư mục dữ liệu piano sau khi người dùng tải bộ mẫu.
 - **Nhật ký thay đổi**: [CHANGELOG.md](CHANGELOG.md) (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
   — mỗi bản một mục, ghi những gì người dùng nhìn thấy.
 - **Bộ slide thuyết trình sản phẩm**: [docs/presentation](docs/presentation/README.md) — 20 slide 16:9,
@@ -381,24 +382,26 @@ Every release (`v{version}` and later) is a GitHub **Release** holding four pack
 | `Keyflow-{version}-win-arm64.zip` | Windows on ARM, self-contained (published by CI; no ARM machine has run it yet) | Nothing else |
 
 Run the installer and you are done; for a ZIP, **unzip the whole folder and run `PianoPath.exe`** — never
-separate the `.exe` from its folder:
+separate `PianoPath.exe` from its `LICENSE.txt`:
 
 ```
 Keyflow-{version}-win-x64\\
 ├── PianoPath.exe              ← the single executable
-├── LICENSE.txt                ← the MIT licence, which has to travel with copies
-└── Assets\\
-    ├── ConcertGrand.sf2       ← the ~113 MiB SoundFont; it must sit next to the .exe
-    └── ATTRIBUTION.txt        ← FreePats credit (CC BY 3.0)
+└── LICENSE.txt                ← the MIT licence, which has to travel with copies
 ```
+
+Salamander Grand Piano V3 is not included in the package. To play piano, open **SETTINGS → Audio** and
+explicitly download the sample library (about 748 MB); samples are verified before use, downloads can
+be cancelled/resumed, and the CC BY 3.0 attribution is saved beside the samples in the user's piano
+installation folder.
 
 - **Checking a download**: each release carries `SHA256SUMS.txt`; compare with
   `Get-FileHash .\\Keyflow-{version}-win-x64.zip -Algorithm SHA256`. The packages are **not code-signed**,
   so this is the only way to be sure the file that arrived is the file the pipeline built.
 - **SmartScreen**: because nothing is signed, the first launch shows *"Windows protected your PC"* —
   choose **More info → Run anyway**.
-- **Keep the licences**: `LICENSE.txt` (MIT) and `Assets\\ATTRIBUTION.txt` (the SoundFont's CC BY 3.0)
-  ship inside every package; do not remove them when passing a copy on.
+- **Keep the licence**: `LICENSE.txt` (MIT) travels with the application. Salamander's CC BY 3.0 notice
+  is in the piano data folder after the user downloads the sample library.
 - **What changed**: [CHANGELOG.en.md](CHANGELOG.en.md) (Vietnamese edition: [CHANGELOG.md](CHANGELOG.md))
   — one entry per release, listing everything a user can see.
 - **The product presentation**: [docs/presentation](docs/presentation/README.md) — twenty 16:9 slides,

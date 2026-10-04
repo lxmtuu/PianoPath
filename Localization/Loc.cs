@@ -78,7 +78,7 @@ internal static class Languages
 /// that paints live WPF labels lives in <c>Localization/Localizer.cs</c> and joins this one through
 /// <see cref="RefreshLiveLabels"/>, a partial method: a build that links only this file compiles the
 /// call away instead of needing WindowsBase. That seam is what lets <c>tests/PianoPath.Tests</c> cover
-/// the MIDI, MusicXML, SoundFont and history code, all of which report through <see cref="T"/>.
+/// the MIDI, MusicXML, SFZ audio and history code, all of which report through <see cref="T"/>.
 /// </para>
 /// </summary>
 internal static partial class Loc

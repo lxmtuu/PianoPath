@@ -4,9 +4,9 @@ name: release
 # them. Runs when a version tag such as v1.0.0 is pushed (the packages are attached to a GitHub Release) or
 # manually from the Actions tab (they are available as workflow artifacts, and no release is created).
 #
-# build.yml already publishes the small framework-dependent kind on every push, so what is new here is the
-# part that needs the real 113 MiB SoundFont: two self-contained packages, an installer compiled from the
-# folder a user actually downloads, and a --verify run against the published executable.
+# build.yml already publishes the framework-dependent kind on every push. This workflow builds all portable
+# packages, an installer compiled from the folder a user downloads, and runs --verify against the published
+# executable. Piano samples are fetched by the app after the user requests audio setup.
 on:
   push:
     tags: ["v*"]
@@ -24,7 +24,7 @@ env:
 permissions:
   contents: write
 
-# A release run is expensive (LFS bandwidth, three publishes). Two runs of the same tag are one accident
+# A release run is expensive (three publishes). Two runs of the same tag are one accident
 # too many, so a newer run of the same ref replaces the older one — except for a tag, where cancelling a
 # half-published release would be worse than letting it finish.
 concurrency:
@@ -37,8 +37,8 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # A release must ship the real SoundFont, so download the ~113 MiB LFS object (counts against the LFS bandwidth quota).
-          lfs: true
+          # The optional 748 MB Salamander library is downloaded by the app after installation; no Git LFS objects are needed.
+          lfs: false
 
       - uses: actions/setup-dotnet@v6
         with:
@@ -185,9 +185,8 @@ jobs:
             | `Keyflow-…-win-arm64.zip` | Windows on ARM, self-contained. Published by CI; no ARM machine has run it yet. |
             | `SHA256SUMS.txt` | The SHA-256 of every file above: `Get-FileHash .\Keyflow-…-win-x64.zip -Algorithm SHA256`. |
 
-            Keep `Assets\` next to the executable, and keep the `LICENSE.txt` (MIT) and
-            `Assets\ATTRIBUTION.txt` that ship in every package: the bundled piano is FreePats' YDP Grand
-            Piano under CC BY 3.0.
+            Keep the `LICENSE.txt` (MIT) with the application. Salamander Grand Piano V3 is downloaded only
+            when requested (about 748 MB); its CC BY 3.0 attribution is written beside the sample files.
 
             The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC"
             on the first launch — choose *More info → Run anyway*.
@@ -402,7 +401,7 @@ jobs:
                   '',
                   "``Keyflow-$version-win-x64.zip`` is portable and self-contained. ``Keyflow-Setup-$version.exe`` installs for Windows x64: Start Menu and Desktop shortcuts, an uninstall entry, and a wizard in English or Tiếng Việt. ``Keyflow-$version-win-x64-fd.zip`` is a smaller download for a PC that has the .NET 10 Desktop Runtime, and ``Keyflow-$version-win-arm64.zip`` is Windows on ARM.",
                   '',
-                  'Keep `Assets\` next to the executable, and keep the `LICENSE.txt` (MIT) and `Assets\ATTRIBUTION.txt` that ship inside every package: the bundled piano is FreePats'' YDP Grand Piano under CC BY 3.0.',
+                  'Keep the `LICENSE.txt` (MIT) with the application. Salamander Grand Piano V3 is downloaded only when requested (about 748 MB); its CC BY 3.0 attribution is written beside the sample files.',
                   '',
                   'The packages are **not code-signed**, so Windows SmartScreen shows "Windows protected your PC" on the first launch — choose *More info → Run anyway*. `SHA256SUMS.txt` covers every file above: `Get-FileHash .\Keyflow-' + $version + '-win-x64.zip -Algorithm SHA256`.',
                   '',

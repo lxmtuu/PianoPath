@@ -62,6 +62,7 @@ internal sealed class AsioAudioSink : IAudioSink
     private AsioBufferInfo[] _buffers = [];
     private int _bufferFrames;
     private int _sampleType;
+    private bool _outputReadyChecked, _supportsOutputReady;
     private int _outputChannels;
     private double _outputLatencyMs;
     private float[] _samples = [];
@@ -75,20 +76,28 @@ internal sealed class AsioAudioSink : IAudioSink
     private AsioMessageHandler? _asioMessage;
     private BufferSwitchTimeInfoHandler? _bufferSwitchTimeInfo;
     private volatile bool _stopping;
-    private bool _started;
-    private bool _disposed;
+    private bool _buffersCreateAttempted, _started, _disposed;
 
-    public string Description => Loc.F("ASIO · {0} · {1:0.#} ms", _driverName, _outputLatencyMs);
+    public string Description => Loc.F("ASIO · {0} · {1:0.#} ms · {2} frames", _driverName, _outputLatencyMs, _bufferFrames);
     public double BufferMilliseconds => _outputLatencyMs;
 
-    private AsioAudioSink(string driverName, AudioRenderCallback render) { _driverName = driverName; _render = render; }
+    private readonly double _targetLatencyMilliseconds;
+    private readonly IntPtr _systemHandle;
 
-    /// <summary>Opens and starts <paramref name="driverName"/>, or returns <c>null</c> with the reason.</summary>
-    internal static AsioAudioSink? TryCreate(string driverName, AudioRenderCallback render, out string? failure)
+    private AsioAudioSink(string driverName, double targetLatencyMilliseconds, IntPtr systemHandle, AudioRenderCallback render)
+    {
+        _driverName = driverName;
+        _targetLatencyMilliseconds = Math.Clamp(targetLatencyMilliseconds, 2, 50);
+        _systemHandle = systemHandle;
+        _render = render;
+    }
+
+    /// <summary>Opens and starts <paramref name="driverName"/>, choosing a size near the user's latency target.</summary>
+    internal static AsioAudioSink? TryCreate(string driverName, double latencyMilliseconds, IntPtr systemHandle, AudioRenderCallback render, out string? failure)
     {
         if (AsioDriverRegistry.Names.Count == 0) { failure = Loc.T("No ASIO driver is installed on this machine."); return null; }
         if (AsioDriverRegistry.ClassIdOf(driverName) is not { } clsid) { failure = Loc.F("The ASIO driver '{0}' is not installed.", driverName); return null; }
-        var sink = new AsioAudioSink(driverName, render);
+        var sink = new AsioAudioSink(driverName, latencyMilliseconds, systemHandle, render);
         try
         {
             if (sink.Open(clsid, out failure)) return sink;
@@ -109,7 +118,10 @@ internal sealed class AsioAudioSink : IAudioSink
         if (hr != 0 || _driver == IntPtr.Zero) { failure = Loc.F("The ASIO driver could not be created (0x{0:X8}).", hr); return false; }
         _asio = AsioMethods.Bind(_driver);
 
-        if (_asio.Init(_driver, IntPtr.Zero) == 0)
+        // ASIO drivers expect the host's HWND in init(); passing null works with a few drivers but leaves
+        // others in a degraded/default path. The desktop window is a safe last resort for non-WPF hosts.
+        var systemHandle = _systemHandle != IntPtr.Zero ? _systemHandle : GetDesktopWindow();
+        if (_asio.Init(_driver, systemHandle) == 0)
         {
             var message = new byte[256];
             _asio.GetErrorMessage(_driver, message);
@@ -128,9 +140,15 @@ internal sealed class AsioAudioSink : IAudioSink
             return false;
         }
 
-        _asio.GetBufferSize(_driver, out _, out _, out var preferred, out _);
-        _bufferFrames = Math.Max(32, preferred);
-        _samples = new float[_bufferFrames * 2];
+        var sizeResult = _asio.GetBufferSize(_driver, out var minimum, out var maximum, out var preferred, out var granularity);
+        if (sizeResult != 0)
+        {
+            failure = Loc.F("The ASIO driver could not report its buffer sizes (code {0}).", sizeResult);
+            return false;
+        }
+        var targetFrames = (int)Math.Round(_targetLatencyMilliseconds * PianoAudioEngine.SampleRate / 1000.0);
+        _bufferFrames = AsioBufferSizing.SelectFrames(minimum, maximum, preferred, granularity, targetFrames);
+        _samples = new float[checked(_bufferFrames * 2)];
 
         _bufferSwitch = OnBufferSwitch;
         _sampleRateChanged = OnSampleRateChanged;
@@ -150,11 +168,13 @@ internal sealed class AsioAudioSink : IAudioSink
 
         _buffers = new AsioBufferInfo[_outputChannels];
         for (var channel = 0; channel < _outputChannels; channel++) _buffers[channel] = new AsioBufferInfo { IsInput = 0, ChannelNumber = channel };
+        _buffersCreateAttempted = true; // if the driver failed partway through, still ask it to release partial allocations
         var code = _asio.CreateBuffers(_driver, _buffers, _outputChannels, _bufferFrames, _callbacksMemory);
         if (code != 0) { failure = Loc.F("The ASIO driver could not start (code {0}).", code); return false; }
 
-        var info = new AsioChannelInfo { Channel = 0, IsInput = 0 };
-        _asio.GetChannelInfo(_driver, ref info);
+        var info = new AsioChannelInfo { Channel = 0, IsInput = 0, Name = new byte[32] };
+        var channelInfoResult = _asio.GetChannelInfo(_driver, ref info);
+        if (channelInfoResult != 0) { failure = Loc.F("The ASIO driver could not describe output channel 1 (code {0}).", channelInfoResult); return false; }
         _sampleType = info.Type;
         if (_sampleType is not (SampleTypeInt16 or SampleTypeInt24 or SampleTypeInt32 or SampleTypeFloat32))
         {
@@ -163,7 +183,7 @@ internal sealed class AsioAudioSink : IAudioSink
         }
         _packInt = new int[_bufferFrames];
         _packShort = new short[_bufferFrames];
-        _packBytes = new byte[_bufferFrames * 3];
+        _packBytes = new byte[checked(_bufferFrames * 3)];
 
         _asio.GetLatencies(_driver, out _, out var outputLatency);
         _outputLatencyMs = Math.Max(outputLatency, _bufferFrames) * 1000.0 / PianoAudioEngine.SampleRate;
@@ -213,7 +233,14 @@ internal sealed class AsioAudioSink : IAudioSink
                         break;
                 }
             }
-            _asio.OutputReady(_driver); // drivers that support it shave one buffer of latency; others ignore it
+            // The outputReady method reports ASE_NotPresent on unsupported drivers; probe once after the
+            // first completed block, then use it only when the driver says it is meaningful.
+            if (!_outputReadyChecked)
+            {
+                _outputReadyChecked = true;
+                _supportsOutputReady = _asio.OutputReady(_driver) == 0;
+            }
+            else if (_supportsOutputReady) _asio.OutputReady(_driver);
         }
         catch { /* never let a managed exception cross into the driver's thread */ }
     }
@@ -244,12 +271,9 @@ internal sealed class AsioAudioSink : IAudioSink
         _stopping = true;
         if (_driver != IntPtr.Zero)
         {
-            try
-            {
-                if (_started) _asio.Stop(_driver);
-                if (_buffers.Length > 0) _asio.DisposeBuffers(_driver);
-            }
-            catch { /* a driver that faults while closing must not take the app down */ }
+            // Attempt each teardown stage independently; a failed Stop must not skip releasing prepared buffers.
+            if (_started) { try { _asio.Stop(_driver); } catch { } _started = false; }
+            if (_buffersCreateAttempted) { try { _asio.DisposeBuffers(_driver); } catch { } _buffersCreateAttempted = false; }
             Marshal.Release(_driver);
             _driver = IntPtr.Zero;
         }
@@ -346,4 +370,5 @@ internal sealed class AsioAudioSink : IAudioSink
     private const uint ClsCtxInprocServer = 1;
 
     [DllImport("ole32.dll")] private static extern int CoCreateInstance(ref Guid clsid, IntPtr outer, uint context, ref Guid iid, out IntPtr instance);
+    [DllImport("user32.dll")] private static extern IntPtr GetDesktopWindow();
 }

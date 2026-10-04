@@ -156,31 +156,20 @@
                         <TabItem Header="Audio" local:Loc.Localize="True" Tag="{StaticResource IconAudio}" local:SettingsPages.Section="SOUND &amp; INPUT">
                             <ScrollViewer VerticalScrollBarVisibility="Auto">
                                 <StackPanel Margin="18,12,18,18">
-                                    <TextBlock Text="INSTRUMENT" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                    <TextBlock Text="Keyflow plays SoundFont (.sf2) and SFZ instruments. The bundled concert grand loads automatically; download the Salamander grand below or load your own file." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
+                                    <TextBlock Text="PIANO" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
+                                    <TextBlock Text="One concert grand, tuned for live play" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
                                     <Border Padding="14" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
                                         <StackPanel>
-                                            <TextBlock x:Name="SoundFontLabel" Text="BUILT-IN GRAND · STARTING" local:Loc.Localize="True" Foreground="{StaticResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Name="SoundFontHint" Text="Yamaha Disklavier grand piano" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,12"/>
-                                            <WrapPanel>
-                                                <Button x:Name="SoundFontButton" Content="◉  LOAD SOUNDFONT" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="LoadSoundFont_Click" Margin="0,0,8,0"/>
-                                                <Button Content="Unload · silent mode" local:Loc.Localize="True" Click="UnloadSoundFont_Click"/>
-                                            </WrapPanel>
-                                        </StackPanel>
-                                    </Border>
-                                    <Border Padding="14" CornerRadius="12" Margin="0,8,0,0" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
-                                        <StackPanel>
-                                            <TextBlock x:Name="SalamanderLabel" Text="SALAMANDER GRAND PIANO · NOT DOWNLOADED" local:Loc.Localize="True" Foreground="{StaticResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock x:Name="SalamanderHint" Text="Yamaha C5 concert grand · 48 kHz / 24-bit · 16 velocity layers, release samples, string resonance and pedal noise · recorded by Alexander Holm, CC BY" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,3,0,12"/>
+                                            <TextBlock x:Name="InstrumentStatusLabel" Text="SALAMANDER GRAND · SETUP REQUIRED" local:Loc.Localize="True" Foreground="{StaticResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock Text="Salamander Grand Piano V3 · a sampled Yamaha C5 recorded at 48 kHz / 24-bit, with 16 velocity layers, release samples and pedal noises." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                                            <TextBlock x:Name="InstrumentHint" Text="One-time download · about 748 MB. It is verified as it downloads; an interrupted setup can resume." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,0,0,12"/>
                                             <ProgressBar x:Name="SalamanderProgress" Height="6" Minimum="0" Maximum="1000" Visibility="Collapsed" Margin="0,0,0,12"/>
                                             <WrapPanel>
-                                                <Button x:Name="SalamanderButton" Content="⬇  DOWNLOAD · 750 MB" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="SalamanderButton_Click" Margin="0,0,8,0"/>
-                                                <Button x:Name="SalamanderPlayButton" Content="PLAY THIS PIANO" local:Loc.Localize="True" Click="SalamanderPlay_Click" Visibility="Collapsed"/>
+                                                <Button x:Name="SalamanderButton" Content="⬇  DOWNLOAD PIANO · 748 MB" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="SalamanderButton_Click" Margin="0,0,8,0"/>
+                                                <Button x:Name="SalamanderPlayButton" Content="LOAD INSTALLED PIANO" local:Loc.Localize="True" Click="SalamanderPlay_Click" Visibility="Collapsed"/>
                                             </WrapPanel>
                                         </StackPanel>
                                     </Border>
-                                    <TextBlock Text="PRESET" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
-                                    <ComboBox x:Name="PresetCombo" IsEnabled="False" SelectionChanged="PresetCombo_SelectionChanged" ToolTip="Choose an instrument preset from the loaded SoundFont" local:Loc.Localize="True"/>
                                     <TextBlock Text="EFFECTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <WrapPanel>
                                         <ToggleButton x:Name="ReverbToggle" Content="HALL REVERB" local:Loc.Localize="True" Height="32" Style="{StaticResource PedalToggleStyle}" IsChecked="True" Checked="ReverbToggle_Changed" Unchecked="ReverbToggle_Changed" Margin="0,0,8,0"/>
@@ -191,13 +180,19 @@
                                         <Button x:Name="ReverbImpulseButton" Content="IR FILE…" local:Loc.Localize="True" Click="ReverbImpulse_Click" ToolTip="Load an impulse response (.wav or .flac) recorded in a real room" VerticalAlignment="Center"/>
                                     </WrapPanel>
                                     <TextBlock Text="OUTPUT &amp; LATENCY" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
-                                    <TextBlock Text="Auto picks WASAPI and falls back by itself. WASAPI keeps the piano a few milliseconds behind the keys; ASIO talks to a studio interface's own driver; waveOut is the old compatible path." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
+                                    <TextBlock Text="Auto uses the Windows default. Choose any active Windows output (including Voicemeeter VAIO/AUX/VAIO3) or an ASIO driver. The latency target requests the smallest supported buffer; the live status shows what the driver granted." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
                                     <TextBlock Text="Audio output" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,2,0,4"/>
                                     <ComboBox x:Name="AudioOutputCombo" AutomationProperties.Name="Audio output" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="AudioOutputCombo_SelectionChanged"/>
                                     <TextBlock Text="Target latency" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
                                     <ComboBox x:Name="AudioLatencyCombo" AutomationProperties.Name="Target latency" local:Loc.Localize="True" SelectionChanged="AudioLatencyCombo_SelectionChanged"><ComboBoxItem Content="Safe · 20 ms" local:Loc.Localize="True"/><ComboBoxItem Content="Balanced · 10 ms" local:Loc.Localize="True"/><ComboBoxItem Content="Low · 5 ms" local:Loc.Localize="True"/><ComboBoxItem Content="Ultra · 3 ms" local:Loc.Localize="True"/></ComboBox>
+                                    <TextBlock Text="Master piano level" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Slider x:Name="AudioGainSlider" Width="190" Minimum="50" Maximum="200" Value="125" TickFrequency="5" SmallChange="5" LargeChange="10" IsSnapToTickEnabled="True" ValueChanged="AudioGainSlider_ValueChanged" AutomationProperties.Name="Master piano level"/>
+                                        <TextBlock x:Name="AudioGainValue" Text="125%" MinWidth="52" Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource LabelTextStyle}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Boosts or lowers the piano synth; a soft limiter protects peaks from clipping." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,2,0,0"/>
                                     <Button x:Name="AsioPanelButton" Content="ASIO control panel" local:Loc.Localize="True" Click="AsioPanel_Click" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="False"/>
-                                    <TextBlock x:Name="AudioOutputHint" Text="Takes effect once a SoundFont is loaded." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,8,0,0"/>
+                                    <TextBlock x:Name="AudioOutputHint" Text="Download Salamander Grand to enable piano audio." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,8,0,0"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
@@ -215,7 +210,7 @@
                                     <ComboBox x:Name="TrackCombo" AutomationProperties.Name="MIDI track" local:Loc.Localize="True" SelectionChanged="TrackCombo_SelectionChanged"/>
                                     <StackPanel x:Name="TrackListHost" Margin="0,10,0,0"/>
                                     <TextBlock Text="METRONOME" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
-                                    <CheckBox x:Name="MetronomeCheck" Content="SoundFont metronome click" local:Loc.Localize="True" IsEnabled="False"/>
+                                    <CheckBox x:Name="MetronomeCheck" Content="Piano metronome click" local:Loc.Localize="True" IsEnabled="False"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
@@ -595,7 +590,8 @@
                     <Button x:Name="MenuPlayButton" Content="Perform &amp; Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Open a MIDI score or perform live on the concert stage (Space)" local:Loc.Localize="True"/>
                     <Button x:Name="MenuQuickAdjustButton" Content="Quick adjustments" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuQuickAdjust_Click" ToolTip="Quickly adjust common stage controls; use Stage Design Studio for everything else." local:Loc.Localize="True"/>
                     <StackPanel x:Name="MenuLinkStack" Margin="10,22,0,0">
-                        <Button Content="Audio &amp; MIDI Hardware Setup" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Disklavier SoundFonts, MIDI routing and latency settings" local:Loc.Localize="True"/>
+                        <Button Content="Piano &amp; Audio Setup" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Download Salamander Grand, adjust effects, output and latency" local:Loc.Localize="True"/>
+                        <Button Content="MIDI Devices" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuMidi_Click" ToolTip="Choose a MIDI keyboard or output device" local:Loc.Localize="True"/>
                         <Button Content="Keyboard &amp; Shortcuts" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuShortcuts_Click" ToolTip="Every shortcut the stage listens to (F1)" local:Loc.Localize="True"/>
                         <Button Content="About Keyflow Concert Grand" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
                         <Button Content="Exit Keyflow" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>

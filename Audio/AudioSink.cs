@@ -28,48 +28,6 @@ internal interface IAudioSink : IDisposable
     double BufferMilliseconds { get; }
 }
 
-/// <summary>The audio backends the settings page can ask for, from "decide for me" to a named ASIO driver.</summary>
-internal enum AudioBackendKind { Auto, WasapiShared, WasapiExclusive, Asio, WaveOut }
-
-/// <summary>
-/// The user's output choice as one stable id string, so the settings file and the combo box agree on a
-/// value that survives language switches: <c>auto</c>, <c>wasapi</c>, <c>wasapi-exclusive</c>,
-/// <c>waveout</c>, or <c>asio:</c> followed by the driver's registry name.
-/// </summary>
-internal readonly record struct AudioOutputChoice(AudioBackendKind Kind, string AsioDriver)
-{
-    internal const string AutoId = "auto";
-    internal const string WasapiSharedId = "wasapi";
-    internal const string WasapiExclusiveId = "wasapi-exclusive";
-    internal const string WaveOutId = "waveout";
-    private const string AsioPrefix = "asio:";
-
-    internal static AudioOutputChoice Auto => new(AudioBackendKind.Auto, "");
-
-    /// <summary>The choice for one named ASIO driver, as the settings page's combo builds its rows.</summary>
-    internal static AudioOutputChoice ForAsio(string driverName) => new(AudioBackendKind.Asio, driverName);
-
-    internal string Id => Kind switch
-    {
-        AudioBackendKind.WasapiShared => WasapiSharedId,
-        AudioBackendKind.WasapiExclusive => WasapiExclusiveId,
-        AudioBackendKind.Asio => AsioPrefix + AsioDriver,
-        AudioBackendKind.WaveOut => WaveOutId,
-        _ => AutoId,
-    };
-
-    /// <summary>Anything unknown parses as Auto, so an edited settings file can never leave the app silent.</summary>
-    internal static AudioOutputChoice Parse(string? id) => id switch
-    {
-        WasapiSharedId => new(AudioBackendKind.WasapiShared, ""),
-        WasapiExclusiveId => new(AudioBackendKind.WasapiExclusive, ""),
-        WaveOutId => new(AudioBackendKind.WaveOut, ""),
-        { } value when value.StartsWith(AsioPrefix, StringComparison.Ordinal) && value.Length > AsioPrefix.Length
-            => new(AudioBackendKind.Asio, value[AsioPrefix.Length..]),
-        _ => Auto,
-    };
-}
-
 /// <summary>
 /// Opens the backend the user asked for, falling back along <c>WASAPI shared → waveOut</c> when the request
 /// was <see cref="AudioBackendKind.Auto"/> or when the explicit request failed. The factory never throws:
@@ -79,24 +37,38 @@ internal readonly record struct AudioOutputChoice(AudioBackendKind Kind, string 
 internal static class AudioSinkFactory
 {
     /// <summary>
-    /// <paramref name="latencyMilliseconds"/> is the target for the WASAPI paths (clamped by what the device
-    /// grants); ASIO uses the driver's own preferred buffer and waveOut keeps its fixed compatibility queue.
+    /// <paramref name="latencyMilliseconds"/> is the target buffer period for WASAPI and ASIO (clamped to
+    /// sizes the driver/device supports); waveOut keeps its fixed compatibility queue. A WASAPI choice may
+    /// also name one Windows render endpoint, including a Voicemeeter virtual input.
     /// <paramref name="failure"/> carries the explicit request's error even when a fallback then succeeded,
     /// so the settings page can say "ASIO failed, using WASAPI" instead of silently ignoring the choice.
     /// </summary>
-    internal static IAudioSink? TryCreate(AudioOutputChoice choice, double latencyMilliseconds, AudioRenderCallback render, out string? failure)
+    internal static IAudioSink? TryCreate(AudioOutputChoice choice, double latencyMilliseconds, AudioRenderCallback render, IntPtr asioSystemHandle, out string? failure)
     {
         failure = null;
         switch (choice.Kind)
         {
             case AudioBackendKind.WasapiShared:
-                return WasapiAudioSink.TryCreate(exclusive: false, latencyMilliseconds, render, out failure) ?? Fallback(latencyMilliseconds, render, ref failure);
+                return WasapiAudioSink.TryCreate(exclusive: false, latencyMilliseconds, render, out failure, endpointId: choice.EndpointId)
+                    ?? Fallback(latencyMilliseconds, render, ref failure);
             case AudioBackendKind.WasapiExclusive:
-                return WasapiAudioSink.TryCreate(exclusive: true, latencyMilliseconds, render, out failure) ?? Fallback(latencyMilliseconds, render, ref failure);
+            {
+                var exclusive = WasapiAudioSink.TryCreate(exclusive: true, latencyMilliseconds, render, out failure, endpointId: choice.EndpointId);
+                if (exclusive is not null) return exclusive;
+                // An endpoint can allow shared mode while refusing exclusive mode. Preserve the selected
+                // Voicemeeter/physical output before falling back to Windows' default device.
+                if (choice.EndpointId.Length > 0)
+                {
+                    var shared = WasapiAudioSink.TryCreate(exclusive: false, latencyMilliseconds, render, out _, endpointId: choice.EndpointId);
+                    if (shared is not null) return shared;
+                }
+                return Fallback(latencyMilliseconds, render, ref failure);
+            }
             case AudioBackendKind.Asio:
-                return AsioAudioSink.TryCreate(choice.AsioDriver, render, out failure) ?? Fallback(latencyMilliseconds, render, ref failure);
+                return AsioAudioSink.TryCreate(choice.AsioDriver, latencyMilliseconds, asioSystemHandle, render, out failure)
+                    ?? Fallback(latencyMilliseconds, render, ref failure);
             case AudioBackendKind.WaveOut:
-                return WaveOutAudioSink.TryCreate(render, out failure);
+                return (IAudioSink?)WaveOutAudioSink.TryCreate(render, out failure) ?? Fallback(latencyMilliseconds, render, ref failure);
             default:
                 // Auto promises no particular backend, so reaching the speakers at all clears the failure;
                 // only a machine where every path refused keeps a message (the WASAPI one, which names the

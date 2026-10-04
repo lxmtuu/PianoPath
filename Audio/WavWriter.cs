@@ -10,7 +10,7 @@ namespace PianoPath;
 ///
 /// <para>
 /// Only the format the engine produces is written — 16-bit signed PCM, one or two channels — because that is
-/// what the SoundFont synthesiser renders and what <c>waveOut</c> plays, so the recorded file holds exactly the
+/// what the SFZ synthesiser renders and what the output sink plays, so the recorded file holds exactly the
 /// samples the machine heard. <see cref="Header"/> is public to the assembly so the checks can compare the
 /// bytes it writes with the specification instead of with the file it just produced.
 /// </para>

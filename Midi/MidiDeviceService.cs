@@ -12,6 +12,9 @@ internal sealed class MidiDeviceService : IDisposable
     private IntPtr _input = IntPtr.Zero;
     private IntPtr _output = IntPtr.Zero;
     private MidiInProc? _callback;
+    // PedalLevelChanged remains continuous; the UI's on/off event is edge-triggered so half-pedal CC streams
+    // do not flood the WPF dispatcher with duplicate "still down" updates.
+    private readonly bool[,] _pedalDown = new bool[16, 3];
     public event Action<int, int, bool>? NoteChanged;
     public event Action<PianoPedal, bool>? PedalChanged;
     /// <summary>The raw controller value 0..127 of a pedal message. A continuous (half-)pedal sends the
@@ -77,9 +80,25 @@ internal sealed class MidiDeviceService : IDisposable
         else if (kind == 0xB0)
         {
             var pedal = data1 switch { 67 => PianoPedal.Soft, 66 => PianoPedal.Sostenuto, 64 => PianoPedal.Sustain, _ => (PianoPedal?)null };
-            if (pedal is { } value) { PedalLevelChanged?.Invoke(value, data2); PedalChanged?.Invoke(value, data2 >= 64); }
+            if (pedal is { } value)
+            {
+                PedalLevelChanged?.Invoke(value, data2);
+                var channel = status & 15;
+                var index = value switch { PianoPedal.Soft => 0, PianoPedal.Sostenuto => 1, _ => 2 };
+                var wasDown = IsPedalDown(index);
+                _pedalDown[channel, index] = data2 >= 64;
+                var isDown = IsPedalDown(index);
+                if (wasDown != isDown) PedalChanged?.Invoke(value, isDown);
+            }
         }
     }
+    private bool IsPedalDown(int pedalIndex)
+    {
+        for (var channel = 0; channel < 16; channel++)
+            if (_pedalDown[channel, pedalIndex]) return true;
+        return false;
+    }
+
     private static string GetName(int id, bool input)
     {
         var caps = new MidiCaps();

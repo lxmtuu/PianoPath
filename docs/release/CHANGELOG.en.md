@@ -18,6 +18,15 @@ check red instead of shipping a release that states two versions.
 The product's technical limits live in the release README's *[Current limitations](README.en.md#current-limitations)*
 section and are not repeated here; the internal development roadmap is not part of the public release repository.
 
+## Unreleased
+
+### Audio & setup experience
+
+- Replaced the bundled SF2 piano and SF2 engine with **Salamander Grand Piano V3 as the sole instrument**, rendered through SFZ; removed SF2 import and external instrument selection.
+- Salamander is no longer stored in Git or bundled in ZIPs/installers. Users explicitly download the one-time library (about **748 MB**) from Audio settings. The downloader pins a commit, verifies every FLAC against its Git blob SHA-1, supports cancel/resume, and writes the SFZ mapping and attribution only after all samples verify.
+- Split the startup menu into **Piano & Audio Setup** and **MIDI Devices** shortcuts; Audio settings now show clearer status, download progress, piano load/repair actions and output selection.
+- Updated the READMEs, release instructions, source checks and generated public release page for the separate piano download; removed obsolete Git LFS, `Assets/` and old SF2-size guidance.
+
 ## 1.0.0 — 2026-10-03
 
 The first official release. Keyflow is a Windows desktop application (C# · WPF · .NET 10) to **play, practise

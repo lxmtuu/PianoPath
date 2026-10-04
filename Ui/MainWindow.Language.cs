@@ -59,7 +59,7 @@ public partial class MainWindow
         RefreshLibrarySongs();
         RefreshPracticeHistory();
         RefreshSettingControls();
-        UpdateSoundFontUi();
+        UpdateInstrumentUi();
         UpdatePlaybackLabel();
         PopulateTracks(preserve: true);
         UpdateStats();
@@ -107,6 +107,7 @@ public partial class MainWindow
     {
         RefreshDeviceCaption(InputDeviceCombo, "Computer keyboard only");
         RefreshDeviceCaption(OutputDeviceCombo, "No MIDI output");
+        if (AudioOutputCombo is not null) RefreshAudioOutputs();
     }
 
     private void RefreshDeviceCaption(ComboBox combo, string placeholder)

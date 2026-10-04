@@ -41,6 +41,9 @@
     <Compile Include="..\..\Midi\MusicXmlReader.cs" Link="Product\Midi\MusicXmlReader.cs" />
     <Compile Include="..\..\Midi\HandSplit.cs" Link="Product\Midi\HandSplit.cs" />
     <Compile Include="..\..\Midi\Meter.cs" Link="Product\Midi\Meter.cs" />
+    <Compile Include="..\..\Audio\AudioOutputChoice.cs" Link="Product\Audio\AudioOutputChoice.cs" />
+    <Compile Include="..\..\Audio\AsioBufferSizing.cs" Link="Product\Audio\AsioBufferSizing.cs" />
+    <Compile Include="..\..\Audio\AudioTapDispatcher.cs" Link="Product\Audio\AudioTapDispatcher.cs" />
     <Compile Include="..\..\Audio\IAudioTrack.cs" Link="Product\Audio\IAudioTrack.cs" />
     <Compile Include="..\..\Audio\WavWriter.cs" Link="Product\Audio\WavWriter.cs" />
     <Compile Include="..\..\Audio\WavReader.cs" Link="Product\Audio\WavReader.cs" />

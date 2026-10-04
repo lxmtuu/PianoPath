@@ -65,7 +65,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
 
     /// <summary>
     /// Opens the file and starts the encoders. <paramref name="withAudio"/> asks for the audio stream as well,
-    /// which is only ever true when the engine has a SoundFont to play. <paramref name="step"/>, when given,
+    /// which is only ever true when the Salamander SFZ piano is loaded. <paramref name="step"/>, when given,
     /// hears every stage of the way — the AAC probe, the writer opening, each stream going in, the writer
     /// starting — so the verification's child process can leave a log that names the call a machine stopped at
     /// rather than the call it was going to make next.

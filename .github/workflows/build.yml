@@ -94,8 +94,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The bundled SoundFont lives in Git LFS; the build itself only needs the pointer, so skip the 113 MiB download.
-          # The verification suite detects the pointer and reports SKIP for the bundled-piano checks.
+          # No sample library is checked into the repository; Salamander is downloaded by the app after an explicit request.
           lfs: false
 
       - uses: actions/setup-dotnet@v6
@@ -109,7 +108,7 @@ jobs:
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
-      # (no Git LFS SoundFont, no audio device, an unopenable MIDI port) and reports those as
+      # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
       # Every log line is also echoed into the job summary; annotations stay under GitHub's
       # 10-per-level cap by only surfacing SKIP/NOTE/FAIL plus the final summary line.
@@ -254,8 +253,8 @@ jobs:
       # The wizard is part of the product, so it is compiled on every push instead of only when a
       # release is cut: this is the only place the real ISCC runs, and tools/build_installer.ps1
       # refuses to let the compiler ignore a name or a placeholder the translation got wrong.
-      # -Stub writes placeholder files into publish\win-x64 so the job never needs the 113 MiB
-      # SoundFont, which the compiler only checks for existence anyway.
+      # -Stub writes only a placeholder executable into publish\win-x64; the 748 MB sample library
+      # is never needed to compile an installer because it is downloaded after installation.
       - name: Build the installer
         shell: pwsh
         run: pwsh tools/build_installer.ps1 -Stub -OutputDir (Join-Path $env:RUNNER_TEMP 'keyflow-installer')
@@ -546,21 +545,21 @@ jobs:
       # have been found by the person cutting the release, at the moment they cut it.
       #
       # It publishes the framework-dependent kind, which downloads no runtime pack and takes a couple of
-      # minutes, with -AllowLfsPointer because this job does not fetch the 113 MiB SoundFont — the point is
-      # the packaging, not the piano (release.yml publishes the real thing with LFS). The assertions after
-      # it are what makes the step about the *package* rather than about dotnet: the executable, the
-      # licence MIT asks to travel with copies, the SoundFont's attribution, and the ZIP -Zip promised.
+      # minutes. The assertions after it exercise the actual package path: the executable, the MIT licence,
+      # the absence of bundled piano samples, and the ZIP that -Zip promised.
       - name: Publish a distributable build
         shell: pwsh
         run: |
-          .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64 -Zip -AllowLfsPointer
+          .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64 -Zip
           $folder = 'publish/win-x64-fd'
-          foreach ($file in @("$folder/PianoPath.exe", "$folder/LICENSE.txt", "$folder/Assets/ConcertGrand.sf2", "$folder/Assets/ATTRIBUTION.txt")) {
+          foreach ($file in @("$folder/PianoPath.exe", "$folder/LICENSE.txt")) {
             if (-not (Test-Path $file)) {
               "::error title=Published package::$file is missing from the published folder"
               throw "$file was not published"
             }
           }
+          $sf2 = @(Get-ChildItem $folder -Filter '*.sf2' -File -Recurse -ErrorAction SilentlyContinue)
+          if ($sf2.Count -gt 0) { throw "Unexpected SF2 file in package: $($sf2[0].FullName)" }
           $zip = Get-ChildItem publish -Filter 'Keyflow-*-win-x64-fd.zip' -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $zip) { throw 'publish.ps1 -Zip wrote no Keyflow-*-win-x64-fd.zip into publish/' }
           # The last link of the version chain, checked against the binary a user would actually run:

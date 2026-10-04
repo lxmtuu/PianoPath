@@ -21,12 +21,12 @@ mà Unreal Engine dùng mặc định.
 ## 1. Hiện trạng trước khi nâng cấp (kết quả rà soát)
 
 Kiến trúc hiện tại đã khá chỉn chu: `PianoStage` vẽ toàn bộ sân khấu bằng `DrawingContext` (vector),
-hệ cài đặt khai báo 10 trang, preset, tìm kiếm, và `VerificationSuite` chạy trong CI. Bàn phím cũ vẽ
+hệ cài đặt hiện khai báo 13 trang, preset, tìm kiếm, và `VerificationSuite` chạy trong CI. Bàn phím cũ vẽ
 bằng các `RoundedRectangle` + gradient dọc — nhanh nhưng **phẳng**: không có bóng đổ thật, không có
 occlusion giữa các phím, không có specular theo góc nhìn, nên kém "vật lý" so với Keysight/Piano VFX.
 
 Những điểm đã rà soát và giữ nguyên vì chúng tốt và được test bao:
-- `MidiReader`, `SoundFontSynthesizer`, `PianoAudioEngine`, reverb — có test dày, không đụng.
+- `MidiReader`, `SfzSynthesizer`, `PianoAudioEngine`, reverb — có test riêng, không nằm trong phạm vi sửa shader.
 - Hệ preset / JSON round-trip / clamp — giữ nguyên contract (mọi giá trị mới đều được `Clamp()`).
 - `CaptureStageBgr` cho quay video — giữ nguyên.
 
@@ -129,11 +129,11 @@ giữ nguyên stage + dock hiện có làm phần "Design" chi tiết:
 
 | Ảnh Embers | Thành phần | Keyflow tương ứng |
 |---|---|---|
-| 1. Main menu (Play/Design/Showcase/Settings/About/Exit trên nền nebula) | `MainMenuOverlay` trong `MainWindow.xaml` | Card logo + `Play` / `Design` + liên kết `Settings` / `About` / `Exit`; mở khi khởi động thường; nút HOME trên header để quay lại; `--verify`/`--snapshot`/`--show-settings` bỏ qua menu để CI/chụp ảnh không đổi. |
+| 1. Main menu (Play/Design/Showcase/Settings/About/Exit trên nền nebula) | `MainMenuOverlay` trong `MainWindow.xaml` | Card logo + `Play` / `Quick Adjustments` / `Piano & Audio Setup` / `MIDI Devices` / `About` / `Exit`; mở khi khởi động thường; nút HOME trên header để quay lại; `--verify`/`--snapshot`/`--show-settings` bỏ qua menu để CI/chụp ảnh không đổi. |
 | 2. Styles grid (thumbnail bàn phím + nốt màu) | `PresetThumbnail()` trong `MainWindow.Settings.cs` | Mỗi preset trong danh sách Style có thumbnail mini render thật (nền tối, phím trắng/đen, vạch nốt theo palette của preset + vạch halo), cache theo tên+màu. |
-| 3–6. Style editor: section Notes / Keys / Embers, nhóm ADVANCED, nút Save, tab BACK | Dock 10 trang hiện có | Các section tương đương đã có (Notes/Keyboard/Particles...); chevron trong Play dialog deep-link đúng trang. |
+| 3–6. Style editor: section Notes / Keys / Embers, nhóm ADVANCED, nút Save, tab BACK | Dock 13 trang hiện có | Các section tương đương đã có (Notes/Keyboard/Particles...); chevron trong Play dialog deep-link đúng trang. |
 | 7–11. Play dialog: Back / Settings / Close, nhóm START A SESSION (MIDI File / Live Play / bài hiện tại), Recent + Library, hai thẻ tay có thể thao tác bằng bàn phím, Playback Speed, Stage Layers (mỗi hàng toggle + chevron), CTA đổi theo trạng thái bài | `PlayDialogOverlay` + `MainWindow.Menu.cs` | Header **Play** mở cùng hộp thoại từ sân khấu và menu chính; Back/Escape quay về đúng bề mặt gọi, nút Settings và chevron deep-link tới dock, dock có đường quay lại hộp thoại. Nút chính chọn MIDI khi chưa có bài và bắt đầu phát khi đã nạp; toggle ánh xạ một-một vào setting thật nên dock và dialog không lệch nhau. Thẻ tay là Button có tên trợ năng, màu viền theo `LeftHandColor/RightHandColor` (hoặc gradient nốt); Library không hiện ô tìm kiếm rỗng khi chưa có mục. |
-| 12–13. Settings dialog (Display/Audio/MIDI/Other, chọn SoundFont) | Menu → Settings | Mở dock tại trang Audio (SoundFont, MIDI input/output, prevent overlaps...). |
+| 12–13. Settings dock (13 pages, grouped by Stage Design / Sound & Input / Session / App) | Main menu setup shortcuts | Audio downloads/loads Salamander and controls effects/output; MIDI selects devices; other pages cover visual design, practice, history, recording and app preferences. |
 | 14–25. Camera (Parallax/Zoom/Saturation/Contrast/Bloom + ADVANCED), Background (Select Image/Dim/Guide/Gradient), Notes (3D Notes), Halo (Halo Color + color picker HSV/HEX), Flame (Plasma/Rays), Keys (Lighting/Overhang/Animate), Extras (Counter/Watermark) | Các trang dock | Đủ hết thông số tương đương đã có sẵn; color picker HSV/HEX là `ColorPickerWindow`. |
 
 ### Xử lí đồ họa ánh sáng "như Embers"
