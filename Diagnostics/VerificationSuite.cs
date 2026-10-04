@@ -1769,12 +1769,14 @@ internal static partial class VerificationSuite
         Assert(unnamed.Count == 0,
             $"{unnamed.Count} interactive control(s) have no accessible name: {string.Join(", ", unnamed.Take(6))}.");
 
-        // The glyphs that used to be anonymous: the loop buttons show "A" / "B" / "×" and the tooltip a
-        // screen reader hears is the localized sentence, not the letter.
+        // The glyphs that used to be anonymous: the loop buttons show "A" / "B" and a clear-loop glyph
+        // (the letter × left the UI with the other Unicode button captions); the tooltip a screen
+        // reader hears is the localized sentence, not the letter.
         FrameworkElement? ByContent(string content) => controls.FirstOrDefault(element => element is ContentControl { Content: string text } && text == content);
-        var loopA = ByContent("A"); var loopB = ByContent("B"); var clearLoop = ByContent("×");
+        var loopA = ByContent("A"); var loopB = ByContent("B");
+        var clearLoop = controls.FirstOrDefault(element => element is Button && AutomationProperties.GetName(element) == Loc.T("Clear the loop"));
         Assert(loopA is not null && loopB is not null && clearLoop is not null,
-            "The transport should expose the A / B / × loop buttons that this check names.");
+            "The transport should expose the A / B loop buttons and the clear-loop glyph that this check names.");
         Assert(AutomationProperties.GetName(loopA!) == Loc.T("Set the loop start at the playhead")
                 && AutomationProperties.GetName(loopB!) == Loc.T("Set the loop end at the playhead")
                 && AutomationProperties.GetName(clearLoop!) == Loc.T("Clear the loop"),

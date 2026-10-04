@@ -840,6 +840,7 @@ public partial class MainWindow
         reset.Content = new System.Windows.Shapes.Path { Data = (Geometry)FindResource("IconReset"), Fill = muted, Stroke = muted, StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, Width = 11, Height = 11, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var resetValue = FormatSetting(property, (double)prop.GetValue(DefaultVisualSettings)!);
         Loc.Format(reset, "Reset to {0}", FrameworkElement.ToolTipProperty, resetValue);
+        Loc.Format(reset, "Reset to {0}", AutomationProperties.NameProperty, resetValue);
         reset.Click += VisualReset_Click;
         var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = Math.Clamp(current, minimum, maximum), Tag = property, Margin = new Thickness(0, 2, 0, 0) };
         Loc.Set(slider, label, AutomationProperties.NameProperty);
@@ -956,6 +957,7 @@ public partial class MainWindow
                 button.Tag = FindResource(icon);
                 button.ToolTip = text;
                 Loc.Bind(button, () => Loc.T(text), FrameworkElement.ToolTipProperty);
+                Loc.Bind(button, () => Loc.T(text), AutomationProperties.NameProperty);
             }
             button.Click += click; wrap.Children.Add(button);
         }
