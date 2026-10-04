@@ -73,9 +73,11 @@ internal readonly struct Homography
     }
 
     /// <summary>This map applied after <paramref name="first"/>: <c>After(f).Apply(p)</c> is <c>Apply(f.Apply(p))</c>.</summary>
-    internal Homography After(Homography first)
+    internal Homography After(Homography first) => Multiply(this, first);
+
+    private static Homography Multiply(Homography left, Homography right)
     {
-        double Cell(int r, int c) => this[r, 0] * first[0, c] + this[r, 1] * first[1, c] + this[r, 2] * first[2, c];
+        double Cell(int r, int c) => left[r, 0] * right[0, c] + left[r, 1] * right[1, c] + left[r, 2] * right[2, c];
         return new Homography(Cell(0, 0), Cell(0, 1), Cell(0, 2), Cell(1, 0), Cell(1, 1), Cell(1, 2), Cell(2, 0), Cell(2, 1), Cell(2, 2));
     }
 
