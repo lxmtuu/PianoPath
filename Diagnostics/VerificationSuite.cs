@@ -1255,10 +1255,11 @@ internal static partial class VerificationSuite
         Assert(messages.Count == 2 && messages[0] == (60, 100, true) && messages[1] == (60, 0, false), "The WinMM MIM_DATA callback should translate packed Note On/Off messages and ignore other callback messages.");
         Assert(pedals.Count == 6 && pedals.Take(3).Select(x => x.pedal).SequenceEqual([PianoPedal.Soft, PianoPedal.Sostenuto, PianoPedal.Sustain]) && pedals.All(x => x.down == pedals.IndexOf(x) < 3), "MIDI CC 67/66/64 should report real-time soft, sostenuto and sustain pedal edges.");
         Assert(MidiDeviceService.ControllerFor(PianoPedal.Sustain) == 64 && MidiDeviceService.ControllerFor(PianoPedal.Sostenuto) == 66 && MidiDeviceService.ControllerFor(PianoPedal.Soft) == 67, "Pedal output should use the standard MIDI controller numbers.");
-        // A continuous pedal sends the whole 0..127 range; the raw value must survive next to the on/off edge.
+        // A continuous pedal sends the whole 0..127 range; retain each raw value and only emit on/off edges.
+        service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(64, 127));
         service.ProcessShortMessage(MidiDeviceService.PackControllerMessage(64, 45));
-        Assert(levels.Count == 7 && levels[6] == (PianoPedal.Sustain, 45) && levels.Take(6).Select(x => x.value).SequenceEqual([127, 127, 127, 0, 0, 0]), "Pedal messages should also report their raw controller value for half-pedalling.");
-        Assert(pedals.Count == 7 && pedals[6] == (PianoPedal.Sustain, false), "A half-pedal value below 64 should still read as 'up' for the on/off consumers.");
+        Assert(levels.Count == 8 && levels[6] == (PianoPedal.Sustain, 127) && levels[7] == (PianoPedal.Sustain, 45) && levels.Take(6).Select(x => x.value).SequenceEqual([127, 127, 127, 0, 0, 0]), "Pedal messages should also report their raw controller value for half-pedalling.");
+        Assert(pedals.Count == 8 && pedals[6] == (PianoPedal.Sustain, true) && pedals[7] == (PianoPedal.Sustain, false), "A half-pedal value below 64 should transition to 'up' for the on/off consumers.");
         var controllerMessage = MidiDeviceService.PackControllerMessage(64, 127, 3);
         Assert((controllerMessage & 255) == 0xB3 && ((controllerMessage >> 8) & 127) == 64 && ((controllerMessage >> 16) & 127) == 127, "MIDI pedal output should pack controller, value and channel correctly.");
         var ins = MidiDeviceService.Inputs; var outs = MidiDeviceService.Outputs;
