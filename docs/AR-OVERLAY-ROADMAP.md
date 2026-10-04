@@ -8,7 +8,7 @@ trạng thái hiện tại nằm ở `README.md`.
 > **Trạng thái:** bản thảo để chốt hướng đi (2026‑10‑05). Chưa có dòng code nào của lộ trình này được viết; mọi
 > con số "hiện có" bên dưới đã đối chiếu với mã nguồn ở commit `2133a19`.
 >
-> **Tiến độ (2026‑10‑05):** AR‑0.1 (cả hai bước), AR‑0.2 và AR‑0.5 (Python + C#) đã xong; `Homography` đã có sớm cho AR‑1.3. Còn lại ở AR‑0: 0.3 (chọn mode camera) và 0.4 (bỏ trần 30 fps). Môi trường làm việc **không có .NET SDK** nên mọi thay đổi C# được xác nhận bằng CI Windows (job `build`, `test`). (`Homography` và khung tổng hợp C# đang chờ CI Windows xác nhận.)
+> **Tiến độ (2026‑10‑05):** AR‑0.1 (cả hai bước), AR‑0.2 và AR‑0.5 (Python + C#) đã xong; `Homography` đã có sớm cho AR‑1.3. Còn lại ở AR‑0: 0.3 (chọn mode camera) và 0.4 (bỏ trần 30 fps). Môi trường làm việc **không có .NET SDK** nên mọi thay đổi C# được xác nhận bằng CI Windows (job `build`, `test`). Tất cả đã qua CI Windows + job `test` (run `37238149495`): bản dựng, `--verify`, ngân sách khung hình, bộ ảnh preset; khung C# khớp PNG Python từng điểm ảnh.
 
 ## 0. Mục tiêu, và thế nào là "xong"
 
