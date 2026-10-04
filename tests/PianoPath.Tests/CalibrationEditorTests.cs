@@ -163,11 +163,27 @@ public class CalibrationEditorTests
     }
 
     [Fact]
-    public void A_keyboard_turned_a_quarter_round_cannot_be_put_in_order_and_is_refused()
+    public void Corners_that_cannot_be_named_by_where_they_are_are_taken_as_clicked_when_they_are_fine()
     {
-        var editor = Filled((640, 60), (1180, 360), (640, 660), (100, 360));        // a diamond: no corner is more "top-left" than another
+        // A diamond: no corner is more "top-left" than another, so there is nothing to put in order — but it is a good
+        // outline, and the person clicked it in the order the wizard asked, so it stands.
+        var diamond = new (double X, double Y)[] { (640, 60), (1180, 360), (640, 660), (100, 360) };
+        Assert.Null(CalibrationQuad.Order(diamond));
+        var editor = Filled(diamond);
+        Assert.True(editor.CanFinish);
+        var calibration = editor.Finish(KeyboardLayout.Standard88, out var problem);
+        Assert.NotNull(calibration);
+        Assert.Equal(CalibrationProblem.None, problem);
+        Assert.Equal(diamond, calibration.Corners);
+    }
+
+    [Fact]
+    public void A_dart_that_cannot_be_ordered_either_is_refused()
+    {
+        var editor = Filled((640, 60), (1180, 360), (640, 200), (100, 360));
         Assert.False(editor.CanFinish);
-        Assert.Null(editor.Finish(KeyboardLayout.Standard88, out _));
+        Assert.Null(editor.Finish(KeyboardLayout.Standard88, out var problem));
+        Assert.NotEqual(CalibrationProblem.None, problem);
     }
 
     [Fact]

@@ -258,15 +258,18 @@ internal sealed class CalibrationEditor
     internal CalibrationProblem Problem => CalibrationQuad.Check(_points, ImageWidth, ImageHeight);
 
     /// <summary>
-    /// The points as the overlay can use them: as they stand when they pass <see cref="CalibrationQuad.Check"/>,
-    /// otherwise put in order by <see cref="CalibrationQuad.Order"/> when that makes them pass (clicked starting at the
-    /// wrong corner, or round the wrong way); null when neither does.
+    /// The points as the overlay can use them. A picture with the keyboard upright — low notes on the left, the player at
+    /// the bottom — is the usual one, so when <see cref="CalibrationQuad.Order"/> can name the four corners by where they
+    /// are in the picture and the result passes <see cref="CalibrationQuad.Check"/>, that order is used: it repairs a
+    /// start at the wrong corner, a turn the wrong way round, and a click order that would have turned the keyboard
+    /// upside down. Corners that cannot be named that way (a keyboard seen at a steep angle) are taken as clicked when
+    /// they pass the check; otherwise null.
     /// </summary>
     private (double X, double Y)[]? Usable()
     {
         var points = _points.ToArray();
-        if (CalibrationQuad.Check(points, ImageWidth, ImageHeight) == CalibrationProblem.None) return points;
-        return CalibrationQuad.Order(points) is { } ordered && CalibrationQuad.Check(ordered, ImageWidth, ImageHeight) == CalibrationProblem.None ? ordered : null;
+        if (CalibrationQuad.Order(points) is { } ordered && CalibrationQuad.Check(ordered, ImageWidth, ImageHeight) == CalibrationProblem.None) return ordered;
+        return CalibrationQuad.Check(points, ImageWidth, ImageHeight) == CalibrationProblem.None ? points : null;
     }
 
     /// <summary>Done is allowed when the points are fine, or only need putting in order.</summary>
