@@ -67,6 +67,11 @@ internal static partial class VerificationSuite
                 timer.Stop();
                 try
                 {
+                    var settingsPanel = (Border)startupWindow.FindName("SettingsPanel");
+                    var settingsTabs = (TabControl)startupWindow.FindName("SettingsTabs");
+                    settingsTabs.SelectedIndex = SettingsPages.IndexOf(SettingsPages.Audio);
+                    settingsPanel.Visibility = Visibility.Visible;
+                    startupWindow.UpdateLayout();
                     var audio = (PianoAudioEngine)Field(startupWindow, "_audio");
                     var instrumentLabel = (TextBlock)startupWindow.FindName("InstrumentStatusLabel");
                     var downloadButton = (Button)startupWindow.FindName("SalamanderButton");
