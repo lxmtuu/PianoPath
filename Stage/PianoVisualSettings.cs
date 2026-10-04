@@ -390,6 +390,13 @@ internal sealed class PianoVisualSettings
     public string GpuFrameRate { get; set; } = "144";
     /// <summary>GPU stage window: present on the display's vertical blank (off allows tearing for the lowest latency).</summary>
     public bool GpuVSync { get; set; } = true;
+    /// <summary>
+    /// How many keys the player's keyboard has: <c>88</c>, <c>76</c>, <c>61</c> or <c>49</c> (see <see cref="KeyboardSizes"/>).
+    /// The stage, the GPU engine and the shaded keys all draw that keyboard (<see cref="KeyboardLayout.Active"/>), and a
+    /// song's notes outside it are not drawn. It belongs to the instrument on this computer, not to a look, so
+    /// applying a preset keeps it.
+    /// </summary>
+    public string KeyboardSize { get; set; } = "88";
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -416,6 +423,8 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
     internal static readonly string[] GpuFrameRates = ["60", "120", "144", "240", "Unlimited"];
+    /// <summary>The keyboard sizes the app draws, widest first; they are <see cref="KeyboardLayout.All"/> as text.</summary>
+    internal static readonly string[] KeyboardSizes = ["88", "76", "61", "49"];
     internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
@@ -430,6 +439,10 @@ internal sealed class PianoVisualSettings
 
     /// <summary>The GPU engine's target frame rate as a number; 0 means unlimited.</summary>
     internal int GpuTargetFps => int.TryParse(GpuFrameRate, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var fps) ? fps : 0;
+
+    /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
+    internal KeyboardLayout KeyboardLayoutChoice =>
+        KeyboardLayout.ForKeyCount(int.TryParse(KeyboardSize, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var keys) ? keys : 88);
 
     internal string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
 
@@ -447,6 +460,8 @@ internal sealed class PianoVisualSettings
             if (property.Name == nameof(Language)) continue;
             // So does the graphics engine: it depends on the machine's GPU, not on the look.
             if (property.Name is nameof(RenderBackend) or nameof(GpuFrameRate) or nameof(GpuVSync)) continue;
+            // The keyboard size is the player's instrument: a look must never turn their 61 keys into 88.
+            if (property.Name == nameof(KeyboardSize)) continue;
             // And the audio output: the backend and its buffer belong to this machine's sound hardware,
             // so applying a community look can never switch the player off their ASIO interface.
             if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
@@ -547,6 +562,7 @@ internal sealed class PianoVisualSettings
         // (or anything else a file may name) migrates to the GPU engine on load.
         RenderBackend = "Gpu";
         if (!GpuFrameRates.Contains(GpuFrameRate)) GpuFrameRate = "144";
+        if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
         CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);

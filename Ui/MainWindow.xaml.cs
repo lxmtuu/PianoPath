@@ -1568,6 +1568,7 @@ public partial class MainWindow : Window
     private void PressNote(int pitch, int velocity = 100)
     {
         if (!_pressed.Add(pitch)) return;
+        NoteKeyboardRange(pitch);
         StartStageFrames();
         var hit = velocity / 127.0; Stage.AddLiveNote(pitch, hit); Stage.Impact(pitch, hit); if (!_liveAudioSent) _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
         if (_playing)

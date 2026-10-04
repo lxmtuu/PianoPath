@@ -224,6 +224,7 @@
     "RecordingTransparent": true,
     "RenderBackend": "Gpu",
     "GpuFrameRate": "144",
-    "GpuVSync": true
+    "GpuVSync": true,
+    "KeyboardSize": "88"
   }
 }

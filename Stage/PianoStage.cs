@@ -129,6 +129,9 @@ internal sealed partial class PianoStage : FrameworkElement
 
     public void SetVisualSettings(PianoVisualSettings settings, bool reloadBackground = false)
     {
+        // The keyboard comes first: everything below, and every frame after it, is drawn for that layout. The shaded
+        // keyboard's cache key carries the layout, so a switch re-bakes it by itself.
+        KeyboardLayout.Use(settings.KeyboardLayoutChoice);
         var requestedPath = settings.BackgroundImagePath?.Trim() ?? "";
         var backgroundChanged = !string.Equals(_loadedBackgroundPath, requestedPath, StringComparison.OrdinalIgnoreCase);
         _visual = settings;

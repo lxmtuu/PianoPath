@@ -448,9 +448,24 @@ internal static partial class VerificationSuite
         Assert(ReferenceEquals(scene.Keys, full), "A scene keeps the keyboard it was built for.");
         Assert(HandTracker.KeyPitch(.5, full) == full.PitchAt(.5, false), "A tracked hand lands on the key the layout puts under that position.");
 
+        // The setting: a known size names its layout, an unknown one falls back to the full keyboard, and a look
+        // being applied never changes the player's keyboard.
+        var sixtyOne = new PianoVisualSettings { KeyboardSize = "61" };
+        Assert(sixtyOne.KeyboardLayoutChoice.KeyCount == 61 && sixtyOne.KeyboardLayoutChoice.FirstPitch == 36, "The size 61 should name the 61-key layout.");
+        var odd = new PianoVisualSettings { KeyboardSize = "73" }; odd.Clamp();
+        Assert(odd.KeyboardSize == "88" && odd.KeyboardLayoutChoice.KeyCount == 88, "A keyboard size the app does not draw should fall back to 88 keys.");
+        var applied = new PianoVisualSettings { KeyboardSize = "61" }; applied.CopyFrom(new PianoVisualSettings { KeyboardSize = "49" });
+        Assert(applied.KeyboardSize == "61", "Applying a look or a preset must keep the player's keyboard size.");
+        Assert(PianoVisualSettings.KeyboardSizes.SequenceEqual(KeyboardLayout.All.Select(layout => layout.KeyCount.ToString())),
+            "The sizes the settings offer should be exactly the layouts the app has.");
+
         try
         {
             var narrow = KeyboardLayout.ForKeyCount(61);
+            var stageForSize = new PianoStage();
+            stageForSize.SetVisualSettings(sixtyOne);
+            Assert(ReferenceEquals(KeyboardLayout.Active, narrow), "Handing the stage a 61-key setting should make the 61-key layout the one being drawn.");
+            KeyboardLayout.Use(full);
             Assert(KeyboardLayout.Use(narrow) && !KeyboardLayout.Use(narrow), "Using a layout reports the change once.");
             Assert(PianoStage.FirstPitch == 36 && PianoStage.KeyCount == 61, "The stage should follow the layout that is being drawn.");
             Assert(Math.Abs(PianoStage.KeyCenterOf(36) - .5 / 36) < 1e-12 && Math.Abs(PianoStage.KeyCenterOf(96) - 35.5 / 36) < 1e-12,

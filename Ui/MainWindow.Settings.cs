@@ -417,6 +417,13 @@ public partial class MainWindow
 
     private void BuildKeyboardPage()
     {
+        var instrument = Card(KeyboardSettingsHost, "KEYBOARD SIZE", "How many keys your keyboard or piano has.");
+        Choice(instrument, "Keyboard size", nameof(PianoVisualSettings.KeyboardSize), "How many keys your keyboard or piano has. The stage, the falling notes and the lit keys all follow it, and notes of a song outside its range are not drawn. It belongs to this computer: applying a preset keeps it.",
+            ("88", "88 keys"), ("76", "76 keys"), ("61", "61 keys"), ("49", "49 keys"));
+        _keyboardHintLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
+        Register(instrument, _keyboardHintLabel, null, "keyboard size keys 88 76 61 49 range suggestion played");
+        RefreshKeyboardHint();
+
         var look = Card(KeyboardSettingsHost, "KEYBOARD", "Appearance of the 88 keys.");
         Toggle(look, "Show keyboard", nameof(PianoVisualSettings.ShowKeys), "Hide the keys for a pure piano-roll look.");
         Choice(look, "Style", nameof(PianoVisualSettings.KeyboardStyle), "Flat classic keys, a studio grand with depth, or translucent glass keys.", ("Classic", "Classic"), ("Studio", "Studio 3D"), ("Glass", "Glass"));
@@ -1108,6 +1115,7 @@ public partial class MainWindow
             nameof(PianoVisualSettings.NoteDirection) => "Note direction updated",
             nameof(PianoVisualSettings.ColorMode) => "Color mode updated",
             nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style updated",
+            nameof(PianoVisualSettings.KeyboardSize) => "Keyboard size updated",
             nameof(PianoVisualSettings.BackgroundMode) => "Background mode updated",
             _ => "Setting updated"
         };
@@ -1167,6 +1175,30 @@ public partial class MainWindow
         _visualSettings.PresetModified = true;
         UpdatePresetLabels();
         RecordHistory(property);
+    }
+
+    private TextBlock? _keyboardHintLabel;
+    private int _playedLowest = int.MaxValue, _playedHighest = int.MinValue;
+
+    /// <summary>Remembers the lowest and highest key played on a live instrument, so the keyboard size row can say which size fits.</summary>
+    private void NoteKeyboardRange(int pitch)
+    {
+        if (pitch >= _playedLowest && pitch <= _playedHighest) return;
+        _playedLowest = Math.Min(_playedLowest, pitch);
+        _playedHighest = Math.Max(_playedHighest, pitch);
+        RefreshKeyboardHint();
+    }
+
+    /// <summary>The line under the keyboard size row: what has been played so far and the size that holds it.</summary>
+    private void RefreshKeyboardHint()
+    {
+        if (_keyboardHintLabel is null) return;
+        Loc.Bind(_keyboardHintLabel, () =>
+        {
+            if (_playedHighest < _playedLowest) return Loc.T("Play a few notes on your keyboard and the size that fits them is suggested here.");
+            var fitting = KeyboardLayout.Fitting(_playedLowest, _playedHighest);
+            return Loc.F("You have played from {0} to {1}: a {2}-key keyboard fits.", NoteLabel(_playedLowest), NoteLabel(_playedHighest), fitting.KeyCount);
+        });
     }
 
     private void RefreshDependentRows()

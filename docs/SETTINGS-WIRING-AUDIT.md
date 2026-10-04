@@ -91,6 +91,7 @@ Phương pháp:
 | Chức năng cài đặt | Thuộc tính | Logic tiêu thụ |
 |---|---|---|
 | Show keyboard / Style / Height | `ShowKeys`, `KeyboardStyle`, `KeyboardScale` | `PianoStage.cs:347`, `:786`, `:71` (KeyboardHeight); style còn đổi màu phím nền của shader (`Shading/PianoShaderScene.cs:171-184`) |
+| Keyboard size (88/76/61/49) | `KeyboardSize` | `PianoStage.SetVisualSettings` → `KeyboardLayout.Use(settings.KeyboardLayoutChoice)`; mọi nơi vẽ (vector, shader, GPU, bàn tay) đọc `KeyboardLayout.Active`. `CopyFrom` bỏ qua khoá này nên preset không đổi cỡ đàn; `Clamp` đưa giá trị lạ về 88. Test: `VerifyKeyboardLayout` |
 | Black key length | `KeyOverhang` | `PianoStage.cs:856, :1089` |
 | Key labels (None/C/All) | `KeyLabels` | `PianoStage.cs:898-901` |
 | Lid shadow / Felt strip / Felt color | `ShowKeyShadow`, `ShowKeyFelt`, `KeyFeltColor` | `PianoStage.cs:823, :820/:876, :881` |
