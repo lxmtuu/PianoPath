@@ -48,13 +48,13 @@
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="LOOK" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
                         <TextBlock x:Name="HeaderPresetLabel" Text="Neon Violet" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
-                        <Button Content="Change" Style="{StaticResource GhostButtonStyle}" Padding="8,2" Margin="8,0,0,0" FontSize="10" Click="StyleQuick_Click" ToolTip="Open the style presets" local:Loc.Localize="True"/>
+                        <Button Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconSliders}" Margin="8,0,0,0" Click="StyleQuick_Click" ToolTip="Open the style presets" local:Loc.Localize="True"/>
                     </StackPanel>
                 </Border>
                 <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
                     <Button Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconHome}" Click="MainMenu_Click" ToolTip="Back to the main menu" local:Loc.Localize="True" Margin="0,0,6,0"/>
                     <Button x:Name="PlaySetupButton" Content="Play" local:Loc.Localize="True" Tag="{StaticResource IconPlay}" Style="{StaticResource AccentIconButtonStyle}" Click="PlayDialogOpen_Click" Margin="0,0,8,0" Padding="14,8" ToolTip="Open play, songs and stage settings"/>
-                    <Button Content="SETTINGS" Tag="{StaticResource IconSliders}" Style="{StaticResource IconTextButtonStyle}" Click="Settings_Click" Margin="0,0,12,0" Padding="14,8" ToolTip="Show or hide the settings dock (Escape)" local:Loc.Localize="True"/>
+                    <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconGear}" Click="Settings_Click" Margin="0,0,12,0" ToolTip="Show or hide the settings dock (Escape)" local:Loc.Localize="True"/>
                     <Border Width="1" Height="30" Background="{DynamicResource PanelBorderBrush}" Margin="0,0,8,0"/>
                     <Button Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconMinimize}" Click="Minimize_Click" ToolTip="Minimize" local:Loc.Localize="True"/>
                     <Button Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconMaximize}" Click="FullScreen_Click" Margin="2,0" ToolTip="Toggle full screen (F11)" local:Loc.Localize="True"/>
@@ -116,19 +116,19 @@
                                     <ListBox x:Name="PresetList" AutomationProperties.Name="Stage presets" local:Loc.Localize="True" Style="{StaticResource PresetListStyle}" SelectionChanged="PresetList_SelectionChanged" MouseDoubleClick="PresetList_MouseDoubleClick" MaxHeight="420"/>
                                     <TextBlock x:Name="PresetDescriptionLabel" Style="{StaticResource MutedTextStyle}" Margin="2,4,0,10"/>
                                     <WrapPanel>
-                                        <Button x:Name="ApplyPresetButton" Content="APPLY PRESET" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="ApplyPreset_Click" Margin="0,0,8,8"/>
-                                        <Button Content="SAVE AS…" Click="SavePresetAs_Click" Margin="0,0,8,8" ToolTip="Store the current look as a user preset" local:Loc.Localize="True"/>
-                                        <Button x:Name="DeletePresetButton" Content="DELETE" local:Loc.Localize="True" Style="{StaticResource DangerButtonStyle}" Click="DeletePreset_Click" Margin="0,0,8,8" IsEnabled="False"/>
-                                        <Button Content="IMPORT…" Click="ImportPreset_Click" Margin="0,0,8,8" ToolTip="Load a preset .json file" local:Loc.Localize="True"/>
-                                        <Button Content="EXPORT…" Click="ExportPreset_Click" Margin="0,0,8,8" ToolTip="Save the current look as a .json file" local:Loc.Localize="True"/>
-                                        <Button Content="RESET TO DEFAULT" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Click="ResetVisualSettings_Click" Margin="0,0,8,8"/>
+                                        <Button x:Name="ApplyPresetButton" Content="Apply preset" local:Loc.Localize="True" Tag="{StaticResource IconSparkle}" Style="{StaticResource AccentIconButtonStyle}" Click="ApplyPreset_Click" Padding="12,7" Margin="0,0,10,8"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconSave}" Click="SavePresetAs_Click" Margin="0,0,6,8" ToolTip="Store the current look as a user preset" local:Loc.Localize="True"/>
+                                        <Button x:Name="DeletePresetButton" Style="{StaticResource GlyphButtonStyle}" Foreground="#FF9FB4" Tag="{StaticResource IconTrash}" Click="DeletePreset_Click" Margin="0,0,6,8" ToolTip="Delete the selected preset" local:Loc.Localize="True" IsEnabled="False"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconImport}" Click="ImportPreset_Click" Margin="0,0,6,8" ToolTip="Load a preset .json file" local:Loc.Localize="True"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconExport}" Click="ExportPreset_Click" Margin="0,0,6,8" ToolTip="Save the current look as a .json file" local:Loc.Localize="True"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconReset}" Click="ResetVisualSettings_Click" Margin="0,0,6,8" ToolTip="Reset to the default look" local:Loc.Localize="True"/>
                                     </WrapPanel>
                                     <TextBlock Text="SHARE CODE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,14,0,4"/>
-                                    <TextBlock Text="Send the current look to somebody as text: copy it from the box, or paste a code you received and press APPLY CODE." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
+                                    <TextBlock Text="Send the current look to somebody as text: copy it from the box, or paste a code you received and press Apply code." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
                                     <TextBox x:Name="ShareCodeBox" AutomationProperties.Name="Look share code" local:Loc.Localize="True" FontSize="10.5" TextWrapping="Wrap" AcceptsReturn="True" MaxHeight="74" VerticalScrollBarVisibility="Auto"/>
                                     <WrapPanel Margin="0,6,0,0">
-                                        <Button Content="COPY CODE" local:Loc.Localize="True" Click="CopyShareCode_Click" Margin="0,0,8,8" ToolTip="Put the current look in the box and on the clipboard"/>
-                                        <Button Content="APPLY CODE" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="ApplyShareCode_Click" Margin="0,0,8,8" ToolTip="Apply the code that is in the box"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconCopy}" Click="CopyShareCode_Click" Margin="0,0,10,8" ToolTip="Put the current look in the box and on the clipboard" local:Loc.Localize="True"/>
+                                        <Button Content="Apply code" local:Loc.Localize="True" Tag="{StaticResource IconCheck}" Style="{StaticResource AccentIconButtonStyle}" Click="ApplyShareCode_Click" Padding="12,7" Margin="0,0,8,8" ToolTip="Apply the code that is in the box"/>
                                     </WrapPanel>
                                     <TextBlock x:Name="ShareCodeStatusLabel" Style="{StaticResource MutedTextStyle}" Margin="0,2,0,10"/>
                                     <StackPanel x:Name="StyleSettingsHost"/>
@@ -165,8 +165,8 @@
                                             <TextBlock x:Name="InstrumentHint" Text="One-time download · about 748 MB. It is verified as it downloads; an interrupted setup can resume." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,0,0,12"/>
                                             <ProgressBar x:Name="SalamanderProgress" Height="6" Minimum="0" Maximum="1000" Visibility="Collapsed" Margin="0,0,0,12"/>
                                             <WrapPanel>
-                                                <Button x:Name="SalamanderButton" Content="⬇  DOWNLOAD PIANO · 748 MB" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="SalamanderButton_Click" Margin="0,0,8,0"/>
-                                                <Button x:Name="SalamanderPlayButton" Content="LOAD INSTALLED PIANO" local:Loc.Localize="True" Click="SalamanderPlay_Click" Visibility="Collapsed"/>
+                                                <Button x:Name="SalamanderButton" Content="Download piano · 748 MB" local:Loc.Localize="True" Tag="{StaticResource IconDownload}" Style="{StaticResource AccentIconButtonStyle}" Click="SalamanderButton_Click" Padding="12,7" Margin="0,0,8,0"/>
+                                                <Button x:Name="SalamanderPlayButton" Content="Load installed piano" local:Loc.Localize="True" Tag="{StaticResource IconPlay}" Style="{StaticResource AccentIconButtonStyle}" Click="SalamanderPlay_Click" Padding="12,7" Visibility="Collapsed"/>
                                             </WrapPanel>
                                         </StackPanel>
                                     </Border>
@@ -177,7 +177,7 @@
                                     </WrapPanel>
                                     <WrapPanel Margin="0,8,0,0">
                                         <ComboBox x:Name="ReverbStyleCombo" MinWidth="230" VerticalAlignment="Center" Margin="0,0,8,0" SelectionChanged="ReverbStyleCombo_SelectionChanged" ToolTip="Which room the reverb renders: the classic hall, a convolution concert hall or soundboard, or your own impulse response" local:Loc.Localize="True"/>
-                                        <Button x:Name="ReverbImpulseButton" Content="IR FILE…" local:Loc.Localize="True" Click="ReverbImpulse_Click" ToolTip="Load an impulse response (.wav or .flac) recorded in a real room" VerticalAlignment="Center"/>
+                                        <Button x:Name="ReverbImpulseButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconWaveform}" Click="ReverbImpulse_Click" ToolTip="Load an impulse response (.wav or .flac) recorded in a real room" VerticalAlignment="Center" local:Loc.Localize="True"/>
                                     </WrapPanel>
                                     <TextBlock Text="OUTPUT &amp; LATENCY" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Text="Auto uses the Windows default. Choose any active Windows output (including Voicemeeter VAIO/AUX/VAIO3) or an ASIO driver. The latency target requests the smallest supported buffer; the live status shows what the driver granted." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
@@ -191,7 +191,7 @@
                                         <TextBlock x:Name="AudioGainValue" Text="125%" MinWidth="52" Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource LabelTextStyle}"/>
                                     </StackPanel>
                                     <TextBlock Text="Boosts or lowers the piano synth; a soft limiter protects peaks from clipping." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,2,0,0"/>
-                                    <Button x:Name="AsioPanelButton" Content="ASIO control panel" local:Loc.Localize="True" Click="AsioPanel_Click" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="False"/>
+                                    <Button x:Name="AsioPanelButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconSliders}" Click="AsioPanel_Click" ToolTip="ASIO control panel" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="False" local:Loc.Localize="True"/>
                                     <TextBlock x:Name="AudioOutputHint" Text="Download Salamander Grand to enable piano audio." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,8,0,0"/>
                                 </StackPanel>
                             </ScrollViewer>
@@ -204,7 +204,7 @@
                                     <ComboBox x:Name="InputDeviceCombo" AutomationProperties.Name="MIDI input device" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="InputDeviceCombo_SelectionChanged"/>
                                     <TextBlock Text="MIDI output" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
                                     <ComboBox x:Name="OutputDeviceCombo" AutomationProperties.Name="MIDI output device" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="OutputDeviceCombo_SelectionChanged"/>
-                                    <Button Content="⟳  Refresh devices" local:Loc.Localize="True" Click="RefreshDevices_Click" HorizontalAlignment="Left" Margin="0,10,0,0"/>
+                                    <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconRefresh}" Click="RefreshDevices_Click" ToolTip="Refresh devices" HorizontalAlignment="Left" Margin="0,10,0,0" local:Loc.Localize="True"/>
                                     <TextBlock Text="SONG TRACKS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}" Margin="0,22,0,4"/>
                                     <TextBlock Text="Solo a single track for practice, or mute tracks and recolor them for the video." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
                                     <ComboBox x:Name="TrackCombo" AutomationProperties.Name="MIDI track" local:Loc.Localize="True" SelectionChanged="TrackCombo_SelectionChanged"/>
@@ -236,7 +236,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <Button Content="A" Click="SetLoopA_Click" Width="40" ToolTip="Set the loop start at the playhead" local:Loc.Localize="True"/>
                                         <Button Content="B" Click="SetLoopB_Click" Width="40" Margin="6,0,0,0" ToolTip="Set the loop end at the playhead" local:Loc.Localize="True"/>
-                                        <Button Content="×" Click="ClearLoop_Click" Width="40" Margin="6,0,0,0" ToolTip="Clear the loop" local:Loc.Localize="True"/>
+                                        <Button Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconClose}" Click="ClearLoop_Click" VerticalAlignment="Center" Margin="6,0,0,0" ToolTip="Clear the loop" local:Loc.Localize="True"/>
                                         <TextBlock x:Name="LoopLabel" Text="No loop" local:Loc.Localize="True" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="11"/>
                                     </StackPanel>
                                     <TextBlock Text="SHORTCUTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
@@ -261,8 +261,8 @@
                                     <TextBlock x:Name="HistoryEmptyLabel" Text="Nothing recorded yet. Play a song through and its run will show up here." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
                                     <TextBlock x:Name="HistorySummaryLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>
                                     <StackPanel Orientation="Horizontal">
-                                        <Button Content="EXPORT HTML" local:Loc.Localize="True" Click="ExportHistory_Click" Margin="0,0,8,0"/>
-                                        <Button Content="CLEAR HISTORY" local:Loc.Localize="True" Style="{StaticResource DangerButtonStyle}" Click="ClearHistory_Click"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconExport}" Click="ExportHistory_Click" Margin="0,0,6,0" ToolTip="Export the practice history as an HTML file" local:Loc.Localize="True"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Foreground="#FF9FB4" Tag="{StaticResource IconTrash}" Click="ClearHistory_Click" ToolTip="Clear all practice history" local:Loc.Localize="True"/>
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>
@@ -274,7 +274,7 @@
                                     <TextBlock Text="Records the stage to an AVI file (MJPEG when a codec is available). Use the Green Screen preset and OBS for a keyed overlay." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
                                     <StackPanel x:Name="RecordingSettingsHost"/>
                                     <TextBlock x:Name="RecordingInfoLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>
-                                    <Button Content="●  START / STOP RECORDING" local:Loc.Localize="True" Style="{StaticResource DangerButtonStyle}" Click="RecordVideo_Click" HorizontalAlignment="Left"/>
+                                    <Button Content="Start / stop recording" local:Loc.Localize="True" Tag="{StaticResource IconRecord}" Style="{StaticResource DangerIconButtonStyle}" Click="RecordVideo_Click" Padding="14,8" HorizontalAlignment="Left"/>
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
@@ -288,8 +288,8 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <TextBlock x:Name="SettingsSaveLabel" Text="Changes apply live · saved automatically" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal">
-                                <Button Content="RESET PAGE" Style="{StaticResource GhostButtonStyle}" Click="ResetPage_Click" Margin="0,0,6,0" ToolTip="Restore the current page to the active preset" local:Loc.Localize="True"/>
-                                <Button Content="SAVE" local:Loc.Localize="True" Style="{StaticResource AccentButtonStyle}" Click="SaveVisualSettings_Click" Padding="16,6"/>
+                                <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconReset}" Click="ResetPage_Click" Margin="0,0,10,0" ToolTip="Restore the current page to the active preset" local:Loc.Localize="True"/>
+                                <Button Content="Save" local:Loc.Localize="True" Tag="{StaticResource IconSave}" Style="{StaticResource AccentIconButtonStyle}" Click="SaveVisualSettings_Click" Padding="16,7"/>
                             </StackPanel>
                         </Grid>
                     </Border>
@@ -407,8 +407,8 @@
                                 <TextBlock Text="LIBRARY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,4"/>
                                 <TextBlock x:Name="LibraryFolderLabel" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,6"/>
                                 <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
-                                    <Button Content="CHOOSE FOLDER" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="12,7" Click="ChooseSongFolder_Click" ToolTip="Index every song in a folder and keep the list up to date" AutomationProperties.Name="Choose song folder"/>
-                                    <Button x:Name="RescanSongFolderButton" Content="RESCAN" local:Loc.Localize="True" Style="{StaticResource GhostButtonStyle}" Padding="12,7" Margin="6,0,0,0" Click="RescanSongFolder_Click" ToolTip="Read the folder again, re-reading only the files that changed" AutomationProperties.Name="Rescan song folder"/>
+                                    <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconFolder}" Click="ChooseSongFolder_Click" ToolTip="Index every song in a folder and keep the list up to date" AutomationProperties.Name="Choose song folder" local:Loc.Localize="True"/>
+                                    <Button x:Name="RescanSongFolderButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconRefresh}" Margin="6,0,0,0" Click="RescanSongFolder_Click" ToolTip="Read the folder again, re-reading only the files that changed" AutomationProperties.Name="Rescan song folder" local:Loc.Localize="True"/>
                                 </StackPanel>
                                 <TextBox x:Name="LibrarySearchBox" TextChanged="LibrarySearch_Changed" Padding="8,6" Margin="0,0,0,6" ToolTip="Search by title or tag" local:Loc.Localize="True" AutomationProperties.Name="Search the song library"/>
                                 <StackPanel x:Name="LibrarySongHost"/>
@@ -453,7 +453,7 @@
                                 <Path Data="{StaticResource IconNotes}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                 <TextBlock Grid.Column="1" Text="Speed" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
                                 <TextBlock x:Name="PlaySpeedLabel" Grid.Column="2" Text="550" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
-                                <Button Grid.Column="3" Content="↺" Style="{StaticResource MiniButtonStyle}" Click="PlaySpeedReset_Click" ToolTip="Reset fall speed" local:Loc.Localize="True"/>
+                                <Button Grid.Column="3" Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconReset}" Click="PlaySpeedReset_Click" ToolTip="Reset fall speed" local:Loc.Localize="True"/>
                                 <Slider Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="PlaySpeedSlider" AutomationProperties.Name="Fall speed" local:Loc.Localize="True" Minimum="100" Maximum="1000" Value="550" Margin="0,6,0,0" ValueChanged="PlaySpeed_Changed"/>
                             </Grid>
                             <TextBlock Text="STAGE LAYERS" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,18,0,2"/>
@@ -590,11 +590,11 @@
                     <Button x:Name="MenuPlayButton" Content="Perform &amp; Play" Style="{StaticResource MenuPrimaryButtonStyle}" Click="MainMenuPlay_Click" ToolTip="Open a MIDI score or perform live on the concert stage (Space)" local:Loc.Localize="True"/>
                     <Button x:Name="MenuQuickAdjustButton" Content="Quick adjustments" Style="{StaticResource MenuCardButtonStyle}" Margin="0,12,0,0" Click="MainMenuQuickAdjust_Click" ToolTip="Quickly adjust common stage controls; use Stage Design Studio for everything else." local:Loc.Localize="True"/>
                     <StackPanel x:Name="MenuLinkStack" Margin="10,22,0,0">
-                        <Button Content="Piano &amp; Audio Setup" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Download Salamander Grand, adjust effects, output and latency" local:Loc.Localize="True"/>
-                        <Button Content="MIDI Devices" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuMidi_Click" ToolTip="Choose a MIDI keyboard or output device" local:Loc.Localize="True"/>
-                        <Button Content="Keyboard &amp; Shortcuts" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuShortcuts_Click" ToolTip="Every shortcut the stage listens to (F1)" local:Loc.Localize="True"/>
-                        <Button Content="About Keyflow Concert Grand" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
-                        <Button Content="Exit Keyflow" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
+                        <Button Content="Piano &amp; Audio Setup" Tag="{StaticResource IconAudio}" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuSettings_Click" ToolTip="Download Salamander Grand, adjust effects, output and latency" local:Loc.Localize="True"/>
+                        <Button Content="MIDI Devices" Tag="{StaticResource IconMidi}" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuMidi_Click" ToolTip="Choose a MIDI keyboard or output device" local:Loc.Localize="True"/>
+                        <Button Content="Keyboard &amp; Shortcuts" Tag="{StaticResource IconKeyboard}" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuShortcuts_Click" ToolTip="Every shortcut the stage listens to (F1)" local:Loc.Localize="True"/>
+                        <Button Content="About Keyflow Concert Grand" Tag="{StaticResource IconInfo}" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuAbout_Click"/>
+                        <Button Content="Exit Keyflow" Tag="{StaticResource IconExit}" local:Loc.Localize="True" Style="{StaticResource MenuLinkButtonStyle}" Click="MainMenuExit_Click"/>
                     </StackPanel>
                 </StackPanel>
                 <StackPanel x:Name="MenuSidePanel" Grid.Column="2" Width="368" VerticalAlignment="Center" Margin="64,0,0,0">
@@ -613,8 +613,8 @@
                             </StackPanel>
                             <TextBlock x:Name="MenuPresetLabel" Style="{StaticResource MutedTextStyle}" Margin="0,6,0,12" TextWrapping="Wrap"/>
                             <WrapPanel>
-                                <Button Content="Stage Design Studio" Style="{StaticResource AccentButtonStyle}" Click="MainMenuDesign_Click" Margin="0,0,8,0" ToolTip="Open the full stage settings dock" local:Loc.Localize="True"/>
-                                <Button Content="TRY A LOOK" Click="MenuPresetShuffle_Click" ToolTip="Cycle through the built-in stage presets" local:Loc.Localize="True"/>
+                                <Button Content="Stage Design Studio" Tag="{StaticResource IconSliders}" Style="{StaticResource AccentIconButtonStyle}" Click="MainMenuDesign_Click" Padding="12,7" Margin="0,0,8,0" ToolTip="Open the full stage settings dock" local:Loc.Localize="True"/>
+                                <Button Content="Try a look" Tag="{StaticResource IconSparkle}" Style="{StaticResource IconTextButtonStyle}" Click="MenuPresetShuffle_Click" Padding="10,7" ToolTip="Cycle through the built-in stage presets" local:Loc.Localize="True"/>
                             </WrapPanel>
                         </StackPanel>
                     </Border>

@@ -102,9 +102,9 @@ internal static partial class Loc
         {
             if (table.ContainsKey(property)) continue;
             if (element.ReadLocalValue(property) is not string { Length: > 1 } text) continue;
-            // A glyph button (the ↺ of the speed reset, the A and B of the loop) carries a symbol in
-            // the same property that holds a caption elsewhere; symbols are not translatable, and
-            // binding them would report every one of them as an unknown key.
+            // A glyph button (the A and B of the loop) carries a symbol in the same property that
+            // holds a caption elsewhere; symbols are not translatable, and binding them would report
+            // every one of them as an unknown key.
             if (!text.Any(char.IsLetter)) continue;
             table[property] = () => T(text);
         }

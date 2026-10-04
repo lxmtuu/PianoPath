@@ -35,7 +35,7 @@ Phương pháp:
 | Key counter | `ShowCounter` | `PianoStage.cs:349, :1041` (DrawCounter) |
 | FPS & particle HUD | `ShowFps` | `PianoStage.cs:349, :1042` (DrawCounter) |
 | Ô tìm kiếm cài đặt | — | `MainWindow.Settings.cs` (SettingsSearch_TextChanged → RefreshDependentRows) |
-| SAVE / RESET PAGE / tự lưu sau 0,65 s | — | `SaveVisualSettings_Click` / `ResetPage_Click` / `_settingsSaveTimer` (`MainWindow.xaml.cs:25`) |
+| Lưu / nút đặt lại trang (icon) / tự lưu sau 0,65 s | — | `SaveVisualSettings_Click` / `ResetPage_Click` / `_settingsSaveTimer` (`MainWindow.xaml.cs:25`) |
 
 ## 2. Trang Notes (màu, hình dáng, glow, tốc độ)
 
@@ -169,7 +169,7 @@ Phương pháp:
    vì thế rộng hơn phạm vi thật; đây là giới hạn UX, không phải cài đặt chết.
 4. Metronome chỉ bật điểm click khi **có bài MIDI** (cần tempo map `_beatTimes`); checkbox được
    kích hoạt theo piano đã nạp. Click phát bằng cùng Salamander SFZ engine.
-5. `RESET PAGE` trên các trang tĩnh hiển thị "This page has no visual settings to reset" — đúng
+5. Nút đặt lại trang (icon) trên các trang tĩnh hiển thị "This page has no visual settings to reset" — đúng
    thiết kế vì các trang đó không có tham số visual.
 
 ## 9. Bằng chứng kiểm thử
