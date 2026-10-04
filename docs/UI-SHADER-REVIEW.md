@@ -35,8 +35,9 @@ Những điểm đã rà soát và giữ nguyên vì chúng tốt và được t
 ## 2. Shader đổ bóng kiểu Unreal (phần trọng tâm)
 
 ### 2.1 Cách tiếp cận
-WPF không biên dịch HLSL lúc chạy, nên shader được viết bằng C# như một **software shader** chạy đa
-luồng (`Parallel.For`) rồi đóng gói thành `BitmapSource`. Để giữ 60 fps, bàn phím được **bake một
+Riêng shader đổ bóng phím của `PianoKeyboardRenderer`, WPF không chạy HLSL cho các tile đó, nên nó
+được viết bằng C# như một **software shader** chạy đa luồng (`Parallel.For`) rồi đóng gói thành
+`BitmapSource`. Shader pixel HLSL của nền trang chủ (được ghi riêng ở §9) là một đường render khác. Để giữ 60 fps, bàn phím được **bake một
 lần và cache** (nền tĩnh), sau đó mỗi phím đang kêu chỉ vẽ lại một **tile overlay** nhỏ — không bao
 giờ shade lại cả 88 phím mỗi khung hình.
 
@@ -145,22 +146,22 @@ giữ nguyên stage + dock hiện có làm phần "Design" chi tiết:
   hai tay (ColorMode PerHand) chứ chưa tách toàn bộ style — card Left/Right trong Play dialog hiện
   mở trang Notes để chỉnh, đây là giới hạn được ghi nhận chứ không giả vờ có.
 
-## 8. Đợt nâng cấp "concert shell" (giao diện hoà nhạc / Your Lie in April)
+## 8. Giao diện shell: bốn theme và nền chuyển động
 
-- **Ba giao diện** trong `Theme/ShellTheme.cs`: *Concert Grand* (mặc định — sơn mài ebony Steinway,
-  vàng champagne #D4AF37 và sheen ngà), *Concert Noir* (obsidian xanh đêm + bạc platinum), *Velvet Gold*
-  (mahogany + nhung đỏ + đồng thau). Id là slug khớp tên (`concert-grand` / `concert-noir` /
-  `velvet-gold`); id cũ `sakura` / `noir` / `velvet` vẫn được `ShellThemes.LegacyIds` đọc và
-  `ApplyMigrations` viết lại khi nạp file lưu. Mọi token màu (Accent, Glow, Petal, Panel, Control, Track, Popup…) được
-  `ShellThemeManager` ghi đè vào `Application.Resources`; XAML đọc bằng `DynamicResource` nên cả
-  header, dock, menu, hộp thoại và thanh trượt đổi màu trong một khung hình, không cần mở lại app.
-- **Backdrop động** (`Theme/ChromeBackdrop.cs`): hoa anh đào rơi, quầng cực quang hay nếp nhung tuỳ
-  theme, mật độ theo `BackdropDensity`, biên độ theo `ChromeMotion` (Off/Calm/Full). Dùng cho nền
-  main menu và sau lưng dock cài đặt.
+- **Bốn giao diện dựng sẵn** trong `Theme/ShellTheme.cs`: *Cosmic Nocturne* (mặc định mới — tinh vân tím,
+  bụi sao cyan và vàng phím đàn), *Concert Grand* (sơn mài ebony Steinway, champagne gold),
+  *Concert Noir* (obsidian xanh đêm + bạc platinum) và *Velvet Gold* (mahogany + nhung đỏ + đồng thau).
+  Id `concert-grand` / `concert-noir` / `velvet-gold` vẫn giữ nguyên; id cũ `sakura` / `noir` / `velvet`
+  vẫn được `ShellThemes.LegacyIds` đọc và viết lại khi nạp file lưu. Mọi token màu được
+  `ShellThemeManager` áp vào `Application.Resources`; XAML đọc bằng `DynamicResource` nên header, dock,
+  menu, hộp thoại và thanh trượt đổi màu trong một khung hình, không cần mở lại app.
+- **Backdrop** (`Theme/ChromeBackdrop.cs`): theme *Nebula* dùng pixel shader HLSL/WPF của §9; Concert
+  Grand, Noir và Velvet Gold giữ nền vector acoustic/mote cũ. Chuyển động theo `ChromeMotion`
+  (Off/Calm/Full), mật độ sao/mote theo `BackdropDensity`; nền menu và dock chỉ giữ frame demand khi hiện.
 - **Đồng hồ khung hình dùng chung** (`Ui/FrameClock.cs`): `CompositionTarget.Rendering` là nguồn duy
   nhất cho mọi animation; đếm yêu cầu (`Acquire`/`Release`) nên khi sân khấu đứng yên thì WPF không
-  phải vẽ thêm khung nào. Sân khấu (nốt rơi, tia lửa, petal) và backdrop chạy cùng nhịp
-  vsync, hết hiện tượng lệch nhịp giữa hai `DispatcherTimer` khác chu kỳ.
+  phải vẽ thêm khung nào. Sân khấu (nốt rơi, tia lửa, petal) và backdrop chạy cùng nhịp vsync, hết
+  hiện tượng lệch nhịp giữa hai `DispatcherTimer` khác chu kỳ.
 - **Chuyển động giao diện** (`Ui/ChromeMotion.cs`): fade/slide/pop/cascade/pulse dùng chung một bộ
   easing, tôn trọng `SystemParameters.ClientAreaAnimation`; `--snapshot`/`--show-settings` gọi
   `DisableChromeMotion()` để ảnh chụp luôn tất định.
@@ -170,3 +171,21 @@ giữ nguyên stage + dock hiện có làm phần "Design" chi tiết:
 - **Hiệu năng**: bỏ `DispatcherTimer` 16 ms của sân khấu, nhãn thống kê/thanh thời gian chỉ cập nhật
   khi giá trị đổi, pen lưới guide và mọi brush/petal được cache; `HasActiveEffects` bao gồm
   cả lớp petal và impact wave/flash nên chỉ chạy khung hình khi thật sự có gì chuyển động.
+
+
+## 9. Shader vũ trụ của trang chủ
+
+Trang chủ có một shader riêng, tách biệt khỏi shader sân khấu D3D11 và shader software bake bàn phím:
+
+- `Ui/GalaxyBackdrop.hlsl` biên dịch hàm `PsNebula` thành bytecode Direct3D 9 `ps_3_0` bằng
+  `Vortice.D3DCompiler` (Windows đã có `d3dcompiler_47.dll`); bytecode được đưa vào WPF
+  `ShaderEffect`. Đây là pixel shader chạy trên GPU của lớp compositing WPF, không phải một vòng vẽ
+  toàn màn hình bằng CPU hay một swap-chain HWND nằm trên giao diện.
+- Mỗi pixel kết hợp nhiễu giá trị nhiều lớp (mây tinh vân), một dải thiên hà chéo, lưới sao xác định
+  theo toạ độ và các pha nhấp nháy riêng; hai màu lấy từ theme đang chọn. Uniform thời gian chạy theo
+  `FrameClock`; tỉ lệ khung hình, cường độ và mật độ sao theo viewport/theme/cài đặt.
+- Chỉ backdrop của menu khởi động bật shader. Backdrop vector hiện có vẫn là fallback nếu WPF/GPU
+  không hỗ trợ pixel shader; chế độ chuyển động Off dừng clock, menu ẩn nhả frame demand, còn Windows
+  High Contrast tắt lớp shader để giữ palette trợ năng.
+- `VerificationSuite.VerifyShaderPipeline` kiểm tra resource HLSL, trường sao và uniforms; `--snapshot`
+  giữ đồng hồ ở frame 0 để preview CI tiếp tục tất định.

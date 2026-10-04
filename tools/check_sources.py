@@ -666,7 +666,7 @@ def scan_dead_keys(cs_files, xaml_files):
 
     # Keys a surface looks up through a value, so no source file spells them out.
     runtime = {
-        "Acoustic", "Imperial", "Obsidian",     # BackdropStyle names, looked up as style.ToString()
+        "Acoustic", "Imperial", "Nebula", "Obsidian",     # BackdropStyle names, looked up as style.ToString()
     }
 
     def decoded(literal: str):
