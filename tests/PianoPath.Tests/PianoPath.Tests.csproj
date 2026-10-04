@@ -55,11 +55,19 @@
     <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
+    <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
   </ItemGroup>
 
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->
   <ItemGroup>
     <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The synthetic camera picture of a keyboard and its ground truth, written by tools/make_ar_sample.py. The tests hold the
+       C# renderer (SyntheticKeyboardFrame) and Homography to them, so they are the files in docs/samples, not copies. -->
+  <ItemGroup>
+    <Content Include="..\..\docs\samples\ar-keyboard-topdown.png" Link="Fixtures\ar-keyboard-topdown.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\samples\ar-keyboard-topdown.json" Link="Fixtures\ar-keyboard-topdown.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>
