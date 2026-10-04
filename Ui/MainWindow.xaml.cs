@@ -1374,7 +1374,7 @@ public partial class MainWindow : Window
             var reading = HandTracker.Track(frame, width, height, _visualSettings.HandTrackingSensitivity);
             Stage.SetHandReading(reading);
             HandStatus = reading.Found
-                ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, PianoStage.FirstPitch, PianoStage.KeyCount)), reading.Coverage * 100)
+                ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, KeyboardLayout.Active)), reading.Coverage * 100)
                 : Loc.T("Hand: nothing found in the newest frame.");
         }
         else if (Stage.HasHand)

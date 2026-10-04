@@ -17,7 +17,7 @@ namespace PianoPath;
 internal struct GpuFrameConstants
 {
     public Vector4 ScreenTime, SceneSize, Camera, Background, Aura, Horizon, SceneA, SceneB;
-    public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx;
+    public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx, KeyRange;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -412,7 +412,8 @@ internal sealed class GpuStageRenderer : IDisposable
                 look.BackgroundMotionAmount, look.BackgroundMotionSpeed, simulation.Activity),
             SceneFxColor = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundMotionColor), 1),
             HitFx = new Vector4(look.ShowHalo && look.HaloPulse ? HaloMotionId(look.HaloPulseStyle) : 0,
-                look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity)
+                look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity),
+            KeyRange = new Vector4(layout.Keys.FirstPitch, Math.Max(1, layout.Keys.KeyCount - 1), 0, 0)
         };
     }
 

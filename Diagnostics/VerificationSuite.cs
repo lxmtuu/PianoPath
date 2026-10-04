@@ -426,26 +426,49 @@ internal static partial class VerificationSuite
     /// </summary>
     /// <summary>
     /// The keyboard geometry has one home, <see cref="KeyboardLayout"/>, and the stage, the GPU engine and the shaded
-    /// keys must keep agreeing with it: same key range as the stage's constants, same white-key count as the shader
-    /// scene, and every key centre the stage lands notes on equal to the layout's. (The geometry itself is checked on
-    /// any machine by <c>KeyboardLayoutTests</c>.)
+    /// keys all read the layout being drawn from it: the full keyboard by default, and a different one the moment
+    /// <see cref="KeyboardLayout.Use"/> says so. (The geometry itself is checked on any machine by
+    /// <c>KeyboardLayoutTests</c>.) The layout is always put back, so a failure here cannot leak a keyboard into the
+    /// checks after it.
     /// </summary>
     private static void VerifyKeyboardLayout()
     {
         var full = KeyboardLayout.Standard88;
-        Assert(full.FirstPitch == PianoStage.FirstPitch && full.KeyCount == PianoStage.KeyCount,
-            "The full layout should cover the same keys as the stage's constants.");
-        Assert(full.WhiteCount == PianoShaderScene.WhiteKeys && full.FirstPitch == PianoShaderScene.FirstPitch && full.KeyCount == PianoShaderScene.KeyCount,
-            "The full layout should have the same range and white-key count as the shaded keyboard.");
+        Assert(ReferenceEquals(KeyboardLayout.Active, full), "A fresh run draws the full keyboard.");
+        Assert(full.WhiteCount == PianoShaderScene.WhiteKeys && full.FirstPitch == PianoStage.FirstPitch && full.KeyCount == PianoStage.KeyCount,
+            "The stage and the shaded keyboard should report the range of the layout being drawn.");
         for (var pitch = 0; pitch < 128; pitch++)
         {
             Assert(Math.Abs(PianoStage.KeyCenterOf(pitch) - full.CenterX(pitch)) < 1e-12,
                 $"The stage should land pitch {pitch} where the layout puts it.");
-            // The shaded keyboard measures in white keys; one white key is 1/52 of the width.
-            Assert(Math.Abs(PianoShaderScene.KeyCenterX[pitch] / PianoShaderScene.WorldWidth - full.CenterX(pitch)) < 1e-9,
+            Assert(Math.Abs(full.WorldCenters[pitch] / full.WhiteCount - full.CenterX(pitch)) < 1e-9,
                 $"The shaded keyboard should put pitch {pitch} where the layout puts it.");
         }
-        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the key range, the white-key count and the centre of every key.");
+        var scene = PianoShaderScene.From(VisualPresets.NeonViolet(), 640, 160, "Balanced");
+        Assert(ReferenceEquals(scene.Keys, full), "A scene keeps the keyboard it was built for.");
+        Assert(HandTracker.KeyPitch(.5, full) == full.PitchAt(.5, false), "A tracked hand lands on the key the layout puts under that position.");
+
+        try
+        {
+            var narrow = KeyboardLayout.ForKeyCount(61);
+            Assert(KeyboardLayout.Use(narrow) && !KeyboardLayout.Use(narrow), "Using a layout reports the change once.");
+            Assert(PianoStage.FirstPitch == 36 && PianoStage.KeyCount == 61, "The stage should follow the layout that is being drawn.");
+            Assert(Math.Abs(PianoStage.KeyCenterOf(36) - .5 / 36) < 1e-12 && Math.Abs(PianoStage.KeyCenterOf(96) - 35.5 / 36) < 1e-12,
+                "On a 61-key keyboard the lowest and highest keys should sit half a white key from the edges.");
+            var gpu = new GpuSceneLayout(640, 360, .2f);
+            Assert(ReferenceEquals(gpu.Keys, narrow) && Math.Abs(gpu.Lane - 640f / 61) < 1e-4 && Math.Abs(gpu.X(36) - 640 * .5 / 36) < 1e-3,
+                "The GPU engine should lay a 61-key keyboard out in 61 lanes, from the same centres as the stage.");
+            var other = PianoShaderScene.From(VisualPresets.NeonViolet(), 640, 160, "Balanced");
+            Assert(ReferenceEquals(other.Keys, narrow) && other.Signature() != scene.Signature()
+                    && !PianoShaderScene.SceneKey.Capture(other).Equals(PianoShaderScene.SceneKey.Capture(scene)),
+                "A different keyboard is a different bake, in both the signature and the cache key.");
+            Assert(ReferenceEquals(scene.Keys, full), "A scene built before the switch keeps drawing its own keyboard.");
+            var bake = PianoKeyboardRenderer.Render(other, new KeyLightState(), 0, 0, 640, 160, -1);
+            Assert(bake is not null && bake.PixelWidth > 0, "The 61-key keyboard should shade into a bitmap.");
+        }
+        finally { KeyboardLayout.Use(full); }
+        Assert(PianoStage.KeyCount == 88 && ReferenceEquals(KeyboardLayout.Active, full), "The full keyboard is back after the check.");
+        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the range and the centre of every key, and switching to 61 keys moves the stage, the GPU lanes and the shaded keyboard together, with a scene keeping the keyboard it was built for.");
     }
 
     private static void VerifyHandTracking()

@@ -40,6 +40,7 @@ cbuffer Frame : register(b0)
     float4 SceneFx;      // x = GPU background-motion id, y = amount, z = speed, w = key activity
     float4 SceneFxColor; // rgb = background-motion tint
     float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
+    float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
 };
 
 cbuffer PassConstants : register(b1)
@@ -733,7 +734,7 @@ float3 HitLineColor(float x)
 {
     // the pitch under this x (the keyboard is close to linear in pitch at this scale)
     float t = saturate(x / SceneSize.x);
-    float pitch = 21.0 + t * 87.0;
+    float pitch = KeyRange.x + t * KeyRange.y;
     int p0 = (int)clamp(floor(pitch), 0.0, 127.0);
     float3 base = KeyColors[p0].rgb;
     float activity = 0.0;

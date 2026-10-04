@@ -153,6 +153,62 @@ public class KeyboardLayoutTests
         Assert.InRange(layout.CenterX(127), 1, 1.1); // past the right edge, where the keyboard would go on
     }
 
+    // ---- The tables the shaded keyboard and the stage read ---------------------------------------------
+
+    [Theory]
+    [MemberData(nameof(Sizes))]
+    public void World_centres_are_the_centres_counted_in_white_keys(int keys)
+    {
+        var layout = Layout(keys);
+        for (var pitch = 0; pitch < 128; pitch++)
+            Assert.Equal(layout.CenterX(pitch) * layout.WhiteCount, layout.WorldCenters[pitch], 9);
+    }
+
+    [Theory]
+    [MemberData(nameof(Sizes))]
+    public void The_white_pitches_are_the_white_keys_in_order(int keys)
+    {
+        var layout = Layout(keys);
+        Assert.Equal(Pitches(layout).Where(pitch => !KeyboardLayout.IsBlack(pitch)), layout.WhitePitches);
+        for (var index = 0; index < layout.WhiteCount; index++)
+            Assert.Equal(layout.WhitePitches[index], layout.WhitePitchAt(index));
+    }
+
+    [Theory]
+    [MemberData(nameof(Sizes))]
+    public void Each_black_key_stands_on_the_boundary_after_the_white_keys_below_it(int keys)
+    {
+        var layout = Layout(keys);
+        var blacks = Pitches(layout).Where(KeyboardLayout.IsBlack).ToArray();
+        Assert.Equal(layout.WhiteCount + 1, layout.BlackAtBoundary.Length);
+        foreach (var pitch in blacks)
+            Assert.Equal(pitch, layout.BlackAtBoundary[layout.WhitesBelow(pitch)]);
+        Assert.Equal(blacks.Length, layout.BlackAtBoundary.Count(pitch => pitch != 0));
+        Assert.Equal(0, layout.BlackAtBoundary[0]);
+        Assert.Equal(0, layout.BlackAtBoundary[layout.WhiteCount]);
+    }
+
+    [Fact]
+    public void Using_a_layout_makes_it_the_active_one_and_reports_the_change_once()
+    {
+        var before = KeyboardLayout.Active;
+        try
+        {
+            var other = ReferenceEquals(before, Layout(61)) ? Layout(49) : Layout(61);
+            Assert.True(KeyboardLayout.Use(other));
+            Assert.Same(other, KeyboardLayout.Active);
+            Assert.False(KeyboardLayout.Use(other));
+        }
+        finally { KeyboardLayout.Use(before); }
+        Assert.Same(before, KeyboardLayout.Active);
+    }
+
+    [Fact]
+    public void A_fresh_run_draws_the_full_keyboard()
+    {
+        Assert.Same(KeyboardLayout.Standard88, KeyboardLayout.Active);
+    }
+
     // ---- Choosing a layout ------------------------------------------------------------------------------
 
     [Fact]

@@ -25,38 +25,35 @@ internal sealed class KeyLightState
 }
 
 /// <summary>
-/// The scene description for the ray-traced keyboard: a cylindrical pinhole camera looking down at 88
-/// key boxes, a softbox above them and the materials of ivory, ebony, the key bed and the fallboard.
+/// The scene description for the ray-traced keyboard: a cylindrical pinhole camera looking down at the
+/// key boxes (88 on the full keyboard), a softbox above them and the materials of ivory, ebony, the key bed and the fallboard.
 /// World units are white keys, so one unit of X is exactly one key lane and falling notes stay aligned.
 /// </summary>
 internal sealed class PianoShaderScene
 {
-    internal const int WhiteKeys = 52;
-    internal const int FirstPitch = 21;
-    internal const int KeyCount = 88;
-    internal const double WorldWidth = WhiteKeys;
+    /// <summary>
+    /// The keyboard this scene shades, taken from <see cref="KeyboardLayout.Active"/> when the scene is built and
+    /// kept for the whole bake, so a layout switched halfway through a bake cannot give it two keyboards. It is part
+    /// of <see cref="SceneKey"/>: a different keyboard is a different bake.
+    /// </summary>
+    internal KeyboardLayout Keys = KeyboardLayout.Active;
+
+    /// <summary>White keys of the keyboard being drawn now; for callers that have no scene in hand (the checks).</summary>
+    internal static int WhiteKeys => KeyboardLayout.Active.WhiteCount;
+    /// <summary>The key range being drawn now; for callers that have no scene in hand (the checks).</summary>
+    internal static int FirstPitch => KeyboardLayout.Active.FirstPitch;
+    internal static int KeyCount => KeyboardLayout.Active.KeyCount;
+    /// <summary>World width in white-key units: one unit per white key of the keyboard being drawn now.</summary>
+    internal static double WorldWidth => KeyboardLayout.Active.WhiteCount;
     /// <summary>Gap between two neighbouring white keys, and the black key footprint; both match the vector keyboard hit test.</summary>
     internal const double WhiteGap = .028;
     internal const double BlackWidth = .52;
     /// <summary>How far a sounding key lights up its neighbours, in world units.</summary>
     internal const double LitReach = 4.2;
 
-    internal static readonly int[] WhitesBelow = BuildWhitesBelow();
-    internal static readonly int[] WhitePitchAt = BuildWhitePitchAt();
-    internal static readonly int[] BlackPitchAtBoundary = BuildBlackPitchAtBoundary();
-    internal static readonly double[] KeyCenterX = BuildKeyCenterX();
+    internal static bool IsBlack(int pitch) => KeyboardLayout.IsBlack(pitch);
 
-    internal static bool IsBlack(int pitch) => pitch % 12 is 1 or 3 or 6 or 8 or 10;
-
-    internal static double BlackKeyOffset(int pitch) => (pitch % 12) switch
-    {
-        1 => -0.08,
-        3 => 0.08,
-        6 => -0.10,
-        8 => 0.00,
-        10 => 0.10,
-        _ => 0.0
-    };
+    internal static double BlackKeyOffset(int pitch) => KeyboardLayout.BlackKeyOffset(pitch);
 
     // ---- output -----------------------------------------------------------------------------------
     internal int BandWidth = 1920;
@@ -208,7 +205,8 @@ internal sealed class PianoShaderScene
         RimIntensity.ToString("0.###", CultureInfo.InvariantCulture), AmbientIntensity.ToString("0.###", CultureInfo.InvariantCulture), EmissiveIntensity.ToString("0.###", CultureInfo.InvariantCulture),
         Exposure.ToString("0.###", CultureInfo.InvariantCulture), Saturation.ToString("0.###", CultureInfo.InvariantCulture), Contrast.ToString("0.###", CultureInfo.InvariantCulture), Filmic, LightSize.ToString("0.###", CultureInfo.InvariantCulture),
         ShadowSamples, OcclusionSamples, WhiteKeyColor.ToString(), BlackKeyColor.ToString(),
-        KeyLightColor.ToString(), FillColor.ToString(), RimColor.ToString(), SkyColor.ToString(), GroundColor.ToString());
+        KeyLightColor.ToString(), FillColor.ToString(), RimColor.ToString(), SkyColor.ToString(), GroundColor.ToString(),
+        Keys.FirstPitch, Keys.KeyCount);
 
     /// <summary>
     /// Allocation-free fingerprint of exactly the fields <see cref="Signature"/> covers. Two scenes with
@@ -221,7 +219,7 @@ internal sealed class PianoShaderScene
         double KeyLightIntensity, double ShadowStrength, double Occlusion, double RimIntensity, double AmbientIntensity,
         double EmissiveIntensity, double Exposure, double Saturation, double Contrast, bool Filmic, double LightSize,
         int ShadowSamples, int OcclusionSamples, uint WhiteKeyColor, uint BlackKeyColor, uint KeyLightColor, uint FillColor,
-        uint RimColor, uint SkyColor, uint GroundColor)
+        uint RimColor, uint SkyColor, uint GroundColor, KeyboardLayout Keys)
     {
         /// <summary>Captures the fingerprint of a built scene; doubles round exactly like the "0.###" fields of <see cref="Signature"/>.</summary>
         /// <remarks><see cref="System.Windows.Media.Color"/> exposes no packed representation, so the five colors are folded by hand.</remarks>
@@ -231,48 +229,11 @@ internal sealed class PianoShaderScene
             Q(scene.KeyLightIntensity), Q(scene.ShadowStrength), Q(scene.Occlusion), Q(scene.RimIntensity), Q(scene.AmbientIntensity),
             Q(scene.EmissiveIntensity), Q(scene.Exposure), Q(scene.Saturation), Q(scene.Contrast), scene.Filmic, Q(scene.LightSize),
             scene.ShadowSamples, scene.OcclusionSamples, Pack(scene.WhiteKeyColor), Pack(scene.BlackKeyColor), Pack(scene.KeyLightColor),
-            Pack(scene.FillColor), Pack(scene.RimColor), Pack(scene.SkyColor), Pack(scene.GroundColor));
+            Pack(scene.FillColor), Pack(scene.RimColor), Pack(scene.SkyColor), Pack(scene.GroundColor), scene.Keys);
 
         private static double Q(double value) => Math.Round(value, 3, MidpointRounding.AwayFromZero);
 
         /// <summary>Folds a color into one uint, the same packing the stage's brush cache uses.</summary>
         private static uint Pack(System.Windows.Media.Color color) => (uint)color.A << 24 | (uint)color.R << 16 | (uint)color.G << 8 | color.B;
-    }
-
-    private static int[] BuildWhitesBelow()
-    {
-        var result = new int[128]; var count = 0;
-        for (var pitch = 0; pitch < 128; pitch++)
-        {
-            result[pitch] = count;
-            if (pitch >= FirstPitch && pitch < FirstPitch + KeyCount && !IsBlack(pitch)) count++;
-        }
-        return result;
-    }
-
-    private static int[] BuildWhitePitchAt()
-    {
-        var result = new int[WhiteKeys]; var index = 0;
-        for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount && index < WhiteKeys; pitch++)
-            if (!IsBlack(pitch)) result[index++] = pitch;
-        return result;
-    }
-
-    private static int[] BuildBlackPitchAtBoundary()
-    {
-        var result = new int[WhiteKeys + 1];
-        for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
-            if (IsBlack(pitch)) result[WhitesBelow[pitch]] = pitch;
-        return result;
-    }
-
-    private static double[] BuildKeyCenterX()
-    {
-        var result = new double[128];
-        for (var pitch = 0; pitch < 128; pitch++)
-            result[pitch] = (IsBlack(pitch)
-                ? (WhitesBelow[pitch] + BlackKeyOffset(pitch))
-                : (WhitesBelow[pitch] + .5)) * (WorldWidth / WhiteKeys);
-        return result;
     }
 }

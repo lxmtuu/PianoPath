@@ -35,8 +35,13 @@ internal sealed class KeyboardLayout
         new KeyboardLayout(36, 49), // C2 to C6
     ];
 
+    /// <summary>The keyboard the app is drawing right now; read by the stage, the GPU engine and the shaded keys. Written only by <see cref="Use"/>.</summary>
+    private static volatile KeyboardLayout _active = Standard88;
+
     private readonly int[] _whitesBelow = new int[128];
     private readonly double[] _centers = new double[128];
+    private readonly double[] _worldCenters = new double[128];
+    private readonly int[] _blackAtBoundary;
     private readonly int[] _whitePitches;
 
     private KeyboardLayout(int firstPitch, int keyCount)
@@ -52,9 +57,31 @@ internal sealed class KeyboardLayout
         _whitePitches = [.. whites];
         var whiteWidth = 1.0 / _whitePitches.Length;
         for (var pitch = 0; pitch < 128; pitch++)
+        {
+            // In white-key widths from the left edge: the unit the shaded keyboard measures its world in.
+            _worldCenters[pitch] = IsBlack(pitch) ? _whitesBelow[pitch] + BlackKeyOffset(pitch) : _whitesBelow[pitch] + .5;
             _centers[pitch] = IsBlack(pitch)
                 ? (_whitesBelow[pitch] + BlackKeyOffset(pitch)) * whiteWidth
                 : (_whitesBelow[pitch] + .5) * whiteWidth;
+        }
+        _blackAtBoundary = new int[_whitePitches.Length + 1];
+        for (var pitch = firstPitch; pitch < firstPitch + keyCount; pitch++)
+            if (IsBlack(pitch)) _blackAtBoundary[_whitesBelow[pitch]] = pitch;
+    }
+
+    /// <summary>The keyboard being drawn: the full one until <see cref="Use"/> says otherwise.</summary>
+    internal static KeyboardLayout Active => _active;
+
+    /// <summary>
+    /// Makes a layout the keyboard being drawn. Returns true when that was a change, so the caller knows to drop
+    /// whatever it cached for the old one. Everything that reads <see cref="Active"/> takes the layout it sees once per
+    /// frame or per bake, so a switch in the middle of a frame costs at most one odd frame and never a bad index.
+    /// </summary>
+    internal static bool Use(KeyboardLayout layout)
+    {
+        if (ReferenceEquals(_active, layout)) return false;
+        _active = layout;
+        return true;
     }
 
     /// <summary>MIDI pitch of the lowest key.</summary>
@@ -91,6 +118,21 @@ internal sealed class KeyboardLayout
         10 => 0.10,
         _ => 0.0
     };
+
+    /// <summary>MIDI pitches of the white keys in keyboard order. Shared, not a copy: callers must not write to it.</summary>
+    internal int[] WhitePitches => _whitePitches;
+
+    /// <summary>
+    /// For every MIDI pitch, the centre of its key in white-key widths from the left edge (a white key is 1 wide).
+    /// Shared, not a copy: callers must not write to it.
+    /// </summary>
+    internal double[] WorldCenters => _worldCenters;
+
+    /// <summary>
+    /// Entry <c>b</c> is the black key standing on the boundary between the white keys <c>b - 1</c> and <c>b</c>, or 0
+    /// where there is none; one entry longer than the white keys. Shared, not a copy: callers must not write to it.
+    /// </summary>
+    internal int[] BlackAtBoundary => _blackAtBoundary;
 
     /// <summary>MIDI pitch of the white key at an index, 0 being the lowest.</summary>
     internal int WhitePitchAt(int index) => _whitePitches[Math.Clamp(index, 0, _whitePitches.Length - 1)];
