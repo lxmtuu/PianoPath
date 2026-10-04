@@ -86,6 +86,20 @@ internal sealed class PianoVisualSettings
     /// copies it, so applying a preset cannot translate the interface behind the user's back.
     /// </summary>
     public string Language { get; set; } = "";
+    /// <summary>
+    /// Audio output backend id (<see cref="AudioOutputChoice"/>): <c>auto</c>, <c>wasapi</c>,
+    /// <c>wasapi-exclusive</c>, <c>waveout</c> or <c>asio:&lt;driver&gt;</c>. Unknown values parse as
+    /// <c>auto</c>, so a profile moved from a machine whose ASIO driver is absent still plays.
+    /// </summary>
+    public string AudioOutputMode { get; set; } = "auto";
+    /// <summary>WASAPI buffer target in milliseconds (2–50); ASIO uses the driver's own preferred buffer.</summary>
+    public double AudioLatencyMs { get; set; } = 10;
+    /// <summary>Reverb character: <c>hall</c> (classic algorithmic), <c>concert</c> or <c>soundboard</c>
+    /// (built-in convolution responses) or <c>custom</c> (the impulse file below). Unknown values fall
+    /// back to <c>hall</c>.</summary>
+    public string ReverbStyle { get; set; } = "hall";
+    /// <summary>Path of the user's impulse-response file when <see cref="ReverbStyle"/> is <c>custom</c>.</summary>
+    public string ReverbImpulseFile { get; set; } = "";
 
     // ---- Interface theme (the chrome around the stage) -----------------------------------------------
     /// <summary>Interface theme id: concert-grand, concert-noir or velvet-gold. See <see cref="ShellThemes"/>.</summary>
@@ -431,6 +445,12 @@ internal sealed class PianoVisualSettings
             if (property.Name == nameof(Language)) continue;
             // So does the graphics engine: it depends on the machine's GPU, not on the look.
             if (property.Name is nameof(RenderBackend) or nameof(GpuFrameRate) or nameof(GpuVSync)) continue;
+            // And the audio output: the backend and its buffer belong to this machine's sound hardware,
+            // so applying a community look can never switch the player off their ASIO interface.
+            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs)) continue;
+            // The reverb room and its impulse file follow the machine too: the file path would not exist
+            // on another computer, and a look should not silently change how the piano sounds.
+            if (property.Name is nameof(ReverbStyle) or nameof(ReverbImpulseFile)) continue;
             var value = property.GetValue(source);
             property.SetValue(this, value is List<string> list ? new List<string>(list) : value);
         }
@@ -473,6 +493,12 @@ internal sealed class PianoVisualSettings
         VelocityColorAmount = Math.Clamp(VelocityColorAmount, 0, 100); OctaveColorBlend = Math.Clamp(OctaveColorBlend, 0, 100);
         PedalGlowIntensity = Math.Clamp(PedalGlowIntensity, 0, 100); TempoSyncAmount = Math.Clamp(TempoSyncAmount, 0, 100);
         AudioReactiveAmount = Math.Clamp(AudioReactiveAmount, 0, 100);
+        AudioLatencyMs = Math.Clamp(AudioLatencyMs, 2, 50);
+        // An id this build does not know (hand-edited file, newer profile) normalises to Auto now instead
+        // of surprising whoever later parses it.
+        AudioOutputMode = AudioOutputChoice.Parse(AudioOutputMode).Id;
+        if (ReverbStyle is not ("hall" or "concert" or "soundboard" or "custom")) ReverbStyle = "hall";
+        if (ReverbStyle == "custom" && string.IsNullOrWhiteSpace(ReverbImpulseFile)) ReverbStyle = "hall";
         ZoneSplitPitch = Math.Clamp(ZoneSplitPitch, 21, 108); ZoneSplitAmount = Math.Clamp(ZoneSplitAmount, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);
