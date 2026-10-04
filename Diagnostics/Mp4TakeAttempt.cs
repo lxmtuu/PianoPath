@@ -176,7 +176,7 @@ internal static class Mp4TakeAttempt
             if (audio) recorder.AppendSilence(44100);
             var seconds = recorder.Seconds;
             var sound = recorder.AudioDropped ? "dropped" : "kept";
-            if (recorder.FrameCount != Frames || audio != recorder.AudioDropped || (audio && Math.Abs(seconds - 1) > .001))
+            if (recorder.FrameCount != Frames || audio == recorder.AudioDropped || (audio && Math.Abs(seconds - 1) > .001))
             {
                 Say($"FAIL MP4 take: the recorder counted {recorder.FrameCount} frames and {seconds:0.###} s of audio, and said the sound was {sound}.");
                 return 1;

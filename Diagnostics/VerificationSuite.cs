@@ -1358,8 +1358,10 @@ internal static partial class VerificationSuite
         Assert(inputCombo.SelectedIndex == 0 && !midi.InputOpen,
             "An explicit 'Computer keyboard only' choice must survive a device refresh instead of snapping back to a MIDI input.");
         var expectedInstrumentStatus = SalamanderPiano.IsInstalled ? "SALAMANDER GRAND · INSTALLED" : "SALAMANDER GRAND · SETUP REQUIRED";
-        Assert(!piano.HasInstrument && instrumentLabel.Text == Loc.T(expectedInstrumentStatus) && ((Button)window.FindName("SalamanderButton")).IsVisible,
-            "The initial UI must clearly offer Salamander setup and remain silent without the single supported piano.");
+        var salamanderButton = (Button)window.FindName("SalamanderButton");
+        Assert(!piano.HasInstrument && instrumentLabel.Text == Loc.T(expectedInstrumentStatus)
+                && salamanderButton.Visibility == Visibility.Visible && salamanderButton.IsEnabled,
+            "The initial UI must offer Salamander setup in Audio settings and remain silent without the single supported piano.");
         var reverb = (ToggleButton)window.FindName("ReverbToggle");
         Assert(reverb.IsChecked == true && piano.ReverbEnabled, "The built-in concert room reverb should start enabled.");
         reverb.IsChecked = false; Assert(!piano.ReverbEnabled, "The reverb control should bypass the live audio effect.");
