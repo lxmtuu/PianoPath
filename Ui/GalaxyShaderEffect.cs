@@ -50,9 +50,8 @@ internal sealed class GalaxyShaderEffect : ShaderEffect
             shader.SetStreamSource(stream);
         PixelShader = shader;
 
-        // WPF feeds the sampler with this effect's input. The procedural shader only needs its alpha,
-        // while the star field and nebula are generated entirely from normalized pixel coordinates.
-        Input = Brushes.White;
+        // Use WPF's implicit visual input; ChromeBackdrop supplies an opaque white surface while this
+        // procedural shader generates every visible color from normalized pixel coordinates.
         UpdateShaderValue(InputProperty);
         UpdateShaderValue(PrimaryColorProperty);
         UpdateShaderValue(SecondaryColorProperty);
