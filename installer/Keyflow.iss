@@ -22,6 +22,7 @@ AppId={{9B4E2A61-5C7D-4F03-8E2B-6A1D0C3F7B21}
 AppName=Keyflow
 AppVersion={#AppVersion}
 AppVerName=Keyflow {#AppVersion}
+SetupIconFile=..\Assets\Keyflow.ico
 AppPublisher=lxmtuu
 AppPublisherURL=https://github.com/lxmtuu/KeyFlow
 AppCopyright=© 2026 Yami · Neyu — Contributor: Jin

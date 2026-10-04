@@ -1,12 +1,14 @@
 <Application x:Class="PianoPath.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:PianoPath">
+             xmlns:local="clr-namespace:PianoPath"
+             xmlns:media="clr-namespace:System.Windows.Media.Imaging;assembly=PresentationCore">
     <Application.Resources>
         <!-- ===== Palette ====================================================================
              Midnight surfaces with a violet-to-cyan nebula accent. The GPU-shaded home screen keeps
              the piano keys and drifting stardust as its brightest focal points. -->
         <!-- ===== Palette (Cosmic Nocturne: violet nebula, cyan stardust, piano-key gold) ===== -->
+        <media:BitmapImage x:Key="KeyflowLogoImage" UriSource="pack://application:,,,/Assets/KeyflowLogo.png"/>
         <Color x:Key="AccentColor">#9A7BFF</Color>
         <Color x:Key="AccentColor2">#78E7FF</Color>
         <SolidColorBrush x:Key="AccentBrush" Color="#9A7BFF"/>
@@ -185,13 +187,6 @@
             <EllipseGeometry Center="12,3.6" RadiusX="1.7" RadiusY="1.7"/>
             <EllipseGeometry Center="19.6,15.4" RadiusX="1.7" RadiusY="1.7"/>
             <EllipseGeometry Center="5.4,16.6" RadiusX="1.7" RadiusY="1.7"/>
-        </GeometryGroup>
-        <GeometryGroup x:Key="IconLogo">
-            <RectangleGeometry Rect="1.5,4,21,16" RadiusX="3" RadiusY="3"/>
-            <RectangleGeometry Rect="6.4,4,2.4,9.4"/>
-            <RectangleGeometry Rect="11.8,4,2.4,9.4"/>
-            <RectangleGeometry Rect="17.2,4,2.4,9.4"/>
-            <EllipseGeometry Center="12,17" RadiusX="1.5" RadiusY="1.5"/>
         </GeometryGroup>
         <!-- Action icons: the dock toolbar, the file actions and the window controls draw from this set. -->
         <GeometryGroup x:Key="IconGear" FillRule="EvenOdd">

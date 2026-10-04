@@ -7,6 +7,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
     <RootNamespace>PianoPath</RootNamespace>
+    <ApplicationIcon>Assets/Keyflow.ico</ApplicationIcon>
     <Product>Keyflow · Piano VFX Studio</Product>
     <Authors>Yami, Neyu</Authors>
     <Copyright>© 2026 Yami · Neyu. Contributor: Jin.</Copyright>
@@ -41,6 +42,11 @@
     <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
     <EmbeddedResource Include="Gpu/StageShaders.hlsl" LogicalName="PianoPath.Gpu.StageShaders.hlsl" />
     <EmbeddedResource Include="Ui/GalaxyBackdrop.hlsl" LogicalName="PianoPath.Ui.GalaxyBackdrop.hlsl" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- The supplied Keyflow artwork is used by WPF surfaces and compiled into every Windows executable icon size. -->
+    <Resource Include="Assets/KeyflowLogo.png" />
   </ItemGroup>
 
   <ItemGroup>
