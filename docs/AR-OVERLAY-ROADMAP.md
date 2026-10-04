@@ -8,7 +8,7 @@ trạng thái hiện tại nằm ở `README.md`.
 > **Trạng thái:** bản thảo để chốt hướng đi (2026‑10‑05). Chưa có dòng code nào của lộ trình này được viết; mọi
 > con số "hiện có" bên dưới đã đối chiếu với mã nguồn ở commit `2133a19`.
 >
-> **Tiến độ (2026‑10‑05):** AR‑0.1(a) đã vào nhánh — xem bảng AR‑0. Môi trường làm việc của lượt này **không có .NET SDK** nên
+> **Tiến độ (2026‑10‑05):** AR‑0.1(a) đã vào nhánh (job `test` Linux xanh) và AR‑0.5 (phần Python) đã xong — xem bảng AR‑0. Môi trường làm việc của lượt này **không có .NET SDK** nên
 > chưa biên dịch/chạy được; phần C# đã qua kiểm cú pháp (tree‑sitter) và logic đã được thử bằng bản port Python, **CI Windows
 > là lần biên dịch thật đầu tiên**.
 
@@ -92,7 +92,7 @@ Ký hiệu: **Phụ thuộc** = phải xong trước. **Kiểm chứng** = lớp
 | 0.2 | **Cài đặt layout** | `PianoVisualSettings.KeyboardLayout` ("88 / 76 / 61 / 49"), dòng ở trang Keyboard, có đúng một chỗ tiêu thụ (luật "không chức năng chết"), cập nhật `docs/SETTINGS-WIRING-AUDIT.md`. Layout nên **tự đoán từ MIDI** (nốt thấp nhất/cao nhất đã nghe) và gợi ý, không tự đổi | `--verify` + `check_sources.py` |
 | 0.3 | **Camera mode selection** | Liệt kê `IMFMediaType` gốc của thiết bị (độ phân giải × fps × định dạng); chọn 1280×720@60 MJPG nếu có, ngược lại 30 fps; để Media Foundation giải mã sang RGB32 (đã có) hoặc NV12. Hiển thị mode thật trong status ("720p · 60 fps · MJPG") | `VerifyCameraOverlay` mở rộng: mode do video file báo vẫn đúng; câu báo lỗi khi thiết bị không có mode yêu cầu |
 | 0.4 | **Bỏ trần 30 fps cứng** | `CameraLoop` đọc theo nhịp thật của camera (không `Thread.Sleep`), khung mới ghi dấu thời gian (`QueryPerformanceCounter` hoặc `MFSampleExtension`/sample time); ring buffer 3 khung thay cho một buffer có lock | `VerifyCameraOverlay`: đọc 30 khung từ AVI do app ghi, dấu thời gian tăng đều |
-| 0.5 | **Khung tổng hợp để test** | `tools/make_ar_sample.py` (kiểu `make_stage_background.py`): vẽ **ảnh một bàn phím** từ cùng hình học với `KeyboardLayout`, qua một homography biết trước, có nhiễu/độ sáng thay đổi → `docs/samples/ar-keyboard-*.png`. Không dùng ảnh bên thứ ba | `scan` của checker: `docs/samples` khớp script |
+| 0.5 | **Khung tổng hợp để test** — ✅ **xong phần Python** | `tools/make_ar_sample.py` vẽ bàn phím từ trên xuống bằng đúng hình học `KeyboardLayout` qua một homography biết trước (phối cảnh, ánh sáng tối góc, nhiễu cảm biến), đủ 4 cỡ (`--keys 88\|76\|61\|49`), deterministic; kèm `ar-keyboard-topdown.json` (4 góc, homography, tâm mặt trên từng phím) làm ground truth. Không dùng ảnh bên thứ ba. **Còn lại:** bộ vẽ khung tương đương bằng C# trong project test (cần cho `KeyboardDetector`/`Homography` ở AR‑1/2), vì test xUnit không đọc được PNG qua Python | `scan_generated_assets` của checker (kích thước, 8‑bit RGB, JSON mô tả đúng ảnh); `make_ar_sample.py --check` tự đối chiếu số với layout |
 
 **Phụ thuộc:** không. **Ước lượng:** 1–1,5 tuần. **Rủi ro:** 0.1 chạm nhiều file (stage, GPU, sheet) → làm **một PR riêng, không kèm tính năng**, và dùng ảnh README do CI render làm bằng chứng không hồi quy.
 
@@ -123,6 +123,20 @@ Mục tiêu: người mới không phải click 4 điểm; và nếu cây đàn/
 | 2.5 | **Nhiều camera/góc đặt** | Lưu **nhiều hồ sơ** (ví dụ "trên đầu", "trước mặt", "điện thoại"), chọn theo camera đang mở | round‑trip |
 
 **Phụ thuộc:** AR‑1. **Ước lượng:** 2–3 tuần. **Rủi ro:** góc nhìn từ phía người chơi nghiêng mạnh làm phím đen bị phím trắng che → vẫn cần đường lùi thủ công 4 điểm (AR‑1.2 giữ nguyên, 2.x chỉ là gợi ý).
+
+### AR‑2b — Camera từ phía người chơi
+
+Làm **sau khi** góc từ trên xuống đã ổn định (quyết định §8.4). Cùng `Homography` và wizard 4 điểm của AR‑1, nhưng bàn phím bị
+nhìn nghiêng nên phát sinh các vấn đề riêng:
+
+| # | Việc | Chi tiết | Kiểm chứng |
+|---|---|---|---|
+| 2b.1 | **Ảnh mẫu từ phía người chơi** | `make_ar_sample.py --view player`: cùng bàn phím nhìn nghiêng 25–40°, phím đen che một phần phím trắng, đầu xa nhỏ hơn đầu gần | `check_sources` (ảnh + JSON) |
+| 2b.2 | **Hình học phím theo độ cao** | Mép trên phím đen cao hơn mép phím trắng: vẽ glow phím đen ở **mặt trên của nó**, không ở mặt phẳng phím trắng; thêm tham số `Key height` (mm) vào calibration | test chiếu: tâm phím đen đúng trên ảnh nghiêng |
+| 2b.3 | **Dò tự động cho góc nghiêng** | Profile 1 chiều dọc theo mép trước phím trắng (vẫn thấy rõ) thay cho đường qua phím đen (bị che) | `VerifyKeyboardDetector` thêm bộ ảnh nghiêng |
+| 2b.4 | **Nốt rơi theo hướng nhìn** | Nốt rơi theo phương thẳng đứng của ảnh nhưng đáy nốt bám mép sau phím; có chế độ plane (AR‑6.3) nếu cần | ảnh `--snapshot` |
+
+**Phụ thuộc:** AR‑1, AR‑2.1. **Ước lượng:** 1,5–2 tuần.
 
 ### AR‑3 — Đồng bộ thời gian (cái làm AR "cảm giác đúng")
 
@@ -158,9 +172,9 @@ Hiện `HandTracker` chỉ biết **một** bàn tay lớn nhất, ngón chỉ �
 | 5.2 | **Đầu ngón (cổ điển)** | Đỉnh lồi của đường viền mặt nạ ở độ phân giải đầy đủ + lõm giữa các ngón; trả `Fingertips[]` (x,y) → qua homography nghịch → **phím dưới từng đầu ngón** | test: bàn tay vẽ tay (5 ngón), từng đầu ngón rơi đúng phím |
 | 5.3 | **Chỉ ngón (fingering) trong bài** | Đọc `<fingering>` của MusicXML (hiện **chưa** đọc), cho MIDI thì cho phép nhập/lưu ngón tay theo bài hoặc sinh gợi ý bằng thuật toán quy hoạch động đơn giản (chi phí chuyển tay); vẽ số ngón 1–5 trên nốt rơi và trên **phím thật** cạnh nốt kế | `VerifyMusicXml`: đọc đúng `<fingering>`; test DP trên giai điệu cho trước |
 | 5.4 | **Gợi ý tư thế / ngón sai** (Learn) | So đầu ngón dự kiến (ngón nào) với vị trí thật khi MIDI Note On tới: "ngón 3 đang ở E4, nốt cần là F4" — **chỉ gợi ý nhẹ**, không chấm điểm vì tính không chắc | test hợp nhất |
-| 5.5 | **Mô hình ML tuỳ chọn** | Tải một lần (mẫu downloader Salamander: manifest ghim hash, resume, huỷ an toàn, xác minh SHA‑256) một mô hình hand landmark (ví dụ MediaPipe Hands, giấy phép Apache‑2.0) + **ONNX Runtime/DirectML**; ra 21 điểm/tay → cùng `IHandSource`. Mặc định **tắt**, gói cài không tăng dung lượng, thuật toán cổ điển luôn là đường lùi | `VerifyHandModelDownload` (hash, resume, huỷ an toàn); phần độ chính xác của mô hình không có ảnh thật để kiểm trong CI nên chỉ kiểm giao diện `IHandSource` bằng một nguồn giả, và ghi rõ điều đó trong tài liệu |
+| 5.5 | **Mô hình ML tuỳ chọn** *(đã duyệt, §8.2)* | Tải một lần (mẫu downloader Salamander: manifest ghim hash, resume, huỷ an toàn, xác minh SHA‑256) một mô hình hand landmark (ví dụ MediaPipe Hands, giấy phép Apache‑2.0) + **ONNX Runtime/DirectML**; ra 21 điểm/tay → cùng `IHandSource`. Mặc định **tắt**, gói cài không tăng dung lượng, thuật toán cổ điển luôn là đường lùi | `VerifyHandModelDownload` (hash, resume, huỷ an toàn); phần độ chính xác của mô hình không có ảnh thật để kiểm trong CI nên chỉ kiểm giao diện `IHandSource` bằng một nguồn giả, và ghi rõ điều đó trong tài liệu |
 
-**Phụ thuộc:** AR‑1 (5.1–5.4), AR‑4.1 (giao diện `IHandSource`). **Ước lượng:** 3–4 tuần (5.5 riêng 1–2 tuần, có thể tách PR/phiên bản). **Rủi ro:** chấp nhận ML thêm dependency native (ONNX Runtime ~ 20‑30 MB) → **cần quyết định của chủ repo**, xem §8.
+**Phụ thuộc:** AR‑1 (5.1–5.4), AR‑4.1 (giao diện `IHandSource`). **Ước lượng:** 3–4 tuần (5.5 riêng 1–2 tuần, có thể tách PR/phiên bản). **Rủi ro:** ONNX Runtime là dependency native (~20‑30 MB); đã được duyệt (§8.2) với điều kiện giữ tuỳ chọn và đường lùi cổ điển.
 
 ### AR‑6 — Hoàn thiện Learn/Perform và đầu ra
 
@@ -170,22 +184,22 @@ Hiện `HandTracker` chỉ biết **một** bàn tay lớn nhất, ngón chỉ �
 | 6.2 | **Perform mode** | Không có nốt tương lai. Mỗi nốt vừa chơi **bay lên** khỏi phím (vệt, hạt, flash theo vận tốc MIDI) bằng các hiệu ứng có sẵn của `EffectCatalog` (kết hợp theo "combo themes") — chọn một **preset AR** riêng, ví dụ "Neon Hands", "Sakura Stage". Hiệu ứng nặng (blur toàn khung) bị tắt tự động trong AR để giữ 60 fps | preset trong `presets/` qua `VerifyCommunityPresets` |
 | 6.3 | **Chế độ mặt phẳng (plane / 3D)** | Thay image‑space bằng nốt đứng trong **một mặt phẳng vuông góc với bàn phím** tại mép sau phím: cần ước lượng tư thế (PnP) từ homography + FOV gần đúng (slider **Camera FOV**, mặc định 70° ngang, hiệu chỉnh bằng 2 nốt ở xa). Làm sau cùng vì rủi ro thẩm mỹ cao và nằm sát vùng "3D camera toàn phần" trong danh sách *không làm* — chỉ làm nếu 1–5 cho phản hồi tốt | `VerifyArCalibration` PnP trên dữ liệu tổng hợp; lùi về image‑space khi FOV sai |
 | 6.4 | **Cửa sổ AR cho OBS / máy chiếu** | Mở rộng "OPEN GPU STAGE WINDOW": cửa sổ có camera + AR đã ghép, F11, chọn màn hình; tuỳ chọn nền trong (alpha) để OBS dùng Window Capture với Allow Transparency | `VerifyGpuStage` swap chain |
-| 6.5 | **Webcam ảo** | Windows 11 có `MFCreateVirtualCamera`: đẩy khung AR đã ghép thành camera ảo để Zoom/Meet/Teams chọn được, không cần OBS. **Chỉ Windows 11 22H2+**, cần đăng ký COM media source, nên là mục tuỳ chọn, tách phiên bản, có thể bị hoãn nếu ký mã/đăng ký phát sinh vướng mắc | `Mf.VirtualCameraProbe` SKIP khi không có API |
+| 6.5 | **Webcam ảo** *(kéo lên v1.3 theo quyết định §8.5: vừa quay vừa stream/call)* | Windows 11 có `MFCreateVirtualCamera`: đẩy khung AR đã ghép thành camera ảo để Zoom/Meet/Teams chọn được, không cần OBS. **Chỉ Windows 11 22H2+** (Windows 10 dùng OBS Virtual Camera qua 6.4), cần đăng ký COM media source nên có thể cần ký mã. Khung ra phải đi cùng luồng với ghi hình để quay và stream cùng lúc không tốn gấp đôi GPU | `Mf.VirtualCameraProbe` SKIP khi không có API |
 | 6.6 | **Xuất sidecar thông tin** | Cùng với MP4, ghi `take.ar.json` (layout, calibration, offset) để dựng lại/ghép lại trong công cụ khác | round‑trip |
 
-**Phụ thuộc:** 6.1–6.2 sau AR‑3; 6.3 sau AR‑2; 6.4 sau AR‑1; 6.5 sau 6.4. **Ước lượng:** 3–4 tuần.
+**Phụ thuộc:** 6.1–6.2 sau AR‑3; 6.3 sau AR‑2; 6.4 sau AR‑1; 6.5 sau 6.4. Vì cần **vừa quay vừa stream**, 6.4/6.5 vào v1.3 và nên bắt đầu ngay khi AR‑1 xong. **Ước lượng:** 3–4 tuần.
 
-## 5. Bản đồ phiên bản đề xuất
+## 5. Bản đồ phiên bản (đã chỉnh theo §8)
 
 | Đợt | Nội dung | Độ lớn | Giá trị người dùng thấy |
 |---|---|---|---|
-| **v1.1** | AR‑0 + AR‑1 | 3–4,5 tuần | Calibrate 4 điểm, nốt rơi lên đàn thật, quay được |
-| **v1.2** | AR‑3 + AR‑2.1–2.2 | 3–4 tuần | Bù độ trễ tự động, dò đàn tự động, 49/61/76/88 phím |
-| **v1.3** | AR‑4 + AR‑2.3–2.5 + AR‑6.1, 6.2 | 4–5 tuần | Che tay, Learn/Perform hoàn chỉnh, preset AR |
-| **v1.4** | AR‑5.1–5.4 + AR‑6.4 | 3–4 tuần | Hai tay, ngón tay, cửa sổ OBS |
-| **v1.5+** (tuỳ chọn) | AR‑5.5 (ML), AR‑6.3 (plane), AR‑6.5 (webcam ảo) | 4–6 tuần | Theo dõi tay chuẩn hơn, chế độ 3D, Zoom/Meet |
+| **v1.1** | AR‑0 + AR‑1 (góc từ trên xuống, đủ 4 cỡ đàn) | 3–4,5 tuần | Calibrate 4 điểm, nốt rơi lên đàn thật, quay được |
+| **v1.2** | AR‑3 + AR‑2.1–2.2 | 3–4 tuần | Bù độ trễ tự động, dò đàn tự động |
+| **v1.3** | AR‑6.1, 6.2 (Learn/Perform) + **AR‑6.4 (OBS) + AR‑6.5 (webcam ảo)** + AR‑4 | 5–7 tuần | Che tay, preset AR, **stream/call được ngay** |
+| **v1.4** | **AR‑2b (camera từ phía người chơi)** + AR‑2.3–2.5 + AR‑5.1–5.4 | 4–5 tuần | Góc nhìn thứ hai, hai tay, ngón tay |
+| **v1.5** | AR‑5.5 (ML ONNX tuỳ chọn) + AR‑6.3 (mặt phẳng 3D) | 3–5 tuần | Theo dõi tay chuẩn hơn, chế độ 3D |
 
-Tổng: **khoảng 14–20 tuần** cho một người. Mỗi đợt kết thúc phải cập nhật `CHANGELOG.md` + `CHANGELOG.en.md`
+Tổng: **khoảng 16–22 tuần** cho một người. Mỗi đợt kết thúc phải cập nhật `CHANGELOG.md` + `CHANGELOG.en.md`
 (cùng số phiên bản với `<Version>`, theo `scan_release_version`), README song ngữ và `docs/SETTINGS-WIRING-AUDIT.md`.
 
 ## 6. Lớp kiểm chứng (tóm tắt, theo luật "mỗi tính năng một lớp")
@@ -211,13 +225,20 @@ Tổng: **khoảng 14–20 tuần** cho một người. Mỗi đợt kết thúc
 | Hiệu năng ở 1080p60 + bloom + camera | Trung | Upload dynamic texture, thang camera về 720p khi bench vượt ngân sách, tắt blur nặng trong AR |
 | Quyền riêng tư (camera, ảnh tay) | Thấp | Giữ nguyên: offline, không telemetry, không lưu khung hình; calibration chỉ lưu số |
 
-## 8. Những điều cần chủ repo quyết định trước khi bắt đầu
+## 8. Quyết định của chủ repo (2026‑10‑05)
 
-1. **Phạm vi nền tảng:** chỉ Windows + webcam/điện thoại làm webcam (DroidCam, Iriun, Camo… đều hiện như webcam)? Hay cần ngoài kính AR (xem §9)?
-2. **Có chấp nhận dependency ML tuỳ chọn (AR‑5.5) không?** Nếu không, AR‑5 dừng ở thuật toán cổ điển.
-3. **Layout phím:** bắt buộc 49/61/76/88, hay chỉ 61 + 88?
-4. **Góc đặt camera ưu tiên:** nhìn từ trên xuống (đơn giản, chính xác nhất, hợp video dạy đàn) hay từ phía người chơi (tự nhiên, khó hơn)? Đề xuất: **tối ưu từ trên xuống trước**, từ phía người chơi dùng cùng homography nhưng ưu tiên sau.
-5. **Mục tiêu video:** quay để đăng, hay stream/call trực tiếp? Quyết định 6.5 (webcam ảo) có nên lên sớm.
+Năm câu hỏi của bản thảo đầu đã được trả lời; mọi mục khác trong tài liệu này đã được chỉnh theo đó.
+
+| # | Câu hỏi | Quyết định | Hệ quả cho lộ trình |
+|---|---|---|---|
+| 1 | Phạm vi nền tảng | **Chỉ Windows + webcam** (kể cả điện thoại làm webcam) | Kính AR/XR nằm lại trong §9; không có client thứ hai |
+| 2 | ML tuỳ chọn (ONNX) cho AR‑5.5 | **Có** | AR‑5.5 là việc **trong phạm vi**, không còn "nếu được duyệt". Vẫn tuỳ chọn, tải một lần, mặc định tắt, thuật toán cổ điển là đường lùi |
+| 3 | Cỡ đàn | **Đủ 49 / 61 / 76 / 88 phím** | AR‑0.1/0.2 hỗ trợ cả bốn ngay từ đầu; mọi test AR chạy trên cả bốn cỡ (`tools/make_ar_sample.py --keys N`) |
+| 4 | Góc đặt camera | **Làm từ trên xuống trước**, sau đó đến từ phía người chơi, làm đầy đủ cả hai | AR‑1/AR‑2 tối ưu và kiểm chứng cho góc từ trên xuống. Góc từ phía người chơi (phím đen bị che, phối cảnh mạnh) là **AR‑2b**, sau khi từ trên xuống ổn định, và dùng chung homography + wizard 4 điểm |
+| 5 | Mục đích video | **Vừa quay vừa stream/call** | **Webcam ảo (AR‑6.5) và cửa sổ OBS (AR‑6.4) được kéo lên v1.3**, cùng đợt với Learn/Perform — không để cuối. Ghi hình + đầu ra trực tiếp dùng chung một luồng khung đã ghép |
+
+**Còn lại cần chốt khi tới lúc:** ngưỡng độ trễ cho phép khi stream/call (gợi ý ≤ 100 ms từ camera tới khung ra), và có cần
+ký mã bộ cài để đăng ký webcam ảo không (Windows có thể đòi hỏi khi đăng ký COM media source).
 
 ## 9. Những việc đã cân nhắc và **không** làm (hoặc chưa)
 
