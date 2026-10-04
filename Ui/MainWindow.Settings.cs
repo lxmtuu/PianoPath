@@ -10,7 +10,6 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using System.Windows.Shapes;
 
 namespace PianoPath;
 
@@ -172,9 +171,9 @@ public partial class MainWindow
         // the three places most looks are tuned in, one click away from the switches
         var more = Card(StyleSettingsHost, "GO TO", "The note's journey, the sky behind it and the engine that draws it all.");
         ButtonRow(more,
-            ("NOTE EFFECTS ›", (_, _) => JumpToCard("FALLING FX")),
-            ("AMBIENT LAYERS ›", (_, _) => JumpToCard("AMBIENT LAYERS")),
-            ("GRAPHICS ENGINE ›", (_, _) => JumpToCard("GRAPHICS ENGINE")));
+            ("NOTE EFFECTS ›", (_, _) => JumpToCard("FALLING FX"), null),
+            ("AMBIENT LAYERS ›", (_, _) => JumpToCard("AMBIENT LAYERS"), null),
+            ("GRAPHICS ENGINE ›", (_, _) => JumpToCard("GRAPHICS ENGINE"), null));
     }
 
     /// <summary>
@@ -682,7 +681,7 @@ public partial class MainWindow
         Choice(graphics, "GPU frame rate", nameof(PianoVisualSettings.GpuFrameRate), "Frames per second the GPU render thread aims for. Match your display (60, 120, 144 or 240 Hz); Unlimited renders as fast as the graphics card allows.",
             ("60", "60 FPS"), ("120", "120 FPS"), ("144", "144 FPS"), ("240", "240 FPS"), ("Unlimited", "Unlimited"));
         Toggle(graphics, "VSync in the GPU stage window", nameof(PianoVisualSettings.GpuVSync), "Present on the display's refresh. Turn it off for the lowest latency; the picture may tear.");
-        ButtonRow(graphics, ("OPEN GPU STAGE WINDOW", OpenGpuStage_Click));
+        ButtonRow(graphics, ("OPEN GPU STAGE WINDOW", OpenGpuStage_Click, null));
         Note(graphics, "The GPU stage window runs at the full frame rate on any monitor and suits a projector or OBS window capture. F11 toggles full screen, Esc leaves it. Graphics settings belong to this computer: applying a preset keeps them.");
         _gpuStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
         Register(graphics, _gpuStatusLabel, null, "gpu direct3d graphics engine renderer status adapter");
@@ -837,7 +836,8 @@ public partial class MainWindow
         box.LostFocus += VisualValueBox_Commit; box.KeyDown += VisualValueBox_KeyDown;
         // A reset is a small glyph, not a caption: the target value lives in the tooltip instead.
         var reset = new Button { Tag = property, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0) };
-        reset.Content = new Path { Data = (Geometry)FindResource("IconReset"), Stroke = new SolidColorBrush(Color.FromRgb(0xA5, 0xAC, 0xB9)), StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, Width = 11, Height = 11, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var muted = new SolidColorBrush(Color.FromRgb(0xA5, 0xAC, 0xB9));
+        reset.Content = new System.Windows.Shapes.Path { Data = (Geometry)FindResource("IconReset"), Fill = muted, Stroke = muted, StrokeThickness = 1.4, StrokeLineJoin = PenLineJoin.Round, Width = 11, Height = 11, Stretch = Stretch.Uniform, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
         var resetValue = FormatSetting(property, (double)prop.GetValue(DefaultVisualSettings)!);
         Loc.Format(reset, "Reset to {0}", FrameworkElement.ToolTipProperty, resetValue);
         reset.Click += VisualReset_Click;
