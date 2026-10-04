@@ -23,6 +23,9 @@ internal sealed class PianoAudioEngine : IDisposable
     /// kept so an output switch can rebuild the pipeline around the same instrument.</summary>
     private object? _instrument;
     private int _reverbEnabled = 1;
+    private PianoReverbStyle _reverbStyle = PianoReverbStyle.Hall;
+    private string? _reverbImpulsePath;
+    private WavData? _customImpulse;
     private int _resonanceEnabled = 1;
     private AudioOutputChoice _outputChoice = AudioOutputChoice.Auto;
     private double _latencyMilliseconds = 10;
@@ -66,6 +69,32 @@ internal sealed class PianoAudioEngine : IDisposable
         }
     }
 
+    /// <summary>Which room the reverb stage renders; <see cref="SetReverb"/> changes it.</summary>
+    public PianoReverbStyle ReverbStyle => _reverbStyle;
+    /// <summary>The user's impulse-response file when <see cref="ReverbStyle"/> is <see cref="PianoReverbStyle.CustomImpulse"/>.</summary>
+    public string? ReverbImpulsePath => _reverbImpulsePath;
+
+    /// <summary>
+    /// Picks the reverb: the classic algorithmic hall, one of the built-in convolution responses, or a
+    /// user impulse file (WAV or FLAC). A custom file is read and validated here, on the caller's thread,
+    /// so a bad file throws to the UI instead of silencing the audio thread; the decoded response is kept
+    /// and the live pipeline is rebuilt around the new room.
+    /// </summary>
+    public void SetReverb(PianoReverbStyle style, string? impulsePath = null)
+    {
+        if (style == PianoReverbStyle.CustomImpulse)
+        {
+            if (impulsePath is not { Length: > 0 }) throw new ArgumentException("A custom reverb needs an impulse response file.", nameof(impulsePath));
+            _customImpulse = System.IO.Path.GetExtension(impulsePath).Equals(".flac", StringComparison.OrdinalIgnoreCase)
+                ? FlacReader.Read(impulsePath)
+                : WavReader.Read(impulsePath);
+            _reverbImpulsePath = impulsePath;
+        }
+        else { _customImpulse = null; _reverbImpulsePath = null; }
+        _reverbStyle = style;
+        if (Volatile.Read(ref _pipeline) is not null) Rebuild();
+    }
+
     /// <summary>
     /// Remembers the output request — backend plus the WASAPI latency target — and rebuilds the live
     /// pipeline around it when a SoundFont is already playing. Held notes are cut by the rebuild (the synth
@@ -102,7 +131,7 @@ internal sealed class PianoAudioEngine : IDisposable
             ? (IPianoSynthesizer)new SfzSynthesizer(sfz, SampleRate)
             : new SoundFontSynthesizer((SoundFontData)_instrument, SampleRate);
         if (synth is SoundFontSynthesizer sf2 && _selectedPreset is { } preset) sf2.SelectPreset(preset.Bank, preset.Program);
-        var next = new Pipeline(synth, ReverbEnabled, StringResonanceEnabled, _outputChoice, _latencyMilliseconds);
+        var next = new Pipeline(synth, ReverbEnabled, _reverbStyle, _customImpulse, StringResonanceEnabled, _outputChoice, _latencyMilliseconds);
         Interlocked.Exchange(ref _pipeline, next)?.Dispose();
     }
 
@@ -147,7 +176,7 @@ internal sealed class PianoAudioEngine : IDisposable
     {
         /// <summary>Frames rendered per tap-only block; matches the recording clock's accounting.</summary>
         private const int TapBlockFrames = 512;
-        private readonly StereoHallReverb _reverb = new(SampleRate);
+        private readonly IStereoReverb _reverb;
         private readonly StringResonance _resonance = new(SampleRate);
         private readonly float[] _tapSamples = new float[TapBlockFrames * 2];
         private short[] _tapPcm = new short[TapBlockFrames * 2];
@@ -161,9 +190,17 @@ internal sealed class PianoAudioEngine : IDisposable
         /// <summary>The explicit backend request's failure when a fallback sink answered instead.</summary>
         public string? FallbackNotice { get; }
 
-        public Pipeline(IPianoSynthesizer synth, bool reverbEnabled, bool resonanceEnabled, AudioOutputChoice choice, double latencyMilliseconds)
+        public Pipeline(IPianoSynthesizer synth, bool reverbEnabled, PianoReverbStyle reverbStyle, WavData? customImpulse, bool resonanceEnabled, AudioOutputChoice choice, double latencyMilliseconds)
         {
             Synth = synth;
+            // The engine validated a custom impulse when it was chosen; a null here means the classic hall.
+            _reverb = reverbStyle switch
+            {
+                PianoReverbStyle.ConcertHall => new ConvolutionReverb(ReverbImpulse.ConcertHall(SampleRate), SampleRate, wet: .32f),
+                PianoReverbStyle.Soundboard => new ConvolutionReverb(ReverbImpulse.Soundboard(SampleRate), SampleRate, wet: .5f),
+                PianoReverbStyle.CustomImpulse when customImpulse is not null => new ConvolutionReverb(customImpulse, SampleRate, wet: .35f),
+                _ => new StereoHallReverb(SampleRate)
+            };
             _reverb.Enabled = reverbEnabled;
             _resonance.Enabled = resonanceEnabled;
             Sink = AudioSinkFactory.TryCreate(choice, latencyMilliseconds, Render, out var failure);
@@ -210,8 +247,21 @@ internal sealed class PianoAudioEngine : IDisposable
     }
 }
 
+/// <summary>The reverb choices the Settings page offers; styles other than the hall run the convolver.</summary>
+internal enum PianoReverbStyle
+{
+    /// <summary>The classic algorithmic Schroeder hall — the default, unchanged sound.</summary>
+    Hall,
+    /// <summary>Convolution with the built-in generated concert-hall response.</summary>
+    ConcertHall,
+    /// <summary>Convolution with the short, close soundboard response — almost dry.</summary>
+    Soundboard,
+    /// <summary>Convolution with an impulse response the user loaded (WAV or FLAC).</summary>
+    CustomImpulse,
+}
+
 /// <summary>Low-cost stereo Schroeder room reverb used after SoundFont sample rendering.</summary>
-internal sealed class StereoHallReverb
+internal sealed class StereoHallReverb : IStereoReverb
 {
     private sealed class Comb
     {
@@ -253,7 +303,8 @@ internal sealed class StereoHallReverb
     private double _fade;
     private bool _wetActive;
     private readonly double _fadeStep;
-    public volatile bool Enabled = true;
+    private volatile bool _enabled = true;
+    public bool Enabled { get => _enabled; set => _enabled = value; }
 
     public StereoHallReverb(int sampleRate)
     {

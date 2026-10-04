@@ -46,6 +46,8 @@
     "Language": "",
     "AudioOutputMode": "auto",
     "AudioLatencyMs": 10.0,
+    "ReverbStyle": "hall",
+    "ReverbImpulseFile": "",
     "ShellTheme": "concert-noir",
     "ChromeMotion": "Calm",
     "BackdropDensity": 40,

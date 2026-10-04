@@ -47,6 +47,9 @@
     <Compile Include="..\..\Audio\FlacReader.cs" Link="Product\Audio\FlacReader.cs" />
     <Compile Include="..\..\Audio\SfzReader.cs" Link="Product\Audio\SfzReader.cs" />
     <Compile Include="..\..\Audio\SalamanderPiano.cs" Link="Product\Audio\SalamanderPiano.cs" />
+    <Compile Include="..\..\Audio\Fft.cs" Link="Product\Audio\Fft.cs" />
+    <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />
+    <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
   </ItemGroup>
 

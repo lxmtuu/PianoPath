@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifySoundFontEngine(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyBundledPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var bundledPiano = Path.Combine(AppContext.BaseDirectory, "Assets", "ConcertGrand.sf2");
@@ -1254,7 +1254,9 @@ internal static partial class VerificationSuite
         Assert(attack.Any(sample => sample != 0), "The bundled Yamaha grand preset should produce audio for middle C.");
         synth.NoteOff(0, 60); var release = new short[4410 * 2]; synth.Render(release, 4410);
         Assert(release.Any(sample => sample != 0), "The bundled piano should keep its recorded release after key-up.");
-        using var engine = new PianoAudioEngine(); engine.LoadSoundFont(path);
+        using var engine = new PianoAudioEngine();
+        engine.SetReverb(PianoReverbStyle.ConcertHall); // the convolver must survive the production pipeline
+        engine.LoadSoundFont(path);
         Assert(engine.HasSoundFont && engine.Presets.Any(p => p.Program == 0), "The real bundled piano SF2 should open in the production waveOut engine.");
         engine.NoteOn(60, 96); Thread.Sleep(80); engine.NoteOff(60); Thread.Sleep(60); engine.UnloadSoundFont();
         Results.Add($"PASS built-in piano: {font.Name}, {font.Presets.Count} preset(s), {font.SampleCount:N0} samples, acoustic-grand audio and live waveOut playback.");
@@ -1287,6 +1289,58 @@ internal static partial class VerificationSuite
         var after = new short[4410 * 2]; ringing.Process(after, 4410);
         Assert(after.All(sample => sample == 0), "A settled bypassed reverb must keep the dry path silent.");
         Results.Add("PASS reverb: stereo room tail, stable dry path, selectable bypass and a faded tail on switch-off.");
+    }
+
+    /// <summary>
+    /// The convolution reverb against its mathematical contract: a dirac impulse response must hand the
+    /// dry signal back exactly one 512-frame partition later (the dry path itself untouched), a fresh
+    /// disabled instance must be a bit-exact passthrough, and the built-in responses must be deterministic,
+    /// stereo, and the length their rooms claim. The bypass fade mirrors the classic hall's behaviour.
+    /// </summary>
+    private static void VerifyConvolutionReverb()
+    {
+        // A dirac IR turns convolution into a pure delay, so every sample of the wet path is predictable.
+        var dirac = new WavData { SampleRate = 44100, Channels = 2, Samples = new short[] { 32767, 32767 } };
+        var reverb = new ConvolutionReverb(dirac, 44100, wet: .5f);
+        const int frames = 2048;
+        var rng = new Random(905);
+        var input = new float[frames * 2];
+        for (var i = 0; i < input.Length; i++) input[i] = (float)(rng.NextDouble() * .6 - .3);
+        var buffer = (float[])input.Clone();
+        reverb.Process(buffer, frames);
+        var worst = 0f;
+        for (var i = 0; i < frames * 2; i++)
+        {
+            var expected = i < 512 * 2 ? 0f : input[i - 512 * 2] * .5f;
+            worst = Math.Max(worst, Math.Abs(buffer[i] - input[i] - expected));
+        }
+        Assert(worst < 2e-3f, $"A dirac response must echo the dry signal one block later through the FFT path (worst error {worst}).");
+        var untouched = (float[])input.Clone();
+        new ConvolutionReverb(dirac, 44100, wet: .5f) { Enabled = false }.Process(untouched, frames);
+        Assert(untouched.SequenceEqual(input), "A disabled convolution reverb must be a bit-exact passthrough.");
+        var hall = ReverbImpulse.ConcertHall(44100);
+        Assert(hall is { Channels: 2, SampleRate: 44100 } && hall.Frames > 2 * 44100, "The generated concert hall should be a stereo tail beyond two seconds.");
+        Assert(hall.Samples.SequenceEqual(ReverbImpulse.ConcertHall(44100).Samples), "The generated concert hall must be deterministic.");
+        var board = ReverbImpulse.Soundboard(44100);
+        Assert(board is { Channels: 2 } && board.Frames > 0 && board.Frames < 44100 / 2, "The soundboard response should be a short close-mic tail.");
+        var ringing = new ConvolutionReverb(hall, 44100, wet: .32f);
+        var tail = new float[4410 * 2]; tail[0] = tail[1] = .75f;
+        ringing.Process(tail, 4410);
+        Assert(tail.Skip(1200 * 2).Any(sample => sample != 0), "The concert hall must ring after the dry impulse has passed.");
+        ringing.Enabled = false;
+        var fading = new float[4410 * 2]; ringing.Process(fading, 4410);
+        Assert(fading.Any(sample => sample != 0), "Bypassing the convolver while it rings should fade the tail, not cut it.");
+        var settled = new float[4410 * 2];
+        for (var block = 0; block < 5; block++)
+        {
+            Array.Clear(settled);
+            ringing.Process(settled, 4410);
+            if (settled.All(sample => sample == 0)) break;
+        }
+        Assert(settled.All(sample => sample == 0), "Once the faded tail ends, the bypassed convolver must fall silent.");
+        var after = new float[4410 * 2]; ringing.Process(after, 4410);
+        Assert(after.All(sample => sample == 0), "A settled bypassed convolver must keep the dry path silent.");
+        Results.Add($"PASS convolution reverb: dirac-exact FFT path, bit-exact bypass, {hall.Frames / 44100.0:0.0} s generated hall and {board.Frames * 1000 / 44100} ms soundboard.");
     }
 
     /// <summary>

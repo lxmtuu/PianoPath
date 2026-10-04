@@ -94,6 +94,12 @@ internal sealed class PianoVisualSettings
     public string AudioOutputMode { get; set; } = "auto";
     /// <summary>WASAPI buffer target in milliseconds (2–50); ASIO uses the driver's own preferred buffer.</summary>
     public double AudioLatencyMs { get; set; } = 10;
+    /// <summary>Reverb character: <c>hall</c> (classic algorithmic), <c>concert</c> or <c>soundboard</c>
+    /// (built-in convolution responses) or <c>custom</c> (the impulse file below). Unknown values fall
+    /// back to <c>hall</c>.</summary>
+    public string ReverbStyle { get; set; } = "hall";
+    /// <summary>Path of the user's impulse-response file when <see cref="ReverbStyle"/> is <c>custom</c>.</summary>
+    public string ReverbImpulseFile { get; set; } = "";
 
     // ---- Interface theme (the chrome around the stage) -----------------------------------------------
     /// <summary>Interface theme id: concert-grand, concert-noir or velvet-gold. See <see cref="ShellThemes"/>.</summary>
@@ -442,6 +448,9 @@ internal sealed class PianoVisualSettings
             // And the audio output: the backend and its buffer belong to this machine's sound hardware,
             // so applying a community look can never switch the player off their ASIO interface.
             if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs)) continue;
+            // The reverb room and its impulse file follow the machine too: the file path would not exist
+            // on another computer, and a look should not silently change how the piano sounds.
+            if (property.Name is nameof(ReverbStyle) or nameof(ReverbImpulseFile)) continue;
             var value = property.GetValue(source);
             property.SetValue(this, value is List<string> list ? new List<string>(list) : value);
         }
@@ -488,6 +497,8 @@ internal sealed class PianoVisualSettings
         // An id this build does not know (hand-edited file, newer profile) normalises to Auto now instead
         // of surprising whoever later parses it.
         AudioOutputMode = AudioOutputChoice.Parse(AudioOutputMode).Id;
+        if (ReverbStyle is not ("hall" or "concert" or "soundboard" or "custom")) ReverbStyle = "hall";
+        if (ReverbStyle == "custom" && string.IsNullOrWhiteSpace(ReverbImpulseFile)) ReverbStyle = "hall";
         ZoneSplitPitch = Math.Clamp(ZoneSplitPitch, 21, 108); ZoneSplitAmount = Math.Clamp(ZoneSplitAmount, 0, 100);
         HaloIntensity = Math.Clamp(HaloIntensity, 0, 200);
         PetalAmount = Math.Clamp(PetalAmount, 0, 150);

@@ -76,6 +76,10 @@ public partial class MainWindow : Window
         // pipeline already opens the backend the player chose last time instead of opening waveOut and
         // immediately rebuilding.
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
+        // Same for the reverb room, which also shapes the very first pipeline.
+        ApplyStoredReverb();
+        RefreshReverbStyleCombo();
+        Loc.OnChanged(RefreshReverbStyleCombo);
         BuildVisualSettingsControls();
         // The XAML literals are the translation keys (see Ui/MainWindow.xaml), so the window marks
         // its own tree and paints it once; every later switch repaints through the same registry.
@@ -584,6 +588,84 @@ public partial class MainWindow : Window
 
     private async void SalamanderPlay_Click(object sender, RoutedEventArgs e) =>
         await LoadSoundFontAsync(SalamanderPiano.SfzPath, builtIn: false);
+
+    // =============================================================================================
+    // Reverb style (classic hall, built-in convolution rooms, or a user impulse response)
+    // =============================================================================================
+
+    private static readonly string[] ReverbStyleIds = ["hall", "concert", "soundboard", "custom"];
+    private bool _suppressReverbStyle;
+
+    /// <summary>Hands the stored reverb choice to the engine at startup; a vanished custom file falls back.</summary>
+    private void ApplyStoredReverb()
+    {
+        if (_visualSettings.ReverbStyle == "custom")
+        {
+            try { _audio.SetReverb(PianoReverbStyle.CustomImpulse, _visualSettings.ReverbImpulseFile); return; }
+            catch { _visualSettings.ReverbStyle = "hall"; _visualSettings.ReverbImpulseFile = ""; }
+        }
+        _audio.SetReverb(_visualSettings.ReverbStyle switch
+        {
+            "concert" => PianoReverbStyle.ConcertHall,
+            "soundboard" => PianoReverbStyle.Soundboard,
+            _ => PianoReverbStyle.Hall,
+        });
+    }
+
+    /// <summary>(Re)fills the style list — called at startup and on every language switch.</summary>
+    private void RefreshReverbStyleCombo()
+    {
+        _suppressReverbStyle = true;
+        try
+        {
+            ReverbStyleCombo.ItemsSource = new[]
+            {
+                Loc.T("HALL · CLASSIC"), Loc.T("CONCERT HALL · CONVOLUTION"),
+                Loc.T("SOUNDBOARD · CLOSE"), Loc.T("CUSTOM IMPULSE RESPONSE"),
+            };
+            var index = Array.IndexOf(ReverbStyleIds, _visualSettings.ReverbStyle);
+            ReverbStyleCombo.SelectedIndex = index >= 0 ? index : 0;
+        }
+        finally { _suppressReverbStyle = false; }
+    }
+
+    private void ReverbStyleCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressReverbStyle || ReverbStyleCombo.SelectedIndex < 0) return;
+        var id = ReverbStyleIds[ReverbStyleCombo.SelectedIndex];
+        if (id == "custom") { ChooseReverbImpulse(); return; } // picking the entry asks for the file
+        _audio.SetReverb(id switch { "concert" => PianoReverbStyle.ConcertHall, "soundboard" => PianoReverbStyle.Soundboard, _ => PianoReverbStyle.Hall });
+        _visualSettings.ReverbStyle = id;
+        AfterReverbChange();
+    }
+
+    private void ReverbImpulse_Click(object sender, RoutedEventArgs e) => ChooseReverbImpulse();
+
+    private void ChooseReverbImpulse()
+    {
+        var dialog = new OpenFileDialog { Filter = Loc.T("Impulse responses (*.wav, *.flac)|*.wav;*.flac|All files (*.*)|*.*"), Title = Loc.T("Choose an impulse response") };
+        if (dialog.ShowDialog(this) != true) { RefreshReverbStyleCombo(); return; } // put the combo back
+        try
+        {
+            _audio.SetReverb(PianoReverbStyle.CustomImpulse, dialog.FileName);
+            _visualSettings.ReverbStyle = "custom";
+            _visualSettings.ReverbImpulseFile = dialog.FileName;
+            AfterReverbChange();
+        }
+        catch (Exception ex)
+        {
+            RefreshReverbStyleCombo();
+            ShowError(Loc.F("Could not load this impulse response.\n{0}", ex.Message), "Audio");
+        }
+    }
+
+    /// <summary>A reverb switch rebuilds the pipeline, so the held pedals must be re-pressed, like an output switch.</summary>
+    private void AfterReverbChange()
+    {
+        foreach (var pedal in _pedalsDown) _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), 127);
+        RefreshReverbStyleCombo();
+        _settingsSaveTimer.Stop(); _settingsSaveTimer.Start();
+    }
     /// <summary>Shows a warning dialog, or only records it when dialogs are suppressed (verification runs, snapshots).</summary>
     private void ShowError(string message, string titleKey, MessageBoxImage icon = MessageBoxImage.Warning) =>
         ShowMessage(message, titleKey, icon);
