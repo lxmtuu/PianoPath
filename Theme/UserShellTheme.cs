@@ -18,23 +18,23 @@ internal sealed class UserShellTheme
     /// <summary>The name the user typed; also the base of the theme id.</summary>
     public string Name { get; set; } = "";
 
-    /// <summary>Backdrop family: Acoustic, Obsidian or Imperial. See <see cref="BackdropStyle"/>.</summary>
-    public string Backdrop { get; set; } = nameof(BackdropStyle.Acoustic);
+    /// <summary>Backdrop family: Acoustic, Obsidian, Imperial or Nebula. See <see cref="BackdropStyle"/>.</summary>
+    public string Backdrop { get; set; } = nameof(BackdropStyle.Nebula);
 
     /// <summary>The one colour every highlight, ring and selection is painted with.</summary>
-    public string Accent { get; set; } = "#D4AF37";
+    public string Accent { get; set; } = "#9A7BFF";
 
     /// <summary>The companion colour the accent gradients run into.</summary>
-    public string AccentAlt { get; set; } = "#F5D77F";
+    public string AccentAlt { get; set; } = "#78E7FF";
 
     /// <summary>Glow used by hover states and the backdrop motes' light.</summary>
-    public string Glow { get; set; } = "#FFD275";
+    public string Glow { get; set; } = "#D1A5FF";
 
     /// <summary>Base of every dark surface: window, panels, controls, borders and the scroll track.</summary>
-    public string Surface { get; set; } = "#0B0D12";
+    public string Surface { get; set; } = "#131627";
 
     /// <summary>Colour of the floating backdrop motes, and the light end of the hairlines.</summary>
-    public string Mote { get; set; } = "#E5C06E";
+    public string Mote { get; set; } = "#C9F4FF";
 }
 
 /// <summary>
@@ -73,15 +73,16 @@ internal static class UserShellThemes
         return IdPrefix + (slug.Length > 32 ? slug[..32].Trim('-') : slug);
     }
 
-    /// <summary>The backdrop family of a stored value, defaulting to acoustic for anything unknown.</summary>
+    /// <summary>The backdrop family of a stored value, defaulting to nebula for anything unknown.</summary>
     internal static BackdropStyle Backdrop(string? stored) =>
-        Enum.TryParse<BackdropStyle>(stored?.Trim(), ignoreCase: true, out var parsed) ? parsed : BackdropStyle.Acoustic;
+        Enum.TryParse<BackdropStyle>(stored?.Trim(), ignoreCase: true, out var parsed) ? parsed : BackdropStyle.Nebula;
 
     /// <summary>The tooltip of a user theme: a key, so it translates like the built-in blurbs do.</summary>
     internal static string BlurbKey(BackdropStyle backdrop) => backdrop switch
     {
         BackdropStyle.Obsidian => "Custom interface theme over the obsidian backdrop.",
         BackdropStyle.Imperial => "Custom interface theme over the imperial backdrop.",
+        BackdropStyle.Nebula => "Custom interface theme over the nebula backdrop.",
         _ => "Custom interface theme over the acoustic backdrop."
     };
 
@@ -91,11 +92,11 @@ internal static class UserShellThemes
     /// </summary>
     internal static ShellTheme Build(UserShellTheme theme)
     {
-        var accent = ReadColour(theme.Accent, Color.FromRgb(0xD4, 0xAF, 0x37));
+        var accent = ReadColour(theme.Accent, Color.FromRgb(0x9A, 0x7B, 0xFF));
         var accentAlt = ReadColour(theme.AccentAlt, Lighten(accent, .35));
         var glow = ReadColour(theme.Glow, accentAlt);
         var mote = ReadColour(theme.Mote, accentAlt);
-        var surface = ClampSurface(ReadColour(theme.Surface, Color.FromRgb(0x0B, 0x0D, 0x12)));
+        var surface = ClampSurface(ReadColour(theme.Surface, Color.FromRgb(0x13, 0x16, 0x27)));
         var backdrop = Backdrop(theme.Backdrop);
         var name = string.IsNullOrWhiteSpace(theme.Name) ? "Custom theme" : theme.Name.Trim();
         return new ShellTheme(

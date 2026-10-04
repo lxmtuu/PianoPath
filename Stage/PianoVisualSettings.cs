@@ -104,7 +104,7 @@ internal sealed class PianoVisualSettings
     public string ReverbImpulseFile { get; set; } = "";
 
     // ---- Interface theme (the chrome around the stage) -----------------------------------------------
-    /// <summary>Interface theme id: concert-grand, concert-noir or velvet-gold. See <see cref="ShellThemes"/>.</summary>
+    /// <summary>Interface theme id: cosmic-nocturne, concert-grand, concert-noir or velvet-gold. See <see cref="ShellThemes"/>.</summary>
     public string ShellTheme { get; set; } = ShellThemes.DefaultId;
     /// <summary>Off, Calm or Full: how much the interface chrome animates.</summary>
     public string ChromeMotion { get; set; } = "Full";

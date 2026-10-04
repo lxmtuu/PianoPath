@@ -40,6 +40,7 @@
     <PackageReference Include="Vortice.DXGI" Version="3.8.3" />
     <PackageReference Include="Vortice.D3DCompiler" Version="3.8.3" />
     <EmbeddedResource Include="Gpu/StageShaders.hlsl" LogicalName="PianoPath.Gpu.StageShaders.hlsl" />
+    <EmbeddedResource Include="Ui/GalaxyBackdrop.hlsl" LogicalName="PianoPath.Ui.GalaxyBackdrop.hlsl" />
   </ItemGroup>
 
   <ItemGroup>

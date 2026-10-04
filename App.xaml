@@ -4,54 +4,53 @@
              xmlns:local="clr-namespace:PianoPath">
     <Application.Resources>
         <!-- ===== Palette ====================================================================
-             Neutral, near-black surfaces with one violet→cyan accent: the same recipe the current
-             generation of MIDI visualizers (Keysight, Piano VFX, Embers) uses, so the neon stage
-             stays the brightest thing on screen instead of competing with the chrome. -->
-        <!-- ===== Palette (Concert Grand Steinway Ebony & Champagne Gold Defaults) ===== -->
-        <Color x:Key="AccentColor">#D4AF37</Color>
-        <Color x:Key="AccentColor2">#F5D77F</Color>
-        <SolidColorBrush x:Key="AccentBrush" Color="#D4AF37"/>
-        <SolidColorBrush x:Key="Accent2Brush" Color="#F5D77F"/>
-        <SolidColorBrush x:Key="AccentSoftBrush" Color="#30D4AF37"/>
+             Midnight surfaces with a violet-to-cyan nebula accent. The GPU-shaded home screen keeps
+             the piano keys and drifting stardust as its brightest focal points. -->
+        <!-- ===== Palette (Cosmic Nocturne: violet nebula, cyan stardust, piano-key gold) ===== -->
+        <Color x:Key="AccentColor">#9A7BFF</Color>
+        <Color x:Key="AccentColor2">#78E7FF</Color>
+        <SolidColorBrush x:Key="AccentBrush" Color="#9A7BFF"/>
+        <SolidColorBrush x:Key="Accent2Brush" Color="#78E7FF"/>
+        <SolidColorBrush x:Key="AccentSoftBrush" Color="#389A7BFF"/>
         <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
-            <GradientStop Color="#D4AF37" Offset="0"/>
-            <GradientStop Color="#F5D77F" Offset=".55"/>
-            <GradientStop Color="#C89B3C" Offset="1"/>
+            <GradientStop Color="#8668EF" Offset="0"/>
+            <GradientStop Color="#A985FF" Offset=".55"/>
+            <GradientStop Color="#65D7F5" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="WindowBrush" Color="#06070A"/>
-        <SolidColorBrush x:Key="PanelBrush" Color="#F00B0D12"/>
+        <SolidColorBrush x:Key="WindowBrush" Color="#050610"/>
+        <SolidColorBrush x:Key="PanelBrush" Color="#F00D0F1C"/>
         <LinearGradientBrush x:Key="PanelChromeBrush" StartPoint="0,0" EndPoint="0,1">
-            <GradientStop Color="#F6141822" Offset="0"/>
-            <GradientStop Color="#EE090B10" Offset="1"/>
+            <GradientStop Color="#F617192D" Offset="0"/>
+            <GradientStop Color="#EE0A0B15" Offset="1"/>
         </LinearGradientBrush>
-        <SolidColorBrush x:Key="PanelAltBrush" Color="#0F1218"/>
-        <SolidColorBrush x:Key="PanelBorderBrush" Color="#262B3B"/>
-        <SolidColorBrush x:Key="HairlineBrush" Color="#18FFFFFF"/>
-        <SolidColorBrush x:Key="ControlBrush" Color="#12151D"/>
-        <SolidColorBrush x:Key="ControlHoverBrush" Color="#1C202C"/>
-        <SolidColorBrush x:Key="ControlBorderBrush" Color="#32384D"/>
-        <SolidColorBrush x:Key="PopupBrush" Color="#FA0E1017"/>
+        <SolidColorBrush x:Key="PanelAltBrush" Color="#101220"/>
+        <SolidColorBrush x:Key="PanelBorderBrush" Color="#2A2D4A"/>
+        <SolidColorBrush x:Key="HairlineBrush" Color="#1FFFFFFF"/>
+        <SolidColorBrush x:Key="ControlBrush" Color="#131627"/>
+        <SolidColorBrush x:Key="ControlHoverBrush" Color="#202038"/>
+        <SolidColorBrush x:Key="ControlBorderBrush" Color="#404369"/>
+        <SolidColorBrush x:Key="PopupBrush" Color="#FA0D0F1C"/>
         <SolidColorBrush x:Key="TextBrush" Color="#F4F5F9"/>
         <SolidColorBrush x:Key="MutedTextBrush" Color="#A5ACB9"/>
         <SolidColorBrush x:Key="DimTextBrush" Color="#6E7585"/>
         <SolidColorBrush x:Key="DangerBrush" Color="#FF4D6D"/>
         <SolidColorBrush x:Key="SuccessBrush" Color="#41E0A8"/>
-        <SolidColorBrush x:Key="TrackBrush" Color="#1C202C"/>
+        <SolidColorBrush x:Key="TrackBrush" Color="#1D2138"/>
 
         <!-- ===== Theme tokens published by ShellThemeManager ===================================
              Defaults keep the XAML valid on its own; at startup - and whenever the look changes -
              ShellThemeManager writes a fresh brush under each key. Every surface reads them with
              DynamicResource, so a theme switch restyles the whole interface instantly: no window
              reload, no template surgery, no flicker. -->
-        <SolidColorBrush x:Key="GlowBrush" Color="#FFD275"/>
-        <SolidColorBrush x:Key="MoteBrush" Color="#E5C06E"/>
-        <SolidColorBrush x:Key="BackdropTopBrush" Color="#141822"/>
+        <SolidColorBrush x:Key="GlowBrush" Color="#D1A5FF"/>
+        <SolidColorBrush x:Key="MoteBrush" Color="#C9F4FF"/>
+        <SolidColorBrush x:Key="BackdropTopBrush" Color="#17192D"/>
         <LinearGradientBrush x:Key="CurtainGradientBrush" StartPoint="0,0" EndPoint="1,0">
-            <GradientStop Color="#D4AF37" Offset="0"/>
-            <GradientStop Color="#FFD275" Offset=".55"/>
-            <GradientStop Color="#F5D77F" Offset="1"/>
+            <GradientStop Color="#9A7BFF" Offset="0"/>
+            <GradientStop Color="#D1A5FF" Offset=".55"/>
+            <GradientStop Color="#78E7FF" Offset="1"/>
         </LinearGradientBrush>
-        <!-- Non-themed extras: the veil over the lower shell and the warm wash behind cards. -->
+        <!-- Neutral scrim over the cosmic menu illustration; theme palettes drive the foreground cards. -->
         <LinearGradientBrush x:Key="ConcertVeilBrush" StartPoint="0,0" EndPoint="0,1">
             <GradientStop Color="#00000000" Offset="0"/>
             <GradientStop Color="#26000000" Offset=".62"/>

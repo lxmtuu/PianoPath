@@ -20,6 +20,12 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 
 ## Unreleased
 
+### Interface & graphics
+
+- Reworked the home screen around **Cosmic Nocturne**: a violet nebula, cyan stardust and a suspended glass piano. It is the default for new settings profiles; a theme a returning user already chose is preserved.
+- Added an HLSL WPF `ps_3_0` pixel shader for the animated nebula clouds and stardust. It advances on the shared `FrameClock`, respects reduced/disabled motion and keeps the vector backdrop as a fallback.
+- Added the **Nebula** backdrop family, expanded the interface picker to four built-in looks, localized its labels and About text in English and Vietnamese, and updated the theme-studio documentation.
+
 ### Audio & setup experience
 
 - Replaced the bundled SF2 piano and SF2 engine with **Salamander Grand Piano V3 as the sole instrument**, rendered through SFZ; removed SF2 import and external instrument selection.

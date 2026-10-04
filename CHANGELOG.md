@@ -19,6 +19,12 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 
 ## Unreleased
 
+### Giao diện & đồ hoạ
+
+- Đổi trang chủ sang **Cosmic Nocturne**: tinh vân tím, bụi sao cyan và bàn phím kính lơ lửng; theme này là mặc định cho cài đặt mới, còn các theme người dùng đã chọn vẫn được giữ nguyên.
+- Bổ sung pixel shader WPF `ps_3_0` viết bằng HLSL cho bụi sao và mây tinh vân chuyển động; shader chạy theo `FrameClock` dùng chung, tôn trọng chế độ tắt chuyển động và có nền vector dự phòng.
+- Thêm họ backdrop **Nebula**, nâng danh sách giao diện lên bốn lựa chọn, dịch nhãn/giới thiệu sang tiếng Việt và tiếng Anh; cập nhật phần hướng dẫn theme tự tạo.
+
 ### Âm thanh & trải nghiệm thiết lập
 
 - Thay toàn bộ nhạc cụ SF2 đóng gói và engine SF2 bằng **Salamander Grand Piano V3 duy nhất**, phát qua SFZ; bỏ chức năng nhập SF2 và chọn nhạc cụ ngoài.

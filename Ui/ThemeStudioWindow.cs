@@ -68,7 +68,7 @@ internal sealed class ThemeStudioWindow : Window
 
         _backdropBox = new ComboBox { Width = 150, Height = 30, Margin = new Thickness(0, 0, 0, 10), VerticalContentAlignment = VerticalAlignment.Center };
         Loc.Set(_backdropBox, "Backdrop", AutomationProperties.NameProperty);
-        foreach (var style in new[] { BackdropStyle.Acoustic, BackdropStyle.Obsidian, BackdropStyle.Imperial })
+        foreach (var style in Enum.GetValues<BackdropStyle>())
             _backdropBox.Items.Add(new ComboBoxItem { Content = Loc.T(style.ToString()), Tag = style });
         _backdropBox.SelectedIndex = Math.Max(0, Array.IndexOf(Enum.GetValues<BackdropStyle>(), UserShellThemes.Backdrop(seed.Backdrop)));
         root.Children.Add(Row("Backdrop", _backdropBox));
@@ -118,7 +118,7 @@ internal sealed class ThemeStudioWindow : Window
         theme = new UserShellTheme
         {
             Name = name,
-            Backdrop = (_backdropBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? nameof(BackdropStyle.Acoustic),
+            Backdrop = (_backdropBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? nameof(BackdropStyle.Nebula),
             Accent = seeds[nameof(UserShellTheme.Accent)],
             AccentAlt = seeds[nameof(UserShellTheme.AccentAlt)],
             Glow = seeds[nameof(UserShellTheme.Glow)],
@@ -148,7 +148,7 @@ internal sealed class ThemeStudioWindow : Window
         var seeds = new UserShellTheme
         {
             Name = _nameBox.Text,
-            Backdrop = (_backdropBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? nameof(BackdropStyle.Acoustic),
+            Backdrop = (_backdropBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? nameof(BackdropStyle.Nebula),
             Accent = Colour(nameof(UserShellTheme.Accent)),
             AccentAlt = Colour(nameof(UserShellTheme.AccentAlt)),
             Glow = Colour(nameof(UserShellTheme.Glow)),
