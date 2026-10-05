@@ -632,7 +632,7 @@ internal static partial class VerificationSuite
             var feed = new GpuStageFeed();
             feed.SetStageHeight(height);
             feed.SetLook(LookOf(settings));
-            feed.SetState(song, position, playing: true);
+            feed.SetState(song, position, true, new HashSet<int>());
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
             // The AR layer is told not to draw notes, so every note pixel below comes from the stage's own note pass.
             if (keys is not null) feed.Ar = new GpuArInput(keys, ArNoteStyle.Default, 1f, .6f, ShowNotes: false);
@@ -643,7 +643,7 @@ internal static partial class VerificationSuite
             var feed = new GpuStageFeed();
             feed.SetStageHeight(height);
             feed.SetLook(LookOf(settings));
-            feed.SetState(song, position, playing: true);
+            feed.SetState(song, position, true, new HashSet<int>());
             return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
         }
         (int R, int G, int B) At(byte[] pixels, double x, double y)

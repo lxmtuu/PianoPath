@@ -306,7 +306,7 @@ internal sealed class GpuStageRenderer : IDisposable
         var arView = default(ArView);
         var arDrawn = ar is not null && TryCameraView(target, look, out arView)
             && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight;
-        _arScene = arDrawn ? ArSceneMap.Create(ar!.Calibration, arView, layout.Width, layout.HitY) : default;
+        _arScene = arDrawn ? ArSceneMap.Create(ar!.Calibration, arView, layout.Width, layout.HitY) : default(ArSceneMap);
         var arScene = ArSceneConstants.Of(_arScene, arDrawn);
 
         simulation.BuildNotes(input, layout, notes);
