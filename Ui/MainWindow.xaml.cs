@@ -1235,6 +1235,7 @@ public partial class MainWindow : Window
     private string _arSource = "";
     private int _arWidth, _arHeight;
     private ArPlan _arPlan = ArPlan.Off;
+    private int _arStatusTicks;
     /// <summary>Set from the plan: the camera thread reads frames unmirrored because the engine turns them round when it draws.</summary>
     private volatile bool _arRawFrames;
     private static readonly ArCalibrationSnapshot NoArSource = new(ArCalibrationState.NoSource, null, "", 0, 0, 0, 0);
@@ -1259,6 +1260,7 @@ public partial class MainWindow : Window
         {
             _gpuFeed.Ar = null;
             _gpuFeed.Camera = null;
+            RefreshArStatus();
             return;
         }
         var options = _visualSettings.ArOptionsValue;
@@ -1272,6 +1274,7 @@ public partial class MainWindow : Window
         _gpuFeed.Ar = calibration is null ? null
             : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes);
         RefreshHandStatus();
+        RefreshArStatus();
     }
 
     /// <summary>
@@ -1439,7 +1442,11 @@ public partial class MainWindow : Window
     /// </summary>
     private void PumpCameraFrame()
     {
-        if (_arPlan.CameraLayer) return;       // the engine's render thread is the ring's reader while the overlay is drawn
+        if (_arPlan.CameraLayer)               // the engine's render thread is the ring's reader while the overlay is drawn
+        {
+            if (++_arStatusTicks % 30 == 0) { RefreshArStatus(); RefreshCameraOverlayStatus(announce: false); }
+            return;
+        }
         if (!_cameraFrames.TryTake(out var taken)) return;
         var frame = taken.Pixels; var width = taken.Width; var height = taken.Height;
         if (width <= 0 || height <= 0 || frame.Length < width * height * 4) return;

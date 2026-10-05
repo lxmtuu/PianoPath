@@ -92,6 +92,7 @@ Phương pháp:
 |---|---|---|
 | Show keyboard / Style / Height | `ShowKeys`, `KeyboardStyle`, `KeyboardScale` | `PianoStage.cs:347`, `:786`, `:71` (KeyboardHeight); style còn đổi màu phím nền của shader (`Shading/PianoShaderScene.cs:171-184`) |
 | Keyboard size (88/76/61/49) | `KeyboardSize` | `PianoStage.SetVisualSettings` → `KeyboardLayout.Use(settings.KeyboardLayoutChoice)`; mọi nơi vẽ (vector, shader, GPU, bàn tay) đọc `KeyboardLayout.Active`. `CopyFrom` bỏ qua khoá này nên preset không đổi cỡ đàn; `Clamp` đưa giá trị lạ về 88. Test: `VerifyKeyboardLayout` |
+| AR overlay (bật/tắt, Mode Learn/Perform, độ đặc, nhìn trước, độ ngả màu phím) | `ArEnabled`, `ArMode`, `ArOpacity`, `ArLookahead`, `ArKeyLight` | `PianoVisualSettings.ArOptionsValue` → `ArPlan.Decide` → `MainWindow.UpdateArFeed` (camera + lớp AR vào `GpuStageFeed`, `PianoStage.ArOverlayActive` cho stage lùi). `CopyFrom` bỏ qua cả năm khoá nên preset/mã chia sẻ không bật hay chỉnh AR; `Clamp` kẹp giá trị. Test: `ArOptionsTests`, `ArPlanTests`, `VerifyCameraOverlayDock` |
 | Black key length | `KeyOverhang` | `PianoStage.cs:856, :1089` |
 | Key labels (None/C/All) | `KeyLabels` | `PianoStage.cs:898-901` |
 | Lid shadow / Felt strip / Felt color | `ShowKeyShadow`, `ShowKeyFelt`, `KeyFeltColor` | `PianoStage.cs:823, :820/:876, :881` |
