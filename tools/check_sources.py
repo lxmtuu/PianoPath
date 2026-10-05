@@ -1499,6 +1499,18 @@ def scan_release_version(cs_files):
     return errors
 
 
+def scan_media_foundation_keys():
+    """The Media Foundation GUIDs that cannot be told apart by eye. The advanced-video-processing key once held the
+    GUID of MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, so the reader never inserted its converter and every camera that
+    sends YUY2/NV12/MJPEG failed with 0xC00D5212 — a bug no CI job without a webcam could see."""
+    text = (ROOT / "Camera" / "MediaFoundation.cs").read_text(encoding="utf-8")
+    found = re.search(r'ReaderAdvancedKey\s*=\s*new\("([0-9A-Fa-f-]+)"\)', text)
+    wanted = "0F81DA2C-B537-4672-A8B2-A681B17307A3"   # MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING
+    if not found or found.group(1).upper() != wanted:
+        return [f"Camera/MediaFoundation.cs: ReaderAdvancedKey must be {wanted} (MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING)"]
+    return []
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -1523,6 +1535,7 @@ def main():
     errors.extend(scan_dead_keys(cs_files, xaml_files))
     errors.extend(scan_release_version(cs_files))
     errors.extend(scan_project_files())
+    errors.extend(scan_media_foundation_keys())
     errors.extend(scan_public_release())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")

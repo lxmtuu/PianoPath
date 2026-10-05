@@ -1167,6 +1167,7 @@ internal static class StringsEnglish
         ["The camera reported no video modes, so its default mode is used."] = "The camera reported no video modes, so its default mode is used.",
         ["The camera runs at {0} × {1}. The keys have not been marked yet for a {2}-key keyboard."] = "The camera runs at {0} × {1}. The keys have not been marked yet for a {2}-key keyboard.",
         ["The camera was closed, so nothing was saved."] = "The camera was closed, so nothing was saved.",
+        ["The camera would not deliver {0} as 32-bit frames, so its default mode is used."] = "The camera would not deliver {0} as 32-bit frames, so its default mode is used.",
         ["The camera would not switch to the mode that was chosen ({0}), so its default mode is used."] = "The camera would not switch to the mode that was chosen ({0}), so its default mode is used.",
         ["The camera would not switch to {0} ({1}), so its default mode is used."] = "The camera would not switch to {0} ({1}), so its default mode is used.",
         ["The camera's picture changed size, so nothing was saved. Try again."] = "The camera's picture changed size, so nothing was saved. Try again.",

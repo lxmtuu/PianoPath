@@ -51,6 +51,23 @@ internal sealed partial class CameraFrameReader
         finally { foreach (var entry in native) Release(entry.Type); }
     }
 
+    /// <summary>Switches the camera to the first mode it lists — the one it would use by itself. False when it will not.</summary>
+    private bool SelectFirstNativeMode()
+    {
+        try
+        {
+            if (_reader!.GetNativeMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out var pointer) != Mf.S_OK || pointer == IntPtr.Zero) return false;
+            Mf.IMFMediaType? type = null;
+            try
+            {
+                type = Marshal.GetObjectForIUnknown(pointer) as Mf.IMFMediaType;
+                return type is not null && _reader.SetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, type) == Mf.S_OK;
+            }
+            finally { Marshal.Release(pointer); Release(type); }
+        }
+        catch { return false; }
+    }
+
     /// <summary>Lists the video modes the camera reports, in the order it reports them, skipping any type that is not video.</summary>
     private void ReadNativeModes(List<NativeMode> into)
     {

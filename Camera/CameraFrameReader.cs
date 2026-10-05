@@ -323,6 +323,18 @@ internal sealed partial class CameraFrameReader : IDisposable
             type.SetGUIDKey(Mf.MajorType, Mf.VideoMajorType);
             type.SetGUIDKey(Mf.SubType, Mf.Rgb32);
             hr = reader.SetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, type);
+            if (hr != Mf.S_OK && chosen is not null)
+            {
+                // The mode the overlay forced cannot be converted on this machine. Go back to the first mode the camera
+                // lists (its own default) and ask again, so a camera that works at all still opens.
+                var forced = chosen.Label;
+                if (SelectFirstNativeMode() && reader.SetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, type) == Mf.S_OK)
+                {
+                    hr = Mf.S_OK;
+                    chosen = null;
+                    ModeNote = Loc.F("The camera would not deliver {0} as 32-bit frames, so its default mode is used.", forced);
+                }
+            }
             if (hr != Mf.S_OK) return Loc.F("This source cannot produce the 32-bit frames the overlay draws ({0}).", Mf.Describe(hr));
             if (reader.GetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, out var current) != Mf.S_OK || current is null)
                 return Loc.T("The reader did not report the format of its video stream.");

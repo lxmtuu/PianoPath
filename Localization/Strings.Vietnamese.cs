@@ -1167,6 +1167,7 @@ internal static class StringsVietnamese
         ["The camera reported no video modes, so its default mode is used."] = "Camera không báo chế độ video nào, nên dùng chế độ mặc định của nó.",
         ["The camera runs at {0} × {1}. The keys have not been marked yet for a {2}-key keyboard."] = "Camera chạy ở {0} × {1}. Dải phím chưa được đánh dấu cho đàn {2} phím.",
         ["The camera was closed, so nothing was saved."] = "Camera đã đóng nên chưa lưu gì.",
+        ["The camera would not deliver {0} as 32-bit frames, so its default mode is used."] = "Camera không đưa {0} ra khung 32-bit được, nên dùng chế độ mặc định của nó.",
         ["The camera would not switch to the mode that was chosen ({0}), so its default mode is used."] = "Camera không chuyển sang chế độ đã chọn ({0}), nên dùng chế độ mặc định của nó.",
         ["The camera would not switch to {0} ({1}), so its default mode is used."] = "Camera không chuyển sang {0} ({1}), nên dùng chế độ mặc định của nó.",
         ["The camera's picture changed size, so nothing was saved. Try again."] = "Hình của camera đã đổi kích thước nên chưa lưu gì. Hãy thử lại.",
