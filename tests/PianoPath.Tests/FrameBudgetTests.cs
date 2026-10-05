@@ -421,4 +421,69 @@ public class FrameBudgetTests
         Assert.Equal(FrameTrend.Unknown, baseline.Compare(Run(true, Scene("heavy", 10)), Scene("default", 60)).Trend);
         Assert.Equal(FrameTrend.Unknown, baseline.Compare(new FrameBenchRun { SoftwareAdapter = true }, Scene("default", 60)).Trend);
     }
+
+    // ---------------------------------------------------------------------------------------------
+    // the AR scene (--bench-ar)
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void The_ar_scene_is_asked_for_and_the_two_looks_the_gate_always_runs_are_unchanged()
+    {
+        Assert.DoesNotContain(FrameBudget.ArLook, FrameBudget.All);
+        Assert.Equal(["default", "heavy", "ar"], FrameBudget.AllWithAr.Select(budget => budget.Scene).ToArray());
+        Assert.Equal(FrameBudget.All, FrameBudget.AllWithAr.Take(2));
+        Assert.True(FrameBudget.ArLook.Camera);
+        Assert.All(FrameBudget.All, budget => Assert.False(budget.Camera));
+        Assert.Equal((1920, 1080), (FrameBudget.ArLook.Width, FrameBudget.ArLook.Height));
+        Assert.True(FrameBudget.ArLook.P95LimitMs > 0 && FrameBudget.ArLook.Description.Length > 20);
+        Assert.True(string.IsNullOrWhiteSpace(FrameBudget.ArLook.Preset));
+        Assert.Null(FrameBudget.Find("ar"));                                   // --bench alone never measures it
+    }
+
+    private static FrameBenchReport WithCamera(FrameBenchReport scene, long frames, double mean, double worst) => new()
+    {
+        Scene = scene.Scene, Preset = scene.Preset, Description = scene.Description, Width = scene.Width, Height = scene.Height, Frames = scene.Frames,
+        WarmupFrames = scene.WarmupFrames, WarmupMs = scene.WarmupMs, Particles = scene.Particles, BudgetP95LimitMs = scene.BudgetP95LimitMs,
+        Verdict = scene.Verdict, VerdictNote = scene.VerdictNote, Stats = scene.Stats, Samples = scene.Samples,
+        CameraFrames = frames, CameraAgeMeanMs = mean, CameraAgeWorstMs = worst
+    };
+
+    [Fact]
+    public void The_cameras_numbers_travel_in_the_json_and_a_scene_without_a_camera_writes_none()
+    {
+        var run = Run(true, Scene("default", 60), WithCamera(Scene("ar", 90), 412, 3.25, 17.5));
+        var json = run.ToJson();
+        Assert.True(FrameBenchRun.TryParse(json, out var reread));
+        var ar = reread.Scene("ar")!;
+        Assert.Equal(412, ar.CameraFrames);
+        Assert.Equal(3.25, ar.CameraAgeMeanMs, 3);
+        Assert.Equal(17.5, ar.CameraAgeWorstMs, 3);
+        var plain = reread.Scene("default")!;
+        Assert.Equal(0, plain.CameraFrames);
+        Assert.Equal(0, plain.CameraAgeMeanMs);
+        Assert.Equal(1, json.Split("\"camera\"").Length - 1);                   // only the scene that had one
+    }
+
+    [Fact]
+    public void A_report_from_before_the_ar_scene_still_reads_and_still_compares()
+    {
+        var before = Run(true, Scene("default", 60), Scene("heavy", 120));
+        Assert.DoesNotContain("\"camera\"", before.ToJson());
+        Assert.True(FrameBenchRun.TryParse(before.ToJson(), out var old));
+        // the next run has a scene the old one never had: unknown, not an error and not a regression
+        var now = Run(true, Scene("default", 60), Scene("heavy", 120), WithCamera(Scene("ar", 90), 100, 2, 9));
+        Assert.Equal(FrameTrend.Unknown, now.Compare(old, now.Scene("ar")!).Trend);
+        Assert.Equal(FrameTrend.Steady, now.Compare(old, now.Scene("default")!).Trend);
+    }
+
+    [Fact]
+    public void The_measurement_line_names_the_cameras_share_only_for_a_scene_that_had_one()
+    {
+        var lines = Run(true, Scene("default", 60), WithCamera(Scene("ar", 90), 412, 3.25, 17.5)).LogLines(null);
+        var withCamera = lines.Single(line => line.Contains("ar 1920×1080", StringComparison.Ordinal));
+        Assert.Contains("412 pictures", withCamera, StringComparison.Ordinal);
+        Assert.Contains("3.25 ms on average (worst 17.50 ms)", withCamera, StringComparison.Ordinal);
+        Assert.DoesNotContain("camera:", lines.Single(line => line.Contains("default 1920×1080", StringComparison.Ordinal)), StringComparison.Ordinal);
+        Assert.All(lines, line => Assert.Matches("^(NOTE|PASS|WARN|FAIL) perf: ", line));
+    }
 }

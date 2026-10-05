@@ -53,6 +53,11 @@ internal static class FrameBenchmark
             ? path
             : Path.Combine(Path.GetTempPath(), "keyflow-bench.json");
         var previous = Read(Value(args, "--bench-baseline="));
+        // --bench-ar adds the AR overlay scene to the run (and is a run of its own, with that one scene, when --bench is not there).
+        var withAr = args.Contains("--bench-ar");
+        IReadOnlyList<FrameBudget> budgets = withAr
+            ? (args.Contains("--bench") || args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal)) ? FrameBudget.AllWithAr : [FrameBudget.ArLook])
+            : FrameBudget.All;
 
         var scenes = new List<FrameBenchReport>();
         var notes = MainWindow.CreateDemoSong();
@@ -69,7 +74,7 @@ internal static class FrameBenchmark
             // only uploads it. The real stage always sets it, so the measured scene has it too.
             feed.LabelAtlas = PianoStage.GpuGlyphAtlas;
             var software = FrameBudget.IsSoftwareAdapter(loop.IsWarp, loop.AdapterName);
-            foreach (var budget in FrameBudget.All) scenes.Add(RunScene(loop, feed, budget, notes, frames, software));
+            foreach (var budget in budgets) scenes.Add(RunScene(loop, feed, budget, notes, frames, software));
             var run = new FrameBenchRun
             {
                 TakenUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
@@ -114,12 +119,19 @@ internal static class FrameBenchmark
             : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? new PianoVisualSettings();
         // Note colours are data the stage uploads as a table either way, so the bench uses a fixed ramp
         // instead of reaching into the WPF stage for the user's palette: the frame cost does not depend on it.
-        feed.SetLook(GpuLook.From(settings, (pitch, track) => System.Windows.Media.Color.FromRgb((byte)(pitch * 2), (byte)(40 + track * 60), 200), .205));
+        feed.SetLook(GpuLook.From(settings, (pitch, track) => System.Windows.Media.Color.FromRgb((byte)(pitch * 2), (byte)(40 + track * 60), 200), .205, null, overCamera: budget.Camera));
         feed.SetStageHeight(budget.Height);
         feed.ClearTransient();
         loop.SetEmbedded(true, budget.Width, budget.Height);
         loop.TargetFps = 0; // the loop still does not pace itself while sampling; this keeps it unpaced before and after
         var transport = new BenchTransport(notes);
+        using var camera = budget.Camera ? new BenchCamera() : null;
+        if (camera is not null)
+        {
+            // what the overlay shows: the camera's picture, and the notes and lit keys on the keyboard marked in it
+            feed.Camera = new GpuCameraInput(camera.Ring, PictureFit.Fit, false, 1f);
+            feed.Ar = new GpuArInput(camera.Calibration, ArNoteStyle.Default, 1f);
+        }
 
         // ---- warm-up: shaders, the atlas, the texture ring and the particle pools all settle here ----
         var drawnBefore = loop.FramesRendered;
@@ -143,6 +155,8 @@ internal static class FrameBenchmark
             transport.Advance(feed);
         }
         var samples = loop.FrameSamples;
+        var cameraAge = loop.CameraAge;
+        feed.Camera = null; feed.Ar = null;
         loop.SetEmbedded(false, 0, 0);
 
         var stats = FrameStats.From(samples);
@@ -162,6 +176,9 @@ internal static class FrameBenchmark
             WarmupFrames = warmupFrames,
             WarmupMs = warmupMs,
             Particles = loop.ParticleCount,
+            CameraFrames = camera is null ? 0 : cameraAge.Frames,
+            CameraAgeMeanMs = camera is null ? 0 : cameraAge.AverageMilliseconds,
+            CameraAgeWorstMs = camera is null ? 0 : cameraAge.WorstMilliseconds,
             BudgetP95LimitMs = budget.P95LimitMs,
             Verdict = verdict,
             VerdictNote = note,
@@ -211,6 +228,56 @@ internal static class FrameBenchmark
             _next = 0;
             _pressed.Clear();
             _releases.Clear();
+        }
+    }
+
+    /// <summary>
+    /// A camera for the AR scene: a 1280×720 picture published into a ring sixty times a second by its own thread, copied into the
+    /// ring's buffer each time as a real reader copies a frame out of the driver, and the calibration of the keyboard "in" it.
+    /// </summary>
+    private sealed class BenchCamera : IDisposable
+    {
+        internal const int Width = 1280, Height = 720, Fps = 60;
+        private readonly Thread _thread;
+        private volatile bool _stop;
+
+        internal CameraFrameRing Ring { get; } = new();
+        internal ArCalibration Calibration { get; }
+
+        internal BenchCamera()
+        {
+            Calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(70, 292), (1214, 268), (1236, 421), (52, 449)], Width, Height, out var problem)
+                ?? throw new InvalidOperationException($"the bench keyboard did not make a calibration ({problem})");
+            var picture = new byte[Width * Height * 4];
+            for (var y = 0; y < Height; y++)
+                for (var x = 0; x < Width; x++)
+                {
+                    var i = (y * Width + x) * 4;
+                    picture[i] = (byte)(70 + y / 8); picture[i + 1] = (byte)(60 + x / 16); picture[i + 2] = 80; picture[i + 3] = 255;
+                }
+            _thread = new Thread(() =>
+            {
+                var interval = Stopwatch.Frequency / Fps;
+                var next = Stopwatch.GetTimestamp();
+                while (!_stop)
+                {
+                    var buffer = Ring.BeginWrite(picture.Length, out var slot);
+                    Buffer.BlockCopy(picture, 0, buffer, 0, picture.Length);
+                    Ring.Publish(slot, Width, Height, Stopwatch.GetTimestamp());
+                    next += interval;
+                    var late = Stopwatch.GetTimestamp() - next;
+                    if (late > interval * 4) next = Stopwatch.GetTimestamp();      // a stall is not caught up with in a burst
+                    while (!_stop && Stopwatch.GetTimestamp() < next) Thread.Sleep(1);
+                }
+            }) { IsBackground = true, Name = "bench camera" };
+            _thread.Start();
+        }
+
+        public void Dispose()
+        {
+            _stop = true;
+            _thread.Join(TimeSpan.FromSeconds(2));
+            Ring.Clear();
         }
     }
 

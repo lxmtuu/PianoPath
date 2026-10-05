@@ -443,6 +443,18 @@ internal static partial class VerificationSuite
         Assert(FrameBenchRun.TryParse(new FrameBenchRun { TakenUtc = "2026-10-01T00:00:00.0000000Z", AppVersion = "0.4.0", Adapter = "verify", SoftwareAdapter = true, Scenes = [measured] }.ToJson(), out var measuredBack)
             && measuredBack.Scene("verify") is { } measuredScene && measuredScene.Samples.Count == measured.Samples.Count,
             "A report built from a real measurement has to survive the round trip through JSON with every frame time still in it.");
+        // ---- and one with the camera and the overlay, through the same code path (--bench-ar) -----------
+        var measuredAr = FrameBenchmark.Measure(FrameBudget.ArLook with { Scene = "verify-ar", Width = 320, Height = 180, P95LimitMs = 0 }, 24);
+        Assert(measuredAr is not null, "A machine that could sample the plain scene has to sample the AR scene too.");
+        Assert(measuredAr!.Frames > 0 && measuredAr.Frames <= 24 && measuredAr.Stats.Ordered && measuredAr.Verdict == FrameVerdict.NotApplicable,
+            $"The AR scene has to record frames like any other ({measuredAr.Frames} frames).");
+        Assert(measuredAr.CameraFrames >= 1 && measuredAr.CameraAgeMeanMs >= 0 && measuredAr.CameraAgeMeanMs < 5000 && measuredAr.CameraAgeWorstMs >= measuredAr.CameraAgeMeanMs,
+            $"The AR scene's camera pictures have to have been drawn and counted ({measuredAr.CameraFrames} pictures, mean {measuredAr.CameraAgeMeanMs:0.0} ms, worst {measuredAr.CameraAgeWorstMs:0.0} ms).");
+        Assert(measured.CameraFrames == 0, "The plain scene has no camera and must report none.");
+        Assert(FrameBenchRun.TryParse(new FrameBenchRun { TakenUtc = "2026-10-01T00:00:00.0000000Z", AppVersion = "0.4.0", Adapter = "verify", SoftwareAdapter = true, Scenes = [measuredAr] }.ToJson(), out var arBack)
+            && arBack.Scene("verify-ar") is { } arScene && arScene.CameraFrames == measuredAr.CameraFrames,
+            "The camera's numbers have to survive the round trip through JSON.");
+        Results.Add($"NOTE ar bench: {measuredAr.Frames} frames of {measuredAr.Width}×{measuredAr.Height} with the camera and the overlay at mean {FrameBudget.Ms(measuredAr.Stats.MeanMs)} ms, p95 {FrameBudget.Ms(measuredAr.Stats.P95Ms)} ms; {measuredAr.CameraFrames} pictures held {FrameBudget.Ms(measuredAr.CameraAgeMeanMs)} ms on average before they were drawn.");
         Results.Add($"PASS perf gate: 2 budgets at 1080p (p95 < {FrameBudget.Ms(FrameBudget.DefaultLook.P95LimitMs)} ms for the default look, < {FrameBudget.Ms(FrameBudget.HeavyLook.P95LimitMs)} ms for {FrameBudget.HeavyLook.Preset}), " +
             $"nearest-rank percentiles, the software-adapter rule, the JSON round trip and the relative gate check out, and {measured.Frames} frames of {measured.Width}×{measured.Height} sampled on the loop itself " +
             $"came back at mean {FrameBudget.Ms(measured.Stats.MeanMs)} ms, p95 {FrameBudget.Ms(measured.Stats.P95Ms)} ms, max {FrameBudget.Ms(measured.Stats.MaxMs)} ms.");

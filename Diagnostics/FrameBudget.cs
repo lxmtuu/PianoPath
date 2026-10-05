@@ -94,7 +94,7 @@ internal readonly struct FrameStats
 /// player feels, and a mean hides exactly that. p99 is reported too, but the gate is p95: over a couple of
 /// hundred frames p99 is one or two samples and moves with whatever else the machine was doing.</para>
 /// </remarks>
-internal sealed record FrameBudget(string Scene, int Width, int Height, double P95LimitMs, string Preset, string Description)
+internal sealed record FrameBudget(string Scene, int Width, int Height, double P95LimitMs, string Preset, string Description, bool Camera = false)
 {
     /// <summary>Frames measured per scene when the command line does not say.</summary>
     internal const int DefaultFrames = 120;
@@ -118,8 +118,19 @@ internal sealed record FrameBudget(string Scene, int Width, int Height, double P
     internal static readonly FrameBudget HeavyLook = new("heavy", 1920, 1080, 16, "Galaxy Voyage",
         "the busiest built-in look (Galaxy Voyage): ambient galaxy, stars, shooting stars, rainbow trails and firework bursts at 1080p");
 
+    /// <summary>
+    /// The AR overlay (<c>--bench-ar</c>): the default look as the stage draws it over a camera — its own notes and keys left out, as
+    /// the overlay does — with a 1280×720 camera at 60 fps through the camera layer, and the falling notes and lit keys on the marked
+    /// keyboard. The budget is the heavy look's: a stream or a call is running next to it.
+    /// </summary>
+    internal static readonly FrameBudget ArLook = new("ar", 1920, 1080, 16, "",
+        "the default look over a 1280×720 camera at 60 fps with the AR overlay on: the camera layer, the falling notes and the lit keys at 1080p", Camera: true);
+
     /// <summary>Every budgeted scene, in the order <c>--bench</c> measures them.</summary>
     internal static IReadOnlyList<FrameBudget> All { get; } = [DefaultLook, HeavyLook];
+
+    /// <summary>The scenes <c>--bench</c> measures plus the AR one, which <c>--bench-ar</c> asks for.</summary>
+    internal static IReadOnlyList<FrameBudget> AllWithAr { get; } = [DefaultLook, HeavyLook, ArLook];
 
     /// <summary>Finds a scene by id (<c>default</c>, <c>heavy</c>), or null when the name is not one of them.</summary>
     internal static FrameBudget? Find(string? scene) =>
@@ -173,6 +184,10 @@ internal sealed class FrameBenchReport
     internal int WarmupFrames { get; init; }
     internal double WarmupMs { get; init; }
     internal int Particles { get; init; }
+    /// <summary>Camera pictures the loop drew during a scene with a camera (0 for one without): how many, how long the app held each before drawing it, on average and at worst.</summary>
+    internal long CameraFrames { get; init; }
+    internal double CameraAgeMeanMs { get; init; }
+    internal double CameraAgeWorstMs { get; init; }
     internal double BudgetP95LimitMs { get; init; }
     internal FrameVerdict Verdict { get; init; }
     internal string VerdictNote { get; init; } = "";
@@ -279,7 +294,8 @@ internal sealed class FrameBenchRun
             var fps = scene.Stats.FpsAtP95.ToString("0", CultureInfo.InvariantCulture);
             lines.Add($"NOTE perf: {scene.Scene} {scene.Width}×{scene.Height} · {scene.Stats.Count} frames after {scene.WarmupFrames} warm-up frames · " +
                       $"mean {FrameBudget.Ms(scene.Stats.MeanMs)} ms, median {FrameBudget.Ms(scene.Stats.MedianMs)} ms, " +
-                      $"p95 {FrameBudget.Ms(scene.Stats.P95Ms)} ms (~{fps} fps), p99 {FrameBudget.Ms(scene.Stats.P99Ms)} ms, max {FrameBudget.Ms(scene.Stats.MaxMs)} ms · {scene.Particles} particles");
+                      $"p95 {FrameBudget.Ms(scene.Stats.P95Ms)} ms (~{fps} fps), p99 {FrameBudget.Ms(scene.Stats.P99Ms)} ms, max {FrameBudget.Ms(scene.Stats.MaxMs)} ms · {scene.Particles} particles"
+                      + (scene.CameraFrames > 0 ? $" · camera: {scene.CameraFrames} pictures, each held {FrameBudget.Ms(scene.CameraAgeMeanMs)} ms on average (worst {FrameBudget.Ms(scene.CameraAgeWorstMs)} ms) before it was drawn" : ""));
             lines.Add(scene.Verdict switch
             {
                 FrameVerdict.Pass => $"PASS perf: {scene.VerdictNote}",
@@ -324,6 +340,14 @@ internal sealed class FrameBenchRun
                 json.WriteNumber("warmupFrames", scene.WarmupFrames);
                 json.WriteNumber("warmupMs", Math.Round(scene.WarmupMs, 2));
                 json.WriteNumber("particles", scene.Particles);
+                if (scene.CameraFrames > 0)
+                {
+                    json.WriteStartObject("camera");
+                    json.WriteNumber("frames", scene.CameraFrames);
+                    json.WriteNumber("ageMeanMs", Math.Round(scene.CameraAgeMeanMs, 3));
+                    json.WriteNumber("ageWorstMs", Math.Round(scene.CameraAgeWorstMs, 3));
+                    json.WriteEndObject();
+                }
                 json.WriteNumber("budgetP95LimitMs", scene.BudgetP95LimitMs);
                 json.WriteString("verdict", scene.Verdict.ToString());
                 json.WriteString("verdictNote", scene.VerdictNote);
@@ -386,6 +410,9 @@ internal sealed class FrameBenchRun
                     WarmupFrames = (int)Number(element, "warmupFrames"),
                     WarmupMs = Number(element, "warmupMs"),
                     Particles = (int)Number(element, "particles"),
+                    CameraFrames = element.TryGetProperty("camera", out var cameraElement) && cameraElement.ValueKind == JsonValueKind.Object ? (long)Number(cameraElement, "frames") : 0,
+                    CameraAgeMeanMs = cameraElement.ValueKind == JsonValueKind.Object ? Number(cameraElement, "ageMeanMs") : 0,
+                    CameraAgeWorstMs = cameraElement.ValueKind == JsonValueKind.Object ? Number(cameraElement, "ageWorstMs") : 0,
                     BudgetP95LimitMs = Number(element, "budgetP95LimitMs"),
                     Verdict = Enum.TryParse<FrameVerdict>(Text(element, "verdict"), out var verdict) ? verdict : FrameVerdict.NotApplicable,
                     VerdictNote = Text(element, "verdictNote"),
