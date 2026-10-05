@@ -22,6 +22,7 @@ internal static class StringsVietnamese
         [" No audio track was written for this take."] = " Bản ghi này không có tệp âm thanh.",
         [" The AAC encoder on this machine refused the audio stream, so this take has no sound."] = " Bộ mã hoá AAC trên máy này từ chối luồng âm thanh, nên lượt ghi này không có tiếng.",
         [" with the audio inside"] = " với âm thanh nằm trong tệp",
+        [" · the app holds each picture for {0} ms"] = " · app giữ mỗi khung hình {0} ms",
         ["+ TAG"] = "+ THẺ",
         [", edited since it was applied"] = ", đã chỉnh sửa sau khi áp dụng",
         ["120 FPS"] = "120 FPS",

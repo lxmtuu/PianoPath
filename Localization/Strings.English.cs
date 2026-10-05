@@ -22,6 +22,7 @@ internal static class StringsEnglish
         [" No audio track was written for this take."] = " No audio track was written for this take.",
         [" The AAC encoder on this machine refused the audio stream, so this take has no sound."] = " The AAC encoder on this machine refused the audio stream, so this take has no sound.",
         [" with the audio inside"] = " with the audio inside",
+        [" · the app holds each picture for {0} ms"] = " · the app holds each picture for {0} ms",
         ["+ TAG"] = "+ TAG",
         [", edited since it was applied"] = ", edited since it was applied",
         ["120 FPS"] = "120 FPS",

@@ -114,4 +114,20 @@ public sealed class CameraAgeMeterTests
         Assert.Equal("", failure);
         Assert.Equal(200_000, meter.Snapshot.Frames);
     }
+
+    [Theory]
+    [InlineData(0, 0.0, 0)]            // nothing counted: nothing said
+    [InlineData(1, 0.2, 5)]            // never "0 ms", which would read as a promise
+    [InlineData(1, 7.4, 5)]
+    [InlineData(5, 7.6, 10)]
+    [InlineData(5, 42.0, 40)]
+    [InlineData(5, 1e12, 9995)]
+    [InlineData(5, double.NaN, 0)]
+    public void The_status_line_shows_the_average_in_steps_so_it_does_not_flicker(long frames, double average, int expected)
+    {
+        var age = new CameraAge(frames, average, average, average);
+        Assert.Equal(expected, CameraAgeText.Rounded(age));
+        Assert.Equal(expected == 0, CameraAgeText.Describe(age).Length == 0);
+        if (expected > 0) Assert.Contains(expected.ToString(), CameraAgeText.Describe(age));
+    }
 }

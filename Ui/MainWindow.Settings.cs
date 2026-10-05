@@ -592,7 +592,8 @@ public partial class MainWindow
             ArStatus.NoCamera => CameraStatus.Length > 0 ? Loc.F("Waiting for the camera. {0}", CameraStatus) : Loc.T("Waiting for the camera."),
             ArStatus.NeedsCalibration => Loc.F("The camera runs at {0} × {1}. The keys have not been marked yet for a {2}-key keyboard.", snapshot.ImageWidth, snapshot.ImageHeight, keys),
             ArStatus.Outdated => Loc.F("The saved key area was marked for another picture size or keyboard size. Mark it again for {0} × {1} and {2} keys.", snapshot.ImageWidth, snapshot.ImageHeight, keys),
-            _ => Loc.F("AR overlay on · {0} × {1} · {2} keys · {3}", snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode)),
+            _ => Loc.F("AR overlay on · {0} × {1} · {2} keys · {3}", snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
+                + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default),
         };
     }
 
@@ -603,7 +604,7 @@ public partial class MainWindow
     private void RefreshArStatus()
     {
         if (_arStatus is null) return;
-        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, _visualSettings.KeyboardSize, _visualSettings.ArMode, CameraStatus);
+        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, _visualSettings.KeyboardSize, _visualSettings.ArMode, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
         if (key == _arStatusKey) return;
         _arStatusKey = key;
         Loc.Bind(_arStatus, ArStatusText);

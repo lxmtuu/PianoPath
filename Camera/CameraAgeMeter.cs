@@ -7,6 +7,19 @@ namespace PianoPath;
 /// <param name="WorstMilliseconds">The oldest a frame was when first drawn.</param>
 internal readonly record struct CameraAge(long Frames, double LastMilliseconds, double AverageMilliseconds, double WorstMilliseconds);
 
+/// <summary>The words about the camera's age for the AR card's status line.</summary>
+internal static class CameraAgeText
+{
+    /// <summary>A delay is shown in steps of this many milliseconds, so the line does not flicker as the average moves.</summary>
+    internal const int Step = 5;
+
+    /// <summary>The average age rounded to a step; 0 while nothing has been counted, so nothing is said.</summary>
+    internal static int Rounded(CameraAge age) => age.Frames <= 0 || double.IsNaN(age.AverageMilliseconds) ? 0 : (int)Math.Min(9995, Math.Max(Step, Math.Round(age.AverageMilliseconds / Step) * Step));
+
+    /// <summary>What to add to the status line, or nothing when no picture has been counted.</summary>
+    internal static string Describe(CameraAge age) => Rounded(age) is var ms and > 0 ? Loc.F(" · the app holds each picture for {0} ms", ms) : "";
+}
+
 /// <summary>
 /// How long a camera picture waited inside the app: from the moment the reader got the frame
 /// (<see cref="CameraFrameView.CaptureTicks"/>) until the render thread first drew it. It counts only what the app does with a frame — the
