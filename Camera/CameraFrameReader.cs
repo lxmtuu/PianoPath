@@ -108,7 +108,12 @@ internal sealed partial class CameraFrameReader : IDisposable
         return devices;
     }
 
-    /// <summary>Opens the camera with this symbolic link, or the first one when the link is empty or gone.</summary>
+    /// <summary>
+    /// Opens the camera with this symbolic link. When the link is empty (automatic), gone, or the camera will not open,
+    /// the other cameras are tried in <see cref="CameraRanking"/> order — colour cameras first, infrared face-login
+    /// cameras last — until one opens; <paramref name="error"/> then says what was passed over, and is the failure of
+    /// every camera tried when none opens.
+    /// </summary>
     internal static CameraFrameReader? OpenDevice(string link, out string? error)
     {
         error = null;
@@ -120,22 +125,36 @@ internal sealed partial class CameraFrameReader : IDisposable
                 error = listError ?? Loc.T("No camera was found on this machine.");
                 return null;
             }
-            var chosen = found.FirstOrDefault(entry => entry.Info.Link.Length > 0 && string.Equals(entry.Info.Link, link, StringComparison.OrdinalIgnoreCase));
-            if (chosen.Activate is null)
+            var names = found.Select(entry => entry.Info.Name).ToList();
+            var preferred = CameraRanking.Find(found.Select(entry => entry.Info.Link).ToList(), link);
+            // A stored link that matches nothing is a camera that was unplugged: say so, and carry on with the others.
+            var gone = !string.IsNullOrEmpty(link) && preferred < 0 ? Loc.T("That camera is gone, so another camera on the machine is used instead.") : null;
+            var failures = new List<string>();
+            (string Name, string Error)? firstFailure = null;
+            foreach (var index in CameraRanking.Order(names, preferred))
             {
-                // The stored link is gone (a camera was unplugged): fall back to the first one and say so.
-                chosen = found.First();
-                if (!string.IsNullOrEmpty(link)) error = Loc.T("That camera is gone, so the first camera on the machine is used instead.");
-            }
-            var reader = Attach(readerAttributes => DeviceReader(chosen.Activate!, readerAttributes), out var openError, live: true);
-            error = openError ?? error;
-            if (reader is not null)
-            {
-                reader.Label = chosen.Info.Name.Length > 0 ? chosen.Info.Name : Loc.T("Camera");
-                reader.Source = chosen.Info.Link;
+                var entry = found[index];
+                if (entry.Activate is null) continue;
+                var activate = entry.Activate;
+                var reader = Attach(readerAttributes => DeviceReader(activate, readerAttributes), out var openError, live: true);
+                var name = entry.Info.Name.Length > 0 ? entry.Info.Name : Loc.T("Camera");
+                if (reader is null)
+                {
+                    failures.Add($"{name}: {openError}");
+                    firstFailure ??= (name, openError ?? "");
+                    continue;
+                }
+                reader.Label = name;
+                reader.Source = entry.Info.Link;
                 reader.IsLive = true;
+                var notes = new List<string>();
+                if (gone is not null) notes.Add(gone);
+                if (firstFailure is { } failed) notes.Add(Loc.F("{0} would not open ({1}), so {2} is used.", failed.Name, failed.Error, name));
+                error = notes.Count > 0 ? string.Join(" ", notes) : null;
+                return reader;
             }
-            return reader;
+            error = Loc.F("No camera could be opened. {0}", string.Join(" ", failures));
+            return null;
         }
         finally { foreach (var entry in found) Release(entry.Activate); }
     }

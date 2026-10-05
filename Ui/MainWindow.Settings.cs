@@ -539,7 +539,7 @@ public partial class MainWindow
         var overlay = Card(CameraSettingsHost, "WEBCAM OVERLAY", "A live camera or a video file drawn over the stage, keyed against pure green. Use a green screen behind you (or the Green Screen preset on the stage) and the background of the picture disappears.");
         Toggle(overlay, "Camera overlay", nameof(PianoVisualSettings.ShowCameraOverlay), "Draw the source below over the stage as a picture-in-picture.");
         ButtonRow(overlay, ("CHOOSE VIDEO…", ChooseCameraVideo_Click, "IconCamera"), ("USE CAMERA", UseCameraOverlay_Click, "IconCamera"), ("REFRESH CAMERAS", RefreshCameraOverlay_Click, "IconRefresh"));
-        Choice(overlay, "Camera", nameof(PianoVisualSettings.CameraSourceLink), "Which camera the overlay opens; the list is read from the machine when the page opens and when REFRESH is pressed.",
+        Choice(overlay, "Camera", nameof(PianoVisualSettings.CameraSourceLink), "Which camera the overlay opens. The list is read from the machine at start, whenever a camera is plugged in or removed, and when REFRESH is pressed. Automatic picks the first colour camera and leaves infrared (face-login) cameras for last.",
             CameraChoices());
         Choice(overlay, "Corner", nameof(PianoVisualSettings.CameraCorner), "Which corner of the stage the picture sits in.",
             CameraOverlay.Corners.Select(corner => (corner, corner)).ToArray());
@@ -671,7 +671,14 @@ public partial class MainWindow
     {
         var devices = CameraFrameReader.Devices(out _cameraListError);
         _cameraDevices = devices;
-        return [("", Loc.T("First camera")), .. devices.Where(device => device.Link.Length > 0).Select(device => (device.Link, device.Name))];
+        return CameraChoiceOptions(devices);
+    }
+
+    /// <summary>The picker's rows for a list of cameras: "automatic" first, then each camera, infrared ones marked.</summary>
+    private static (string Value, string Caption)[] CameraChoiceOptions(IReadOnlyList<CameraInfo> devices)
+    {
+        return [("", Loc.T("Automatic (best camera)")), .. devices.Where(device => device.Link.Length > 0)
+            .Select(device => (device.Link, CameraRanking.IsInfrared(device.Name) ? Loc.F("{0} (infrared)", device.Name) : device.Name))];
     }
 
     /// <summary>
@@ -738,8 +745,8 @@ public partial class MainWindow
                         : _cameraListError is not null
                             ? Loc.F("The camera list could not be read: {0}", _cameraListError)
                             : _cameraDevices.Count == 0
-                                ? Loc.T("No camera was found on this machine. Choose a video file to overlay instead.")
-                                : Loc.F("{0} camera(s) found. The overlay opens the one picked above.", _cameraDevices.Count);
+                                ? Loc.T("No camera was found on this machine. If one is plugged in, check that Windows lets desktop apps use it (Settings → Privacy & security → Camera), or choose a video file to overlay instead.")
+                                : Loc.F("{0} camera(s) found: {1}. The overlay opens the one picked above.", _cameraDevices.Count, string.Join(", ", _cameraDevices.Select(device => device.Name)));
         _cameraStatus.Text = text;
         if (announce) Loc.Set(SettingsSaveLabel, text);
     }
