@@ -431,6 +431,13 @@ internal sealed partial class CameraFrameReader : IDisposable
                 {
                     // A driver that will not answer is skipped; the other cameras are still listed.
                 }
+                finally
+                {
+                    // The array holds one reference to each activator and the caller owns it. The wrapper above took its own, so
+                    // this one is given back here; without it every reading of the list (now every few seconds) would leak one
+                    // activator per camera.
+                    Marshal.Release(pointer);
+                }
             }
         }
         catch (Exception ex) { error = ex.Message; }
