@@ -40,7 +40,7 @@ public class ArNotesTests
     public void A_note_reaches_the_back_of_the_keys_at_its_start_time_and_trails_behind_it()
     {
         var shapes = Build([Note(60, 10, .5)], 10);
-        var shape = Assert.Single(shapes.Skip(1));
+        var shape = Assert.Single(shapes);
         var (left, right) = Calibration.Layout.Span(60);
         var centre = (left + right) / 2; var half = (right - left) / 2 * Style.WidthShare;
         var length = .5 * Style.FallSpeed - Style.Gap;
@@ -59,7 +59,7 @@ public class ArNotesTests
     [Fact]
     public void A_note_still_to_come_is_that_far_behind_the_keys_for_the_time_it_has_to_wait()
     {
-        var shape = Assert.Single(Build([Note(60, 11, .5)], 10).Skip(1));
+        var shape = Assert.Single(Build([Note(60, 11, .5)], 10));
         var (left, right) = Calibration.Layout.Span(60);
         var centre = (left + right) / 2;
         var (u, v) = Keys(shape.Patch.FrontRight);
@@ -67,7 +67,7 @@ public class ArNotesTests
         Near(-1.5, v, 1e-6);                               // one second at 1.5 key depths per second
         Assert.False(shape.Sounding);
         // twice the time, twice the distance
-        var later = Assert.Single(Build([Note(60, 12, .5)], 10).Skip(1));
+        var later = Assert.Single(Build([Note(60, 12, .5)], 10));
         Near(-3, Keys(later.Patch.FrontRight).V, 1e-6);
     }
 
@@ -75,19 +75,19 @@ public class ArNotesTests
     public void A_note_comes_into_view_at_the_reach_and_fades_in_over_its_last_quarter()
     {
         var edge = Style.Reach / Style.FallSpeed;
-        Assert.Empty(Build([Note(60, 10 + edge + .01, .5)], 10).Skip(1));
-        var barely = Assert.Single(Build([Note(60, 10 + edge - .01, .5)], 10).Skip(1));
+        Assert.Empty(Build([Note(60, 10 + edge + .01, .5)], 10));
+        var barely = Assert.Single(Build([Note(60, 10 + edge - .01, .5)], 10));
         Assert.InRange(barely.Fade, 0, .05);
-        var halfway = Assert.Single(Build([Note(60, 10 + edge - .5 * Style.Reach * .25 / Style.FallSpeed, .5)], 10).Skip(1));
+        var halfway = Assert.Single(Build([Note(60, 10 + edge - .5 * Style.Reach * .25 / Style.FallSpeed, .5)], 10));
         Near(.5, halfway.Fade, 1e-9);
-        var nearer = Assert.Single(Build([Note(60, 10 + edge * .6, .5)], 10).Skip(1));
+        var nearer = Assert.Single(Build([Note(60, 10 + edge * .6, .5)], 10));
         Assert.Equal(1, nearer.Fade);
     }
 
     [Fact]
     public void A_long_note_is_cut_off_at_the_reach()
     {
-        var shape = Assert.Single(Build([Note(60, 10, 20)], 10).Skip(1));
+        var shape = Assert.Single(Build([Note(60, 10, 20)], 10));
         Near(-Style.Reach, Keys(shape.Patch.BackLeft).V, 1e-6);
         Near(0, Keys(shape.Patch.FrontLeft).V, 1e-6);
     }
@@ -97,21 +97,21 @@ public class ArNotesTests
     {
         var note = Note(60, 10, .5);
         var length = .5 * Style.FallSpeed - Style.Gap;
-        var early = Assert.Single(Build([note], 10.2).Skip(1));
+        var early = Assert.Single(Build([note], 10.2));
         Near(0, Keys(early.Patch.FrontLeft).V, 1e-6);                          // held at the keys
         Near(.2 * Style.FallSpeed - length, Keys(early.Patch.BackLeft).V, 1e-6); // its tail drawn in
         Assert.True(early.Sounding);
-        var late = Assert.Single(Build([note], 10.45).Skip(1));
+        var late = Assert.Single(Build([note], 10.45));
         Assert.True(late.Patch.Area < early.Patch.Area);
-        Assert.Empty(Build([note], 10.5).Skip(1));                              // nothing is left of it
-        Assert.Empty(Build([note], 12).Skip(1));
-        Assert.Empty(Build([note], 10.6).Skip(1));
+        Assert.Empty(Build([note], 10.5));                              // nothing is left of it
+        Assert.Empty(Build([note], 12));
+        Assert.Empty(Build([note], 10.6));
     }
 
     [Fact]
     public void A_very_short_note_is_still_drawn_at_the_shortest_length()
     {
-        var shape = Assert.Single(Build([Note(60, 11, .01)], 10).Skip(1));
+        var shape = Assert.Single(Build([Note(60, 11, .01)], 10));
         var length = Keys(shape.Patch.FrontLeft).V - Keys(shape.Patch.BackLeft).V;
         Near(Style.MinLength, length, 1e-6);
     }
@@ -120,7 +120,7 @@ public class ArNotesTests
     public void A_note_is_as_wide_as_its_key_allows_and_black_notes_come_last()
     {
         var notes = new[] { Note(61, 10.5, .5), Note(60, 10.5, .5), Note(63, 10.6, .5), Note(62, 10.6, .5) };
-        var shapes = Build(notes, 10).Skip(1).ToList();
+        var shapes = Build(notes, 10).ToList();
         Assert.Equal(4, shapes.Count);
         Assert.Equal(new[] { false, false, true, true }, shapes.Select(s => s.Black));
         var white = shapes.First(s => s.Pitch == 60); var black = shapes.First(s => s.Pitch == 61);
@@ -139,7 +139,7 @@ public class ArNotesTests
         var corners61 = new (double X, double Y)[] { (190, 276), (1088, 258), (1106, 432), (172, 452) };
         var keys61 = KeyboardLayout.ForKeyCount(61);
         var calibration = ArProjectionTests.Calibrate(corners61, keys61);
-        var shapes = Build([Note(keys61.FirstPitch - 1, 10.5, .5), Note(keys61.FirstPitch, 10.5, .5), Note(keys61.LastPitch, 10.5, .5), Note(keys61.LastPitch + 1, 10.5, .5), Note(0, 10.5, .5), Note(127, 10.5, .5)], 10, calibration: calibration).Skip(1);
+        var shapes = Build([Note(keys61.FirstPitch - 1, 10.5, .5), Note(keys61.FirstPitch, 10.5, .5), Note(keys61.LastPitch, 10.5, .5), Note(keys61.LastPitch + 1, 10.5, .5), Note(0, 10.5, .5), Note(127, 10.5, .5)], 10, calibration: calibration);
         Assert.Equal(new[] { keys61.FirstPitch, keys61.LastPitch }, shapes.Select(s => s.Pitch).Order());
     }
 
@@ -150,13 +150,13 @@ public class ArNotesTests
         foreach (var style in new[] { new ArNoteStyle(FallSpeed: 0), new ArNoteStyle(FallSpeed: double.NaN), new ArNoteStyle(Reach: -1), new ArNoteStyle(MinLength: 0), new ArNoteStyle(Gap: -1), new ArNoteStyle(WidthShare: 0), new ArNoteStyle(WidthShare: 1.5) })
         {
             Assert.False(style.IsUsable);
-            Assert.Empty(Build(notes, 10, style).Skip(1));
+            Assert.Empty(Build(notes, 10, style));
         }
         Assert.True(ArNoteStyle.Default.IsUsable);
-        Assert.Empty(Build(notes, double.NaN).Skip(1));
-        Assert.Empty(Build(notes, double.PositiveInfinity).Skip(1));
-        Assert.Empty(Build([], 10).Skip(1));
-        Assert.Empty(Build(notes, 10, view: new ArView(0, 0, 10, 10, PictureFit.Fit, false)).Skip(1));
+        Assert.Empty(Build(notes, double.NaN));
+        Assert.Empty(Build(notes, double.PositiveInfinity));
+        Assert.Empty(Build([], 10));
+        Assert.Empty(Build(notes, 10, view: new ArView(0, 0, 10, 10, PictureFit.Fit, false)));
     }
 
     [Fact]
