@@ -561,15 +561,19 @@ internal static partial class VerificationSuite
 
     /// <summary>
     /// AR-6.2b, the stage's own notes drawn through the scene-to-picture map: with the overlay on it is the stage's note pass
-    /// that draws, so a note lands where <see cref="ArSceneMap"/> puts it and nowhere else, its NoteStyle, its glow and its
-    /// rounded corners all reach it because it is the very shader that drew them before a camera was ever involved, and a note
-    /// that runs past the map's horizon is cut there instead of smeared over the picture. Read back from frames on WARP.
+    /// that draws, so a note lands where <see cref="ArSceneMap"/> puts it and nowhere else, as wide as the map makes its own
+    /// scene width, with its NoteStyle and its glow reaching it because it is the very shader that drew them before a camera was
+    /// ever involved, and a note that runs past the map's horizon is cut there instead of smeared over the picture. Read back
+    /// from frames rendered on WARP.
     /// <para>
     /// One thing these pixels cannot say is whether <c>PsNote</c> anti-aliases the note's edge against the map's own local scale
     /// (<see cref="ArSceneMap.Scale"/>) rather than the stage's <c>SceneSize.z</c>. The composite lays the camera picture under
     /// the light and the sRGB encode is steep near black, so a one-pixel ramp and a five-pixel one land on nearly the same byte
     /// values and any threshold between them would be a guess dressed up as a check. That the vertex shader works the scale out
     /// and hands it to the pixel shader is held to <see cref="ArSceneMap"/> arithmetically instead, in ArSceneConstantsTests.
+    /// The corner radius is left out for a plain reason: at any width a note is drawn here, roundness 0 and roundness 100 differ
+    /// by less than a pixel of this output, and it travels to the same shader in the same constant buffer as the NoteStyle the
+    /// check below does read back.
     /// </para>
     /// </summary>
     private static void VerifyArSceneNotes()
@@ -634,8 +638,10 @@ internal static partial class VerificationSuite
             feed.SetLook(LookOf(settings));
             feed.SetState(song, position, true, new HashSet<int>());
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
-            // The AR layer is told not to draw notes, so every note pixel below comes from the stage's own note pass.
-            if (keys is not null) feed.Ar = new GpuArInput(keys, ArNoteStyle.Default, 1f, .6f, ShowNotes: false);
+            // The AR layer is told to draw neither notes nor lit keys, so every note pixel below comes from the stage's own
+            // note pass and nothing of the layer's own can sit under a probe. (The keys would light by themselves: the
+            // simulation answers the song, and two of these three notes are sounding.)
+            if (keys is not null) feed.Ar = new GpuArInput(keys, ArNoteStyle.Default, 1f, KeyLight: 0f, ShowNotes: false);
             return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
         }
         byte[] DrawBare(GpuStageRenderer renderer, PianoVisualSettings settings)
@@ -666,7 +672,7 @@ internal static partial class VerificationSuite
         var straight = Draw(renderer, quiet, 90, calibration);
         Assert(renderer.ArScene.Valid, "The renderer should hold a scene map for the output it drew.");
         Assert(renderer.ArQuadCount == 0 && renderer.ArKeyQuadCount == 0,
-            $"With no note of its own to draw and no key held, the AR layer should draw nothing; it drew {renderer.ArQuadCount} quads.");
+            $"With neither notes nor lit keys asked of it, the AR layer should draw nothing; it drew {renderer.ArQuadCount} quads.");
         Assert(renderer.CameraTexture is { Uploads: > 0 },
             $"The camera picture should reach the GPU ({renderer.CameraTexture?.Uploads ?? 0} uploads).");
         // Held on to across the rest of the checks: the frames below are drawn from the same output and the same settings, so
@@ -736,22 +742,28 @@ internal static partial class VerificationSuite
         var unlitFrame = Draw(renderer, unlit, 0, calibration);
         var litFrame = Draw(renderer, lit, 0, calibration);
         var first = notes.Span[0].Rect;
-        Assert(map.TryProject(first.X - 1.5, first.Y + first.W / 2, out var glowX, out var glowY, out _),
+        // two scene pixels to the left of the note's own left edge: outside it, well inside the quad the vertex shader builds
+        // for it (which reaches NoteA.w + NoteA.z + 2 scene px out), and far enough out that rounding to a pixel cannot land
+        // the probe on the note itself
+        Assert(map.TryProject(first.X - 2, first.Y + first.W / 2, out var glowX, out var glowY, out _),
             "The pixel beside the note should project onto the picture.");
         Assert(Level(litFrame, glowX, glowY) > Level(unlitFrame, glowX, glowY) + 40 && Level(unlitFrame, glowX, glowY) <= 30,
             $"A note's glow should light the picture beside it ({glowX:0},{glowY:0}): {Level(litFrame, glowX, glowY)} with glow against {Level(unlitFrame, glowX, glowY)} without.");
 
-        // ---- and its rounded corners ------------------------------------------------------------------
-        var sharp = quiet.Clone(); sharp.NoteRoundness = 0;
-        var round = quiet.Clone(); round.NoteRoundness = 100;
-        var sharpFrame = Draw(renderer, sharp, 0, calibration);
-        var roundFrame = Draw(renderer, round, 0, calibration);
-        // The box's own bottom-right corner, 0.8 scene px in from it: inside the 2 px radius roundness 0 gives a note this wide,
-        // and outside the 3.6 px radius roundness 100 gives it, so the two frames disagree at this one pixel and agree elsewhere.
-        Assert(map.TryProject(first.X + first.Z - .8, first.Y + first.W - .8, out var cornerX, out var cornerY, out _),
-            "The note's corner should project onto the picture.");
-        Assert(Level(sharpFrame, cornerX, cornerY) > Level(roundFrame, cornerX, cornerY) + 40,
-            $"A rounded corner should leave the box's own corner out ({cornerX:0},{cornerY:0}): {Level(sharpFrame, cornerX, cornerY)} square against {Level(roundFrame, cornerX, cornerY)} round.");
+        // ---- and its own width, as wide as the map makes it ------------------------------------------
+        // Measured across the Solid note at its middle height: the lit span has to be the note's width in scene pixels times
+        // what the map makes of it there. One projected point says where a note is; this says how big it is, which is the
+        // other half of the projection being right rather than a guess that landed near the middle.
+        Assert(map.TryProject(first.X, first.Y + first.W / 2, out var leftX, out var leftY, out _)
+            && map.TryProject(first.X + first.Z, first.Y + first.W / 2, out var rightX, out var rightY, out _),
+            "Both of the note's side edges should project onto the picture.");
+        var expected = rightX - leftX;
+        var row = (leftY + rightY) / 2;
+        var litSpan = 0;
+        for (var x = (int)Math.Floor(leftX) - 4; x <= (int)Math.Ceiling(rightX) + 4; x++)
+            if (Level(styles[0].Pixels, x, row) > 40) litSpan++;
+        Assert(expected > 3 && Math.Abs(litSpan - expected) <= 2.5,
+            $"The note should be as wide on the keys as the map makes its {first.Z:0.0} scene pixels: {expected:0.0} px from corner to corner, {litSpan} px lit.");
 
         // ---- a note that runs past the horizon is cut, not smeared -------------------------------------
         // These corners widen towards the player, so this map's horizon is half a key depth behind the keys and the CPU refuses
@@ -779,8 +791,8 @@ internal static partial class VerificationSuite
 
         Results.Add($"PASS ar scene notes: {notes.Count} notes drawn by the stage's own pass through the scene map " +
                     $"(the first at {placed[0].X:0},{placed[0].Y:0} instead of the stage's {notes.Span[0].Rect.X + notes.Span[0].Rect.Z / 2:0},{notes.Span[0].Rect.Y + notes.Span[0].Rect.W / 2:0}), " +
-                    $"all {PianoVisualSettings.NoteStyles.Length} note styles apart by at least {leastStyleDifference}, the glow reaching {Level(litFrame, glowX, glowY)} beside the note, " +
-                    $"a rounded corner costing {Level(sharpFrame, cornerX, cornerY) - Level(roundFrame, cornerX, cornerY)} of it, and a note past the horizon cut with nothing drawn over the keys, " +
+                    $"all {PianoVisualSettings.NoteStyles.Length} note styles apart by at least {leastStyleDifference}, {litSpan} px lit where the map puts {expected:0.0} px of note, " +
+                    $"the glow reaching {Level(litFrame, glowX, glowY)} beside it, and a note past the horizon cut with {drawn} px still drawn and nothing over the keys, " +
                     $"in {started.Elapsed.TotalSeconds:0.0} s on {renderer.AdapterName}.");
     }
 
