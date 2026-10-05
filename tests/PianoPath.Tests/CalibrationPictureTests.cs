@@ -72,15 +72,16 @@ public class CalibrationPictureTests
     }
 
     [Fact]
-    public async Task Peeking_while_the_camera_publishes_and_the_engine_takes_never_shows_a_torn_frame()
+    public void Peeking_while_the_camera_publishes_and_the_engine_takes_never_shows_a_torn_frame()
     {
         var ring = new CameraFrameRing();
         const int width = 64, height = 36, size = width * height * 4;
-        using var stop = new CancellationTokenSource();
-        var writer = Task.Run(() =>
+        var stop = false;
+        // Own threads, not the pool's: other tests keep the pool busy and a task could start long after the loop below has ended.
+        var writer = new Thread(() =>
         {
             byte value = 0;
-            while (!stop.IsCancellationRequested)
+            while (!Volatile.Read(ref stop))
             {
                 var buffer = ring.BeginWrite(size, out var slot);
                 value = (byte)(value % 250 + 1);
@@ -88,10 +89,11 @@ public class CalibrationPictureTests
                 ring.Publish(slot, width, height, 0);
                 Thread.Yield();
             }
-        });
-        var taker = Task.Run(() => { while (!stop.IsCancellationRequested) { ring.TryTake(out _); Thread.Sleep(1); } });
+        }) { IsBackground = true };
+        var taker = new Thread(() => { while (!Volatile.Read(ref stop)) { ring.TryTake(out _); Thread.Sleep(1); } }) { IsBackground = true };
+        writer.Start(); taker.Start();
         var torn = 0; var peeked = 0;
-        var end = DateTime.UtcNow.AddMilliseconds(600);
+        var end = DateTime.UtcNow.AddMilliseconds(800);
         while (DateTime.UtcNow < end)
         {
             Thread.Sleep(1);                                                  // the lock is not fair: a loop that never lets go would starve the others
@@ -99,8 +101,8 @@ public class CalibrationPictureTests
             peeked++;
             if (copy.Pixels.Length != size || copy.Pixels.Any(b => b != copy.Pixels[0])) torn++;
         }
-        stop.Cancel();
-        await Task.WhenAll(writer, taker);
+        Volatile.Write(ref stop, true);
+        Assert.True(writer.Join(5000) && taker.Join(5000));
         Assert.True(peeked > 0, "the writer never published, or every peek was starved");
         Assert.Equal(0, torn);
     }
