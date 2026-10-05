@@ -18,6 +18,7 @@ internal struct GpuFrameConstants
 {
     public Vector4 ScreenTime, SceneSize, Camera, Background, Aura, Horizon, SceneA, SceneB;
     public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx, KeyRange, ArPicture, ArFlags;
+    public Vector4 ArSceneA, ArSceneB, ArSceneC;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -264,6 +265,15 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>How many of those were lit keys (the rest are notes); verification reads it.</summary>
     internal int ArKeyQuadCount => _arLayer.KeyQuadCount;
 
+    private ArSceneMap _arScene;
+
+    /// <summary>
+    /// The scene → output map the last frame's note pass drew through (invalid when it drew the stage's own way): the stage's
+    /// own notes laid flat on the keys and carried into the camera picture, so they land on the real piano (AR-6.2). Verification
+    /// reads it to work out where a note should be, on the CPU, and then reads the pixels back.
+    /// </summary>
+    internal ArSceneMap ArScene => _arScene;
+
     /// <summary>The camera texture (null when there is no layer or no frame yet); verification reads its counters.</summary>
     internal GpuCameraTexture? CameraTexture => _camera;
 
@@ -288,12 +298,23 @@ internal sealed class GpuStageRenderer : IDisposable
         GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites)
     {
         var look = input.Look;
+        // ---- AR-6.2: one map from the stage's own scene to the camera picture, for this output ----
+        // It needs the same three things the AR layer's quads need (a camera picture, a calibration made at that picture's
+        // size, and the scene this output lays out), so both are decided together and cannot disagree about where the
+        // keyboard is. The note pass draws through it; the AR layer keeps drawing the lit keys through the same corners.
+        var ar = _arInput;
+        var arView = default(ArView);
+        var arDrawn = ar is not null && TryCameraView(target, look, out arView)
+            && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight;
+        _arScene = arDrawn ? ArSceneMap.Create(ar!.Calibration, arView, layout.Width, layout.HitY) : default;
+        var arScene = ArSceneConstants.Of(_arScene, arDrawn);
+
         simulation.BuildNotes(input, layout, notes);
         simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
         simulation.BuildSprites(look, layout, sprites);
         simulation.BuildAmbient(look, layout, _ambientList);
 
-        var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth);
+        var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, arScene);
         var context = Context;
         context.UpdateSubresource(in constants, _frameBuffer);
         _notes.Upload(context, notes.Span);
@@ -303,8 +324,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _keyColors.Upload(context, simulation.KeyColors);
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
-        if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, _arList);
+        if (arDrawn) _arLayer.Build(input, ar!, arView, _arKeyColors ?? simulation.KeyColors, _arList);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
@@ -443,7 +463,7 @@ internal sealed class GpuStageRenderer : IDisposable
     };
 
     private GpuFrameConstants BuildConstants(GpuRenderTarget target, GpuFrameInput input, GpuSceneLayout layout, GpuStageSimulation simulation,
-        float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth)
+        float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth, ArSceneConstants arScene)
     {
         var look = input.Look;
         var pixelsPerUnit = target.Height / Math.Max(1f, layout.Height);
@@ -457,6 +477,10 @@ internal sealed class GpuStageRenderer : IDisposable
         // the software star field: one star per 5200 DIP² at full density (a 26 DIP cell is 676 DIP²), drawn faint
         var stars = look.ShowBackground && look.ShowStars && !look.Chroma ? Math.Max(.02f, look.StarDensity * 676f / 5200f) : 0;
         var edge = .9f + look.NoteEdgeWidth * 3.4f;
+        var arPicture = ComputeArPicture(target, look, out var arFlags);
+        // ArFlags.w is the note pass's switch: with it the stage's own notes go through ArSceneA..C and land on the real
+        // keys instead of through Camera and the stage's own key positions (AR-6.2).
+        arFlags.W = arScene.Flag;
         return new GpuFrameConstants
         {
             ScreenTime = new Vector4(target.Width, target.Height, (float)simulation.Time, layout.HitY),
@@ -486,12 +510,12 @@ internal sealed class GpuStageRenderer : IDisposable
             HitFx = new Vector4(look.ShowHalo && look.HaloPulse ? HaloMotionId(look.HaloPulseStyle) : 0,
                 look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity),
             KeyRange = new Vector4(layout.Keys.FirstPitch, Math.Max(1, layout.Keys.KeyCount - 1), 0, 0),
-            ArPicture = ComputeArPicture(target, look, out var arFlags),
-            ArFlags = arFlags
+            ArPicture = arPicture,
+            ArFlags = arFlags,
+            ArSceneA = arScene.RowA, ArSceneB = arScene.RowB, ArSceneC = arScene.RowC
         };
     }
 
-    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
     /// <summary>Where the camera picture lands on this output; false when no camera picture is drawn.</summary>
     private bool TryCameraView(GpuRenderTarget target, GpuLook look, out ArView view)
     {
@@ -502,6 +526,11 @@ internal sealed class GpuStageRenderer : IDisposable
         return view.Valid;
     }
 
+    /// <summary>
+    /// Where the camera picture lands on this output (pixels) and the flags the shaders read: x mirror, y the camera layer is
+    /// drawn, z picture opacity. <c>w</c> is left 0 here and set by the caller, because it belongs to the note pass rather than
+    /// to the picture (see <see cref="ArSceneConstants"/>).
+    /// </summary>
     private Vector4 ComputeArPicture(GpuRenderTarget target, GpuLook look, out Vector4 flags)
     {
         flags = Vector4.Zero;

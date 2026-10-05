@@ -560,6 +560,231 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
+    /// AR-6.2b, the stage's own notes drawn through the scene-to-picture map: with the overlay on it is the stage's note pass
+    /// that draws, so a note lands where <see cref="ArSceneMap"/> puts it and nowhere else, its NoteStyle, its glow and its
+    /// rounded corners all reach it because it is the very shader that drew them before a camera was ever involved, and a note
+    /// that runs past the map's horizon is cut there instead of smeared over the picture. Read back from frames on WARP.
+    /// <para>
+    /// One thing these pixels cannot say is whether <c>PsNote</c> anti-aliases the note's edge against the map's own local scale
+    /// (<see cref="ArSceneMap.Scale"/>) rather than the stage's <c>SceneSize.z</c>. The composite lays the camera picture under
+    /// the light and the sRGB encode is steep near black, so a one-pixel ramp and a five-pixel one land on nearly the same byte
+    /// values and any threshold between them would be a guess dressed up as a check. That the vertex shader works the scale out
+    /// and hands it to the pixel shader is held to <see cref="ArSceneMap"/> arithmetically instead, in ArSceneConstantsTests.
+    /// </para>
+    /// </summary>
+    private static void VerifyArSceneNotes()
+    {
+        const int cw = 1280, ch = 720;         // the camera picture
+        const int width = 640, height = 360;   // the output the notes are read at
+        var started = Stopwatch.StartNew();
+        Assert(ReferenceEquals(KeyboardLayout.Active, KeyboardLayout.Standard88), "The scene notes are drawn over the full keyboard.");
+        var problem = CalibrationProblem.None;
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(70, 292), (1214, 268), (1236, 421), (52, 449)], cw, ch, out problem)
+            ?? throw new InvalidOperationException($"The sample corners were refused: {problem}");
+
+        // Two notes sounding at the position below, so they hang over the keys, and one still falling, so it lies above them.
+        // Every setting that would put a second shape on the same note is off, so one pixel says one thing.
+        var song = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = 10, Duration = .3 },
+            new() { Pitch = 64, Start = 10, Duration = .3 },
+            new() { Pitch = 67, Start = 10.3, Duration = .3 },
+        };
+        const double position = 10.1;
+        var quiet = new PianoVisualSettings
+        {
+            BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = true, ShowEmbers = false,
+            ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false, ShowLightBeams = false,
+            ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0, BloomSize = 0, Notes3D = false,
+            ShowNoteLabels = false, NoteLandingGlow = false, FallingGhost = false, FallingTrail = "None", NoteShimmer = false,
+            FallingPulse = false, HoldBar = false, HoldBreath = false, HoldVibration = false, HoldElectricArc = false,
+            VelocityColor = false, HaloPulse = false, ShootingStars = false, NoteStyle = "Solid", NoteWidth = 100, NoteHeadGlow = 0,
+        };
+
+        // A flat picture, so "the picture, untouched" is a level and not a guess. Grey says it for the places a note must not
+        // be; black is used where the note's own light has to be the only thing in the frame, because the picture showing
+        // through a note's edge compresses the very differences those checks are about. One ring, published again for each
+        // frame: two rings would both be on sequence 1 and the GPU would keep the first picture for the second.
+        var ring = new CameraFrameRing();
+        void Publish(byte level)
+        {
+            var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
+            Array.Fill(buffer, level, 0, cw * ch * 4);
+            for (var i = 3; i < cw * ch * 4; i += 4) buffer[i] = 255;
+            ring.Publish(slot, cw, ch, Stopwatch.GetTimestamp());
+        }
+
+        GpuLook LookOf(PianoVisualSettings settings) => GpuLook.From(settings, (pitch, track) => Color.FromRgb(255, 80, 220), .205);
+        // The scene the render loop lays out for this output (its height is the scene height, so the width is the output's own)
+        // and the notes the renderer's own call builds in it, so the checks hold the pixels to the notes the frame was made
+        // from rather than to a second model of them.
+        var layout = new GpuSceneLayout(height * width / (float)height, height, .205f);
+        GpuInstanceList<GpuNoteInstance> NotesOf(GpuLook look)
+        {
+            var input = new GpuFrameInput { Notes = song, MaxNoteDuration = .3, Position = position, Playing = true, Look = look };
+            var notes = new GpuInstanceList<GpuNoteInstance>(16);
+            new GpuStageSimulation().BuildNotes(input, layout, notes);
+            return notes;
+        }
+        byte[] Draw(GpuStageRenderer renderer, PianoVisualSettings settings, byte picture, ArCalibration? keys)
+        {
+            Publish(picture);
+            var feed = new GpuStageFeed();
+            feed.SetStageHeight(height);
+            feed.SetLook(LookOf(settings));
+            feed.SetState(song, position, playing: true);
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
+            // The AR layer is told not to draw notes, so every note pixel below comes from the stage's own note pass.
+            if (keys is not null) feed.Ar = new GpuArInput(keys, ArNoteStyle.Default, 1f, .6f, ShowNotes: false);
+            return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
+        }
+        byte[] DrawBare(GpuStageRenderer renderer, PianoVisualSettings settings)
+        {
+            var feed = new GpuStageFeed();
+            feed.SetStageHeight(height);
+            feed.SetLook(LookOf(settings));
+            feed.SetState(song, position, playing: true);
+            return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
+        }
+        (int R, int G, int B) At(byte[] pixels, double x, double y)
+        {
+            var px = (int)Math.Clamp(Math.Round(x), 0, width - 1);
+            var py = (int)Math.Clamp(Math.Round(y), 0, height - 1);
+            return (pixels[(py * width + px) * 4 + 2], pixels[(py * width + px) * 4 + 1], pixels[(py * width + px) * 4]);
+        }
+        int Level(byte[] pixels, double x, double y) { var c = At(pixels, x, y); return Math.Max(c.R, Math.Max(c.G, c.B)); }
+        int Spread(byte[] pixels, double x, double y) { var c = At(pixels, x, y); return Math.Max(c.R, Math.Max(c.G, c.B)) - Math.Min(c.R, Math.Min(c.G, c.B)); }
+        // how far a pixel is from the flat grey picture: 0 where nothing was drawn over it
+        int Off(byte[] pixels, double x, double y) { var c = At(pixels, x, y); return Math.Max(Math.Abs(c.R - 90), Math.Max(Math.Abs(c.G - 90), Math.Abs(c.B - 90))); }
+
+        using var renderer = GpuStageRenderer.Create(forceWarp: true);
+        var look = LookOf(quiet);
+        var notes = NotesOf(look);
+        Assert(notes.Count == 3, $"Three notes should be built for this song at {position:0.00} s, got {notes.Count}.");
+
+        // ---- where the notes land -------------------------------------------------------------------
+        var straight = Draw(renderer, quiet, 90, calibration);
+        Assert(renderer.ArScene.Valid, "The renderer should hold a scene map for the output it drew.");
+        Assert(renderer.ArQuadCount == 0 && renderer.ArKeyQuadCount == 0,
+            $"With no note of its own to draw and no key held, the AR layer should draw nothing; it drew {renderer.ArQuadCount} quads.");
+        Assert(renderer.CameraTexture is { Uploads: > 0 },
+            $"The camera picture should reach the GPU ({renderer.CameraTexture?.Uploads ?? 0} uploads).");
+        // Held on to across the rest of the checks: the frames below are drawn from the same output and the same settings, so
+        // this is the map every one of them used.
+        var map = renderer.ArScene;
+        Assert(Math.Abs(map.SceneWidth - layout.Width) < .01 && Math.Abs(map.HitY - layout.HitY) < .01,
+            $"The map must be the one for this output's own scene, and is {map.SceneWidth:0.0} wide with its hit line at {map.HitY:0.0}.");
+        var placed = new List<(double X, double Y)>();
+        for (var i = 0; i < notes.Count; i++)
+        {
+            var rect = notes.Span[i].Rect;
+            double cx = rect.X + rect.Z / 2, cy = rect.Y + rect.W / 2;
+            Assert(map.TryProject(cx, cy, out var outX, out var outY, out var weight), $"Note {i} should project onto the picture.");
+            Assert(weight >= ArProjection.MinW, $"Note {i}'s weight should be one the rasteriser can divide by ({weight:0.000}).");
+            Assert(Spread(straight, outX, outY) > 30,
+                $"Note {i} should be drawn where the scene map puts it ({outX:0},{outY:0}), and its spread there is {Spread(straight, outX, outY)}.");
+            // At this output the stage's own transform is the identity (zoom 1, no offset, scene height = output height), so the
+            // stage's own place for the note is its scene place - and the whole point of AR-6.2b is that nothing is drawn there.
+            Assert(Off(straight, cx, cy) <= 6,
+                $"Note {i} must not be drawn at the stage's own place any more ({cx:0},{cy:0}), which reads {Off(straight, cx, cy)} off the picture.");
+            placed.Add((outX, outY));
+        }
+
+        // ---- and where they land with no camera at all: the stage's own place, exactly as before -----
+        var bare = DrawBare(renderer, quiet);
+        Assert(!renderer.ArScene.Valid, "With no camera picture there is no scene map, so the note pass must draw the stage's own way.");
+        for (var i = 0; i < notes.Count; i++)
+        {
+            var rect = notes.Span[i].Rect;
+            double cx = rect.X + rect.Z / 2, cy = rect.Y + rect.W / 2;
+            Assert(Spread(bare, cx, cy) > 30, $"With no camera, note {i} should still be drawn at the stage's own place ({cx:0},{cy:0}).");
+            Assert(Level(bare, placed[i].X, placed[i].Y) <= 6,
+                $"With no camera, nothing should be drawn at note {i}'s place on the keys ({placed[i].X:0},{placed[i].Y:0}); it reads {Level(bare, placed[i].X, placed[i].Y)}.");
+        }
+
+        // ---- the stage's own note shader reaches the notes on the keys -------------------------------
+        var styles = new List<(string Name, byte[] Pixels)>();
+        foreach (var name in PianoVisualSettings.NoteStyles)
+        {
+            var settings = quiet.Clone(); settings.NoteStyle = name;
+            styles.Add((name, Draw(renderer, settings, 0, calibration)));
+        }
+        var leastStyleDifference = int.MaxValue;
+        for (var i = 0; i < styles.Count; i++)
+            for (var j = i + 1; j < styles.Count; j++)
+            {
+                // summed over the two notes that hang over the keys, so one style's own palette cannot carry the check
+                var difference = 0;
+                foreach (var (x, y) in placed.Take(2))
+                    for (var dy = -12; dy <= 12; dy++)
+                        for (var dx = -6; dx <= 6; dx++)
+                        {
+                            var a = At(styles[i].Pixels, x + dx, y + dy);
+                            var b = At(styles[j].Pixels, x + dx, y + dy);
+                            difference += Math.Abs(a.R - b.R) + Math.Abs(a.G - b.G) + Math.Abs(a.B - b.B);
+                        }
+                leastStyleDifference = Math.Min(leastStyleDifference, difference);
+                Assert(difference > 400,
+                    $"{styles[i].Name} and {styles[j].Name} notes must not look the same once they are drawn on the keys (they differ by {difference}).");
+            }
+
+        // ---- the note's glow reaches the picture beside it -------------------------------------------
+        // NoteGlow is read through BloomIntensity, so both frames bloom alike and the only difference between them is the halo
+        // the note sheds. NoteEdge is 0 to keep the body under the bloom threshold, so the body cannot shed any of its own.
+        var unlit = quiet.Clone(); unlit.NoteGlow = 0; unlit.NoteEdge = 0; unlit.BloomIntensity = 65;
+        var lit = unlit.Clone(); lit.NoteGlow = 100;
+        var unlitFrame = Draw(renderer, unlit, 0, calibration);
+        var litFrame = Draw(renderer, lit, 0, calibration);
+        var first = notes.Span[0].Rect;
+        Assert(map.TryProject(first.X - 1.5, first.Y + first.W / 2, out var glowX, out var glowY, out _),
+            "The pixel beside the note should project onto the picture.");
+        Assert(Level(litFrame, glowX, glowY) > Level(unlitFrame, glowX, glowY) + 40 && Level(unlitFrame, glowX, glowY) <= 30,
+            $"A note's glow should light the picture beside it ({glowX:0},{glowY:0}): {Level(litFrame, glowX, glowY)} with glow against {Level(unlitFrame, glowX, glowY)} without.");
+
+        // ---- and its rounded corners ------------------------------------------------------------------
+        var sharp = quiet.Clone(); sharp.NoteRoundness = 0;
+        var round = quiet.Clone(); round.NoteRoundness = 100;
+        var sharpFrame = Draw(renderer, sharp, 0, calibration);
+        var roundFrame = Draw(renderer, round, 0, calibration);
+        // The box's own bottom-right corner, 0.8 scene px in from it: inside the 2 px radius roundness 0 gives a note this wide,
+        // and outside the 3.6 px radius roundness 100 gives it, so the two frames disagree at this one pixel and agree elsewhere.
+        Assert(map.TryProject(first.X + first.Z - .8, first.Y + first.W - .8, out var cornerX, out var cornerY, out _),
+            "The note's corner should project onto the picture.");
+        Assert(Level(sharpFrame, cornerX, cornerY) > Level(roundFrame, cornerX, cornerY) + 40,
+            $"A rounded corner should leave the box's own corner out ({cornerX:0},{cornerY:0}): {Level(sharpFrame, cornerX, cornerY)} square against {Level(roundFrame, cornerX, cornerY)} round.");
+
+        // ---- a note that runs past the horizon is cut, not smeared -------------------------------------
+        // These corners widen towards the player, so this map's horizon is half a key depth behind the keys and the CPU refuses
+        // the top of every note in the song. The clip w the vertex shader hands the rasteriser is what cuts the quad there, so
+        // the picture over the keys and in front of them must stay untouched: a NaN or an infinity would smear it.
+        var folded = ArCalibration.Create(KeyboardLayout.Standard88, [(80, 100), (1200, 100), (800, 600), (400, 600)], cw, ch, out problem)
+            ?? throw new InvalidOperationException($"The folding corners were refused: {problem}");
+        var foldedFrame = Draw(renderer, quiet, 90, folded);
+        var foldedMap = renderer.ArScene;
+        Assert(foldedMap.Valid, "The folding calibration should still give a usable map at the keys.");
+        Assert(!foldedMap.TryProject(first.X + first.Z / 2, first.Y, out _, out _, out _),
+            "The top of the note should be past this map's horizon, so the CPU refuses it.");
+        Assert(foldedMap.TryProject(first.X + first.Z / 2, first.Y + first.W, out _, out var bottomY, out _),
+            "The bottom of the note is on the keys, so the CPU still answers for it.");
+        var smeared = 0;
+        for (var y = (int)bottomY + 40; y < height; y++)
+            for (var x = 0; x < width; x += 4)
+                if (Off(foldedFrame, x, y) > 6) smeared++;
+        Assert(smeared == 0, $"Nothing may be drawn over the keys once the notes run past the horizon; {smeared} pixels were.");
+        var drawn = 0;
+        for (var y = 0; y <= (int)bottomY; y++)
+            for (var x = 0; x < width; x += 2)
+                if (Spread(foldedFrame, x, y) > 25) drawn++;
+        Assert(drawn > 40, $"The part of the notes this side of the horizon should still be drawn; {drawn} pixels were.");
+
+        Results.Add($"PASS ar scene notes: {notes.Count} notes drawn by the stage's own pass through the scene map " +
+                    $"(the first at {placed[0].X:0},{placed[0].Y:0} instead of the stage's {notes.Span[0].Rect.X + notes.Span[0].Rect.Z / 2:0},{notes.Span[0].Rect.Y + notes.Span[0].Rect.W / 2:0}), " +
+                    $"all {PianoVisualSettings.NoteStyles.Length} note styles apart by at least {leastStyleDifference}, the glow reaching {Level(litFrame, glowX, glowY)} beside the note, " +
+                    $"a rounded corner costing {Level(sharpFrame, cornerX, cornerY) - Level(roundFrame, cornerX, cornerY)} of it, and a note past the horizon cut with nothing drawn over the keys, " +
+                    $"in {started.Elapsed.TotalSeconds:0.0} s on {renderer.AdapterName}.");
+    }
+
+    /// <summary>
     /// AR-1.5, the calibration window end to end on the real window: it refuses to open without a camera, a picture or the right
     /// size; shows the camera's picture the way the stage shows it; takes four clicks to a calibration that is saved for this
     /// camera; keeps Done shut on corners that cannot be used; saves nothing when cancelled or when the camera changed behind

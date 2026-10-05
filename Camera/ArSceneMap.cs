@@ -1,3 +1,5 @@
+using System.Numerics;
+
 namespace PianoPath;
 
 /// <summary>
@@ -112,4 +114,36 @@ internal readonly struct ArSceneMap
 
     /// <summary>The keyboard coordinates of a scene point: <c>u</c> across the keys, <c>v</c> along them (negative behind the keys).</summary>
     internal (double U, double V) ToKeys(double x, double y) => Valid ? (x / SceneWidth, (y - HitY) / DepthPixels) : (double.NaN, double.NaN);
+}
+
+/// <summary>
+/// A scene map as the shader holds it (Gpu/StageShaders.hlsl, AR-6.2): the three rows, each in the <c>xyz</c> of one
+/// <c>float4</c> of the <c>Frame</c> constant buffer, and the flag in <c>ArFlags.w</c> that tells the note pass to draw through
+/// them. Packing them here rather than in the renderer keeps the whole contract with the shader — the order of the nine
+/// numbers, what the flag means, and when a map must not be sent — in one pure place a test can hold on any machine.
+/// </summary>
+/// <param name="RowA">Row 0: dotted with (<c>x</c>, <c>y</c>, 1) it is the output's <c>x</c>, before the division by the weight.</param>
+/// <param name="RowB">Row 1: the output's <c>y</c>, before the same division.</param>
+/// <param name="RowC">Row 2: the weight itself, which the vertex shader hands to the rasteriser as the clip <c>w</c>.</param>
+/// <param name="Flag">1 when the note pass draws through the rows, 0 when it draws the stage's own way.</param>
+internal readonly record struct ArSceneConstants(Vector4 RowA, Vector4 RowB, Vector4 RowC, float Flag)
+{
+    /// <summary>What a frame without the overlay carries: zeros and no flag, so the note pass is left exactly as it was.</summary>
+    internal static readonly ArSceneConstants Off = default;
+
+    /// <summary>
+    /// Packs <paramref name="map"/> for the shader. <paramref name="drawn"/> says whether this frame is drawing the overlay at
+    /// all; the rows are sent only when the map can also answer, so a flag of 1 always has a usable map behind it and the vertex
+    /// shader is never asked to divide by a weight it was not given.
+    /// </summary>
+    internal static ArSceneConstants Of(ArSceneMap map, bool drawn)
+    {
+        if (!drawn || !map.Valid) return Off;
+        var rows = map.Rows();
+        // A calibration that nearly folds the plane over itself would send infinities the shader cannot divide by; the
+        // wizard refuses such a quad, and so does this, which leaves the note pass drawing the stage's own way.
+        foreach (var value in rows) if (!float.IsFinite(value)) return Off;
+        return new ArSceneConstants(new Vector4(rows[0], rows[1], rows[2], 0), new Vector4(rows[3], rows[4], rows[5], 0),
+            new Vector4(rows[6], rows[7], rows[8], 0), 1);
+    }
 }

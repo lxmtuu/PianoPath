@@ -4,7 +4,9 @@
 // with D3DCompile (vs_5_0 / ps_5_0). The pipeline is:
 //
 //   1. VsFullscreen + PsBackground   - background colour/image, procedural atmosphere, stars, horizon glow, key bed
-//   2. VsNote       + PsNote         - instanced SDF note capsules: Solid, Neon, Glass, Fire (lava)
+//   2. VsNote       + PsNote         - instanced SDF note capsules: Solid, Neon, Glass, Fire (lava). With ArFlags.w set
+//                                      (AR-6.2) each vertex goes through the scene -> output map in ArSceneA..C instead
+//                                      of through Camera, so these very notes land on the real keys in the picture.
 //   3. VsKey        + PsKey          - instanced 3D key boxes, GGX + Lambert, rim, emissive, AO, shadows
 //   4. VsSprite     + PsSprite       - instanced additive particles, rings, flares, beams, hit line
 //   4b. VsArQuad    + PsArQuad       - AR layer: notes projected onto the camera picture
@@ -43,7 +45,14 @@ cbuffer Frame : register(b0)
     float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
     float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
     float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
-    float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity
+    float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity,
+                         // w = 1 when the stage's own scene is drawn through ArSceneA..C instead of through Camera (AR-6.2)
+    // The scene -> output map of Camera/ArSceneMap.cs, three rows of it: dot a row with (x, y, 1) and divide the first two
+    // answers by the third to get the output pixel of a scene point. VsNote hands the third to the rasteriser as the clip w,
+    // which is what makes a note a perspective quad on the keys rather than a flat one on the stage.
+    float4 ArSceneA;     // row 0: the output's x, times the weight
+    float4 ArSceneB;     // row 1: the output's y, times the weight
+    float4 ArSceneC;     // row 2: the weight itself, 0 at the map's horizon and negative beyond it
 };
 
 cbuffer PassConstants : register(b1)
@@ -375,6 +384,7 @@ struct NoteOut
     float4 Color : TEXCOORD2;
     float4 Misc : TEXCOORD3;
     float SceneY : TEXCOORD4;
+    float Scale : TEXCOORD5;       // output pixels per scene pixel here: SceneSize.z, or the AR map's own (ArSceneMap.Scale)
 };
 
 NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
@@ -385,13 +395,37 @@ NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 centre = n.Rect.xy + halfSize;
     float2 corner = QuadCorner(vid);
     float2 local = corner * (halfSize + margin);
+    float2 scene = centre + local;
     NoteOut o;
-    o.Position = ToClip(SceneToScreen(centre + local), 0.5);
     o.Local = local;
     o.Half = halfSize;
     o.Color = n.Color;
     o.Misc = n.Misc;
-    o.SceneY = centre.y + local.y;
+    o.SceneY = scene.y;
+    o.Scale = SceneSize.z;
+    if (ArFlags.w > 0.5)
+    {
+        // AR-6.2: the stage's own scene laid flat on the keys and carried into the camera picture. The map's weight
+        // becomes the clip w, so the rasteriser interpolates across the quad in perspective - the way VsArQuad already
+        // does for the corners the AR layer's quads are given. Everything below the keys' back edge is then on the
+        // piano itself, and NoteStyle, glow, roundness and the head all keep working because this is the same note.
+        float3 h = float3(scene, 1.0);
+        float w = dot(ArSceneC.xyz, h);
+        float mapX = dot(ArSceneA.xyz, h);
+        float mapY = dot(ArSceneB.xyz, h);
+        // ndc * w with the division by w cancelled out: a vertex at or beyond the horizon (w <= 0) stays finite, and
+        // the clipper then cuts the primitive at w = 0 exactly as it does for any other perspective vertex.
+        o.Position = float4(mapX / ScreenTime.x * 2.0 - w, w - mapY / ScreenTime.y * 2.0, 0.5 * w, w);
+        // Output pixels per scene pixel at this vertex: sqrt|det J| of the map, which is the number ArSceneMap.Scale
+        // works out on the CPU. The pixel shader needs it because the note's shape is still measured in scene pixels
+        // while the screen it lands on is measured in output pixels - one scene pixel is not one output pixel here.
+        // The reciprocal is guarded so a vertex at the horizon cannot hand the pixel shader an infinity.
+        float rw = 1.0 / (abs(w) < 1e-3 ? (w < 0.0 ? -1e-3 : 1e-3) : w);
+        float2 jx = ArSceneA.xy - mapX * rw * ArSceneC.xy;
+        float2 jy = ArSceneB.xy - mapY * rw * ArSceneC.xy;
+        o.Scale = min(sqrt(abs(jx.x * jy.y - jx.y * jy.x)) * abs(rw), 1e4);
+    }
+    else o.Position = ToClip(SceneToScreen(scene), 0.5);
     return o;
 }
 
@@ -401,7 +435,7 @@ float4 PsNote(NoteOut v) : SV_Target
     float2 hb = max(v.Half, 0.5);
     float radius = min(NoteA.y, min(hb.x, hb.y));
     float d = SdRoundBox(p, hb, radius);                 // < 0 inside
-    float inside = saturate(0.5 - d * SceneSize.z);
+    float inside = saturate(0.5 - d * v.Scale);          // d is in scene px, the edge it anti-aliases is in output px
     float outsideD = max(d, 0.0);
     float style = NoteA.x;
     float3 col = v.Color.rgb;
