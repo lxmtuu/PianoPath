@@ -273,6 +273,9 @@ internal sealed class CalibrationEditor
         return CalibrationQuad.Check(points, ImageWidth, ImageHeight) == CalibrationProblem.None ? points : null;
     }
 
+    /// <summary>The four corners as the overlay would use them (put in order when they only need that), or null when they are not usable yet.</summary>
+    internal IReadOnlyList<(double X, double Y)>? UsableCorners => Usable();
+
     /// <summary>Done is allowed when the points are fine, or only need putting in order.</summary>
     internal bool CanFinish => Usable() is not null;
 

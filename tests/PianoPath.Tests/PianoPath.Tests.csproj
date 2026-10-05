@@ -62,6 +62,7 @@
     <Compile Include="..\..\Camera\ArKeys.cs" Link="Product\Camera\ArKeys.cs" />
     <Compile Include="..\..\Camera\ArOptions.cs" Link="Product\Camera\ArOptions.cs" />
     <Compile Include="..\..\Camera\ArPlan.cs" Link="Product\Camera\ArPlan.cs" />
+    <Compile Include="..\..\Camera\CalibrationWizard.cs" Link="Product\Camera\CalibrationWizard.cs" />
     <Compile Include="..\..\Camera\ArCalibrationSession.cs" Link="Product\Camera\ArCalibrationSession.cs" />
     <Compile Include="..\..\Camera\CameraMode.cs" Link="Product\Camera\CameraMode.cs" />
     <Compile Include="..\..\Camera\CameraFrameRing.cs" Link="Product\Camera\CameraFrameRing.cs" />
