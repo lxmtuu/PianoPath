@@ -962,9 +962,18 @@ internal static partial class VerificationSuite
         Invoke(window, "UpdateArFeed");
         Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
             "With the AR switch off the overlay leaves the stage alone.");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)),
+            "The Camera & FX page should carry the AR switch, the mode picker and the three sliders.");
+        var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
+        Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;
-        visualSettings.ArEnabled = true;
-        Invoke(window, "SyncCameraOverlay");
+        toggles[nameof(PianoVisualSettings.ArEnabled)].IsChecked = true;
+        Assert(visualSettings.ArEnabled, "Switching the overlay on in the dock should reach the settings.");
+        Assert(engineRuns ? arText().StartsWith(Loc.T("Waiting for the camera."), StringComparison.Ordinal)
+                : arText() == Loc.T("The AR overlay needs the Direct3D 11 engine; the software renderer is drawing the stage."),
+            $"The AR card should say what the overlay waits for ({arText()}).");
         Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.NoCamera : ArStatus.NeedsGpu) && gpuFeed.Camera is null,
             "Switched on without an open camera, the overlay waits for one; without the engine it says it needs it.");
         (double X, double Y)[] arCorners = [(70, 292), (1214, 268), (1236, 421), (52, 449)];     // a key area is a key area for any keyboard size
@@ -980,12 +989,18 @@ internal static partial class VerificationSuite
             "A calibrated camera draws the overlay and the stage's own notes and keys step aside.");
         if (engineRuns)
         {
+            Assert(arText().Contains("1280 × 720", StringComparison.Ordinal), $"The AR card should say what the overlay draws on ({arText()}).");
+            sliders[nameof(PianoVisualSettings.ArOpacity)].Value = 40;
+            Assert(visualSettings.ArOpacity == 40 && Math.Abs(gpuFeed.Ar!.Opacity - .4f) < 1e-3, "The opacity slider should reach the layer the engine draws.");
+            sliders[nameof(PianoVisualSettings.ArLookahead)].Value = 2.5;
+            var valueBoxes = (Dictionary<string, TextBox>)Field(window, "_visualValueBoxes");
+            Assert(valueBoxes[nameof(PianoVisualSettings.ArLookahead)].Text == $"{2.5:0.0} s" && Math.Abs(gpuFeed.Ar!.Notes.Reach / gpuFeed.Ar.Notes.FallSpeed - 2.5) < 1e-9,
+                "The lookahead slider should show seconds and set how far above the keys notes come into view.");
+            choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Perform;
+            Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes, "The mode picker should reach the layer the engine draws.");
+            choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Learn;
             Assert(ReferenceEquals(gpuFeed.Camera!.Ring, Field(window, "_cameraFrames")) && gpuFeed.Ar!.Calibration == window.ArCalibration.Current,
                 "The engine reads the camera's own ring and draws on the calibration in force.");
-            visualSettings.ArMode = ArModes.Perform;
-            Invoke(window, "UpdateArFeed");
-            Assert(!gpuFeed.Ar!.ShowNotes, "Perform mode asks the engine for the keys without the notes to come.");
-            visualSettings.ArMode = ArModes.Learn;
             var frameRing = (CameraFrameRing)Field(window, "_cameraFrames");
             frameRing.BeginWrite(16, out var arSlot); frameRing.Publish(arSlot, 2, 2, 1);
             Invoke(window, "PumpCameraFrame");
@@ -996,8 +1011,11 @@ internal static partial class VerificationSuite
                 "A green-screen background takes the camera's place, so the overlay steps aside.");
             visualSettings.BackgroundMode = "Solid";
         }
-        visualSettings.ArEnabled = arWas;
-        window.ArCalibration.Reset();
+        Invoke(window, "ResetArCalibration_Click", window, new RoutedEventArgs());
+        Assert(window.ArCalibration.State is ArCalibrationState.NotCalibrated or ArCalibrationState.NoSource && window.ArCalibration.Current is null,
+            "RESET CALIBRATION should forget the calibration in force.");
+        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60;
+        Invoke(window, "RefreshSettingControls");
         Invoke(window, "ApplyArSource", null!, 0, 0);
         Invoke(window, "SyncCameraOverlay");
         Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
