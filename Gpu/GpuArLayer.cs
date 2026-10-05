@@ -24,7 +24,9 @@ internal struct GpuArQuad
 /// <param name="Notes">How notes fall over it.</param>
 /// <param name="Opacity">0..1, how strongly the layer is drawn.</param>
 /// <param name="KeyLight">0..1, how strongly a held key is tinted: the share of the camera picture that the key's colour replaces at full glow.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true);
+/// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
+/// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0);
 
 /// <summary>Turns the song's notes at this moment into quads for the AR pass.</summary>
 internal sealed class GpuArLayer
@@ -70,7 +72,7 @@ internal sealed class GpuArLayer
             }
         }
         if (!ar.ShowNotes || !input.Playing || input.Notes.Count == 0) return;
-        ArNotes.Build(ar.Calibration, view, input.Notes, input.Position, input.MaxNoteDuration, ar.Notes, _shapes);
+        ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes);
         var look = input.Look;
         foreach (var shape in _shapes)
         {

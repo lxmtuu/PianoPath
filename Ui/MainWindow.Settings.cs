@@ -559,6 +559,7 @@ public partial class MainWindow
         SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
+        SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound is never delayed. Zero shows everything at once.");
         ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"));
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(ar, _arStatus, null, "ar overlay status calibration camera keys");

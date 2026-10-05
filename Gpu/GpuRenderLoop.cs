@@ -255,6 +255,8 @@ internal sealed class GpuRenderLoop : IDisposable
         var notes = new GpuInstanceList<GpuNoteInstance>(1024);
         var keys = new GpuInstanceList<GpuKeyInstance>(128);
         var sprites = new GpuInstanceList<GpuSpriteInstance>(8192);
+        var keyHistory = new ArKeyHistory();
+        var delayedKeys = new System.Numerics.Vector4[128];
         var clock = Stopwatch.StartNew();
         var last = clock.Elapsed.TotalSeconds;
         var fpsWindowStart = last; var fpsFrames = 0; var lastEmbedded = double.NegativeInfinity;
@@ -326,6 +328,14 @@ internal sealed class GpuRenderLoop : IDisposable
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
                 simulation.Step(dt, input, _feed, sceneHeight * primaryAspect);
+                // the AR layer lights the keys as they were lit a camera-delay ago, which is what the camera's picture shows
+                if (_feed.Ar is { DelaySeconds: > 0 } delayed)
+                {
+                    keyHistory.Record(now, simulation.KeyColors);
+                    keyHistory.Sample(now - delayed.DelaySeconds, delayedKeys);
+                    gpu.SetArKeyColors(delayedKeys);
+                }
+                else { keyHistory.Clear(); gpu.SetArKeyColors(null); }
 
                 if (hasWindow)
                 {

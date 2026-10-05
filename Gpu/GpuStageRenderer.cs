@@ -250,6 +250,14 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>Sets what the AR layer draws (null for none). Call next to <see cref="UpdateCamera"/>, from the render thread.</summary>
     internal void UpdateAr(GpuArInput? input) => _arInput = input;
 
+    private Vector4[]? _arKeyColors;
+
+    /// <summary>
+    /// The glow the AR layer lights the keys with instead of the simulation's own, or null for the simulation's: the loop hands in
+    /// the glow of a camera-delay ago here. Set next to <see cref="UpdateAr"/>, from the render thread.
+    /// </summary>
+    internal void SetArKeyColors(Vector4[]? colors) => _arKeyColors = colors;
+
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
 
@@ -296,7 +304,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, simulation.KeyColors, _arList);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, _arList);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();

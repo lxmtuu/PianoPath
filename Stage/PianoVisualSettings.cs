@@ -412,6 +412,8 @@ internal sealed class PianoVisualSettings
     public double ArLookahead { get; set; } = 3;
     /// <summary>How strongly a played key is tinted, percent.</summary>
     public double ArKeyLight { get; set; } = 60;
+    /// <summary>How late the camera's picture is, milliseconds; the overlay is held back by this much so it shows what the picture shows. Never delays the sound.</summary>
+    public double ArDelay { get; set; } = 0;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -457,7 +459,7 @@ internal sealed class PianoVisualSettings
     internal int GpuTargetFps => int.TryParse(GpuFrameRate, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var fps) ? fps : 0;
 
     /// <summary>The AR values as one record, in range.</summary>
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay).Normalised();
 
     /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
     internal KeyboardLayout KeyboardLayoutChoice =>
@@ -482,7 +484,7 @@ internal sealed class PianoVisualSettings
             // The keyboard size is the player's instrument: a look must never turn their 61 keys into 88.
             if (property.Name == nameof(KeyboardSize)) continue;
             // The overlay is set up for this camera and this instrument, so a look neither turns it on nor tunes it.
-            if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight)) continue;
+            if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)) continue;
             // And the audio output: the backend and its buffer belong to this machine's sound hardware,
             // so applying a community look can never switch the player off their ASIO interface.
             if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
@@ -584,8 +586,8 @@ internal sealed class PianoVisualSettings
         RenderBackend = "Gpu";
         if (!GpuFrameRates.Contains(GpuFrameRate)) GpuFrameRate = "144";
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
-        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight).Normalised();
-        ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight;
+        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay).Normalised();
+        ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
         CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);

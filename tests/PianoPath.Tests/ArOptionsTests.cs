@@ -109,4 +109,22 @@ public class ArOptionsTests
         }
         Assert.True(Visible(1) < Visible(2) && Visible(2) < Visible(4));
     }
+
+    [Fact]
+    public void The_camera_delay_defaults_to_none_and_stays_inside_zero_to_three_hundred_milliseconds()
+    {
+        Assert.Equal(0, ArOptions.Default.Delay);
+        Assert.Equal(0, ArOptions.Default.DelaySeconds);
+        Assert.Equal(0, new ArOptions(true, "Learn", 100, 3, 60).Delay);                       // the five-value form still means no delay
+        Assert.Equal(.12, new ArOptions(true, "Learn", 100, 3, 60, 120).DelaySeconds, 12);
+        Assert.Equal(300, new ArOptions(true, "Learn", 100, 3, 60, 9000).Normalised().Delay);
+        Assert.Equal(0, new ArOptions(true, "Learn", 100, 3, 60, -40).Normalised().Delay);
+        foreach (var wild in new[] { double.NaN, double.PositiveInfinity, double.NegativeInfinity, 1e300, -1e300 })
+        {
+            var delay = new ArOptions(true, "Learn", 100, 3, 60, wild).Normalised().Delay;
+            Assert.InRange(delay, ArOptions.DelayMin, ArOptions.DelayMax);
+            Assert.InRange(new ArOptions(true, "Learn", 100, 3, 60, wild).DelaySeconds, 0, .3);
+        }
+        Assert.Equal(ArOptions.DelayDefault, new ArOptions(true, "Learn", 100, 3, 60, double.NaN).Normalised().Delay);
+    }
 }

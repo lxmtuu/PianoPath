@@ -382,6 +382,112 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
+    /// AR-3.1, the camera delay compensation on the real GPU path: with a delay set, the notes are drawn where the song's position
+    /// of that long ago puts them, and a key the player presses lights up that much later on the render thread's clock; with no
+    /// delay nothing moves. Read back from the rendered frames on WARP.
+    /// </summary>
+    private static void VerifyArDelay()
+    {
+        const int cw = 1280, ch = 720, width = 640, height = 360;
+        var quiet = new PianoVisualSettings
+        {
+            BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = false,
+            ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowLightBeams = false, ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+        };
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(70, 292), (1214, 268), (1236, 421), (52, 449)], cw, ch, out var problem);
+        Assert(calibration is not null, $"The sample keyboard's corners must make a calibration ({problem}).");
+        var ring = new CameraFrameRing();
+        void PublishGrey()
+        {
+            var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
+            Array.Fill(buffer, (byte)90, 0, cw * ch * 4);
+            for (var i = 3; i < cw * ch * 4; i += 4) buffer[i] = 255;
+            ring.Publish(slot, cw, ch, Stopwatch.GetTimestamp());
+        }
+        var started = Stopwatch.StartNew();
+
+        // ---- notes: drawn for the song's position of one delay ago ------------------------------------------
+        var song = new List<NoteEvent> { new() { Pitch = 60, Start = 10.5, Duration = .2 } };
+        var view = new ArView(cw, ch, width, height, PictureFit.Fit, false);
+        (int X, int Y) CentreAt(double position)
+        {
+            var shapes = new List<ArNoteShape>();
+            ArNotes.Build(calibration!, view, song, position, 1, ArNoteStyle.Default, shapes);
+            Assert(shapes.Count == 1, $"The one note should be in reach at position {position:0.00} ({shapes.Count} shapes).");
+            var patch = shapes[0].Patch;
+            double x = 0, y = 0;
+            for (var i = 0; i < 4; i++) { x += patch[i].X / 4; y += patch[i].Y / 4; }
+            return ((int)Math.Floor(x), (int)Math.Floor(y));
+        }
+        var (nowX, nowY) = CentreAt(10);
+        var (laterX, laterY) = CentreAt(9.7);
+        Assert(Math.Abs(nowY - laterY) > 8, $"A 0.3 s delay should move the note by more than its own length ({nowY} against {laterY}).");
+        using var renderer = GpuStageRenderer.Create(forceWarp: true);
+        PublishGrey();
+        byte[] Render(float delay)
+        {
+            var feed = new GpuStageFeed(); feed.SetStageHeight(height);
+            feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+            feed.SetState(song, 10, true, new HashSet<int>());
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
+            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, delay);
+            PublishGrey();
+            return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
+        }
+        int Spread(byte[] pixels, (int X, int Y) at)
+        {
+            Assert(at.X >= 0 && at.Y >= 0 && at.X < width && at.Y < height, $"The probe ({at.X},{at.Y}) must be on the output.");
+            var i = (at.Y * width + at.X) * 4;
+            return Math.Max(pixels[i], Math.Max(pixels[i + 1], pixels[i + 2])) - Math.Min(pixels[i], Math.Min(pixels[i + 1], pixels[i + 2]));
+        }
+        var straight = Render(0);
+        Assert(Spread(straight, (nowX, nowY)) > 30 && Spread(straight, (laterX, laterY)) <= 3, "With no delay the note is drawn at the song's position, and nowhere else.");
+        var delayed = Render(.3f);
+        Assert(Spread(delayed, (laterX, laterY)) > 30 && Spread(delayed, (nowX, nowY)) <= 3, "With a 0.3 s delay the note is drawn where it was 0.3 s ago, and not where it is.");
+
+        // ---- keys: a pressed key lights up one delay later on the render thread's clock ----------------------
+        var (kx, ky) = view.ToOutput(calibration!.ToPicture(calibration.Layout.CenterX(60), .85).X, calibration.ToPicture(calibration.Layout.CenterX(60), .85).Y);
+        var feedKeys = new GpuStageFeed(); feedKeys.SetStageHeight(height);
+        feedKeys.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+        feedKeys.SetState([], 0, false, new HashSet<int>());
+        feedKeys.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
+        using var loop = new GpuRenderLoop(feedKeys, forceWarp: true);
+        double SecondsUntilLit(float delay)
+        {
+            var tap = new GpuRecordingTap(width, height, 60);
+            int Grey() { var v = 0; tap.TryRead(frame => { var i = ((int)ky * width + (int)kx) * 4; v = Math.Max(frame[i], Math.Max(frame[i + 1], frame[i + 2])) - Math.Min(frame[i], Math.Min(frame[i + 1], frame[i + 2])); }); return v; }
+            // first with no delay and the key up until the last glow of an earlier press has died away, so the history starts dark
+            feedKeys.SetState([], 0, false, new HashSet<int>());
+            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, 0f);
+            PublishGrey();
+            feedKeys.Recording = tap;
+            var wait = Stopwatch.StartNew();
+            while ((tap.Serial < 8 || Grey() > 3) && loop.Error is null && wait.Elapsed.TotalSeconds < 30) Thread.Sleep(10);
+            Assert(loop.Error is null && tap.Serial >= 8 && Grey() <= 3, $"Before the key is pressed its place in the picture is the camera's grey ({loop.Error}).");
+            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, delay);
+            Thread.Sleep((int)(delay * 1000) + 250);                               // the delayed history now holds only dark
+            Assert(Grey() <= 3, "Switching the delay on must not light anything by itself.");
+            var pressed = Stopwatch.StartNew();
+            feedKeys.SetState([], 0, false, new HashSet<int> { 60 });
+            double found = -1;
+            while (pressed.Elapsed.TotalSeconds < 6)
+            {
+                if (Grey() > 25) { found = pressed.Elapsed.TotalSeconds; break; }
+                Thread.Sleep(2);
+            }
+            feedKeys.Recording = null;
+            Assert(found >= 0, $"A key pressed with a delay of {delay:0.0} s should light up in the end ({loop.Error}).");
+            return found;
+        }
+        var straightSeconds = SecondsUntilLit(0);
+        var delayedSeconds = SecondsUntilLit(.3f);
+        Assert(delayedSeconds >= .27 && delayedSeconds - straightSeconds >= .2,
+            $"With a 0.3 s delay the key must light up 0.3 s later (no delay: {straightSeconds:0.000} s, delay: {delayedSeconds:0.000} s).");
+        Results.Add($"PASS ar delay: notes drawn {nowY - laterY} px apart for a 0.3 s delay (and only there), and a pressed key lit after {straightSeconds * 1000:0} ms with no delay and {delayedSeconds * 1000:0} ms with a 0.3 s delay, in {started.Elapsed.TotalSeconds:0.0} s on {renderer.AdapterName}.");
+    }
+
+    /// <summary>
     /// AR-1.5, the calibration window end to end on the real window: it refuses to open without a camera, a picture or the right
     /// size; shows the camera's picture the way the stage shows it; takes four clicks to a calibration that is saved for this
     /// camera; keeps Done shut on corners that cannot be used; saves nothing when cancelled or when the camera changed behind
