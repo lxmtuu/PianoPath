@@ -1158,6 +1158,7 @@ internal static class StringsEnglish
         ["The audio device did not answer while opening the output stream."] = "The audio device did not answer while opening the output stream.",
         ["The burning impact line above the keys"] = "The burning impact line above the keys",
         ["The camera cannot run here: {0}"] = "The camera cannot run here: {0}",
+        ["The camera did not answer in time."] = "The camera did not answer in time.",
         ["The camera has not delivered a picture yet. Try again in a moment."] = "The camera has not delivered a picture yet. Try again in a moment.",
         ["The camera is not running, so there is nothing to follow."] = "The camera is not running, so there is nothing to follow.",
         ["The camera list could not be prepared."] = "The camera list could not be prepared.",

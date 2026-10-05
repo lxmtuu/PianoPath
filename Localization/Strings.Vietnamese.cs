@@ -1158,6 +1158,7 @@ internal static class StringsVietnamese
         ["The audio device did not answer while opening the output stream."] = "Thiết bị âm thanh không phản hồi khi mở luồng phát.",
         ["The burning impact line above the keys"] = "Đường chạm rực sáng phía trên phím",
         ["The camera cannot run here: {0}"] = "Camera không chạy được ở đây: {0}",
+        ["The camera did not answer in time."] = "Camera không trả lời kịp.",
         ["The camera has not delivered a picture yet. Try again in a moment."] = "Camera chưa gửi hình nào. Thử lại sau giây lát.",
         ["The camera is not running, so there is nothing to follow."] = "Camera chưa chạy nên chưa có gì để theo.",
         ["The camera list could not be prepared."] = "Không chuẩn bị được danh sách camera.",

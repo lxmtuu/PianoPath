@@ -1225,7 +1225,7 @@ public partial class MainWindow : Window
 
     private CameraFrameReader? _camera;
     private Thread? _cameraThread;
-    private volatile bool _cameraStop;
+    private CameraSession? _cameraSession;
     /// <summary>The frames from the camera thread to the drawing thread: three buffers, no copy.</summary>
     private readonly CameraFrameRing _cameraFrames = new();
     private long _lastHandTrackTicks;
@@ -1342,14 +1342,34 @@ public partial class MainWindow : Window
         _arRawFrames = arPlan.RawFrames;
         if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking && !arPlan.NeedsCamera) { CameraStatus = ""; HandStatus = ""; return; }
         var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
-        var reader = live
-            ? CameraFrameReader.OpenDevice(_visualSettings.CameraSourceLink, out var error)
-            : CameraFrameReader.OpenFile(_visualSettings.CameraVideoPath, out error);
-        if (reader is null)
+        var link = _visualSettings.CameraSourceLink;
+        var path = _visualSettings.CameraVideoPath;
+        // The reader is opened, read and closed on ONE thread, its own. A Media Foundation reader that is created on the
+        // UI thread (an STA) and read from another one fails on the first read with E_NOINTERFACE ("Unable to cast COM
+        // object ... to IMFSourceReader"), because the call has to be marshalled into the apartment that made it and the
+        // reader has no marshalling support. So the thread opens it, tells this one how that went, and carries on reading.
+        var session = new CameraSession();
+        var opened = new ManualResetEventSlim();
+        var thread = new Thread(() => RunCamera(session, live, link, path, opened)) { IsBackground = true, Name = "Keyflow camera overlay" };
+        _cameraSession = session;
+        _cameraThread = thread;
+        _cameraFrames.Clear();
+        thread.Start();
+        if (!opened.Wait(TimeSpan.FromSeconds(20)))
         {
-            CameraStatus = error ?? Loc.T("The camera overlay could not be opened.");
+            session.Stop = true;                 // the thread closes whatever it manages to open, and goes
+            _cameraSession = null; _cameraThread = null;
+            CameraStatus = Loc.T("The camera did not answer in time.");
             return;
         }
+        var reader = session.Reader;
+        if (reader is null)
+        {
+            _cameraSession = null; _cameraThread = null;
+            CameraStatus = session.OpenError ?? Loc.T("The camera overlay could not be opened.");
+            return;
+        }
+        var error = session.OpenNote;
         _camera = reader;
         ApplyArSource(reader.Source, reader.Width, reader.Height);
         CameraStatus = live
@@ -1359,10 +1379,6 @@ public partial class MainWindow : Window
         // mode that was chosen) is heard too.
         if (error is { Length: > 0 } note) CameraStatus = $"{CameraStatus} {note}";
         if (reader.ModeNote.Length > 0) CameraStatus = $"{CameraStatus} {reader.ModeNote}";
-        _cameraStop = false;
-        _cameraFrames.Clear();
-        _cameraThread = new Thread(CameraLoop) { IsBackground = true, Name = "Keyflow camera overlay" };
-        _cameraThread.Start();
         // The frames are turned into a bitmap on the UI thread, once per frame time at most.
         if (_cameraUiTimer is null)
         {
@@ -1376,13 +1392,14 @@ public partial class MainWindow : Window
     /// <summary>Stops the overlay, closes the reader and clears the picture from the stage.</summary>
     private void StopCameraOverlay()
     {
-        _cameraStop = true;
+        if (_cameraSession is { } session) session.Stop = true;
+        _cameraSession = null;
         _cameraUiTimer?.Stop();
         var thread = _cameraThread;
         _cameraThread = null;
-        // The reader is closed before the thread is joined: a read that is already waiting comes back at once,
-        // so closing never hangs on a camera that has stopped answering.
-        _camera?.Dispose();
+        // The camera thread closes the reader itself (see StartCameraOverlay), as soon as the read it is waiting in comes
+        // back — one frame time on a live camera. A camera that never answers leaves a background thread behind, not a
+        // frozen window.
         _camera = null;
         if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
         _cameraFrames.Clear();
@@ -1398,14 +1415,39 @@ public partial class MainWindow : Window
     /// frame returns when there is one, so a 60 fps mode gives 60 frames a second and no sleep gets in the way. Only a
     /// video file is held back, to the times written in it.
     /// </summary>
-    private void CameraLoop()
+    private void RunCamera(CameraSession session, bool live, string link, string path, ManualResetEventSlim opened)
     {
-        var reader = _camera;
+        CameraFrameReader? reader = null;
+        try
+        {
+            string? error;
+            reader = live ? CameraFrameReader.OpenDevice(link, out error) : CameraFrameReader.OpenFile(path, out error);
+            session.Reader = reader;
+            session.OpenError = reader is null ? error : null;
+            session.OpenNote = reader is null ? null : error;
+        }
+        catch (Exception ex) { session.OpenError = ex.Message; }
+        finally { opened.Set(); }
         if (reader is null) return;
+        try { if (!session.Stop) CameraLoop(session, reader); }
+        finally { reader.Dispose(); }
+    }
+
+    /// <summary>What the UI thread and the camera thread share for one run of the overlay.</summary>
+    private sealed class CameraSession
+    {
+        internal volatile bool Stop;
+        internal CameraFrameReader? Reader;
+        internal string? OpenError;
+        internal string? OpenNote;
+    }
+
+    private void CameraLoop(CameraSession session, CameraFrameReader reader)
+    {
         var pacer = new FramePacer();
         try
         {
-            while (!_cameraStop && reader.Error is null)
+            while (!session.Stop && reader.Error is null)
             {
                 var size = reader.Width * reader.Height * 4;
                 if (size <= 0) { Thread.Sleep(20); continue; }
@@ -1421,9 +1463,9 @@ public partial class MainWindow : Window
                 var wait = pacer.WaitSeconds(reader.LastSampleTime, System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency);
                 if (wait > 0) Thread.Sleep((int)Math.Ceiling(wait * 1000));
             }
-            if (reader.Error is { Length: > 0 } failure) CameraStatus = failure;
+            if (!session.Stop && reader.Error is { Length: > 0 } failure) CameraStatus = failure;
         }
-        catch (Exception ex) { CameraStatus = ex.Message; }
+        catch (Exception ex) { if (!session.Stop) CameraStatus = ex.Message; }
     }
 
     /// <summary>
