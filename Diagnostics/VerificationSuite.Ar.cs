@@ -227,6 +227,9 @@ internal static partial class VerificationSuite
         Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 0, "A paused song draws no notes, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
         Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
+        Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: false)));
+        Assert(renderer.ArQuadCount == renderer.ArKeyQuadCount && renderer.ArKeyQuadCount >= 1,
+            "Perform mode draws no notes to come but still lights the key of the note that sounds.");
         // ---- AR-1.4: held keys lit where they are in the picture ---------------------------------------------
         var held = new HashSet<int> { 60, 61, 64 };
         GpuStageFeed MakeKeyFeed(GpuArInput? ar)

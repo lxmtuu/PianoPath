@@ -954,6 +954,54 @@ internal static partial class VerificationSuite
         visualSettings.KeyboardSize = arSize;
         Invoke(window, "ApplyArSource", null!, 0, 0);
         Assert(arSession.State == ArCalibrationState.NoSource, "Closing the camera leaves no calibration in force.");
+
+        // The overlay's switch carried out: nothing without the switch, the camera and the engine's layers once a camera is open and
+        // calibrated, the stage's own notes and keys stepping aside, and the engine the only reader of the camera's frames.
+        var gpuFeed = (GpuStageFeed)Field(window, "_gpuFeed");
+        var engineRuns = window.GpuLoop is { Error: null };
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
+            "With the AR switch off the overlay leaves the stage alone.");
+        var arWas = visualSettings.ArEnabled;
+        visualSettings.ArEnabled = true;
+        Invoke(window, "SyncCameraOverlay");
+        Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.NoCamera : ArStatus.NeedsGpu) && gpuFeed.Camera is null,
+            "Switched on without an open camera, the overlay waits for one; without the engine it says it needs it.");
+        (double X, double Y)[] arCorners = [(70, 292), (1214, 268), (1236, 421), (52, 449)];     // a key area is a key area for any keyboard size
+        Invoke(window, "ApplyArSource", "verification camera", 1280, 720);
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.NeedsCalibration : ArStatus.NeedsGpu) && gpuFeed.Ar is null && !stage.ArOverlayActive
+                && (gpuFeed.Camera is not null) == engineRuns,
+            "An open camera that was not calibrated shows as the background, with the stage as it was and no notes or keys on it.");
+        Assert(window.ArCalibration.Save(arCorners, out _) == ArSaveResult.Saved, "The sample key area should be accepted as a calibration.");
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.Active : ArStatus.NeedsGpu) && (gpuFeed.Ar is not null) == engineRuns
+                && stage.ArOverlayActive == engineRuns && (gpuFeed.Camera is not null) == engineRuns,
+            "A calibrated camera draws the overlay and the stage's own notes and keys step aside.");
+        if (engineRuns)
+        {
+            Assert(ReferenceEquals(gpuFeed.Camera!.Ring, Field(window, "_cameraFrames")) && gpuFeed.Ar!.Calibration == window.ArCalibration.Current,
+                "The engine reads the camera's own ring and draws on the calibration in force.");
+            visualSettings.ArMode = ArModes.Perform;
+            Invoke(window, "UpdateArFeed");
+            Assert(!gpuFeed.Ar!.ShowNotes, "Perform mode asks the engine for the keys without the notes to come.");
+            visualSettings.ArMode = ArModes.Learn;
+            var frameRing = (CameraFrameRing)Field(window, "_cameraFrames");
+            frameRing.BeginWrite(16, out var arSlot); frameRing.Publish(arSlot, 2, 2, 1);
+            Invoke(window, "PumpCameraFrame");
+            Assert(frameRing.TryTake(out _), "The window's own pump leaves the frames to the engine while the overlay is drawn.");
+            visualSettings.BackgroundMode = "ChromaGreen";
+            Invoke(window, "UpdateArFeed");
+            Assert(window.ArPlanNow.Status == ArStatus.ChromaBackground && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
+                "A green-screen background takes the camera's place, so the overlay steps aside.");
+            visualSettings.BackgroundMode = "Solid";
+        }
+        visualSettings.ArEnabled = arWas;
+        window.ArCalibration.Reset();
+        Invoke(window, "ApplyArSource", null!, 0, 0);
+        Invoke(window, "SyncCameraOverlay");
+        Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
+            "Switching the overlay off puts the stage back as it was.");
         Results.Add("PASS camera overlay dock: the switch, the camera and corner pickers, the size/opacity/key sliders, the clamp and the corner fallback, the pump's key and the frame drawn in the chosen corner of the rendered stage.");
     }
 

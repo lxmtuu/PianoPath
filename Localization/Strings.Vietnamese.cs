@@ -452,6 +452,7 @@ internal static class StringsVietnamese
         ["Hand split point"] = "Điểm chia tay",
         ["Hand tracking"] = "Theo dõi bàn tay",
         ["Hand tracking is off. Switch it on to follow the hand the camera sees and mark its key."] = "Theo dõi bàn tay đang tắt. Bật lên để theo bàn tay camera nhìn thấy và đánh dấu phím của nó.",
+        ["Hand tracking waits while the AR overlay is using the camera."] = "Theo dõi bàn tay tạm dừng khi lớp phủ AR đang dùng camera.",
         ["Hand: nothing found in the newest frame."] = "Bàn tay: không thấy gì trong khung hình mới nhất.",
         ["Hand: waiting for the first frame."] = "Bàn tay: đang chờ khung hình đầu tiên.",
         ["Hand: {0} finger(s), over {1} · {2:0}% of the picture"] = "Bàn tay: {0} ngón, đang ở {1} · {2:0}% khung hình",

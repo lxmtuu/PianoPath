@@ -97,12 +97,24 @@ internal sealed partial class PianoStage
     }
 
     /// <summary>Rebuilds the GPU look from the current settings (the note colour table included).</summary>
+    private bool _arOverlay;
+
+    /// <summary>
+    /// True while the AR overlay draws over the camera: the GPU look then leaves out the stage's own notes, keys and the effects
+    /// that sit on them (see <see cref="GpuLook.From"/>). Only the look changes; the settings are untouched.
+    /// </summary>
+    internal bool ArOverlayActive
+    {
+        get => _arOverlay;
+        set { if (_arOverlay == value) return; _arOverlay = value; PublishGpuLook(); }
+    }
+
     private void PublishGpuLook()
     {
         if (_gpu is null) return;
         var height = ActualHeight;
         var fraction = height >= 1 ? KeyboardHeight / height : .205 * _visual.KeyboardScale / 100;
-        _gpu.SetLook(GpuLook.From(_visual, (pitch, track) => AdjustColor(NoteColor(pitch, track)), Math.Clamp(fraction, .05, .6), AdjustColor));
+        _gpu.SetLook(GpuLook.From(_visual, (pitch, track) => AdjustColor(NoteColor(pitch, track)), Math.Clamp(fraction, .05, .6), AdjustColor, _arOverlay));
         _gpuLookElapsed = _elapsed;
     }
 

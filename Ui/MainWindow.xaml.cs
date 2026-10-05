@@ -134,6 +134,8 @@ public partial class MainWindow : Window
         // The GPU stage is the main stage: the render loop starts with the window and the software
         // renderer only steps in if Direct3D cannot start (or for a --software run).
         ApplyRenderBackend();
+        // The overlay needs the engine, which only exists from here on, so a saved "AR on" starts now.
+        SyncCameraOverlay();
         UpdateInstrumentUi();
         if (loadSalamanderOnStart) Loaded += MainWindow_Loaded;
     }
@@ -1232,6 +1234,45 @@ public partial class MainWindow : Window
     private ArCalibrationSession? _arCalibration;
     private string _arSource = "";
     private int _arWidth, _arHeight;
+    private ArPlan _arPlan = ArPlan.Off;
+    /// <summary>Set from the plan: the camera thread reads frames unmirrored because the engine turns them round when it draws.</summary>
+    private volatile bool _arRawFrames;
+    private static readonly ArCalibrationSnapshot NoArSource = new(ArCalibrationState.NoSource, null, "", 0, 0, 0, 0);
+
+    /// <summary>What the overlay is doing now, as <see cref="ArPlan"/> decided it.</summary>
+    internal ArPlan ArPlanNow => _arPlan;
+
+    private ArPlan DecideAr() => ArPlan.Decide(_visualSettings.ArOptionsValue, _gpuLoop is { Error: null }, _arSource.Length > 0,
+        _arCalibration?.Snapshot ?? NoArSource, _visualSettings.BackgroundMode == "ChromaGreen");
+
+    /// <summary>
+    /// Carries out the plan for the overlay: the camera and the AR layer go to the engine (or leave it), the stage's own notes and
+    /// keys step aside while the overlay is drawn, and the engine becomes the only reader of the camera's frames. Cheap, and safe to
+    /// call after anything that could change the answer: a setting, the engine, the camera, the calibration.
+    /// </summary>
+    internal void UpdateArFeed()
+    {
+        var plan = DecideAr();
+        _arPlan = plan;
+        Stage.ArOverlayActive = plan.HideStageLayers;
+        if (!plan.CameraLayer)
+        {
+            _gpuFeed.Ar = null;
+            _gpuFeed.Camera = null;
+            return;
+        }
+        var options = _visualSettings.ArOptionsValue;
+        // The engine's render thread now takes the frames from the ring; the window's own picture-in-picture and hand tracker
+        // would take them from it too, so they stand down while the overlay owns the camera.
+        Stage.SetCameraFrame(null);
+        Stage.SetHandReading(null);
+        HandStatus = "";
+        _gpuFeed.Camera = new GpuCameraInput(_cameraFrames, PictureFit.Fit, _visualSettings.CameraMirror, 1f);
+        var calibration = plan.ArLayer ? _arCalibration?.Current : null;
+        _gpuFeed.Ar = calibration is null ? null
+            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes);
+        RefreshHandStatus();
+    }
 
     /// <summary>
     /// The calibration of the camera that is open, kept in the settings folder next to everything else. It is made on first
@@ -1275,11 +1316,15 @@ public partial class MainWindow : Window
         ApplyArSource(_arSource, _arWidth, _arHeight);
         // The reader opens for either layer: the picture can stay hidden while the hand is still followed, so a
         // user who wants only the key markers never has to put the camera on the stage to get them.
-        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking,
-            _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath);
-        if (wanted == _cameraSignature) return;
-        _cameraSignature = wanted;
-        StartCameraOverlay();
+        var plan = DecideAr();
+        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking || plan.NeedsCamera,
+            _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath, plan.RawFrames);
+        if (wanted != _cameraSignature)
+        {
+            _cameraSignature = wanted;
+            StartCameraOverlay();
+        }
+        UpdateArFeed();
     }
 
     /// <summary>
@@ -1289,7 +1334,9 @@ public partial class MainWindow : Window
     private void StartCameraOverlay()
     {
         StopCameraOverlay();
-        if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking) { CameraStatus = ""; HandStatus = ""; return; }
+        var arPlan = DecideAr();
+        _arRawFrames = arPlan.RawFrames;
+        if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking && !arPlan.NeedsCamera) { CameraStatus = ""; HandStatus = ""; return; }
         var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
         var reader = live
             ? CameraFrameReader.OpenDevice(_visualSettings.CameraSourceLink, out var error)
@@ -1319,6 +1366,7 @@ public partial class MainWindow : Window
             _cameraUiTimer.Tick += (_, _) => PumpCameraFrame();
         }
         _cameraUiTimer.Start();
+        UpdateArFeed();
     }
 
     /// <summary>Stops the overlay, closes the reader and clears the picture from the stage.</summary>
@@ -1358,7 +1406,7 @@ public partial class MainWindow : Window
                 var size = reader.Width * reader.Height * 4;
                 if (size <= 0) { Thread.Sleep(20); continue; }
                 var buffer = _cameraFrames.BeginWrite(size, out var slot);
-                if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror, out var width, out var height))
+                if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror && !_arRawFrames, out var width, out var height))
                 {
                     if (reader.AtEnd) { reader.Rewind(); pacer.Reset(); Thread.Sleep(20); continue; }
                     if (reader.Error is null) { Thread.Sleep(5); continue; }
@@ -1391,6 +1439,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void PumpCameraFrame()
     {
+        if (_arPlan.CameraLayer) return;       // the engine's render thread is the ring's reader while the overlay is drawn
         if (!_cameraFrames.TryTake(out var taken)) return;
         var frame = taken.Pixels; var width = taken.Width; var height = taken.Height;
         if (width <= 0 || height <= 0 || frame.Length < width * height * 4) return;

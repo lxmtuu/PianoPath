@@ -648,6 +648,8 @@ public partial class MainWindow
         if (_handStatus is null) return;
         var text = !_visualSettings.ShowHandTracking
             ? Loc.T("Hand tracking is off. Switch it on to follow the hand the camera sees and mark its key.")
+            : _arPlan.CameraLayer
+                ? Loc.T("Hand tracking waits while the AR overlay is using the camera.")
             : CameraStatus.Length == 0
                 ? Loc.T("The camera is not running, so there is nothing to follow.")
                 : HandStatus.Length > 0 ? HandStatus : Loc.T("Hand: waiting for the first frame.");

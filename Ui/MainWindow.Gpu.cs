@@ -102,6 +102,7 @@ public partial class MainWindow
         if (_gpuLoop is { Error: { } error })
         {
             Stage.AttachGpu(null, false);
+            SyncCameraOverlay();                   // the overlay cannot be drawn without the engine
             if (!_gpuFailureShown)
             {
                 _gpuFailureShown = true;

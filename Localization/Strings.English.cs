@@ -452,6 +452,7 @@ internal static class StringsEnglish
         ["Hand split point"] = "Hand split point",
         ["Hand tracking"] = "Hand tracking",
         ["Hand tracking is off. Switch it on to follow the hand the camera sees and mark its key."] = "Hand tracking is off. Switch it on to follow the hand the camera sees and mark its key.",
+        ["Hand tracking waits while the AR overlay is using the camera."] = "Hand tracking waits while the AR overlay is using the camera.",
         ["Hand: nothing found in the newest frame."] = "Hand: nothing found in the newest frame.",
         ["Hand: waiting for the first frame."] = "Hand: waiting for the first frame.",
         ["Hand: {0} finger(s), over {1} · {2:0}% of the picture"] = "Hand: {0} finger(s), over {1} · {2:0}% of the picture",

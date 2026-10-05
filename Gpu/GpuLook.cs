@@ -239,9 +239,11 @@ internal sealed class GpuLook
 
     /// <summary>
     /// Builds the look from the settings. <paramref name="noteColor"/> is the stage's own colour function
-    /// (note colour with every modulator and the saturation/contrast grade applied).
+    /// (note colour with every modulator and the saturation/contrast grade applied). <paramref name="overCamera"/> leaves out the
+    /// stage's own notes, keys and the effects that sit on them: the AR overlay draws over a real keyboard in the camera picture, and
+    /// these would be drawn on top of it at the stage's own key positions.
     /// </summary>
-    internal static GpuLook From(PianoVisualSettings s, Func<int, int, WpfColor> noteColor, double keyboardFraction, Func<WpfColor, WpfColor>? adjustColor = null)
+    internal static GpuLook From(PianoVisualSettings s, Func<int, int, WpfColor> noteColor, double keyboardFraction, Func<WpfColor, WpfColor>? adjustColor = null, bool overCamera = false)
     {
         var grade = adjustColor ?? (c => c);
         var colors = new Vector3[128 * TrackSlots];
@@ -252,7 +254,7 @@ internal sealed class GpuLook
         static float Speed(double value) => (float)(.25 + value / 100 * 1.75);
         return new GpuLook
         {
-            ShowNotes = s.ShowNotes,
+            ShowNotes = s.ShowNotes && !overCamera,
             NoteStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.NoteStyles, s.NoteStyle)),
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
@@ -274,8 +276,8 @@ internal sealed class GpuLook
             HoldVibration = s.HoldVibration, HoldVibrationAmount = P(s.HoldVibrationAmount),
             HoldElectricArc = s.HoldElectricArc, HoldArcIntensity = P(s.HoldArcIntensity),
 
-            ShowEmbers = s.ShowEmbers, ShowWisps = s.ShowWisps, ShowFlame = s.ShowFlame && s.FlameIntensity > 0,
-            ShowImpactRings = s.ShowImpactRings, ShowImpactFlash = s.ShowImpactFlash,
+            ShowEmbers = s.ShowEmbers && !overCamera, ShowWisps = s.ShowWisps && !overCamera, ShowFlame = s.ShowFlame && s.FlameIntensity > 0 && !overCamera,
+            ShowImpactRings = s.ShowImpactRings && !overCamera, ShowImpactFlash = s.ShowImpactFlash && !overCamera,
             ImpactBurst = s.ZoneSplit ? "Zone" : s.ImpactBurst, ImpactWave = s.ImpactWave, ImpactWaveIntensity = P(s.ImpactWaveIntensity),
             ImpactFlashIntensity = P(s.ImpactFlashIntensity), RingSize = P(s.RingSize), RingSizeRaw = (float)s.RingSize,
             ImpactFlashStyle = s.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 },
@@ -291,7 +293,7 @@ internal sealed class GpuLook
             WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",
 
-            ShowKeys = s.ShowKeys, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo, HaloIntensity = P(s.HaloIntensity),
+            ShowKeys = s.ShowKeys && !overCamera, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo && !overCamera, HaloIntensity = P(s.HaloIntensity),
             KeyboardStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.KeyboardStyles, s.KeyboardStyle)),
             KeyboardFraction = (float)keyboardFraction, KeyOverhang = P(s.KeyOverhang), KeyPressDepth = P(s.KeyPressDepth),
             KeyLighting = P(s.KeyLighting), KeyGlowRadius = P(s.KeyGlowRadius), PressedKeyFixed = s.PressedKeyColorMode == "Fixed",
@@ -303,7 +305,7 @@ internal sealed class GpuLook
             ShowBackground = s.ShowBackground, BackgroundGradient = s.BackgroundGradient, BackgroundMotion = s.BackgroundMotion,
             BackgroundMotionAmount = P(s.BackgroundMotionAmount), BackgroundMotionSpeed = Speed(s.BackgroundMotionSpeed), ShowStars = s.ShowStars, StarDensity = P(s.StarDensity),
             Chroma = s.BackgroundMode == "ChromaGreen", BackgroundDim = P(s.BackgroundDim),
-            HorizonGlow = P(s.HorizonGlow), ShowLightBeams = s.ShowLightBeams, BeamIntensity = P(s.BeamIntensity),
+            HorizonGlow = P(s.HorizonGlow), ShowLightBeams = s.ShowLightBeams && !overCamera, BeamIntensity = P(s.BeamIntensity),
             BackgroundGuide = s.ShowBackground && s.BackgroundGuide, ShowPetals = s.ShowPetals, PetalAmount = (float)s.PetalAmount,
             AmbientEnergy = s.AmbientEnergy, AmbientEnergyAmount = P(s.AmbientEnergyAmount), AmbientEnergySpeed = Speed(s.AmbientEnergySpeed),
             AmbientNature = s.AmbientNature, AmbientNatureAmount = P(s.AmbientNatureAmount), AmbientNatureSpeed = Speed(s.AmbientNatureSpeed),
