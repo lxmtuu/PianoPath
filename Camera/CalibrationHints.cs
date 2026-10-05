@@ -44,9 +44,24 @@ internal static class CalibrationHints
     /// <summary>The name of a key in the usual way, middle C being C4: what the window writes under the lowest and the highest key of the grid.</summary>
     internal static string KeyName(int pitch) => $"{Names[((pitch % 12) + 12) % 12]}{(int)Math.Floor(pitch / 12.0) - 1}";
 
+    /// <summary>The label of the orientation choice, and what it is for.</summary>
+    internal const string OrientationTitle = "Keyboard in the picture";
+    internal const string OrientationTip = "Choose how the keyboard looks in the picture. A camera above the keys, behind you, sees the low notes on the left and the far edge at the top. A camera on the far side of the keyboard, looking at you, sees it the other way round.";
+
+    /// <summary>The words for one choice of orientation.</summary>
+    internal static string ForOrientation(KeyboardOrientation orientation) => orientation switch
+    {
+        KeyboardOrientation.LowRight => "Low notes on the right, far edge at the top",
+        KeyboardOrientation.FarBottom => "Low notes on the left, far edge at the bottom",
+        KeyboardOrientation.LowRightFarBottom => "Low notes on the right, far edge at the bottom",
+        _ => "Low notes on the left, far edge at the top",
+    };
+
     /// <summary>Every sentence the window can show, for the check that they all exist in the string table.</summary>
     internal static IEnumerable<string> All() =>
     [
-        .. CornerSteps, AdjustStep, .. Enum.GetValues<CalibrationProblem>().Where(p => p != CalibrationProblem.None).Select(ForProblem),
+        .. CornerSteps, AdjustStep, OrientationTitle, OrientationTip,
+        .. Enum.GetValues<CalibrationProblem>().Where(p => p != CalibrationProblem.None).Select(ForProblem),
+        .. Enum.GetValues<KeyboardOrientation>().Select(ForOrientation),
     ];
 }

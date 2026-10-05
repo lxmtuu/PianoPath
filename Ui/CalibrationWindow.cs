@@ -170,7 +170,9 @@ internal sealed class CalibrationSurface : FrameworkElement
     {
         var text = Text(CalibrationHints.KeyName(key.Pitch), 12, Accent);
         var x = Math.Clamp((key.Corners[2].X + key.Corners[3].X) / 2 - text.Width / 2, 2, Math.Max(2, ActualWidth - text.Width - 2));
-        var y = Math.Clamp(Math.Max(key.Corners[2].Y, key.Corners[3].Y) + 4, 2, Math.Max(2, ActualHeight - text.Height - 2));
+        // outside the near edge: below it when the keys' near edge is the lower one, above it when the picture shows them the other way up
+        var nearIsLower = key.Corners[2].Y + key.Corners[3].Y >= key.Corners[0].Y + key.Corners[1].Y;
+        var y = Math.Clamp(nearIsLower ? Math.Max(key.Corners[2].Y, key.Corners[3].Y) + 4 : Math.Min(key.Corners[2].Y, key.Corners[3].Y) - text.Height - 4, 2, Math.Max(2, ActualHeight - text.Height - 2));
         dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(170, 0, 0, 0)), null, new Rect(x - 3, y - 1, text.Width + 6, text.Height + 2));
         dc.DrawText(text, new Point(x, y));
     }
@@ -234,6 +236,9 @@ internal sealed class CalibrationWindow : Window
     private readonly CalibrationSurface _surface;
     private readonly TextBlock _hint, _note;
     private readonly Button _done, _undo, _startOver;
+    private readonly ComboBox _orientation;
+
+    private sealed record OrientationChoice(KeyboardOrientation Value, string Caption);
     private readonly Func<CalibrationPicture?>? _retake;
     private static readonly Brush NormalText = new SolidColorBrush(Color.FromRgb(231, 218, 244)), FixText = new SolidColorBrush(Color.FromRgb(255, 140, 160));
 
@@ -241,7 +246,8 @@ internal sealed class CalibrationWindow : Window
     /// <param name="layout">The keyboard being marked.</param>
     /// <param name="mirror">The stage shows the picture turned round, so the window does too.</param>
     /// <param name="retake">Gives a newer picture of the camera, or null when it has none.</param>
-    internal CalibrationWindow(CalibrationPicture picture, KeyboardLayout layout, bool mirror, Func<CalibrationPicture?>? retake = null)
+    /// <param name="orientation">How the keyboard looks in the picture to start with; when not given, as upright in the picture the camera delivers.</param>
+    internal CalibrationWindow(CalibrationPicture picture, KeyboardLayout layout, bool mirror, Func<CalibrationPicture?>? retake = null, KeyboardOrientation? orientation = null)
     {
         _retake = retake;
         Title = Loc.T("Mark the keys");
@@ -251,7 +257,11 @@ internal sealed class CalibrationWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner; ShowInTaskbar = false; UseLayoutRounding = true;
         Background = new SolidColorBrush(Color.FromRgb(18, 16, 24)); Foreground = Brushes.White; FontFamily = new FontFamily("Segoe UI");
 
-        _surface = new CalibrationSurface(picture, new CalibrationWizard(picture.Width, picture.Height, layout), mirror);
+        var wizard = new CalibrationWizard(picture.Width, picture.Height, layout);
+        wizard.SetViewport(0, 0, mirror);                        // the picture is shown turned round or not from the start, whatever the orientation means for it
+        var start = orientation ?? KeyboardOrientations.Default(mirror);
+        wizard.SetOrientation(start);
+        _surface = new CalibrationSurface(picture, wizard, mirror);
         _hint = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, MinHeight = 38, Margin = new Thickness(16, 12, 16, 8), Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)) };
         _note = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(255, 190, 120)), Margin = new Thickness(0, 2, 0, 0) };
 
@@ -272,8 +282,20 @@ internal sealed class CalibrationWindow : Window
         DockPanel.SetDock(buttons, Dock.Right);
         bar.Children.Add(buttons); bar.Children.Add(left);
 
+        _orientation = new ComboBox { Width = 330, Height = 28, DisplayMemberPath = nameof(OrientationChoice.Caption), SelectedValuePath = nameof(OrientationChoice.Value), ToolTip = Loc.T(CalibrationHints.OrientationTip) };
+        foreach (var choice in Enum.GetValues<KeyboardOrientation>()) _orientation.Items.Add(new OrientationChoice(choice, Loc.T(CalibrationHints.ForOrientation(choice))));
+        _orientation.SelectedValue = start;
+        _orientation.SelectionChanged += (_, _) =>
+        {
+            if (_orientation.SelectedValue is KeyboardOrientation chosen) { Wizard.SetOrientation(chosen); _surface.Refresh(); }
+        };
+        var orientationRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 8) };
+        orientationRow.Children.Add(new TextBlock { Text = Loc.T(CalibrationHints.OrientationTitle), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) });
+        orientationRow.Children.Add(_orientation);
+
         var root = new DockPanel();
         DockPanel.SetDock(_hint, Dock.Top); root.Children.Add(_hint);
+        DockPanel.SetDock(orientationRow, Dock.Top); root.Children.Add(orientationRow);
         DockPanel.SetDock(bar, Dock.Bottom); root.Children.Add(bar);
         root.Children.Add(new Border { Margin = new Thickness(16, 0, 16, 0), BorderBrush = new SolidColorBrush(Color.FromRgb(79, 65, 97)), BorderThickness = new Thickness(1), Child = _surface });
         Content = root;
@@ -286,6 +308,9 @@ internal sealed class CalibrationWindow : Window
     internal CalibrationSurface Surface => _surface;
     internal CalibrationWizard Wizard => _surface.Wizard;
     internal Button DoneButton => _done;
+
+    /// <summary>The choice of how the keyboard looks in the picture.</summary>
+    internal ComboBox OrientationBox => _orientation;
 
     /// <summary>The calibration the person marked; null until Done is pressed.</summary>
     internal ArCalibration? Result { get; private set; }

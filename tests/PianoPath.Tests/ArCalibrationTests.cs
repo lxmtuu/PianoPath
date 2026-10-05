@@ -349,7 +349,7 @@ public class ArCalibrationTests
                 for (var i = 0; i < 4; i++) corners[i] = (s[i].X + (random.NextDouble() - .5) * 400, s[i].Y + (random.NextDouble() - .5) * 250);   // a shaky hand
             }
             var calibration = ArCalibration.Create(KeyboardLayout.Standard88, corners, W, H, out var problem);
-            Assert.Equal(CalibrationQuad.Check(corners, W, H), problem);
+            Assert.Equal(CalibrationQuad.CheckAnyWinding(corners, W, H), problem);
             if (calibration is null) { Assert.NotEqual(CalibrationProblem.None, problem); continue; }
             accepted++;
             for (var pitch = 21; pitch <= 108; pitch++)

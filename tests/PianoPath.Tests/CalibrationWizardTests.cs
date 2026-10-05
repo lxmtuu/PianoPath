@@ -12,6 +12,7 @@ public class CalibrationWizardTests
     {
         var wizard = new CalibrationWizard(W, H, layout ?? KeyboardLayout.Standard88);
         wizard.SetViewport(width, height, mirror);
+        wizard.SetOrientation(KeyboardOrientations.Default(mirror));        // upright in the picture as delivered, like the window starts
         return wizard;
     }
 

@@ -93,6 +93,22 @@ internal static class CalibrationQuad
     }
 
     /// <summary>
+    /// <see cref="Check"/> for corners that may go round either way. A camera that looks at the keyboard from the far side, or whose
+    /// picture arrives turned round, sees it as a mirror image: back-left, back-right, front-right, front-left then turn the other
+    /// way in the picture, and that is a real keyboard, not a mistake. Everything else is judged as <see cref="Check"/> does, on the same
+    /// corners turned round so that they run the usual way.
+    /// </summary>
+    internal static CalibrationProblem CheckAnyWinding(IReadOnlyList<(double X, double Y)> corners, int imageWidth, int imageHeight)
+    {
+        var problem = Check(corners, imageWidth, imageHeight);
+        return problem == CalibrationProblem.WrongOrder ? Check(Reflect(corners, imageWidth, imageHeight, flipX: true, flipY: false), imageWidth, imageHeight) : problem;
+    }
+
+    /// <summary>The points turned round left to right (<paramref name="flipX"/>) and/or top to bottom (<paramref name="flipY"/>) in a picture of this size. Doing it twice gives the points back.</summary>
+    internal static (double X, double Y)[] Reflect(IReadOnlyList<(double X, double Y)> points, int imageWidth, int imageHeight, bool flipX, bool flipY) =>
+        [.. points.Select(p => (flipX ? imageWidth - p.X : p.X, flipY ? imageHeight - p.Y : p.Y))];
+
+    /// <summary>
     /// The four points put into the order the overlay wants — back-left, back-right, front-right, front-left —
     /// judged by where they are in the picture (top-left is the one with the smallest x + y, and so on). Null when
     /// that does not name four different points, as when the keyboard is turned a quarter round.
@@ -166,12 +182,12 @@ internal sealed class ArCalibration
 
     /// <summary>
     /// Builds the calibration for <paramref name="layout"/> from four corners, or null with the reason in
-    /// <paramref name="problem"/>: the corners may not be used when <see cref="CalibrationQuad.Check"/> finds
+    /// <paramref name="problem"/>: the corners may not be used when <see cref="CalibrationQuad.CheckAnyWinding"/> finds
     /// anything wrong or when they define no usable map.
     /// </summary>
     internal static ArCalibration? Create(KeyboardLayout layout, IReadOnlyList<(double X, double Y)> corners, int imageWidth, int imageHeight, out CalibrationProblem problem)
     {
-        problem = CalibrationQuad.Check(corners, imageWidth, imageHeight);
+        problem = CalibrationQuad.CheckAnyWinding(corners, imageWidth, imageHeight);
         if (problem != CalibrationProblem.None) return null;
         var copy = corners.ToArray();
         var toImage = Homography.FromPoints([(0, 0), (1, 0), (1, 1), (0, 1)], copy);
@@ -256,7 +272,22 @@ internal sealed class CalibrationEditor
     /// placed; after that the verdict of <see cref="CalibrationQuad.Check"/>, so a drag that makes the outline fold
     /// shows it at once, while the person is still dragging.
     /// </summary>
-    internal CalibrationProblem Problem => CalibrationQuad.Check(_points, ImageWidth, ImageHeight);
+    internal CalibrationProblem Problem => CalibrationQuad.Check(Seen(_points), ImageWidth, ImageHeight);
+
+    /// <summary>True when the keyboard shows left to right turned round in the picture as delivered (low notes on the right).</summary>
+    internal bool FlipX { get; private set; }
+
+    /// <summary>True when the keyboard shows top to bottom turned round in the picture as delivered (the far edge at the bottom).</summary>
+    internal bool FlipY { get; private set; }
+
+    /// <summary>
+    /// Says how the keyboard sits in the picture as delivered: the points are judged and put in order as if the picture were turned
+    /// round that way, which for a keyboard that is upside down in the picture is the way it looks right.
+    /// </summary>
+    internal void SetFlips(bool flipX, bool flipY) { FlipX = flipX; FlipY = flipY; }
+
+    /// <summary>The points as they would be if the keyboard sat upright in the picture.</summary>
+    private (double X, double Y)[] Seen(IReadOnlyList<(double X, double Y)> points) => CalibrationQuad.Reflect(points, ImageWidth, ImageHeight, FlipX, FlipY);
 
     /// <summary>
     /// The points as the overlay can use them. A picture with the keyboard upright — low notes on the left, the player at
@@ -269,8 +300,10 @@ internal sealed class CalibrationEditor
     private (double X, double Y)[]? Usable()
     {
         var points = _points.ToArray();
-        if (CalibrationQuad.Order(points) is { } ordered && CalibrationQuad.Check(ordered, ImageWidth, ImageHeight) == CalibrationProblem.None) return ordered;
-        return CalibrationQuad.Check(points, ImageWidth, ImageHeight) == CalibrationProblem.None ? points : null;
+        var upright = Seen(points);
+        if (CalibrationQuad.Order(upright) is { } ordered && CalibrationQuad.Check(ordered, ImageWidth, ImageHeight) == CalibrationProblem.None)
+            return CalibrationQuad.Reflect(ordered, ImageWidth, ImageHeight, FlipX, FlipY);
+        return CalibrationQuad.Check(upright, ImageWidth, ImageHeight) == CalibrationProblem.None ? points : null;
     }
 
     /// <summary>The four corners as the overlay would use them (put in order when they only need that), or null when they are not usable yet.</summary>
@@ -335,7 +368,7 @@ internal sealed class CalibrationEditor
     /// </summary>
     internal ArCalibration? Finish(KeyboardLayout layout, out CalibrationProblem problem)
     {
-        var points = Usable() ?? _points.ToArray();
+        if (Usable() is not { } points) { problem = Problem; return null; }       // judged the strict way: Create alone would take corners that run the other way
         var result = ArCalibration.Create(layout, points, ImageWidth, ImageHeight, out problem);
         if (result is not null) { _points.Clear(); _points.AddRange(points); }
         return result;
@@ -352,7 +385,7 @@ internal sealed class CalibrationEditor
 /// corners no longer mean anything — and a settings preset or a share code never carries one.
 ///
 /// <para>
-/// A file that cannot be read, or an entry that would not pass <see cref="CalibrationQuad.Check"/>, is dropped
+/// A file that cannot be read, or an entry that would not pass <see cref="CalibrationQuad.CheckAnyWinding"/>, is dropped
 /// instead of trusted: the worst a damaged file can do is ask for a new calibration. Saving writes a temporary file
 /// and moves it into place, so a crash cannot leave half a file.
 /// </para>
@@ -404,7 +437,7 @@ internal sealed class ArCalibrationStore
     /// <summary>Saves the corners for this camera, picture size and keyboard size, replacing the earlier ones, and writes the file. False when the corners are not good enough or the file cannot be written.</summary>
     internal bool Set(string cameraLink, int imageWidth, int imageHeight, int keyCount, IReadOnlyList<(double X, double Y)> corners)
     {
-        if (CalibrationQuad.Check(corners, imageWidth, imageHeight) != CalibrationProblem.None) return false;
+        if (CalibrationQuad.CheckAnyWinding(corners, imageWidth, imageHeight) != CalibrationProblem.None) return false;
         lock (_gate)
         {
             _entries.RemoveAll(e => Matches(e, cameraLink, imageWidth, imageHeight, keyCount));
@@ -443,7 +476,7 @@ internal sealed class ArCalibrationStore
                 foreach (var entry in file.Entries)
                 {
                     if (entry is null || entry.Corners is not { Length: 8 } || entry.ImageWidth <= 0 || entry.ImageHeight <= 0 || entry.KeyCount <= 0) continue;
-                    if (CalibrationQuad.Check(Points(entry), entry.ImageWidth, entry.ImageHeight) != CalibrationProblem.None) continue;
+                    if (CalibrationQuad.CheckAnyWinding(Points(entry), entry.ImageWidth, entry.ImageHeight) != CalibrationProblem.None) continue;
                     entry.CameraLink ??= "";
                     _entries.RemoveAll(e => Matches(e, entry.CameraLink, entry.ImageWidth, entry.ImageHeight, entry.KeyCount));
                     _entries.Add(entry);

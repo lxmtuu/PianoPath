@@ -629,7 +629,8 @@ public partial class MainWindow
             case CalibrationLaunch.SizeMismatch: ShowMessage(Loc.T("The camera's picture changed size, so nothing was saved. Try again."), "Mark the keys", MessageBoxImage.Information); return;
         }
         var window = new CalibrationWindow(picture!, _visualSettings.KeyboardLayoutChoice, _visualSettings.CameraMirror,
-            () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames));
+            () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames),
+            before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null);
         if (show is null && IsLoaded) window.Owner = this;
         var accepted = show is null ? window.ShowDialog() : show(window);
         if (accepted != true || window.Result is not { } result) return;

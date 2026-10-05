@@ -11,6 +11,55 @@ internal enum WizardStep
     Fix,
 }
 
+/// <summary>
+/// How the keyboard looks in the picture the person sees. A camera above the keys, behind the player, sees the low notes on the left
+/// and the far edge of the keys (where the black keys start) at the top. A camera on the far side of the keyboard, looking at the player,
+/// sees it turned round: the low notes on the right and the far edge at the bottom.
+/// </summary>
+internal enum KeyboardOrientation
+{
+    /// <summary>Low notes on the left, far edge at the top.</summary>
+    Upright,
+    /// <summary>Low notes on the right, far edge at the top.</summary>
+    LowRight,
+    /// <summary>Low notes on the left, far edge at the bottom.</summary>
+    FarBottom,
+    /// <summary>Low notes on the right, far edge at the bottom.</summary>
+    LowRightFarBottom,
+}
+
+internal static class KeyboardOrientations
+{
+    internal static bool LowOnRight(this KeyboardOrientation orientation) => orientation is KeyboardOrientation.LowRight or KeyboardOrientation.LowRightFarBottom;
+    internal static bool FarAtBottom(this KeyboardOrientation orientation) => orientation is KeyboardOrientation.FarBottom or KeyboardOrientation.LowRightFarBottom;
+
+    /// <summary>
+    /// What to start from when nothing is known: the keyboard upright in the picture as the camera delivers it, which on the
+    /// screen is the other way round when the picture is shown mirrored.
+    /// </summary>
+    internal static KeyboardOrientation Default(bool mirrored) => mirrored ? KeyboardOrientation.LowRight : KeyboardOrientation.Upright;
+
+    /// <summary>
+    /// The orientation a calibration's corners (back-left, back-right, front-right, front-left, in the picture as delivered) show
+    /// on the screen, where the picture is shown turned round left to right when <paramref name="mirrored"/>. How the window
+    /// starts when the camera already has a calibration, so it opens on the choice that made it.
+    /// </summary>
+    internal static KeyboardOrientation Of(IReadOnlyList<(double X, double Y)> corners, int imageWidth, bool mirrored)
+    {
+        if (corners.Count != 4) return KeyboardOrientation.Upright;
+        double X(int i) => mirrored ? imageWidth - corners[i].X : corners[i].X;
+        var lowOnRight = (X(0) + X(3)) / 2 > (X(1) + X(2)) / 2;
+        var farAtBottom = (corners[0].Y + corners[1].Y) / 2 > (corners[2].Y + corners[3].Y) / 2;
+        return (lowOnRight, farAtBottom) switch
+        {
+            (false, false) => KeyboardOrientation.Upright,
+            (true, false) => KeyboardOrientation.LowRight,
+            (false, true) => KeyboardOrientation.FarBottom,
+            _ => KeyboardOrientation.LowRightFarBottom,
+        };
+    }
+}
+
 /// <summary>A key of the preview grid, in window coordinates.</summary>
 /// <param name="Pitch">The key.</param>
 /// <param name="Black">True for a black key; these come after every white one so they are drawn on top.</param>
@@ -36,6 +85,7 @@ internal sealed class CalibrationWizard
 
     private readonly CalibrationEditor _editor;
     private ArView _view;
+    private KeyboardOrientation _orientation = KeyboardOrientation.Upright;
     private int _dragging = -1;
     private (double X, double Y) _grabOffset;
 
@@ -63,8 +113,24 @@ internal sealed class CalibrationWizard
     internal bool IsDragging => _dragging >= 0;
 
     /// <summary>Tells the wizard how big the picture's box is and whether the picture is shown turned round.</summary>
-    internal void SetViewport(double width, double height, bool mirror) =>
+    internal void SetViewport(double width, double height, bool mirror)
+    {
         _view = new ArView(ImageWidth, ImageHeight, width, height, PictureFit.Fit, mirror);
+        ApplyOrientation();
+    }
+
+    /// <summary>How the keyboard looks in the picture on the screen; the corners already placed are judged again for it.</summary>
+    internal KeyboardOrientation Orientation => _orientation;
+
+    /// <summary>Says how the keyboard looks on the screen. The corners stay where they are; what changes is how they are put in order and judged.</summary>
+    internal void SetOrientation(KeyboardOrientation orientation)
+    {
+        _orientation = orientation;
+        ApplyOrientation();
+    }
+
+    /// <summary>The orientation is as seen on the screen and the editor works on the picture as delivered, which the screen shows turned round left to right when mirrored.</summary>
+    private void ApplyOrientation() => _editor.SetFlips(_orientation.LowOnRight() != _view.Mirror, _orientation.FarAtBottom());
 
     // ---- what to say ------------------------------------------------------------------------------------
 

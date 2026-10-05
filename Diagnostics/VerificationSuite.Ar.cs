@@ -400,6 +400,16 @@ internal static partial class VerificationSuite
                     "The grid of keys should be drawn over the picture once the four corners can be used.");
                 var (cx, cy) = w.Wizard.PointOnScreen(w.Wizard.Selected);
                 Assert(Differs(drawn, (int)Math.Round(cx), (int)Math.Round(cy), 255, 230, 67) <= 8, "The corner that was placed last should be drawn, filled, where it was clicked.");
+                // the choice of how the keyboard looks in the picture: starts as upright in the picture as delivered, and changes how the same corners are read
+                var upright = KeyboardOrientations.Default(mirror);
+                Assert(w.OrientationBox.Items.Count == 4 && w.Wizard.Orientation == upright && Equals(w.OrientationBox.SelectedValue, upright),
+                    "The window should start with the keyboard upright in the picture as delivered, and offer the four ways it can look.");
+                var turned = upright == KeyboardOrientation.LowRightFarBottom ? KeyboardOrientation.Upright : KeyboardOrientation.LowRightFarBottom;
+                w.OrientationBox.SelectedValue = turned;
+                Assert(w.Wizard.Orientation == turned && w.Wizard.Points.Count == 4 && w.Wizard.PreviewKeys().Count == keyCount,
+                    "Choosing another orientation should read the same four corners another way and move none of them.");
+                w.OrientationBox.SelectedValue = upright;
+                Assert(w.Wizard.Orientation == upright && w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust, "Choosing the first orientation again should bring the first reading back.");
                 w.Accept();
                 return w.Result is not null;
             });

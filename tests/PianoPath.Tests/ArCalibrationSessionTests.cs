@@ -127,7 +127,8 @@ public sealed class ArCalibrationSessionTests : IDisposable
         session.Use(Cam, 1280, 720, Full);
         session.Save(Corners(88), out _);
         var before = session.Snapshot;
-        var reversed = Enumerable.Reverse(Corners(88)).ToArray();
+        var corners = Corners(88);
+        var reversed = new[] { corners[0], corners[1], corners[3], corners[2] };       // a bow tie: no way round makes it a keyboard
         Assert.Equal(ArSaveResult.BadCorners, session.Save(reversed, out var problem));
         Assert.NotEqual(CalibrationProblem.None, problem);
         Assert.Equal(ArSaveResult.BadCorners, session.Save([(0, 0), (1, 1)], out _));

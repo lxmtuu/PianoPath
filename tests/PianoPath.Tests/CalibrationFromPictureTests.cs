@@ -114,6 +114,7 @@ public sealed class CalibrationFromPictureTests : IDisposable
         var (viewWidth, viewHeight) = Viewports[viewportIndex];
         var wizard = new CalibrationWizard(picture.Width, picture.Height, layout);
         wizard.SetViewport(viewWidth, viewHeight, mirror);
+        wizard.SetOrientation(KeyboardOrientations.Default(mirror));         // upright in the picture as delivered, which is how the window starts
 
         // 1) clicks that are a couple of pixels off: usable at once, and the keys are near the keys already
         const double jitter = 2;
