@@ -327,7 +327,7 @@ internal sealed partial class CameraFrameReader : IDisposable
             {
                 // The mode the overlay forced cannot be converted on this machine. Go back to the first mode the camera
                 // lists (its own default) and ask again, so a camera that works at all still opens.
-                var forced = chosen.Label;
+                var forced = chosen.Value.Label;
                 if (SelectFirstNativeMode() && reader.SetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, type) == Mf.S_OK)
                 {
                     hr = Mf.S_OK;
