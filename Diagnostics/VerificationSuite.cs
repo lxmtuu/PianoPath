@@ -459,6 +459,24 @@ internal static partial class VerificationSuite
         Assert(PianoVisualSettings.KeyboardSizes.SequenceEqual(KeyboardLayout.All.Select(layout => layout.KeyCount.ToString())),
             "The sizes the settings offer should be exactly the layouts the app has.");
 
+        // The overlay's own settings: defaults agree with ArOptions, wild values are pulled into range, and a look being
+        // applied (a preset, a community look, a pasted code) neither switches the overlay on nor retunes it.
+        var arDefault = new PianoVisualSettings();
+        Assert(!arDefault.ArEnabled && arDefault.ArOptionsValue == ArOptions.Default,
+            "A fresh install has the overlay off, and the settings' defaults are the ones ArOptions names.");
+        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5 }; arWild.Clamp();
+        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin,
+            "Out-of-range overlay values should be pulled into range when settings load.");
+        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30 };
+        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90 });
+        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30,
+            "Applying a look must keep every overlay setting.");
+        var arCode = VisualPresetShare.Encode(arKept);
+        Assert(VisualPresetShare.TryDecode(arCode, out var arShared, out _) && arShared.ArMode == "Perform" && arShared.ArLookahead == 2,
+            "A look code carries the overlay values like any other setting, and reads them back in range.");
+        var arJson = PianoVisualSettings.FromJson(arKept.ToJson());
+        Assert(arJson.ArOptionsValue == arKept.ArOptionsValue, "The overlay settings should survive a save and a load.");
+
         try
         {
             var narrow = KeyboardLayout.ForKeyCount(61);

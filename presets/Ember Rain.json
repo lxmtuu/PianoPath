@@ -225,6 +225,11 @@
     "RenderBackend": "Gpu",
     "GpuFrameRate": "144",
     "GpuVSync": true,
-    "KeyboardSize": "88"
+    "KeyboardSize": "88",
+    "ArEnabled": false,
+    "ArMode": "Learn",
+    "ArOpacity": 100.0,
+    "ArLookahead": 3.0,
+    "ArKeyLight": 60.0
   }
 }

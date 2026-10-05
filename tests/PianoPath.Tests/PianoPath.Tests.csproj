@@ -60,6 +60,7 @@
     <Compile Include="..\..\Camera\ArView.cs" Link="Product\Camera\ArView.cs" />
     <Compile Include="..\..\Camera\ArProjection.cs" Link="Product\Camera\ArProjection.cs" />
     <Compile Include="..\..\Camera\ArKeys.cs" Link="Product\Camera\ArKeys.cs" />
+    <Compile Include="..\..\Camera\ArOptions.cs" Link="Product\Camera\ArOptions.cs" />
     <Compile Include="..\..\Camera\CameraMode.cs" Link="Product\Camera\CameraMode.cs" />
     <Compile Include="..\..\Camera\CameraFrameRing.cs" Link="Product\Camera\CameraFrameRing.cs" />
     <Compile Include="..\..\Camera\FramePacer.cs" Link="Product\Camera\FramePacer.cs" />
