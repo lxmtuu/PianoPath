@@ -72,7 +72,7 @@ public class CalibrationPictureTests
     }
 
     [Fact]
-    public void Peeking_while_the_camera_publishes_and_the_engine_takes_never_shows_a_torn_frame()
+    public async Task Peeking_while_the_camera_publishes_and_the_engine_takes_never_shows_a_torn_frame()
     {
         var ring = new CameraFrameRing();
         const int width = 64, height = 36, size = width * height * 4;
@@ -86,20 +86,22 @@ public class CalibrationPictureTests
                 value = (byte)(value % 250 + 1);
                 for (var i = 0; i < size; i++) buffer[i] = value;           // slow on purpose: a torn frame would show
                 ring.Publish(slot, width, height, 0);
+                Thread.Yield();
             }
         });
-        var taker = Task.Run(() => { while (!stop.IsCancellationRequested) ring.TryTake(out _); });
+        var taker = Task.Run(() => { while (!stop.IsCancellationRequested) { ring.TryTake(out _); Thread.Sleep(1); } });
         var torn = 0; var peeked = 0;
         var end = DateTime.UtcNow.AddMilliseconds(600);
         while (DateTime.UtcNow < end)
         {
+            Thread.Sleep(1);                                                  // the lock is not fair: a loop that never lets go would starve the others
             if (!ring.TryPeek(out var copy)) continue;
             peeked++;
             if (copy.Pixels.Length != size || copy.Pixels.Any(b => b != copy.Pixels[0])) torn++;
         }
         stop.Cancel();
-        Task.WaitAll(writer, taker);
-        Assert.True(peeked > 0);
+        await Task.WhenAll(writer, taker);
+        Assert.True(peeked > 0, "the writer never published, or every peek was starved");
         Assert.Equal(0, torn);
     }
 
@@ -242,6 +244,6 @@ public class CalibrationPictureTests
     {
         Assert.Equal("C4", CalibrationHints.KeyName(60)); Assert.Equal("A0", CalibrationHints.KeyName(21));
         Assert.Equal("C8", CalibrationHints.KeyName(108)); Assert.Equal("C♯5", CalibrationHints.KeyName(73));
-        Assert.Equal("C-1", CalibrationHints.KeyName(0)); Assert.Equal("B-1", CalibrationHints.KeyName(-1));
+        Assert.Equal("C-1", CalibrationHints.KeyName(0)); Assert.Equal("B-2", CalibrationHints.KeyName(-1));
     }
 }
