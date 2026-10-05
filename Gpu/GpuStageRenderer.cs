@@ -253,6 +253,9 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
 
+    /// <summary>How many of those were lit keys (the rest are notes); verification reads it.</summary>
+    internal int ArKeyQuadCount => _arLayer.KeyQuadCount;
+
     /// <summary>The camera texture (null when there is no layer or no frame yet); verification reads its counters.</summary>
     internal GpuCameraTexture? CameraTexture => _camera;
 
@@ -293,7 +296,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arList);
+            _arLayer.Build(input, ar, arView, simulation.KeyColors, _arList);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();

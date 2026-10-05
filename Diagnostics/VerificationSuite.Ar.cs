@@ -198,7 +198,8 @@ internal static partial class VerificationSuite
         ArNotes.Build(calibration!, arView, arNotes, 10, 1, ArNoteStyle.Default, expected);
         Assert(expected.Count == 4, $"Four of the five notes are in reach or sounding ({expected.Count}).");
         var arFrame = Render(MakeArFeed(flatInput, arInput));
-        Assert(renderer.ArQuadCount == 4, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount}).");
+        // the sounding G4 also lights its key, so the keys are counted apart from the notes
+        Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 4 && renderer.ArKeyQuadCount >= 1, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount} quads, {renderer.ArKeyQuadCount} of them keys).");
         var plain = Look(arFrame, width, height, (20, 20))!.Value;
         Assert(plain.Off <= 3 && plain.Spread <= 3, $"Away from every note the picture is the camera's grey (off by {plain.Off}).");
         foreach (var shape in expected)
@@ -223,9 +224,56 @@ internal static partial class VerificationSuite
         Assert(overKeys is { } over && over.Off <= 3, "Just past the leading edge of a coming note the camera's grey must show.");
 
         Render(MakeArFeed(flatInput, arInput, playing: false));
-        Assert(renderer.ArQuadCount == 0, "A paused song draws no notes, like the stage.");
+        Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 0, "A paused song draws no notes, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
         Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
+        // ---- AR-1.4: held keys lit where they are in the picture ---------------------------------------------
+        var held = new HashSet<int> { 60, 61, 64 };
+        GpuStageFeed MakeKeyFeed(GpuArInput? ar)
+        {
+            var feed = MakeFeed(flatInput);
+            feed.SetState([], 0, false, held);
+            feed.Ar = ar;
+            return feed;
+        }
+        byte[] RenderWarm(GpuStageFeed feed) => GpuRenderLoop.RenderFrames(renderer, feed, width, height, 10, 1 / 60.0, false, out _);
+        var layout = calibration!.Layout;
+        (double X, double Y) KeyPoint(double u, double v) { var p = calibration.ToPicture(u, v); return arView.ToOutput(p.X, p.Y); }
+        var lit = RenderWarm(MakeKeyFeed(arInput));
+        var litKeys = renderer.ArKeyQuadCount;
+        var unlit = RenderWarm(MakeKeyFeed(null));
+        Assert(litKeys == 5 && renderer.ArQuadCount == 0, $"Three held keys (C4 and E4 white, C#4 black) are five rectangles ({litKeys}).");
+        int Change((double X, double Y) at)
+        {
+            var x = (int)Math.Floor(at.X); var y = (int)Math.Floor(at.Y);
+            Assert(x >= 0 && y >= 0 && x < width && y < height, $"The probe ({at.X:0.0},{at.Y:0.0}) must be on the output.");
+            var i = (y * width + x) * 4;
+            return Math.Max(Math.Abs(lit[i] - unlit[i]), Math.Max(Math.Abs(lit[i + 1] - unlit[i + 1]), Math.Abs(lit[i + 2] - unlit[i + 2])));
+        }
+        (string What, (double X, double Y) At)[] shouldLight =
+        [
+            ("C4, front of the white key", KeyPoint(layout.CenterX(60), .85)),
+            ("C4, stem between the black keys", KeyPoint((layout.Span(60).Left + layout.Span(61).Left) / 2, .3)),
+            ("C#4, the black key", KeyPoint(layout.CenterX(61), .3)),
+            ("E4, front of the white key", KeyPoint(layout.CenterX(64), .85)),
+            ("E4, stem beside D#4", KeyPoint((layout.Span(63).Right + layout.Span(64).Right) / 2, .3)),
+        ];
+        foreach (var (what, at) in shouldLight)
+            Assert(Change(at) > 25, $"A held key must be tinted: {what} changed by {Change(at)}.");
+        (string What, (double X, double Y) At)[] shouldStay =
+        [
+            ("D4, a white key not held", KeyPoint(layout.CenterX(62), .85)),
+            ("D4's stem between two black keys", KeyPoint((layout.Span(61).Right + layout.Span(63).Left) / 2, .3)),
+            ("D#4, a black key beside two held keys", KeyPoint(layout.CenterX(63), .3)),
+            ("F#4, a black key not held", KeyPoint(layout.CenterX(66), .3)),
+            ("G5, far from any held key", KeyPoint(layout.CenterX(79), .85)),
+            ("the air above C4", KeyPoint(layout.CenterX(60), -.3)),
+        ];
+        foreach (var (what, at) in shouldStay)
+            Assert(Change(at) <= 2, $"Only held keys light up: {what} changed by {Change(at)}.");
+        RenderWarm(MakeKeyFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, 0f)));
+        Assert(renderer.ArQuadCount == 0, "A key light strength of zero draws no key.");
+
         Render(MakeArFeed(flatInput, null));
         Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
         var smallRing = new CameraFrameRing(); PublishGradient(smallRing, 160, 90);
@@ -234,6 +282,7 @@ internal static partial class VerificationSuite
         Render(MakeArFeed(null, arInput));
         Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
+        Results.Add($"PASS ar keys: three held keys are five rectangles, each tinted where it is in the picture and nothing around it, black keys beside a held white key left alone; read back against the same frame without the layer.");
         Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
     }

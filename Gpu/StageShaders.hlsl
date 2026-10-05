@@ -64,7 +64,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // x = fade-in 0..1, y = 1 while the note sounds
+    float4 Misc;         // x = fade-in 0..1, y = 1 while the note sounds, z = 1 for a lit key
 };
 
 struct KeyInstance
@@ -349,6 +349,12 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
+    if (i.Misc.z > 0.5)
+    {
+        // a lit key: its colour laid over the key in the picture, so a white key takes the tint and a dark one lights up
+        float ka = i.Color.a;
+        return float4(i.Color.rgb * 1.1 * ka, ka);
+    }
     float side = min(i.Uv.x, 1.0 - i.Uv.x);
     float rim = 1.0 - smoothstep(0.0, 0.16, side);
     float lead = smoothstep(0.55, 1.0, i.Uv.y);
