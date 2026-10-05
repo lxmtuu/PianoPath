@@ -17,7 +17,7 @@ namespace PianoPath;
 internal struct GpuFrameConstants
 {
     public Vector4 ScreenTime, SceneSize, Camera, Background, Aura, Horizon, SceneA, SceneB;
-    public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx;
+    public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx, KeyRange, ArPicture, ArFlags;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -103,8 +103,8 @@ internal sealed class GpuStageRenderer : IDisposable
     internal FeatureLevel Level { get; }
     internal double ShaderCompileMilliseconds { get; private set; }
 
-    private ID3D11VertexShader _vsFullscreen = null!, _vsNote = null!, _vsKey = null!, _vsSprite = null!;
-    private ID3D11PixelShader _psBackground = null!, _psNote = null!, _psKey = null!, _psSprite = null!, _psPrefilter = null!, _psDown = null!, _psUp = null!, _psComposite = null!;
+    private ID3D11VertexShader _vsFullscreen = null!, _vsNote = null!, _vsKey = null!, _vsSprite = null!, _vsArQuad = null!;
+    private ID3D11PixelShader _psArQuad = null!, _psBackground = null!, _psNote = null!, _psKey = null!, _psSprite = null!, _psPrefilter = null!, _psDown = null!, _psUp = null!, _psComposite = null!;
     private ID3D11BlendState _blendPremultiplied = null!, _blendAdditive = null!, _blendOpaque = null!;
     private ID3D11DepthStencilState _depthOff = null!, _depthWrite = null!, _depthRead = null!;
     private ID3D11RasterizerState _raster = null!;
@@ -114,6 +114,10 @@ internal sealed class GpuStageRenderer : IDisposable
     private readonly DynamicStructuredBuffer<GpuKeyInstance> _keys;
     private readonly DynamicStructuredBuffer<GpuSpriteInstance> _sprites;
     private readonly DynamicStructuredBuffer<Vector4> _keyColors;
+    private readonly DynamicStructuredBuffer<GpuArQuad> _arQuads;
+    private readonly GpuInstanceList<GpuArQuad> _arList = new(512);
+    private readonly GpuArLayer _arLayer = new();
+    private GpuArInput? _arInput;
     // the layers behind the notes (lanes, petals, ambient, note trails) need their own buffer:
     // SV_InstanceID restarts at 0 for every draw, so one buffer cannot serve two sprite batches
     private readonly DynamicStructuredBuffer<GpuSpriteInstance> _ambient;
@@ -124,6 +128,8 @@ internal sealed class GpuStageRenderer : IDisposable
     private ID3D11Texture2D? _backgroundTexture;
     private ID3D11ShaderResourceView? _backgroundView;
     private float _backgroundAspect = 1;
+    private GpuCameraTexture? _camera;
+    private GpuCameraInput? _cameraInput;
     private long _backgroundVersion = -1;
 
     private GpuStageRenderer(ID3D11Device device, ID3D11DeviceContext context, FeatureLevel level, bool warp)
@@ -141,6 +147,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _keys = new DynamicStructuredBuffer<GpuKeyInstance>(device, 128);
         _sprites = new DynamicStructuredBuffer<GpuSpriteInstance>(device, 4096);
         _keyColors = new DynamicStructuredBuffer<Vector4>(device, 128);
+        _arQuads = new DynamicStructuredBuffer<GpuArQuad>(device, 512);
         _ambient = new DynamicStructuredBuffer<GpuSpriteInstance>(device, 2048);
         CreateStates();
         CompileShaders();
@@ -180,6 +187,8 @@ internal sealed class GpuStageRenderer : IDisposable
         _vsNote = Device.CreateVertexShader(Compile("VsNote", "vs_5_0").Span);
         _vsKey = Device.CreateVertexShader(Compile("VsKey", "vs_5_0").Span);
         _vsSprite = Device.CreateVertexShader(Compile("VsSprite", "vs_5_0").Span);
+        _vsArQuad = Device.CreateVertexShader(Compile("VsArQuad", "vs_5_0").Span);
+        _psArQuad = Device.CreatePixelShader(Compile("PsArQuad", "ps_5_0").Span);
         _psBackground = Device.CreatePixelShader(Compile("PsBackground", "ps_5_0").Span);
         _psNote = Device.CreatePixelShader(Compile("PsNote", "ps_5_0").Span);
         _psKey = Device.CreatePixelShader(Compile("PsKey", "ps_5_0").Span);
@@ -220,6 +229,47 @@ internal sealed class GpuStageRenderer : IDisposable
         _backgroundAspect = image.Width / (float)image.Height;
     }
 
+    /// <summary>
+    /// Takes the newest camera frame from the feed's ring into the camera texture. Call once per loop iteration, from the
+    /// render thread, before any <see cref="Render"/>: every output (preview, window, recording) then draws the same picture.
+    /// Null removes the layer and frees the texture.
+    /// </summary>
+    internal void UpdateCamera(GpuCameraInput? input)
+    {
+        _cameraInput = input;
+        if (input is null)
+        {
+            _camera?.Dispose(); _camera = null;
+            return;
+        }
+        if (!input.Ring.TryTake(out var frame)) return;
+        _camera ??= new GpuCameraTexture(Device);
+        _camera.Upload(Context, frame);
+    }
+
+    /// <summary>Sets what the AR layer draws (null for none). Call next to <see cref="UpdateCamera"/>, from the render thread.</summary>
+    internal void UpdateAr(GpuArInput? input) => _arInput = input;
+
+    private Vector4[]? _arKeyColors;
+
+    /// <summary>
+    /// The glow the AR layer lights the keys with instead of the simulation's own, or null for the simulation's: the loop hands in
+    /// the glow of a camera-delay ago here. Set next to <see cref="UpdateAr"/>, from the render thread.
+    /// </summary>
+    internal void SetArKeyColors(Vector4[]? colors) => _arKeyColors = colors;
+
+    /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
+    internal int ArQuadCount => _arList.Count;
+
+    /// <summary>How many of those were lit keys (the rest are notes); verification reads it.</summary>
+    internal int ArKeyQuadCount => _arLayer.KeyQuadCount;
+
+    /// <summary>The camera texture (null when there is no layer or no frame yet); verification reads its counters.</summary>
+    internal GpuCameraTexture? CameraTexture => _camera;
+
+    /// <summary>True when the next frame draws the camera picture: a layer is set, a frame has arrived, and the output is not a chroma-key frame.</summary>
+    private bool CameraActive(GpuLook look) => _camera?.View is not null && _cameraInput is not null && !look.Chroma;
+
     /// <summary>Uploads the glyph atlas (note names, Matrix Rain glyphs) once; coverage is read from its alpha channel.</summary>
     internal void UpdateAtlas(GpuBackgroundImage? image)
     {
@@ -251,6 +301,11 @@ internal sealed class GpuStageRenderer : IDisposable
         _sprites.Upload(context, sprites.Span);
         _ambient.Upload(context, _ambientList.Span);
         _keyColors.Upload(context, simulation.KeyColors);
+        // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
+        _arList.Clear();
+        if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, _arList);
+        _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
         context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
@@ -271,10 +326,14 @@ internal sealed class GpuStageRenderer : IDisposable
         context.OMSetBlendState(_blendOpaque);
         context.OMSetDepthStencilState(_depthOff, 0);
         context.VSSetShader(_vsFullscreen);
-        context.PSSetShader(_psBackground);
-        if (_backgroundView is not null && look.ShowBackground && !look.Chroma) context.PSSetShaderResource(1, _backgroundView);
-        context.Draw(3, 0);
-        context.PSUnsetShaderResource(1);
+        // the camera picture replaces the whole backdrop (sky, stars, horizon, key bed); the composite pass lays it under the light
+        if (!CameraActive(look))
+        {
+            context.PSSetShader(_psBackground);
+            if (_backgroundView is not null && look.ShowBackground && !look.Chroma) context.PSSetShaderResource(1, _backgroundView);
+            context.Draw(3, 0);
+            context.PSUnsetShaderResource(1);
+        }
 
         if (_atlasView is not null) context.PSSetShaderResource(6, _atlasView);
         if (_ambientList.Count > 0)
@@ -315,6 +374,17 @@ internal sealed class GpuStageRenderer : IDisposable
             context.DrawInstanced(6, (uint)sprites.Count, 0, 0);
         }
 
+        // ---- AR layer: notes projected onto the camera picture ----
+        if (_arList.Count > 0)
+        {
+            context.OMSetBlendState(_blendPremultiplied);
+            context.OMSetDepthStencilState(_depthOff, 0);
+            context.VSSetShader(_vsArQuad);
+            context.PSSetShader(_psArQuad);
+            context.VSSetShaderResource(8, _arQuads.View);
+            context.DrawInstanced(6, (uint)_arList.Count, 0, 0);
+        }
+
         // ---- bloom pyramid ----
         context.OMSetDepthStencilState(_depthOff, 0);
         context.VSSetShader(_vsFullscreen);
@@ -342,8 +412,10 @@ internal sealed class GpuStageRenderer : IDisposable
         context.PSSetShader(_psComposite);
         context.PSSetShaderResource(0, target.HdrSrv!);
         context.PSSetShaderResource(1, target.BloomSrv[0]!);
+        if (CameraActive(look)) context.PSSetShaderResource(7, _camera!.View!);
         context.Draw(3, 0);
         context.PSUnsetShaderResources(0, 2);
+        context.PSUnsetShaderResource(7);
     }
 
     private void Pass(ID3D11RenderTargetView destination, (int Width, int Height) size, ID3D11PixelShader shader, ID3D11ShaderResourceView source, float texelX, float texelY, float z, float w)
@@ -412,17 +484,41 @@ internal sealed class GpuStageRenderer : IDisposable
                 look.BackgroundMotionAmount, look.BackgroundMotionSpeed, simulation.Activity),
             SceneFxColor = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundMotionColor), 1),
             HitFx = new Vector4(look.ShowHalo && look.HaloPulse ? HaloMotionId(look.HaloPulseStyle) : 0,
-                look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity)
+                look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity),
+            KeyRange = new Vector4(layout.Keys.FirstPitch, Math.Max(1, layout.Keys.KeyCount - 1), 0, 0),
+            ArPicture = ComputeArPicture(target, look, out var arFlags),
+            ArFlags = arFlags
         };
+    }
+
+    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
+    /// <summary>Where the camera picture lands on this output; false when no camera picture is drawn.</summary>
+    private bool TryCameraView(GpuRenderTarget target, GpuLook look, out ArView view)
+    {
+        view = default;
+        if (!CameraActive(look)) return false;
+        var input = _cameraInput!;
+        view = new ArView(_camera!.Width, _camera.Height, target.Width, target.Height, input.Fit, input.Mirror);
+        return view.Valid;
+    }
+
+    private Vector4 ComputeArPicture(GpuRenderTarget target, GpuLook look, out Vector4 flags)
+    {
+        flags = Vector4.Zero;
+        if (!TryCameraView(target, look, out var view)) return Vector4.Zero;
+        var input = _cameraInput!;
+        flags = new Vector4(input.Mirror ? 1 : 0, 1, Math.Clamp(input.Opacity, 0f, 1f), 0);
+        return new Vector4((float)view.Left, (float)view.Top, (float)view.Width, (float)view.Height);
     }
 
     public void Dispose()
     {
         try { Context.ClearState(); Context.Flush(); } catch { }
-        _notes.Dispose(); _keys.Dispose(); _sprites.Dispose(); _keyColors.Dispose(); _ambient.Dispose();
+        _notes.Dispose(); _keys.Dispose(); _sprites.Dispose(); _keyColors.Dispose(); _arQuads.Dispose(); _ambient.Dispose();
         _atlasView?.Dispose(); _atlasTexture?.Dispose();
         _backgroundView?.Dispose(); _backgroundTexture?.Dispose();
-        foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
+        _camera?.Dispose();
+        foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
             _blendPremultiplied, _blendAdditive, _blendOpaque, _depthOff, _depthWrite, _depthRead, _raster, _linear, _point, _frameBuffer, _passBuffer })
             disposable?.Dispose();
         Context.Dispose();

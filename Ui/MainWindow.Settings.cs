@@ -417,6 +417,13 @@ public partial class MainWindow
 
     private void BuildKeyboardPage()
     {
+        var instrument = Card(KeyboardSettingsHost, "KEYBOARD SIZE", "How many keys your keyboard or piano has.");
+        Choice(instrument, "Keyboard size", nameof(PianoVisualSettings.KeyboardSize), "How many keys your keyboard or piano has. The stage, the falling notes and the lit keys all follow it, and notes of a song outside its range are not drawn. It belongs to this computer: applying a preset keeps it.",
+            ("88", "88 keys"), ("76", "76 keys"), ("61", "61 keys"), ("49", "49 keys"));
+        _keyboardHintLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
+        Register(instrument, _keyboardHintLabel, null, "keyboard size keys 88 76 61 49 range suggestion played");
+        RefreshKeyboardHint();
+
         var look = Card(KeyboardSettingsHost, "KEYBOARD", "Appearance of the 88 keys.");
         Toggle(look, "Show keyboard", nameof(PianoVisualSettings.ShowKeys), "Hide the keys for a pure piano-roll look.");
         Choice(look, "Style", nameof(PianoVisualSettings.KeyboardStyle), "Flat classic keys, a studio grand with depth, or translucent glass keys.", ("Classic", "Classic"), ("Studio", "Studio 3D"), ("Glass", "Glass"));
@@ -529,10 +536,13 @@ public partial class MainWindow
         SliderRow(post, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150, "Global glow strength.");
         SliderRow(post, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150, "How far the glow spreads.");
 
+        var cameras = Card(CameraSettingsHost, "CAMERAS ON THIS MACHINE", "Every camera Windows reports, listed by its own name. Click one to use it; Automatic picks the first colour camera. The list updates by itself, so a virtual camera such as OBS appears here once it starts.");
+        BuildCameraList(cameras);
+
         var overlay = Card(CameraSettingsHost, "WEBCAM OVERLAY", "A live camera or a video file drawn over the stage, keyed against pure green. Use a green screen behind you (or the Green Screen preset on the stage) and the background of the picture disappears.");
         Toggle(overlay, "Camera overlay", nameof(PianoVisualSettings.ShowCameraOverlay), "Draw the source below over the stage as a picture-in-picture.");
         ButtonRow(overlay, ("CHOOSE VIDEO…", ChooseCameraVideo_Click, "IconCamera"), ("USE CAMERA", UseCameraOverlay_Click, "IconCamera"), ("REFRESH CAMERAS", RefreshCameraOverlay_Click, "IconRefresh"));
-        Choice(overlay, "Camera", nameof(PianoVisualSettings.CameraSourceLink), "Which camera the overlay opens; the list is read from the machine when the page opens and when REFRESH is pressed.",
+        Choice(overlay, "Camera", nameof(PianoVisualSettings.CameraSourceLink), "Which camera the overlay opens. The list is read from the machine at start, whenever a camera is plugged in or removed, and when REFRESH is pressed. Automatic picks the first colour camera and leaves infrared (face-login) cameras for last.",
             CameraChoices());
         Choice(overlay, "Corner", nameof(PianoVisualSettings.CameraCorner), "Which corner of the stage the picture sits in.",
             CameraOverlay.Corners.Select(corner => (corner, corner)).ToArray());
@@ -542,6 +552,21 @@ public partial class MainWindow
         SliderRow(overlay, "Key tolerance", nameof(PianoVisualSettings.CameraKeyTolerance), 0, 100, "How much of the picture counts as the green key colour and is made see-through. Zero keeps the whole picture.");
         _cameraStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(overlay, _cameraStatus, null, "camera overlay status green screen chroma key");
+
+        // The AR overlay is its own card: it uses the camera picked above but draws on the real keyboard in the picture.
+        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Play on your real keyboard: the camera is the background, the notes fall onto the real keys and the keys you press light up. It needs the Direct3D engine and a camera looking at the keys (the one picked above).");
+        Toggle(ar, "AR overlay", nameof(PianoVisualSettings.ArEnabled), "Use the camera as the background and draw the notes and lit keys over your real keyboard. Mark the four corners of the keys once per camera, picture size and keyboard size.");
+        Choice(ar, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the notes of the song falling onto the real keys. Perform shows only the keys you press lighting up, for playing freely or filming.",
+            (ArModes.Learn, "Learn"), (ArModes.Perform, "Perform"));
+        SliderRow(ar, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "How solid the falling notes and the lit keys are over the camera picture.");
+        SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")
+            .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
+        SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
+        SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound you hear is never delayed, but a recording with the camera in it starts its sound this much later, so the finger and the sound line up in the file. Zero changes nothing.");
+        ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"), ("MEASURE DELAY", MeasureArDelay_Click, "IconMotion"));
+        Note(ar, "Measure how late the camera's picture is: press about twenty keys on your keyboard while the camera watches your hands, and the camera delay is set to match.");
+        _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
+        Register(ar, _arStatus, null, "ar overlay status calibration camera keys");
 
         // Hand tracking is its own card: it reads the same camera but paints on the keyboard, and it works with
         // the picture hidden, which is the point of having it separate from the overlay.
@@ -553,6 +578,98 @@ public partial class MainWindow
         SyncCameraOverlay();
         RefreshCameraOverlayStatus(announce: false);
         RefreshHandStatus();
+        RefreshArStatus();
+    }
+
+    private TextBlock? _arStatus;
+    private string _arStatusKey = "";
+
+    /// <summary>What the AR card says about the overlay now: why it is not drawn yet, or what it is drawing on.</summary>
+    private string ArStatusText()
+    {
+        var snapshot = _arCalibration?.Snapshot ?? NoArSource;
+        var keys = _visualSettings.KeyboardLayoutChoice.KeyCount;
+        if (MeasuringArDelay) return LatencyText.Collecting(_latency.Presses);
+        if (_latencyText.Length > 0 && _arPlan.ArLayer) return _latencyText;          // what the last run found, until the overlay stops drawing
+        return _arPlan.Status switch
+        {
+            ArStatus.Off => Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."),
+            ArStatus.NeedsGpu => Loc.T("The AR overlay needs the Direct3D 11 engine; the software renderer is drawing the stage."),
+            ArStatus.ChromaBackground => Loc.T("A green-screen background takes the camera's place. Choose another stage background for the AR overlay."),
+            ArStatus.NoCamera => CameraStatus.Length > 0 ? Loc.F("Waiting for the camera. {0}", CameraStatus) : Loc.T("Waiting for the camera."),
+            ArStatus.NeedsCalibration => Loc.F("The camera runs at {0} × {1}. The keys have not been marked yet for a {2}-key keyboard.", snapshot.ImageWidth, snapshot.ImageHeight, keys),
+            ArStatus.Outdated => Loc.F("The saved key area was marked for another picture size or keyboard size. Mark it again for {0} × {1} and {2} keys.", snapshot.ImageWidth, snapshot.ImageHeight, keys),
+            _ => Loc.F("AR overlay on · {0} × {1} · {2} keys · {3}", snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
+                + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default),
+        };
+    }
+
+    /// <summary>
+    /// Writes the AR card's status line again when what it says has changed. Called whenever the plan is carried out and, while the
+    /// overlay owns the camera, from the frame timer, so a camera that stops answering is reported.
+    /// </summary>
+    private void RefreshArStatus()
+    {
+        if (_arStatus is null) return;
+        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
+        if (key == _arStatusKey) return;
+        _arStatusKey = key;
+        Loc.Bind(_arStatus, ArStatusText);
+    }
+
+    /// <summary>
+    /// Opens the window where the four corners of the keys are marked on a still of the camera, and keeps the result for this camera,
+    /// picture size and keyboard size. Everything that can go wrong is said in words and nothing is changed.
+    /// </summary>
+    private void CalibrateAr_Click(object sender, RoutedEventArgs e) => CalibrateAr();
+
+    /// <summary>The click's work, apart from the window's own state so a check can run it with the dialog turned off.</summary>
+    internal void CalibrateAr(Func<CalibrationWindow, bool?>? show = null)
+    {
+        var frames = _cameraFrames;
+        var mirroredFrames = _visualSettings.CameraMirror && !_arRawFrames;      // the camera thread mirrors unless the engine does
+        var picture = CalibrationPicture.Capture(frames, mirroredFrames);
+        var before = (_arCalibration ?? ArCalibration).Snapshot;
+        switch (CalibrationLaunchRules.Check(before, picture))
+        {
+            case CalibrationLaunch.NoCamera: ShowMessage(ArStatusText(), "Mark the keys", MessageBoxImage.Information); return;
+            case CalibrationLaunch.NoPicture: ShowMessage(Loc.T("The camera has not delivered a picture yet. Try again in a moment."), "Mark the keys", MessageBoxImage.Information); return;
+            case CalibrationLaunch.SizeMismatch: ShowMessage(Loc.T("The camera's picture changed size, so nothing was saved. Try again."), "Mark the keys", MessageBoxImage.Information); return;
+        }
+        var window = new CalibrationWindow(picture!, _visualSettings.KeyboardLayoutChoice, _visualSettings.CameraMirror,
+            () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames),
+            before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null);
+        if (show is null && IsLoaded) window.Owner = this;
+        bool? accepted;
+        _calibrating = true;                     // the camera is left alone while the keys are being marked
+        try { accepted = show is null ? window.ShowDialog() : show(window); }
+        finally { _calibrating = false; }
+        if (accepted != true || window.Result is not { } result) return;
+
+        var session = _arCalibration ?? ArCalibration;
+        // The camera is not modal: it may have been unplugged or reopened at another size while the window was up.
+        if (!CalibrationLaunchRules.SameSource(before, session.Snapshot))
+        {
+            ShowMessage(Loc.T("The camera's picture changed size, so nothing was saved. Try again."), "Mark the keys", MessageBoxImage.Information);
+            return;
+        }
+        switch (session.Save(result.Corners, out _))
+        {
+            case ArSaveResult.Saved: Loc.Set(SettingsSaveLabel, "Key area saved for this camera and keyboard size"); break;
+            case ArSaveResult.NotWritten:
+                Loc.Set(SettingsSaveLabel, "Key area marked, but not saved to disk");
+                ShowMessage(Loc.T("The key area is marked, but it could not be saved to disk, so it will be asked for again next time."), "Mark the keys", MessageBoxImage.Information);
+                break;
+            default: ShowMessage(Loc.T("The camera was closed, so nothing was saved."), "Mark the keys", MessageBoxImage.Information); break;
+        }
+        UpdateArFeed();
+    }
+
+    private void ResetArCalibration_Click(object sender, RoutedEventArgs e)
+    {
+        var had = _arCalibration?.Reset() == true;
+        UpdateArFeed();
+        Loc.Set(SettingsSaveLabel, had ? "Calibration forgotten for this camera" : "There was no saved calibration to forget");
     }
 
     /// <summary>Rows of the camera picker built from the machine's own list, refreshed on demand.</summary>
@@ -560,7 +677,14 @@ public partial class MainWindow
     {
         var devices = CameraFrameReader.Devices(out _cameraListError);
         _cameraDevices = devices;
-        return [("", Loc.T("First camera")), .. devices.Where(device => device.Link.Length > 0).Select(device => (device.Link, device.Name))];
+        return CameraChoiceOptions(devices);
+    }
+
+    /// <summary>The picker's rows for a list of cameras: "automatic" first, then each camera, infrared ones marked.</summary>
+    private static (string Value, string Caption)[] CameraChoiceOptions(IReadOnlyList<CameraInfo> devices)
+    {
+        return [("", Loc.T("Automatic (best camera)")), .. devices.Where(device => device.Link.Length > 0)
+            .Select(device => (device.Link, CameraRanking.IsInfrared(device.Name) ? Loc.F("{0} (infrared)", device.Name) : device.Name))];
     }
 
     /// <summary>
@@ -572,6 +696,7 @@ public partial class MainWindow
     {
         _visualChoiceOptions[nameof(PianoVisualSettings.CameraSourceLink)] = CameraChoices();
         RefreshChoiceCaptions();
+        RebuildCameraList();
     }
 
     private void RefreshCameraOverlay_Click(object sender, RoutedEventArgs e)
@@ -613,7 +738,9 @@ public partial class MainWindow
     {
         if (_cameraStatus is null) return;
         var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
-        var text = !_visualSettings.ShowCameraOverlay
+        var text = _arPlan.CameraLayer
+            ? CameraStatus                                    // the engine draws the picture, so the stage has no frame of its own to wait for
+            : !_visualSettings.ShowCameraOverlay
             ? Loc.T("The overlay is off. Switch Camera overlay on to put the picture over the stage.")
             // What the reader is really doing wins over what the settings say it should do.
             : CameraStatus.Length > 0
@@ -625,8 +752,8 @@ public partial class MainWindow
                         : _cameraListError is not null
                             ? Loc.F("The camera list could not be read: {0}", _cameraListError)
                             : _cameraDevices.Count == 0
-                                ? Loc.T("No camera was found on this machine. Choose a video file to overlay instead.")
-                                : Loc.F("{0} camera(s) found. The overlay opens the one picked above.", _cameraDevices.Count);
+                                ? Loc.T("No camera was found on this machine. If one is plugged in, check that Windows lets desktop apps use it (Settings → Privacy & security → Camera), or choose a video file to overlay instead.")
+                                : Loc.F("{0} camera(s) found: {1}. The overlay opens the one picked above.", _cameraDevices.Count, string.Join(", ", _cameraDevices.Select(device => device.Name)));
         _cameraStatus.Text = text;
         if (announce) Loc.Set(SettingsSaveLabel, text);
     }
@@ -641,6 +768,8 @@ public partial class MainWindow
         if (_handStatus is null) return;
         var text = !_visualSettings.ShowHandTracking
             ? Loc.T("Hand tracking is off. Switch it on to follow the hand the camera sees and mark its key.")
+            : _arPlan.CameraLayer
+                ? Loc.T("Hand tracking waits while the AR overlay is using the camera.")
             : CameraStatus.Length == 0
                 ? Loc.T("The camera is not running, so there is nothing to follow.")
                 : HandStatus.Length > 0 ? HandStatus : Loc.T("Hand: waiting for the first frame.");
@@ -997,6 +1126,8 @@ public partial class MainWindow
         nameof(PianoVisualSettings.ParticleAmount) or nameof(PianoVisualSettings.ParticleVelocity) or nameof(PianoVisualSettings.Gravity) or nameof(PianoVisualSettings.VectorField) or nameof(PianoVisualSettings.WispAmount) => $"{value:0}",
         nameof(PianoVisualSettings.HandSplitPitch) => $"{NoteLabel((int)Math.Round(value))} ({value:0})",
         nameof(PianoVisualSettings.RecordingFrameRate) => $"{value:0} fps",
+        nameof(PianoVisualSettings.ArLookahead) => $"{value:0.0} s",
+        nameof(PianoVisualSettings.ArDelay) => $"{value:0} ms",
         _ => $"{value:0}%"
     };
 
@@ -1108,6 +1239,7 @@ public partial class MainWindow
             nameof(PianoVisualSettings.NoteDirection) => "Note direction updated",
             nameof(PianoVisualSettings.ColorMode) => "Color mode updated",
             nameof(PianoVisualSettings.KeyboardStyle) => "Keyboard style updated",
+            nameof(PianoVisualSettings.KeyboardSize) => "Keyboard size updated",
             nameof(PianoVisualSettings.BackgroundMode) => "Background mode updated",
             _ => "Setting updated"
         };
@@ -1167,6 +1299,30 @@ public partial class MainWindow
         _visualSettings.PresetModified = true;
         UpdatePresetLabels();
         RecordHistory(property);
+    }
+
+    private TextBlock? _keyboardHintLabel;
+    private int _playedLowest = int.MaxValue, _playedHighest = int.MinValue;
+
+    /// <summary>Remembers the lowest and highest key played on a live instrument, so the keyboard size row can say which size fits.</summary>
+    private void NoteKeyboardRange(int pitch)
+    {
+        if (pitch >= _playedLowest && pitch <= _playedHighest) return;
+        _playedLowest = Math.Min(_playedLowest, pitch);
+        _playedHighest = Math.Max(_playedHighest, pitch);
+        RefreshKeyboardHint();
+    }
+
+    /// <summary>The line under the keyboard size row: what has been played so far and the size that holds it.</summary>
+    private void RefreshKeyboardHint()
+    {
+        if (_keyboardHintLabel is null) return;
+        Loc.Bind(_keyboardHintLabel, () =>
+        {
+            if (_playedHighest < _playedLowest) return Loc.T("Play a few notes on your keyboard and the size that fits them is suggested here.");
+            var fitting = KeyboardLayout.Fitting(_playedLowest, _playedHighest);
+            return Loc.F("You have played from {0} to {1}: a {2}-key keyboard fits.", NoteLabel(_playedLowest), NoteLabel(_playedHighest), fitting.KeyCount);
+        });
     }
 
     private void RefreshDependentRows()
@@ -1298,6 +1454,8 @@ public partial class MainWindow
         }
         finally { _loadingVisualSettings = false; }
         RefreshDependentRows(); RebuildTrackList(); UpdateRecordingInfo(); UpdatePresetLabels();
+        // A preset or a reset can change the picked camera: the list marks the new one.
+        if (_cameraList is not null) Dispatcher.BeginInvoke(new Action(RebuildCameraList), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void SyncPlayDialogToggle(string property, bool value)

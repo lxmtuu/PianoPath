@@ -86,7 +86,7 @@ public partial class MainWindow : Window
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
         _audio.MasterGain = _visualSettings.AudioMasterGain;
         _audio.OutputChanged += AudioEngine_OutputChanged;
-        SourceInitialized += (_, _) => _audio.SetAsioSystemHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle);
+        SourceInitialized += (_, _) => { _audio.SetAsioSystemHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle); HookCameraChanges(); };
         // Same for the reverb room, which also shapes the very first pipeline.
         _storedReverbTask = ApplyStoredReverbAsync();
         RefreshReverbStyleCombo();
@@ -111,6 +111,7 @@ public partial class MainWindow : Window
             // Audio note events are queued without taking the synth's render lock. The audio thread consumes
             // them at the next buffer, so a heavy sample block cannot stall WinMM's MIDI callback.
             if (on) _audio.NoteOn(pitch, velocity); else _audio.NoteOff(pitch);
+            if (on) _latency.NoteOn(System.Diagnostics.Stopwatch.GetTimestamp());       // timed here, on the MIDI thread, as close to the key as it gets
             // The GPU gets the note immediately; only its WPF overlay work is batched below.
             var direct = ForwardMidiToGpu(pitch, velocity, on);
             QueueMidiUiEvent(new PendingMidiUiEvent(pitch, velocity, on, direct));
@@ -134,6 +135,8 @@ public partial class MainWindow : Window
         // The GPU stage is the main stage: the render loop starts with the window and the software
         // renderer only steps in if Direct3D cannot start (or for a --software run).
         ApplyRenderBackend();
+        // The overlay needs the engine, which only exists from here on, so a saved "AR on" starts now.
+        SyncCameraOverlay();
         UpdateInstrumentUi();
         if (loadSalamanderOnStart) Loaded += MainWindow_Loaded;
     }
@@ -1222,14 +1225,76 @@ public partial class MainWindow : Window
 
     private CameraFrameReader? _camera;
     private Thread? _cameraThread;
-    private volatile bool _cameraStop;
-    private readonly Lock _cameraFrameLock = new();
-    private byte[] _cameraFrame = [];
-    private int _cameraFrameWidth, _cameraFrameHeight;
-    private bool _cameraFrameFresh;
+    private CameraSession? _cameraSession;
+    /// <summary>The frames from the camera thread to the drawing thread: three buffers, no copy.</summary>
+    private readonly CameraFrameRing _cameraFrames = new();
+    private long _lastHandTrackTicks;
     private WriteableBitmap? _cameraBitmap;
     private DispatcherTimer? _cameraUiTimer;
     private string _cameraSignature = "";
+    private ArCalibrationSession? _arCalibration;
+    private string _arSource = "";
+    private int _arWidth, _arHeight;
+    private ArPlan _arPlan = ArPlan.Off;
+    private int _arStatusTicks;
+    /// <summary>Set from the plan: the camera thread reads frames unmirrored because the engine turns them round when it draws.</summary>
+    private volatile bool _arRawFrames;
+    private static readonly ArCalibrationSnapshot NoArSource = new(ArCalibrationState.NoSource, null, "", 0, 0, 0, 0);
+
+    /// <summary>What the overlay is doing now, as <see cref="ArPlan"/> decided it.</summary>
+    internal ArPlan ArPlanNow => _arPlan;
+
+    private ArPlan DecideAr() => ArPlan.Decide(_visualSettings.ArOptionsValue, _gpuLoop is { Error: null }, _arSource.Length > 0,
+        _arCalibration?.Snapshot ?? NoArSource, _visualSettings.BackgroundMode == "ChromaGreen");
+
+    /// <summary>
+    /// Carries out the plan for the overlay: the camera and the AR layer go to the engine (or leave it), the stage's own notes and
+    /// keys step aside while the overlay is drawn, and the engine becomes the only reader of the camera's frames. Cheap, and safe to
+    /// call after anything that could change the answer: a setting, the engine, the camera, the calibration.
+    /// </summary>
+    internal void UpdateArFeed()
+    {
+        var plan = DecideAr();
+        _arPlan = plan;
+        Stage.ArOverlayActive = plan.HideStageLayers;
+        if (!plan.CameraLayer)
+        {
+            _gpuFeed.Ar = null;
+            _gpuFeed.Camera = null;
+            RefreshArStatus();
+            return;
+        }
+        var options = _visualSettings.ArOptionsValue;
+        // The engine's render thread now takes the frames from the ring; the window's own picture-in-picture and hand tracker
+        // would take them from it too, so they stand down while the overlay owns the camera.
+        Stage.SetCameraFrame(null);
+        Stage.SetHandReading(null);
+        HandStatus = "";
+        _gpuFeed.Camera = new GpuCameraInput(_cameraFrames, PictureFit.Fit, _visualSettings.CameraMirror, 1f);
+        var calibration = plan.ArLayer ? _arCalibration?.Current : null;
+        _gpuFeed.Ar = calibration is null ? null
+            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes, (float)options.DelaySeconds);
+        RefreshHandStatus();
+        RefreshArStatus();
+    }
+
+    /// <summary>
+    /// The calibration of the camera that is open, kept in the settings folder next to everything else. It is made on first
+    /// use, so a check that points the settings folder somewhere temporary gets a store there.
+    /// </summary>
+    internal ArCalibrationSession ArCalibration => _arCalibration ??= new ArCalibrationSession(new ArCalibrationStore(PianoVisualSettingsStore.SettingsDirectory));
+
+    /// <summary>
+    /// Tells the calibration which source is open (null for none) and brings it up to date with the keyboard size in the
+    /// settings. It is safe to call whenever anything changes; nothing happens unless the source, its picture size or the
+    /// keyboard size is different from last time.
+    /// </summary>
+    private void ApplyArSource(string? source, int width, int height)
+    {
+        _arSource = source ?? ""; _arWidth = width; _arHeight = height;
+        if (_arSource.Length == 0) _arCalibration?.Clear();       // nothing open and nothing made yet: no reason to read the file
+        else ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice);
+    }
 
     /// <summary>
     /// What the overlay is doing right now — the camera it opened, the file it is looping, or why neither
@@ -1251,13 +1316,19 @@ public partial class MainWindow : Window
     /// </summary>
     private void SyncCameraOverlay()
     {
+        // The keyboard size may have changed with this very settings change; the calibration follows it.
+        ApplyArSource(_arSource, _arWidth, _arHeight);
         // The reader opens for either layer: the picture can stay hidden while the hand is still followed, so a
         // user who wants only the key markers never has to put the camera on the stage to get them.
-        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking,
-            _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath);
-        if (wanted == _cameraSignature) return;
-        _cameraSignature = wanted;
-        StartCameraOverlay();
+        var plan = DecideAr();
+        var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking || plan.NeedsCamera,
+            _visualSettings.CameraSourceLink, _visualSettings.CameraVideoPath, plan.RawFrames);
+        if (wanted != _cameraSignature)
+        {
+            _cameraSignature = wanted;
+            StartCameraOverlay();
+        }
+        UpdateArFeed();
     }
 
     /// <summary>
@@ -1266,89 +1337,153 @@ public partial class MainWindow : Window
     /// </summary>
     private void StartCameraOverlay()
     {
+        StartCameraOverlayCore();
+        // "In use" in the camera list moves to the camera that opened (or off the one that would not).
+        Dispatcher.BeginInvoke(new Action(RebuildCameraList), DispatcherPriority.Background);
+    }
+
+    private void StartCameraOverlayCore()
+    {
         StopCameraOverlay();
-        if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking) { CameraStatus = ""; HandStatus = ""; return; }
+        var arPlan = DecideAr();
+        _arRawFrames = arPlan.RawFrames;
+        if (!_visualSettings.ShowCameraOverlay && !_visualSettings.ShowHandTracking && !arPlan.NeedsCamera) { CameraStatus = ""; HandStatus = ""; return; }
         var live = string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath);
-        var reader = live
-            ? CameraFrameReader.OpenDevice(_visualSettings.CameraSourceLink, out var error)
-            : CameraFrameReader.OpenFile(_visualSettings.CameraVideoPath, out error);
-        if (reader is null)
+        var link = _visualSettings.CameraSourceLink;
+        var path = _visualSettings.CameraVideoPath;
+        // The reader is opened, read and closed on ONE thread, its own. A Media Foundation reader that is created on the
+        // UI thread (an STA) and read from another one fails on the first read with E_NOINTERFACE ("Unable to cast COM
+        // object ... to IMFSourceReader"), because the call has to be marshalled into the apartment that made it and the
+        // reader has no marshalling support. So the thread opens it, tells this one how that went, and carries on reading.
+        var session = new CameraSession();
+        var opened = new ManualResetEventSlim();
+        var thread = new Thread(() => RunCamera(session, live, link, path, opened)) { IsBackground = true, Name = "Keyflow camera overlay" };
+        _cameraSession = session;
+        _cameraThread = thread;
+        _cameraFrames.Clear();
+        thread.Start();
+        if (!opened.Wait(TimeSpan.FromSeconds(20)))
         {
-            CameraStatus = error ?? Loc.T("The camera overlay could not be opened.");
+            session.Stop = true;                 // the thread closes whatever it manages to open, and goes
+            _cameraSession = null; _cameraThread = null;
+            CameraStatus = Loc.T("The camera did not answer in time.");
             return;
         }
+        var reader = session.Reader;
+        if (reader is null)
+        {
+            _cameraSession = null; _cameraThread = null;
+            CameraStatus = session.OpenError ?? Loc.T("The camera overlay could not be opened.");
+            return;
+        }
+        var error = session.OpenNote;
         _camera = reader;
+        ApplyArSource(reader.Source, reader.Width, reader.Height);
         CameraStatus = live
-            ? Loc.F("Live: {0}", reader.Label)
+            ? Loc.F("Live: {0} · {1}", reader.Label, reader.Mode.Label)
             : Loc.F("Video: {0} · {1} × {2}", reader.Label, reader.Width, reader.Height);
-        // A reader that opened but had something to add (the stored camera is gone, say) is heard too.
+        // A reader that opened but had something to add (the stored camera is gone, or it would not take the
+        // mode that was chosen) is heard too.
         if (error is { Length: > 0 } note) CameraStatus = $"{CameraStatus} {note}";
-        _cameraStop = false;
-        lock (_cameraFrameLock) _cameraFrameFresh = false;
-        _cameraThread = new Thread(CameraLoop) { IsBackground = true, Name = "Keyflow camera overlay" };
-        _cameraThread.Start();
+        if (reader.ModeNote.Length > 0) CameraStatus = $"{CameraStatus} {reader.ModeNote}";
         // The frames are turned into a bitmap on the UI thread, once per frame time at most.
         if (_cameraUiTimer is null)
         {
-            _cameraUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / CameraFrameReader.FrameRate) };
+            _cameraUiTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / CameraFrameReader.DisplayRate) };
             _cameraUiTimer.Tick += (_, _) => PumpCameraFrame();
         }
         _cameraUiTimer.Start();
+        UpdateArFeed();
     }
 
     /// <summary>Stops the overlay, closes the reader and clears the picture from the stage.</summary>
     private void StopCameraOverlay()
     {
-        _cameraStop = true;
+        if (_cameraSession is { } session) session.Stop = true;
+        _cameraSession = null;
         _cameraUiTimer?.Stop();
         var thread = _cameraThread;
         _cameraThread = null;
-        // The reader is closed before the thread is joined: a read that is already waiting comes back at once,
-        // so closing never hangs on a camera that has stopped answering.
-        _camera?.Dispose();
+        // The camera thread closes the reader itself (see StartCameraOverlay), as soon as the read it is waiting in comes
+        // back — one frame time on a live camera. A camera that never answers leaves a background thread behind, not a
+        // frozen window.
         _camera = null;
         if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
-        lock (_cameraFrameLock) _cameraFrameFresh = false;
+        _cameraFrames.Clear();
+        ApplyArSource(null, 0, 0);
         Stage.SetCameraFrame(null);
         Stage.SetHandReading(null);
         HandStatus = "";
     }
 
     /// <summary>
-    /// The reading thread: one frame at a time into the shared buffer, paced to the overlay's frame rate, with
-    /// a file rewound when it ends and a reader that fails reported instead of spinning.
+    /// The reading thread: one frame at a time into a free buffer of the ring, with a file rewound when it ends and a
+    /// reader that fails reported instead of spinning. A live camera is read as fast as it delivers — asking for a
+    /// frame returns when there is one, so a 60 fps mode gives 60 frames a second and no sleep gets in the way. Only a
+    /// video file is held back, to the times written in it.
     /// </summary>
-    private void CameraLoop()
+    private void RunCamera(CameraSession session, bool live, string link, string path, ManualResetEventSlim opened)
     {
-        var reader = _camera;
-        if (reader is null) return;
+        CameraFrameReader? reader = null;
         try
         {
-            while (!_cameraStop && reader.Error is null)
+            string? error;
+            reader = live ? CameraFrameReader.OpenDevice(link, out error) : CameraFrameReader.OpenFile(path, out error);
+            session.Reader = reader;
+            session.OpenError = reader is null ? error : null;
+            session.OpenNote = reader is null ? null : error;
+        }
+        catch (Exception ex) { session.OpenError = ex.Message; }
+        finally { opened.Set(); }
+        if (reader is null) return;
+        try { if (!session.Stop) CameraLoop(session, reader); }
+        finally { reader.Dispose(); }
+    }
+
+    /// <summary>What the UI thread and the camera thread share for one run of the overlay.</summary>
+    private sealed class CameraSession
+    {
+        internal volatile bool Stop;
+        internal CameraFrameReader? Reader;
+        internal string? OpenError;
+        internal string? OpenNote;
+    }
+
+    private void CameraLoop(CameraSession session, CameraFrameReader reader)
+    {
+        var pacer = new FramePacer();
+        try
+        {
+            while (!session.Stop && reader.Error is null)
             {
                 var size = reader.Width * reader.Height * 4;
                 if (size <= 0) { Thread.Sleep(20); continue; }
-                byte[] buffer;
-                lock (_cameraFrameLock)
+                var buffer = _cameraFrames.BeginWrite(size, out var slot);
+                if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror && !_arRawFrames, out var width, out var height))
                 {
-                    if (_cameraFrame.Length < size) _cameraFrame = new byte[size];
-                    buffer = _cameraFrame;
-                }
-                if (!reader.TryReadFrame(buffer, _visualSettings.CameraMirror, out var width, out var height))
-                {
-                    if (reader.AtEnd) { reader.Rewind(); Thread.Sleep(20); continue; }
+                    if (reader.AtEnd) { reader.Rewind(); pacer.Reset(); Thread.Sleep(20); continue; }
                     if (reader.Error is null) { Thread.Sleep(5); continue; }
                     break;
                 }
-                lock (_cameraFrameLock)
-                {
-                    _cameraFrameWidth = width; _cameraFrameHeight = height; _cameraFrameFresh = true;
-                }
-                Thread.Sleep((int)(CameraFrameReader.FrameSeconds * 1000));
+                _cameraFrames.Publish(slot, width, height, reader.LastFrameTicks);
+                if (reader.IsLive) continue;
+                var wait = pacer.WaitSeconds(reader.LastSampleTime, System.Diagnostics.Stopwatch.GetTimestamp() / (double)System.Diagnostics.Stopwatch.Frequency);
+                if (wait > 0) Thread.Sleep((int)Math.Ceiling(wait * 1000));
             }
-            if (reader.Error is { Length: > 0 } failure) CameraStatus = failure;
+            if (!session.Stop && reader.Error is { Length: > 0 } failure) CameraStatus = failure;
         }
-        catch (Exception ex) { CameraStatus = ex.Message; }
+        catch (Exception ex) { if (!session.Stop) CameraStatus = ex.Message; }
+    }
+
+    /// <summary>
+    /// Hands the pump a frame the way the camera thread does. The checks use it to put a known picture on the stage
+    /// without a camera; it is the same ring the real frames go through.
+    /// </summary>
+    internal void InjectCameraFrame(byte[] bgra, int width, int height)
+    {
+        var buffer = _cameraFrames.BeginWrite(width * height * 4, out var slot);
+        Buffer.BlockCopy(bgra, 0, buffer, 0, Math.Min(bgra.Length, width * height * 4));
+        _cameraFrames.Publish(slot, width, height, System.Diagnostics.Stopwatch.GetTimestamp());
     }
 
     /// <summary>
@@ -1357,27 +1492,32 @@ public partial class MainWindow : Window
     /// </summary>
     private void PumpCameraFrame()
     {
-        byte[] frame;
-        int width, height;
-        lock (_cameraFrameLock)
+        PollLatency();
+        if (_arPlan.CameraLayer)               // the engine's render thread is the ring's reader while the overlay is drawn
         {
-            if (!_cameraFrameFresh || _cameraFrameWidth <= 0 || _cameraFrameHeight <= 0) return;
-            _cameraFrameFresh = false;
-            frame = _cameraFrame; width = _cameraFrameWidth; height = _cameraFrameHeight;
+            if (++_arStatusTicks % 30 == 0) { RefreshArStatus(); RefreshCameraOverlayStatus(announce: false); }
+            return;
         }
-        if (frame.Length < width * height * 4) return;
+        if (!_cameraFrames.TryTake(out var taken)) return;
+        var frame = taken.Pixels; var width = taken.Width; var height = taken.Height;
+        if (width <= 0 || height <= 0 || frame.Length < width * height * 4) return;
         // The tracker reads the frame before the key is applied: it wants the colours the camera really saw, and
         // making the green see-through would only take pixels away from the count. It runs whatever the picture
         // layer is set to, because the key markers are a layer of their own.
-        if (_visualSettings.ShowHandTracking)
+        // At most 30 times a second however fast the camera is: a 60 fps mode is for the picture and the latency
+        // probe, not a reason to run the tracker twice as often.
+        var trackNow = System.Diagnostics.Stopwatch.GetTimestamp();
+        var trackDue = trackNow - _lastHandTrackTicks >= System.Diagnostics.Stopwatch.Frequency / 30 * 9 / 10;
+        if (_visualSettings.ShowHandTracking && trackDue)
         {
+            _lastHandTrackTicks = trackNow;
             var reading = HandTracker.Track(frame, width, height, _visualSettings.HandTrackingSensitivity);
             Stage.SetHandReading(reading);
             HandStatus = reading.Found
-                ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, PianoStage.FirstPitch, PianoStage.KeyCount)), reading.Coverage * 100)
+                ? Loc.F("Hand: {0} finger(s), over {1} · {2:0}% of the picture", reading.Fingers, NoteLabel(HandTracker.KeyPitch(reading.CenterX, KeyboardLayout.Active)), reading.Coverage * 100)
                 : Loc.T("Hand: nothing found in the newest frame.");
         }
-        else if (Stage.HasHand)
+        else if (!_visualSettings.ShowHandTracking && Stage.HasHand)
         {
             Stage.SetHandReading(null);
             HandStatus = "";
@@ -1394,6 +1534,8 @@ public partial class MainWindow : Window
     private readonly Lock _audioTrackLock = new();
     private bool _audioTrackStarted;
     private double _audioTrackSeconds;
+    /// <summary>Seconds of silence this take's audio began with, to keep the sound with a delayed camera picture (see <see cref="RecordingSync"/>).</summary>
+    private double _audioLeadIn;
 
     /// <summary>
     /// Where the audio of a recording goes: a WAV beside the AVI, or <c>audio.wav</c> inside the PNG folder.
@@ -1418,6 +1560,7 @@ public partial class MainWindow : Window
     internal bool BeginAudioTrack()
     {
         EndAudioTrack();
+        _audioLeadIn = 0;
         if (!_visualSettings.RecordAudio || !_audio.HasInstrument || _recordingPath is null) return false;
         // An MP4 carries its own audio stream, so the same tap goes straight into the file being written;
         // every other format gets a WAV beside the video to mux afterwards.
@@ -1426,6 +1569,9 @@ public partial class MainWindow : Window
             : WavWriter.TryCreate(AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder));
         if (track is null) return false;
         _audioTrack = track; _audioTrackSeconds = 0;
+        // A take with the camera in it starts its sound as late as the camera's picture is, so the finger and the sound of a press
+        // land on the same stamp in the file (the picture is moved no earlier than zero, so the sound is the one that waits).
+        _audioLeadIn = RecordingSync.Begin(track, _visualSettings.ArOptionsValue.DelaySeconds, _arPlan.CameraLayer);
         // The tap runs on the audio thread, so the writer is only ever touched under its lock.
         _audio.SetTap((samples, count) => { lock (_audioTrackLock) _audioTrack?.Append(samples, count); });
         _audio.SetTapClockEnabled(true);
@@ -1466,7 +1612,7 @@ public partial class MainWindow : Window
             _audioTrackSeconds = AudioTrackSeconds();
             return;
         }
-        var due = (long)(elapsed.TotalSeconds * 44100) - (long)(AudioTrackSeconds() * 44100);
+        var due = RecordingSync.SilenceDue(elapsed.TotalSeconds, _audioLeadIn, AudioTrackSeconds());
         if (due > 0) { lock (_audioTrackLock) _audioTrack?.AppendSilence(due); }
         _audioTrackSeconds = AudioTrackSeconds();
     }
@@ -1568,6 +1714,7 @@ public partial class MainWindow : Window
     private void PressNote(int pitch, int velocity = 100)
     {
         if (!_pressed.Add(pitch)) return;
+        NoteKeyboardRange(pitch);
         StartStageFrames();
         var hit = velocity / 127.0; Stage.AddLiveNote(pitch, hit); Stage.Impact(pitch, hit); if (!_liveAudioSent) _audio.NoteOn(pitch, velocity); SendOutput(pitch, velocity, true);
         if (_playing)

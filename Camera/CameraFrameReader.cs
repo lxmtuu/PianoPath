@@ -6,7 +6,8 @@ namespace PianoPath;
 /// <summary>One camera the machine reports: the name a person sees and the link used to open it.</summary>
 /// <param name="Name">Friendly name from the driver, e.g. "HD Webcam".</param>
 /// <param name="Link">Symbolic link; the identity stored in the settings, empty when the driver gave none.</param>
-internal sealed record CameraInfo(string Name, string Link);
+/// <summary>A camera the machine reports: its name (never just a number — see <see cref="CameraNames"/>), its symbolic link, and the hardware behind it.</summary>
+internal sealed record CameraInfo(string Name, string Link, string Hardware = "");
 
 /// <summary>
 /// Reads video frames out of a live camera or a video file, always as top-down 32-bit BGRA.
@@ -24,13 +25,16 @@ internal sealed record CameraInfo(string Name, string Link);
 /// or through <see cref="Error"/>, and the dock prints them.
 /// </para>
 /// </summary>
-internal sealed class CameraFrameReader : IDisposable
+internal sealed partial class CameraFrameReader : IDisposable
 {
-    /// <summary>Frames are paced at this rate; the overlay is a picture-in-picture, not a film viewer.</summary>
-    internal const int FrameRate = 30;
+    /// <summary>
+    /// How often the window turns the newest frame into a picture, at most. It is not the camera's rate — a live
+    /// camera is read as fast as it delivers, whatever its mode — only how often the screen is given a new one.
+    /// </summary>
+    internal const int DisplayRate = 60;
 
-    /// <summary>Seconds one frame is shown, for the pump that reads ahead.</summary>
-    internal static double FrameSeconds => 1.0 / FrameRate;
+    /// <summary>The longest a video file waits between two frames when its own times say so, and the pace it falls back to.</summary>
+    internal static double FileFrameSeconds => FramePacer.FallbackSeconds;
 
     private static readonly Lock StartupLock = new();
     private static bool _started;
@@ -66,6 +70,24 @@ internal sealed class CameraFrameReader : IDisposable
     internal int Frames { get; private set; }
 
     /// <summary>
+    /// The mode the source delivers frames in, once it is open: the camera mode the reader asked for when it chose
+    /// one, otherwise the size and rate the reader settled on. Its <see cref="CameraMode.Label"/> is what the dock shows.
+    /// </summary>
+    internal CameraMode Mode { get; private set; }
+
+    /// <summary>
+    /// A sentence about the camera's mode that the dock should add: the camera offered no modes, or refused the one
+    /// chosen, and the reader is using the camera's own default. Empty when all went as chosen.
+    /// </summary>
+    internal string ModeNote { get; private set; } = "";
+
+    /// <summary>The time the source wrote on the newest frame, in 100 ns units; 0 before the first frame.</summary>
+    internal long LastSampleTime { get; private set; }
+
+    /// <summary><see cref="System.Diagnostics.Stopwatch.GetTimestamp"/> as the newest frame arrived; 0 before the first frame.</summary>
+    internal long LastFrameTicks { get; private set; }
+
+    /// <summary>
     /// True when Media Foundation started, which is what tells a caller an overlay can work at all. The reason
     /// it did not start is in <see cref="StartupError"/>.
     /// </summary>
@@ -87,7 +109,12 @@ internal sealed class CameraFrameReader : IDisposable
         return devices;
     }
 
-    /// <summary>Opens the camera with this symbolic link, or the first one when the link is empty or gone.</summary>
+    /// <summary>
+    /// Opens the camera with this symbolic link. When the link is empty (automatic), gone, or the camera will not open,
+    /// the other cameras are tried in <see cref="CameraRanking"/> order — colour cameras first, infrared face-login
+    /// cameras last — until one opens; <paramref name="error"/> then says what was passed over, and is the failure of
+    /// every camera tried when none opens.
+    /// </summary>
     internal static CameraFrameReader? OpenDevice(string link, out string? error)
     {
         error = null;
@@ -99,22 +126,36 @@ internal sealed class CameraFrameReader : IDisposable
                 error = listError ?? Loc.T("No camera was found on this machine.");
                 return null;
             }
-            var chosen = found.FirstOrDefault(entry => entry.Info.Link.Length > 0 && string.Equals(entry.Info.Link, link, StringComparison.OrdinalIgnoreCase));
-            if (chosen.Activate is null)
+            var names = found.Select(entry => entry.Info.Name).ToList();
+            var preferred = CameraRanking.Find(found.Select(entry => entry.Info.Link).ToList(), link);
+            // A stored link that matches nothing is a camera that was unplugged: say so, and carry on with the others.
+            var gone = !string.IsNullOrEmpty(link) && preferred < 0 ? Loc.T("That camera is gone, so another camera on the machine is used instead.") : null;
+            var failures = new List<string>();
+            (string Name, string Error)? firstFailure = null;
+            foreach (var index in CameraRanking.Order(names, preferred))
             {
-                // The stored link is gone (a camera was unplugged): fall back to the first one and say so.
-                chosen = found.First();
-                if (!string.IsNullOrEmpty(link)) error = Loc.T("That camera is gone, so the first camera on the machine is used instead.");
-            }
-            var reader = Attach(readerAttributes => DeviceReader(chosen.Activate!, readerAttributes), out var openError);
-            error = openError ?? error;
-            if (reader is not null)
-            {
-                reader.Label = chosen.Info.Name.Length > 0 ? chosen.Info.Name : Loc.T("Camera");
-                reader.Source = chosen.Info.Link;
+                var entry = found[index];
+                if (entry.Activate is null) continue;
+                var activate = entry.Activate;
+                var reader = Attach(readerAttributes => DeviceReader(activate, readerAttributes), out var openError, live: true);
+                var name = entry.Info.Name.Length > 0 ? entry.Info.Name : Loc.T("Camera");
+                if (reader is null)
+                {
+                    failures.Add($"{name}: {openError}");
+                    firstFailure ??= (name, openError ?? "");
+                    continue;
+                }
+                reader.Label = name;
+                reader.Source = entry.Info.Link;
                 reader.IsLive = true;
+                var notes = new List<string>();
+                if (gone is not null) notes.Add(gone);
+                if (firstFailure is { } failed) notes.Add(Loc.F("{0} would not open ({1}), so {2} is used.", failed.Name, failed.Error, name));
+                error = notes.Count > 0 ? string.Join(" ", notes) : null;
+                return reader;
             }
-            return reader;
+            error = Loc.F("No camera could be opened. {0}", string.Join(" ", failures));
+            return null;
         }
         finally { foreach (var entry in found) Release(entry.Activate); }
     }
@@ -150,10 +191,12 @@ internal sealed class CameraFrameReader : IDisposable
         try
         {
             var flags = 0;
-            var hr = _reader.ReadSample(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out flags, out _, out sample);
+            var hr = _reader.ReadSample(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 0, out _, out flags, out var sampleTime, out sample);
+            var arrived = System.Diagnostics.Stopwatch.GetTimestamp();
             if (hr == Mf.MF_E_END_OF_STREAM || (flags & Mf.MF_SOURCE_READERF_ENDOFSTREAM) != 0) { AtEnd = true; return false; }
             if (hr != Mf.S_OK) { Error = Loc.F("Reading a frame failed ({0}).", Mf.Describe(hr)); return false; }
             if (sample is null) return false;      // a stream tick: time passed, no picture
+            LastSampleTime = sampleTime; LastFrameTicks = arrived;
             if (sample.ConvertToContiguousBuffer(out var buffer) != Mf.S_OK || buffer is null)
             {
                 Error = Loc.T("The frame carried no picture buffer.");
@@ -236,7 +279,7 @@ internal sealed class CameraFrameReader : IDisposable
     /// Creates a source reader with the options the overlay needs and configures it for RGB32. The attach
     /// function builds the reader for one particular source: a camera or a file.
     /// </summary>
-    private static CameraFrameReader? Attach(Func<Mf.IMFAttributes?, Mf.IMFSourceReader?> attach, out string? error)
+    private static CameraFrameReader? Attach(Func<Mf.IMFAttributes?, Mf.IMFSourceReader?> attach, out string? error, bool live = false)
     {
         EnsureStarted();
         if (!_started) { error = _startupError; return null; }
@@ -258,7 +301,7 @@ internal sealed class CameraFrameReader : IDisposable
                 error = Loc.T("The source could not be opened.");
                 return null;
             }
-            var result = new CameraFrameReader { _reader = reader };
+            var result = new CameraFrameReader { _reader = reader, IsLive = live };
             reader = null;                       // the reader object owns it from here
             if (result.Configure() is { } configureError) { error = configureError; result.Dispose(); return null; }
             error = null;
@@ -289,6 +332,10 @@ internal sealed class CameraFrameReader : IDisposable
         var reader = _reader!;
         var hr = reader.SetStreamSelection(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, 1);
         if (hr != Mf.S_OK) return Loc.F("This source has no video stream ({0}).", Mf.Describe(hr));
+        // A live camera is first switched to the mode the overlay wants (720p at the highest rate it has); the reader
+        // then converts whatever the camera sends to RGB32 below. A file has no modes to choose from.
+        CameraMode? chosen = IsLive ? ChooseCameraMode() : null;
+        var rate = (High: 0, Low: 0);
         Mf.IMFMediaType? type = null;
         try
         {
@@ -296,6 +343,18 @@ internal sealed class CameraFrameReader : IDisposable
             type.SetGUIDKey(Mf.MajorType, Mf.VideoMajorType);
             type.SetGUIDKey(Mf.SubType, Mf.Rgb32);
             hr = reader.SetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, type);
+            if (hr != Mf.S_OK && chosen is not null)
+            {
+                // The mode the overlay forced cannot be converted on this machine. Go back to the first mode the camera
+                // lists (its own default) and ask again, so a camera that works at all still opens.
+                var forced = chosen.Value.Label;
+                if (SelectFirstNativeMode() && reader.SetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, IntPtr.Zero, type) == Mf.S_OK)
+                {
+                    hr = Mf.S_OK;
+                    chosen = null;
+                    ModeNote = Loc.F("The camera would not deliver {0} as 32-bit frames, so its default mode is used.", forced);
+                }
+            }
             if (hr != Mf.S_OK) return Loc.F("This source cannot produce the 32-bit frames the overlay draws ({0}).", Mf.Describe(hr));
             if (reader.GetCurrentMediaType(Mf.MF_SOURCE_READER_FIRST_VIDEO_STREAM, out var current) != Mf.S_OK || current is null)
                 return Loc.T("The reader did not report the format of its video stream.");
@@ -307,9 +366,11 @@ internal sealed class CameraFrameReader : IDisposable
                     Width = high; Height = low;
                 }
                 Stride = current.GetUINT32Key(Mf.DefaultStride, out var stride) == Mf.S_OK && stride != 0 ? stride : Width * 4;
+                if (current.GetUINT64Key(Mf.FrameRateKey, out var packedRate) == Mf.S_OK) rate = Mf.Split(packedRate);
             }
             finally { Release(current); }
             if (Width <= 0 || Height <= 0) return Loc.T("The reader reported a video stream with no frame size.");
+            Mode = new CameraMode(Width, Height, rate.High, rate.Low, chosen?.Format ?? "");
             return null;
         }
         finally { Release(type); }
@@ -356,12 +417,26 @@ internal sealed class CameraFrameReader : IDisposable
                 try
                 {
                     if (Marshal.GetObjectForIUnknown(pointer) is not Mf.IMFActivate activate) continue;
-                    devices.Add((new CameraInfo(Attribute(activate, Mf.FriendlyName) ?? Loc.F("Camera {0}", index + 1),
-                        Attribute(activate, Mf.SymbolicLink) ?? ""), activate));
+                    var link = Attribute(activate, Mf.SymbolicLink) ?? "";
+                    var reported = Attribute(activate, Mf.FriendlyName);
+                    // A driver may leave the name empty or give "Camera 1"; Windows' own record of the device usually has the real one.
+                    var (friendly, busName, description) = CameraNames.IsGeneric(reported) ? ReadPnpNames(link) : (null, null, null);
+                    var name = CameraNames.Resolve(link, reported, friendly, busName, description);
+                    // A software camera (OBS Virtual Camera and the like) may give no symbolic link. It still has to be pickable and
+                    // remembered, so its name stands in as its identity.
+                    if (link.Length == 0) link = CameraNames.NameLinkPrefix + name;
+                    devices.Add((new CameraInfo(name, link, CameraNames.Hardware(link)), activate));
                 }
                 catch
                 {
                     // A driver that will not answer is skipped; the other cameras are still listed.
+                }
+                finally
+                {
+                    // The array holds one reference to each activator and the caller owns it. The wrapper above took its own, so
+                    // this one is given back here; without it every reading of the list (now every few seconds) would leak one
+                    // activator per camera.
+                    Marshal.Release(pointer);
                 }
             }
         }
@@ -371,15 +446,50 @@ internal sealed class CameraFrameReader : IDisposable
             if (activates != IntPtr.Zero) Marshal.FreeCoTaskMem(activates);
             Release(attributes);
         }
+        // Two of the same webcam keep their names apart: "HD Webcam", "HD Webcam (2)".
+        var unique = CameraNames.Disambiguate(devices.Select(device => device.Item1.Name).ToList());
+        for (var index = 0; index < devices.Count; index++) devices[index] = (devices[index].Item1 with { Name = unique[index] }, devices[index].Item2);
         return devices;
+    }
+
+    /// <summary>
+    /// What Windows itself calls the device behind a capture link, read from the device's registry entry
+    /// (<c>HKLM\SYSTEM\CurrentControlSet\Enum\…</c>): its friendly name, the product string the hardware reports, and the
+    /// driver's description. Any of them is null when the entry or the value is missing; nothing here may throw.
+    /// </summary>
+    private static (string? Friendly, string? Bus, string? Description) ReadPnpNames(string link)
+    {
+        try
+        {
+            var path = CameraNames.InstancePath(link);
+            if (path is null) return (null, null, null);
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + path);
+            if (key is null) return (null, null, null);
+            string? Read(string value) => key.GetValue(value) as string is { Length: > 0 } text ? text : null;
+            return (Read("FriendlyName"), CameraNames.CleanDescription(Read("BusReportedDeviceDesc")) is { Length: > 0 } bus ? bus : null,
+                CameraNames.CleanDescription(Read("DeviceDesc")) is { Length: > 0 } description ? description : null);
+        }
+        catch { return (null, null, null); }
     }
 
     /// <summary>Reads a string attribute the way Media Foundation hands it out: an allocated wide string.</summary>
     private static string? Attribute(object attributes, Guid key)
     {
-        if (attributes.GetAllocatedStringKey(key, out var pointer, out _) != Mf.S_OK || pointer == IntPtr.Zero) return null;
-        try { return Marshal.PtrToStringUni(pointer); }
-        finally { Marshal.FreeCoTaskMem(pointer); }
+        if (attributes.GetAllocatedStringKey(key, out var pointer, out _) == Mf.S_OK && pointer != IntPtr.Zero)
+        {
+            try { return Marshal.PtrToStringUni(pointer); }
+            finally { Marshal.FreeCoTaskMem(pointer); }
+        }
+        // The other way to read a string: ask how long it is, then for that many characters.
+        try
+        {
+            var local = key;
+            var typed = (Mf.IMFAttributes)attributes;
+            if (typed.GetStringLength(ref local, out var length) != Mf.S_OK || length <= 0) return null;
+            var text = new System.Text.StringBuilder(length + 1);
+            return typed.GetString(ref local, text, text.Capacity, out _) == Mf.S_OK ? text.ToString() : null;
+        }
+        catch { return null; }
     }
 
     private static void EnsureStarted()

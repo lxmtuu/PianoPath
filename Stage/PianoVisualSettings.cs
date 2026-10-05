@@ -390,6 +390,30 @@ internal sealed class PianoVisualSettings
     public string GpuFrameRate { get; set; } = "144";
     /// <summary>GPU stage window: present on the display's vertical blank (off allows tearing for the lowest latency).</summary>
     public bool GpuVSync { get; set; } = true;
+    /// <summary>
+    /// How many keys the player's keyboard has: <c>88</c>, <c>76</c>, <c>61</c> or <c>49</c> (see <see cref="KeyboardSizes"/>).
+    /// The stage, the GPU engine and the shaded keys all draw that keyboard (<see cref="KeyboardLayout.Active"/>), and a
+    /// song's notes outside it are not drawn. It belongs to the instrument on this computer, not to a look, so
+    /// applying a preset keeps it.
+    /// </summary>
+    public string KeyboardSize { get; set; } = "88";
+
+    // ---- AR overlay (see ArOptions) --------------------------------------------------------------------
+    /// <summary>
+    /// The camera is the background and the notes and lit keys are drawn over the real keyboard, where the calibration says
+    /// it is. The overlay belongs to this camera and this instrument, so applying a look never changes any of the AR values.
+    /// </summary>
+    public bool ArEnabled { get; set; } = false;
+    /// <summary><c>Learn</c> shows the notes to come, <c>Perform</c> only the lit keys (see <see cref="ArModes"/>).</summary>
+    public string ArMode { get; set; } = "Learn";
+    /// <summary>How solid the overlay's notes and keys are, percent.</summary>
+    public double ArOpacity { get; set; } = 100;
+    /// <summary>How many seconds before it sounds a note starts to show.</summary>
+    public double ArLookahead { get; set; } = 3;
+    /// <summary>How strongly a played key is tinted, percent.</summary>
+    public double ArKeyLight { get; set; } = 60;
+    /// <summary>How late the camera's picture is, milliseconds; the overlay is held back by this much so it shows what the picture shows. Never delays the sound.</summary>
+    public double ArDelay { get; set; } = 0;
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -416,6 +440,9 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] BackgroundModes = ["Solid", "Image", "ChromaGreen"];
     internal static readonly string[] RecordingResolutions = ["Window", "720p", "1080p"];
     internal static readonly string[] GpuFrameRates = ["60", "120", "144", "240", "Unlimited"];
+    /// <summary>The keyboard sizes the app draws, widest first; they are <see cref="KeyboardLayout.All"/> as text.</summary>
+    internal static readonly string[] KeyboardSizes = ["88", "76", "61", "49"];
+    internal static readonly string[] ArModeNames = ArModes.All;
     internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
@@ -430,6 +457,13 @@ internal sealed class PianoVisualSettings
 
     /// <summary>The GPU engine's target frame rate as a number; 0 means unlimited.</summary>
     internal int GpuTargetFps => int.TryParse(GpuFrameRate, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var fps) ? fps : 0;
+
+    /// <summary>The AR values as one record, in range.</summary>
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay).Normalised();
+
+    /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
+    internal KeyboardLayout KeyboardLayoutChoice =>
+        KeyboardLayout.ForKeyCount(int.TryParse(KeyboardSize, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var keys) ? keys : 88);
 
     internal string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
 
@@ -447,6 +481,14 @@ internal sealed class PianoVisualSettings
             if (property.Name == nameof(Language)) continue;
             // So does the graphics engine: it depends on the machine's GPU, not on the look.
             if (property.Name is nameof(RenderBackend) or nameof(GpuFrameRate) or nameof(GpuVSync)) continue;
+            // The keyboard size is the player's instrument: a look must never turn their 61 keys into 88.
+            if (property.Name == nameof(KeyboardSize)) continue;
+            // The overlay is set up for this camera and this instrument, so a look neither turns it on nor tunes it.
+            if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)) continue;
+            // Which camera, or which video file, is this machine's too: a look must never switch the player off the camera they
+            // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
+            // stored per camera, so a different camera would also mean marking the keys again.
+            if (property.Name is nameof(CameraSourceLink) or nameof(CameraVideoPath)) continue;
             // And the audio output: the backend and its buffer belong to this machine's sound hardware,
             // so applying a community look can never switch the player off their ASIO interface.
             if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
@@ -458,6 +500,17 @@ internal sealed class PianoVisualSettings
         }
         if (keepBackgroundImage) BackgroundImagePath = image;
         ApplyMigrations(); Clamp();
+    }
+
+    /// <summary>
+    /// Takes away what only means something on this machine — the background image, the camera pick and the video file —
+    /// from a look that is about to be saved or shared, as <see cref="VisualPresetShare"/> and the preset store need.
+    /// </summary>
+    internal void ClearMachineLocal()
+    {
+        BackgroundImagePath = "";
+        CameraSourceLink = "";
+        CameraVideoPath = "";
     }
 
     internal void Clamp()
@@ -547,6 +600,9 @@ internal sealed class PianoVisualSettings
         // (or anything else a file may name) migrates to the GPU engine on load.
         RenderBackend = "Gpu";
         if (!GpuFrameRates.Contains(GpuFrameRate)) GpuFrameRate = "144";
+        if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
+        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay).Normalised();
+        ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
         CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);

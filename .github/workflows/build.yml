@@ -168,7 +168,8 @@ jobs:
           path: ${{ runner.temp }}/keyflow-verification.log
           if-no-files-found: warn
 
-      # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes and
+      # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes (and, with --bench-ar,
+      # a third: the AR overlay over a synthetic 60 fps camera) and
       # writes how long every frame took. A runner has no graphics card, so the stage is drawn by WARP and the
       # absolute budgets (p95 < 8 ms for the default look, < 16 ms for the busiest one) do not apply there — the
       # app says so itself instead of failing. What a runner can still judge is the change against the previous
@@ -189,7 +190,7 @@ jobs:
           $out = Join-Path $env:RUNNER_TEMP 'keyflow-bench.json'
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-bench.log'
           $previous = Join-Path $env:RUNNER_TEMP 'perf-baseline/keyflow-bench.json'
-          $arguments = @('--bench=90', "--bench-out=$out")
+          $arguments = @('--bench=90', '--bench-ar', "--bench-out=$out")
           if (Test-Path $previous) { $arguments += "--bench-baseline=$previous" }
           # The gate prints its own lines (NOTE/PASS/WARN/FAIL perf: …) and the report is the JSON beside them.
           # A window app has no console of its own, so stdout is redirected to read those lines back.

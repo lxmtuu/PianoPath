@@ -33,7 +33,7 @@ internal static class VisualPresetShare
     internal static string Encode(PianoVisualSettings settings)
     {
         var payload = settings.Clone();
-        payload.BackgroundImagePath = "";
+        payload.ClearMachineLocal();
         if (payload.BackgroundMode == "Image") payload.BackgroundMode = "Solid";
         var json = Encoding.UTF8.GetBytes(payload.ToJson());
         using var buffer = new MemoryStream();
@@ -80,7 +80,7 @@ internal static class VisualPresetShare
             settings.Clamp();
             // A shared look never carries a picture; the background image path is quoted text the recipient
             // does not have, so the look keeps its colours and falls back to the solid background.
-            settings.BackgroundImagePath = "";
+            settings.ClearMachineLocal();       // nor a camera: the link and the video path are this machine's
             if (settings.BackgroundMode == "Image") settings.BackgroundMode = "Solid";
             look = settings;
             return true;

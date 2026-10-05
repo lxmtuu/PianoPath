@@ -60,7 +60,7 @@ internal static class PianoKeyboardRenderer
         for (var column = 0; column < pixelWidth; column++)
         {
             var viewX = ctx.ViewX + (column + .5) / ctx.Scale;
-            var worldX = viewX / scene.BandWidth * PianoShaderScene.WorldWidth;
+            var worldX = viewX / scene.BandWidth * scene.Keys.WhiteCount;
             while (litStart < ctx.LitX.Length && ctx.LitX[litStart] < worldX - PianoShaderScene.LitReach) litStart++;
             ShadePixel(ctx, ctx.ViewX + column, ctx.ViewY + row, worldX, scene.CameraHeight, -scene.CameraDistance, dirY, dirDepth, litStart, rowOffset + column * 4, pixels);
         }
@@ -75,8 +75,8 @@ internal static class PianoKeyboardRenderer
         double boxX0 = 0, boxX1 = 0, boxDepth0 = 0, boxDepth1 = 0;
 
         var floor = Math.Floor(worldX);
-        var whiteIndex = (int)Math.Clamp(floor, 0, PianoShaderScene.WhiteKeys - 1);
-        var whitePitch = PianoShaderScene.WhitePitchAt[whiteIndex];
+        var whiteIndex = (int)Math.Clamp(floor, 0, scene.Keys.WhiteCount - 1);
+        var whitePitch = scene.Keys.WhitePitches[whiteIndex];
         var whiteSink = ctx.KeyDown[whitePitch] ? scene.PressDepth : 0;
         var whiteX0 = whiteIndex + PianoShaderScene.WhiteGap * .5;
         var whiteX1 = whiteIndex + 1 - PianoShaderScene.WhiteGap * .5;
@@ -89,13 +89,13 @@ internal static class PianoKeyboardRenderer
         }
 
         // A black key can overlap near whiteIndex or whiteIndex + 1.
-        var b0 = (int)Math.Clamp(floor, 0, PianoShaderScene.WhiteKeys);
-        var b1 = (int)Math.Clamp(floor + 1, 0, PianoShaderScene.WhiteKeys);
+        var b0 = (int)Math.Clamp(floor, 0, scene.Keys.WhiteCount);
+        var b1 = (int)Math.Clamp(floor + 1, 0, scene.Keys.WhiteCount);
         for (var b = b0; b <= b1; b++)
         {
-            var blackPitch = PianoShaderScene.BlackPitchAtBoundary[b];
+            var blackPitch = scene.Keys.BlackAtBoundary[b];
             if (blackPitch <= 0) continue;
-            var blackCenter = PianoShaderScene.KeyCenterX[blackPitch];
+            var blackCenter = scene.Keys.WorldCenters[blackPitch];
             var bX0 = blackCenter - PianoShaderScene.BlackWidth * .5;
             var bX1 = blackCenter + PianoShaderScene.BlackWidth * .5;
             if (worldX >= bX0 && worldX <= bX1)
@@ -113,18 +113,18 @@ internal static class PianoKeyboardRenderer
         if (material < 0 && IntersectSlabs(originY, originDepth, dirY, dirDepth, -1.4, -scene.KeyBedDepth, -.3, scene.WhiteDepth, out var keyBedT, out var keyBedTop))
         {
             bestT = keyBedT; material = MaterialKeyBed; topFace = keyBedTop;
-            boxX0 = 0; boxX1 = PianoShaderScene.WorldWidth; boxDepth0 = -.3; boxDepth1 = scene.WhiteDepth;
+            boxX0 = 0; boxX1 = scene.Keys.WhiteCount; boxDepth0 = -.3; boxDepth1 = scene.WhiteDepth;
         }
         if (material < 0 && IntersectSlabs(originY, originDepth, dirY, dirDepth, -1.4, -scene.BedDrop, scene.WhiteDepth, scene.WhiteDepth + scene.BedDepth, out var bedT, out var bedTop))
         {
             bestT = bedT; material = MaterialBed; topFace = bedTop;
-            boxX0 = 0; boxX1 = PianoShaderScene.WorldWidth; boxDepth0 = scene.WhiteDepth; boxDepth1 = scene.WhiteDepth + scene.BedDepth;
+            boxX0 = 0; boxX1 = scene.Keys.WhiteCount; boxDepth0 = scene.WhiteDepth; boxDepth1 = scene.WhiteDepth + scene.BedDepth;
         }
         if (material < 0 && IntersectSlabs(originY, originDepth, dirY, dirDepth, -scene.BedDrop, scene.FallboardHeight,
                 scene.WhiteDepth + scene.BedDepth, scene.WhiteDepth + scene.BedDepth + .6, out var boardT, out var boardTop))
         {
             bestT = boardT; material = MaterialFallboard; topFace = boardTop;
-            boxX0 = 0; boxX1 = PianoShaderScene.WorldWidth;
+            boxX0 = 0; boxX1 = scene.Keys.WhiteCount;
             boxDepth0 = scene.WhiteDepth + scene.BedDepth; boxDepth1 = scene.WhiteDepth + scene.BedDepth + .6;
         }
         if (material < 0)
@@ -319,13 +319,13 @@ internal static class PianoKeyboardRenderer
         var minX = Math.Min(origin.X, origin.X + toLight.X * ShadowReach) - PianoShaderScene.BlackWidth;
         var maxX = Math.Max(origin.X, origin.X + toLight.X * ShadowReach) + PianoShaderScene.BlackWidth;
         var first = Math.Max(0, (int)Math.Floor(minX));
-        var last = Math.Min(PianoShaderScene.WhiteKeys, (int)Math.Ceiling(maxX));
+        var last = Math.Min(scene.Keys.WhiteCount, (int)Math.Ceiling(maxX));
         for (var boundary = first; boundary <= last; boundary++)
         {
-            var blackPitch = PianoShaderScene.BlackPitchAtBoundary[boundary];
+            var blackPitch = scene.Keys.BlackAtBoundary[boundary];
             if (blackPitch <= 0) continue;
             var sink = ctx.KeyDown[blackPitch] ? scene.PressDepth : 0;
-            var bc = PianoShaderScene.KeyCenterX[blackPitch];
+            var bc = scene.Keys.WorldCenters[blackPitch];
             if (IntersectBox(origin, toLight, bc - PianoShaderScene.BlackWidth * .5, bc + PianoShaderScene.BlackWidth * .5,
                     -sink, scene.BlackHeight - sink, 0, scene.BlackDepth, ShadowReach)) return true;
         }
@@ -362,13 +362,13 @@ internal static class PianoKeyboardRenderer
         var minX = Math.Min(origin.X, origin.X + direction.X * radius) - PianoShaderScene.BlackWidth;
         var maxX = Math.Max(origin.X, origin.X + direction.X * radius) + PianoShaderScene.BlackWidth;
         var first = Math.Max(0, (int)Math.Floor(minX));
-        var last = Math.Min(PianoShaderScene.WhiteKeys, (int)Math.Ceiling(maxX));
+        var last = Math.Min(scene.Keys.WhiteCount, (int)Math.Ceiling(maxX));
         for (var boundary = first; boundary <= last; boundary++)
         {
-            var blackPitch = PianoShaderScene.BlackPitchAtBoundary[boundary];
+            var blackPitch = scene.Keys.BlackAtBoundary[boundary];
             if (blackPitch <= 0) continue;
             var sink = ctx.KeyDown[blackPitch] ? scene.PressDepth : 0;
-            var bc = PianoShaderScene.KeyCenterX[blackPitch];
+            var bc = scene.Keys.WorldCenters[blackPitch];
             if (IntersectBox(origin, direction, bc - PianoShaderScene.BlackWidth * .5, bc + PianoShaderScene.BlackWidth * .5,
                     -sink, scene.BlackHeight - sink, 0, scene.BlackDepth, radius)) return true;
         }
@@ -465,11 +465,11 @@ internal static class PianoKeyboardRenderer
             LightSideB = Vec3.Cross(ToKeyLight, LightSideA).Normalized();
             var focusIsBlack = focusPitch > 0 && PianoShaderScene.IsBlack(focusPitch);
             FocusCenter = new Vec3(
-                focusPitch > 0 ? PianoShaderScene.KeyCenterX[focusPitch] : -99,
+                focusPitch > 0 ? scene.Keys.WorldCenters[focusPitch] : -99,
                 (focusIsBlack ? scene.BlackHeight : 0) - scene.PressDepth,
                 (focusIsBlack ? scene.BlackDepth : scene.WhiteDepth) * .55);
 
-            var ordered = lights.Pitches.Where(p => p > 0).OrderBy(p => PianoShaderScene.KeyCenterX[p]).ToArray();
+            var ordered = lights.Pitches.Where(p => p > 0).OrderBy(p => scene.Keys.WorldCenters[p]).ToArray();
             LitX = new double[ordered.Length];
             LitAmount = new double[ordered.Length];
             LitPosition = new Vec3[ordered.Length];
@@ -479,7 +479,7 @@ internal static class PianoKeyboardRenderer
                 var key = ordered[i];
                 var black = PianoShaderScene.IsBlack(key);
                 var surface = (black ? scene.BlackHeight : 0) - scene.PressDepth;
-                LitX[i] = PianoShaderScene.KeyCenterX[key];
+                LitX[i] = scene.Keys.WorldCenters[key];
                 LitAmount[i] = lights.Amount[key] * scene.EmissiveIntensity;
                 LitPosition[i] = new Vec3(LitX[i], surface + (black ? .3 : .38), (black ? scene.BlackDepth : scene.WhiteDepth) * .5);
                 LitColor[i] = ShaderMath.ToLinear(lights.Tint[key]);

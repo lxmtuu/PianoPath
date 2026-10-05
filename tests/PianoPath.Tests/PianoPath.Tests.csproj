@@ -28,7 +28,7 @@
          Diagnostics/FrameBenchmark.cs - the half of the perf gate that runs the Direct3D render loop; its
                                        arithmetic, budgets and report live in Diagnostics/FrameBudget.cs,
                                        which is linked below and needs nothing but the base class library
-         Stage/, Theme/, Library/, Profile/, Practice/
+         Stage/ (except KeyboardLayout.cs, which is pure), Theme/, Library/, Profile/, Practice/
                                      - all bottom out in ShellThemes, whose record is declared in terms
                                        of System.Windows.Media.Color, or in PianoVisualSettingsStore
        Adding a file to this list is the whole act of widening the coverage; if it drags WPF in, the
@@ -54,11 +54,42 @@
     <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />
     <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
+    <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
+    <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
+    <Compile Include="..\..\Camera\ArCalibration.cs" Link="Product\Camera\ArCalibration.cs" />
+    <Compile Include="..\..\Camera\ArView.cs" Link="Product\Camera\ArView.cs" />
+    <Compile Include="..\..\Camera\ArProjection.cs" Link="Product\Camera\ArProjection.cs" />
+    <Compile Include="..\..\Camera\ArKeys.cs" Link="Product\Camera\ArKeys.cs" />
+    <Compile Include="..\..\Camera\ArOptions.cs" Link="Product\Camera\ArOptions.cs" />
+    <Compile Include="..\..\Camera\ArPlan.cs" Link="Product\Camera\ArPlan.cs" />
+    <Compile Include="..\..\Camera\CalibrationWizard.cs" Link="Product\Camera\CalibrationWizard.cs" />
+    <Compile Include="..\..\Camera\CalibrationPicture.cs" Link="Product\Camera\CalibrationPicture.cs" />
+    <Compile Include="..\..\Camera\CalibrationHints.cs" Link="Product\Camera\CalibrationHints.cs" />
+    <Compile Include="..\..\Camera\ArCalibrationSession.cs" Link="Product\Camera\ArCalibrationSession.cs" />
+    <Compile Include="..\..\Camera\CameraMode.cs" Link="Product\Camera\CameraMode.cs" />
+    <Compile Include="..\..\Camera\CameraRanking.cs" Link="Product\Camera\CameraRanking.cs" />
+    <Compile Include="..\..\Camera\CameraListing.cs" Link="Product\Camera\CameraListing.cs" />
+    <Compile Include="..\..\Camera\CameraNames.cs" Link="Product\Camera\CameraNames.cs" />
+    <Compile Include="..\..\Camera\CameraFrameRing.cs" Link="Product\Camera\CameraFrameRing.cs" />
+    <Compile Include="..\..\Camera\FramePacer.cs" Link="Product\Camera\FramePacer.cs" />
+    <Compile Include="..\..\Camera\CameraAgeMeter.cs" Link="Product\Camera\CameraAgeMeter.cs" />
+    <Compile Include="..\..\Camera\ArKeyHistory.cs" Link="Product\Camera\ArKeyHistory.cs" />
+    <Compile Include="..\..\Camera\LatencyProbe.cs" Link="Product\Camera\LatencyProbe.cs" />
+    <Compile Include="..\..\Camera\LatencyText.cs" Link="Product\Camera\LatencyText.cs" />
+    <Compile Include="..\..\Camera\RecordingSync.cs" Link="Product\Camera\RecordingSync.cs" />
+    <Compile Include="..\..\Camera\MotionEnergy.cs" Link="Product\Camera\MotionEnergy.cs" />
   </ItemGroup>
 
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->
   <ItemGroup>
     <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- The synthetic camera picture of a keyboard and its ground truth, written by tools/make_ar_sample.py. The tests hold the
+       C# renderer (SyntheticKeyboardFrame) and Homography to them, so they are the files in docs/samples, not copies. -->
+  <ItemGroup>
+    <Content Include="..\..\docs\samples\ar-keyboard-topdown.png" Link="Fixtures\ar-keyboard-topdown.png" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\samples\ar-keyboard-topdown.json" Link="Fixtures\ar-keyboard-topdown.json" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

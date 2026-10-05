@@ -352,7 +352,7 @@ internal sealed class VisualPresetStore(string directory)
         System.IO.Directory.CreateDirectory(Directory);
         var copy = settings.Clone();
         copy.PresetName = safe;
-        copy.BackgroundImagePath = "";
+        copy.ClearMachineLocal();
         var path = Path.Combine(Directory, safe + ".json");
         var temp = path + ".tmp";
         var picture = thumbnail ?? ""; // the file always carries the field, empty when there is no picture
@@ -370,7 +370,7 @@ internal sealed class VisualPresetStore(string directory)
     internal static void Export(PianoVisualSettings settings, string path, string? thumbnail = null, string description = "")
     {
         var copy = settings.Clone();
-        copy.BackgroundImagePath = "";
+        copy.ClearMachineLocal();
         var dir = Path.GetDirectoryName(path);
         if (!string.IsNullOrEmpty(dir)) System.IO.Directory.CreateDirectory(dir);
         File.WriteAllText(path, WritePresetFile(copy, thumbnail, description));

@@ -26,6 +26,9 @@ internal sealed class GpuRecordingTap
     internal int Height { get; }
     internal int FrameRate { get; }
 
+    /// <summary>How long the camera's pictures waited in the app before they were first drawn into this take.</summary>
+    internal CameraAgeMeter CameraAge { get; } = new();
+
     /// <summary>Number of frames published so far; 0 until the first one is read back.</summary>
     internal long Serial => Interlocked.Read(ref _serial);
 

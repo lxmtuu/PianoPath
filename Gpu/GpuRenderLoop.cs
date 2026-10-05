@@ -213,6 +213,11 @@ internal sealed class GpuRenderLoop : IDisposable
         }
     }
 
+    private readonly CameraAgeMeter _cameraAge = new();
+
+    /// <summary>How long camera pictures wait in the app before the stage first draws them; all zero without a camera layer.</summary>
+    internal CameraAge CameraAge => _cameraAge.Snapshot;
+
     internal bool WaitUntilStarted(TimeSpan timeout) => _started.Wait(timeout);
 
     private void Run()
@@ -250,6 +255,8 @@ internal sealed class GpuRenderLoop : IDisposable
         var notes = new GpuInstanceList<GpuNoteInstance>(1024);
         var keys = new GpuInstanceList<GpuKeyInstance>(128);
         var sprites = new GpuInstanceList<GpuSpriteInstance>(8192);
+        var keyHistory = new ArKeyHistory();
+        var delayedKeys = new System.Numerics.Vector4[128];
         var clock = Stopwatch.StartNew();
         var last = clock.Elapsed.TotalSeconds;
         var fpsWindowStart = last; var fpsFrames = 0; var lastEmbedded = double.NegativeInfinity;
@@ -297,12 +304,23 @@ internal sealed class GpuRenderLoop : IDisposable
                 {
                     // a new take (or the end of one): start its clock now, and free the old frame's memory
                     recording = tap; nextRecordFrame = clock.Elapsed.TotalSeconds;
+                    if (tap is not null && gpu.CameraTexture is { } showing) tap.CameraAge.Skip(showing.Sequence);          // a picture already on show is not part of this take's delays
                     recordReadback.Dispose(); recordTarget.Dispose();
                 }
                 if (!hasEmbedded && !hasWindow && tap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
 
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
+                gpu.UpdateCamera(_feed.Camera);
+                var cameraTexture = gpu.CameraTexture;
+                if (cameraTexture is null) { _cameraAge.Reset(); tap?.CameraAge.Reset(); }
+                else
+                {
+                    var ticks = Stopwatch.GetTimestamp();
+                    _cameraAge.Observe(cameraTexture.Sequence, cameraTexture.CaptureTicks, ticks, Stopwatch.Frequency);
+                    tap?.CameraAge.Observe(cameraTexture.Sequence, cameraTexture.CaptureTicks, ticks, Stopwatch.Frequency);
+                }
+                gpu.UpdateAr(_feed.Ar);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
@@ -310,6 +328,14 @@ internal sealed class GpuRenderLoop : IDisposable
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
                 simulation.Step(dt, input, _feed, sceneHeight * primaryAspect);
+                // the AR layer lights the keys as they were lit a camera-delay ago, which is what the camera's picture shows
+                if (_feed.Ar is { DelaySeconds: > 0 } delayed)
+                {
+                    keyHistory.Record(now, simulation.KeyColors);
+                    keyHistory.Sample(now - delayed.DelaySeconds, delayedKeys);
+                    gpu.SetArKeyColors(delayedKeys);
+                }
+                else { keyHistory.Clear(); gpu.SetArKeyColors(null); }
 
                 if (hasWindow)
                 {
@@ -427,7 +453,7 @@ internal sealed class GpuRenderLoop : IDisposable
     /// The frames of <see cref="RenderOnce"/> on a device that already exists: a fresh simulation stepped
     /// <paramref name="warmupFrames"/> + 1 times from the feed, the last step drawn and read back.
     /// </summary>
-    private static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings)
+    internal static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings)
     {
         var timer = Stopwatch.StartNew();
         var simulation = new GpuStageSimulation();
@@ -454,6 +480,8 @@ internal sealed class GpuRenderLoop : IDisposable
             if (!renderWarmup && frame < warmupFrames) continue;
             started = timer.Elapsed.TotalMilliseconds;
             renderer.UpdateBackground(feed.Background);
+            renderer.UpdateCamera(feed.Camera);
+            renderer.UpdateAr(feed.Ar);
             renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
             drawn += timer.Elapsed.TotalMilliseconds - started;

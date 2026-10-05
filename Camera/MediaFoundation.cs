@@ -36,8 +36,13 @@ internal static partial class Mf
     internal static readonly Guid SubType = new("F7E34C9A-42E8-4714-B74B-CB29D72C35E5");
     internal static readonly Guid FrameSize = new("1652C33D-D6B2-4012-B834-72030849A37D");
     internal static readonly Guid DefaultStride = new("644B4E48-1E02-4516-B0EB-C01CA9D49AC6");
-    /// <summary>Source-reader attribute that lets the reader insert the converter to RGB32.</summary>
-    internal static readonly Guid ReaderAdvancedKey = new("A634A91C-822B-41B9-A494-4DE4643612B0");
+    /// <summary>
+    /// MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING: lets the reader insert the converter to RGB32. (An earlier
+    /// version carried A634A91C-822B-41B9-A494-4DE4643612B0 here, which is MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS —
+    /// the converter was never enabled and a YUY2/NV12/MJPEG camera failed with 0xC00D5212. tools/check_sources.py
+    /// pins this value.)
+    /// </summary>
+    internal static readonly Guid ReaderAdvancedKey = new("0F81DA2C-B537-4672-A8B2-A681B17307A3");
 
     internal static readonly Guid VideoMajorType = new("73646976-0000-0010-8000-00AA00389B71"); // 'vids'
     internal static readonly Guid Rgb32 = new("00000016-0000-0010-8000-00AA00389B71");            // BGRA in memory

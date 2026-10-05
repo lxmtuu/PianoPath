@@ -35,13 +35,16 @@ internal readonly struct GpuSceneLayout
         Width = width; Height = height;
         KeyboardHeight = height * keyboardFraction;
         HitY = height - KeyboardHeight;
-        Lane = width / 88f;
+        Keys = KeyboardLayout.Active;
+        Lane = width / Keys.KeyCount;
     }
     internal float Width { get; }
     internal float Height { get; }
     internal float KeyboardHeight { get; }
     internal float HitY { get; }
     internal float Lane { get; }
+    /// <summary>The keyboard this output was laid out for, taken once so one frame never mixes two keyboards.</summary>
+    internal KeyboardLayout Keys { get; }
     internal float X(int pitch) => (float)PianoStage.KeyCenterOf(pitch) * Width;
 }
 
@@ -54,7 +57,10 @@ internal readonly struct GpuSceneLayout
 internal sealed partial class GpuStageSimulation
 {
     internal const int MaxParticles = 24000;
-    private const int FirstPitch = 21, KeyCount = 88;
+    /// <summary>The keyboard being drawn (<see cref="KeyboardLayout.Active"/>); read on the render thread, one reference at a time.</summary>
+    private static int FirstPitch => KeyboardLayout.Active.FirstPitch;
+    private static int KeyCount => KeyboardLayout.Active.KeyCount;
+    private static bool OnKeyboard(int pitch) => KeyboardLayout.Active.Contains(pitch);
 
     private enum Shape : byte { Dot, Streak, Confetti, Dust, Flame, Droplet, Shard }
 
@@ -213,7 +219,7 @@ internal sealed partial class GpuStageSimulation
         for (var pitch = 0; pitch < 128; pitch++)
         {
             var c = ToLinear(_keyColor[pitch]);
-            KeyColors[pitch] = new Vector4(c, pitch is >= FirstPitch and < FirstPitch + KeyCount ? _glow[pitch] : 0);
+            KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? _glow[pitch] : 0);
         }
 
         // ---- continuous emitters on sounding keys ----
@@ -464,7 +470,7 @@ internal sealed partial class GpuStageSimulation
                 {
                     var note = list[i];
                     if (note.Start > latestStart) break;
-                    if (note.Pitch is < FirstPitch or >= FirstPitch + KeyCount || note.End < input.Position - 1) continue;
+                    if (!OnKeyboard(note.Pitch) || note.End < input.Position - 1) continue;
                     var height = (float)Math.Clamp(note.Duration * speed - look.NoteGap, look.NoteMinLength, hitY * .9);
                     var played = note.Played; var missed = note.Missed;
                     var color = played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f) : missed ? new Vector3(1f, 83 / 255f, 113 / 255f) : look.NoteColor(note.Pitch, note.Track);
@@ -567,7 +573,7 @@ internal sealed partial class GpuStageSimulation
     internal void BuildKeys(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuKeyInstance> keys, out float frontHeight, out float blackLength, out float blackHeight, out float whiteWidth, out float blackWidth)
     {
         keys.Clear();
-        whiteWidth = layout.Width / 52f;
+        whiteWidth = layout.Width / layout.Keys.WhiteCount;
         blackWidth = whiteWidth * .52f;
         frontHeight = layout.KeyboardHeight * (.05f + look.ShaderCameraTilt * .1f);
         var topLength = layout.KeyboardHeight - frontHeight;

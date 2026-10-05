@@ -22,7 +22,7 @@ public partial class App : Application
         // one took, so a frame budget is judged by a measurement instead of by feel. It opens no window — the
         // render loop, the simulation and the read-back are the whole of what is being measured.
         // See Diagnostics/FrameBenchmark.cs and the frame budgets in Diagnostics/FrameBudget.cs.
-        if (e.Args.Contains("--bench") || e.Args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal)))
+        if (e.Args.Contains("--bench") || e.Args.Contains("--bench-ar") || e.Args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal)))
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
             Shutdown(FrameBenchmark.Run(e.Args));

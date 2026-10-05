@@ -108,7 +108,7 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>The software stage's per-pitch base hue.</summary>
-    private static double Hue188(int pitch) => 188 + (pitch - FirstPitch) / 87.0 * 112;
+    private static double Hue188(int pitch) => 188 + (pitch - FirstPitch) / (double)Math.Max(1, KeyCount - 1) * 112;
 
     // ------------------------------------------------------------------------------------------------
     // impact morphs and release effects
@@ -401,7 +401,7 @@ internal sealed partial class GpuStageSimulation
     /// </summary>
     private void AddKeyLabels(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, GpuSceneLayout layout)
     {
-        var whiteWidth = layout.Width / 52f;
+        var whiteWidth = layout.Width / layout.Keys.WhiteCount;
         if (look.KeyLabels == 2 && whiteWidth < 13) return;
         var fontSize = Math.Clamp(whiteWidth * .48f, 7, 11);
         var frontHeight = layout.KeyboardHeight * (.05f + look.ShaderCameraTilt * .1f);

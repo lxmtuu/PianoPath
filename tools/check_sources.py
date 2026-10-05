@@ -1021,21 +1021,42 @@ def scan_generated_assets():
     asset whose generator disagrees about size or bit depth is either hand-edited or stale, so compare the
     PNG header with the constants of the script that writes it."""
     errors = []
-    script = ROOT / "tools" / "make_stage_background.py"
-    target = ROOT / "docs" / "samples" / "stage-backdrop.png"
-    if not script.exists():
-        return [str(script.relative_to(ROOT)) + " is missing; it is the licence and the recipe of the sample backdrop"]
-    if not target.exists():
-        return [str(target.relative_to(ROOT)) + " is missing; regenerate it with `python3 tools/make_stage_background.py`"]
-    width, height = (int(n) for n in re.search(r"^W, H = (\d+), (\d+)", script.read_text(encoding="utf-8"), re.M).groups())
-    head = target.read_bytes()
-    if not head.startswith(b"\x89PNG\r\n\x1a\n"):
-        return [str(target.relative_to(ROOT)) + " is not a PNG"]
-    fields = struct.unpack(">IIBBBBB", head[16:16 + 13])
-    if (fields[0], fields[1], fields[2], fields[3]) != (width, height, 8, 2):
-        errors.append(f"{target.relative_to(ROOT)} is {fields[0]}x{fields[1]} at {fields[2]} bit colour type {fields[3]}, "
-                      f"but tools/make_stage_background.py writes {width}x{height} at 8 bit colour type 2 (RGB) — "
-                      f"regenerate it instead of editing the picture by hand")
+    # (script, picture): every picture the repository draws for itself, and the recipe that is its licence.
+    assets = [("make_stage_background.py", "stage-backdrop.png"),
+              ("make_ar_sample.py", "ar-keyboard-topdown.png")]
+    for script_name, picture in assets:
+        script = ROOT / "tools" / script_name
+        target = ROOT / "docs" / "samples" / picture
+        if not script.exists():
+            errors.append(str(script.relative_to(ROOT)) + " is missing; it is the licence and the recipe of " + picture)
+            continue
+        if not target.exists():
+            errors.append(str(target.relative_to(ROOT)) + f" is missing; regenerate it with `python3 tools/{script_name}`")
+            continue
+        width, height = (int(n) for n in re.search(r"^W, H = (\d+), (\d+)", script.read_text(encoding="utf-8"), re.M).groups())
+        head = target.read_bytes()
+        if not head.startswith(b"\x89PNG\r\n\x1a\n"):
+            errors.append(str(target.relative_to(ROOT)) + " is not a PNG")
+            continue
+        fields = struct.unpack(">IIBBBBB", head[16:16 + 13])
+        if (fields[0], fields[1], fields[2], fields[3]) != (width, height, 8, 2):
+            errors.append(f"{target.relative_to(ROOT)} is {fields[0]}x{fields[1]} at {fields[2]} bit colour type {fields[3]}, "
+                          f"but tools/{script_name} writes {width}x{height} at 8 bit colour type 2 (RGB) — "
+                          f"regenerate it instead of editing the picture by hand")
+    # The AR sample has a ground-truth file beside it; a checker or a calibration test reads it, so it has to parse
+    # and describe the picture next to it.
+    truth = ROOT / "docs" / "samples" / "ar-keyboard-topdown.json"
+    if not truth.exists():
+        errors.append(str(truth.relative_to(ROOT)) + " is missing; tools/make_ar_sample.py writes it beside the picture")
+    else:
+        try:
+            document = json.loads(truth.read_text(encoding="utf-8"))
+            if document.get("image") != [1280, 720] or len(document.get("corners", [])) != 4 or len(document.get("homography", [])) != 3:
+                errors.append(str(truth.relative_to(ROOT)) + " no longer describes the picture (image size, four corners, a 3x3 homography)")
+            elif len(document.get("keyTopCentres", {})) != document.get("keys"):
+                errors.append(str(truth.relative_to(ROOT)) + " should name the top centre of every key")
+        except (json.JSONDecodeError, AttributeError) as error:
+            errors.append(f"{truth.relative_to(ROOT)} is not the JSON tools/make_ar_sample.py writes: {error}")
     return errors
 
 
@@ -1478,6 +1499,18 @@ def scan_release_version(cs_files):
     return errors
 
 
+def scan_media_foundation_keys():
+    """The Media Foundation GUIDs that cannot be told apart by eye. The advanced-video-processing key once held the
+    GUID of MF_READWRITE_ENABLE_HARDWARE_TRANSFORMS, so the reader never inserted its converter and every camera that
+    sends YUY2/NV12/MJPEG failed with 0xC00D5212 — a bug no CI job without a webcam could see."""
+    text = (ROOT / "Camera" / "MediaFoundation.cs").read_text(encoding="utf-8")
+    found = re.search(r'ReaderAdvancedKey\s*=\s*new\("([0-9A-Fa-f-]+)"\)', text)
+    wanted = "0F81DA2C-B537-4672-A8B2-A681B17307A3"   # MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING
+    if not found or found.group(1).upper() != wanted:
+        return [f"Camera/MediaFoundation.cs: ReaderAdvancedKey must be {wanted} (MF_SOURCE_READER_ENABLE_ADVANCED_VIDEO_PROCESSING)"]
+    return []
+
+
 def main():
     errors = []
     cs_files = sorted(p for p in ROOT.glob("**/*.cs") if "obj" not in p.parts and "bin" not in p.parts)
@@ -1502,6 +1535,7 @@ def main():
     errors.extend(scan_dead_keys(cs_files, xaml_files))
     errors.extend(scan_release_version(cs_files))
     errors.extend(scan_project_files())
+    errors.extend(scan_media_foundation_keys())
     errors.extend(scan_public_release())
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")

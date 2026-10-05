@@ -205,6 +205,9 @@ internal static class HandTracker
     /// The key a tracked position is over: the share across the frame turned into one of the keyboard's pitches,
     /// clamped to the keys the stage really draws so a hand at the edge of the picture never points off the end.
     /// </summary>
+    internal static int KeyPitch(double centerX, KeyboardLayout layout) => layout.PitchAt(centerX, false);
+
+    /// <summary>The same, for a keyboard that is simply its keys spread evenly; kept for callers that know only a range.</summary>
     internal static int KeyPitch(double centerX, int firstPitch, int keyCount) =>
         firstPitch + (int)Math.Round(Math.Clamp(centerX, 0, 1) * (keyCount - 1));
 }

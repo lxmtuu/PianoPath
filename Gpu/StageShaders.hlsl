@@ -7,6 +7,7 @@
 //   2. VsNote       + PsNote         - instanced SDF note capsules: Solid, Neon, Glass, Fire (lava)
 //   3. VsKey        + PsKey          - instanced 3D key boxes, GGX + Lambert, rim, emissive, AO, shadows
 //   4. VsSprite     + PsSprite       - instanced additive particles, rings, flares, beams, hit line
+//   4b. VsArQuad    + PsArQuad       - AR layer: notes projected onto the camera picture
 //   5. PsBloomPrefilter / PsBloomDown / PsBloomUp - HDR bloom pyramid (13-tap down, tent up)
 //   6. PsComposite                   - exposure, ACES, saturation, contrast, vignette, dither, chroma
 //
@@ -40,6 +41,9 @@ cbuffer Frame : register(b0)
     float4 SceneFx;      // x = GPU background-motion id, y = amount, z = speed, w = key activity
     float4 SceneFxColor; // rgb = background-motion tint
     float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
+    float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
+    float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
+    float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity
 };
 
 cbuffer PassConstants : register(b1)
@@ -52,6 +56,15 @@ struct NoteInstance
     float4 Rect;         // x, y (top-left), w, h in scene px
     float4 Color;        // rgb linear note colour, a = opacity
     float4 Misc;         // x = sounding (0..1), y = seed, z = head direction (+1 bottom, -1 top), w = played
+};
+
+struct ArQuadInstance
+{
+    float4 A;            // x0, y0, x1, y1: back-left and back-right corners (output px)
+    float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
+    float4 W;            // the four corner weights of the projective map
+    float4 Color;        // rgb linear, a = opacity
+    float4 Misc;         // x = fade-in 0..1, y = 1 while the note sounds, z = 1 for a lit key
 };
 
 struct KeyInstance
@@ -73,10 +86,12 @@ StructuredBuffer<NoteInstance> Notes : register(t2);
 StructuredBuffer<KeyInstance> Keys : register(t3);
 StructuredBuffer<SpriteInstance> Sprites : register(t4);
 StructuredBuffer<float4> KeyColors : register(t5);   // 128 entries: rgb = note colour of the pitch, a = activity
+StructuredBuffer<ArQuadInstance> ArQuads : register(t8);   // AR layer: one projected quad per note
 
 Texture2D SourceTex : register(t0);
 Texture2D SecondTex : register(t1);
 Texture2D AtlasTex : register(t6);       // glyph atlas: 16 x 24 cells of 64 x 32 px, coverage in alpha
+Texture2D CameraTex : register(t7);      // the newest camera picture, display-encoded (not sRGB-converted on read)
 SamplerState LinearClamp : register(s0);
 SamplerState PointClamp : register(s1);
 
@@ -298,6 +313,54 @@ float4 PsBackground(FullscreenOut i) : SV_Target
         c = lerp(c, float3(0.004, 0.004, 0.006), SceneB.w);
     }
     return float4(c, 0.0);
+}
+
+// ---------------------------------------------------------------------------------------------------
+// AR layer: quads of the keyboard plane projected onto the camera picture (Camera/ArProjection.cs)
+// ---------------------------------------------------------------------------------------------------
+
+struct ArQuadOut
+{
+    float4 Position : SV_Position;
+    float2 Uv : TEXCOORD0;       // x across the note, y from its tail (0) to its leading edge (1)
+    float4 Color : TEXCOORD1;
+    float4 Misc : TEXCOORD2;
+};
+
+ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
+{
+    ArQuadInstance q = ArQuads[iid];
+    // two triangles over the corners 0,1,2 and 0,2,3
+    uint k = vid < 3u ? vid : (vid == 3u ? 0u : vid - 2u);
+    float2 p = q.A.xy;
+    float w = q.W.x;
+    if (k == 1u) { p = q.A.zw; w = q.W.y; }
+    else if (k == 2u) { p = q.B.xy; w = q.W.z; }
+    else if (k == 3u) { p = q.B.zw; w = q.W.w; }
+    float2 ndc = float2(p.x / ScreenTime.x * 2.0 - 1.0, 1.0 - p.y / ScreenTime.y * 2.0);
+    ArQuadOut o;
+    // the corner weight as clip w: the rasteriser then interpolates across the quad in perspective
+    o.Position = float4(ndc * w, 0.0, w);
+    o.Uv = float2((k == 1u || k == 2u) ? 1.0 : 0.0, k >= 2u ? 1.0 : 0.0);
+    o.Color = q.Color;
+    o.Misc = q.Misc;
+    return o;
+}
+
+float4 PsArQuad(ArQuadOut i) : SV_Target
+{
+    if (i.Misc.z > 0.5)
+    {
+        // a lit key: its colour laid over the key in the picture, so a white key takes the tint and a dark one lights up
+        float ka = i.Color.a;
+        return float4(i.Color.rgb * 1.1 * ka, ka);
+    }
+    float side = min(i.Uv.x, 1.0 - i.Uv.x);
+    float rim = 1.0 - smoothstep(0.0, 0.16, side);
+    float lead = smoothstep(0.55, 1.0, i.Uv.y);
+    float3 c = i.Color.rgb * (1.0 + 0.45 * rim + 0.35 * lead + 0.5 * i.Misc.y);
+    float a = i.Color.a * i.Misc.x;
+    return float4(c * a, a);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -733,7 +796,7 @@ float3 HitLineColor(float x)
 {
     // the pitch under this x (the keyboard is close to linear in pitch at this scale)
     float t = saturate(x / SceneSize.x);
-    float pitch = 21.0 + t * 87.0;
+    float pitch = KeyRange.x + t * KeyRange.y;
     int p0 = (int)clamp(floor(pitch), 0.0, 127.0);
     float3 base = KeyColors[p0].rgb;
     float activity = 0.0;
@@ -1079,6 +1142,15 @@ float4 PsComposite(FullscreenOut i) : SV_Target
     float3 display = LinearToSrgb(c);
     float noise = Hash21(i.Position.xy + frac(ScreenTime.z) * 61.0) - 0.5;
     display += noise * Post2.w;
+    if (ArFlags.y > 0.5)
+    {
+        // the camera picture sits under the light: what the stage draws solid hides it, light adds to it
+        float2 uv = float2((i.Position.x - ArPicture.x) / ArPicture.z, (i.Position.y - ArPicture.y) / ArPicture.w);
+        if (ArFlags.x > 0.5) uv.x = 1.0 - uv.x;
+        float inside = (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) ? 1.0 : 0.0;
+        float3 cam = CameraTex.SampleLevel(LinearClamp, uv, 0).rgb * (inside * ArFlags.z);
+        display += cam * (1.0 - saturate(scene.a));
+    }
     if (Background.w > 0.5)
     {
         // chroma key: solid content and the light around it cover the green; empty space shows it

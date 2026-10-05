@@ -52,7 +52,7 @@ internal static partial class VerificationSuite
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -424,6 +424,94 @@ internal static partial class VerificationSuite
     /// on. The frame is the same shape a camera hands over — 32-bit pixels, top row first — so what is measured
     /// here is what the pump measures from a real camera.
     /// </summary>
+    /// <summary>
+    /// The keyboard geometry has one home, <see cref="KeyboardLayout"/>, and the stage, the GPU engine and the shaded
+    /// keys all read the layout being drawn from it: the full keyboard by default, and a different one the moment
+    /// <see cref="KeyboardLayout.Use"/> says so. (The geometry itself is checked on any machine by
+    /// <c>KeyboardLayoutTests</c>.) The layout is always put back, so a failure here cannot leak a keyboard into the
+    /// checks after it.
+    /// </summary>
+    private static void VerifyKeyboardLayout()
+    {
+        var full = KeyboardLayout.Standard88;
+        Assert(ReferenceEquals(KeyboardLayout.Active, full), "A fresh run draws the full keyboard.");
+        Assert(full.WhiteCount == PianoShaderScene.WhiteKeys && full.FirstPitch == PianoStage.FirstPitch && full.KeyCount == PianoStage.KeyCount,
+            "The stage and the shaded keyboard should report the range of the layout being drawn.");
+        for (var pitch = 0; pitch < 128; pitch++)
+        {
+            Assert(Math.Abs(PianoStage.KeyCenterOf(pitch) - full.CenterX(pitch)) < 1e-12,
+                $"The stage should land pitch {pitch} where the layout puts it.");
+            Assert(Math.Abs(full.WorldCenters[pitch] / full.WhiteCount - full.CenterX(pitch)) < 1e-9,
+                $"The shaded keyboard should put pitch {pitch} where the layout puts it.");
+        }
+        var scene = PianoShaderScene.From(VisualPresets.NeonViolet(), 640, 160, "Balanced");
+        Assert(ReferenceEquals(scene.Keys, full), "A scene keeps the keyboard it was built for.");
+        Assert(HandTracker.KeyPitch(.5, full) == full.PitchAt(.5, false), "A tracked hand lands on the key the layout puts under that position.");
+
+        // The setting: a known size names its layout, an unknown one falls back to the full keyboard, and a look
+        // being applied never changes the player's keyboard.
+        var sixtyOne = new PianoVisualSettings { KeyboardSize = "61" };
+        Assert(sixtyOne.KeyboardLayoutChoice.KeyCount == 61 && sixtyOne.KeyboardLayoutChoice.FirstPitch == 36, "The size 61 should name the 61-key layout.");
+        var odd = new PianoVisualSettings { KeyboardSize = "73" }; odd.Clamp();
+        Assert(odd.KeyboardSize == "88" && odd.KeyboardLayoutChoice.KeyCount == 88, "A keyboard size the app does not draw should fall back to 88 keys.");
+        var applied = new PianoVisualSettings { KeyboardSize = "61" }; applied.CopyFrom(new PianoVisualSettings { KeyboardSize = "49" });
+        Assert(applied.KeyboardSize == "61", "Applying a look or a preset must keep the player's keyboard size.");
+        Assert(PianoVisualSettings.KeyboardSizes.SequenceEqual(KeyboardLayout.All.Select(layout => layout.KeyCount.ToString())),
+            "The sizes the settings offer should be exactly the layouts the app has.");
+
+        // The overlay's own settings: defaults agree with ArOptions, wild values are pulled into range, and a look being
+        // applied (a preset, a community look, a pasted code) neither switches the overlay on nor retunes it.
+        var arDefault = new PianoVisualSettings();
+        Assert(!arDefault.ArEnabled && arDefault.ArOptionsValue == ArOptions.Default,
+            "A fresh install has the overlay off, and the settings' defaults are the ones ArOptions names.");
+        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000 }; arWild.Clamp();
+        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax,
+            "Out-of-range overlay values should be pulled into range when settings load.");
+        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120 };
+        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0 });
+        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120,
+            "Applying a look must keep every overlay setting.");
+        Assert(MainWindow.FormatSetting(nameof(PianoVisualSettings.ArDelay), 120) == "120 ms" && MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.ArDelay), "85 ms", out var typedDelay) && typedDelay == 85,
+            "The camera delay is shown and typed in milliseconds, not as a percentage.");
+        var cameraKept = new PianoVisualSettings { CameraSourceLink = @"\\?\usb#vid_046d&pid_0825#1#{x}\global", CameraVideoPath = @"C:\clips\hands.mp4", CameraCorner = "Top left" };
+        cameraKept.CopyFrom(new PianoVisualSettings { CameraSourceLink = "other", CameraVideoPath = "", CameraCorner = "Bottom right" });
+        Assert(cameraKept.CameraSourceLink.StartsWith(@"\\?\usb", StringComparison.Ordinal) && cameraKept.CameraVideoPath == @"C:\clips\hands.mp4" && cameraKept.CameraCorner == "Bottom right",
+            "Applying a look must keep the camera the player picked and the video file, and still change how the picture is framed.");
+        Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(cameraKept), out var cameraShared, out _) && cameraShared.CameraSourceLink == "" && cameraShared.CameraVideoPath == "" && cameraShared.CameraCorner == "Bottom right",
+            "A shared look carries neither the camera's device path nor the video file's path.");
+        var arCode = VisualPresetShare.Encode(arKept);
+        Assert(VisualPresetShare.TryDecode(arCode, out var arShared, out _) && arShared.ArMode == "Perform" && arShared.ArLookahead == 2,
+            "A look code carries the overlay values like any other setting, and reads them back in range.");
+        var arJson = PianoVisualSettings.FromJson(arKept.ToJson());
+        Assert(arJson.ArOptionsValue == arKept.ArOptionsValue, "The overlay settings should survive a save and a load.");
+
+        try
+        {
+            var narrow = KeyboardLayout.ForKeyCount(61);
+            var stageForSize = new PianoStage();
+            stageForSize.SetVisualSettings(sixtyOne);
+            Assert(ReferenceEquals(KeyboardLayout.Active, narrow), "Handing the stage a 61-key setting should make the 61-key layout the one being drawn.");
+            KeyboardLayout.Use(full);
+            Assert(KeyboardLayout.Use(narrow) && !KeyboardLayout.Use(narrow), "Using a layout reports the change once.");
+            Assert(PianoStage.FirstPitch == 36 && PianoStage.KeyCount == 61, "The stage should follow the layout that is being drawn.");
+            Assert(Math.Abs(PianoStage.KeyCenterOf(36) - .5 / 36) < 1e-12 && Math.Abs(PianoStage.KeyCenterOf(96) - 35.5 / 36) < 1e-12,
+                "On a 61-key keyboard the lowest and highest keys should sit half a white key from the edges.");
+            var gpu = new GpuSceneLayout(640, 360, .2f);
+            Assert(ReferenceEquals(gpu.Keys, narrow) && Math.Abs(gpu.Lane - 640f / 61) < 1e-4 && Math.Abs(gpu.X(36) - 640 * .5 / 36) < 1e-3,
+                "The GPU engine should lay a 61-key keyboard out in 61 lanes, from the same centres as the stage.");
+            var other = PianoShaderScene.From(VisualPresets.NeonViolet(), 640, 160, "Balanced");
+            Assert(ReferenceEquals(other.Keys, narrow) && other.Signature() != scene.Signature()
+                    && !PianoShaderScene.SceneKey.Capture(other).Equals(PianoShaderScene.SceneKey.Capture(scene)),
+                "A different keyboard is a different bake, in both the signature and the cache key.");
+            Assert(ReferenceEquals(scene.Keys, full), "A scene built before the switch keeps drawing its own keyboard.");
+            var bake = PianoKeyboardRenderer.Render(other, new KeyLightState(), 0, 0, 640, 160, -1);
+            Assert(bake is not null && bake.PixelWidth > 0, "The 61-key keyboard should shade into a bitmap.");
+        }
+        finally { KeyboardLayout.Use(full); }
+        Assert(PianoStage.KeyCount == 88 && ReferenceEquals(KeyboardLayout.Active, full), "The full keyboard is back after the check.");
+        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the range and the centre of every key, and switching to 61 keys moves the stage, the GPU lanes and the shaded keyboard together, with a scene keeping the keyboard it was built for.");
+    }
+
     private static void VerifyHandTracking()
     {
         // The skin rule: a light skin tone is skin, and the colours a stage or a wall is made of are not.
@@ -648,8 +736,8 @@ internal static partial class VerificationSuite
         Assert(CameraOverlay.ApplyKey(keying, 3, 0) == 0, "With the key off nothing may be cleared, not even a pure green.");
         Assert(Math.Abs(CameraOverlay.OpacityFactor(0)) < 1e-9 && Math.Abs(CameraOverlay.OpacityFactor(100) - 1) < 1e-9 && Math.Abs(CameraOverlay.OpacityFactor(250) - 1) < 1e-9,
             "The opacity percent should map onto a 0–1 factor and clamp anything above 100.");
-        Assert(CameraFrameReader.FrameRate == 30 && Math.Abs(CameraFrameReader.FrameSeconds - 1.0 / 30) < 1e-9,
-            "The overlay should pace itself at the 30 frames per second it documents.");
+        Assert(CameraFrameReader.DisplayRate == 60 && Math.Abs(CameraFrameReader.FileFrameSeconds - 1.0 / 30) < 1e-9,
+            "The window should show a new picture at most 60 times a second, and a file with no times of its own should be read at 30 fps.");
 
         var missing = Path.Combine(Path.GetTempPath(), $"keyflow-no-such-video-{Guid.NewGuid():N}.mp4");
         Assert(CameraFrameReader.OpenFile(missing, out var missingError) is null && missingError is { Length: > 0 },
@@ -684,6 +772,14 @@ internal static partial class VerificationSuite
                     Assert(got && width == 64 && height == 48 && reader.Frames == 1 && pixels[3] == 255,
                         $"The overlay reader should read an opaque frame out of the application's own clip ({reader.Width} × {reader.Height}, frame={reader.Frames}, alpha={pixels[3]}, error=“{reader.Error}”).");
                     Assert(pixels[0] > 150 && pixels[1] < 120 && pixels[2] < 120, "A frame should arrive as BGRA in the order the clip was written in.");
+                    Assert(reader.Mode.Width == 64 && reader.Mode.Height == 48 && reader.Mode.Label.Length > 0,
+                        $"The reader should report the mode it delivers, 64 × 48 here (got “{reader.Mode.Label}”).");
+                    Assert(reader.LastFrameTicks > 0 && reader.LastFrameTicks <= System.Diagnostics.Stopwatch.GetTimestamp(),
+                        "A frame should be stamped with the clock reading at which it arrived.");
+                    var firstTime = reader.LastSampleTime;
+                    var more = reader.TryReadFrame(pixels, mirror: false, out _, out _);
+                    Assert(!more || reader.LastSampleTime >= firstTime && reader.Frames == 2,
+                        $"The time Media Foundation writes on a frame should not go backwards ({firstTime} then {reader.LastSampleTime}).");
                     var keyed = CameraOverlay.ApplyKey(pixels, width * height, 30);
                     Assert(keyed == 0, "A picture with no green in it must survive the key untouched.");
                 }
@@ -736,8 +832,8 @@ internal static partial class VerificationSuite
                 }
         }
         Paint(50, 60, 110, 110); Paint(55, 20, 65, 60); Paint(75, 20, 85, 60); Paint(95, 20, 105, 60);
-        SetField(window, "_cameraFrame", frame);
-        SetField(window, "_cameraFrameWidth", 160); SetField(window, "_cameraFrameHeight", 120); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "InjectCameraFrame", frame, 160, 120);
+        SetField(window, "_lastHandTrackTicks", 0L); // the tracker runs at most 30 times a second: let this frame through
         Invoke(window, "PumpCameraFrame");
         Assert(stage.HasHand || Field(stage, "_hand") is not null,
             "A frame with a hand in it, pumped the way the camera pumps frames, should reach the stage.");
@@ -768,7 +864,6 @@ internal static partial class VerificationSuite
         visualSettings.ShowHandTracking = true; stage.SetVisualSettings(visualSettings);
         stage.SetHandReading(null);
         Assert(!stage.HasHand && MarkerInk() == 0, "With no hand found there should be no marker at all.");
-        SetField(window, "_cameraFrameFresh", false);
 
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         SetField(window, "_cameraSignature", "");
@@ -815,8 +910,7 @@ internal static partial class VerificationSuite
         // frame filled with the key colour comes back see-through, and the stage paints it in the chosen corner.
         var red = new byte[64 * 36 * 4];
         for (var index = 0; index < red.Length; index += 4) { red[index + 2] = 255; red[index + 3] = 255; }
-        SetField(window, "_cameraFrame", red);
-        SetField(window, "_cameraFrameWidth", 64); SetField(window, "_cameraFrameHeight", 36); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "InjectCameraFrame", red, 64, 36);
         Invoke(window, "PumpCameraFrame");
         var painted = (WriteableBitmap?)Field(window, "_cameraBitmap");
         Assert(painted is { PixelWidth: 64, PixelHeight: 36 }, "The pump should build a bitmap the size of the frame the reader produced.");
@@ -837,7 +931,7 @@ internal static partial class VerificationSuite
             "Nothing of the overlay may be painted outside its rectangle.");
         var green = new byte[64 * 36 * 4];
         for (var index = 0; index < green.Length; index += 4) { green[index + 1] = 255; green[index + 3] = 255; }
-        SetField(window, "_cameraFrame", green); SetField(window, "_cameraFrameFresh", true);
+        Invoke(window, "InjectCameraFrame", green, 64, 36);
         Invoke(window, "PumpCameraFrame");
         painted.CopyPixels(pixels, 64 * 4, 0);
         Assert(pixels[3] == 0 && pixels[1] == 0, "The key should make a green frame see-through before it reaches the stage.");
@@ -846,13 +940,94 @@ internal static partial class VerificationSuite
         using (var dc = keyedVisual.RenderOpen()) Invoke(stage, "DrawCameraOverlay", dc, 1000d, 600d);
         var keyedShot = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32); keyedShot.Render(keyedVisual); keyedShot.CopyPixels(keyed, 4000, 0);
         Assert(keyed[inside + 3] == 0, "A keyed frame must leave the stage behind it visible.");
-        SetField(window, "_cameraFrameFresh", false);
         stage.SetCameraFrame(null);
         Assert(!stage.HasCameraFrame, "Clearing the frame should stop the overlay from drawing.");
         toggles[nameof(PianoVisualSettings.ShowCameraOverlay)].IsChecked = wasShowing;
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
-        SetField(window, "_cameraSignature", string.Join("|", visualSettings.ShowCameraOverlay, visualSettings.CameraSourceLink, visualSettings.CameraVideoPath));
+        SetField(window, "_cameraSignature", string.Join("|", visualSettings.ShowCameraOverlay, visualSettings.CameraSourceLink, visualSettings.CameraVideoPath, false));
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        // The AR calibration follows what is open: nothing without a camera, the keyboard size of the settings, the settings folder.
+        var arSession = window.ArCalibration;
+        Assert(arSession.Store.FilePath.StartsWith(PianoVisualSettingsStore.SettingsDirectory, StringComparison.OrdinalIgnoreCase),
+            "The AR calibrations are kept in the settings folder.");
+        Assert(arSession.State == ArCalibrationState.NoSource, "With no camera open there is nothing to calibrate against.");
+        var arSize = visualSettings.KeyboardSize;
+        Invoke(window, "ApplyArSource", "verification camera", 1280, 720);
+        Assert(arSession.State == ArCalibrationState.NotCalibrated && arSession.Snapshot.KeyCount == visualSettings.KeyboardLayoutChoice.KeyCount,
+            "An opened camera that was never calibrated asks for a calibration for the keyboard in the settings.");
+        visualSettings.KeyboardSize = visualSettings.KeyboardSize == "61" ? "49" : "61";
+        Invoke(window, "SyncCameraOverlay");
+        Assert(arSession.Snapshot.KeyCount == visualSettings.KeyboardLayoutChoice.KeyCount,
+            "Changing the keyboard size must move the calibration to the new size's.");
+        visualSettings.KeyboardSize = arSize;
+        Invoke(window, "ApplyArSource", null!, 0, 0);
+        Assert(arSession.State == ArCalibrationState.NoSource, "Closing the camera leaves no calibration in force.");
+
+        // The overlay's switch carried out: nothing without the switch, the camera and the engine's layers once a camera is open and
+        // calibrated, the stage's own notes and keys stepping aside, and the engine the only reader of the camera's frames.
+        var gpuFeed = (GpuStageFeed)Field(window, "_gpuFeed");
+        var engineRuns = window.GpuLoop is { Error: null };
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
+            "With the AR switch off the overlay leaves the stage alone.");
+        Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay)),
+            "The Camera & FX page should carry the AR switch, the mode picker and the four sliders.");
+        var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
+        Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
+        var arWas = visualSettings.ArEnabled;
+        toggles[nameof(PianoVisualSettings.ArEnabled)].IsChecked = true;
+        Assert(visualSettings.ArEnabled, "Switching the overlay on in the dock should reach the settings.");
+        Assert(engineRuns ? arText().StartsWith(Loc.T("Waiting for the camera."), StringComparison.Ordinal)
+                : arText() == Loc.T("The AR overlay needs the Direct3D 11 engine; the software renderer is drawing the stage."),
+            $"The AR card should say what the overlay waits for ({arText()}).");
+        Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.NoCamera : ArStatus.NeedsGpu) && gpuFeed.Camera is null,
+            "Switched on without an open camera, the overlay waits for one; without the engine it says it needs it.");
+        (double X, double Y)[] arCorners = [(70, 292), (1214, 268), (1236, 421), (52, 449)];     // a key area is a key area for any keyboard size
+        Invoke(window, "ApplyArSource", "verification camera", 1280, 720);
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.NeedsCalibration : ArStatus.NeedsGpu) && gpuFeed.Ar is null && !stage.ArOverlayActive
+                && (gpuFeed.Camera is not null) == engineRuns,
+            "An open camera that was not calibrated shows as the background, with the stage as it was and no notes or keys on it.");
+        Assert(window.ArCalibration.Save(arCorners, out _) == ArSaveResult.Saved, "The sample key area should be accepted as a calibration.");
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status == (engineRuns ? ArStatus.Active : ArStatus.NeedsGpu) && (gpuFeed.Ar is not null) == engineRuns
+                && stage.ArOverlayActive == engineRuns && (gpuFeed.Camera is not null) == engineRuns,
+            "A calibrated camera draws the overlay and the stage's own notes and keys step aside.");
+        if (engineRuns)
+        {
+            Assert(arText().Contains("1280 × 720", StringComparison.Ordinal), $"The AR card should say what the overlay draws on ({arText()}).");
+            sliders[nameof(PianoVisualSettings.ArOpacity)].Value = 40;
+            Assert(visualSettings.ArOpacity == 40 && Math.Abs(gpuFeed.Ar!.Opacity - .4f) < 1e-3, "The opacity slider should reach the layer the engine draws.");
+            sliders[nameof(PianoVisualSettings.ArLookahead)].Value = 2.5;
+            var valueBoxes = (Dictionary<string, TextBox>)Field(window, "_visualValueBoxes");
+            Assert(valueBoxes[nameof(PianoVisualSettings.ArLookahead)].Text == $"{2.5:0.0} s" && Math.Abs(gpuFeed.Ar!.Notes.Reach / gpuFeed.Ar.Notes.FallSpeed - 2.5) < 1e-9,
+                "The lookahead slider should show seconds and set how far above the keys notes come into view.");
+            choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Perform;
+            Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes, "The mode picker should reach the layer the engine draws.");
+            choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Learn;
+            Assert(ReferenceEquals(gpuFeed.Camera!.Ring, Field(window, "_cameraFrames")) && gpuFeed.Ar!.Calibration == window.ArCalibration.Current,
+                "The engine reads the camera's own ring and draws on the calibration in force.");
+            var frameRing = (CameraFrameRing)Field(window, "_cameraFrames");
+            frameRing.BeginWrite(16, out var arSlot); frameRing.Publish(arSlot, 2, 2, 1);
+            Invoke(window, "PumpCameraFrame");
+            Assert(frameRing.TryTake(out _), "The window's own pump leaves the frames to the engine while the overlay is drawn.");
+            visualSettings.BackgroundMode = "ChromaGreen";
+            Invoke(window, "UpdateArFeed");
+            Assert(window.ArPlanNow.Status == ArStatus.ChromaBackground && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
+                "A green-screen background takes the camera's place, so the overlay steps aside.");
+            visualSettings.BackgroundMode = "Solid";
+        }
+        Invoke(window, "ResetArCalibration_Click", window, new RoutedEventArgs());
+        Assert(window.ArCalibration.State is ArCalibrationState.NotCalibrated or ArCalibrationState.NoSource && window.ArCalibration.Current is null,
+            "RESET CALIBRATION should forget the calibration in force.");
+        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60;
+        Invoke(window, "RefreshSettingControls");
+        Invoke(window, "ApplyArSource", null!, 0, 0);
+        Invoke(window, "SyncCameraOverlay");
+        Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
+            "Switching the overlay off puts the stage back as it was.");
         Results.Add("PASS camera overlay dock: the switch, the camera and corner pickers, the size/opacity/key sliders, the clamp and the corner fallback, the pump's key and the frame drawn in the chosen corner of the rendered stage.");
     }
 
@@ -1329,6 +1504,7 @@ internal static partial class VerificationSuite
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
+        Run(nameof(VerifyCalibrationWindow), () => VerifyCalibrationWindow(window, visualSettings));
         Run(nameof(VerifyHandTrackingDock), () => VerifyHandTrackingDock(window, stage, visualSettings));
         Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
         Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
