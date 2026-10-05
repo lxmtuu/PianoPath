@@ -536,6 +536,9 @@ public partial class MainWindow
         SliderRow(post, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150, "Global glow strength.");
         SliderRow(post, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150, "How far the glow spreads.");
 
+        var cameras = Card(CameraSettingsHost, "CAMERAS ON THIS MACHINE", "Every camera Windows reports, listed by its own name. Click one to use it; Automatic picks the first colour camera.");
+        BuildCameraList(cameras);
+
         var overlay = Card(CameraSettingsHost, "WEBCAM OVERLAY", "A live camera or a video file drawn over the stage, keyed against pure green. Use a green screen behind you (or the Green Screen preset on the stage) and the background of the picture disappears.");
         Toggle(overlay, "Camera overlay", nameof(PianoVisualSettings.ShowCameraOverlay), "Draw the source below over the stage as a picture-in-picture.");
         ButtonRow(overlay, ("CHOOSE VIDEO…", ChooseCameraVideo_Click, "IconCamera"), ("USE CAMERA", UseCameraOverlay_Click, "IconCamera"), ("REFRESH CAMERAS", RefreshCameraOverlay_Click, "IconRefresh"));
@@ -690,6 +693,7 @@ public partial class MainWindow
     {
         _visualChoiceOptions[nameof(PianoVisualSettings.CameraSourceLink)] = CameraChoices();
         RefreshChoiceCaptions();
+        RebuildCameraList();
     }
 
     private void RefreshCameraOverlay_Click(object sender, RoutedEventArgs e)
@@ -1446,6 +1450,8 @@ public partial class MainWindow
         }
         finally { _loadingVisualSettings = false; }
         RefreshDependentRows(); RebuildTrackList(); UpdateRecordingInfo(); UpdatePresetLabels();
+        // A preset or a reset can change the picked camera: the list marks the new one.
+        if (_cameraList is not null) Dispatcher.BeginInvoke(new Action(RebuildCameraList), System.Windows.Threading.DispatcherPriority.Background);
     }
 
     private void SyncPlayDialogToggle(string property, bool value)

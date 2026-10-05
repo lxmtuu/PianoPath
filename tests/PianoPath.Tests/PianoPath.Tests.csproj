@@ -68,6 +68,7 @@
     <Compile Include="..\..\Camera\ArCalibrationSession.cs" Link="Product\Camera\ArCalibrationSession.cs" />
     <Compile Include="..\..\Camera\CameraMode.cs" Link="Product\Camera\CameraMode.cs" />
     <Compile Include="..\..\Camera\CameraRanking.cs" Link="Product\Camera\CameraRanking.cs" />
+    <Compile Include="..\..\Camera\CameraListing.cs" Link="Product\Camera\CameraListing.cs" />
     <Compile Include="..\..\Camera\CameraFrameRing.cs" Link="Product\Camera\CameraFrameRing.cs" />
     <Compile Include="..\..\Camera\FramePacer.cs" Link="Product\Camera\FramePacer.cs" />
     <Compile Include="..\..\Camera\CameraAgeMeter.cs" Link="Product\Camera\CameraAgeMeter.cs" />

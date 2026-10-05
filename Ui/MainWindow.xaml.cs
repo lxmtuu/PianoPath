@@ -1337,6 +1337,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void StartCameraOverlay()
     {
+        StartCameraOverlayCore();
+        // "In use" in the camera list moves to the camera that opened (or off the one that would not).
+        Dispatcher.BeginInvoke(new Action(RebuildCameraList), DispatcherPriority.Background);
+    }
+
+    private void StartCameraOverlayCore()
+    {
         StopCameraOverlay();
         var arPlan = DecideAr();
         _arRawFrames = arPlan.RawFrames;
