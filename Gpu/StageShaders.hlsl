@@ -41,6 +41,8 @@ cbuffer Frame : register(b0)
     float4 SceneFxColor; // rgb = background-motion tint
     float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
     float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
+    float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
+    float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity
 };
 
 cbuffer PassConstants : register(b1)
@@ -78,6 +80,7 @@ StructuredBuffer<float4> KeyColors : register(t5);   // 128 entries: rgb = note 
 Texture2D SourceTex : register(t0);
 Texture2D SecondTex : register(t1);
 Texture2D AtlasTex : register(t6);       // glyph atlas: 16 x 24 cells of 64 x 32 px, coverage in alpha
+Texture2D CameraTex : register(t7);      // the newest camera picture, display-encoded (not sRGB-converted on read)
 SamplerState LinearClamp : register(s0);
 SamplerState PointClamp : register(s1);
 
@@ -1080,6 +1083,15 @@ float4 PsComposite(FullscreenOut i) : SV_Target
     float3 display = LinearToSrgb(c);
     float noise = Hash21(i.Position.xy + frac(ScreenTime.z) * 61.0) - 0.5;
     display += noise * Post2.w;
+    if (ArFlags.y > 0.5)
+    {
+        // the camera picture sits under the light: what the stage draws solid hides it, light adds to it
+        float2 uv = float2((i.Position.x - ArPicture.x) / ArPicture.z, (i.Position.y - ArPicture.y) / ArPicture.w);
+        if (ArFlags.x > 0.5) uv.x = 1.0 - uv.x;
+        float inside = (uv.x >= 0.0 && uv.x <= 1.0 && uv.y >= 0.0 && uv.y <= 1.0) ? 1.0 : 0.0;
+        float3 cam = CameraTex.SampleLevel(LinearClamp, uv, 0).rgb * (inside * ArFlags.z);
+        display += cam * (1.0 - saturate(scene.a));
+    }
     if (Background.w > 0.5)
     {
         // chroma key: solid content and the light around it cover the green; empty space shows it

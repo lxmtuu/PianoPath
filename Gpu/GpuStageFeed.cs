@@ -70,6 +70,10 @@ internal sealed class GpuStageFeed
     /// <summary>The decoded background picture (null for none); swapped whole, uploaded by the render thread when its version changes.</summary>
     internal GpuBackgroundImage? Background { get => Volatile.Read(ref _background); set => Volatile.Write(ref _background, value); }
 
+    private GpuCameraInput? _camera;
+    /// <summary>The camera layer (null for none); swapped whole. While it is set the render thread takes the frames from its ring.</summary>
+    internal GpuCameraInput? Camera { get => Volatile.Read(ref _camera); set => Volatile.Write(ref _camera, value); }
+
     private GpuRecordingTap? _recording;
     /// <summary>The active GPU recording request (null when REC is off or records the software stage).</summary>
     internal GpuRecordingTap? Recording { get => Volatile.Read(ref _recording); set => Volatile.Write(ref _recording, value); }

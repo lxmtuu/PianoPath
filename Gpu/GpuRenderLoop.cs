@@ -303,6 +303,7 @@ internal sealed class GpuRenderLoop : IDisposable
 
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
+                gpu.UpdateCamera(_feed.Camera);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
@@ -427,7 +428,7 @@ internal sealed class GpuRenderLoop : IDisposable
     /// The frames of <see cref="RenderOnce"/> on a device that already exists: a fresh simulation stepped
     /// <paramref name="warmupFrames"/> + 1 times from the feed, the last step drawn and read back.
     /// </summary>
-    private static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings)
+    internal static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings)
     {
         var timer = Stopwatch.StartNew();
         var simulation = new GpuStageSimulation();
@@ -454,6 +455,7 @@ internal sealed class GpuRenderLoop : IDisposable
             if (!renderWarmup && frame < warmupFrames) continue;
             started = timer.Elapsed.TotalMilliseconds;
             renderer.UpdateBackground(feed.Background);
+            renderer.UpdateCamera(feed.Camera);
             renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
             drawn += timer.Elapsed.TotalMilliseconds - started;
