@@ -204,7 +204,7 @@ internal static partial class VerificationSuite
             foreach (var (s, t) in new[] { (.5, .5), (.2, .5), (.8, .5), (.5, .15), (.5, .85) })
             {
                 var inside = Look(arFrame, width, height, Blend(shape.Patch, s, t));
-                Assert(inside.Spread > 60, $"Note {shape.Pitch} should be coloured at ({s:0.00},{t:0.00}) of its quad, spread {inside.Spread}.");
+                Assert(inside.Spread > 30 && inside.Off > 40, $"Note {shape.Pitch} should be coloured at ({s:0.00},{t:0.00}) of its quad, spread {inside.Spread}, off grey by {inside.Off}.");
             }
             foreach (var (s, t) in new[] { (-.3, .5), (1.3, .5), (.5, -.35) })
             {
