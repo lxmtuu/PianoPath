@@ -71,6 +71,8 @@
     <Compile Include="..\..\Camera\FramePacer.cs" Link="Product\Camera\FramePacer.cs" />
     <Compile Include="..\..\Camera\CameraAgeMeter.cs" Link="Product\Camera\CameraAgeMeter.cs" />
     <Compile Include="..\..\Camera\ArKeyHistory.cs" Link="Product\Camera\ArKeyHistory.cs" />
+    <Compile Include="..\..\Camera\LatencyProbe.cs" Link="Product\Camera\LatencyProbe.cs" />
+    <Compile Include="..\..\Camera\MotionEnergy.cs" Link="Product\Camera\MotionEnergy.cs" />
   </ItemGroup>
 
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->
