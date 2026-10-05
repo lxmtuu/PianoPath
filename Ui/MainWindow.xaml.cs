@@ -1485,6 +1485,8 @@ public partial class MainWindow : Window
     private readonly Lock _audioTrackLock = new();
     private bool _audioTrackStarted;
     private double _audioTrackSeconds;
+    /// <summary>Seconds of silence this take's audio began with, to keep the sound with a delayed camera picture (see <see cref="RecordingSync"/>).</summary>
+    private double _audioLeadIn;
 
     /// <summary>
     /// Where the audio of a recording goes: a WAV beside the AVI, or <c>audio.wav</c> inside the PNG folder.
@@ -1509,6 +1511,7 @@ public partial class MainWindow : Window
     internal bool BeginAudioTrack()
     {
         EndAudioTrack();
+        _audioLeadIn = 0;
         if (!_visualSettings.RecordAudio || !_audio.HasInstrument || _recordingPath is null) return false;
         // An MP4 carries its own audio stream, so the same tap goes straight into the file being written;
         // every other format gets a WAV beside the video to mux afterwards.
@@ -1517,6 +1520,9 @@ public partial class MainWindow : Window
             : WavWriter.TryCreate(AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder));
         if (track is null) return false;
         _audioTrack = track; _audioTrackSeconds = 0;
+        // A take with the camera in it starts its sound as late as the camera's picture is, so the finger and the sound of a press
+        // land on the same stamp in the file (the picture is moved no earlier than zero, so the sound is the one that waits).
+        _audioLeadIn = RecordingSync.Begin(track, _visualSettings.ArOptionsValue.DelaySeconds, _arPlan.CameraLayer);
         // The tap runs on the audio thread, so the writer is only ever touched under its lock.
         _audio.SetTap((samples, count) => { lock (_audioTrackLock) _audioTrack?.Append(samples, count); });
         _audio.SetTapClockEnabled(true);
@@ -1557,7 +1563,7 @@ public partial class MainWindow : Window
             _audioTrackSeconds = AudioTrackSeconds();
             return;
         }
-        var due = (long)(elapsed.TotalSeconds * 44100) - (long)(AudioTrackSeconds() * 44100);
+        var due = RecordingSync.SilenceDue(elapsed.TotalSeconds, _audioLeadIn, AudioTrackSeconds());
         if (due > 0) { lock (_audioTrackLock) _audioTrack?.AppendSilence(due); }
         _audioTrackSeconds = AudioTrackSeconds();
     }
