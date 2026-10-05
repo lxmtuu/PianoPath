@@ -536,7 +536,7 @@ public partial class MainWindow
         SliderRow(post, "Bloom intensity", nameof(PianoVisualSettings.BloomIntensity), 0, 150, "Global glow strength.");
         SliderRow(post, "Bloom size", nameof(PianoVisualSettings.BloomSize), 0, 150, "How far the glow spreads.");
 
-        var cameras = Card(CameraSettingsHost, "CAMERAS ON THIS MACHINE", "Every camera Windows reports, listed by its own name. Click one to use it; Automatic picks the first colour camera.");
+        var cameras = Card(CameraSettingsHost, "CAMERAS ON THIS MACHINE", "Every camera Windows reports, listed by its own name. Click one to use it; Automatic picks the first colour camera. The list updates by itself, so a virtual camera such as OBS appears here once it starts.");
         BuildCameraList(cameras);
 
         var overlay = Card(CameraSettingsHost, "WEBCAM OVERLAY", "A live camera or a video file drawn over the stage, keyed against pure green. Use a green screen behind you (or the Green Screen preset on the stage) and the background of the picture disappears.");

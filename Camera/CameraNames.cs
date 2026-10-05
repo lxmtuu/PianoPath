@@ -11,6 +11,9 @@ namespace PianoPath;
 /// </summary>
 internal static partial class CameraNames
 {
+    /// <summary>The start of the identity given to a camera that has no symbolic link: the prefix, then its name.</summary>
+    internal const string NameLinkPrefix = "name:";
+
     /// <summary>"Camera", "Camera 2", "Webcam 1": a stand-in, not a name.</summary>
     internal static bool IsGeneric(string? name)
         => string.IsNullOrWhiteSpace(name) || GenericName().IsMatch(name.Trim());

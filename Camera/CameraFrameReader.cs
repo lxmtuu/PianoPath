@@ -422,6 +422,9 @@ internal sealed partial class CameraFrameReader : IDisposable
                     // A driver may leave the name empty or give "Camera 1"; Windows' own record of the device usually has the real one.
                     var (friendly, busName, description) = CameraNames.IsGeneric(reported) ? ReadPnpNames(link) : (null, null, null);
                     var name = CameraNames.Resolve(link, reported, friendly, busName, description);
+                    // A software camera (OBS Virtual Camera and the like) may give no symbolic link. It still has to be pickable and
+                    // remembered, so its name stands in as its identity.
+                    if (link.Length == 0) link = CameraNames.NameLinkPrefix + name;
                     devices.Add((new CameraInfo(name, link, CameraNames.Hardware(link)), activate));
                 }
                 catch

@@ -46,4 +46,16 @@ internal static class CameraListing
 
     /// <summary>A camera whose driver gives no name at all still gets a line to click.</summary>
     private static string NameOrFallback(string name) => string.IsNullOrWhiteSpace(name) ? "Unnamed camera" : name.Trim();
+
+    /// <summary>
+    /// What changed between two readings of the machine's cameras, by link (ignoring case): the names of the cameras that
+    /// appeared and of those that went. A virtual camera such as OBS shows up here the moment its program starts it.
+    /// </summary>
+    internal static (IReadOnlyList<string> Added, IReadOnlyList<string> Removed) Changes(IReadOnlyList<(string Link, string Name)> before, IReadOnlyList<(string Link, string Name)> after)
+    {
+        var was = new HashSet<string>(before.Select(camera => camera.Link), StringComparer.OrdinalIgnoreCase);
+        var now = new HashSet<string>(after.Select(camera => camera.Link), StringComparer.OrdinalIgnoreCase);
+        return (after.Where(camera => !was.Contains(camera.Link)).Select(camera => camera.Name).ToList(),
+                before.Where(camera => !now.Contains(camera.Link)).Select(camera => camera.Name).ToList());
+    }
 }

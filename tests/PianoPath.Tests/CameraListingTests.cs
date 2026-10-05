@@ -92,4 +92,27 @@ public sealed class CameraListingTests
         Assert.Null(rows[0].Picks);
         Assert.True(rows[0].Selected);
     }
+
+    [Fact]
+    public void ACameraThatStartsAppearsInTheChangesAndOneThatStopsLeaves()
+    {
+        (string, string)[] webcam = [("web", "Integrated Camera")];
+        (string, string)[] both = [("web", "Integrated Camera"), ("obs", "OBS Virtual Camera")];
+        var started = CameraListing.Changes(webcam, both);
+        Assert.Equal(new[] { "OBS Virtual Camera" }, started.Added.ToArray());
+        Assert.Empty(started.Removed);
+        var stopped = CameraListing.Changes(both, webcam);
+        Assert.Empty(stopped.Added);
+        Assert.Equal(new[] { "OBS Virtual Camera" }, stopped.Removed.ToArray());
+    }
+
+    [Fact]
+    public void NoChangeAndLinkCaseAreNotChanges()
+    {
+        (string, string)[] a = [("WEB", "Cam")];
+        (string, string)[] b = [("web", "Cam")];
+        var same = CameraListing.Changes(a, b);
+        Assert.Empty(same.Added);
+        Assert.Empty(same.Removed);
+    }
 }

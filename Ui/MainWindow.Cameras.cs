@@ -21,6 +21,13 @@ public partial class MainWindow
     /// <summary>A plug-in produces a burst of these messages while the driver loads; the list is read once, after the burst.</summary>
     private static readonly TimeSpan CameraScanDelay = TimeSpan.FromMilliseconds(900);
 
+    /// <summary>
+    /// A virtual camera (OBS Virtual Camera) joins the list when its program starts it, and Windows sends no device-change message
+    /// for that — nothing is plugged in. So the list is also read every few seconds, and when this window is brought to the front.
+    /// </summary>
+    private static readonly TimeSpan CameraPollInterval = TimeSpan.FromSeconds(3);
+
+    private DispatcherTimer? _cameraPollTimer;
     private DispatcherTimer? _cameraScanTimer;
     private bool _cameraScanning;
     private bool _cameraScanAgain;
@@ -32,6 +39,10 @@ public partial class MainWindow
         var handle = new WindowInteropHelper(this).Handle;
         HwndSource.FromHwnd(handle)?.AddHook(CameraDeviceHook);
         ScheduleCameraScan(TimeSpan.FromMilliseconds(250));
+        _cameraPollTimer = new DispatcherTimer { Interval = CameraPollInterval };
+        _cameraPollTimer.Tick += (_, _) => { if (!_closing && !_cameraScanning) StartCameraScan(); };
+        _cameraPollTimer.Start();
+        Activated += (_, _) => ScheduleCameraScan(TimeSpan.FromMilliseconds(150));
     }
 
     private IntPtr CameraDeviceHook(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
@@ -79,12 +90,17 @@ public partial class MainWindow
         var first = _cameraListSignature is null;
         if (!first && signature == _cameraListSignature && error == _cameraListError) return;
         _cameraListSignature = signature;
+        // Say what came or went — "Camera found: OBS Virtual Camera" — so a camera that appears by itself is noticed.
+        var (added, removed) = CameraListing.Changes(_cameraDevices.Where(device => device.Link.Length > 0).Select(device => (device.Link, device.Name)).ToList(),
+            list.Where(device => device.Link.Length > 0).Select(device => (device.Link, device.Name)).ToList());
         _cameraDevices = list;
         _cameraListError = error;
         _visualChoiceOptions[nameof(PianoVisualSettings.CameraSourceLink)] = CameraChoiceOptions(list);
         RefreshChoiceCaptions();
         RebuildCameraList();
         RefreshCameraOverlayStatus(announce: false);
+        var news = first ? "" : added.Count > 0 ? Loc.F("Camera found: {0}", string.Join(", ", added)) : removed.Count > 0 ? Loc.F("Camera removed: {0}", string.Join(", ", removed)) : "";
+        if (news.Length > 0) Loc.Set(SettingsSaveLabel, news);
         // The first reading only fills the picker: the overlay opened (or tried to) at start-up with its own list.
         if (first || !string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath)) return;
         var wanted = _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking || DecideAr().NeedsCamera;
