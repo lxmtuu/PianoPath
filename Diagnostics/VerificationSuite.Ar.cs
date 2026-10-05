@@ -310,10 +310,13 @@ internal static partial class VerificationSuite
         var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(70, 292), (1214, 268), (1236, 421), (52, 449)], cw, ch, out var problem);
         Assert(calibration is not null, $"The sample keyboard's corners must make a calibration ({problem}).");
         var ring = new CameraFrameRing();
-        var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
-        Array.Fill(buffer, (byte)90, 0, cw * ch * 4);
-        for (var i = 3; i < cw * ch * 4; i += 4) buffer[i] = 255;
-        ring.Publish(slot, cw, ch, Stopwatch.GetTimestamp());
+        void PublishGrey(long captureTicks)
+        {
+            var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
+            Array.Fill(buffer, (byte)90, 0, cw * ch * 4);
+            for (var i = 3; i < cw * ch * 4; i += 4) buffer[i] = 255;
+            ring.Publish(slot, cw, ch, captureTicks);
+        }
 
         var held = new HashSet<int> { 60, 61, 64 };
         var feed = new GpuStageFeed(); feed.SetStageHeight(360);
@@ -321,6 +324,7 @@ internal static partial class VerificationSuite
         feed.SetState([], 0, false, held);
         var started = Stopwatch.StartNew();
         var takes = 0;
+        var maxAge = 0.0;
         using var loop = new GpuRenderLoop(feed, forceWarp: true);
         // one take: the layers as asked, recorded by the render thread at the size asked, the newest frame copied out
         byte[] Take(bool mirror, bool withAr, int w, int h)
@@ -329,9 +333,15 @@ internal static partial class VerificationSuite
             feed.Ar = withAr ? new GpuArInput(calibration!, ArNoteStyle.Default, 1f) : null;
             var tap = new GpuRecordingTap(w, h, 30);
             feed.Recording = tap;
+            // a picture the camera handed over 80 ms ago: the take must count it once, and at least that old
+            PublishGrey(Stopwatch.GetTimestamp() - Stopwatch.Frequency * 80 / 1000);
             var wait = Stopwatch.StartNew();
             while (tap.Serial < 3 && loop.Error is null && wait.Elapsed.TotalSeconds < 30) Thread.Sleep(20);
             Assert(loop.Error is null && tap.Serial >= 3, $"The render loop should record {w}×{h} frames with the camera layer on ({loop.Error}, {tap.Serial} frames).");
+            var age = tap.CameraAge.Snapshot;
+            Assert(age.Frames == 1 && age.LastMilliseconds >= 80 && age.LastMilliseconds < 80 + 1500 && age.WorstMilliseconds == age.LastMilliseconds,
+                $"A take should count the 80 ms old camera picture once, at least that old ({age.Frames} frames, last {age.LastMilliseconds:0} ms).");
+            maxAge = Math.Max(maxAge, age.LastMilliseconds - 80);
             byte[]? copy = null;
             tap.TryRead(frame => copy = (byte[])frame.Clone());
             feed.Recording = null;
@@ -367,7 +377,8 @@ internal static partial class VerificationSuite
             foreach (var (name, at) in new[] { ("D4 front", At(layout.CenterX(62), .85)), ("G5 front", At(layout.CenterX(79), .85)), ("the air above C4", At(layout.CenterX(60), -.3)), ("the sky", ((int)sky.X, (int)sky.Y)) })
                 Assert(Change(at) <= 4, $"Only held keys light up in a take of {what}: {name} changed by {Change(at)}.");
         }
-        Results.Add($"PASS ar recording: {takes} takes (stage shape, square with bars, mirrored) hold the camera picture and the lit keys where they are in each take, read back from the render thread's own frames in {started.Elapsed.TotalSeconds:0.0} s.");
+        Assert(loop.CameraAge.Frames >= 3 && loop.CameraAge.WorstMilliseconds >= 80, $"The render loop should have counted the pictures it drew ({loop.CameraAge.Frames} frames, worst {loop.CameraAge.WorstMilliseconds:0} ms).");
+        Results.Add($"PASS ar recording: {takes} takes (stage shape, square with bars, mirrored) hold the camera picture and the lit keys where they are in each take, read back from the render thread's own frames in {started.Elapsed.TotalSeconds:0.0} s; each counted its 80 ms old picture once (the app added at most {maxAge:0} ms before it was drawn).");
     }
 
     /// <summary>

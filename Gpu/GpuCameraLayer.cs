@@ -36,6 +36,8 @@ internal sealed class GpuCameraTexture : IDisposable
     internal int Height { get; private set; }
     /// <summary>Sequence number of the frame now in the texture (0 before the first).</summary>
     internal long Sequence { get; private set; }
+    /// <summary>When the frame now in the texture arrived from the camera (<see cref="System.Diagnostics.Stopwatch.GetTimestamp"/>); 0 before the first.</summary>
+    internal long CaptureTicks { get; private set; }
     /// <summary>How many times the texture has been (re)created; a steady camera creates it once.</summary>
     internal int Creations { get; private set; }
     /// <summary>How many frames have been written into it.</summary>
@@ -70,6 +72,7 @@ internal sealed class GpuCameraTexture : IDisposable
         }
         finally { context.Unmap(_texture, 0); }
         Sequence = frame.Sequence;
+        CaptureTicks = frame.CaptureTicks;
         Uploads++;
         return true;
     }
@@ -77,6 +80,6 @@ internal sealed class GpuCameraTexture : IDisposable
     public void Dispose()
     {
         View?.Dispose(); _texture?.Dispose();
-        View = null; _texture = null; Width = Height = 0;
+        View = null; _texture = null; Width = Height = 0; Sequence = 0; CaptureTicks = 0;
     }
 }

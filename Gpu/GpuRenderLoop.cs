@@ -213,6 +213,11 @@ internal sealed class GpuRenderLoop : IDisposable
         }
     }
 
+    private readonly CameraAgeMeter _cameraAge = new();
+
+    /// <summary>How long camera pictures wait in the app before the stage first draws them; all zero without a camera layer.</summary>
+    internal CameraAge CameraAge => _cameraAge.Snapshot;
+
     internal bool WaitUntilStarted(TimeSpan timeout) => _started.Wait(timeout);
 
     private void Run()
@@ -297,6 +302,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 {
                     // a new take (or the end of one): start its clock now, and free the old frame's memory
                     recording = tap; nextRecordFrame = clock.Elapsed.TotalSeconds;
+                    if (tap is not null && gpu.CameraTexture is { } showing) tap.CameraAge.Skip(showing.Sequence);          // a picture already on show is not part of this take's delays
                     recordReadback.Dispose(); recordTarget.Dispose();
                 }
                 if (!hasEmbedded && !hasWindow && tap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
@@ -304,6 +310,14 @@ internal sealed class GpuRenderLoop : IDisposable
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
                 gpu.UpdateCamera(_feed.Camera);
+                var cameraTexture = gpu.CameraTexture;
+                if (cameraTexture is null) { _cameraAge.Reset(); tap?.CameraAge.Reset(); }
+                else
+                {
+                    var ticks = Stopwatch.GetTimestamp();
+                    _cameraAge.Observe(cameraTexture.Sequence, cameraTexture.CaptureTicks, ticks, Stopwatch.Frequency);
+                    tap?.CameraAge.Observe(cameraTexture.Sequence, cameraTexture.CaptureTicks, ticks, Stopwatch.Frequency);
+                }
                 gpu.UpdateAr(_feed.Ar);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
