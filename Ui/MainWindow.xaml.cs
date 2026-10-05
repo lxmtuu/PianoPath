@@ -1229,6 +1229,27 @@ public partial class MainWindow : Window
     private WriteableBitmap? _cameraBitmap;
     private DispatcherTimer? _cameraUiTimer;
     private string _cameraSignature = "";
+    private ArCalibrationSession? _arCalibration;
+    private string _arSource = "";
+    private int _arWidth, _arHeight;
+
+    /// <summary>
+    /// The calibration of the camera that is open, kept in the settings folder next to everything else. It is made on first
+    /// use, so a check that points the settings folder somewhere temporary gets a store there.
+    /// </summary>
+    internal ArCalibrationSession ArCalibration => _arCalibration ??= new ArCalibrationSession(new ArCalibrationStore(PianoVisualSettingsStore.SettingsDirectory));
+
+    /// <summary>
+    /// Tells the calibration which source is open (null for none) and brings it up to date with the keyboard size in the
+    /// settings. It is safe to call whenever anything changes; nothing happens unless the source, its picture size or the
+    /// keyboard size is different from last time.
+    /// </summary>
+    private void ApplyArSource(string? source, int width, int height)
+    {
+        _arSource = source ?? ""; _arWidth = width; _arHeight = height;
+        if (_arSource.Length == 0) _arCalibration?.Clear();       // nothing open and nothing made yet: no reason to read the file
+        else ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice);
+    }
 
     /// <summary>
     /// What the overlay is doing right now — the camera it opened, the file it is looping, or why neither
@@ -1250,6 +1271,8 @@ public partial class MainWindow : Window
     /// </summary>
     private void SyncCameraOverlay()
     {
+        // The keyboard size may have changed with this very settings change; the calibration follows it.
+        ApplyArSource(_arSource, _arWidth, _arHeight);
         // The reader opens for either layer: the picture can stay hidden while the hand is still followed, so a
         // user who wants only the key markers never has to put the camera on the stage to get them.
         var wanted = string.Join("|", _visualSettings.ShowCameraOverlay || _visualSettings.ShowHandTracking,
@@ -1277,6 +1300,7 @@ public partial class MainWindow : Window
             return;
         }
         _camera = reader;
+        ApplyArSource(reader.Source, reader.Width, reader.Height);
         CameraStatus = live
             ? Loc.F("Live: {0} · {1}", reader.Label, reader.Mode.Label)
             : Loc.F("Video: {0} · {1} × {2}", reader.Label, reader.Width, reader.Height);
@@ -1310,6 +1334,7 @@ public partial class MainWindow : Window
         _camera = null;
         if (thread is { IsAlive: true }) thread.Join(TimeSpan.FromMilliseconds(250));
         _cameraFrames.Clear();
+        ApplyArSource(null, 0, 0);
         Stage.SetCameraFrame(null);
         Stage.SetHandReading(null);
         HandStatus = "";

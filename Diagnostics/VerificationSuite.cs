@@ -938,6 +938,22 @@ internal static partial class VerificationSuite
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         SetField(window, "_cameraSignature", string.Join("|", visualSettings.ShowCameraOverlay, visualSettings.CameraSourceLink, visualSettings.CameraVideoPath));
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        // The AR calibration follows what is open: nothing without a camera, the keyboard size of the settings, the settings folder.
+        var arSession = window.ArCalibration;
+        Assert(arSession.Store.FilePath.StartsWith(PianoVisualSettingsStore.SettingsDirectory, StringComparison.OrdinalIgnoreCase),
+            "The AR calibrations are kept in the settings folder.");
+        Assert(arSession.State == ArCalibrationState.NoSource, "With no camera open there is nothing to calibrate against.");
+        var arSize = visualSettings.KeyboardSize;
+        Invoke(window, "ApplyArSource", "verification camera", 1280, 720);
+        Assert(arSession.State == ArCalibrationState.NotCalibrated && arSession.Snapshot.KeyCount == visualSettings.KeyboardLayoutChoice.KeyCount,
+            "An opened camera that was never calibrated asks for a calibration for the keyboard in the settings.");
+        visualSettings.KeyboardSize = visualSettings.KeyboardSize == "61" ? "49" : "61";
+        Invoke(window, "SyncCameraOverlay");
+        Assert(arSession.Snapshot.KeyCount == visualSettings.KeyboardLayoutChoice.KeyCount,
+            "Changing the keyboard size must move the calibration to the new size's.");
+        visualSettings.KeyboardSize = arSize;
+        Invoke(window, "ApplyArSource", null!, 0, 0);
+        Assert(arSession.State == ArCalibrationState.NoSource, "Closing the camera leaves no calibration in force.");
         Results.Add("PASS camera overlay dock: the switch, the camera and corner pickers, the size/opacity/key sliders, the clamp and the corner fallback, the pump's key and the frame drawn in the chosen corner of the rendered stage.");
     }
 
