@@ -386,6 +386,78 @@ internal static partial class VerificationSuite
     /// of that long ago puts them, and a key the player presses lights up that much later on the render thread's clock; with no
     /// delay nothing moves. Read back from the rendered frames on WARP.
     /// </summary>
+    /// <summary>
+    /// The delay measurement on the real clock and real threads: a camera thread publishing frames into a ring whose tap feeds the
+    /// measurement, a thread playing twenty notes and a picture that flashes 80 ms after each, the way a camera that is 80 ms
+    /// behind would show a hand coming down. It must find about 80 ms, add the app's share, and leave the ring working.
+    /// </summary>
+    private static void VerifyArLatency()
+    {
+        const int w = 160, h = 90;
+        var ring = new CameraFrameRing();
+        var measurement = new LatencyMeasurement(Stopwatch.Frequency);
+        var region = new PixelRegion(30, 20, 130, 75);
+        var random = new Random(1234);
+        var notes = new List<double>();
+        for (var t = 1.0; notes.Count < LatencyMeasurement.TargetPresses;) { t += .4 + random.NextDouble() * .5; notes.Add(t); }
+        const double Delay = .08;
+        var started = Stopwatch.GetTimestamp();
+        double Now() => (Stopwatch.GetTimestamp() - started) / (double)Stopwatch.Frequency;
+
+        measurement.Start(region, started);
+        ring.FrameTap = measurement.AddFrame;
+        var quit = false;
+        var next = 0;
+        var camera = new Thread(() =>
+        {
+            var seen = 0L;
+            while (!Volatile.Read(ref quit))
+            {
+                var now = Now();
+                var buffer = ring.BeginWrite(w * h * 4, out var slot);
+                var flash = notes.Any(note => now >= note + Delay && now < note + Delay + .02);
+                for (var y = 0; y < h; y++)
+                    for (var x = 0; x < w; x++)
+                    {
+                        var i = (y * w + x) * 4;
+                        var value = (byte)(60 + (flash && x is >= 50 and < 110 && y is >= 30 and < 60 ? 150 : 0));
+                        buffer[i] = buffer[i + 1] = buffer[i + 2] = value; buffer[i + 3] = 255;
+                    }
+                ring.Publish(slot, w, h, Stopwatch.GetTimestamp());
+                if (ring.TryTake(out var taken)) seen = taken.Sequence;                      // the drawing thread, as far as the ring is concerned
+                Thread.Sleep(10);
+            }
+            Volatile.Write(ref quit, true);
+            _ = seen;
+        }) { IsBackground = true };
+        camera.Start();
+
+        LatencyReport? report = null;
+        var age = new CameraAge(100, 10, 14, 30);
+        while (report is null && Now() < 40)
+        {
+            var now = Now();
+            while (next < notes.Count && notes[next] <= now) { measurement.NoteOn(started + (long)(notes[next] * Stopwatch.Frequency)); next++; }
+            report = measurement.Poll(Stopwatch.GetTimestamp(), age);
+            Thread.Sleep(5);
+        }
+        Volatile.Write(ref quit, true);
+        camera.Join(5000);
+        ring.FrameTap = null;
+
+        Assert(report is not null, $"The measurement should have finished within 40 s ({measurement.Presses} presses, {ring.Published} frames).");
+        var estimate = report!.Estimate;
+        Assert(estimate.IsMeasured, $"The delay should have been measured: {estimate} ({ring.Published} frames).");
+        // the camera thread sleeps in steps of about 15 ms here, so a frame can be that late in showing what it saw
+        Assert(Math.Abs(estimate.DelaySeconds - Delay) <= .05, $"The delay found ({estimate.DelaySeconds * 1000:0} ms) should be within 50 ms of the 80 the picture was given.");
+        Assert(report.AppAgeMilliseconds == 14 && report.SuggestedMilliseconds == (int)Math.Round(estimate.DelaySeconds * 1000 + 14), $"The suggestion ({report.SuggestedMilliseconds} ms) should be the delay plus the app's 14 ms.");
+        Assert(measurement.Presses == LatencyMeasurement.TargetPresses && measurement.State == MeasurementState.Finished, "The run should be over with twenty presses.");
+        Results.Add($"NOTE VerifyArLatency: found {estimate.DelaySeconds * 1000:0} ms of 80 ({estimate.Confidence:0.00} sure, {ring.Published} frames), suggested {report.SuggestedMilliseconds} ms.");
+        var before = ring.Published;
+        var buffer2 = ring.BeginWrite(w * h * 4, out var slot2); ring.Publish(slot2, w, h, 1);
+        Assert(ring.Published == before + 1 && ring.TryTake(out _), "The ring should keep working after the tap is taken off.");
+    }
+
     private static void VerifyArDelay()
     {
         const int cw = 1280, ch = 720, width = 640, height = 360;
@@ -545,6 +617,8 @@ internal static partial class VerificationSuite
         Invoke(window, "ApplyArSource", null!, 0, 0); ring.Clear();
         Open(null);
         Assert(opened == 0, "Without a camera the calibration window must not open.");
+        window.MeasureArDelay();
+        Assert(!window.MeasuringArDelay, "Without the overlay on marked keys, a live camera and a MIDI keyboard no measurement may start.");
         Invoke(window, "ApplyArSource", "verification camera", W, H);
         Open(null);
         Assert(opened == 0, "A camera that has delivered no picture yet must not open the calibration window.");

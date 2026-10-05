@@ -111,6 +111,7 @@ public partial class MainWindow : Window
             // Audio note events are queued without taking the synth's render lock. The audio thread consumes
             // them at the next buffer, so a heavy sample block cannot stall WinMM's MIDI callback.
             if (on) _audio.NoteOn(pitch, velocity); else _audio.NoteOff(pitch);
+            if (on) _latency.NoteOn(System.Diagnostics.Stopwatch.GetTimestamp());       // timed here, on the MIDI thread, as close to the key as it gets
             // The GPU gets the note immediately; only its WPF overlay work is batched below.
             var direct = ForwardMidiToGpu(pitch, velocity, on);
             QueueMidiUiEvent(new PendingMidiUiEvent(pitch, velocity, on, direct));
@@ -1442,6 +1443,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void PumpCameraFrame()
     {
+        PollLatency();
         if (_arPlan.CameraLayer)               // the engine's render thread is the ring's reader while the overlay is drawn
         {
             if (++_arStatusTicks % 30 == 0) { RefreshArStatus(); RefreshCameraOverlayStatus(announce: false); }

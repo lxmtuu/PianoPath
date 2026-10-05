@@ -72,6 +72,7 @@
     <Compile Include="..\..\Camera\CameraAgeMeter.cs" Link="Product\Camera\CameraAgeMeter.cs" />
     <Compile Include="..\..\Camera\ArKeyHistory.cs" Link="Product\Camera\ArKeyHistory.cs" />
     <Compile Include="..\..\Camera\LatencyProbe.cs" Link="Product\Camera\LatencyProbe.cs" />
+    <Compile Include="..\..\Camera\LatencyText.cs" Link="Product\Camera\LatencyText.cs" />
     <Compile Include="..\..\Camera\MotionEnergy.cs" Link="Product\Camera\MotionEnergy.cs" />
   </ItemGroup>
 

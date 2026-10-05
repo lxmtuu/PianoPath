@@ -560,7 +560,8 @@ public partial class MainWindow
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
         SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound is never delayed. Zero shows everything at once.");
-        ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"));
+        ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"), ("MEASURE DELAY", MeasureArDelay_Click, "IconMotion"));
+        Note(ar, "Measure how late the camera's picture is: press about twenty keys on your keyboard while the camera watches your hands, and the camera delay is set to match.");
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(ar, _arStatus, null, "ar overlay status calibration camera keys");
 
@@ -585,6 +586,8 @@ public partial class MainWindow
     {
         var snapshot = _arCalibration?.Snapshot ?? NoArSource;
         var keys = _visualSettings.KeyboardLayoutChoice.KeyCount;
+        if (MeasuringArDelay) return LatencyText.Collecting(_latency.Presses);
+        if (_latencyText.Length > 0 && _arPlan.ArLayer) return _latencyText;          // what the last run found, until the overlay stops drawing
         return _arPlan.Status switch
         {
             ArStatus.Off => Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."),
@@ -605,7 +608,7 @@ public partial class MainWindow
     private void RefreshArStatus()
     {
         if (_arStatus is null) return;
-        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, _visualSettings.KeyboardSize, _visualSettings.ArMode, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
+        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
         if (key == _arStatusKey) return;
         _arStatusKey = key;
         Loc.Bind(_arStatus, ArStatusText);
