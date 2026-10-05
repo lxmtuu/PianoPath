@@ -293,6 +293,84 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
+    /// AR-1.7, a take made from the GPU stage holds what the screen shows: the camera's picture and the AR layer over it, drawn by the
+    /// render thread alone at the take's own size. Three takes (the stage's shape, a square one with bars, and the picture mirrored), each
+    /// read back and set against the same take without the AR layer: the picture is there, the lit keys are tinted where they are
+    /// in the picture of that take, and nothing else changes.
+    /// </summary>
+    private static void VerifyArRecording()
+    {
+        const int cw = 1280, ch = 720;
+        var quiet = new PianoVisualSettings
+        {
+            BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = false,
+            ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowLightBeams = false, ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+        };
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(70, 292), (1214, 268), (1236, 421), (52, 449)], cw, ch, out var problem);
+        Assert(calibration is not null, $"The sample keyboard's corners must make a calibration ({problem}).");
+        var ring = new CameraFrameRing();
+        var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
+        Array.Fill(buffer, (byte)90, 0, cw * ch * 4);
+        for (var i = 3; i < cw * ch * 4; i += 4) buffer[i] = 255;
+        ring.Publish(slot, cw, ch, Stopwatch.GetTimestamp());
+
+        var held = new HashSet<int> { 60, 61, 64 };
+        var feed = new GpuStageFeed(); feed.SetStageHeight(360);
+        feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+        feed.SetState([], 0, false, held);
+        var started = Stopwatch.StartNew();
+        var takes = 0;
+        using var loop = new GpuRenderLoop(feed, forceWarp: true);
+        // one take: the layers as asked, recorded by the render thread at the size asked, the newest frame copied out
+        byte[] Take(bool mirror, bool withAr, int w, int h)
+        {
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, mirror, 1f);
+            feed.Ar = withAr ? new GpuArInput(calibration!, ArNoteStyle.Default, 1f) : null;
+            var tap = new GpuRecordingTap(w, h, 30);
+            feed.Recording = tap;
+            var wait = Stopwatch.StartNew();
+            while (tap.Serial < 3 && loop.Error is null && wait.Elapsed.TotalSeconds < 30) Thread.Sleep(20);
+            Assert(loop.Error is null && tap.Serial >= 3, $"The render loop should record {w}×{h} frames with the camera layer on ({loop.Error}, {tap.Serial} frames).");
+            byte[]? copy = null;
+            tap.TryRead(frame => copy = (byte[])frame.Clone());
+            feed.Recording = null;
+            takes++;
+            return copy!;
+        }
+        foreach (var (w, h, mirror) in new[] { (320, 180, false), (240, 240, false), (320, 180, true) })
+        {
+            var lit = Take(mirror, true, w, h);
+            var plain = Take(mirror, false, w, h);
+            var view = new ArView(cw, ch, w, h, PictureFit.Fit, mirror);
+            var layout = calibration!.Layout;
+            (int X, int Y) At(double u, double v) { var p = calibration.ToPicture(u, v); var o = view.ToOutput(p.X, p.Y); return ((int)Math.Floor(o.X), (int)Math.Floor(o.Y)); }
+            int Change((int X, int Y) at)
+            {
+                Assert(at.X >= 0 && at.Y >= 0 && at.X < w && at.Y < h, $"The probe ({at.X},{at.Y}) must be on the {w}×{h} take.");
+                var i = (at.Y * w + at.X) * 4;
+                return Math.Max(Math.Abs(lit[i] - plain[i]), Math.Max(Math.Abs(lit[i + 1] - plain[i + 1]), Math.Abs(lit[i + 2] - plain[i + 2])));
+            }
+            var what = $"{w}×{h}{(mirror ? " mirrored" : "")}";
+            // the camera's picture is in the take (grey 90), and where the picture does not reach the stage's own backdrop shows
+            var sky = view.ToOutput(cw / 2.0, 100);
+            var skyAt = ((int)sky.Y * w + (int)sky.X) * 4;
+            Assert(Math.Abs(plain[skyAt] - 90) <= 4 && Math.Abs(plain[skyAt + 1] - 90) <= 4 && Math.Abs(plain[skyAt + 2] - 90) <= 4,
+                $"A take of {what} should hold the camera's picture (got {plain[skyAt]},{plain[skyAt + 1]},{plain[skyAt + 2]}).");
+            if (view.Top > 10)
+            {
+                var bar = (3 * w + w / 2) * 4;
+                Assert(plain[bar] < 40 && plain[bar + 1] < 40 && plain[bar + 2] < 40, $"The bar above the picture of a {what} take should show the dark backdrop.");
+            }
+            foreach (var (name, at) in new[] { ("C4 front", At(layout.CenterX(60), .85)), ("C#4 black key", At(layout.CenterX(61), .3)), ("E4 front", At(layout.CenterX(64), .85)) })
+                Assert(Change(at) > 25, $"A held key must be tinted in a take of {what}: {name} changed by {Change(at)}.");
+            foreach (var (name, at) in new[] { ("D4 front", At(layout.CenterX(62), .85)), ("G5 front", At(layout.CenterX(79), .85)), ("the air above C4", At(layout.CenterX(60), -.3)), ("the sky", ((int)sky.X, (int)sky.Y)) })
+                Assert(Change(at) <= 4, $"Only held keys light up in a take of {what}: {name} changed by {Change(at)}.");
+        }
+        Results.Add($"PASS ar recording: {takes} takes (stage shape, square with bars, mirrored) hold the camera picture and the lit keys where they are in each take, read back from the render thread's own frames in {started.Elapsed.TotalSeconds:0.0} s.");
+    }
+
+    /// <summary>
     /// AR-1.5, the calibration window end to end on the real window: it refuses to open without a camera, a picture or the right
     /// size; shows the camera's picture the way the stage shows it; takes four clicks to a calibration that is saved for this
     /// camera; keeps Done shut on corners that cannot be used; saves nothing when cancelled or when the camera changed behind
