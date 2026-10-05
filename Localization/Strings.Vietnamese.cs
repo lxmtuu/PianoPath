@@ -201,7 +201,6 @@ internal static class StringsVietnamese
         ["Camera overlay source: the live camera"] = "Nguồn lớp phủ: camera trực tiếp",
         ["Camera overlay source: {0}"] = "Nguồn lớp phủ: {0}",
         ["Camera tilt"] = "Góc nghiêng camera",
-        ["Camera {0}"] = "Camera {0}",
         ["Cancel"] = "Huỷ",
         ["Cancel download"] = "Huỷ tải xuống",
         ["Change the color of this track"] = "Đổi màu của track này",

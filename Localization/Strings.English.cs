@@ -201,7 +201,6 @@ internal static class StringsEnglish
         ["Camera overlay source: the live camera"] = "Camera overlay source: the live camera",
         ["Camera overlay source: {0}"] = "Camera overlay source: {0}",
         ["Camera tilt"] = "Camera tilt",
-        ["Camera {0}"] = "Camera {0}",
         ["Cancel"] = "Cancel",
         ["Cancel download"] = "Cancel download",
         ["Change the color of this track"] = "Change the color of this track",

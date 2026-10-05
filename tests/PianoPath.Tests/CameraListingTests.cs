@@ -65,7 +65,23 @@ public sealed class CameraListingTests
     public void ACameraWithNoNameStillGetsALineToClick()
     {
         var rows = CameraListing.Build(["", " "], ["x", "y"], "", "");
-        Assert.Equal(new[] { "Camera 1", "Camera 2" }, rows.Skip(1).Select(row => row.Name).ToArray());
+        Assert.Equal(new[] { "Unnamed camera", "Unnamed camera (2)" }, rows.Skip(1).Select(row => row.Name).ToArray());
+    }
+
+    [Fact]
+    public void TwoCamerasWithTheSameNameAreToldApartInTheList()
+    {
+        var rows = CameraListing.Build(["HD Webcam", "HD Webcam"], ["a", "b"], "", "");
+        Assert.Equal(new[] { "HD Webcam", "HD Webcam (2)" }, rows.Skip(1).Select(row => row.Name).ToArray());
+        Assert.Equal("HD Webcam", rows[0].Picks);
+    }
+
+    [Fact]
+    public void EachLineCarriesTheHardwareOfItsCamera()
+    {
+        var rows = CameraListing.Build(["A", "B"], ["", "b"], "", "", hardware: ["USB · VID_1&PID_2", "USB · VID_3&PID_4"]);
+        Assert.Equal("", rows[0].Hardware);
+        Assert.Equal("USB · VID_3&PID_4", rows[1].Hardware);   // the camera without a link is left out, so "b" keeps ITS hardware
     }
 
     [Fact]

@@ -6,7 +6,8 @@ namespace PianoPath;
 /// <summary>One camera the machine reports: the name a person sees and the link used to open it.</summary>
 /// <param name="Name">Friendly name from the driver, e.g. "HD Webcam".</param>
 /// <param name="Link">Symbolic link; the identity stored in the settings, empty when the driver gave none.</param>
-internal sealed record CameraInfo(string Name, string Link);
+/// <summary>A camera the machine reports: its name (never just a number — see <see cref="CameraNames"/>), its symbolic link, and the hardware behind it.</summary>
+internal sealed record CameraInfo(string Name, string Link, string Hardware = "");
 
 /// <summary>
 /// Reads video frames out of a live camera or a video file, always as top-down 32-bit BGRA.
@@ -416,8 +417,12 @@ internal sealed partial class CameraFrameReader : IDisposable
                 try
                 {
                     if (Marshal.GetObjectForIUnknown(pointer) is not Mf.IMFActivate activate) continue;
-                    devices.Add((new CameraInfo(Attribute(activate, Mf.FriendlyName) ?? Loc.F("Camera {0}", index + 1),
-                        Attribute(activate, Mf.SymbolicLink) ?? ""), activate));
+                    var link = Attribute(activate, Mf.SymbolicLink) ?? "";
+                    var reported = Attribute(activate, Mf.FriendlyName);
+                    // A driver may leave the name empty or give "Camera 1"; Windows' own record of the device usually has the real one.
+                    var (friendly, busName, description) = CameraNames.IsGeneric(reported) ? ReadPnpNames(link) : (null, null, null);
+                    var name = CameraNames.Resolve(link, reported, friendly, busName, description);
+                    devices.Add((new CameraInfo(name, link, CameraNames.Hardware(link)), activate));
                 }
                 catch
                 {
@@ -431,15 +436,50 @@ internal sealed partial class CameraFrameReader : IDisposable
             if (activates != IntPtr.Zero) Marshal.FreeCoTaskMem(activates);
             Release(attributes);
         }
+        // Two of the same webcam keep their names apart: "HD Webcam", "HD Webcam (2)".
+        var unique = CameraNames.Disambiguate(devices.Select(device => device.Item1.Name).ToList());
+        for (var index = 0; index < devices.Count; index++) devices[index] = (devices[index].Item1 with { Name = unique[index] }, devices[index].Item2);
         return devices;
+    }
+
+    /// <summary>
+    /// What Windows itself calls the device behind a capture link, read from the device's registry entry
+    /// (<c>HKLM\SYSTEM\CurrentControlSet\Enum\…</c>): its friendly name, the product string the hardware reports, and the
+    /// driver's description. Any of them is null when the entry or the value is missing; nothing here may throw.
+    /// </summary>
+    private static (string? Friendly, string? Bus, string? Description) ReadPnpNames(string link)
+    {
+        try
+        {
+            var path = CameraNames.InstancePath(link);
+            if (path is null) return (null, null, null);
+            using var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey("SYSTEM\\CurrentControlSet\\Enum\\" + path);
+            if (key is null) return (null, null, null);
+            string? Read(string value) => key.GetValue(value) as string is { Length: > 0 } text ? text : null;
+            return (Read("FriendlyName"), CameraNames.CleanDescription(Read("BusReportedDeviceDesc")) is { Length: > 0 } bus ? bus : null,
+                CameraNames.CleanDescription(Read("DeviceDesc")) is { Length: > 0 } description ? description : null);
+        }
+        catch { return (null, null, null); }
     }
 
     /// <summary>Reads a string attribute the way Media Foundation hands it out: an allocated wide string.</summary>
     private static string? Attribute(object attributes, Guid key)
     {
-        if (attributes.GetAllocatedStringKey(key, out var pointer, out _) != Mf.S_OK || pointer == IntPtr.Zero) return null;
-        try { return Marshal.PtrToStringUni(pointer); }
-        finally { Marshal.FreeCoTaskMem(pointer); }
+        if (attributes.GetAllocatedStringKey(key, out var pointer, out _) == Mf.S_OK && pointer != IntPtr.Zero)
+        {
+            try { return Marshal.PtrToStringUni(pointer); }
+            finally { Marshal.FreeCoTaskMem(pointer); }
+        }
+        // The other way to read a string: ask how long it is, then for that many characters.
+        try
+        {
+            var local = key;
+            var typed = (Mf.IMFAttributes)attributes;
+            if (typed.GetStringLength(ref local, out var length) != Mf.S_OK || length <= 0) return null;
+            var text = new System.Text.StringBuilder(length + 1);
+            return typed.GetString(ref local, text, text.Capacity, out _) == Mf.S_OK ? text.ToString() : null;
+        }
+        catch { return null; }
     }
 
     private static void EnsureStarted()

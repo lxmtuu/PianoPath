@@ -136,7 +136,7 @@ public partial class MainWindow
         if (_cameraList is null) return;
         var listed = _cameraDevices.Where(device => device.Link.Length > 0).ToList();
         var running = _camera is { IsLive: true } live ? live.Source : "";
-        var rows = CameraListing.Build(listed.Select(device => device.Name).ToList(), listed.Select(device => device.Link).ToList(), running, _visualSettings.CameraSourceLink);
+        var rows = CameraListing.Build(listed.Select(device => device.Name).ToList(), listed.Select(device => device.Link).ToList(), running, _visualSettings.CameraSourceLink, listed.Select(device => device.Hardware).ToList());
         _cameraListLoading = true;
         try
         {
@@ -165,14 +165,16 @@ public partial class MainWindow
         else
         {
             name.Text = row.Name;                       // the camera's own name, exactly as Windows reports it
-            Loc.Set(detail, row.Kind switch
+            var kindText = row.Kind switch
             {
                 CameraKind.Infrared => "Infrared camera: made for face login, not for a picture of the keys",
                 CameraKind.Virtual => "Virtual camera: shows another program's picture",
                 _ => "Colour camera",
-            });
+            };
+            // The hardware ("USB · VID_046D&PID_0825") tells two cameras apart even when Windows names them alike.
+            Loc.Bind(detail, () => row.Hardware.Length > 0 ? $"{Loc.T(kindText)} · {row.Hardware}" : Loc.T(kindText));
         }
-        name.ToolTip = row.IsAutomatic ? null : row.Name;
+        name.ToolTip = row.IsAutomatic ? null : row.Hardware.Length > 0 ? $"{row.Name}\n{row.Hardware}" : row.Name;
         AutomationProperties.SetName(grid, row.IsAutomatic ? Loc.T("Automatic") : row.Name);
         text.Children.Add(name); text.Children.Add(detail);
         grid.Children.Add(text);
