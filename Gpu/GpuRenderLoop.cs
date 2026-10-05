@@ -304,6 +304,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
                 gpu.UpdateCamera(_feed.Camera);
+                gpu.UpdateAr(_feed.Ar);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
@@ -456,6 +457,7 @@ internal sealed class GpuRenderLoop : IDisposable
             started = timer.Elapsed.TotalMilliseconds;
             renderer.UpdateBackground(feed.Background);
             renderer.UpdateCamera(feed.Camera);
+            renderer.UpdateAr(feed.Ar);
             renderer.UpdateAtlas(feed.LabelAtlas);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
             drawn += timer.Elapsed.TotalMilliseconds - started;

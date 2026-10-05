@@ -144,6 +144,92 @@ internal static partial class VerificationSuite
         var centre = ((height / 2) * width + width / 2) * 4;
         Assert(chroma[centre + 1] > 240 && chroma[centre] < 10 && chroma[centre + 2] < 10, "A chroma-key frame must stay pure green; the camera layer is not drawn into it.");
 
+        // ---- AR-1.3: notes projected onto the keyboard in the picture ----------------------------------------
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(70, 292), (1214, 268), (1236, 421), (52, 449)], 1280, 720, out var calibrationProblem);
+        Assert(calibration is not null, $"The sample keyboard's corners must make a calibration ({calibrationProblem}).");
+        var arView = new ArView(1280, 720, width, height, PictureFit.Fit, false);
+        static void PublishGrey(CameraFrameRing ring, int w, int h)
+        {
+            var buffer = ring.BeginWrite(w * h * 4, out var slot);
+            Array.Fill(buffer, (byte)90, 0, w * h * 4);
+            for (var i = 3; i < w * h * 4; i += 4) buffer[i] = 255;
+            ring.Publish(slot, w, h, Stopwatch.GetTimestamp());
+        }
+        var arNotes = new List<NoteEvent>
+        {
+            new() { Pitch = 66, Start = 11.2, Duration = .5 },    // black, on its way
+            new() { Pitch = 72, Start = 10.5, Duration = .5 },
+            new() { Pitch = 67, Start = 9.8, Duration = 1 },      // already sounding
+            new() { Pitch = 60, Start = 11, Duration = 1 },
+            new() { Pitch = 48, Start = 12.9, Duration = .5 },    // not in reach yet
+        };
+        arNotes.Sort((a, b) => a.Start.CompareTo(b.Start));
+        GpuStageFeed MakeArFeed(GpuCameraInput? camera, GpuArInput? ar, bool playing = true)
+        {
+            var feed = MakeFeed(camera);
+            feed.SetState(arNotes, 10, playing, new HashSet<int>());
+            feed.Ar = ar;
+            return feed;
+        }
+        static (double X, double Y) Blend(ArPatch patch, double s, double t)
+        {
+            double weight = 0, x = 0, y = 0;
+            for (var i = 0; i < 4; i++)
+            {
+                var lambda = i switch { 0 => (1 - s) * (1 - t), 1 => s * (1 - t), 2 => s * t, _ => (1 - s) * t };
+                weight += lambda * patch[i].W; x += lambda * patch[i].W * patch[i].X; y += lambda * patch[i].W * patch[i].Y;
+            }
+            return (x / weight, y / weight);
+        }
+        static (int Spread, int Off) Look(byte[] pixels, int w, int h, (double X, double Y) at)
+        {
+            var px = Math.Clamp((int)Math.Floor(at.X), 0, w - 1); var py = Math.Clamp((int)Math.Floor(at.Y), 0, h - 1);
+            var i = (py * w + px) * 4;
+            int blue = pixels[i], green = pixels[i + 1], red = pixels[i + 2];
+            return (Math.Max(red, Math.Max(green, blue)) - Math.Min(red, Math.Min(green, blue)), Math.Max(Math.Abs(red - 90), Math.Max(Math.Abs(green - 90), Math.Abs(blue - 90))));
+        }
+
+        var flatRing = new CameraFrameRing(); PublishGrey(flatRing, 1280, 720);
+        var flatInput = new GpuCameraInput(flatRing, PictureFit.Fit, false, 1f);
+        var arInput = new GpuArInput(calibration!, ArNoteStyle.Default, 1f);
+        var expected = new List<ArNoteShape>();
+        ArNotes.Build(calibration!, arView, arNotes, 10, 1, ArNoteStyle.Default, expected);
+        Assert(expected.Count == 4, $"Four of the five notes are in reach or sounding ({expected.Count}).");
+        var arFrame = Render(MakeArFeed(flatInput, arInput));
+        Assert(renderer.ArQuadCount == 4, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount}).");
+        var plain = Look(arFrame, width, height, (20, 20));
+        Assert(plain.Off <= 3 && plain.Spread <= 3, $"Away from every note the picture is the camera's grey (off by {plain.Off}).");
+        foreach (var shape in expected)
+        {
+            foreach (var (s, t) in new[] { (.5, .5), (.2, .5), (.8, .5), (.5, .15), (.5, .85) })
+            {
+                var inside = Look(arFrame, width, height, Blend(shape.Patch, s, t));
+                Assert(inside.Spread > 60, $"Note {shape.Pitch} should be coloured at ({s:0.00},{t:0.00}) of its quad, spread {inside.Spread}.");
+            }
+            foreach (var (s, t) in new[] { (-.3, .5), (1.3, .5), (.5, -.35) })
+            {
+                var outside = Look(arFrame, width, height, Blend(shape.Patch, s, t));
+                Assert(outside.Off <= 3 && outside.Spread <= 3, $"Just outside note {shape.Pitch}'s quad at ({s:0.00},{t:0.00}) the camera's grey must show (off by {outside.Off}).");
+            }
+        }
+        // the leading edge of a coming note stands on the back edge of the keys; a note over the keys themselves does not exist yet
+        var coming = expected.First(shape => shape.Pitch == 60);
+        var overKeys = Look(arFrame, width, height, Blend(coming.Patch, .5, 1.2));
+        Assert(overKeys.Off <= 3, "The keys under a coming note carry no highlight yet; that is AR-1.4's.");
+
+        Render(MakeArFeed(flatInput, arInput, playing: false));
+        Assert(renderer.ArQuadCount == 0, "A paused song draws no notes, like the stage.");
+        Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
+        Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
+        Render(MakeArFeed(flatInput, null));
+        Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
+        var smallRing = new CameraFrameRing(); PublishGradient(smallRing, 160, 90);
+        Render(MakeArFeed(new GpuCameraInput(smallRing, PictureFit.Fit, false, 1f), arInput));
+        Assert(renderer.ArQuadCount == 0, "A camera that is not the size the calibration was made at must hide the AR layer, not draw notes in the wrong place.");
+        Render(MakeArFeed(null, arInput));
+        Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
+
+        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
     }
 }

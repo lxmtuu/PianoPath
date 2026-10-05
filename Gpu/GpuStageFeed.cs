@@ -74,6 +74,10 @@ internal sealed class GpuStageFeed
     /// <summary>The camera layer (null for none); swapped whole. While it is set the render thread takes the frames from its ring.</summary>
     internal GpuCameraInput? Camera { get => Volatile.Read(ref _camera); set => Volatile.Write(ref _camera, value); }
 
+    private GpuArInput? _ar;
+    /// <summary>The AR layer (null for none); swapped whole. It draws only over a camera picture the calibration was made on.</summary>
+    internal GpuArInput? Ar { get => Volatile.Read(ref _ar); set => Volatile.Write(ref _ar, value); }
+
     private GpuRecordingTap? _recording;
     /// <summary>The active GPU recording request (null when REC is off or records the software stage).</summary>
     internal GpuRecordingTap? Recording { get => Volatile.Read(ref _recording); set => Volatile.Write(ref _recording, value); }
