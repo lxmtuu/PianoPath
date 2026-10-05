@@ -91,7 +91,7 @@ public class SyntheticKeyboardFrameTests
     }
 
     /// <summary>Reads an 8-bit RGB, non-interlaced PNG whose rows all use filter 0 — what <c>make_ar_sample.py</c> writes.</summary>
-    private static (int Width, int Height, byte[] Rgb) ReadPng(string path)
+    internal static (int Width, int Height, byte[] Rgb) ReadPng(string path)
     {
         var bytes = File.ReadAllBytes(path);
         Assert.True(bytes.AsSpan(0, 8).SequenceEqual(new byte[] { 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A }), "not a PNG");
