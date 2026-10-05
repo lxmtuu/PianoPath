@@ -333,8 +333,11 @@ internal static partial class VerificationSuite
         }
         static byte[] Shot(CalibrationWindow w)
         {
+            // the surface is not in a shown window, so its own drawing is asked for directly, as the stage's overlay is
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen()) Invoke(w.Surface, "OnRender", dc);
             var bitmap = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32);
-            bitmap.Render(w.Surface);
+            bitmap.Render(visual);
             var pixels = new byte[1000 * 600 * 4];
             bitmap.CopyPixels(pixels, 4000, 0);
             return pixels;
@@ -376,8 +379,9 @@ internal static partial class VerificationSuite
                 {
                     var (ix, iy) = w.Wizard.View.ToImage(screenX, 80);
                     var at = ((int)iy * W + (int)ix) * 4;
+                    var got = (shot[(80 * 1000 + screenX) * 4], shot[(80 * 1000 + screenX) * 4 + 1], shot[(80 * 1000 + screenX) * 4 + 2], shot[(80 * 1000 + screenX) * 4 + 3]);
                     Assert(Differs(shot, screenX, 80, w.Surface.Picture.Bgra[at], w.Surface.Picture.Bgra[at + 1], w.Surface.Picture.Bgra[at + 2]) <= 3,
-                        $"The picture should be drawn where the view says, turned round when the stage turns it round (mirror {mirror}, x {screenX}).");
+                        $"The picture should be drawn where the view says, turned round when the stage turns it round (mirror {mirror}, x {screenX}: drew BGRA {got}, picture has {w.Surface.Picture.Bgra[at]},{w.Surface.Picture.Bgra[at + 1]},{w.Surface.Picture.Bgra[at + 2]}; surface {w.Surface.ActualWidth}x{w.Surface.ActualHeight}).");
                 }
                 Assert(Differs(shot, 500, 5, 12, 7, 8) <= 3, "The bars around the picture should be the dark backdrop.");
 
