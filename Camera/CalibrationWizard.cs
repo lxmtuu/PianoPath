@@ -16,7 +16,7 @@ internal enum WizardStep
 /// and the far edge of the keys (where the black keys start) at the top. A camera on the far side of the keyboard, looking at the player,
 /// sees it turned round: the low notes on the right and the far edge at the bottom.
 /// </summary>
-internal enum KeyboardOrientation
+public enum KeyboardOrientation
 {
     /// <summary>Low notes on the left, far edge at the top.</summary>
     Upright,
