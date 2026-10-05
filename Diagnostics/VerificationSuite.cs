@@ -936,7 +936,7 @@ internal static partial class VerificationSuite
         Assert(!stage.HasCameraFrame, "Clearing the frame should stop the overlay from drawing.");
         toggles[nameof(PianoVisualSettings.ShowCameraOverlay)].IsChecked = wasShowing;
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
-        SetField(window, "_cameraSignature", string.Join("|", visualSettings.ShowCameraOverlay, visualSettings.CameraSourceLink, visualSettings.CameraVideoPath));
+        SetField(window, "_cameraSignature", string.Join("|", visualSettings.ShowCameraOverlay, visualSettings.CameraSourceLink, visualSettings.CameraVideoPath, false));
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         // The AR calibration follows what is open: nothing without a camera, the keyboard size of the settings, the settings folder.
         var arSession = window.ArCalibration;
