@@ -754,9 +754,12 @@ internal static partial class VerificationSuite
         // Measured across the Solid note at its middle height: the lit span has to be the note's width in scene pixels times
         // what the map makes of it there. One projected point says where a note is; this says how big it is, which is the
         // other half of the projection being right rather than a guess that landed near the middle.
-        Assert(map.TryProject(first.X, first.Y + first.W / 2, out var leftX, out var leftY, out _)
-            && map.TryProject(first.X + first.Z, first.Y + first.W / 2, out var rightX, out var rightY, out _),
-            "Both of the note's side edges should project onto the picture.");
+        // one Assert per edge: an && would short-circuit, and the compiler would be right not to trust that the second
+        // edge's numbers were ever written
+        Assert(map.TryProject(first.X, first.Y + first.W / 2, out var leftX, out var leftY, out _),
+            "The note's left edge should project onto the picture.");
+        Assert(map.TryProject(first.X + first.Z, first.Y + first.W / 2, out var rightX, out var rightY, out _),
+            "The note's right edge should project onto the picture.");
         var expected = rightX - leftX;
         var row = (leftY + rightY) / 2;
         var litSpan = 0;
