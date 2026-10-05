@@ -73,9 +73,9 @@ public class ArOptionsTests
     }
 
     [Theory]
-    [InlineData(1)]
+    [InlineData(1.0)]
     [InlineData(2.5)]
-    [InlineData(3)]
+    [InlineData(3.0)]
 XX_is_how_many_seconds_before_it_sounds_a_note_appears(double seconds)
     {
         var options = new ArOptions(true, ArModes.Learn, 100, seconds, 60);
