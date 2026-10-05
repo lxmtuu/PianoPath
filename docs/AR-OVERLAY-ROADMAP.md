@@ -180,8 +180,8 @@ Hiện `HandTracker` chỉ biết **một** bàn tay lớn nhất, ngón chỉ �
 | # | Việc | Chi tiết | Kiểm chứng |
 |---|---|---|---|
 | 6.1 | **Learn mode đầy đủ** | Wait mode/chấm điểm/ghost hiện có chạy trên đàn thật: nốt kế tiếp **nhấp nháy trên phím thật**, nốt đúng/sai đổi màu viền phím, vòng "sắp tới" (landing glow đã có trên GPU, ánh xạ sang không gian phím AR), đếm nhịp bằng quầng quanh phím | `VerifyPracticeGhostAndChart` + test AR ánh xạ |
-| 6.2 | **Perform mode** | Không có nốt tương lai. Mỗi nốt vừa chơi **bay lên** khỏi phím (vệt, hạt, flash theo vận tốc MIDI) bằng các hiệu ứng có sẵn của `EffectCatalog` (kết hợp theo "combo themes") — chọn một **preset AR** riêng, ví dụ "Neon Hands", "Sakura Stage". Hiệu ứng nặng (blur toàn khung) bị tắt tự động trong AR để giữ 60 fps | preset trong `presets/` qua `VerifyCommunityPresets` |
-| 6.3 | **Chế độ mặt phẳng (plane / 3D)** | Thay image‑space bằng nốt đứng trong **một mặt phẳng vuông góc với bàn phím** tại mép sau phím: cần ước lượng tư thế (PnP) từ homography + FOV gần đúng (slider **Camera FOV**, mặc định 70° ngang, hiệu chỉnh bằng 2 nốt ở xa). Làm sau cùng vì rủi ro thẩm mỹ cao và nằm sát vùng "3D camera toàn phần" trong danh sách *không làm* — chỉ làm nếu 1–5 cho phản hồi tốt | `VerifyArCalibration` PnP trên dữ liệu tổng hợp; lùi về image‑space khi FOV sai |
+| 6.2 | **Perform mode** | Không có nốt tương lai. Mỗi nốt vừa chơi **bay lên** khỏi phím (vệt, hạt, flash theo vận tốc MIDI) bằng các hiệu ứng có sẵn của `EffectCatalog` (kết hợp theo "combo themes") — chọn một **preset AR** riêng, ví dụ "Neon Hands", "Sakura Stage". Hiệu ứng nặng (blur toàn khung) bị tắt tự động trong AR để giữ 60 fps. **Điều kiện đã biết (§12):** hiện `GpuLook.From(overCamera: true)` tắt cả hạt, wisp, lửa, vòng sóng, flash, chùm sáng, quầng; và lớp AR vẽ nốt bằng một shader phẳng riêng nên `NoteStyle`/glow/roundness/hướng `Up` không có tác dụng. 6.2 vì vậy gồm việc đưa **chính** các pass của sân khấu qua một phép chiếu cảnh→ảnh (§12), không phải chỉ bật lại các cờ | preset trong `presets/` qua `VerifyCommunityPresets` |
+| 6.3 | **Chế độ mặt phẳng (plane / 3D)** | Thay image‑space bằng nốt đứng trong **một mặt phẳng vuông góc với bàn phím** tại mép sau phím: cần ước lượng tư thế (PnP) từ homography + FOV gần đúng (slider **Camera FOV**, mặc định 70° ngang, hiệu chỉnh bằng 2 nốt ở xa). Làm sau cùng vì rủi ro thẩm mỹ cao. **Cập nhật 2026‑10‑06:** chủ repo đưa ảnh mẫu cần đạt (nốt và chùm sáng đứng trước một cây đàn grand, nhìn từ phía người chơi) ⇒ 6.3 là **đích**, không còn là "chỉ làm nếu…"; vẫn làm sau 2b và 6.2, vì dùng chung phép chiếu cảnh→ảnh (§12). Vẫn không dựng lại đàn 3D | `VerifyArCalibration` PnP trên dữ liệu tổng hợp; lùi về image‑space khi FOV sai |
 | 6.4 | **Cửa sổ AR cho OBS / máy chiếu** | Mở rộng "OPEN GPU STAGE WINDOW": cửa sổ có camera + AR đã ghép, F11, chọn màn hình; tuỳ chọn nền trong (alpha) để OBS dùng Window Capture với Allow Transparency | `VerifyGpuStage` swap chain |
 | 6.5 | **Webcam ảo** *(kéo lên v1.3 theo quyết định §8.5: vừa quay vừa stream/call)* | Windows 11 có `MFCreateVirtualCamera`: đẩy khung AR đã ghép thành camera ảo để Zoom/Meet/Teams chọn được, không cần OBS. **Chỉ Windows 11 22H2+** (Windows 10 dùng OBS Virtual Camera qua 6.4), cần đăng ký COM media source nên có thể cần ký mã. Khung ra phải đi cùng luồng với ghi hình để quay và stream cùng lúc không tốn gấp đôi GPU | `Mf.VirtualCameraProbe` SKIP khi không có API |
 | 6.6 | **Xuất sidecar thông tin** | Cùng với MP4, ghi `take.ar.json` (layout, calibration, offset) để dựng lại/ghép lại trong công cụ khác | round‑trip |
@@ -282,3 +282,39 @@ Lần đầu chạy trên webcam thật (CI chỉ chạy WARP, không có camera
 | 12 | 2b (camera từ phía người chơi, điện thoại làm webcam) | ✅ ổn | Điện thoại làm webcam (Iriun, DroidCam, Camo, EpocCam) xếp vào "camera màu"; chọn tay trong danh sách luôn được |
 
 **Còn phải thử trên phần cứng thật** (không có trong CI): Camera đa mode (720p60 vs lùi mode mặc định), bật/tắt OBS Virtual Camera khi app đang mở, hai webcam cùng loại (hậu tố `(2)`), tên lấy từ registry, độ khựng khi tự mở lại, p95 của cảnh `ar` trên card thật.
+
+## 12. Hai ảnh mẫu của chủ repo ↔ từng cài đặt hiện có (2026‑10‑06)
+
+Chủ repo đưa hai ảnh cần đạt: **(A)** nhìn thẳng từ trên xuống, nốt/khói/hạt bay lên từ các phím thật, tay nằm trên phím; **(B)** nhìn từ phía người chơi lên một cây đàn grand, nốt và chùm sáng **đứng** trong không khí trước đàn, có phối cảnh. Kết luận sau khi đọc `ArPlan`, `GpuLook`, `GpuArLayer`, `ArProjection`, `StageShaders.hlsl`: **làm được cả hai với webcam, không cần nền tảng hay thư viện mới**, nhưng chúng cần hai khối việc khác nhau.
+
+**Điều đang chặn (đọc từ mã, không phải đoán):**
+
+1. Khi AR hoạt động, `ArPlan.HideStageLayers` ⇒ `GpuLook.From(overCamera: true)` **tắt** `ShowNotes`, `ShowKeys`, `ShowEmbers`, `ShowWisps`, `ShowFlame`, `ShowImpactRings`, `ShowImpactFlash`, `ShowHalo`, `ShowLightBeams`. Chỉ còn nốt phẳng và màu phím của `GpuArLayer`.
+2. Nốt AR vẽ bằng `VsArQuad/PsArQuad`, một shader riêng chỉ có viền, đầu sáng và màu: **`NoteStyle` (Solid/Neon/Glass/Fire), `NoteGlow`, `NoteRoundness`, `NoteEdge`, vệt, bóng mờ, `NoteDirection = Up` đều không có tác dụng trong AR.** Màu (`ColorMode`, `Palette`, theo tay/track) có tác dụng vì đi qua `look.NoteColor`.
+3. `ArOptions.Mode = Perform` hiện chỉ có nghĩa là "không vẽ nốt sắp tới": chưa có gì bay lên khỏi phím.
+4. Mọi hiệu ứng của sân khấu sống trong **không gian cảnh** (x theo phím, y so với đường chạm). Muốn đặt chúng lên đàn thật phải qua một phép chiếu cảnh→ảnh.
+5. `HandTracker` chỉ đọc **một** bàn tay, bằng luật màu da YCbCr; chưa có mặt nạ để che hiệu ứng.
+
+**Hướng làm đề xuất (một kiến trúc cho cả A và B):** thêm vào `Frame` cbuffer một ma trận 3×3 *cảnh→ảnh* và một cờ AR; `VsNote` và `VsSprite` biến đổi vị trí qua ma trận đó và truyền trọng số `w` để nội suy đúng phối cảnh (như `VsArQuad` đang làm). Khi đó **chính** nốt, hạt, wisp, lửa, vòng sóng, chùm sáng của sân khấu chạy trong AR, nên mọi thanh trượt trang Notes/Particles/Effects có tác dụng mà không viết lại từng hiệu ứng. Ma trận (A) là homography mặt phím đã có; ma trận (B) là homography của **mặt phẳng đứng** ở mép sau phím, suy ra từ tư thế camera.
+
+| Thành phần | Có sẵn | Còn thiếu cho (A) | Còn thiếu cho (B) |
+|---|---|---|---|
+| Hình camera + khung AR + calibration 4 điểm | ✅ AR‑0/1 | — | calibration cho góc nghiêng (2b.1–2b.3), chiều cao phím |
+| Nốt theo màu của look | ✅ | — | — |
+| Kiểu nốt, glow, bo góc, vệt | ✅ trên sân khấu, ❌ trong AR | đưa `PsNote` qua phép chiếu | như (A) |
+| Hạt, wisp, lửa, vòng sóng, flash, chùm sáng | ✅ trên sân khấu, ❌ trong AR | phép chiếu cho `VsSprite`; bỏ cờ `overCamera` từng loại | như (A) + chiếu lên mặt đứng |
+| Nốt/hạt **bay lên** | ✅ `NoteDirection=Up` trên sân khấu | Perform mode (6.2) | như (A) |
+| Che tay | ❌ | mặt nạ da (4.1); chỉ cần ở vùng phím | **cần hơn (A)**: tay nằm giữa camera và mặt phẳng nốt, nên che cả phần dưới của nốt/chùm sáng |
+| Tư thế camera (PnP) + FOV | ❌ | không cần (mặt phẳng nằm) | **bắt buộc** (6.3): `K⁻¹H` ⇒ `r1, r2, t`, FOV mặc định 70°, thanh trượt **Camera FOV** |
+| Độ trễ camera | ✅ AR‑3 | — | — |
+| Quay MP4 có lớp camera | ✅ AR‑3.4 | — | — |
+| Webcam ảo / OBS để stream | ❌ (6.4/6.5) | — | — |
+
+**Rủi ro riêng:**
+- (A) Tay dưới ánh sáng màu: ảnh mẫu có tay nhuộm xanh/tím do chính hiệu ứng toả sáng. Luật da YCbCr sẽ **hỏng** ở đây (màu da lệch khỏi cửa sổ chroma), nên mặt nạ có thể nhấp nháy. Đường lùi là mô hình ONNX (5.5) đã duyệt; trước đó, cho nốt/hiệu ứng chỉ nằm **sau** mép sau phím (không chồng lên tay) là đủ cho hầu hết khung hình.
+- (B) FOV sai làm phương thẳng đứng của nốt lệch: nốt "nghiêng" so với đàn. Cần thanh trượt FOV có xem trước và lùi về image‑space khi giá trị vô lý.
+- (B) Chỗ đặt camera: phải thấy toàn dãy phím từ phía sau/trên đầu người chơi mà không bị đầu và vai che. Đây là vấn đề lắp đặt, phần mềm không giải quyết được.
+- (B) Phím nhỏ trong ảnh nên sai số 1–2 px ở góc xa thành lệch cả phím: calibration phải có phóng to khi chấm góc và (sau này) tinh chỉnh bằng MIDI (2.3).
+- Cả hai: p95 khung hình của cảnh `ar` mới chỉ đo trên WARP (≈154 ms); cần đo trên card thật trước khi thêm cả bộ hạt vào AR.
+
+**Thứ tự đề xuất:** (1) thử máy thật AR‑1/3 → (2) phép chiếu cảnh→ảnh cho `VsNote`/`VsSprite` + Perform mode = **ảnh A** → (3) mặt nạ tay 4.1 → (4) 2b + PnP + mặt phẳng đứng = **ảnh B** → (5) webcam ảo 6.5 xen vào bất cứ lúc nào sau (2) vì cần stream được. Thứ tự này khác bản đồ §5 (nơi 6.3 ở v1.5): nếu chủ repo đồng ý, (2) và (3) kéo lên v1.2–v1.3, (4) vào v1.4.
