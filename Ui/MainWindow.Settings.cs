@@ -1127,6 +1127,7 @@ public partial class MainWindow
         nameof(PianoVisualSettings.HandSplitPitch) => $"{NoteLabel((int)Math.Round(value))} ({value:0})",
         nameof(PianoVisualSettings.RecordingFrameRate) => $"{value:0} fps",
         nameof(PianoVisualSettings.ArLookahead) => $"{value:0.0} s",
+        nameof(PianoVisualSettings.ArDelay) => $"{value:0} ms",
         _ => $"{value:0}%"
     };
 

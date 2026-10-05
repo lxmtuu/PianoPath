@@ -471,6 +471,8 @@ internal static partial class VerificationSuite
         arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0 });
         Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120,
             "Applying a look must keep every overlay setting.");
+        Assert(MainWindow.FormatSetting(nameof(PianoVisualSettings.ArDelay), 120) == "120 ms" && MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.ArDelay), "85 ms", out var typedDelay) && typedDelay == 85,
+            "The camera delay is shown and typed in milliseconds, not as a percentage.");
         var cameraKept = new PianoVisualSettings { CameraSourceLink = @"\\?\usb#vid_046d&pid_0825#1#{x}\global", CameraVideoPath = @"C:\clips\hands.mp4", CameraCorner = "Top left" };
         cameraKept.CopyFrom(new PianoVisualSettings { CameraSourceLink = "other", CameraVideoPath = "", CameraCorner = "Bottom right" });
         Assert(cameraKept.CameraSourceLink.StartsWith(@"\\?\usb", StringComparison.Ordinal) && cameraKept.CameraVideoPath == @"C:\clips\hands.mp4" && cameraKept.CameraCorner == "Bottom right",
