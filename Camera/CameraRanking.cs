@@ -8,7 +8,7 @@ namespace PianoPath;
 /// </summary>
 internal static class CameraRanking
 {
-    private static readonly string[] InfraredWords = ["infrared", "infra-red", "windows hello", "face auth", "face recogn", "depth", "ir camera", "ir cam", "ir sensor", "(ir)", "ir-camera"];
+    private static readonly string[] InfraredWords = ["infrared", "infra-red", "windows hello", "face auth", "face recogn", "depth"];
     private static readonly string[] VirtualWords = ["virtual", "obs-camera", "snap camera", "manycam", "xsplit", "splitcam", "vcam", "nvidia broadcast", "streamlabs"];
 
     /// <summary>A camera that only sees infrared light (face login, depth sensors): it cannot show the keyboard.</summary>
@@ -17,7 +17,7 @@ internal static class CameraRanking
         if (string.IsNullOrWhiteSpace(name)) return false;
         var text = name.Trim().ToLowerInvariant();
         if (InfraredWords.Any(word => text.Contains(word, StringComparison.Ordinal))) return true;
-        // A bare "IR" word: "Integrated IR Camera", "HP IR Camera", "IR" — but not "Fire", "Sirius" or "Air".
+        // A bare "IR" word (found as a whole word, never inside "Air Cam" or "Fire"): "Integrated IR Camera", "HP IR Camera", "IR" — but not "Fire", "Sirius" or "Air".
         return text.Split(new[] { ' ', '-', '_', '(', ')', '[', ']', ',', '.' }, StringSplitOptions.RemoveEmptyEntries).Contains("ir");
     }
 
