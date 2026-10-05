@@ -78,6 +78,28 @@ internal sealed class CameraFrameRing
         }
     }
 
+    /// <summary>
+    /// A copy of the newest frame, whether or not it was taken before, for a one-off look that must not disturb whoever is taking
+    /// frames: nothing is marked as taken and no buffer is held. The copy is exactly <c>Width × Height × 4</c> bytes and the caller's own.
+    /// False when the ring has nothing (never published, or cleared since).
+    /// </summary>
+    internal bool TryPeek(out CameraFrameView copy)
+    {
+        lock (_gate)
+        {
+            copy = default;
+            if (_newest < 0) return false;
+            var width = _widths[_newest]; var height = _heights[_newest];
+            if (width <= 0 || height <= 0) return false;
+            var size = checked(width * height * 4);
+            if (_buffers[_newest].Length < size) return false;
+            var pixels = new byte[size];
+            Buffer.BlockCopy(_buffers[_newest], 0, pixels, 0, size);
+            copy = new CameraFrameView(pixels, width, height, _sequences[_newest], _ticks[_newest]);
+            return true;
+        }
+    }
+
     /// <summary>Forgets every frame, so the next <see cref="TryTake"/> has nothing until something new is published.</summary>
     internal void Clear()
     {

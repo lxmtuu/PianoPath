@@ -1,5 +1,7 @@
 using System.Diagnostics;
+using System.Windows;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 
 namespace PianoPath;
 
@@ -288,5 +290,179 @@ internal static partial class VerificationSuite
         Results.Add($"PASS ar keys: three held keys are five rectangles, each tinted where it is in the picture and nothing around it, black keys beside a held white key left alone; read back against the same frame without the layer.");
         Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
+    }
+
+    /// <summary>
+    /// AR-1.5, the calibration window end to end on the real window: it refuses to open without a camera, a picture or the right
+    /// size; shows the camera's picture the way the stage shows it; takes four clicks to a calibration that is saved for this
+    /// camera; keeps Done shut on corners that cannot be used; saves nothing when cancelled or when the camera changed behind
+    /// it; and draws the picture, the corners and the grid of keys where the wizard says they are, read back from a rendering.
+    /// </summary>
+    private static void VerifyCalibrationWindow(MainWindow window, PianoVisualSettings visualSettings)
+    {
+        const int W = 1280, H = 720;
+        var ring = (CameraFrameRing)Field(window, "_cameraFrames");
+        var mirrorWas = visualSettings.CameraMirror;
+        var keyCount = visualSettings.KeyboardLayoutChoice.KeyCount;
+        (double X, double Y)[] truth = [(70, 292), (1214, 268), (1236, 421), (52, 449)];
+        (double X, double Y)[] flat = [(100, 300), (400, 300), (700, 300), (1000, 300)];
+
+        // the left half of the picture is red, the right half green: a picture turned round shows at once
+        var halves = new byte[W * H * 4];
+        for (var y = 0; y < H; y++)
+            for (var x = 0; x < W; x++)
+            {
+                var i = (y * W + x) * 4;
+                halves[i + 1] = (byte)(x >= W / 2 ? 200 : 0); halves[i + 2] = (byte)(x < W / 2 ? 200 : 0); halves[i + 3] = 255;
+            }
+
+        var opened = 0;
+        void Open(Func<CalibrationWindow, bool?>? script) => window.CalibrateAr(w => { opened++; return script?.Invoke(w) ?? false; });
+        static void Click(CalibrationWindow w, (double X, double Y)[] points)
+        {
+            foreach (var point in points)
+            {
+                var (x, y) = w.Wizard.View.ToOutput(point.X, point.Y);
+                Assert(w.Surface.HandlePress(new Point(x, y)), "A press on the picture should place or pick up a corner.");
+                w.Surface.HandleRelease();
+            }
+        }
+        static void Arrange(CalibrationWindow w)
+        {
+            w.Surface.Measure(new Size(1000, 600)); w.Surface.Arrange(new Rect(0, 0, 1000, 600)); w.Surface.UpdateLayout();
+        }
+        static byte[] Shot(CalibrationWindow w)
+        {
+            var bitmap = new RenderTargetBitmap(1000, 600, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(w.Surface);
+            var pixels = new byte[1000 * 600 * 4];
+            bitmap.CopyPixels(pixels, 4000, 0);
+            return pixels;
+        }
+        static int Differs(byte[] shot, int x, int y, byte b, byte g, byte r) => Math.Max(Math.Abs(shot[(y * 1000 + x) * 4] - b), Math.Max(Math.Abs(shot[(y * 1000 + x) * 4 + 1] - g), Math.Abs(shot[(y * 1000 + x) * 4 + 2] - r)));
+        static bool SameCorners(IReadOnlyList<(double X, double Y)>? a, (double X, double Y)[] b) =>
+            a is not null && a.Count == b.Length && a.Zip(b).All(pair => Math.Abs(pair.First.X - pair.Second.X) < 1e-6 && Math.Abs(pair.First.Y - pair.Second.Y) < 1e-6);
+
+        // ---- it opens only when there is something to mark corners on ----
+        Invoke(window, "ApplyArSource", null!, 0, 0); ring.Clear();
+        Open(null);
+        Assert(opened == 0, "Without a camera the calibration window must not open.");
+        Invoke(window, "ApplyArSource", "verification camera", W, H);
+        Open(null);
+        Assert(opened == 0, "A camera that has delivered no picture yet must not open the calibration window.");
+        Invoke(window, "InjectCameraFrame", new byte[640 * 360 * 4], 640, 360);
+        Open(null);
+        Assert(opened == 0, "A picture of another size than the overlay reads must not open the calibration window.");
+        Assert(window.ArCalibration.State == ArCalibrationState.NotCalibrated, "Refusing to open must leave the calibration alone.");
+
+        foreach (var mirror in new[] { false, true })
+        {
+            window.ArCalibration.Reset();
+            visualSettings.CameraMirror = mirror;
+            Invoke(window, "InjectCameraFrame", halves, W, H);
+            var framesMirrored = mirror && !(bool)Field(window, "_arRawFrames");
+            var before = opened;
+            Open(w =>
+            {
+                Arrange(w);
+                Assert(w.Wizard.View.Mirror == mirror && w.Wizard.ImageWidth == W && w.Wizard.ImageHeight == H, "The window should show the picture as the stage does and know its size.");
+                // the picture handed over is the one the camera delivered, whichever way the thread that read it had turned it
+                Assert(w.Surface.Picture.Bgra[1] == (framesMirrored ? 200 : 0) && w.Surface.Picture.Bgra[2] == (framesMirrored ? 0 : 200),
+                    "The window should hold the picture as the camera delivered it, not turned round.");
+                Assert(!w.DoneButton.IsEnabled && w.HintText == Loc.T(CalibrationHints.ForStep(w.Wizard)), "Before any corner is placed Done is shut and the line says what to click.");
+                var first = w.HintText;
+                var shot = Shot(w);
+                foreach (var screenX in new[] { 250, 750 })
+                {
+                    var (ix, iy) = w.Wizard.View.ToImage(screenX, 80);
+                    var at = ((int)iy * W + (int)ix) * 4;
+                    Assert(Differs(shot, screenX, 80, w.Surface.Picture.Bgra[at], w.Surface.Picture.Bgra[at + 1], w.Surface.Picture.Bgra[at + 2]) <= 3,
+                        $"The picture should be drawn where the view says, turned round when the stage turns it round (mirror {mirror}, x {screenX}).");
+                }
+                Assert(Differs(shot, 500, 5, 12, 7, 8) <= 3, "The bars around the picture should be the dark backdrop.");
+
+                Click(w, truth[..3]);
+                Assert(!w.DoneButton.IsEnabled && w.HintText != first, "With three corners placed Done stays shut and the line moves to the next corner.");
+                Click(w, truth[3..]);
+                Assert(w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust, "Four good corners should open Done.");
+                var drawn = Shot(w);
+                var keys = w.Wizard.PreviewKeys();
+                Assert(keys.Count == keyCount, $"The grid should have a key for every key of the keyboard (found {keys.Count}).");
+                var c4 = keys.First(key => key.Pitch == 60);
+                var mx = (int)(c4.Corners.Average(c => c.X)); var my = (int)(c4.Corners.Average(c => c.Y));
+                var (jx, jy) = w.Wizard.View.ToImage(mx, my);
+                var under = ((int)jy * W + (int)jx) * 4;
+                Assert(Differs(drawn, mx, my, w.Surface.Picture.Bgra[under], w.Surface.Picture.Bgra[under + 1], w.Surface.Picture.Bgra[under + 2]) >= 15,
+                    "The grid of keys should be drawn over the picture once the four corners can be used.");
+                var (cx, cy) = w.Wizard.PointOnScreen(w.Wizard.Selected);
+                Assert(Differs(drawn, (int)Math.Round(cx), (int)Math.Round(cy), 255, 230, 67) <= 8, "The corner that was placed last should be drawn, filled, where it was clicked.");
+                w.Accept();
+                return w.Result is not null;
+            });
+            Assert(opened == before + 1, "A camera with a picture of the right size should open the window once.");
+            Assert(window.ArCalibration.State == ArCalibrationState.Ready && SameCorners(window.ArCalibration.Current?.Corners, truth),
+                $"Four clicks and Done should calibrate this camera with the corners that were marked on the picture as delivered (mirror {mirror}).");
+            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", W, H, keyCount), truth), "The calibration should be stored for this camera, picture size and keyboard size.");
+        }
+
+        // ---- corners that cannot be used keep Done shut ----
+        window.ArCalibration.Reset();
+        Open(w =>
+        {
+            Arrange(w);
+            Click(w, flat);
+            Assert(w.Wizard.Step == WizardStep.Fix && !w.DoneButton.IsEnabled && w.HintText == Loc.T(CalibrationHints.ForProblem(w.Wizard.Problem)),
+                "Four corners on one line should shut Done and say why.");
+            w.Accept();
+            Assert(w.Result is null, "Done must do nothing while the corners cannot be used.");
+            w.Surface.HandleKey(System.Windows.Input.Key.Back, System.Windows.Input.ModifierKeys.None);
+            Assert(w.Wizard.Points.Count == 3, "Backspace should take the last corner back.");
+            return false;
+        });
+        Assert(window.ArCalibration.State == ArCalibrationState.NotCalibrated, "A window closed without Done must save nothing.");
+
+        // ---- New picture keeps the corners and refuses a picture of another size ----
+        Open(w =>
+        {
+            Arrange(w);
+            Click(w, truth[..2]);
+            var blue = new byte[W * H * 4];
+            for (var i = 0; i < blue.Length; i += 4) { blue[i] = 200; blue[i + 3] = 255; }
+            Invoke(window, "InjectCameraFrame", blue, W, H);
+            w.Retake();
+            Assert(w.Surface.Picture.Bgra[0] == 200 && w.Wizard.Points.Count == 2 && w.NoteText.Length == 0, "New picture should show the newest frame and keep the corners placed.");
+            Invoke(window, "InjectCameraFrame", new byte[320 * 180 * 4], 320, 180);
+            w.Retake();
+            Assert(w.Surface.Picture.Width == W && w.NoteText.Length > 0, "A new picture of another size must be refused with a word, keeping the one on show.");
+            ring.Clear();
+            w.Retake();
+            Assert(w.NoteText.Length > 0, "With no frame to take New picture should say so.");
+            return false;
+        });
+
+        // ---- the camera changing behind the open window ----
+        Invoke(window, "InjectCameraFrame", halves, W, H);
+        Open(w =>
+        {
+            Arrange(w);
+            Click(w, truth);
+            Invoke(window, "ApplyArSource", "another camera", W, H);
+            w.Accept();
+            return w.Result is not null;
+        });
+        Assert(window.ArCalibration.Snapshot.Source == "another camera" && window.ArCalibration.Current is null
+                && window.ArCalibration.Store.Get("verification camera", W, H, keyCount) is null && window.ArCalibration.Store.Get("another camera", W, H, keyCount) is null,
+            "Corners marked for one camera must not be saved for another that replaced it while the window was open.");
+
+        // ---- leave everything as it was ----
+        Invoke(window, "ApplyArSource", "verification camera", W, H);
+        window.ArCalibration.Reset();
+        Invoke(window, "ApplyArSource", "another camera", W, H);
+        window.ArCalibration.Reset();
+        Invoke(window, "ApplyArSource", null!, 0, 0);
+        ring.Clear();
+        visualSettings.CameraMirror = mirrorWas;
+        Invoke(window, "UpdateArFeed");
+        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled or when the camera changed behind it.");
     }
 }

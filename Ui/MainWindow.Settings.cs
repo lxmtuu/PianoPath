@@ -559,7 +559,7 @@ public partial class MainWindow
         SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
-        ButtonRow(ar, ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"));
+        ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"));
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(ar, _arStatus, null, "ar overlay status calibration camera keys");
 
@@ -607,6 +607,50 @@ public partial class MainWindow
         if (key == _arStatusKey) return;
         _arStatusKey = key;
         Loc.Bind(_arStatus, ArStatusText);
+    }
+
+    /// <summary>
+    /// Opens the window where the four corners of the keys are marked on a still of the camera, and keeps the result for this camera,
+    /// picture size and keyboard size. Everything that can go wrong is said in words and nothing is changed.
+    /// </summary>
+    private void CalibrateAr_Click(object sender, RoutedEventArgs e) => CalibrateAr();
+
+    /// <summary>The click's work, apart from the window's own state so a check can run it with the dialog turned off.</summary>
+    internal void CalibrateAr(Func<CalibrationWindow, bool?>? show = null)
+    {
+        var frames = _cameraFrames;
+        var mirroredFrames = _visualSettings.CameraMirror && !_arRawFrames;      // the camera thread mirrors unless the engine does
+        var picture = CalibrationPicture.Capture(frames, mirroredFrames);
+        var before = (_arCalibration ?? ArCalibration).Snapshot;
+        switch (CalibrationLaunchRules.Check(before, picture))
+        {
+            case CalibrationLaunch.NoCamera: ShowMessage(ArStatusText(), "Mark the keys", MessageBoxImage.Information); return;
+            case CalibrationLaunch.NoPicture: ShowMessage(Loc.T("The camera has not delivered a picture yet. Try again in a moment."), "Mark the keys", MessageBoxImage.Information); return;
+            case CalibrationLaunch.SizeMismatch: ShowMessage(Loc.T("The camera's picture changed size, so nothing was saved. Try again."), "Mark the keys", MessageBoxImage.Information); return;
+        }
+        var window = new CalibrationWindow(picture!, _visualSettings.KeyboardLayoutChoice, _visualSettings.CameraMirror,
+            () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames));
+        if (show is null && IsLoaded) window.Owner = this;
+        var accepted = show is null ? window.ShowDialog() : show(window);
+        if (accepted != true || window.Result is not { } result) return;
+
+        var session = _arCalibration ?? ArCalibration;
+        // The camera is not modal: it may have been unplugged or reopened at another size while the window was up.
+        if (!CalibrationLaunchRules.SameSource(before, session.Snapshot))
+        {
+            ShowMessage(Loc.T("The camera's picture changed size, so nothing was saved. Try again."), "Mark the keys", MessageBoxImage.Information);
+            return;
+        }
+        switch (session.Save(result.Corners, out _))
+        {
+            case ArSaveResult.Saved: Loc.Set(SettingsSaveLabel, "Key area saved for this camera and keyboard size"); break;
+            case ArSaveResult.NotWritten:
+                Loc.Set(SettingsSaveLabel, "Key area marked, but not saved to disk");
+                ShowMessage(Loc.T("The key area is marked, but it could not be saved to disk, so it will be asked for again next time."), "Mark the keys", MessageBoxImage.Information);
+                break;
+            default: ShowMessage(Loc.T("The camera was closed, so nothing was saved."), "Mark the keys", MessageBoxImage.Information); break;
+        }
+        UpdateArFeed();
     }
 
     private void ResetArCalibration_Click(object sender, RoutedEventArgs e)

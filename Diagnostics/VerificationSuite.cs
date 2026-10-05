@@ -1496,6 +1496,7 @@ internal static partial class VerificationSuite
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
+        Run(nameof(VerifyCalibrationWindow), () => VerifyCalibrationWindow(window, visualSettings));
         Run(nameof(VerifyHandTrackingDock), () => VerifyHandTrackingDock(window, stage, visualSettings));
         Run(nameof(VerifySheetLayer), () => VerifySheetLayer(window, stage, visualSettings));
         Run(nameof(VerifySongFolderLibrary), () => VerifySongFolderLibrary(window));
