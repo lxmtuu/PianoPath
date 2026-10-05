@@ -65,14 +65,14 @@ public class ArViewTests
     }
 
     [Theory]
-    [InlineData(1280, 720, 1920, 1080, PictureFit.Fit, false)]
-    [InlineData(1280, 720, 800, 1000, PictureFit.Fit, true)]
-    [InlineData(1920, 1080, 1000, 1000, PictureFit.Fill, false)]
-    [InlineData(640, 480, 1537, 861, PictureFit.Fill, true)]
-    [InlineData(1280, 720, 333.3, 777.7, PictureFit.Fit, true)]
-    public void A_point_goes_to_the_output_and_comes_back_to_where_it_was(int w, int h, double ow, double oh, PictureFit fit, bool mirror)
+    [InlineData(1280, 720, 1920, 1080, false, false)]
+    [InlineData(1280, 720, 800, 1000, false, true)]
+    [InlineData(1920, 1080, 1000, 1000, true, false)]
+    [InlineData(640, 480, 1537, 861, true, true)]
+    [InlineData(1280, 720, 333.3, 777.7, false, true)]
+    public void A_point_goes_to_the_output_and_comes_back_to_where_it_was(int w, int h, double ow, double oh, bool fill, bool mirror)
     {
-        var view = new ArView(w, h, ow, oh, fit, mirror);
+        var view = new ArView(w, h, ow, oh, fill ? PictureFit.Fill : PictureFit.Fit, mirror);
         var random = new Random(77);
         for (var i = 0; i < 2000; i++)
         {
