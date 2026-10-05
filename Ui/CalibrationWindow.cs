@@ -289,6 +289,7 @@ internal sealed class CalibrationWindow : Window
         {
             if (_orientation.SelectedValue is KeyboardOrientation chosen) { Wizard.SetOrientation(chosen); _surface.Refresh(); }
         };
+        _orientation.DropDownClosed += (_, _) => _surface.Focus();          // the arrow keys and Tab are for the corners again as soon as the choice is made
         var orientationRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 8) };
         orientationRow.Children.Add(new TextBlock { Text = Loc.T(CalibrationHints.OrientationTitle), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) });
         orientationRow.Children.Add(_orientation);
