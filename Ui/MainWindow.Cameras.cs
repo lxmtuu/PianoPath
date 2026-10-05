@@ -27,6 +27,17 @@ public partial class MainWindow
     /// </summary>
     private static readonly TimeSpan CameraPollInterval = TimeSpan.FromSeconds(3);
 
+    /// <summary>True while a take is being recorded, the delay is being measured or the key area is being marked.</summary>
+    private bool _calibrating;
+
+    /// <summary>
+    /// Whether a change of the camera list must wait. A take, a delay measurement and the corner-marking window each depend on the
+    /// camera staying the one it is, at the size it is: reopening it (or asking the drivers for the list, which can cost a frame)
+    /// under them would spoil the take, void the measurement or make the marked corners belong to another picture. The list is read
+    /// again by the next poll once they are done, and reopens then if it has to.
+    /// </summary>
+    private bool CameraScanHeld => _videoRecorder is not null || MeasuringArDelay || _calibrating;
+
     private DispatcherTimer? _cameraPollTimer;
     private DispatcherTimer? _cameraScanTimer;
     private bool _cameraScanning;
@@ -67,6 +78,7 @@ public partial class MainWindow
     /// <summary>Lists the cameras on a thread of its own — asking a driver can take a second — and hands the answer back to this one.</summary>
     private void StartCameraScan()
     {
+        if (CameraScanHeld) return;
         if (_cameraScanning) { _cameraScanAgain = true; return; }
         _cameraScanning = true;
         var thread = new Thread(() =>
@@ -85,6 +97,7 @@ public partial class MainWindow
     {
         _cameraScanning = false;
         if (_cameraScanAgain) { _cameraScanAgain = false; ScheduleCameraScan(TimeSpan.FromMilliseconds(250)); }
+        if (CameraScanHeld) return;       // a take or a measurement began while the drivers were being asked: keep the old reading, ask again later
         var links = list.Where(device => device.Link.Length > 0).Select(device => device.Link).ToList();
         var signature = CameraRanking.Signature(links);
         var first = _cameraListSignature is null;

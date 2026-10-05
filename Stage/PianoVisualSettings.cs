@@ -485,6 +485,10 @@ internal sealed class PianoVisualSettings
             if (property.Name == nameof(KeyboardSize)) continue;
             // The overlay is set up for this camera and this instrument, so a look neither turns it on nor tunes it.
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)) continue;
+            // Which camera, or which video file, is this machine's too: a look must never switch the player off the camera they
+            // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
+            // stored per camera, so a different camera would also mean marking the keys again.
+            if (property.Name is nameof(CameraSourceLink) or nameof(CameraVideoPath)) continue;
             // And the audio output: the backend and its buffer belong to this machine's sound hardware,
             // so applying a community look can never switch the player off their ASIO interface.
             if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
@@ -496,6 +500,17 @@ internal sealed class PianoVisualSettings
         }
         if (keepBackgroundImage) BackgroundImagePath = image;
         ApplyMigrations(); Clamp();
+    }
+
+    /// <summary>
+    /// Takes away what only means something on this machine — the background image, the camera pick and the video file —
+    /// from a look that is about to be saved or shared, as <see cref="VisualPresetShare"/> and the preset store need.
+    /// </summary>
+    internal void ClearMachineLocal()
+    {
+        BackgroundImagePath = "";
+        CameraSourceLink = "";
+        CameraVideoPath = "";
     }
 
     internal void Clamp()

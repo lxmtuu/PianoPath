@@ -640,7 +640,10 @@ public partial class MainWindow
             () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames),
             before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null);
         if (show is null && IsLoaded) window.Owner = this;
-        var accepted = show is null ? window.ShowDialog() : show(window);
+        bool? accepted;
+        _calibrating = true;                     // the camera is left alone while the keys are being marked
+        try { accepted = show is null ? window.ShowDialog() : show(window); }
+        finally { _calibrating = false; }
         if (accepted != true || window.Result is not { } result) return;
 
         var session = _arCalibration ?? ArCalibration;
