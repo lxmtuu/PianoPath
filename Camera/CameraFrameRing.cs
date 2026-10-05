@@ -49,9 +49,30 @@ internal sealed class CameraFrameRing
         }
     }
 
+    private volatile Action<CameraFrameView>? _tap;
+
+    /// <summary>
+    /// Something that wants to see every frame as the reader finishes it, on the reader's thread, without taking it from the drawing
+    /// thread (the delay measurement looks at how much each picture moves). It is called with the buffer before it becomes the newest,
+    /// so nobody else touches it yet; it must be quick, must not keep the buffer and must not throw (if it does the frame is still
+    /// published). Null for none.
+    /// </summary>
+    internal Action<CameraFrameView>? FrameTap { get => _tap; set => _tap = value; }
+
     /// <summary>Makes the buffer from <see cref="BeginWrite"/> the newest frame.</summary>
     internal void Publish(int slot, int width, int height, long captureTicks)
     {
+        if (_tap is { } tap)
+        {
+            byte[]? buffer = null; long sequence = 0;
+            lock (_gate)
+                if (slot == _writing) { buffer = _buffers[slot]; sequence = _published + 1; }
+            if (buffer is not null)
+            {
+                try { tap(new CameraFrameView(buffer, width, height, sequence, captureTicks)); }
+                catch { /* a tap that fails must not take the picture down with it */ }
+            }
+        }
         lock (_gate)
         {
             if (slot != _writing) return;

@@ -132,4 +132,35 @@ public class CameraFrameRingTests
         Assert.True(taken > 0);
         Assert.Equal(frames, ring.Published);
     }
+
+    [Fact]
+    public void A_tap_sees_each_frame_before_it_is_the_newest_with_the_sequence_it_will_have()
+    {
+        var ring = new CameraFrameRing();
+        var seen = new List<(long Sequence, long Ticks, int Width, byte First, bool Takeable)>();
+        ring.FrameTap = frame => seen.Add((frame.Sequence, frame.CaptureTicks, frame.Width, frame.Pixels[0], ring.TryTake(out _)));
+        Put(ring, 9, 4, 2, ticks: 100);
+        Put(ring, 8, 4, 2, ticks: 200);
+        Assert.Equal([(1L, 100L, 4, (byte)9, false), (2L, 200L, 4, (byte)8, true)], seen);     // the first frame was not there to take yet; the second saw the first
+        Assert.True(ring.TryTake(out var frame));
+        Assert.Equal(2, frame.Sequence);
+        ring.FrameTap = null;
+        Put(ring, 7);
+        Assert.Equal(2, seen.Count);
+    }
+
+    [Fact]
+    public void A_tap_that_throws_does_not_stop_the_frame_and_a_stale_slot_is_not_shown_to_it()
+    {
+        var ring = new CameraFrameRing();
+        ring.FrameTap = _ => throw new InvalidOperationException("broken");
+        Put(ring, 5);
+        Assert.True(ring.TryTake(out var frame));
+        Assert.Equal(1, frame.Sequence);
+        var calls = 0;
+        ring.FrameTap = _ => calls++;
+        ring.Publish(2, 4, 2, 0);                                                              // never begun: nothing to publish and nothing to show
+        Assert.Equal(0, calls);
+        Assert.Equal(1, ring.Published);
+    }
 }

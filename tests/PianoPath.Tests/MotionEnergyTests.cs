@@ -4,16 +4,16 @@ namespace PianoPath.Tests;
 
 public sealed class MotionEnergyTests
 {
-    private const int W = 160, H = 90;
+    internal const int W = 160, H = 90;
 
-    private static byte[] Grey(byte value)
+    internal static byte[] Grey(byte value)
     {
         var frame = new byte[W * H * 4];
         for (var i = 0; i < frame.Length; i += 4) { frame[i] = frame[i + 1] = frame[i + 2] = value; frame[i + 3] = 255; }
         return frame;
     }
 
-    private static void Paint(byte[] frame, int left, int top, int right, int bottom, byte value)
+    internal static void Paint(byte[] frame, int left, int top, int right, int bottom, byte value)
     {
         for (var y = top; y < bottom; y++)
             for (var x = left; x < right; x++) { var i = (y * W + x) * 4; frame[i] = frame[i + 1] = frame[i + 2] = value; }
@@ -114,10 +114,10 @@ public sealed class MotionEnergyTests
 
     // ---- the recorder: frames and notes in, a delay out ----------------------------------------------------
 
-    private const double Ticks = 1_000_000;
+    internal const double Ticks = 1_000_000;
 
     /// <summary>A camera at 60 fps watching keys: the picture flashes bright for 20 ms, <paramref name="delay"/> seconds after each note.</summary>
-    private static (List<double> Notes, List<(long Ticks, byte[] Frame)> Frames) Playing(double delay, int seed, bool flashOutsideRegion = false)
+    internal static (List<double> Notes, List<(long Ticks, byte[] Frame)> Frames) Playing(double delay, int seed, bool flashOutsideRegion = false)
     {
         var random = new Random(seed);
         var notes = LatencyProbeTests.Notes(random, 20);

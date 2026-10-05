@@ -121,10 +121,12 @@ internal sealed class LatencyRecorder
         }
     }
 
-    /// <summary>A key was pressed at this time.</summary>
+    /// <summary>A key was pressed at this time. A key within a few milliseconds of the one before it joins it as a chord and is not counted again.</summary>
     internal void NoteOn(long ticks)
     {
-        lock (_gate) if (_notes.Count < MaxNotes) _notes.Add(ticks / _ticksPerSecond);
+        var time = ticks / _ticksPerSecond;
+        // the keys of a chord are one press
+        lock (_gate) if (_notes.Count < MaxNotes && (_notes.Count == 0 || time - _notes[^1] >= LatencyProbe.ChordWindow || time < _notes[^1])) _notes.Add(time);
     }
 
     internal LatencyEstimate Estimate()
@@ -137,5 +139,121 @@ internal sealed class LatencyRecorder
     internal void Reset()
     {
         lock (_gate) { _motion.Clear(); _notes.Clear(); _hasPrevious = false; _lastSequence = 0; }
+    }
+}
+
+/// <summary>Where a delay measurement is.</summary>
+internal enum MeasurementState { Idle, Collecting, Finished }
+
+/// <summary>What a finished measurement found and what to do about it.</summary>
+/// <param name="Estimate">What <see cref="LatencyProbe"/> made of it.</param>
+/// <param name="AppAgeMilliseconds">How long the app itself held each picture while this was measured (0 when it was not counted).</param>
+/// <param name="SuggestedMilliseconds">The camera delay to set so the overlay matches the picture on the screen: what the camera took
+/// to deliver the picture plus what the app held it for, rounded; 0 unless <see cref="LatencyEstimate.IsMeasured"/>.</param>
+/// <param name="Clamped">The suggestion was more than the setting can hold and was cut to its largest.</param>
+internal sealed record LatencyReport(LatencyEstimate Estimate, double AppAgeMilliseconds, int SuggestedMilliseconds, bool Clamped);
+
+/// <summary>
+/// One run of "press about twenty keys while the camera watches": starts, takes the frames and the key presses, says when it has
+/// enough (or has waited too long), and turns the answer into a setting. Frames arrive on the camera's thread, presses on the MIDI
+/// thread and <see cref="Poll"/> comes from the interface; everything shares one clock, <see cref="System.Diagnostics.Stopwatch"/> ticks.
+/// </summary>
+internal sealed class LatencyMeasurement
+{
+    /// <summary>Presses wanted. More is surer; this is about as many as anyone will play without losing patience.</summary>
+    internal const int TargetPresses = 20;
+    /// <summary>It gives up after this long, with whatever it has.</summary>
+    internal const double TimeoutSeconds = 90;
+    /// <summary>After the last wanted press it waits this long so the picture of that press has arrived too.</summary>
+    internal const double SettleSeconds = 0.6;
+
+    private readonly object _gate = new();
+    private readonly double _ticksPerSecond;
+    private readonly LatencyRecorder _recorder;
+    private long _startedTicks, _lastPressTicks;
+    private volatile MeasurementState _state;
+    private LatencyReport? _report;
+
+    internal LatencyMeasurement(double ticksPerSecond)
+    {
+        _ticksPerSecond = ticksPerSecond > 0 ? ticksPerSecond : 1;
+        _recorder = new LatencyRecorder(_ticksPerSecond);
+    }
+
+    internal MeasurementState State => _state;
+
+    /// <summary>Key presses counted so far (a chord is one).</summary>
+    internal int Presses => _recorder.Notes;
+
+    /// <summary>The report of the last run that finished, until the next one starts.</summary>
+    internal LatencyReport? Report { get { lock (_gate) return _report; } }
+
+    /// <summary>Begins again, forgetting whatever came before. <paramref name="region"/> is where in the picture movement is looked for.</summary>
+    internal void Start(PixelRegion region, long nowTicks)
+    {
+        lock (_gate)
+        {
+            _recorder.Reset();
+            _recorder.SetRegion(region);
+            _report = null;
+            _startedTicks = nowTicks; _lastPressTicks = nowTicks;
+            _state = MeasurementState.Collecting;
+        }
+    }
+
+    /// <summary>Stops without a result.</summary>
+    internal void Cancel()
+    {
+        lock (_gate) { _state = MeasurementState.Idle; _report = null; _recorder.Reset(); }
+    }
+
+    /// <summary>A camera frame; ignored unless a run is going.</summary>
+    internal void AddFrame(CameraFrameView frame)
+    {
+        if (_state == MeasurementState.Collecting) _recorder.AddFrame(frame);
+    }
+
+    /// <summary>A key was pressed; ignored unless a run is going.</summary>
+    internal void NoteOn(long ticks)
+    {
+        if (_state != MeasurementState.Collecting) return;
+        _recorder.NoteOn(ticks);
+        lock (_gate) _lastPressTicks = Math.Max(_lastPressTicks, ticks);
+    }
+
+    /// <summary>
+    /// Call now and then while a run is going. Finishes it, and returns the report, once the wanted presses have been played and the
+    /// picture has caught up with the last of them, or the time is up; null until then.
+    /// </summary>
+    internal LatencyReport? Poll(long nowTicks, CameraAge age)
+    {
+        lock (_gate)
+        {
+            if (_state != MeasurementState.Collecting) return null;
+            var waited = (nowTicks - _startedTicks) / _ticksPerSecond;
+            var settled = _recorder.Notes >= TargetPresses && (nowTicks - _lastPressTicks) / _ticksPerSecond >= SettleSeconds;
+            return waited >= TimeoutSeconds || settled ? Complete(age) : null;
+        }
+    }
+
+    /// <summary>Ends the run now with whatever it has (the player pressed STOP).</summary>
+    internal LatencyReport? Finish(CameraAge age)
+    {
+        lock (_gate) return _state == MeasurementState.Collecting ? Complete(age) : null;
+    }
+
+    private LatencyReport Complete(CameraAge age)
+    {
+        var estimate = _recorder.Estimate();
+        var held = age.Frames > 0 && double.IsFinite(age.AverageMilliseconds) ? Math.Max(0, age.AverageMilliseconds) : 0;
+        var suggested = 0; var clamped = false;
+        if (estimate.IsMeasured)
+        {
+            var wanted = (int)Math.Round(estimate.DelaySeconds * 1000 + held);
+            suggested = Math.Clamp(wanted, 0, (int)ArOptions.DelayMax);
+            clamped = wanted > ArOptions.DelayMax;
+        }
+        _state = MeasurementState.Finished;
+        return _report = new LatencyReport(estimate, held, suggested, clamped);
     }
 }
