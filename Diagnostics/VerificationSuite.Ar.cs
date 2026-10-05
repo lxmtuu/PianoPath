@@ -160,7 +160,7 @@ internal static partial class VerificationSuite
             new() { Pitch = 66, Start = 11.2, Duration = .5 },    // black, on its way
             new() { Pitch = 72, Start = 10.5, Duration = .5 },
             new() { Pitch = 67, Start = 9.8, Duration = 1 },      // already sounding
-            new() { Pitch = 60, Start = 11, Duration = 1 },
+            new() { Pitch = 60, Start = 11, Duration = .5 },
             new() { Pitch = 48, Start = 12.9, Duration = .5 },    // not in reach yet
         };
         arNotes.Sort((a, b) => a.Start.CompareTo(b.Start));
@@ -181,9 +181,11 @@ internal static partial class VerificationSuite
             }
             return (x / weight, y / weight);
         }
-        static (int Spread, int Off) Look(byte[] pixels, int w, int h, (double X, double Y) at)
+        // null for a point that is not on the output: a note may reach above the top edge, and a point there says nothing
+        static (int Spread, int Off)? Look(byte[] pixels, int w, int h, (double X, double Y) at)
         {
-            var px = Math.Clamp((int)Math.Floor(at.X), 0, w - 1); var py = Math.Clamp((int)Math.Floor(at.Y), 0, h - 1);
+            if (!(at.X >= 0 && at.Y >= 0 && at.X < w && at.Y < h)) return null;
+            var px = (int)Math.Floor(at.X); var py = (int)Math.Floor(at.Y);
             var i = (py * w + px) * 4;
             int blue = pixels[i], green = pixels[i + 1], red = pixels[i + 2];
             return (Math.Max(red, Math.Max(green, blue)) - Math.Min(red, Math.Min(green, blue)), Math.Max(Math.Abs(red - 90), Math.Max(Math.Abs(green - 90), Math.Abs(blue - 90))));
@@ -197,25 +199,28 @@ internal static partial class VerificationSuite
         Assert(expected.Count == 4, $"Four of the five notes are in reach or sounding ({expected.Count}).");
         var arFrame = Render(MakeArFeed(flatInput, arInput));
         Assert(renderer.ArQuadCount == 4, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount}).");
-        var plain = Look(arFrame, width, height, (20, 20));
+        var plain = Look(arFrame, width, height, (20, 20))!.Value;
         Assert(plain.Off <= 3 && plain.Spread <= 3, $"Away from every note the picture is the camera's grey (off by {plain.Off}).");
         foreach (var shape in expected)
         {
-            foreach (var (s, t) in new[] { (.5, .5), (.2, .5), (.8, .5), (.5, .15), (.5, .85) })
+            var insideChecked = 0;
+            foreach (var (s, t) in new[] { (.5, .5), (.2, .5), (.8, .5), (.5, .15), (.5, .85), (.5, .95) })
             {
-                var inside = Look(arFrame, width, height, Blend(shape.Patch, s, t));
+                if (Look(arFrame, width, height, Blend(shape.Patch, s, t)) is not { } inside) continue;
+                insideChecked++;
                 Assert(inside.Spread > 30 && inside.Off > 40, $"Note {shape.Pitch} should be coloured at ({s:0.00},{t:0.00}) of its quad, spread {inside.Spread}, off grey by {inside.Off}.");
             }
-            foreach (var (s, t) in new[] { (-.3, .5), (1.3, .5), (.5, -.35) })
+            Assert(insideChecked >= 2, $"At least two sample points of note {shape.Pitch} should be on the output ({insideChecked}).");
+            foreach (var (s, t) in new[] { (-.3, .5), (1.3, .5), (.5, -.35), (-.3, .9), (1.3, .9) })
             {
-                var outside = Look(arFrame, width, height, Blend(shape.Patch, s, t));
+                if (Look(arFrame, width, height, Blend(shape.Patch, s, t)) is not { } outside) continue;
                 Assert(outside.Off <= 3 && outside.Spread <= 3, $"Just outside note {shape.Pitch}'s quad at ({s:0.00},{t:0.00}) the camera's grey must show (off by {outside.Off}).");
             }
         }
-        // the leading edge of a coming note stands on the back edge of the keys; a note over the keys themselves does not exist yet
+        // past a coming note's leading edge there is only the picture: the notes are not lit before they arrive
         var coming = expected.First(shape => shape.Pitch == 60);
         var overKeys = Look(arFrame, width, height, Blend(coming.Patch, .5, 1.2));
-        Assert(overKeys.Off <= 3, "The keys under a coming note carry no highlight yet; that is AR-1.4's.");
+        Assert(overKeys is { } over && over.Off <= 3, "Just past the leading edge of a coming note the camera's grey must show.");
 
         Render(MakeArFeed(flatInput, arInput, playing: false));
         Assert(renderer.ArQuadCount == 0, "A paused song draws no notes, like the stage.");
