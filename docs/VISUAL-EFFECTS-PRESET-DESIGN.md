@@ -2,7 +2,7 @@
 
 > **Ngày:** 2026-10-06  
 > **Phạm vi:** 14 preset built-in và 3 preset community trong `presets/`; không sửa preset cá nhân.  
-> **Tình trạng:** recipe, mô tả và default wiring đã được cập nhật trong source. Chưa coi look là đạt cho tới khi Windows build tạo gallery từ renderer thật, kiểm tra GPU/WPF và qua các gate ở cuối tài liệu.
+> **Tình trạng (2026-10-06):** recipe, mô tả và default wiring cho đủ 17 preset đã được cập nhật. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass static, portable tests, Windows build, `--verify` (2.169 assertions, 0 skipped) và render gallery WPF/software + GPU/WARP; ảnh được cập nhật ở commit `3b2acf8`. Đã xem tổng quan gallery và default Concert Gold stage; review từng look theo fixed scene/100%/50% và hardware vẫn chưa hoàn tất.
 
 ## 1. Quyết định thiết kế
 
@@ -45,7 +45,7 @@ Thứ tự picker bắt đầu bằng default rồi tới hai hướng creator/l
 | **Lo-Fi Study** | Learning / long session | Nốt đục muted, glow và particle gần bằng 0; aurora chậm; ambient và flash tắt |
 | **Sunset Drive** | Neon / synthwave | Coral–amber neon, speed-line ngắn, Retro Grid, Fireworks/ring nhỏ; flash tắt |
 
-Gallery CI dùng `--preset` cho cả built-in lẫn community và render mỗi recipe qua WPF/software cùng GPU/WARP. Ảnh của hai đường render là bằng chứng kiểm tra, không thay thế đo phần cứng.
+Gallery CI run `37480841688` dùng `--preset` cho 14 built-in + 3 community và render mỗi recipe qua WPF/software cùng GPU/WARP. Gallery 17×2 được refresh trong `docs/previews/presets.jpg` ở commit `3b2acf8`; ảnh xác nhận hai code path trên runner, không thay thế review đầy đủ ở fixed scene hoặc đo phần cứng.
 
 ## 4. Default, compatibility và dữ liệu người dùng
 
@@ -57,10 +57,10 @@ Gallery CI dùng `--preset` cho cả built-in lẫn community và render mỗi r
 
 ## 5. Cổng kiểm chứng bắt buộc
 
-1. `python3 tools/check_sources.py` pass: locale, gallery đủ 17 look, generator và preset JSON đồng bộ.
-2. Windows build pass; `--verify` xác nhận tên, clamp, store first-run/reset, saved-look preservation và từng profile community.
-3. CI render đủ 17 look trên software/WPF và GPU/WARP. Review từng ảnh ở 100% và 50%, tối thiểu scene 720p/1080p, hợp âm dày, note giữ/pedal và đoạn nghỉ.
-4. Chroma green kiểm tra edge/bloom/halo không spill; Learning kiểm tra nhãn và tương phản; Neon/Concert kiểm tra nhiều hit nhanh không hòa thành một quầng.
-5. Chạy frame-budget gate; không suy diễn hiệu năng GPU thật từ WARP. Hardware gallery/bench còn thiếu phải ghi “chưa xác nhận”.
+1. **[x]** `python3 tools/check_sources.py` pass trên CI: locale, gallery đủ 17 look, generator và preset JSON đồng bộ.
+2. **[x]** Windows build, portable xUnit và `--verify` pass; suite xác nhận tên/clamp, first-run/reset, saved-look preservation và community profiles (2.169 assertions, 0 skipped).
+3. **[x]** CI render đủ 17 look trên software/WPF và GPU/WARP. **[ ]** Còn review từng look ở fixed scene 720p/1080p, 100%/50%, hợp âm dày, note-held/pedal và đoạn nghỉ.
+4. **[ ]** Chưa hoàn tất review chroma green edge/bloom/halo spill, Learning labels/contrast và nhiều hit Neon/Concert; không suy đoán từ recipe/hex.
+5. **[x]** CI chạy frame-budget report trên WARP và không áp ngưỡng GPU thật. **[ ]** Hardware gallery/bench chưa xác nhận; không suy diễn hiệu năng thật từ WARP.
 
-Chưa qua Windows render, xem ảnh, test xUnit/`--verify` và đo thiết bị thật thì chỉ xác nhận **recipe/code đã cấu hình**, không tuyên bố “preset đã hoàn thiện thị giác”.
+Build/test/render runtime đã được xác minh; phần còn mở là review hình ảnh/accessibility chi tiết và hardware. Chỉ gọi look “đạt thị giác” sau khi các mục tương ứng pass, không chỉ vì recipe/code đã cấu hình.

@@ -1,8 +1,7 @@
 # PianoPath Concert FX — design bible (Phase 1, direction selected)
 
-> **Trạng thái:** bản đề xuất Phase 1, cần người dùng duyệt ba look trước khi chuyển sang refactor renderer. Đây là đặc tả thiết kế, không phải UI/runtime implementation.
+> **Trạng thái (2026-10-06):** người dùng đã chọn art direction Concert / Neon / Learning và cả 17 recipe đã được nối vào runtime. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass build, portable tests, `--verify` (2.169 assertions, 0 skipped) và render gallery qua WPF/software + GPU/WARP; preview được làm mới ở `3b2acf8`. Đã xem tổng quan gallery và default Concert Gold stage. Phase 1 **chưa đóng**: còn review theo 3 checkpoint ở 100%/50%, accessibility/contrast, bố cục Visual Effects Studio và chấp thuận fixture. WARP không chứng minh chất lượng/performance trên GPU thật.
 > **Ngày:** 2026-10-06
-> **Trạng thái:** người dùng đã yêu cầu triển khai art direction Concert / Neon / Learning trên preset đã ship. Recipe runtime cho 14 built-in + 3 community đang được nối; chưa duyệt bằng ảnh WPF/GPU và chưa kết luận renderer hoàn tất.
 > **Cùng bộ:** [Visual Effects Studio wireframe](VISUAL-EFFECTS-STUDIO-WIREFRAME.md) · [reference scene JSON](samples/visual-effects-phase1-scene.json) · [preview prototype](prototypes/visual-effects-phase1/index.html) · [master roadmap](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
 ## 1. Ý đồ sản phẩm
@@ -123,23 +122,25 @@ Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không ph�
 
 | Cụm thiết kế | Điểm bám hiện tại | Trạng thái Phase 1 |
 |---|---|---|
-| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Concert Gold / Neon Violet / Two Hands đã có recipe runtime; cần gallery và ảnh test xác nhận độ đọc. |
-| Motion theo note | `FallingTrail`, `FallingPulse`, `Hold*`, `ReleaseEffect`, `Impact*` | Preset đã chọn lọc lớp; Phase 3/4 vẫn phải kiểm tra từng behavior/capability. |
-| Atmosphere/compositor | `Ambient*`, `BackgroundMotion`, `Bloom*`, `PianoStage` và GPU passes | Recipe cấu hình chậm/thưa; Stage/WPF/AR chưa được mặc định coi là parity. |
+| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Cả 17 recipe đã được test/render trên WPF/software + GPU/WARP; review 3 checkpoint, tương phản 100%/50% còn mở. |
+| Motion theo note | `FallingTrail`, `FallingPulse`, `Hold*`, `ReleaseEffect`, `Impact*` | Recipe đã chọn lọc lớp và qua suite hiện có; Phase 3/4 vẫn phải kiểm tra từng behavior/capability. |
+| Atmosphere/compositor | `Ambient*`, `BackgroundMotion`, `Bloom*`, `PianoStage` và GPU passes | Gallery xác nhận code path WPF/WARP, không khẳng định parity trên hardware hay AR. |
 | Color Gradient | `ColorMode="Gradient"` | Hiện là theo pitch. Gradient head-to-tail vẫn là `Planned` trong `EffectCatalog`. |
 | Reduced motion/flash | Các effect có thể bật/tắt riêng | Chưa có global contract/setting; phải hoàn tất ở Phase 2/7, không tuyên bố đã có. |
-| Preset/schema | Built-in, community JSON và `CreateDefaultSettings()` | Default mới chỉ ảnh hưởng first-run/reset; file hợp lệ đã lưu không bị viết lại, không đổi schema. |
+| Preset/schema | Built-in, community JSON và `CreateDefaultSettings()` | `--verify` xác nhận default first-run/recovery và saved look hợp lệ vẫn được giữ; không đổi schema. |
 
-Phase 1 nay gồm cả mapping recipe và wiring cần thiết cho fresh-install/reset; vẫn chưa chỉnh renderer hay thêm field settings. Các bước tiếp theo chỉ đóng Phase 1 sau khi compile/test/render/review qua gate.
+Phase 1 gồm mapping recipe và wiring cần thiết cho fresh-install/reset; không chỉnh renderer hay thêm field settings. Compile, portable tests, `--verify` và render WPF/WARP đã qua CI; chỉ đóng Phase 1 sau khi các mục review thị giác/accessibility còn mở ở gate dưới đây được xác nhận.
 
-## 8. Gate Phase 1 — hướng đã chọn, hình ảnh runtime còn chờ xác nhận
+## 8. Gate Phase 1 — hướng đã chọn; review chi tiết còn mở
 
-- [x] Người dùng yêu cầu hướng Concert / Neon / Learning áp lên toàn bộ preset đã ship; Concert Gold được cấu hình làm default/reset trong recipe code.
+- [x] Người dùng chọn hướng Concert / Neon / Learning áp lên toàn bộ preset đã ship; Concert Gold là default/reset.
 - [ ] Xác nhận màu hand/track có dễ đọc và phân biệt trong 3 checkpoint ở 100% và 50% kích thước.
 - [ ] Xác nhận Learning giữ nốt/nhãn rõ hơn trang trí, không phát flash toàn màn; kiểm tra contrast thực tế, không suy từ hex.
-- [ ] Chụp và review gallery 17 look qua WPF/software + GPU/WARP; chỉnh profile có lỗi trước khi kết luận.
+- [x] CI run [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) render đủ 17 look qua WPF/software + GPU/WARP; đã xem tổng quan full sheet và preview Concert Gold.
+- [ ] Review từng profile ở 100%/50%, cùng hợp âm dày, note-held/pedal, đoạn nghỉ và chroma edge; sửa sai lệch trước khi kết luận.
 - [ ] Duyệt bố cục Visual Effects Studio ba pane và **Quick / Advanced** bằng wireframe riêng; đây chưa phải UI đã triển khai.
 - [ ] Chấp thuận scene 12 giây + tempo map + seed làm fixture dùng chung cho Phase 3 trở đi.
-- [ ] Sau khi Windows build, `--verify`/xUnit, gallery và review đều pass, đóng Phase 1; mới mở Effect Contract / compatibility.
+- [x] Windows build, portable xUnit và `--verify` pass; verification báo 2.169 assertions, 0 skipped.
+- [ ] Sau khi review thị giác/accessibility và các mục còn lại được xác nhận, mới đóng Phase 1 rồi mở Effect Contract / compatibility.
 
-Prototype HTML vẫn chỉ là minh họa; không cần dùng nó để chứng minh renderer. Hướng nghệ thuật đã được chọn, nhưng **chưa đánh dấu chất lượng thị giác “đạt”** trước khi ảnh runtime và hardware review qua gate.
+Prototype HTML vẫn chỉ là minh họa; không dùng nó để chứng minh renderer. Runtime code path đã được dựng và kiểm tra trên WARP, nhưng **chưa xác nhận hardware performance** và chưa tuyên bố quality review đầy đủ.
