@@ -227,12 +227,13 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
 - **Impact phase hoàn thiện theo kênh**: hạt (`ShowEmbers` + hệ sparks), sóng (`ShowImpactRings` +
   `ImpactWave` Ring/Shockwave/None + `RingSize` + `ImpactWaveIntensity`), chớp (`ShowImpactFlash` +
   `ImpactFlashIntensity`). Độ lớn/độ sáng theo lực nhấn (modulator velocity đầu tiên).
-- **Bảng tổng hợp**: `Stage/Effects/EffectCatalog.cs` liệt kê toàn bộ 87 effects (4 phase nốt +
-  4 họ ambient + modulators + themes), mỗi effect ghi rõ kênh renderer và trạng thái
-  Available/Planned. Quy tắc: effect Planned không hiện UI cho đến khi có renderer thật.
+- **Inventory hiệu ứng**: `Stage/Effects/EffectCatalog.cs` liệt kê 87 ID (4 phase nốt +
+  4 họ ambient + modulators + themes), kèm channel label và status metadata. Catalog hiện
+  không cung cấp runtime options/capability và `Planned` không tự lọc UI; settings/defaults
+  cùng các control hiện hữu mới là đường runtime. Xem `EFFECT-COVERAGE-AUDIT.md`.
 - Xem chi tiết kiến trúc và roadmap trong `docs/EFFECTS-REDESIGN.md`.
 
-## 12. Đợt effects-redesign v2–v7: hoàn thiện toàn bộ 87 effects
+## 12. Đợt effects-redesign v2–v7: lịch sử triển khai theo nhóm (87 mục inventory)
 
 - **v2 Falling + Impact còn lại**: `FallingTrail` 7 kiểu + Intensity/Length, `FallingPulse` +
   Rate, `FallingGhost` + Amount (trang Notes, card FALLING FX); `ImpactBurst` 5 kiểu
@@ -256,4 +257,4 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
   MODULATORS; test `VerifySmartFx`.
 - **v7 Themes**: 7 preset graphs (Inferno, Ice Crystal, Sakura Nocturne nâng cấp + Galaxy
   Voyage, Electric Storm, Ocean Depths, Retro Arcade mới); test `VerifyThemes`. Toàn bộ
-  87/87 mục trong `EffectCatalog` đang được đánh dấu `Available`. **Cập nhật audit 2026-10-06:** đây là inventory/metadata, chưa phải nguồn options runtime và nhãn này chưa chứng minh parity từng option trên GPU/software/AR. `AmbientLight="Spotlights"` từng thiếu nhánh trong `PianoStage.DrawAmbientLight`; đã thêm WPF pass và regression assertion vào `VerifyAmbientFx`, nhưng chưa chạy được trên Windows/.NET để xác nhận. Xem ma trận [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md).
+  `EffectCatalog` có 87 mục: 86 `Available` và `falling.color-gradient` là `Planned` vì renderer head-to-tail chưa có. **Cập nhật audit 2026-10-06:** đây là inventory/metadata, chưa phải nguồn options runtime và nhãn này chưa chứng minh parity từng option trên GPU/software/AR. `AmbientLight="Spotlights"` từng thiếu nhánh trong `PianoStage.DrawAmbientLight`; WPF pass và regression assertion đã được thêm. Xem ma trận [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md).

@@ -100,7 +100,7 @@ Trạng thái trong catalog: `Available` ghi nhận mục đã được phân v�
 | Glow Trail | Vệt sáng mờ | falling.trail | ✅ v2 |
 | Motion Blur | Mờ chuyển động | falling.body | ✅ v2 |
 | Sparkle Tail | Đuôi tia sáng | falling.trail | ✅ v2 |
-| Color Gradient | Chuyển sắc đầu–đuôi | falling.body | ✅ có sẵn |
+| Color Gradient | Chuyển sắc đầu–đuôi | falling.body.gradient | 🔜 Planned; head-to-tail renderer/settings chưa có |
 | Pulsing | Nhấp nháy | falling.body | ✅ v2 |
 | Ribbon Twist | Dải lụa xoắn | falling.body | ✅ v2 |
 | Particle Stream | Dòng hạt | falling.trail | ✅ v2 |
@@ -364,7 +364,7 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 | ✅ **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
 
 Đây là lịch sử thứ tự triển khai theo nhóm: Impact → Falling → Hold → Release → Ambient → Smart → Themes.
-Catalog hiện đánh dấu 87/87 mục `Available`, nhưng coverage audit cho thấy nhãn này chưa chứng minh
+Catalog hiện có 87 mục: 86 `Available` và `falling.color-gradient` là `Planned` vì renderer đầu–đuôi chưa có; các nhãn còn lại vẫn chưa chứng minh
 mỗi biến thể được test riêng, đồng nhất GPU/software hoặc có đường AR. Lộ trình kiểm chứng và
 chuẩn hóa tiếp theo nằm trong [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
