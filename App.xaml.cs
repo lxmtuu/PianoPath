@@ -60,8 +60,8 @@ public partial class App : Application
         // column of the preset gallery) without touching the settings file.
         if (e.Args.Contains("--gpu")) window.UseGpuForSession();
         if (e.Args.Contains("--software")) window.UseSoftwareForSession();
-        // --preset=<name> applies a built-in look (spaces optional: --preset=GalaxyVoyage); CI renders the
-        // GPU effect previews with it, each from a private settings folder.
+        // --preset=<name> applies a shipped built-in or community look (spaces optional: --preset=GalaxyVoyage);
+        // CI renders the preset gallery with it, each from a private settings folder.
         var presetName = e.Args.FirstOrDefault(argument => argument.StartsWith("--preset=", StringComparison.Ordinal))?["--preset=".Length..];
         if (!string.IsNullOrWhiteSpace(presetName)) window.PreviewPreset(presetName);
         // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches

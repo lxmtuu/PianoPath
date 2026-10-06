@@ -1,7 +1,8 @@
-# PianoPath Concert FX — design bible (Phase 1)
+# PianoPath Concert FX — design bible (Phase 1, direction selected)
 
 > **Trạng thái:** bản đề xuất Phase 1, cần người dùng duyệt ba look trước khi chuyển sang refactor renderer. Đây là đặc tả thiết kế, không phải UI/runtime implementation.
 > **Ngày:** 2026-10-06
+> **Trạng thái:** người dùng đã yêu cầu triển khai art direction Concert / Neon / Learning trên preset đã ship. Recipe runtime cho 14 built-in + 3 community đang được nối; chưa duyệt bằng ảnh WPF/GPU và chưa kết luận renderer hoàn tất.
 > **Cùng bộ:** [Visual Effects Studio wireframe](VISUAL-EFFECTS-STUDIO-WIREFRAME.md) · [reference scene JSON](samples/visual-effects-phase1-scene.json) · [preview prototype](prototypes/visual-effects-phase1/index.html) · [master roadmap](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
 ## 1. Ý đồ sản phẩm
@@ -59,15 +60,15 @@ Sân khấu và chrome có palette riêng: không áp token panel lên ảnh/pre
 
 ### 3.2 Ba profile preview
 
-Các màu trong JSON là **design targets** cho cùng một scene, không khẳng định preset runtime hiện có đã tạo đúng ảnh đó.
+Các giá trị dưới đây là token/target cho ba vai trò; đã map vào preset runtime **Concert Gold**, **Neon Violet** và **Two Hands**. Bản đồ recipe đầy đủ nằm ở [`VISUAL-EFFECTS-PRESET-DESIGN.md`](VISUAL-EFFECTS-PRESET-DESIGN.md); target chưa được xem là đạt cho tới khi gallery được render bằng ứng dụng và review bằng mắt.
 
-| Profile | Cảm xúc | Note color (trái / phải) | Vật liệu và môi trường | Mức chuyển động |
+| Profile | Cảm xúc | Màu note trái/phải hoặc dải chính | Vật liệu và môi trường | Mức chuyển động |
 |---|---|---|---|---|
-| **Concert** | Grand, ấm, sang nhưng tiết chế | Sea-glass `#63D7DE` / brass `#F3C56E` | Satin face, warm key pools, một beam mềm, bụi thưa; giữ negative space | Vừa, chậm, không flash khung hình |
-| **Neon** | Năng lượng live set, rõ khi stream | Cyan `#38D8FF` / magenta `#FF57C9` | Lõi sáng + viền sắc, trail ngắn theo velocity, hit-local shock/ring; bloom có trần | Nhanh theo event/beat, không strobe |
-| **Learning** | Bình tĩnh, có tính hướng dẫn | Blue `#53BCEB` / rose `#FF829C` | Thân matte/opaque, outline rõ, label chỉ khi đủ chỗ; ambient mặc định tắt | Reduced-motion target; chuyển động note cần để đọc vẫn được giữ |
+| **Concert** | Grand, ấm, sang nhưng tiết chế | Sea-glass `#63D7DE` / brass `#F3C56E` | Nốt đặc, satin keyboard, một spotlight mềm, bụi/ring thưa; giữ negative space | Vừa, chậm, không flash mặc định |
+| **Neon** | Năng lượng live set, rõ khi stream | Violet `#786DF1` → cyan `#54D8E8` | Lõi + viền sắc, trail/shimmer ngắn, hit-local energy; bloom có trần | Theo event/beat, không strobe toàn màn |
+| **Learning** | Bình tĩnh, có tính hướng dẫn | Blue `#54B7E5` / rose `#E88FAA` | Thân matte/opaque, hand split C4, nhãn C; ambient/particle tắt | Nền tĩnh; chỉ giữ cue note cần để đọc |
 
-Quy tắc màu: track/hand/pitch giữ ổn định trong cả scene; flash, hạt và key glow là dẫn xuất ngắn hạn, không tự đổi màu nốt nguồn. Không dùng “gradient” để chỉ cùng lúc gradient theo pitch và gradient dọc thân note.
+Quy tắc màu: track/hand/pitch giữ ổn định trong cả scene; flash, hạt và key glow là dẫn xuất ngắn hạn, không tự đổi màu nốt nguồn. Không dùng “gradient” để chỉ cùng lúc gradient theo pitch và gradient dọc thân note; loại sau vẫn là Planned trong catalog.
 
 ## 4. Ngữ pháp vật liệu
 
@@ -116,28 +117,29 @@ Nguồn sự thật là [`visual-effects-phase1-scene.json`](samples/visual-effe
 2. **4.1 s — Held chord and impact:** hai tay, velocity, note giữ, hit cục bộ.
 3. **11.25 s — Release and rest:** decay và khoảng nghỉ sạch.
 
-Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không phải ảnh do PianoPath/WPF/GPU render**. Khi bắt đầu phase có code, thay ảnh minh họa bằng `PianoPath.exe --snapshot`/preset gallery; không nâng prototype thành bằng chứng renderer.
+Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không phải ảnh do PianoPath/WPF/GPU render**. Gallery CI hiện render preset bằng `PianoPath.exe --snapshot` cho WPF/software và GPU/WARP; ảnh này mới là bằng chứng runtime cần review. WARP không chứng minh FPS/phẩm chất trên GPU hoặc webcam thật.
 
 ## 7. Chuyển thiết kế sang code hiện có
 
 | Cụm thiết kế | Điểm bám hiện tại | Trạng thái Phase 1 |
 |---|---|---|
-| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Có setting; ba profile chưa được map thành preset/ảnh chuẩn. |
-| Motion theo note | `FallingTrail`, `FallingPulse`, `Hold*`, `ReleaseEffect`, `Impact*` | Cần Phase 3/4 kiểm thử từng behavior/capability. |
-| Atmosphere/compositor | `Ambient*`, `BackgroundMotion`, `Bloom*`, `PianoStage` và GPU passes | Stage/WPF/AR khác nhau; không khẳng định parity từ design. |
+| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Concert Gold / Neon Violet / Two Hands đã có recipe runtime; cần gallery và ảnh test xác nhận độ đọc. |
+| Motion theo note | `FallingTrail`, `FallingPulse`, `Hold*`, `ReleaseEffect`, `Impact*` | Preset đã chọn lọc lớp; Phase 3/4 vẫn phải kiểm tra từng behavior/capability. |
+| Atmosphere/compositor | `Ambient*`, `BackgroundMotion`, `Bloom*`, `PianoStage` và GPU passes | Recipe cấu hình chậm/thưa; Stage/WPF/AR chưa được mặc định coi là parity. |
 | Color Gradient | `ColorMode="Gradient"` | Hiện là theo pitch. Gradient head-to-tail vẫn là `Planned` trong `EffectCatalog`. |
-| Reduced motion/flash | Có thể rút ra từ design token + effect controls hiện có | Chưa có global contract/setting hoàn chỉnh; đưa vào UX/contract phase sau. |
-| Design targets | JSON fixture + prototype page | Không ghi vào `PianoVisualSettings`, không lưu vào preset và không tự động đổi theme. |
+| Reduced motion/flash | Các effect có thể bật/tắt riêng | Chưa có global contract/setting; phải hoàn tất ở Phase 2/7, không tuyên bố đã có. |
+| Preset/schema | Built-in, community JSON và `CreateDefaultSettings()` | Default mới chỉ ảnh hưởng first-run/reset; file hợp lệ đã lưu không bị viết lại, không đổi schema. |
 
-Không sửa UI, renderer, preset hoặc settings schema ở Phase 1. Các target cần được map vào source-of-truth runtime ở phase implementation sau khi duyệt.
+Phase 1 nay gồm cả mapping recipe và wiring cần thiết cho fresh-install/reset; vẫn chưa chỉnh renderer hay thêm field settings. Các bước tiếp theo chỉ đóng Phase 1 sau khi compile/test/render/review qua gate.
 
-## 8. Gate đề nghị để duyệt Phase 1
+## 8. Gate Phase 1 — hướng đã chọn, hình ảnh runtime còn chờ xác nhận
 
-- [ ] Chọn một trong ba hướng làm mặc định khởi đầu (hoặc yêu cầu chỉnh profile); không yêu cầu preset runtime mới ngay.
-- [ ] Xác nhận hai màu hand/track có dễ đọc và phân biệt được trong 3 checkpoint.
-- [ ] Xác nhận `Learning` giữ note rõ hơn mọi layer trang trí và không cần full-screen flash.
-- [ ] Xác nhận bố cục Studio ba pane và cách tách **Quick / Advanced** hợp lý.
-- [ ] Chấp thuận scene 12 giây + tempo map + seed là fixture dùng chung cho Phase 3 trở đi.
-- [ ] Sau khi duyệt, đóng Phase 1 và mới bắt đầu Effect Contract / compatibility; chưa nhân rộng effect trước vertical slice.
+- [x] Người dùng yêu cầu hướng Concert / Neon / Learning áp lên toàn bộ preset đã ship; Concert Gold được cấu hình làm default/reset trong recipe code.
+- [ ] Xác nhận màu hand/track có dễ đọc và phân biệt trong 3 checkpoint ở 100% và 50% kích thước.
+- [ ] Xác nhận Learning giữ nốt/nhãn rõ hơn trang trí, không phát flash toàn màn; kiểm tra contrast thực tế, không suy từ hex.
+- [ ] Chụp và review gallery 17 look qua WPF/software + GPU/WARP; chỉnh profile có lỗi trước khi kết luận.
+- [ ] Duyệt bố cục Visual Effects Studio ba pane và **Quick / Advanced** bằng wireframe riêng; đây chưa phải UI đã triển khai.
+- [ ] Chấp thuận scene 12 giây + tempo map + seed làm fixture dùng chung cho Phase 3 trở đi.
+- [ ] Sau khi Windows build, `--verify`/xUnit, gallery và review đều pass, đóng Phase 1; mới mở Effect Contract / compatibility.
 
-**Yêu cầu chấp thuận:** người dùng xem ba card trong [preview prototype](prototypes/visual-effects-phase1/index.html), chọn profile mặc định và nêu điểm cần chỉnh. Cho tới khi các mục trên được duyệt, đây vẫn là design proposal; không đánh dấu “art direction approved”.
+Prototype HTML vẫn chỉ là minh họa; không cần dùng nó để chứng minh renderer. Hướng nghệ thuật đã được chọn, nhưng **chưa đánh dấu chất lượng thị giác “đạt”** trước khi ảnh runtime và hardware review qua gate.

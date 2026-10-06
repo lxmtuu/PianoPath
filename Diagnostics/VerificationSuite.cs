@@ -1623,14 +1623,56 @@ internal static partial class VerificationSuite
     private static void VerifyPresets()
     {
         var names = VisualPresets.BuiltIn.Select(p => p.Name).ToList();
-        Assert(names.Count >= 6 && names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Count && names.Contains(VisualPresets.DefaultPresetName), "Built-in presets should have unique names and include the default look.");
+        Assert(names.Count == 14 && names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Count && names[0] == VisualPresets.DefaultPresetName && names.Contains("Concert Gold"),
+            "The 14 curated looks should have unique stable names, with the selected Concert default listed first.");
         foreach (var preset in VisualPresets.BuiltIn)
         {
             var copy = preset.Settings.Clone(); copy.Clamp();
             Assert(copy.ToJson() == preset.Settings.ToJson(), $"The built-in preset '{preset.Name}' should already be within the allowed ranges.");
+            Assert(preset.Settings.PresetName == preset.Name && !string.IsNullOrWhiteSpace(preset.Description),
+                $"The built-in preset '{preset.Name}' should carry its own stable name and localized description.");
         }
-        Assert(VisualPresets.FindBuiltIn("inferno")!.Settings.NoteStyle == "Fire" && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.ShowWisps && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMode == "ChromaGreen",
-            "The reference looks (burning notes, rainbow wisps, chroma key) should map to the matching renderer options.");
+        var shippedPresets = VisualPresets.BuiltIn.Concat(CommunityPresets.All).ToArray();
+        Assert(shippedPresets.All(p => PianoVisualSettings.ColorModes.Contains(p.Settings.ColorMode)
+                && PianoVisualSettings.Palettes.Contains(p.Settings.Palette)
+                && PianoVisualSettings.NoteStyles.Contains(p.Settings.NoteStyle)
+                && PianoVisualSettings.NoteDirections.Contains(p.Settings.NoteDirection)
+                && PianoVisualSettings.ImpactWaves.Contains(p.Settings.ImpactWave)
+                && PianoVisualSettings.ImpactBursts.Contains(p.Settings.ImpactBurst)
+                && PianoVisualSettings.ImpactMorphs.Contains(p.Settings.ImpactMorph)
+                && PianoVisualSettings.ImpactFlashStyles.Contains(p.Settings.ImpactFlashStyle)
+                && PianoVisualSettings.AmbientEnergies.Contains(p.Settings.AmbientEnergy)
+                && PianoVisualSettings.AmbientNatures.Contains(p.Settings.AmbientNature)
+                && PianoVisualSettings.AmbientLights.Contains(p.Settings.AmbientLight)
+                && PianoVisualSettings.AmbientCosmics.Contains(p.Settings.AmbientCosmic)
+                && PianoVisualSettings.FallingTrails.Contains(p.Settings.FallingTrail)
+                && PianoVisualSettings.ReleaseEffects.Contains(p.Settings.ReleaseEffect)
+                && PianoVisualSettings.KeyboardStyles.Contains(p.Settings.KeyboardStyle)
+                && PianoVisualSettings.ShadingQualities.Contains(p.Settings.ShadingQuality)
+                && PianoVisualSettings.PressedKeyColorModes.Contains(p.Settings.PressedKeyColorMode)
+                && PianoVisualSettings.KeyLabelModes.Contains(p.Settings.KeyLabels)
+                && PianoVisualSettings.BackgroundModes.Contains(p.Settings.BackgroundMode)
+                && ShellThemes.All.Any(theme => theme.Id == p.Settings.ShellTheme)),
+            "Every shipped look should choose values supported by the settings model, not values that only survive by being clamped to a fallback.");
+        var concert = VisualPresets.FindBuiltIn("Concert Gold")!.Settings;
+        var neon = VisualPresets.FindBuiltIn("Neon Violet")!.Settings;
+        var learning = VisualPresets.FindBuiltIn("Two Hands")!.Settings;
+        Assert(VisualPresets.CreateDefaultSettings().ToJson() == concert.ToJson()
+                && concert.NoteStyle == "Solid" && concert.ColorMode == "PerHand" && concert.ShellTheme == ShellThemes.VelvetGoldId
+                && concert.NoteGlow <= 50 && concert.BloomIntensity <= 40 && !concert.ShowImpactFlash,
+            "Concert Gold should be the fresh-install/reset look: two readable hands, restrained glow and no bright impact flash.");
+        Assert(neon.NoteStyle == "Neon" && neon.BackgroundMotion == "Nebula" && neon.BloomIntensity <= 55 && neon.ImpactFlashIntensity <= 25,
+            "Neon Violet should keep its creator identity while staying inside the new glow/flash budget.");
+        Assert(learning.ColorMode == "PerHand" && learning.ShowNoteLabels && learning.KeyLabels == "C"
+                && !learning.ShowEmbers && !learning.ShowImpactRings && !learning.ShowImpactFlash
+                && learning.AmbientEnergy == "None" && learning.AmbientNature == "None" && learning.AmbientLight == "None" && learning.AmbientCosmic == "None",
+            "Two Hands should prioritize legible hand colors and note/key labels without decorative particles.");
+        Assert(VisualPresets.FindBuiltIn("Inferno")!.Settings.NoteStyle == "Fire"
+                && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.ColorMode == "RainbowPitch"
+                && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMode == "ChromaGreen"
+                && !VisualPresets.FindBuiltIn("Green Screen")!.Settings.ShowHalo
+                && VisualPresets.FindBuiltIn("Classic Roll")!.Settings.ColorMode == "PerTrack",
+            "The themed and utility looks should retain their defining renderer behavior after the visual refresh.");
         Assert(VisualPresets.BuiltIn.All(p => PianoVisualSettings.BackgroundMotions.Contains(p.Settings.BackgroundMotion)
                 && PianoVisualSettings.HaloPulseStyles.Contains(p.Settings.HaloPulseStyle))
             && VisualPresets.FindBuiltIn("Neon Violet")!.Settings.BackgroundMotion == "Nebula"
@@ -1642,7 +1684,31 @@ internal static partial class VerificationSuite
             && VisualPresets.FindBuiltIn("Classic Roll")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Classic Roll")!.Settings.HaloPulse
             && VisualPresets.FindBuiltIn("Two Hands")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Two Hands")!.Settings.HaloPulse
             && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Green Screen")!.Settings.HaloPulse,
-            "Every built-in look should carry a validated, theme-matched motion profile, while the chroma preset keeps its background clean.");
+            "Every built-in look should use a valid, theme-matched motion profile, while learning, roll and chroma looks stay still.");
+        var originalSettingsDirectory = PianoVisualSettingsStore.SettingsDirectory;
+        var firstRunDirectory = Path.Combine(Path.GetTempPath(), "keyflow-verify-default-look-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(firstRunDirectory);
+            PianoVisualSettingsStore.UseDirectory(firstRunDirectory);
+            var fresh = PianoVisualSettingsStore.Load();
+            Assert(fresh.PresetName == "Concert Gold" && fresh.ColorMode == "PerHand" && fresh.NoteStyle == "Solid",
+                "A settings folder with no saved file should start on the curated Concert Gold look.");
+            File.WriteAllText(PianoVisualSettingsStore.SettingsPath, "{ malformed settings");
+            var recovered = PianoVisualSettingsStore.Load();
+            Assert(recovered.PresetName == "Concert Gold" && recovered.ColorMode == "PerHand",
+                "An unreadable settings file should recover to the safe curated default rather than a busy model fallback.");
+            var legacyLook = new PianoVisualSettings { PresetName = "Neon Violet", NoteStyle = "Neon", NoteColorStart = "#7B5CFF" };
+            PianoVisualSettingsStore.Save(legacyLook);
+            var restored = PianoVisualSettingsStore.Load();
+            Assert(restored.PresetName == "Neon Violet" && restored.NoteStyle == "Neon" && restored.NoteColorStart == "#7B5CFF",
+                "Changing the shipped default must not rewrite an existing user's saved look.");
+        }
+        finally
+        {
+            PianoVisualSettingsStore.UseDirectory(originalSettingsDirectory);
+            try { if (Directory.Exists(firstRunDirectory)) Directory.Delete(firstRunDirectory, true); } catch { }
+        }
         var target = new PianoVisualSettings { BackgroundImagePath = "C:\\keep.png", NoteGlow = 1 };
         target.CopyFrom(VisualPresets.Inferno());
         Assert(target.NoteStyle == "Fire" && target.BackgroundImagePath == "C:\\keep.png" && !ReferenceEquals(target.TrackColors, VisualPresets.Inferno().TrackColors),
@@ -1654,7 +1720,7 @@ internal static partial class VerificationSuite
             Assert(store.LoadUserPresets().Count == 0, "A missing preset folder should simply yield no user presets.");
             var saved = store.Save("My: Look?", VisualPresets.AuroraRainbow());
             var loaded = store.LoadUserPresets();
-            Assert(saved.Name == "My- Look-" && loaded.Count == 1 && loaded[0].Name == saved.Name && loaded[0].Settings.ShowWisps && loaded[0].Settings.BackgroundImagePath == "" && !loaded[0].BuiltIn,
+            Assert(saved.Name == "My- Look-" && loaded.Count == 1 && loaded[0].Name == saved.Name && loaded[0].Settings.ColorMode == "RainbowPitch" && loaded[0].Settings.BackgroundImagePath == "" && !loaded[0].BuiltIn,
                 "User presets should be sanitized, written as JSON and read back without the background image path.");
             var exportPath = Path.Combine(directory, "out", "export.json"); Directory.CreateDirectory(Path.GetDirectoryName(exportPath)!);
             VisualPresetStore.Export(VisualPresets.IceCrystal(), exportPath);
@@ -4052,6 +4118,14 @@ internal static partial class VerificationSuite
             && shelf.FirstOrDefault(preset => preset.Name == "Lo-Fi Study")?.Settings.BackgroundMotion == "Aurora"
             && shelf.FirstOrDefault(preset => preset.Name == "Sunset Drive")?.Settings.BackgroundMotion == "Retro Grid",
             "Every community preset should ship a validated motion profile that supports its theme.");
+        var ember = shelf.First(preset => preset.Name == "Ember Rain").Settings;
+        var study = shelf.First(preset => preset.Name == "Lo-Fi Study").Settings;
+        var sunset = shelf.First(preset => preset.Name == "Sunset Drive").Settings;
+        Assert(ember.NoteStyle == "Fire" && ember.AmbientNature == "Rain" && ember.ImpactWave == "Ripple" && !ember.ShowImpactFlash
+                && study.NoteGlow <= 10 && study.ParticleAmount == 0 && !study.ShowImpactFlash
+                && study.AmbientEnergy == "None" && study.AmbientNature == "None" && study.AmbientLight == "None" && study.AmbientCosmic == "None"
+                && sunset.NoteStyle == "Neon" && sunset.BackgroundMotion == "Retro Grid" && sunset.ImpactBurst == "Fireworks" && !sunset.ShowImpactFlash,
+            "The three community looks should opt into deliberate recipes atop a quiet baseline, without inheriting flashy model defaults.");
         Assert(shelf.Select(preset => preset.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == shelf.Count
                 && !shelf.Any(preset => VisualPresets.FindBuiltIn(preset.Name) is not null),
             "Shelf names should be unique and should not shadow a built-in preset.");

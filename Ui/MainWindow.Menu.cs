@@ -170,7 +170,7 @@ public partial class MainWindow
     private void RefreshMenuStageLook()
     {
         if (MenuPresetLabel is null) return;
-        var preset = VisualPresets.FindBuiltIn(_visualSettings.PresetName);
+        var preset = VisualPresets.FindBuiltIn(_visualSettings.PresetName) ?? CommunityPresets.Find(_visualSettings.PresetName);
         var name = string.IsNullOrWhiteSpace(_visualSettings.PresetName) ? "Custom" : _visualSettings.PresetName;
         // A closure (rather than a template plus arguments) because the description and the
         // "edited" suffix are themselves translated text that has to follow a language switch.

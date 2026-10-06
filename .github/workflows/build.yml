@@ -375,16 +375,15 @@ jobs:
           }
           else { "::notice title=Previews are reproducible::A second render of three pictures matched the first byte for byte." }
 
-      # Every built-in look, drawn by both engines side by side (software | Direct3D 11), in one picture:
-      # docs/previews/presets.jpg. It is how a change to the GPU engine is checked against the look each
-      # preset was designed with, and the list of names is checked against Stage/VisualPresets.cs by
-      # tools/check_sources.py so a new preset cannot be left out.
+      # Every shipped built-in and community look, drawn by both engines side by side (software | Direct3D 11),
+      # in docs/previews/presets.jpg. It is how renderer changes are checked against each curated recipe, and
+      # tools/check_sources.py keeps the gallery in sync with both source lists.
       - name: Render the preset gallery
         id: render-gallery
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
-          $presets = @('NeonViolet', 'Inferno', 'AuroraRainbow', 'IceCrystal', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'SakuraNocturne', 'ConcertGold', 'MoonlightSonata', 'GalaxyVoyage', 'ElectricStorm', 'OceanDepths', 'RetroArcade')
+          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive')
           $work = Join-Path $env:TEMP 'keyflow-gallery'
           Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $work | Out-Null

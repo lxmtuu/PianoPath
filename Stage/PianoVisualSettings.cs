@@ -673,9 +673,15 @@ internal static class PianoVisualSettingsStore
         try
         {
             if (File.Exists(SettingsPath)) return PianoVisualSettings.FromJson(File.ReadAllText(SettingsPath));
-            var settings = new PianoVisualSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
+            // A new install and a settings reset should start from the same curated look the preset
+            // picker calls "default". Existing files are returned untouched apart from their own
+            // normal schema migrations; changing the shipped preset never recolors a user's setup.
+            var settings = VisualPresets.CreateDefaultSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
         }
-        catch { var settings = new PianoVisualSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings; }
+        catch
+        {
+            var settings = VisualPresets.CreateDefaultSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
+        }
     }
 
     internal static void Save(PianoVisualSettings settings)

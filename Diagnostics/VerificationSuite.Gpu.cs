@@ -297,7 +297,7 @@ internal static partial class VerificationSuite
             && FrameBudget.Find("default") == FrameBudget.DefaultLook && FrameBudget.Find("Heavy") == FrameBudget.HeavyLook && FrameBudget.Find("cinematic") is null,
             "Every budgeted scene needs its own id, found without regard to case, and a name that is not a scene must not resolve to one.");
         Assert(FrameBudget.DefaultLook.P95LimitMs == 8 && string.IsNullOrWhiteSpace(FrameBudget.DefaultLook.Preset),
-            "The default scene budgets the look a first run gets (p95 < 8 ms), built from fresh settings rather than from a preset.");
+            "The default scene budgets the first-run Concert Gold look (p95 < 8 ms), obtained from the same factory used by the settings store.");
         Assert(FrameBudget.HeavyLook.P95LimitMs == 16 && VisualPresets.FindBuiltIn(FrameBudget.HeavyLook.Preset) is not null,
             "The heavy scene must name a preset the app really ships, or the gate would measure a look nobody can choose.");
         Assert(FrameBudget.All.All(budget => budget.P95LimitMs > 0 && budget.Description.Length > 20),

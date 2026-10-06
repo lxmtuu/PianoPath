@@ -47,7 +47,7 @@
                 <Border Grid.Column="1" Padding="12,6" CornerRadius="10" Background="#0E1017" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="LOOK" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <TextBlock x:Name="HeaderPresetLabel" Text="Neon Violet" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="HeaderPresetLabel" Text="Concert Gold" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
                         <Button Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconSliders}" Margin="8,0,0,0" Click="StyleQuick_Click" ToolTip="Open the style presets" local:Loc.Localize="True"/>
                     </StackPanel>
                 </Border>
@@ -93,7 +93,7 @@
                                         <TextBlock Text="LIVE" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock x:Name="PresetNameLabel" Text="Preset · Neon Violet" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="PresetNameLabel" Text="Preset · Concert Gold" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
                             </StackPanel>
                             <Grid Grid.Column="1" VerticalAlignment="Center" MaxWidth="268" HorizontalAlignment="Stretch">
                                 <TextBox x:Name="SettingsSearchBox" Height="32" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Filter the settings on every page" local:Loc.Localize="True"/>

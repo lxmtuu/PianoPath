@@ -115,8 +115,8 @@ internal static class FrameBenchmark
     private static FrameBenchReport RunScene(GpuRenderLoop loop, GpuStageFeed feed, FrameBudget budget, IReadOnlyList<NoteEvent> notes, int frames, bool software)
     {
         var settings = string.IsNullOrWhiteSpace(budget.Preset)
-            ? new PianoVisualSettings()
-            : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? new PianoVisualSettings();
+            ? VisualPresets.CreateDefaultSettings()
+            : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? VisualPresets.CreateDefaultSettings();
         // Note colours are data the stage uploads as a table either way, so the bench uses a fixed ramp
         // instead of reaching into the WPF stage for the user's palette: the frame cost does not depend on it.
         feed.SetLook(GpuLook.From(settings, (pitch, track) => System.Windows.Media.Color.FromRgb((byte)(pitch * 2), (byte)(40 + track * 60), 200), .205, null, overCamera: budget.Camera));
