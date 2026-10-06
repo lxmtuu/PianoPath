@@ -1543,9 +1543,19 @@ internal static partial class VerificationSuite
         reverb.IsChecked = false; Assert(!piano.ReverbEnabled, "The reverb control should bypass the live audio effect.");
         reverb.IsChecked = true; Assert(piano.ReverbEnabled, "Reverb should be switchable back on while the piano is running.");
         Assert(!(bool)Field(window, "_playing") && ((IEnumerable<NoteEvent>)Field(window, "_notes")).Count() == 0 && !((Button)window.FindName("PlayButton")).IsEnabled, "Startup should be live-play only with no demo MIDI or automatic transport.");
+        var wasLiveShowEmbers = visualSettings.ShowEmbers;
+        var wasLiveParticleAmount = visualSettings.ParticleAmount;
+        var wasLiveParticleResponse = visualSettings.ParticleResponse;
+        var wasLiveImpactBurst = visualSettings.ImpactBurst;
+        // Concert Gold deliberately uses a low particle budget. Set an explicit test budget so this
+        // input regression verifies that the burst path works, not whichever preset happens to be loaded.
+        stage.ClearTransient();
+        visualSettings.ShowEmbers = true; visualSettings.ParticleAmount = 24;
+        visualSettings.ParticleResponse = 100; visualSettings.ImpactBurst = "Dust";
+        stage.SetVisualSettings(visualSettings);
         Invoke(window, "PressNote", 60, 90);
         Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position")) < .001, "A live piano key must not start or advance MIDI playback.");
-        Assert(stage.LiveTrailCount == 1 && stage.SparkCount >= 12, "A keypress should create a short falling note and a neon impact burst.");
+        Assert(stage.LiveTrailCount == 1 && stage.SparkCount >= 12, "A keypress should create a short falling note and a visible impact burst.");
         Assert(!piano.HasInstrument, "Keyboard input should not synthesize a replacement piano voice in silent mode.");
         Assert((int)Field(window, "_hits") == 0 && (int)Field(window, "_misses") == 0, "Free-play notes should not affect song practice scoring.");
         midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackNoteMessage(61, 90, true));
@@ -1558,6 +1568,9 @@ internal static partial class VerificationSuite
             {
                 Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position") - livePosition) < .001, "MIDI Note On should remain live-only and leave the song playhead stopped.");
                 Assert(stage.LiveTrailCount == 2 && stage.SparkCount > 0, "MIDI Note On should create its own animation and sparks.");
+                visualSettings.ShowEmbers = wasLiveShowEmbers; visualSettings.ParticleAmount = wasLiveParticleAmount;
+                visualSettings.ParticleResponse = wasLiveParticleResponse; visualSettings.ImpactBurst = wasLiveImpactBurst;
+                stage.SetVisualSettings(visualSettings);
                 Assert(stage.FirstLiveTrailY > 0 && stage.FirstLiveTrailY < stage.ActualHeight - stage.KeyboardHeight, "A pressed-key note should fall down its own lane while the song playhead stays still.");
                 Assert(((ToggleButton)window.FindName("SoftPedalToggle")).IsChecked == true && ((HashSet<PianoPedal>)Field(window, "_pedalsDown")).Contains(PianoPedal.Soft), "Incoming MIDI CC 67 should update the soft pedal control immediately.");
                 var heldLength = stage.LiveTrailHeightFor(60);
