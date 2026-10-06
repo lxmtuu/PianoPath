@@ -4242,10 +4242,10 @@ internal static partial class VerificationSuite
             "The Notes page should expose the falling trail choice, the pulse switch and the ghost switch.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
             "The Particles page should expose the burst style, the note morph and the flash style.");
-        var headTailGradient = EffectCatalog.Falling.Single(e => e.Id == "falling.color-gradient");
+        var headTailGradient = EffectCatalog.Falling.All.Single(e => e.Id == "falling.color-gradient");
         Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 86
             && headTailGradient.Status == EffectStatus.Planned && headTailGradient.Channel == "falling.body.gradient"
-            && EffectCatalog.Falling.Where(e => e.Id != headTailGradient.Id).All(e => e.Status == EffectStatus.Available),
+            && EffectCatalog.Falling.All.Where(e => e.Id != headTailGradient.Id).All(e => e.Status == EffectStatus.Available),
             "The effect inventory should keep its missing head-to-tail gradient Planned rather than equating it with the pitch palette.");
         Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
             "The whole impact catalogue should be implemented in v2.");
