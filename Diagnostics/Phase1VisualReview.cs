@@ -47,7 +47,7 @@ internal static class Phase1VisualReview
                 stage.AdjustColor);
 
             RenderSoftwareLook(stage, settings, look, scene, output, images);
-            RenderGpuLook(gpuRenderer, gpuLook, settings, look, scene, output, images);
+            RenderGpuLook(gpuRenderer, gpuLook, look, scene, output, images);
         }
 
         var expected = scene.Looks.Count * scene.Checkpoints.Count * 2 * 2;
@@ -139,7 +139,7 @@ internal static class Phase1VisualReview
         }
     }
 
-    private static void RenderGpuLook(GpuStageRenderer renderer, GpuLook lookData, PianoVisualSettings settings,
+    private static void RenderGpuLook(GpuStageRenderer renderer, GpuLook lookData,
         ReviewLook look, ReviewScene scene, string output, List<ReviewImage> images)
     {
         foreach (var checkpoint in scene.Checkpoints)
@@ -148,7 +148,7 @@ internal static class Phase1VisualReview
             feed.SetLook(lookData);
             feed.SetStageHeight(scene.Height);
             feed.LabelAtlas = PianoStage.GpuGlyphAtlas;
-            var cursor = new ReviewTimelineCursor(scene, settings.PhysicsTimeFactor);
+            var cursor = new ReviewTimelineCursor(scene);
             var dt = 1.0 / scene.FramesPerSecond;
             void BeforeFrame(int frame)
             {
