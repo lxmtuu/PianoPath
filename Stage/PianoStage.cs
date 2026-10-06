@@ -723,6 +723,7 @@ internal sealed partial class PianoStage : FrameworkElement
                 aura.GradientStops.Add(new GradientStop(Color.FromArgb(15, 49, 50, 137), .5)); aura.GradientStops.Add(new GradientStop(Color.FromArgb(0, 5, 4, 13), 1));
                 aura.Freeze(); dc.DrawRectangle(aura, null, new Rect(0, 0, width, keyTop));
             }
+            if (!_transparentBackdrop && _visual.ShowBackground) DrawBackgroundMotion(dc, width, keyTop);
             if (_visual.ShowBackground)
             {
                 if (_visual.ShowStars) DrawStars(dc, width, keyTop);
@@ -822,6 +823,179 @@ internal sealed partial class PianoStage : FrameworkElement
             gradient.Freeze(); brush = CacheGradient(key, gradient);
         }
         dc.DrawRectangle(brush, null, new Rect(0, keyTop - glowHeight, width, glowHeight));
+    }
+
+    /// <summary>Software approximation of the six GPU procedural skies, tuned to preserve their colour and motion identity.</summary>
+    private void DrawBackgroundMotion(DrawingContext dc, double width, double height)
+    {
+        var amount = Math.Clamp(_visual.BackgroundMotionAmount / 100, 0, 1);
+        var mode = _visual.BackgroundMotion;
+        if (!_visual.ShowBackground || _visual.BackgroundMode == "ChromaGreen" || _transparentBackdrop
+            || mode == "None" || amount <= .001 || width < 1 || height < 1) return;
+
+        var time = _elapsed * Math.Max(.05, _visual.BackgroundMotionSpeed / 100);
+        var tint = AdjustColor(ParseColor(_visual.BackgroundMotionColor, ColorFromHue(266)));
+        var peak = mode switch
+        {
+            "Aurora" => .42,
+            "Nebula" => .56,
+            "Prism" => .22,
+            "Ember Haze" => .46,
+            "Ocean Flow" => .50,
+            "Retro Grid" => .72,
+            _ => 0
+        };
+        if (peak <= 0) return;
+        var alpha = BackgroundMotionAlpha(amount, peak);
+        dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, height)));
+        switch (mode)
+        {
+            case "Aurora":
+            {
+                var aurora = Blend(tint, Color.FromRgb(54, 190, 154), .38);
+                for (var i = 0; i < 2; i++)
+                {
+                    var phase = time * .65 + i * 2.2;
+                    var centreY = height * (.27 + i * .11 + Math.Sin(phase) * .018);
+                    var ribbon = WavyMotionRibbon(width, centreY, height * .055, height * .026, phase, height * .025);
+                    dc.DrawGeometry(BackgroundMotionBand(aurora, alpha), null, ribbon);
+                }
+                DrawMotionCloud(dc, new Point(width * (.48 + Math.Sin(time * .2) * .08), height * .34), width * .42, height * .30, aurora, Alpha(alpha * .48));
+                break;
+            }
+            case "Nebula":
+            {
+                var indigo = Blend(tint, Color.FromRgb(105, 74, 180), .34);
+                var rose = Blend(tint, Color.FromRgb(166, 52, 112), .54);
+                DrawMotionCloud(dc, new Point(width * (.38 + Math.Sin(time * .12) * .035), height * .40), width * .46, height * .35, indigo, alpha);
+                DrawMotionCloud(dc, new Point(width * (.69 + Math.Sin(time * .09 + 1.7) * .04), height * .51), width * .34, height * .30, rose, Alpha(alpha * .60));
+                DrawMotionCloud(dc, new Point(width * .53, height * .25), width * .30, height * .22, tint, Alpha(alpha * .45));
+                break;
+            }
+            case "Prism":
+            {
+                var prismColors = new[]
+                {
+                    Blend(tint, Color.FromRgb(111, 89, 220), .42),
+                    Blend(tint, Color.FromRgb(64, 197, 213), .42),
+                    Blend(tint, Color.FromRgb(226, 137, 187), .50)
+                };
+                for (var i = 0; i < prismColors.Length; i++)
+                {
+                    var centreY = height * (.34 + i * .13);
+                    var ribbon = WavyMotionRibbon(width, centreY, height * .027, height * .018, time * .3 + i * 2.1, (i - 1) * height * .16);
+                    dc.DrawGeometry(BackgroundMotionBand(prismColors[i], Alpha(alpha * .52)), null, ribbon);
+                }
+                break;
+            }
+            case "Ember Haze":
+            {
+                var ember = Blend(tint, Color.FromRgb(207, 69, 34), .38);
+                var haze = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
+                    MappingMode = BrushMappingMode.RelativeToBoundingBox
+                };
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(0, ember.R, ember.G, ember.B), 0));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(0, ember.R, ember.G, ember.B), .50));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .20), ember.R, ember.G, ember.B), .68));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .72), ember.R, ember.G, ember.B), .91));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .32), ember.R, ember.G, ember.B), 1));
+                haze.Freeze();
+                dc.DrawRectangle(haze, null, new Rect(0, 0, width, height));
+                DrawMotionCloud(dc, new Point(width * (.50 + Math.Sin(time * .16) * .04), height * .86), width * .48, height * .20, ember, Alpha(alpha * .58));
+                break;
+            }
+            case "Ocean Flow":
+            {
+                var deep = Blend(tint, Color.FromRgb(24, 99, 150), .42);
+                var surface = Blend(tint, Color.FromRgb(45, 183, 183), .40);
+                var lower = WavyMotionRibbon(width, height * .67, height * .045, height * .026, time * .45, height * .018);
+                var upper = WavyMotionRibbon(width, height * .49, height * .030, height * .020, time * .38 + 2, -height * .014);
+                dc.DrawGeometry(BackgroundMotionBand(deep, Alpha(alpha * .62)), null, lower);
+                dc.DrawGeometry(BackgroundMotionBand(surface, Alpha(alpha * .44)), null, upper);
+                DrawMotionCloud(dc, new Point(width * .5, height * .67), width * .55, height * .33, deep, Alpha(alpha * .36));
+                break;
+            }
+            case "Retro Grid":
+            {
+                var horizonY = height * (.43 + .012 * Math.Sin(time * .42));
+                var gridColor = Color.FromArgb(Alpha(alpha * .40), tint.R, tint.G, tint.B);
+                var centerX = width * .5;
+                for (var i = 0; i <= 18; i++)
+                {
+                    var bottomX = width * i / 18;
+                    var horizonX = centerX + (bottomX - centerX) * .055;
+                    dc.DrawLine(Pen(gridColor, .8), new Point(horizonX, horizonY), new Point(bottomX, height));
+                }
+                for (var i = 1; i <= 8; i++)
+                {
+                    var depth = i / 8.0;
+                    var y = horizonY + (height - horizonY) * depth * depth;
+                    var lineColor = Color.FromArgb(Alpha(alpha * (.18 + .48 * depth)), tint.R, tint.G, tint.B);
+                    dc.DrawLine(Pen(lineColor, .8), new Point(0, y), new Point(width, y));
+                }
+                break;
+            }
+        }
+        dc.Pop();
+    }
+
+    private static byte BackgroundMotionAlpha(double amount, double peak)
+        => Alpha(Math.Min(128, 255 * Math.Sqrt(Math.Clamp(amount * peak, 0, 1)) * .64));
+
+    private static LinearGradientBrush BackgroundMotionBand(Color color, byte alpha)
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
+            MappingMode = BrushMappingMode.RelativeToBoundingBox
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 0));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .44), color.R, color.G, color.B), .28));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, color.R, color.G, color.B), .52));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .40), color.R, color.G, color.B), .78));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+        brush.Freeze();
+        return brush;
+    }
+
+    private static StreamGeometry WavyMotionRibbon(double width, double centreY, double halfHeight,
+        double waveHeight, double phase, double slope)
+    {
+        const int steps = 24;
+        var points = new Point[(steps + 1) * 2];
+        for (var i = 0; i <= steps; i++)
+        {
+            var f = i / (double)steps;
+            var centre = centreY + (f - .5) * slope + Math.Sin(f * Math.PI * 3 + phase) * waveHeight;
+            points[i] = new Point(width * f, centre - halfHeight);
+            points[steps * 2 + 1 - i] = new Point(width * f, centre + halfHeight);
+        }
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(points[0], true, true);
+            for (var i = 1; i < points.Length; i++) context.LineTo(points[i], true, false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    private static void DrawMotionCloud(DrawingContext dc, Point centre, double radiusX, double radiusY, Color color, byte alpha)
+    {
+        if (alpha == 0 || radiusX <= 0 || radiusY <= 0) return;
+        var brush = new RadialGradientBrush
+        {
+            Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5),
+            RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .72), color.R, color.G, color.B), 0));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, color.R, color.G, color.B), .32));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .42), color.R, color.G, color.B), .68));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+        brush.Freeze();
+        dc.DrawEllipse(brush, null, centre, radiusX, radiusY);
     }
 
     private void DrawKeyBeams(DrawingContext dc, double width, double keyTop, double lane)
@@ -2319,9 +2493,9 @@ internal sealed partial class PianoStage : FrameworkElement
                     for (var layer = 2; layer >= 0; layer--)
                     {
                         var halfWidth = width * (.028 + layer * .034);
-                        // Convert the GPU additive layer levels (.32 / .23 / .14) to WPF alpha bytes;
-                        // this fallback is not HDR, so preserve a readable warm core without bloom.
-                        var alpha = (layer switch { 0 => 82d, 1 => 59d, _ => 36d }) * amount * flicker;
+                        // WPF composites in display space while the GPU accumulates linear light. Lift the
+                        // equivalent alpha modestly so the software shafts keep the same warm presence.
+                        var alpha = (layer switch { 0 => 108d, 1 => 80d, _ => 52d }) * amount * flicker;
                         var beam = SpotlightBeam(origin, target, Math.Max(1.5, halfWidth * .08), halfWidth);
                         var gradient = new LinearGradientBrush
                         {
@@ -2345,8 +2519,8 @@ internal sealed partial class PianoStage : FrameworkElement
                         RadiusY = .5,
                         MappingMode = BrushMappingMode.RelativeToBoundingBox
                     };
-                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(105 * amount * flicker), shaft.R, shaft.G, shaft.B), 0));
-                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(35 * amount * flicker), shaft.R, shaft.G, shaft.B), .45));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(138 * amount * flicker), shaft.R, shaft.G, shaft.B), 0));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(48 * amount * flicker), shaft.R, shaft.G, shaft.B), .45));
                     pool.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 1));
                     pool.Freeze();
                     dc.DrawEllipse(pool, null, target, width * .05, 11);

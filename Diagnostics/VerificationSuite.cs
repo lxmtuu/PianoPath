@@ -4568,6 +4568,12 @@ internal static partial class VerificationSuite
         var wasNature = visualSettings.AmbientNature; var wasNatureAmount = visualSettings.AmbientNatureAmount;
         var wasLight = visualSettings.AmbientLight; var wasLightAmount = visualSettings.AmbientLightAmount;
         var wasCosmic = visualSettings.AmbientCosmic; var wasCosmicAmount = visualSettings.AmbientCosmicAmount;
+        var wasBackgroundMotion = visualSettings.BackgroundMotion;
+        var wasBackgroundMotionAmount = visualSettings.BackgroundMotionAmount;
+        var wasBackgroundMotionSpeed = visualSettings.BackgroundMotionSpeed;
+        var wasBackgroundMotionColor = visualSettings.BackgroundMotionColor;
+        var wasBackgroundMode = visualSettings.BackgroundMode;
+        var wasShowBackground = visualSettings.ShowBackground;
         var wasWave = visualSettings.ImpactWave;
         // The curated default intentionally zeros inactive layer intensities, so enable each selected layer
         // explicitly instead of relying on model-default amounts left behind by a different preset.
@@ -4606,6 +4612,27 @@ internal static partial class VerificationSuite
         var litPixels = 0;
         for (var i = 3; i < spotlightPixels.Length; i += 4) if (spotlightPixels[i] > 8) litPixels++;
         Assert(litPixels > 1000, $"Spotlights should rasterize visible pixels in the WPF fallback (found {litPixels}).");
+
+        visualSettings.BackgroundMode = "Solid";
+        visualSettings.ShowBackground = true;
+        visualSettings.BackgroundMotionAmount = 60;
+        visualSettings.BackgroundMotionSpeed = 38;
+        foreach (var motion in PianoVisualSettings.BackgroundMotions.Skip(1))
+        {
+            visualSettings.BackgroundMotion = motion;
+            stage.SetVisualSettings(visualSettings);
+            var motionVisual = new DrawingVisual();
+            using (var dc = motionVisual.RenderOpen()) { Invoke(stage, "DrawBackgroundMotion", dc, 1280d, 480d); }
+            Assert(motionVisual.Drawing is not null && motionVisual.Drawing.Bounds.Width > 100 && motionVisual.Drawing.Bounds.Height > 60,
+                $"The WPF fallback should render a visible {motion} background-motion layer.");
+        }
+        visualSettings.BackgroundMode = "ChromaGreen";
+        stage.SetVisualSettings(visualSettings);
+        var chromaMotion = new DrawingVisual();
+        using (var dc = chromaMotion.RenderOpen()) { Invoke(stage, "DrawBackgroundMotion", dc, 1280d, 480d); }
+        Assert(chromaMotion.Drawing is null || chromaMotion.Drawing.Bounds.IsEmpty,
+            "Procedural background motion must leave the chroma-key green perfectly clean on the WPF path.");
+
         stage.Impact(60, 1);
         Assert(stage.RingCount > 0, "A ripple impact should spawn a wave.");
         var ripples = new DrawingVisual();
@@ -4617,9 +4644,16 @@ internal static partial class VerificationSuite
         visualSettings.AmbientNature = wasNature; visualSettings.AmbientNatureAmount = wasNatureAmount;
         visualSettings.AmbientLight = wasLight; visualSettings.AmbientLightAmount = wasLightAmount;
         visualSettings.AmbientCosmic = wasCosmic; visualSettings.AmbientCosmicAmount = wasCosmicAmount;
+        visualSettings.BackgroundMotion = wasBackgroundMotion;
+        visualSettings.BackgroundMotionAmount = wasBackgroundMotionAmount;
+        visualSettings.BackgroundMotionSpeed = wasBackgroundMotionSpeed;
+        visualSettings.BackgroundMotionColor = wasBackgroundMotionColor;
+        visualSettings.BackgroundMode = wasBackgroundMode;
+        visualSettings.ShowBackground = wasShowBackground;
         visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
+        Results.Add("PASS ambient WPF: Spotlights, all six procedural background motions and ripple geometry render; chroma-key remains clean.");
     }
 
     /// <summary>
