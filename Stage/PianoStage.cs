@@ -39,6 +39,8 @@ internal sealed partial class PianoStage : FrameworkElement
     private static readonly Point[] CrystalOutline = [new(.24, 0), new(.76, 0), new(1, .14), new(1, .86), new(.76, 1), new(.24, 1), new(0, .86), new(0, .14)];
     private static readonly Point[] CrystalFacets = [new(.24, .12), new(.5, .28), new(.76, .12), new(.5, .28), new(.5, .28), new(.5, .72), new(.5, .72), new(.24, .88), new(.5, .72), new(.76, .88)];
     private static readonly StreamGeometry CrystalUnitShape = UnitPolygon(CrystalOutline);
+    // Concentric samples of the GPU line shader's exp(-distance² * 0.7) glow, drawn outer-to-inner by WPF.
+    private static readonly double[] SpotlightGaussianRadii = [3.0, 2.4, 1.9, 1.5, 1.1, .8, .55, .32, .14, .04, 0];
     private readonly Dictionary<uint, SolidColorBrush> _brushCache = [];
     private readonly Dictionary<ulong, Brush> _gradientCache = [];
     private readonly List<Star> _stars = [];
@@ -1641,11 +1643,14 @@ internal sealed partial class PianoStage : FrameworkElement
             Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.B) + (ToLinearChannel(b.B) - ToLinearChannel(a.B)) * t) * 255)));
     }
 
-    private static byte SpotlightLayerAlpha(Color shaft, double amount, int layer, bool filmic, double exposure)
+    private static double SpotlightEnergyScaleAtOffset(double width, double radius)
     {
-        var totalOpacity = SpotlightDisplayOpacity(shaft, amount, .9075, filmic, exposure);
-        var layerShare = layer switch { 0 => .529, 1 => .317, _ => .154 };
-        return Alpha((1 - Math.Pow(1 - totalOpacity, layerShare)) * 255);
+        var distance = width * .096 * radius;
+        var inner = width * .028;
+        var middle = width * .062;
+        var outer = width * .096;
+        static double Falloff(double offset, double halfWidth) => Math.Exp(-.7 * Math.Pow(offset / Math.Max(1, halfWidth), 2));
+        return .48 * Falloff(distance, inner) + .2875 * Falloff(distance, middle) + .14 * Falloff(distance, outer);
     }
 
     /// <summary>Maps additive linear GPU emission through the same filmic transfer into WPF source-over opacity.</summary>
@@ -2574,26 +2579,33 @@ internal sealed partial class PianoStage : FrameworkElement
                     var origin = new Point(anchorX, -12);
                     var target = new Point(targetX, height * .97);
 
-                    // Draw the widest, dimmest shaft first, then layer the tighter light toward its core.
-                    for (var layer = 2; layer >= 0; layer--)
+                    // The GPU lines are constant-width soft segments, not solid tapered wedges. Approximate
+                    // their Gaussian lateral falloff with nested feather samples; this removes the hard bands
+                    // visible in software captures while keeping WARP's three-layer energy profile.
+                    var beamGradient = new LinearGradientBrush
                     {
-                        var halfWidth = width * (.028 + layer * .034);
-                        // The WARP pass emits .48/.2875/.14 linear energy across its three layers;
-                        // convert that filmic display contribution into source-over WPF layer opacities.
-                        var alpha = SpotlightLayerAlpha(shaft, amount * flicker, layer, _visual.ShaderFilmic, _visual.ShaderExposure);
-                        var beam = SpotlightBeam(origin, target, Math.Max(1.5, halfWidth * .08), halfWidth);
-                        var gradient = new LinearGradientBrush
-                        {
-                            StartPoint = origin,
-                            EndPoint = target,
-                            MappingMode = BrushMappingMode.Absolute,
-                            SpreadMethod = GradientSpreadMethod.Pad
-                        };
-                        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 0));
-                        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .45), shaft.R, shaft.G, shaft.B), .55));
-                        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha), shaft.R, shaft.G, shaft.B), 1));
-                        gradient.Freeze();
-                        dc.DrawGeometry(gradient, null, beam);
+                        StartPoint = origin,
+                        EndPoint = target,
+                        MappingMode = BrushMappingMode.Absolute,
+                        SpreadMethod = GradientSpreadMethod.Pad
+                    };
+                    beamGradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 0));
+                    beamGradient.GradientStops.Add(new GradientStop(Color.FromArgb(115, shaft.R, shaft.G, shaft.B), .55));
+                    beamGradient.GradientStops.Add(new GradientStop(Color.FromArgb(255, shaft.R, shaft.G, shaft.B), 1));
+                    beamGradient.Freeze();
+                    var previousOpacity = 0d;
+                    foreach (var radius in SpotlightGaussianRadii)
+                    {
+                        var energyScale = SpotlightEnergyScaleAtOffset(width, radius);
+                        var opacity = SpotlightDisplayOpacity(shaft, amount * flicker, energyScale, _visual.ShaderFilmic, _visual.ShaderExposure);
+                        var shellOpacity = (opacity - previousOpacity) / Math.Max(.001, 1 - previousOpacity);
+                        previousOpacity = opacity;
+                        if (shellOpacity <= .001) continue;
+                        var halfWidth = Math.Max(1.5, width * .096 * radius);
+                        var beam = SpotlightBeam(origin, target, halfWidth, halfWidth);
+                        dc.PushOpacity(Math.Clamp(shellOpacity, 0, 1));
+                        dc.DrawGeometry(beamGradient, null, beam);
+                        dc.Pop();
                     }
 
                     var pool = new RadialGradientBrush
