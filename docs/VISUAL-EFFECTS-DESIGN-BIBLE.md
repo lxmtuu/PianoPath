@@ -1,6 +1,6 @@
 # PianoPath Concert FX — design bible (Phase 1, direction selected)
 
-> **Trạng thái (2026-10-06):** người dùng đã chọn art direction Concert / Neon / Learning và cả 17 recipe đã được nối vào runtime. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass build, portable tests, `--verify` (2.169 assertions, 0 skipped) và render gallery preset qua WPF/software + GPU/WARP; preview được làm mới ở `3b2acf8`. CI [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) tiếp tục pass build/tests/`--verify` (2.188 assertions, 0 skipped), pixel checks Gem/Crystal Outline, và gallery note-material 9 cấu hình ở 50%; `docs/previews/note-styles.jpg` được làm mới ở `3a3bd93`. Đã xem tổng quan các gallery, nhưng Phase 1 **chưa đóng**: còn review đủ 17 preset theo 3 checkpoint ở 100%/50%, accessibility/contrast, bố cục Visual Effects Studio và chấp thuận fixture. WARP xác nhận code path, không chứng minh chất lượng/performance trên GPU thật hay AR.
+> **Trạng thái (2026-10-07):** người dùng đã chọn art direction Concert / Neon / Learning và cả 17 recipe đã được nối vào runtime. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) và [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) trước đó xác nhận build, tests, `--verify`, gallery 17 preset và note-material trên WPF/software + GPU/WARP. Nay đã thêm harness đọc fixture và tạo **48 ảnh** cho ba preset tham chiếu; `--verify-review-out=<dir>` và upload artifact đã được nối vào Windows workflow, nhưng **chưa build/chạy trên Windows CI** nên chưa xác nhận ảnh/artifact. Sandbox hiện không có `dotnet`. Phase 1 vẫn mở cho tới khi CI qua và người dùng xem ảnh; sau đó mới mở rộng review sang 17 preset, accessibility/contrast và duyệt Visual Effects Studio. WARP xác nhận code path, không chứng minh chất lượng/performance trên GPU thật hay AR.
 > **Ngày:** 2026-10-06
 > **Cùng bộ:** [Visual Effects Studio wireframe](VISUAL-EFFECTS-STUDIO-WIREFRAME.md) · [reference scene JSON](samples/visual-effects-phase1-scene.json) · [preview prototype](prototypes/visual-effects-phase1/index.html) · [master roadmap](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
@@ -108,15 +108,16 @@ Backplate / camera source
 
 Thứ tự thật có thể khác ở từng backend; Phase 3 phải chứng minh parity/anchor chứ không được coi sơ đồ này là implementation.
 
-## 6. Ba scene review cố định
+## 6. Một scene review cố định, bốn checkpoint
 
-Nguồn sự thật là [`visual-effects-phase1-scene.json`](samples/visual-effects-phase1-scene.json): C–G–Am–F, 4/4, 96 BPM rồi 72 BPM, có velocity thấp/cao, legato, hợp âm giữ, pedal, release và 1.167 giây tail. Mỗi profile phải xem cùng 720 frames ở 1920×1080; dùng các checkpoint:
+Nguồn sự thật là [`visual-effects-phase1-scene.json`](samples/visual-effects-phase1-scene.json): C–G–Am–F, 4/4, 96 BPM rồi 72 BPM, có velocity thấp/cao, legato, hợp âm giữ, pedal, release và 1.167 giây tail. Fixture được tiêu thụ **chỉ bởi verification review harness**, không phải cấu hình playback phiên người dùng. `Diagnostics/Phase1VisualReview.cs` phát timeline cố định và render từ geometry 1920×1080 qua `PianoStage` WPF lẫn D3D11/WARP; tạo 3 preset tham chiếu × 4 checkpoint × 2 renderer × 2 cỡ = **48 PNG**. Ảnh 960×540 là arithmetic mean từng khối nguồn 2×2 từ ảnh 1920×1080, tuyệt đối không relayout scene. Bốn checkpoint vẫn là:
 
 1. **0.8 s — Note readability:** viền, pitch column, nốt sắp chạm.
 2. **4.1 s — Held chord and impact:** hai tay, velocity, note giữ, hit cục bộ.
-3. **11.25 s — Release and rest:** decay và khoảng nghỉ sạch.
+3. **6.1 s — Sustain pedal:** pedal đang bật; bass giữ và melody vẫn tách bạch, pedal glow cục bộ, không flash toàn khung.
+4. **11.25 s — Release and rest:** decay và khoảng nghỉ sạch sau khi note/pedal đã nhả.
 
-Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không phải ảnh do PianoPath/WPF/GPU render**. Gallery CI preset dùng `PianoPath.exe --snapshot` cho WPF/software và GPU/WARP; note-material gallery riêng có 9 cấu hình Solid/Gem/Crystal/… × hai engine, mỗi ô 540×350 (50%). Đây là ảnh runtime/pixel evidence để review; WARP không chứng minh FPS/phẩm chất trên GPU thật hoặc webcam thật.
+Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không phải ảnh do PianoPath/WPF/GPU render**. Gallery CI preset dùng `PianoPath.exe --snapshot` cho WPF/software và GPU/WARP; note-material gallery riêng có 9 cấu hình Solid/Gem/Crystal/… × hai engine, mỗi ô 540×350 (50%). Harness Phase 1 tạo artifact `phase1-visual-review` gồm `index.html`, `manifest.json` và 48 PNG; chạy tay từ thư mục gốc bằng `PianoPath.exe --verify --verify-review-out=<dir>`. Ảnh này là runtime/pixel evidence để review, không tự chấm mỹ thuật; WARP không chứng minh FPS/chất lượng trên GPU thật hoặc webcam thật. Chroma-key không nằm trong ma trận 48 ảnh này và vẫn phải được review riêng bằng gate Green Screen hiện có trước khi tuyên bố đã duyệt chroma.
 
 ## 7. Chuyển thiết kế sang code hiện có
 
@@ -134,14 +135,16 @@ Phase 1 gồm mapping recipe và wiring cần thiết cho fresh-install/reset; k
 ## 8. Gate Phase 1 — hướng đã chọn; review chi tiết còn mở
 
 - [x] Người dùng chọn hướng Concert / Neon / Learning áp lên toàn bộ preset đã ship; Concert Gold là default/reset.
-- [ ] Xác nhận màu hand/track có dễ đọc và phân biệt trong 3 checkpoint ở 100% và 50% kích thước.
-- [ ] Xác nhận Learning giữ nốt/nhãn rõ hơn trang trí, không phát flash toàn màn; kiểm tra contrast thực tế, không suy từ hex.
+- [ ] Harness tùy chọn `--verify-review-out=<dir>` đã được nối trong source: đọc fixture, feed timeline cố định cho WPF/GPU-WARP và dự kiến tạo 48 PNG + manifest/index; **chưa đánh dấu đạt** cho đến khi Windows build và runtime capture xác nhận.
+- [ ] Build Windows + chạy `--verify --verify-review-out=...` thành công, xác nhận đúng 48 PNG (12× 1920×1080 và 12× 960×540 cho mỗi renderer) cùng `manifest.json`/`index.html` trong artifact `phase1-visual-review`. Chưa chạy được trong sandbox này: `dotnet` không cài; chờ Windows CI.
+- [ ] Người dùng duyệt 48 ảnh: độ rõ/viền nốt, pitch registration, tách tay, hợp âm giữ, pedal-on/release/nghỉ, contrast thực tế, flash cục bộ và khả năng đọc ở 50%; sửa sai rồi render lại trước khi đóng gate.
+- [ ] Review chroma-key Green Screen riêng; preset đó không thuộc ma trận 3 profile/48 ảnh. Không gộp kết quả WARP hay ảnh solid-background để tuyên bố chroma đã đạt.
 - [x] CI run [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) render đủ 17 preset qua WPF/software + GPU/WARP; đã xem tổng quan gallery và preview Concert Gold.
 - [x] CI run [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) build/test/`--verify` pass (2.188 assertions, 0 skipped), kiểm tra pixel Gem/Crystal Outline và render gallery 9 material/depth configs × hai engine tại 50%; ảnh nằm ở `docs/previews/note-styles.jpg` (commit `3a3bd93`). Đây là WPF + WARP code-path gate, không phải hardware/AR approval.
-- [ ] Review từng profile ở 100%/50%, cùng hợp âm dày, note-held/pedal, đoạn nghỉ và chroma edge; sửa sai lệch trước khi kết luận.
+- [ ] Sau khi ba profile chuẩn được review và chấp thuận, mới mở rộng fixed-scene checkpoint review cho đủ 17 preset.
 - [ ] Duyệt bố cục Visual Effects Studio ba pane và **Quick / Advanced** bằng wireframe riêng; đây chưa phải UI đã triển khai.
 - [ ] Chấp thuận scene 12 giây + tempo map + seed làm fixture dùng chung cho Phase 3 trở đi.
-- [x] Windows build, portable xUnit và `--verify` pass trên cả hai CI gates; lượt note-material mới nhất báo 2.188 assertions, 0 skipped.
+- [x] Những CI gates cũ đã pass build, portable xUnit và `--verify`; gate mới 48 ảnh chưa được Windows CI xác nhận.
 - [ ] Sau khi review thị giác/accessibility và các mục còn lại được xác nhận, mới đóng Phase 1 rồi mở Effect Contract / compatibility.
 
-Prototype HTML vẫn chỉ là minh họa; không dùng nó để chứng minh renderer. Runtime code path đã được dựng và kiểm tra trên WARP, nhưng **chưa xác nhận hardware performance** và chưa tuyên bố quality review đầy đủ.
+Prototype HTML vẫn chỉ là minh họa; không dùng nó để chứng minh renderer. Harness runtime đã được nối vào code/workflow nhưng chưa chạy trên Windows trong lượt này. WARP chỉ xác nhận code path; **chưa xác nhận hardware performance/AR** và chưa tuyên bố quality review đầy đủ.

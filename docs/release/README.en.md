@@ -328,6 +328,7 @@ application itself (it needs Windows, because it starts real WPF windows):
 ```powershell
 dotnet run --project .\PianoPath.csproj -- --verify
 # optional: --verify-log=C:\some\path\result.log (defaults to %TEMP%\keyflow-verification.log)
+# optional: --verify-review-out=C:\some\path\phase1-review (writes 48 images + manifest.json + index.html)
 ```
 
 The log is written **as the run goes**, so a process that is taken down inside a native call still leaves the

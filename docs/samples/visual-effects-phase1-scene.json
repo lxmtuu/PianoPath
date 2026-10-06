@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "id": "pianopath.phase1.reference-scene",
-  "status": "design-fixture-not-consumed-by-runtime",
-  "purpose": "Một clip piano tất định dùng chung để so sánh ba hướng art direction; không phải cấu hình runtime hoặc MIDI đã nạp vào ứng dụng.",
+  "status": "review-fixture-consumed-by-verification",
+  "purpose": "Một clip piano tất định được bộ verification dùng để render ảnh review qua hai renderer; không phải cấu hình playback hoặc MIDI nạp vào phiên chơi của người dùng.",
   "render": {
     "width": 1920,
     "height": 1080,
@@ -69,6 +69,7 @@
   "reviewFrames": [
     { "id": "note-readability", "timeSeconds": 0.8, "checks": ["note edge against backplate", "pitch-column registration", "leading edge remains clear"] },
     { "id": "held-chord-and-impact", "timeSeconds": 4.1, "checks": ["two-hand separation", "velocity hierarchy", "held chord stays legible", "impact remains local"] },
+    { "id": "sustain-pedal", "timeSeconds": 6.1, "checks": ["pedal is down", "sustained bass and melody remain distinct", "pedal glow stays local", "no full-frame flash"] },
     { "id": "release-and-rest", "timeSeconds": 11.25, "checks": ["release decay", "ambient does not leave visual residue", "rest is visually quiet"] }
   ],
   "looks": [

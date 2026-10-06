@@ -48,7 +48,7 @@ internal sealed class GpuStageFeed
     private double _maxNoteDuration;
     private double _position, _rate;
     private long _positionStamp;
-    private bool _playing;
+    private bool _playing, _fixedPosition, _fixedBeatPulse;
     private GpuLook _look = new();
     private float _beatPulse;
     private bool _sustain;
@@ -109,6 +109,8 @@ internal sealed class GpuStageFeed
         var now = Now;
         lock (_gate)
         {
+            _fixedPosition = false;
+            _fixedBeatPulse = false;
             if (!ReferenceEquals(notes, _notes))
             {
                 _notes = notes;
@@ -134,12 +136,35 @@ internal sealed class GpuStageFeed
         }
     }
 
+    /// <summary>Posts an exact timeline sample for offline capture, bypassing wall-clock playback extrapolation.</summary>
+    internal void SetDeterministicState(IReadOnlyList<NoteEvent> notes, double position, bool playing, IReadOnlySet<int> pressed)
+    {
+        SetState(notes, position, playing, pressed);
+        lock (_gate)
+        {
+            _fixedPosition = true;
+            _positionStamp = 0;
+            _rate = 0;
+        }
+    }
+
+    /// <summary>Sets an already-decayed beat envelope for offline capture; no Stopwatch time enters the frame.</summary>
+    internal void SetDeterministicBeatPulse(double strength)
+    {
+        lock (_gate)
+        {
+            _beatPulse = Math.Clamp((float)strength, 0, 1.2f);
+            _beatStamp = 0;
+            _fixedBeatPulse = true;
+        }
+    }
+
     internal void Impact(int pitch, double strength) => _hits.Enqueue(new GpuHit(pitch, (float)strength, Now, Volatile.Read(ref _eventGeneration)));
     internal void LiveNote(int pitch, bool down, double strength) => _live.Enqueue(new GpuLiveEvent(pitch, down, (float)strength, Now, Volatile.Read(ref _eventGeneration)));
 
     internal void PulseBeat(double strength)
     {
-        lock (_gate) { _beatPulse = Math.Max(_beatPulse * BeatDecay(), (float)strength); _beatStamp = Now; }
+        lock (_gate) { _fixedBeatPulse = false; _beatPulse = Math.Max(_beatPulse * BeatDecay(), (float)strength); _beatStamp = Now; }
     }
 
     private float BeatDecay() => _beatStamp == 0 ? 0 : (float)Math.Exp(-6 * Seconds(Now - _beatStamp));
@@ -185,11 +210,11 @@ internal sealed class GpuStageFeed
         {
             input.Notes = _notes;
             input.MaxNoteDuration = _maxNoteDuration;
-            var ahead = Math.Clamp(Seconds(now - _positionStamp), 0, MaxExtrapolation);
-            input.Position = _playing ? _position + ahead * _rate : _position;
+            var ahead = _fixedPosition ? 0 : Math.Clamp(Seconds(now - _positionStamp), 0, MaxExtrapolation);
+            input.Position = _playing && !_fixedPosition ? _position + ahead * _rate : _position;
             input.Playing = _playing;
             Array.Copy(_pressed, input.Pressed, 128);
-            input.BeatPulse = _beatPulse * BeatDecay();
+            input.BeatPulse = _fixedBeatPulse ? _beatPulse : _beatPulse * BeatDecay();
             input.Sustain = _sustain;
             input.PointerX = _pointerX; input.PointerY = _pointerY;
             input.StageHeightDip = _stageHeightDip;

@@ -444,7 +444,7 @@ internal sealed class GpuRenderLoop : IDisposable
         using var renderer = GpuStageRenderer.Create(forceWarp);
         adapter = renderer.AdapterName;
         var created = timer.Elapsed.TotalMilliseconds;
-        var pixels = RenderFrames(renderer, feed, width, height, warmupFrames, frameSeconds, renderWarmup, out var timings);
+        var pixels = RenderFrames(renderer, feed, width, height, warmupFrames, frameSeconds, renderWarmup, out var timings, null, 20260930);
         LastRenderTimings = $"create:{created:0}(compile:{renderer.ShaderCompileMilliseconds:0}) {timings}";
         return pixels;
     }
@@ -454,9 +454,13 @@ internal sealed class GpuRenderLoop : IDisposable
     /// <paramref name="warmupFrames"/> + 1 times from the feed, the last step drawn and read back.
     /// </summary>
     internal static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings)
+        => RenderFrames(renderer, feed, width, height, warmupFrames, frameSeconds, renderWarmup, out timings, null, 20260930);
+
+    /// <summary>Renders with a deterministic per-frame feed callback and an explicit simulation seed.</summary>
+    internal static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings, Action<int>? beforeFrame, int randomSeed)
     {
         var timer = Stopwatch.StartNew();
-        var simulation = new GpuStageSimulation();
+        var simulation = new GpuStageSimulation(randomSeed);
         var input = new GpuFrameInput();
         var notes = new GpuInstanceList<GpuNoteInstance>(256);
         var keys = new GpuInstanceList<GpuKeyInstance>(128);
@@ -469,6 +473,7 @@ internal sealed class GpuRenderLoop : IDisposable
         double simulated = 0, drawn = 0;
         for (var frame = 0; frame <= warmupFrames; frame++)
         {
+            beforeFrame?.Invoke(frame);
             var started = timer.Elapsed.TotalMilliseconds;
             feed.Capture(input, GpuStageFeed.Now);
             var sceneHeight = (float)Math.Max(120, input.StageHeightDip);

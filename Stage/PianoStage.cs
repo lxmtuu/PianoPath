@@ -15,7 +15,7 @@ internal sealed partial class PianoStage : FrameworkElement
     internal static int FirstPitch => KeyboardLayout.Active.FirstPitch;
     /// <summary>How many keys the keyboard being drawn has; 88 on the full keyboard.</summary>
     internal static int KeyCount => KeyboardLayout.Active.KeyCount;
-    private const double FallSpeed = 258;
+    internal const double FallSpeed = 258;
     private const int FireMaskWidth = 96, FireMaskHeight = 384;
     /// <summary>MIDI pitches of the white keys of the keyboard being drawn, in keyboard order.</summary>
     private static int[] WhitePitches => KeyboardLayout.Active.WhitePitches;
@@ -127,6 +127,8 @@ internal sealed partial class PianoStage : FrameworkElement
     public double ShadedBakeMilliseconds => _shadedMilliseconds;
     /// <summary>How many times the keyboard had to be re-shaded; a slider that does not affect the shader must not raise it.</summary>
     public int ShadedBakeCount => _shadedBakes;
+    /// <summary>Capture-only switch: fully bake lit-key tiles before an off-screen review snapshot.</summary>
+    internal bool SynchronousReviewKeyTileBake { get; set; }
     public double FirstLiveTrailY => _liveTrails.Count == 0 ? -1 : _liveTrails[0].Age * _visual.NoteFallSpeed;
     /// <summary>Length of the visual bar for a pitch: falling notes keep the 28 px spawn offset at the top, rising notes are born at the key line.</summary>
     public double LiveTrailHeightFor(int pitch)
@@ -566,7 +568,9 @@ internal sealed partial class PianoStage : FrameworkElement
     /// differs from one runner to the next, which is what made the README previews differ byte for byte
     /// between two builds of the same interface.
     /// </summary>
-    internal void ResetAnimation()
+    internal void ResetAnimation() => ResetAnimation(null);
+
+    internal void ResetAnimation(int? seed)
     {
         _elapsed = 0;
         _beatPulse = 0; _energyLevel = 0;
@@ -574,8 +578,8 @@ internal sealed partial class PianoStage : FrameworkElement
         _petals.Clear(); _petalCount = -1;
         Array.Clear(_keyHeat);
         Array.Clear(_wispBudget);
-        _petalRandom = new Random(PetalSeed);
-        _random = new Random(ParticleSeed);
+        _petalRandom = new Random(seed is int value ? unchecked(value * 397 ^ PetalSeed) : PetalSeed);
+        _random = new Random(seed ?? ParticleSeed);
         InvalidateVisual();
     }
 
@@ -1421,7 +1425,7 @@ internal sealed partial class PianoStage : FrameworkElement
     /// <summary>Pedal Glow: 1 normally, brighter while the sustain pedal is held down.</summary>
     private double PedalBoost() => _sustainPedal && _visual.PedalGlow ? 1 + _visual.PedalGlowIntensity / 100 : 1;
 
-    private Color AdjustColor(Color input)
+    internal Color AdjustColor(Color input)
     {
         var saturation = _visual.Saturation / 100;
         var gray = .2126 * input.R + .7152 * input.G + .0722 * input.B;
@@ -2827,9 +2831,14 @@ internal sealed partial class PianoStage : FrameworkElement
             var color = KeyColor(pitch);
             var cacheKey = ((long)pitch << 20) | (uint)ColorBucket(color);
             if (_shadedTiles.TryGetValue(cacheKey, out var cached)) { dc.DrawImage(cached.Bitmap, cached.Where); continue; }
+            if (SynchronousReviewKeyTileBake)
+            {
+                RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
+                if (_shadedTiles.TryGetValue(cacheKey, out var bakedNow)) { dc.DrawImage(bakedNow.Bitmap, bakedNow.Where); continue; }
+            }
             if (_lastTile.TryGetValue(pitch, out var previous)) dc.DrawImage(previous.Bitmap, previous.Where);
             else DrawLitKeyPlaceholder(dc, pitch, color, width, bandHeight, top);
-            RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
+            if (!SynchronousReviewKeyTileBake) RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
         }
     }
 
@@ -2844,7 +2853,7 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void RequestKeyTile(long cacheKey, int pitch, Color color, PianoShaderScene scene, double width, double bandHeight, double top)
     {
-        if (!_pendingTiles.Add(cacheKey)) return;
+        if (!SynchronousReviewKeyTileBake && !_pendingTiles.Add(cacheKey)) return;
         var requestedFor = _shadedSceneKey;
         var bleed = Math.Max(2, (int)Math.Ceiling(2.5 / scene.Keys.WhiteCount * scene.BandWidth));
         var center = scene.Keys.WorldCenters[pitch] / scene.Keys.WhiteCount * scene.BandWidth;
@@ -2853,6 +2862,19 @@ internal sealed partial class PianoStage : FrameworkElement
         var where = new Rect(x0 / (double)scene.BandWidth * width, top, tileWidth / (double)scene.BandWidth * width, bandHeight);
         var lights = new KeyLightState();
         lights.Light(pitch, color, 1);
+        if (SynchronousReviewKeyTileBake)
+        {
+            BitmapSource? bitmap = null;
+            try { bitmap = PianoKeyboardRenderer.Render(scene, lights, x0, 0, tileWidth, scene.BandHeight, pitch); }
+            catch (Exception) { /* the placeholder glow stays; a failed review tile must never take the stage down */ }
+            if (bitmap is null || !_hasShadedSceneKey || !requestedFor.Equals(_shadedSceneKey)) return;
+            if (_shadedTiles.Count > 192) { _shadedTiles.Clear(); _lastTile.Clear(); }
+            var tile = new ShadedKeyTile(bitmap, where);
+            _shadedTiles[cacheKey] = tile;
+            if (_lastTile.Count > 128) _lastTile.Clear();
+            _lastTile[pitch] = tile;
+            return;
+        }
         _ = Task.Run(async () =>
         {
             BitmapSource? bitmap = null;

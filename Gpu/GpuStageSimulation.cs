@@ -91,8 +91,11 @@ internal sealed partial class GpuStageSimulation
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
     private readonly bool[] _active = new bool[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
-    private readonly Random _random = new(20260930);
+    private readonly Random _random;
     private double _time;
+
+    internal GpuStageSimulation() : this(20260930) { }
+    internal GpuStageSimulation(int seed) => _random = new Random(seed);
     private float _simWidth = 1280, _activity, _beatPulse;
     private GpuLook _look = new();
 

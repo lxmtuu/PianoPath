@@ -92,7 +92,7 @@ Style / Theme
 ### Hành vi tương tác
 
 1. **Chọn look:** preview giữ frame time, seed, scene và viewport; chỉ palette/mix/material profile đổi.
-2. **Scrub timeline:** preview dừng tại frame xác định; click checkpoint label để tới `0.8`, `4.1` hoặc `11.25` giây.
+2. **Scrub timeline:** preview dừng tại frame xác định; click checkpoint label để tới `0.8`, `4.1`, `6.1` hoặc `11.25` giây.
 3. **Play:** sample rate hiển thị; pause/step/reset không thay đổi song position của người dùng.
 4. **A/B:** ghi nhớ A; đổi một look/parameter; swipe/split comparison dùng cùng frame và crop. A/B không được chạy hai simulation độc lập với clock lệch nhau.
 5. **Save as preset:** tên, mô tả, thumbnail và summary; xác nhận các capability không lưu vào preset máy như camera calibration/device.

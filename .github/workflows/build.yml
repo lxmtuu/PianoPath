@@ -116,7 +116,8 @@ jobs:
         shell: pwsh
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
-          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log" -PassThru -Wait
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
           $lines = if (Test-Path $log) { Get-Content $log } else { @() }
           # A child process that reports every stage it reaches can print more NOTE lines than GitHub will
           # show, and the ones that matter are the last ones — the step the machine stopped at. So only the
@@ -167,6 +168,17 @@ jobs:
           name: keyflow-verification-log
           path: ${{ runner.temp }}/keyflow-verification.log
           if-no-files-found: warn
+
+      # Human review gate: the fixture is rendered through the real WPF stage and the app's GPU renderer
+      # forced to WARP. The 960×540 files are 2×2 averages of the matching 1080p pixels, not fresh layouts.
+      - name: Publish Phase 1 visual review
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: phase1-visual-review
+          path: ${{ runner.temp }}/phase1-visual-review
+          if-no-files-found: warn
+          retention-days: 14
 
       # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes (and, with --bench-ar,
       # a third: the AR overlay over a synthetic 60 fps camera) and
