@@ -1,0 +1,737 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090c12">
+  <title>Phase 1 · PianoPath Visual Effects Studio</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --void: #090c12;
+      --panel: #111722;
+      --raised: #182130;
+      --raised-2: #202a39;
+      --hairline: #2a3545;
+      --text: #f1f4f8;
+      --muted: #a7b1c0;
+      --quiet: #737f91;
+      --violet: #9b83ff;
+      --cyan: #57d7e5;
+      --amber: #ffc66d;
+      --danger: #ff6b78;
+      --left-note: #63d7de;
+      --right-note: #f3c56e;
+      --stage-top: #080b13;
+      --stage-bottom: #101624;
+      font-family: Inter, "Segoe UI", system-ui, sans-serif;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background:
+        radial-gradient(70rem 48rem at 58% -22%, rgba(96, 76, 180, .17), transparent 65%),
+        var(--void);
+      color: var(--text);
+    }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible {
+      outline: 2px solid var(--cyan);
+      outline-offset: 2px;
+    }
+    .app { min-height: 100vh; display: flex; flex-direction: column; }
+    .topbar {
+      min-height: 68px;
+      display: flex;
+      align-items: center;
+      gap: 18px;
+      padding: 0 22px;
+      border-bottom: 1px solid rgba(126, 143, 167, .17);
+      background: rgba(12, 16, 24, .82);
+      backdrop-filter: blur(18px);
+    }
+    .brand-mark {
+      width: 34px; height: 34px; border-radius: 11px;
+      display: grid; place-items: center;
+      border: 1px solid rgba(155, 131, 255, .4);
+      background: linear-gradient(145deg, rgba(155, 131, 255, .23), rgba(87, 215, 229, .08));
+      color: #d9d1ff; font-size: 18px; font-weight: 750;
+      box-shadow: inset 0 1px rgba(255,255,255,.12), 0 7px 24px rgba(63, 52, 130, .22);
+    }
+    .brand { display: flex; align-items: center; gap: 11px; min-width: 252px; }
+    .brand-copy { line-height: 1.12; }
+    .brand-copy strong { display: block; font-size: 12px; letter-spacing: .14em; }
+    .brand-copy span { color: var(--muted); display: block; font-size: 10px; margin-top: 4px; }
+    .crumb { color: var(--muted); font-size: 12px; }
+    .crumb b { color: var(--text); font-weight: 650; }
+    .spacer { flex: 1; }
+    .preview-badge, .backend-badge, .quality-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      border: 1px solid var(--hairline); border-radius: 999px;
+      color: #bac5d4; background: rgba(255,255,255,.025);
+      padding: 7px 10px; font-size: 10px; white-space: nowrap;
+    }
+    .preview-badge { border-color: rgba(155, 131, 255, .35); color: #d4caff; background: rgba(155, 131, 255, .08); }
+    .preview-badge i, .backend-badge i { width: 6px; height: 6px; border-radius: 50%; background: var(--violet); display: inline-block; }
+    .backend-badge i { background: var(--cyan); }
+    .top-actions { display: flex; gap: 8px; }
+    .quiet-button, .primary-button, .icon-button {
+      border: 1px solid var(--hairline); border-radius: 10px;
+      background: rgba(255,255,255,.035); color: var(--text);
+      min-height: 36px; padding: 0 12px; cursor: pointer;
+      transition: border-color .15s ease, background .15s ease, transform .15s ease;
+    }
+    .quiet-button:hover, .icon-button:hover { background: rgba(255,255,255,.08); border-color: #56647a; }
+    .primary-button {
+      border-color: rgba(155, 131, 255, .55);
+      background: linear-gradient(135deg, #8067eb, #6754cb);
+      box-shadow: 0 7px 24px rgba(99, 73, 198, .18);
+      font-weight: 650;
+    }
+    .primary-button:hover { transform: translateY(-1px); filter: brightness(1.08); }
+    .icon-button { width: 36px; padding: 0; display: grid; place-items: center; font-size: 14px; }
+
+    .layout {
+      display: grid;
+      grid-template-columns: 224px minmax(460px, 1fr) 294px;
+      gap: 14px;
+      padding: 14px;
+      flex: 1;
+      min-height: 0;
+      align-items: stretch;
+    }
+    .side-panel, .center-panel {
+      min-height: 0;
+      border: 1px solid rgba(128, 145, 169, .16);
+      border-radius: 15px;
+      background: linear-gradient(180deg, rgba(19, 25, 36, .97), rgba(15, 20, 29, .97));
+      box-shadow: 0 16px 42px rgba(0, 0, 0, .22), inset 0 1px rgba(255,255,255,.025);
+    }
+    .side-panel { padding: 16px 14px; display: flex; flex-direction: column; gap: 15px; }
+    .panel-heading {
+      color: #8f9aad; font-size: 9px; letter-spacing: .16em; font-weight: 750;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .search-box {
+      height: 36px; border: 1px solid var(--hairline); border-radius: 9px;
+      background: #0d121a; color: var(--muted); display: flex; align-items: center; gap: 8px;
+      padding: 0 10px; font-size: 11px;
+    }
+    .search-box span { color: #758195; font-size: 14px; }
+    .search-box em { font-style: normal; flex: 1; }
+    .search-box kbd { font-size: 9px; padding: 2px 4px; border-radius: 4px; border: 1px solid #303a4a; color: #78869a; }
+    .nav-group { display: grid; gap: 4px; }
+    .nav-label { margin: 0 0 4px; color: #7d899a; font-size: 9px; letter-spacing: .15em; font-weight: 750; }
+    .nav-item {
+      border: 1px solid transparent; background: transparent; border-radius: 9px;
+      min-height: 36px; padding: 0 9px; display: flex; gap: 10px; align-items: center;
+      text-align: left; color: #aeb8c6; cursor: pointer; font-size: 11px;
+    }
+    .nav-item .nav-icon { width: 18px; color: #8a96a8; font-size: 13px; text-align: center; }
+    .nav-item:hover { background: rgba(255,255,255,.04); color: var(--text); }
+    .nav-item.active { border-color: rgba(155,131,255,.22); background: linear-gradient(90deg, rgba(155,131,255,.16), rgba(155,131,255,.045)); color: #f0edff; }
+    .nav-item.active .nav-icon { color: #c5b8ff; }
+    .nav-item .lock { margin-left: auto; color: #657184; font-size: 10px; }
+    .library-footer { margin-top: auto; border-top: 1px solid rgba(128,145,169,.12); padding-top: 13px; color: #738094; font-size: 9px; line-height: 1.55; }
+    .library-footer strong { display: block; color: #9daabd; font-size: 10px; margin-bottom: 4px; }
+
+    .center-panel { padding: 15px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+    .center-top { display: flex; gap: 14px; align-items: flex-start; justify-content: space-between; }
+    .center-title h1 { margin: 0; font-size: 16px; letter-spacing: -.02em; font-weight: 680; }
+    .center-title p { margin: 5px 0 0; color: var(--muted); font-size: 10px; }
+    .view-switch { display: flex; border: 1px solid var(--hairline); background: #0c1119; padding: 3px; border-radius: 9px; gap: 2px; }
+    .view-switch button { border: 0; background: transparent; color: #8793a6; font-size: 9px; border-radius: 6px; padding: 6px 8px; white-space: nowrap; }
+    .view-switch button[aria-pressed="true"] { background: #263044; color: #e8ecf4; }
+    .view-switch button:disabled { opacity: .45; cursor: not-allowed; }
+
+    .look-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+    .look-card {
+      position: relative; min-width: 0; border: 1px solid var(--hairline); border-radius: 11px;
+      background: rgba(255,255,255,.022); color: var(--text); text-align: left;
+      padding: 9px 10px; cursor: pointer; overflow: hidden;
+      transition: .16s ease;
+    }
+    .look-card:hover { background: rgba(255,255,255,.05); border-color: #4b5870; }
+    .look-card[aria-pressed="true"] { border-color: var(--look-accent, var(--violet)); background: color-mix(in srgb, var(--look-accent, var(--violet)) 10%, #121722); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--look-accent, var(--violet)) 20%, transparent); }
+    .look-card-top { display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+    .look-card strong { font-size: 11px; font-weight: 700; }
+    .look-card small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
+    .swatches { display: flex; gap: 3px; }
+    .swatches i { display: block; width: 9px; height: 9px; border-radius: 50%; border: 1px solid rgba(255,255,255,.23); }
+    .look-card .selected-check { display: none; position: absolute; right: 8px; bottom: 7px; color: var(--look-accent); font-size: 9px; }
+    .look-card[aria-pressed="true"] .selected-check { display: block; }
+
+    .stage-frame {
+      border-radius: 12px; overflow: hidden; border: 1px solid rgba(131,149,174,.26);
+      background: #070a11; box-shadow: 0 16px 38px rgba(0,0,0,.34), 0 0 48px color-mix(in srgb, var(--look-accent, #9b83ff) 7%, transparent);
+      position: relative;
+    }
+    .stage-frame::after { content: ""; position: absolute; inset: 0; pointer-events: none; box-shadow: inset 0 1px rgba(255,255,255,.075), inset 0 0 0 1px rgba(255,255,255,.018); }
+    canvas { display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; background: var(--stage-top); }
+    .stage-corner { position: absolute; top: 10px; left: 11px; display: flex; gap: 6px; z-index: 1; }
+    .stage-chip { color: #d8deea; border: 1px solid rgba(210,220,237,.19); border-radius: 999px; background: rgba(8,12,20,.62); padding: 5px 8px; font-size: 8px; letter-spacing: .09em; backdrop-filter: blur(10px); }
+    .stage-clock { position: absolute; top: 10px; right: 11px; color: #d0d8e6; border: 1px solid rgba(210,220,237,.18); border-radius: 999px; background: rgba(8,12,20,.62); padding: 5px 8px; font: 9px ui-monospace, SFMono-Regular, Consolas, monospace; z-index: 1; }
+    .preview-disclaimer { display: flex; justify-content: space-between; gap: 10px; align-items: center; color: #8995a7; font-size: 9px; }
+    .preview-disclaimer strong { color: #cbc3ff; font-weight: 650; }
+    .preview-disclaimer .right { color: #6f7a8c; text-align: right; }
+    .transport { display: flex; align-items: center; gap: 7px; }
+    .transport .icon-button { min-height: 31px; width: 32px; border-radius: 8px; font-size: 11px; }
+    .transport .play-button { width: 78px; padding: 0 8px; font-size: 10px; min-height: 31px; border-radius: 8px; }
+    .transport .time { font: 10px ui-monospace, SFMono-Regular, Consolas, monospace; color: #c6cfdd; margin-left: 4px; }
+    .transport .meta { margin-left: auto; color: #778499; font-size: 9px; }
+    .transport .ab-button[aria-pressed="true"] { color: #e4dcff; border-color: rgba(155,131,255,.5); background: rgba(155,131,255,.12); }
+    .timeline {
+      border-top: 1px solid rgba(128,145,169,.14); padding-top: 10px; display: grid; gap: 7px;
+    }
+    .timeline-top { display: flex; justify-content: space-between; color: #8f9bae; font-size: 9px; }
+    .timeline-top strong { color: #cbd3df; font-weight: 600; }
+    .timeline-ruler { display: grid; grid-template-columns: repeat(4,1fr); padding-left: 45px; color: #627085; font: 8px ui-monospace, Consolas, monospace; }
+    .track-row { display: grid; grid-template-columns: 38px 1fr; align-items: center; gap: 7px; min-height: 14px; }
+    .track-name { color: #8995a6; font-size: 8px; letter-spacing: .08em; }
+    .track-lane { height: 11px; position: relative; border-radius: 4px; background: linear-gradient(90deg, rgba(255,255,255,.025), rgba(255,255,255,.012)); overflow: hidden; }
+    .track-lane::before, .track-lane::after { content: ""; position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(139,154,177,.16); left: 25%; }
+    .track-lane::after { left: 50%; box-shadow: 25vw 0 rgba(139,154,177,.16); }
+    .clip { position: absolute; top: 2px; height: 7px; border-radius: 3px; min-width: 3px; opacity: .84; }
+    .playhead { position: absolute; top: -2px; bottom: -2px; width: 1px; background: #f4f3ff; box-shadow: 0 0 7px #b9adff; z-index: 2; }
+    .pedal-block { position: absolute; top: 3px; height: 5px; border: 1px solid rgba(255,198,109,.7); border-radius: 3px; background: rgba(255,198,109,.18); }
+
+    .inspector { gap: 14px; }
+    .inspector-head { display: flex; justify-content: space-between; align-items: flex-start; }
+    .inspector-head h2 { margin: 0; font-size: 12px; font-weight: 680; }
+    .inspector-head p { margin: 4px 0 0; color: var(--muted); font-size: 9px; line-height: 1.45; }
+    .design-tag { color: #dacfff; font-size: 8px; letter-spacing: .1em; border: 1px solid rgba(155,131,255,.35); background: rgba(155,131,255,.09); border-radius: 999px; padding: 4px 6px; }
+    .divider { height: 1px; background: rgba(128,145,169,.15); }
+    .inspector-section { display: grid; gap: 10px; }
+    .section-title { color: #828ea2; font-size: 9px; letter-spacing: .15em; font-weight: 750; }
+    .palette-row { display: grid; grid-template-columns: 1fr auto; gap: 10px; align-items: center; color: #b8c2d0; font-size: 10px; }
+    .swatch-label { display: flex; align-items: center; gap: 7px; }
+    .swatch-label i { width: 12px; height: 12px; border-radius: 4px; border: 1px solid rgba(255,255,255,.24); }
+    .hex-value { color: #8490a3; font: 9px ui-monospace, Consolas, monospace; }
+    .control-line { display: grid; gap: 6px; }
+    .control-caption { display: flex; align-items: center; justify-content: space-between; color: #b8c2d0; font-size: 10px; }
+    .control-caption output { color: #909caf; font: 9px ui-monospace, Consolas, monospace; }
+    input[type="range"] { width: 100%; height: 4px; accent-color: var(--look-accent, var(--violet)); margin: 4px 0; }
+    .toggle-row { display: flex; align-items: center; justify-content: space-between; color: #c0c9d7; font-size: 10px; }
+    .toggle-row input { accent-color: var(--look-accent, var(--violet)); }
+    .support-card { border: 1px solid rgba(128,145,169,.16); border-radius: 10px; padding: 10px; background: rgba(255,255,255,.022); }
+    .support-card strong { display: flex; align-items: center; gap: 6px; font-size: 9px; color: #dae0ea; }
+    .support-card p { color: #8d99aa; font-size: 9px; line-height: 1.5; margin: 6px 0 0; }
+    .support-card .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--amber); }
+    .inspector-actions { margin-top: auto; display: flex; gap: 7px; }
+    .inspector-actions button { flex: 1; min-height: 32px; font-size: 9px; padding: 0 7px; }
+    .master-note { color: #737f91; font-size: 8px; line-height: 1.5; }
+    .range-wrap { position: relative; }
+    .ticks { display: flex; justify-content: space-between; color: #697589; font: 8px ui-monospace, Consolas, monospace; }
+
+    .footer {
+      display: flex; justify-content: space-between; align-items: center; gap: 12px;
+      padding: 9px 20px 12px; color: #758195; font-size: 9px;
+    }
+    .footer strong { color: #aab5c5; font-weight: 600; }
+    .footer .footer-right { display: flex; gap: 14px; align-items: center; }
+    .toast { position: fixed; left: 50%; bottom: 25px; transform: translate(-50%, 12px); opacity: 0; pointer-events: none; transition: .2s ease; background: #1c2533; border: 1px solid #46546a; border-radius: 10px; padding: 10px 14px; color: #e9edf4; box-shadow: 0 8px 30px rgba(0,0,0,.35); font-size: 11px; z-index: 9; }
+    .toast.visible { transform: translate(-50%, 0); opacity: 1; }
+    .loading { margin: auto; color: var(--muted); font-size: 13px; }
+
+    @media (max-width: 1370px) {
+      .layout { grid-template-columns: 202px minmax(420px, 1fr) 270px; gap: 10px; padding: 10px; }
+      .topbar { padding: 0 16px; gap: 12px; }
+      .brand { min-width: 225px; }
+      .side-panel { padding: 13px 11px; }
+      .center-panel { padding: 12px; }
+    }
+    @media (max-width: 1120px) {
+      .layout { grid-template-columns: 62px minmax(0, 1fr) 260px; }
+      .library .brandless, .library .nav-label, .library .nav-text, .library .search-box em,
+      .library .search-box kbd, .library .library-footer, .library .panel-heading span { display: none; }
+      .library { align-items: center; padding: 12px 8px; }
+      .library .panel-heading { justify-content: center; }
+      .library .search-box { width: 38px; justify-content: center; padding: 0; }
+      .library .nav-item { width: 42px; justify-content: center; padding: 0; }
+      .library .nav-item .nav-icon { width: auto; }
+      .library .nav-item .lock { display: none; }
+      .brand-copy span { display: none; }
+      .brand { min-width: 0; }
+    }
+    @media (max-width: 900px) {
+      .layout { grid-template-columns: 56px minmax(0,1fr); }
+      .inspector { display: none; }
+      .topbar .crumb, .topbar .backend-badge, .topbar .top-actions .quiet-button:first-child { display: none; }
+      .preview-disclaimer .right { display: none; }
+      .center-panel { padding: 10px; }
+      .view-switch button { padding: 6px 5px; }
+    }
+    @media (max-width: 640px) {
+      .topbar { min-height: 58px; padding: 0 10px; gap: 8px; }
+      .brand { gap: 7px; }
+      .brand-mark { width: 30px; height: 30px; }
+      .brand-copy strong { font-size: 10px; }
+      .brand-copy span, .preview-badge, .top-actions .quiet-button { display: none; }
+      .top-actions .primary-button { min-height: 32px; padding: 0 9px; font-size: 10px; }
+      .layout { display: block; padding: 8px; }
+      .library { display: none; }
+      .center-panel { min-height: calc(100vh - 105px); border-radius: 12px; }
+      .center-top { display: block; }
+      .view-switch { margin-top: 9px; width: fit-content; }
+      .look-card { padding: 8px 7px; }
+      .look-card strong { font-size: 9px; }
+      .look-card small { font-size: 8px; }
+      .look-card .swatches { display: none; }
+      .transport .meta, .backend-badge { display: none; }
+      .timeline-ruler { padding-left: 34px; }
+      .footer { padding: 8px 12px; }
+      .footer .footer-right { display: none; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app" id="app" style="--look-accent:#9b83ff">
+    <header class="topbar">
+      <div class="brand" aria-label="PianoPath visual effects design prototype">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div class="brand-copy"><strong>PIANOPATH</strong><span>VISUAL EFFECTS STUDIO</span></div>
+      </div>
+      <div class="crumb">Stage Design <span aria-hidden="true">/</span> <b>Effects Studio</b></div>
+      <div class="spacer"></div>
+      <div class="preview-badge"><i></i> PHASE 1 · DESIGN PREVIEW</div>
+      <div class="backend-badge"><i></i> deterministic fixture</div>
+      <div class="top-actions">
+        <button class="quiet-button" id="compareTop" type="button" aria-pressed="false">A/B compare</button>
+        <button class="quiet-button" id="resetLook" type="button">Reset</button>
+        <button class="primary-button" id="saveDraft" type="button">Save as preset</button>
+      </div>
+    </header>
+
+    <main class="layout" id="layout">
+      <aside class="side-panel library" aria-label="Effect library">
+        <div class="panel-heading"><span>STUDIO LIBRARY</span><span>⌘ K</span></div>
+        <div class="search-box" role="search"><span aria-hidden="true">⌕</span><em>Search effects…</em><kbd>⌘K</kbd></div>
+        <div class="nav-group">
+          <p class="nav-label">START HERE</p>
+          <button class="nav-item active" type="button" data-section="look"><span class="nav-icon">◈</span><span class="nav-text">Quick Adjust</span></button>
+          <button class="nav-item" type="button" data-section="scene"><span class="nav-icon">◷</span><span class="nav-text">Reference scene</span></button>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">NOTE LIFECYCLE</p>
+          <button class="nav-item" type="button" data-section="falling"><span class="nav-icon">↓</span><span class="nav-text">Falling</span></button>
+          <button class="nav-item" type="button" data-section="impact"><span class="nav-icon">✳</span><span class="nav-text">Impact</span></button>
+          <button class="nav-item" type="button" data-section="hold"><span class="nav-icon">Ⅱ</span><span class="nav-text">Hold</span></button>
+          <button class="nav-item" type="button" data-section="release"><span class="nav-icon">↗</span><span class="nav-text">Release</span></button>
+        </div>
+        <div class="nav-group">
+          <p class="nav-label">STAGE & OUTPUT</p>
+          <button class="nav-item" type="button" data-section="ambient"><span class="nav-icon">✧</span><span class="nav-text">Atmosphere</span></button>
+          <button class="nav-item" type="button" data-section="keyboard"><span class="nav-icon">▥</span><span class="nav-text">Keyboard</span></button>
+          <button class="nav-item" type="button" data-section="ar"><span class="nav-icon">⌖</span><span class="nav-text">AR Surface</span><span class="lock">◇</span></button>
+        </div>
+        <div class="library-footer"><strong>Design-only prototype</strong>Controls on this page do not write PianoPath settings or change a runtime renderer.</div>
+      </aside>
+
+      <section class="center-panel" aria-label="Visual preview workspace">
+        <div class="center-top">
+          <div class="center-title"><h1>Visual Effects Studio</h1><p>So sánh ba hướng hình ảnh trên cùng một đoạn nhạc và cùng một frame.</p></div>
+          <div class="view-switch" role="group" aria-label="Preview target">
+            <button type="button" class="view-tab" aria-pressed="true">Stage</button>
+            <button type="button" class="view-tab" aria-pressed="false" disabled title="Target thiết kế, chưa được render bởi app">Recording</button>
+            <button type="button" class="view-tab" aria-pressed="false" disabled title="Chỉ mở sau khi có AR calibration; chưa phải camera thật">AR · future</button>
+          </div>
+        </div>
+
+        <div class="look-row" id="lookCards" role="group" aria-label="Choose a design target"></div>
+
+        <div class="stage-frame">
+          <div class="stage-corner"><span class="stage-chip">88-KEY · 16:9</span><span class="stage-chip">SYNTHETIC MIDI</span></div>
+          <div class="stage-clock" id="stageClock">00:04.100 / 00:12.000</div>
+          <canvas id="stage" width="1280" height="720" role="img" aria-label="Deterministic piano visual preview"></canvas>
+        </div>
+        <div class="preview-disclaimer"><span><strong>REFERENCE FIXTURE</strong> · same notes, velocity, pedal, seed and crop across looks</span><span class="right">Canvas concept only — not a PianoPath/WPF capture</span></div>
+
+        <div class="transport" aria-label="Preview transport">
+          <button class="icon-button" id="stepBack" type="button" aria-label="Step backward">↶</button>
+          <button class="primary-button play-button" id="playPause" type="button" aria-pressed="false">▶ Play</button>
+          <button class="icon-button" id="stepForward" type="button" aria-label="Step forward">↷</button>
+          <button class="quiet-button ab-button" id="compareBottom" type="button" aria-pressed="false">A/B</button>
+          <button class="icon-button" id="resetTime" type="button" aria-label="Reset preview">↺</button>
+          <span class="time" id="transportTime">00:04.100</span>
+          <span class="meta">60 fps fixture · seed 424242</span>
+        </div>
+
+        <div class="timeline" aria-label="Reference scene timeline">
+          <div class="timeline-top"><strong>TEST TIMELINE</strong><span id="timelineReadout">C → G → Am → F · 96 → 72 BPM</span></div>
+          <div class="timeline-ruler"><span>BAR 1</span><span>BAR 2</span><span>BAR 3</span><span>BAR 4 + TAIL</span></div>
+          <div class="track-row"><span class="track-name">LEFT</span><div class="track-lane" id="leftTrack"></div></div>
+          <div class="track-row"><span class="track-name">RIGHT</span><div class="track-lane" id="rightTrack"></div></div>
+          <div class="track-row"><span class="track-name">PEDAL</span><div class="track-lane" id="pedalTrack"></div></div>
+          <label class="sr-only" for="scrubber">Preview time</label>
+          <input id="scrubber" type="range" min="0" max="12" step="0.0166667" value="4.1" aria-label="Move through the deterministic scene">
+        </div>
+      </section>
+
+      <aside class="side-panel inspector" aria-label="Look inspector">
+        <div class="inspector-head">
+          <div><h2 id="lookTitle">Concert</h2><p id="lookSubtitle">Hòa nhạc · cinematic</p></div>
+          <span class="design-tag">TARGET</span>
+        </div>
+        <div class="divider"></div>
+        <section class="inspector-section" aria-labelledby="paletteHeading">
+          <div class="section-title" id="paletteHeading">PALETTE ROLES</div>
+          <div class="palette-row"><span class="swatch-label"><i id="leftSwatch"></i>Left hand</span><span class="hex-value" id="leftHex"></span></div>
+          <div class="palette-row"><span class="swatch-label"><i id="rightSwatch"></i>Right hand</span><span class="hex-value" id="rightHex"></span></div>
+          <div class="palette-row"><span class="swatch-label"><i id="accentSwatch"></i>Accent</span><span class="hex-value" id="accentHex"></span></div>
+          <div class="palette-row"><span class="swatch-label"><i id="impactSwatch"></i>Impact</span><span class="hex-value" id="impactHex"></span></div>
+        </section>
+        <div class="divider"></div>
+        <section class="inspector-section" aria-labelledby="mixHeading">
+          <div class="section-title" id="mixHeading">QUICK ADJUST · PROTOTYPE</div>
+          <label class="control-line"><span class="control-caption">Master intensity <output id="masterOutput">78%</output></span><input id="masterSlider" type="range" min="0" max="100" value="78"></label>
+          <label class="control-line"><span class="control-caption">Atmosphere <output id="ambientOutput">18%</output></span><input id="ambientSlider" type="range" min="0" max="60" value="18"></label>
+          <label class="toggle-row"><span>Reduced motion</span><input id="reducedMotion" type="checkbox"></label>
+        </section>
+        <div class="divider"></div>
+        <section class="inspector-section">
+          <div class="section-title">DESIGN INTENT</div>
+          <div class="support-card"><strong><span class="dot"></span><span id="materialTitle">Satin / warm rim</span></strong><p id="materialDescription"></p></div>
+          <div class="support-card"><strong>◇ <span>Runtime support status</span></strong><p>Đây chỉ là target art direction. `Available` trong catalog không được suy ra renderer hoặc AR capability.</p></div>
+        </section>
+        <div class="inspector-actions"><button class="quiet-button" id="resetControls" type="button">Reset look</button><button class="primary-button" id="saveDraftSide" type="button">Save draft</button></div>
+        <p class="master-note">Slider chỉ đổi canvas prototype trong trình duyệt; không ghi preset hoặc `visual-settings.json`.</p>
+      </aside>
+    </main>
+
+    <footer class="footer"><span><strong>PHASE 1 · DESIGN PREVIEW</strong> — xin duyệt look và wireframe trước khi đổi renderer.</span><span class="footer-right"><span>96 → 72 BPM</span><span>Fixed seed 424242</span><span>1920×1080 target</span></span></footer>
+  </div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script>
+    const sceneUrl = "../../samples/visual-effects-phase1-scene.json";
+    const canvas = document.getElementById("stage");
+    const ctx = canvas.getContext("2d", { alpha: false });
+    const state = { scene: null, lookId: "concert-cinematic", seconds: 4.1, playing: false, lastTick: 0, master: .78, ambient: .18, reduced: false, compare: false };
+    const hex = value => value.replace("#", "");
+    const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+    const rgb = value => {
+      const raw = hex(value);
+      return { r: parseInt(raw.slice(0, 2), 16), g: parseInt(raw.slice(2, 4), 16), b: parseInt(raw.slice(4, 6), 16) };
+    };
+    const rgba = (value, alpha) => { const c = rgb(value); return `rgba(${c.r},${c.g},${c.b},${clamp(alpha, 0, 1)})`; };
+    const roundRect = (context, x, y, width, height, radius) => {
+      const r = Math.min(radius, width / 2, height / 2);
+      context.beginPath(); context.moveTo(x + r, y); context.arcTo(x + width, y, x + width, y + height, r);
+      context.arcTo(x + width, y + height, x, y + height, r); context.arcTo(x, y + height, x, y, r);
+      context.arcTo(x, y, x + width, y, r); context.closePath();
+    };
+    const lookById = id => state.scene.looks.find(look => look.id === id);
+    function beatToSeconds(beat) {
+      const map = state.scene.music.tempoMap;
+      let seconds = 0;
+      for (let i = 0; i < map.length; i++) {
+        const current = map[i];
+        const next = map[i + 1];
+        const endBeat = next ? Math.min(beat, next.beat) : beat;
+        if (endBeat > current.beat) seconds += (endBeat - current.beat) * 60 / current.bpm;
+        if (!next || beat <= next.beat) break;
+      }
+      return seconds;
+    }
+    function renderLookCards() {
+      const root = document.getElementById("lookCards");
+      root.replaceChildren();
+      for (const look of state.scene.looks) {
+        const button = document.createElement("button");
+        button.type = "button"; button.className = "look-card"; button.dataset.look = look.id;
+        button.setAttribute("aria-pressed", String(look.id === state.lookId));
+        button.style.setProperty("--look-accent", look.palette.accent);
+        button.innerHTML = `<span class="look-card-top"><strong>${look.name}</strong><span class="swatches"><i style="background:${look.palette.leftHand}"></i><i style="background:${look.palette.rightHand}"></i><i style="background:${look.palette.accent}"></i></span></span><small>${look.subtitle}</small><span class="selected-check">SELECTED</span>`;
+        button.addEventListener("click", () => selectLook(look.id));
+        root.append(button);
+      }
+    }
+    function selectLook(id) {
+      state.lookId = id;
+      state.reduced = id === "clean-learning";
+      document.getElementById("reducedMotion").checked = state.reduced;
+      document.querySelectorAll(".look-card").forEach(card => card.setAttribute("aria-pressed", String(card.dataset.look === id)));
+      updateInspector(); drawStage();
+    }
+    function updateInspector() {
+      const look = lookById(state.lookId);
+      const root = document.getElementById("app");
+      root.style.setProperty("--left-note", look.palette.leftHand);
+      root.style.setProperty("--right-note", look.palette.rightHand);
+      root.style.setProperty("--stage-top", look.palette.stageTop);
+      root.style.setProperty("--stage-bottom", look.palette.stageBottom);
+      root.style.setProperty("--look-accent", look.palette.accent);
+      document.getElementById("lookTitle").textContent = look.name;
+      document.getElementById("lookSubtitle").textContent = look.subtitle;
+      document.getElementById("materialTitle").textContent = look.material.split(";")[0];
+      document.getElementById("materialDescription").textContent = look.material;
+      for (const [id, key] of [["left", "leftHand"], ["right", "rightHand"], ["accent", "accent"], ["impact", "impact"]]) {
+        document.getElementById(`${id}Swatch`).style.background = look.palette[key];
+        document.getElementById(`${id}Hex`).textContent = look.palette[key].toUpperCase();
+      }
+      document.getElementById("masterSlider").value = Math.round(state.master * 100);
+      document.getElementById("ambientSlider").value = Math.round(state.ambient * 100);
+      document.getElementById("masterOutput").textContent = `${Math.round(state.master * 100)}%`;
+      document.getElementById("ambientOutput").textContent = `${Math.round(state.ambient * 100)}%`;
+      document.body.dataset.look = look.id;
+    }
+    function renderTimeline() {
+      const { music, render } = state.scene;
+      const duration = render.durationSeconds;
+      for (const id of ["leftTrack", "rightTrack"]) document.getElementById(id).replaceChildren();
+      const lanes = { left: document.getElementById("leftTrack"), right: document.getElementById("rightTrack") };
+      for (const note of music.notes) {
+        const start = beatToSeconds(note.startBeat);
+        const end = beatToSeconds(note.startBeat + note.durationBeats);
+        const clip = document.createElement("span");
+        clip.className = "clip"; clip.style.left = `${start / duration * 100}%`; clip.style.width = `${Math.max(.5, (end - start) / duration * 100)}%`;
+        clip.style.background = note.hand === "left" ? "var(--left-note)" : "var(--right-note)";
+        lanes[note.hand].append(clip);
+      }
+      const pedalLane = document.getElementById("pedalTrack"); pedalLane.replaceChildren();
+      for (let i = 0; i < music.pedalEvents.length; i += 2) {
+        const down = music.pedalEvents[i], up = music.pedalEvents[i + 1];
+        if (!up) continue;
+        const block = document.createElement("span"); block.className = "pedal-block";
+        const start = beatToSeconds(down.beat), end = beatToSeconds(up.beat);
+        block.style.left = `${start / duration * 100}%`; block.style.width = `${(end - start) / duration * 100}%`; pedalLane.append(block);
+      }
+      document.querySelectorAll(".track-lane").forEach(lane => { const head = document.createElement("span"); head.className = "playhead"; head.dataset.playhead = "true"; lane.append(head); });
+      updatePlayhead();
+    }
+    function updatePlayhead() {
+      const x = clamp(state.seconds / state.scene.render.durationSeconds * 100, 0, 100);
+      document.querySelectorAll("[data-playhead]").forEach(el => el.style.left = `${x}%`);
+      const label = `00:${state.seconds.toFixed(3).padStart(6, "0")}`;
+      document.getElementById("transportTime").textContent = label;
+      document.getElementById("stageClock").textContent = `${label} / 00:${state.scene.render.durationSeconds.toFixed(3)}`;
+      document.getElementById("scrubber").value = state.seconds;
+    }
+    function drawAtmosphere(look, time, x0 = 0, width = canvas.width) {
+      const amount = state.reduced ? 0 : state.ambient;
+      if (amount <= .001) return;
+      const mix = look.mix.ambient * amount / .18;
+      if (look.id === "concert-cinematic") {
+        for (let i = 0; i < 3; i++) {
+          const center = x0 + width * (.24 + i * .25) + Math.sin(time * .36 + i * 1.7) * width * .022;
+          const beam = ctx.createLinearGradient(center, 80, center + width * .04, 520);
+          beam.addColorStop(0, rgba(look.palette.impact, 0));
+          beam.addColorStop(.74, rgba(look.palette.impact, .018 * mix));
+          beam.addColorStop(1, rgba(look.palette.impact, .085 * mix));
+          ctx.fillStyle = beam; ctx.beginPath(); ctx.moveTo(center - width * .018, 82); ctx.lineTo(center + width * .018, 82); ctx.lineTo(center + width * .115, 555); ctx.lineTo(center - width * .115, 555); ctx.closePath(); ctx.fill();
+        }
+        for (let i = 0; i < 34; i++) {
+          const x = x0 + ((i * 137.5 + 71) % width);
+          const y = 105 + ((i * 73.3 + 23) % 390) + Math.sin(time * .35 + i) * 4;
+          ctx.fillStyle = rgba(i % 4 ? look.palette.accent : look.palette.impact, .13 * mix);
+          ctx.beginPath(); ctx.arc(x, y, .8 + (i % 3) * .3, 0, Math.PI * 2); ctx.fill();
+        }
+      } else if (look.id === "neon-electronic") {
+        ctx.save(); ctx.lineWidth = 1;
+        for (let i = 0; i <= 22; i++) {
+          const x = x0 + i / 22 * width;
+          ctx.strokeStyle = rgba(i % 4 === 0 ? look.palette.accent : look.palette.leftHand, i % 4 === 0 ? .10 * mix : .025 * mix);
+          ctx.beginPath(); ctx.moveTo(x, 80); ctx.lineTo(x, 555); ctx.stroke();
+        }
+        for (let i = 0; i < 7; i++) {
+          const y = 110 + i * 58 + Math.sin(time * .65 + i) * 2;
+          ctx.strokeStyle = rgba(look.palette.rightHand, .034 * mix); ctx.beginPath(); ctx.moveTo(x0 + 32, y); ctx.lineTo(x0 + width - 32, y); ctx.stroke();
+        }
+        const glow = ctx.createRadialGradient(x0 + width * .51, 390, 8, x0 + width * .51, 390, width * .50);
+        glow.addColorStop(0, rgba(look.palette.accent, .045 * mix)); glow.addColorStop(1, rgba(look.palette.accent, 0));
+        ctx.fillStyle = glow; ctx.fillRect(x0, 70, width, 490); ctx.restore();
+      } else {
+        ctx.save(); ctx.lineWidth = 1;
+        for (let i = 0; i < 7; i++) {
+          const y = 145 + i * 57;
+          ctx.strokeStyle = rgba(look.palette.accent, .042 * mix); ctx.beginPath(); ctx.moveTo(x0 + 38, y); ctx.lineTo(x0 + width - 38, y); ctx.stroke();
+        }
+        ctx.restore();
+      }
+    }
+    function drawKeyboard(look, x0, width, hitY, keyHeight, firstPitch, keyCount) {
+      const laneWidth = width / keyCount;
+      const keyboardY = hitY + 6;
+      const white = new Set([0, 2, 4, 5, 7, 9, 11]);
+      ctx.fillStyle = "#090d15"; ctx.fillRect(x0, keyboardY, width, keyHeight);
+      for (let i = 0; i < keyCount; i++) {
+        const pitch = firstPitch + i, pc = pitch % 12, x = x0 + i * laneWidth;
+        if (!white.has(pc)) continue;
+        const glow = state.scene.music.notes.some(note => note.pitch === pitch && note.hand && beatToSeconds(note.startBeat) <= state.seconds && beatToSeconds(note.startBeat + note.durationBeats) >= state.seconds);
+        const base = ctx.createLinearGradient(0, keyboardY, 0, keyboardY + keyHeight);
+        base.addColorStop(0, glow ? rgba(noteColorForPitch(look, pitch), .75) : "#dfe5ed");
+        base.addColorStop(1, glow ? rgba(noteColorForPitch(look, pitch), .4) : "#9ea9b7");
+        ctx.fillStyle = base; ctx.fillRect(x + .4, keyboardY, laneWidth - .8, keyHeight);
+        ctx.strokeStyle = "rgba(7,11,17,.62)"; ctx.lineWidth = 1; ctx.strokeRect(x + .4, keyboardY, laneWidth - .8, keyHeight);
+        if (pc === 0 && laneWidth > 8) {
+          ctx.fillStyle = "rgba(16,24,35,.52)"; ctx.font = "9px ui-monospace,Consolas"; ctx.fillText(`C${Math.floor(pitch / 12) - 1}`, x + 3, keyboardY + keyHeight - 8);
+        }
+      }
+      for (let i = 0; i < keyCount; i++) {
+        const pitch = firstPitch + i, pc = pitch % 12;
+        if (white.has(pc)) continue;
+        const x = x0 + i * laneWidth;
+        const blackWidth = laneWidth * .66;
+        ctx.fillStyle = state.scene.music.notes.some(note => note.pitch === pitch && beatToSeconds(note.startBeat) <= state.seconds && beatToSeconds(note.startBeat + note.durationBeats) >= state.seconds) ? rgba(noteColorForPitch(look, pitch), .92) : "#111722";
+        roundRect(ctx, x - blackWidth / 2, keyboardY, blackWidth, keyHeight * .59, 2.2); ctx.fill();
+        ctx.strokeStyle = "rgba(225,235,246,.13)"; ctx.stroke();
+      }
+      ctx.fillStyle = "rgba(235,242,250,.72)"; ctx.fillRect(x0, keyboardY + keyHeight - 3, width, 2);
+    }
+    function noteColorForPitch(look, pitch) { return pitch < 60 ? look.palette.leftHand : look.palette.rightHand; }
+    function drawScene(look, time, x0 = 0, width = canvas.width, addLabel = false) {
+      const { render, music } = state.scene;
+      const firstPitch = render.keyboard.firstMidiPitch, keyCount = render.keyboard.keyCount;
+      const hitY = render.keyboard.hitLineNormalizedY * canvas.height;
+      const topY = 86, travel = hitY - topY - 4, laneWidth = width / keyCount;
+      const bg = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      bg.addColorStop(0, look.palette.stageTop); bg.addColorStop(1, look.palette.stageBottom);
+      ctx.fillStyle = bg; ctx.fillRect(x0, 0, width, canvas.height);
+      const vignette = ctx.createRadialGradient(x0 + width * .5, canvas.height * .4, width * .08, x0 + width * .5, canvas.height * .42, width * .75);
+      vignette.addColorStop(0, "rgba(0,0,0,0)"); vignette.addColorStop(1, "rgba(0,0,0,.33)");
+      ctx.fillStyle = vignette; ctx.fillRect(x0, 0, width, canvas.height);
+      drawAtmosphere(look, time, x0, width);
+      const hitGlow = ctx.createLinearGradient(0, hitY - 26, 0, hitY + 10);
+      hitGlow.addColorStop(0, rgba(look.palette.accent, 0)); hitGlow.addColorStop(.8, rgba(look.palette.accent, .035)); hitGlow.addColorStop(1, rgba(look.palette.accent, .12));
+      ctx.fillStyle = hitGlow; ctx.fillRect(x0, hitY - 27, width, 40);
+      ctx.strokeStyle = rgba(look.palette.accent, .52); ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(x0 + 18, hitY); ctx.lineTo(x0 + width - 18, hitY); ctx.stroke();
+      for (let octave = 0; octave <= keyCount; octave += 12) {
+        const x = x0 + octave * laneWidth;
+        ctx.strokeStyle = rgba(look.palette.accent, .085); ctx.beginPath(); ctx.moveTo(x, topY); ctx.lineTo(x, hitY); ctx.stroke();
+      }
+      const lookahead = render.keyboard.lookaheadSeconds;
+      const master = state.master;
+      for (const note of music.notes) {
+        const start = beatToSeconds(note.startBeat), end = beatToSeconds(note.startBeat + note.durationBeats);
+        if (start > time + lookahead || end < time - .6) continue;
+        const active = time >= start && time <= end;
+        const untilHit = Math.max(0, start - time);
+        const bottom = active ? hitY - 3 : hitY - untilHit / lookahead * travel;
+        const bodyHeight = clamp((end - start) / lookahead * travel, 24, 230);
+        const top = Math.max(topY + 2, bottom - bodyHeight);
+        const pitchIndex = note.pitch - firstPitch;
+        const keyX = x0 + (pitchIndex + .12) * laneWidth;
+        const noteWidth = laneWidth * .76;
+        const color = noteColorForPitch(look, note.pitch);
+        const velocity = .58 + note.velocity / 255 * .42;
+        const alpha = clamp((.76 + velocity * .2) * master, .2, 1);
+        const mix = look.mix.trail * master;
+        if (!state.reduced && !active && mix > .08 && look.id !== "clean-learning") {
+          const trail = ctx.createLinearGradient(0, top - 35, 0, top + bodyHeight * .58);
+          trail.addColorStop(0, rgba(color, 0)); trail.addColorStop(1, rgba(color, .055 * mix));
+          ctx.fillStyle = trail; ctx.fillRect(keyX - noteWidth * .3, Math.max(topY, top - 40), noteWidth * 1.6, Math.max(4, bodyHeight * .58));
+        }
+        ctx.save();
+        const neon = look.id === "neon-electronic";
+        ctx.shadowColor = rgba(color, (neon ? .85 : .42) * master);
+        ctx.shadowBlur = (neon ? 17 : 8) * look.mix.bloom * master;
+        roundRect(ctx, keyX, top, noteWidth, Math.max(12, bottom - top), look.id === "clean-learning" ? 2 : 5);
+        ctx.fillStyle = rgba(color, alpha); ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = rgba("#FFFFFF", look.id === "clean-learning" ? .78 : .36); ctx.lineWidth = look.id === "clean-learning" ? 1.5 : 1;
+        ctx.stroke();
+        ctx.fillStyle = rgba("#FFFFFF", .52 * master); ctx.fillRect(keyX + 3, Math.max(top + 3, bottom - 5), Math.max(3, noteWidth - 6), 1.2);
+        if (note.velocity >= 92) {
+          ctx.fillStyle = rgba(look.palette.impact, .8 * master); ctx.beginPath(); ctx.arc(keyX + noteWidth / 2, bottom - 2, 2.4, 0, Math.PI * 2); ctx.fill();
+        }
+        ctx.restore();
+        if (!active && start <= time && time - start < .52 && look.mix.impact > 0) {
+          const age = time - start, radius = 18 + age / .52 * 56;
+          ctx.beginPath(); ctx.ellipse(keyX + noteWidth / 2, hitY + 2, radius * .62, 4 + radius * .12, 0, 0, Math.PI * 2);
+          ctx.strokeStyle = rgba(look.palette.impact, (1 - age / .52) * look.mix.impact * master * .66); ctx.lineWidth = 1.5; ctx.stroke();
+        }
+      }
+      drawKeyboard(look, x0, width, hitY, 102, firstPitch, keyCount);
+      if (addLabel) {
+        ctx.fillStyle = "rgba(235,242,250,.56)"; ctx.font = "11px ui-monospace,Consolas";
+        ctx.fillText(`PREVIEW TARGET · ${look.name.toUpperCase()} · ${render.width}×${render.height}`, x0 + 22, canvas.height - 18);
+      }
+    }
+    function drawStage() {
+      if (!state.scene) return;
+      const look = lookById(state.lookId);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (state.compare) {
+        const half = canvas.width / 2;
+        drawScene(look, state.seconds, 0, half, true);
+        drawScene(lookById("clean-learning"), state.seconds, half, half, true);
+        ctx.fillStyle = "rgba(7,10,16,.9)"; ctx.fillRect(half - 1, 0, 2, canvas.height);
+        ctx.fillStyle = "rgba(9,12,18,.75)"; ctx.fillRect(half - 50, 20, 100, 22);
+        ctx.fillStyle = "#e6eaf1"; ctx.font = "10px Inter,Segoe UI,sans-serif"; ctx.textAlign = "center"; ctx.fillText("A / B · SAME FRAME", half, 35); ctx.textAlign = "left";
+      } else drawScene(look, state.seconds, 0, canvas.width, false);
+      updatePlayhead();
+    }
+    function updatePlayButton() {
+      const button = document.getElementById("playPause");
+      button.textContent = state.playing ? "Ⅱ Pause" : "▶ Play";
+      button.setAttribute("aria-pressed", String(state.playing));
+    }
+    function tick(timestamp) {
+      if (!state.playing) { state.lastTick = 0; return; }
+      if (state.lastTick) state.seconds = Math.min(state.scene.render.durationSeconds, state.seconds + (timestamp - state.lastTick) / 1000);
+      state.lastTick = timestamp;
+      if (state.seconds >= state.scene.render.durationSeconds) { state.playing = false; updatePlayButton(); }
+      drawStage();
+      if (state.playing) requestAnimationFrame(tick);
+    }
+    function toast(message) {
+      const el = document.getElementById("toast"); el.textContent = message; el.classList.add("visible");
+      clearTimeout(toast.timer); toast.timer = setTimeout(() => el.classList.remove("visible"), 2200);
+    }
+    function resetLook() {
+      state.master = .78; state.ambient = .18; state.reduced = state.lookId === "clean-learning";
+      document.getElementById("reducedMotion").checked = state.reduced;
+      updateInspector(); drawStage(); toast("Đã reset design controls trong prototype.");
+    }
+    function initScene(scene) {
+      state.scene = scene;
+      state.seconds = scene.render.initialTimeSeconds;
+      renderLookCards(); updateInspector(); renderTimeline(); drawStage(); updatePlayButton();
+      document.getElementById("reducedMotion").checked = false;
+    }
+    document.getElementById("playPause").addEventListener("click", () => {
+      state.playing = !state.playing;
+      if (state.seconds >= state.scene.render.durationSeconds) state.seconds = 0;
+      updatePlayButton(); if (state.playing) requestAnimationFrame(tick);
+    });
+    document.getElementById("resetTime").addEventListener("click", () => { state.playing = false; state.seconds = state.scene.render.initialTimeSeconds; updatePlayButton(); drawStage(); });
+    document.getElementById("stepBack").addEventListener("click", () => { state.playing = false; state.seconds = clamp(state.seconds - 1 / 60, 0, state.scene.render.durationSeconds); updatePlayButton(); drawStage(); });
+    document.getElementById("stepForward").addEventListener("click", () => { state.playing = false; state.seconds = clamp(state.seconds + 1 / 60, 0, state.scene.render.durationSeconds); updatePlayButton(); drawStage(); });
+    document.getElementById("scrubber").addEventListener("input", event => { state.playing = false; state.seconds = Number(event.target.value); updatePlayButton(); drawStage(); });
+    document.getElementById("masterSlider").addEventListener("input", event => { state.master = Number(event.target.value) / 100; updateInspector(); drawStage(); });
+    document.getElementById("ambientSlider").addEventListener("input", event => { state.ambient = Number(event.target.value) / 100; updateInspector(); drawStage(); });
+    document.getElementById("reducedMotion").addEventListener("change", event => { state.reduced = event.target.checked; drawStage(); });
+    for (const id of ["compareTop", "compareBottom"]) {
+      document.getElementById(id).addEventListener("click", () => {
+        state.compare = !state.compare;
+        for (const buttonId of ["compareTop", "compareBottom"]) document.getElementById(buttonId).setAttribute("aria-pressed", String(state.compare));
+        drawStage(); toast(state.compare ? "A/B: look đang chọn · Learning baseline, cùng frame." : "A/B compare đã tắt.");
+      });
+    }
+    for (const id of ["resetLook", "resetControls"]) document.getElementById(id).addEventListener("click", resetLook);
+    for (const id of ["saveDraft", "saveDraftSide"]) document.getElementById(id).addEventListener("click", () => toast("Prototype thôi — chưa lưu preset vào PianoPath."));
+    document.querySelectorAll(".nav-item").forEach(button => button.addEventListener("click", () => {
+      document.querySelectorAll(".nav-item").forEach(item => item.classList.toggle("active", item === button));
+      if (button.dataset.section === "ar") toast("AR Surface là roadmap target; prototype này không mở camera/calibration thật.");
+      else if (button.dataset.section !== "look") toast(`${button.querySelector(".nav-text").textContent} — wireframe, chưa phải renderer/runtime setting.`);
+    }));
+    document.querySelectorAll(".view-tab:not(:disabled)").forEach(button => button.addEventListener("click", () => {
+      document.querySelectorAll(".view-tab").forEach(item => item.setAttribute("aria-pressed", String(item === button)));
+    }));
+    document.addEventListener("keydown", event => {
+      if (event.code === "Space" && !["INPUT", "TEXTAREA"].includes(document.activeElement.tagName)) { event.preventDefault(); document.getElementById("playPause").click(); }
+    });
+    fetch(sceneUrl).then(response => { if (!response.ok) throw new Error(`HTTP ${response.status}`); return response.json(); })
+      .then(initScene)
+      .catch(error => {
+        document.getElementById("layout").innerHTML = `<div class="loading">Không tải được scene JSON (${error.message}). Hãy mở prototype qua HTTP server từ thư mục <code>docs/</code>.</div>`;
+      });
+  </script>
+</body>
+</html>
