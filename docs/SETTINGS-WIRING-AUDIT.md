@@ -256,4 +256,4 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
   MODULATORS; test `VerifySmartFx`.
 - **v7 Themes**: 7 preset graphs (Inferno, Ice Crystal, Sakura Nocturne nâng cấp + Galaxy
   Voyage, Electric Storm, Ocean Depths, Retro Arcade mới); test `VerifyThemes`. Toàn bộ
-  87/87 effects trong `EffectCatalog` đã Available; mọi control trên UI đều có logic thật.
+  87/87 mục trong `EffectCatalog` đang được đánh dấu `Available`. **Cập nhật audit 2026-10-06:** đây là inventory/metadata, chưa phải nguồn options runtime và nhãn này chưa chứng minh parity từng option trên GPU/software/AR. `AmbientLight="Spotlights"` từng thiếu nhánh trong `PianoStage.DrawAmbientLight`; đã thêm WPF pass và regression assertion vào `VerifyAmbientFx`, nhưng chưa chạy được trên Windows/.NET để xác nhận. Xem ma trận [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md).
