@@ -4242,8 +4242,11 @@ internal static partial class VerificationSuite
             "The Notes page should expose the falling trail choice, the pulse switch and the ghost switch.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
             "The Particles page should expose the burst style, the note morph and the flash style.");
-        Assert(EffectCatalog.Falling.All.All(e => e.Status == EffectStatus.Available),
-            "The whole falling catalogue should be implemented in v2.");
+        var headTailGradient = EffectCatalog.Falling.Single(e => e.Id == "falling.color-gradient");
+        Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 86
+            && headTailGradient.Status == EffectStatus.Planned && headTailGradient.Channel == "falling.body.gradient"
+            && EffectCatalog.Falling.Where(e => e.Id != headTailGradient.Id).All(e => e.Status == EffectStatus.Available),
+            "The effect inventory should keep its missing head-to-tail gradient Planned rather than equating it with the pitch palette.");
         Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
             "The whole impact catalogue should be implemented in v2.");
         var wasTrail = visualSettings.FallingTrail; var wasTrailIntensity = visualSettings.FallingTrailIntensity;
@@ -4398,6 +4401,13 @@ internal static partial class VerificationSuite
         using (var dc = spotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
         Assert(spotlights.Drawing is not null && spotlights.Drawing.Bounds.Width > 500 && spotlights.Drawing.Bounds.Height > 350,
             "The software stage should draw the three Spotlights shafts and their key-side pools.");
+        var spotlightRaster = new RenderTargetBitmap(1280, 480, 96, 96, PixelFormats.Pbgra32);
+        spotlightRaster.Render(spotlights);
+        var spotlightPixels = new byte[1280 * 480 * 4];
+        spotlightRaster.CopyPixels(spotlightPixels, 1280 * 4, 0);
+        var litPixels = 0;
+        for (var i = 3; i < spotlightPixels.Length; i += 4) if (spotlightPixels[i] > 8) litPixels++;
+        Assert(litPixels > 1000, $"Spotlights should rasterize visible pixels in the WPF fallback (found {litPixels}).");
         stage.Impact(60, 1);
         Assert(stage.RingCount > 0, "A ripple impact should spawn a wave.");
         var ripples = new DrawingVisual();
