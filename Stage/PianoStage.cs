@@ -2166,7 +2166,31 @@ internal sealed partial class PianoStage : FrameworkElement
         }
     }
 
-    /// <summary>Ambient layer, Light &amp; Color family: gradient waves, prisms or color splashes.</summary>
+    /// <summary>Creates a tapered spotlight shaft between its ceiling anchor and key-side target.</summary>
+    private static StreamGeometry SpotlightBeam(Point origin, Point target, double originHalfWidth, double targetHalfWidth)
+    {
+        var direction = target - origin;
+        if (direction.Length < 1)
+        {
+            var empty = new StreamGeometry();
+            empty.Freeze();
+            return empty;
+        }
+        direction.Normalize();
+        var side = new Vector(-direction.Y, direction.X);
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(origin + side * originHalfWidth, true, true);
+            context.LineTo(target + side * targetHalfWidth, true, false);
+            context.LineTo(target - side * targetHalfWidth, true, false);
+            context.LineTo(origin - side * originHalfWidth, true, false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    /// <summary>Ambient layer, Light &amp; Color family: spotlights, gradient waves, prisms or color splashes.</summary>
     private void DrawAmbientLight(DrawingContext dc, double width, double height)
     {
         var amount = _visual.AmbientLightAmount / 100;
@@ -2175,6 +2199,60 @@ internal sealed partial class PianoStage : FrameworkElement
         var tint = AdjustColor(ParseColor(_visual.AmbientLightColor, ColorFromHue(266)));
         switch (_visual.AmbientLight)
         {
+            case "Spotlights":
+            {
+                // Match the GPU stage's three warm key lights: broad translucent shafts, a stronger core
+                // and a softly glowing pool where each beam meets the keyboard.
+                var activity = Math.Clamp(_visual.TempoSync ? _beatPulse : _energyLevel, 0, 1);
+                var shaft = Blend(Color.FromRgb(255, 244, 224), tint, .45);
+                for (var i = 0; i < 3; i++)
+                {
+                    var anchorX = width * (.22 + .28 * i);
+                    var sway = Math.Sin(_elapsed * speed * .35 + i * 2.1 + activity * (1.4 + i * .3));
+                    var targetX = anchorX + sway * width * (.07 + activity * .05)
+                        + Math.Sin(_elapsed * speed * .13 + i * 1.3) * width * .03;
+                    var flicker = .92 + .08 * Math.Sin(_elapsed * (9 + i * 2.3) + i * 5) + activity * .12;
+                    var origin = new Point(anchorX, -12);
+                    var target = new Point(targetX, height * .97);
+
+                    // Draw the widest, dimmest shaft first, then layer the tighter light toward its core.
+                    for (var layer = 2; layer >= 0; layer--)
+                    {
+                        var halfWidth = width * (.028 + layer * .034);
+                        // Convert the GPU additive layer levels (.32 / .23 / .14) to WPF alpha bytes;
+                        // this fallback is not HDR, so preserve a readable warm core without bloom.
+                        var alpha = (layer switch { 0 => 82d, 1 => 59d, _ => 36d }) * amount * flicker;
+                        var beam = SpotlightBeam(origin, target, Math.Max(1.5, halfWidth * .08), halfWidth);
+                        var gradient = new LinearGradientBrush
+                        {
+                            StartPoint = origin,
+                            EndPoint = target,
+                            MappingMode = BrushMappingMode.Absolute,
+                            SpreadMethod = GradientSpreadMethod.Pad
+                        };
+                        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 0));
+                        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .45), shaft.R, shaft.G, shaft.B), .55));
+                        gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha), shaft.R, shaft.G, shaft.B), 1));
+                        gradient.Freeze();
+                        dc.DrawGeometry(gradient, null, beam);
+                    }
+
+                    var pool = new RadialGradientBrush
+                    {
+                        Center = new Point(.5, .5),
+                        GradientOrigin = new Point(.5, .5),
+                        RadiusX = .5,
+                        RadiusY = .5,
+                        MappingMode = BrushMappingMode.RelativeToBoundingBox
+                    };
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(105 * amount * flicker), shaft.R, shaft.G, shaft.B), 0));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(35 * amount * flicker), shaft.R, shaft.G, shaft.B), .45));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 1));
+                    pool.Freeze();
+                    dc.DrawEllipse(pool, null, target, width * .05, 11);
+                }
+                break;
+            }
             case "Gradient Wave":
             {
                 var bands = 5;

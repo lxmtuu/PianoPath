@@ -4370,7 +4370,7 @@ internal static partial class VerificationSuite
             && EffectCatalog.AmbientCosmic.All.All(e => e.Status == EffectStatus.Available),
             "All four ambient catalogues should be implemented in v5.");
         var wasEnergy = visualSettings.AmbientEnergy; var wasNature = visualSettings.AmbientNature;
-        var wasLight = visualSettings.AmbientLight; var wasCosmic = visualSettings.AmbientCosmic;
+        var wasLight = visualSettings.AmbientLight; var wasLightAmount = visualSettings.AmbientLightAmount; var wasCosmic = visualSettings.AmbientCosmic;
         var wasWave = visualSettings.ImpactWave;
         visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientNature = "Snow";
         visualSettings.AmbientLight = "Prism"; visualSettings.AmbientCosmic = "Galaxy";
@@ -4384,6 +4384,20 @@ internal static partial class VerificationSuite
             Assert(visual.Drawing is not null && visual.Drawing.Bounds.Width > 100 && visual.Drawing.Bounds.Height > 100,
                 $"The {pass} layer should paint stage-wide geometry.");
         }
+        // Concert Gold selects Spotlights. Keep a WPF/software regression check because the GPU already
+        // had this mode while the software stage silently rendered nothing for it.
+        visualSettings.AmbientLight = "Spotlights"; visualSettings.AmbientLightAmount = 0;
+        stage.SetVisualSettings(visualSettings);
+        var disabledSpotlights = new DrawingVisual();
+        using (var dc = disabledSpotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
+        Assert(disabledSpotlights.Drawing is null || disabledSpotlights.Drawing.Bounds.IsEmpty,
+            "Spotlights intensity zero should disable its WPF drawing pass.");
+        visualSettings.AmbientLightAmount = 60;
+        stage.SetVisualSettings(visualSettings);
+        var spotlights = new DrawingVisual();
+        using (var dc = spotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
+        Assert(spotlights.Drawing is not null && spotlights.Drawing.Bounds.Width > 500 && spotlights.Drawing.Bounds.Height > 350,
+            "The software stage should draw the three Spotlights shafts and their key-side pools.");
         stage.Impact(60, 1);
         Assert(stage.RingCount > 0, "A ripple impact should spawn a wave.");
         var ripples = new DrawingVisual();
@@ -4392,8 +4406,8 @@ internal static partial class VerificationSuite
         for (var i = 0; i < 40; i++) stage.Advance(.05);
         Assert(stage.RingCount == 0, "Ripple waves should fade out over time.");
         visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientNature = wasNature;
-        visualSettings.AmbientLight = wasLight; visualSettings.AmbientCosmic = wasCosmic;
-        visualSettings.ImpactWave = wasWave;
+        visualSettings.AmbientLight = wasLight; visualSettings.AmbientLightAmount = wasLightAmount;
+        visualSettings.AmbientCosmic = wasCosmic; visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
     }

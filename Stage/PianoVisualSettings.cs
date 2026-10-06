@@ -281,7 +281,7 @@ internal sealed class PianoVisualSettings
     public string AmbientNature { get; set; } = "None";
     public double AmbientNatureAmount { get; set; } = 60;
     public double AmbientNatureSpeed { get; set; } = 50;
-    /// <summary>Light &amp; Color layer: None, Gradient Wave, Prism or Color Splash.</summary>
+    /// <summary>Light &amp; Color layer: None, Gradient Wave, Prism, Color Splash or Spotlights.</summary>
     public string AmbientLight { get; set; } = "None";
     public double AmbientLightAmount { get; set; } = 60;
     public double AmbientLightSpeed { get; set; } = 50;
