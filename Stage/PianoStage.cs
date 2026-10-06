@@ -1632,6 +1632,68 @@ internal sealed partial class PianoStage : FrameworkElement
     }
 
     private static Color Blend(Color a, Color b, double t) => Color.FromRgb((byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+    private static Color BlendLinear(Color a, Color b, double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return Color.FromRgb(
+            Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.R) + (ToLinearChannel(b.R) - ToLinearChannel(a.R)) * t) * 255)),
+            Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.G) + (ToLinearChannel(b.G) - ToLinearChannel(a.G)) * t) * 255)),
+            Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.B) + (ToLinearChannel(b.B) - ToLinearChannel(a.B)) * t) * 255)));
+    }
+
+    private static byte SpotlightLayerAlpha(Color shaft, double amount, int layer, bool filmic, double exposure)
+    {
+        var totalOpacity = SpotlightDisplayOpacity(shaft, amount, .9075, filmic, exposure);
+        var layerShare = layer switch { 0 => .529, 1 => .317, _ => .154 };
+        return Alpha((1 - Math.Pow(1 - totalOpacity, layerShare)) * 255);
+    }
+
+    /// <summary>Maps additive linear GPU emission through the same filmic transfer into WPF source-over opacity.</summary>
+    private static double SpotlightDisplayOpacity(Color shaft, double amount, double energyScale, bool filmic, double exposure)
+    {
+        var gain = Math.Clamp(amount, 0, 1.2) * energyScale * Math.Clamp(exposure / 100, 0, 4);
+        var r = ToLinearChannel(shaft.R) * gain;
+        var g = ToLinearChannel(shaft.G) * gain;
+        var b = ToLinearChannel(shaft.B) * gain;
+        if (filmic)
+        {
+            r *= 1.25; g *= 1.25; b *= 1.25;
+            var inR = .59719 * r + .35458 * g + .04823 * b;
+            var inG = .07600 * r + .90834 * g + .01566 * b;
+            var inB = .02840 * r + .13383 * g + .83777 * b;
+            static double Fit(double value) => (value * (value + .0245786) - .000090537)
+                / (value * (.983729 * value + .432951) + .238081);
+            var fitR = Fit(inR); var fitG = Fit(inG); var fitB = Fit(inB);
+            (r, g, b) = (
+                Math.Clamp(1.60475 * fitR - .53108 * fitG - .07367 * fitB, 0, 1),
+                Math.Clamp(-.10208 * fitR + 1.10813 * fitG - .00605 * fitB, 0, 1),
+                Math.Clamp(-.00327 * fitR - .07276 * fitG + 1.07602 * fitB, 0, 1));
+        }
+        else
+        {
+            var luma = .2126 * r + .7152 * g + .0722 * b;
+            var scale = 1 / (1 + Math.Max(luma - 1, 0));
+            r *= scale; g *= scale; b *= scale;
+        }
+
+        var sourceLuma = .2126 * (shaft.R / 255.0) + .7152 * (shaft.G / 255.0) + .0722 * (shaft.B / 255.0);
+        if (sourceLuma <= 1e-6) return 0;
+        var displayLuma = .2126 * ToSrgbChannel(r) + .7152 * ToSrgbChannel(g) + .0722 * ToSrgbChannel(b);
+        return Math.Clamp(displayLuma / sourceLuma, 0, .96);
+    }
+
+    private static double ToLinearChannel(byte channel)
+    {
+        var srgb = channel / 255.0;
+        return srgb <= .04045 ? srgb / 12.92 : Math.Pow((srgb + .055) / 1.055, 2.4);
+    }
+
+    private static double ToSrgbChannel(double linear)
+    {
+        linear = Math.Clamp(linear, 0, 1);
+        return linear <= .0031308 ? linear * 12.92 : 1.055 * Math.Pow(linear, 1 / 2.4) - .055;
+    }
+
     private static byte Alpha(double value) => (byte)Math.Clamp(value, 0, 255);
 
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)
@@ -2498,10 +2560,10 @@ internal sealed partial class PianoStage : FrameworkElement
         {
             case "Spotlights":
             {
-                // Match the GPU stage's three warm key lights: broad translucent shafts, a stronger core
-                // and a softly glowing pool where each beam meets the keyboard.
+                // Match the GPU stage's three warm key lights: broad shafts, a stronger core and a pool
+                // at the keyboard. Blend the tint in linear light, then map GPU HDR emission to WPF opacity.
                 var activity = Math.Clamp(_visual.TempoSync ? _beatPulse : _energyLevel, 0, 1);
-                var shaft = Blend(Color.FromRgb(255, 244, 224), tint, .45);
+                var shaft = BlendLinear(Color.FromRgb(255, 244, 224), tint, .45);
                 for (var i = 0; i < 3; i++)
                 {
                     var anchorX = width * (.22 + .28 * i);
@@ -2516,9 +2578,9 @@ internal sealed partial class PianoStage : FrameworkElement
                     for (var layer = 2; layer >= 0; layer--)
                     {
                         var halfWidth = width * (.028 + layer * .034);
-                        // WPF composites in display space while the GPU accumulates linear light. Lift the
-                        // equivalent alpha modestly so the software shafts keep the same warm presence.
-                        var alpha = (layer switch { 0 => 108d, 1 => 80d, _ => 52d }) * amount * flicker;
+                        // The WARP pass emits .48/.2875/.14 linear energy across its three layers;
+                        // convert that filmic display contribution into source-over WPF layer opacities.
+                        var alpha = SpotlightLayerAlpha(shaft, amount * flicker, layer, _visual.ShaderFilmic, _visual.ShaderExposure);
                         var beam = SpotlightBeam(origin, target, Math.Max(1.5, halfWidth * .08), halfWidth);
                         var gradient = new LinearGradientBrush
                         {
@@ -2542,8 +2604,9 @@ internal sealed partial class PianoStage : FrameworkElement
                         RadiusY = .5,
                         MappingMode = BrushMappingMode.RelativeToBoundingBox
                     };
-                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(138 * amount * flicker), shaft.R, shaft.G, shaft.B), 0));
-                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(48 * amount * flicker), shaft.R, shaft.G, shaft.B), .45));
+                    var poolAlpha = SpotlightDisplayOpacity(shaft, amount * flicker, .54, _visual.ShaderFilmic, _visual.ShaderExposure);
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(poolAlpha * 255), shaft.R, shaft.G, shaft.B), 0));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(poolAlpha * 255 * .38), shaft.R, shaft.G, shaft.B), .45));
                     pool.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 1));
                     pool.Freeze();
                     dc.DrawEllipse(pool, null, target, width * .05, 11);

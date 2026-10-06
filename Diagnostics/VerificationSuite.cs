@@ -4605,7 +4605,7 @@ internal static partial class VerificationSuite
         using (var dc = disabledSpotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
         Assert(disabledSpotlights.Drawing is null || disabledSpotlights.Drawing.Bounds.IsEmpty,
             "Spotlights intensity zero should disable its WPF drawing pass.");
-        visualSettings.AmbientLightAmount = 60;
+        visualSettings.AmbientLightAmount = 16; // Concert Gold's shipped intensity; guard the low-level look, not an artificial maximum.
         stage.SetVisualSettings(visualSettings);
         var spotlights = new DrawingVisual();
         using (var dc = spotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
@@ -4616,8 +4616,14 @@ internal static partial class VerificationSuite
         var spotlightPixels = new byte[1280 * 480 * 4];
         spotlightRaster.CopyPixels(spotlightPixels, 1280 * 4, 0);
         var litPixels = 0;
-        for (var i = 3; i < spotlightPixels.Length; i += 4) if (spotlightPixels[i] > 8) litPixels++;
-        Assert(litPixels > 1000, $"Spotlights should rasterize visible pixels in the WPF fallback (found {litPixels}).");
+        byte spotlightPeakAlpha = 0;
+        for (var i = 3; i < spotlightPixels.Length; i += 4)
+        {
+            if (spotlightPixels[i] > 8) litPixels++;
+            if (spotlightPixels[i] > spotlightPeakAlpha) spotlightPeakAlpha = spotlightPixels[i];
+        }
+        Assert(litPixels > 1000 && spotlightPeakAlpha > 80,
+            $"Concert Gold Spotlights should rasterize visible, warm WPF light at its shipped intensity (pixels={litPixels}, peak alpha={spotlightPeakAlpha}).");
 
         visualSettings.ShowLightBeams = true;
         visualSettings.BeamIntensity = 45;
