@@ -290,6 +290,17 @@ internal static partial class VerificationSuite
             }
             return count;
         }
+        int BrightChangedPixels(byte[] image, byte[] baseline)
+        {
+            var count = 0;
+            for (var i = 0; i < image.Length; i += 4)
+            {
+                var delta = Math.Abs(image[i] - baseline[i]) + Math.Abs(image[i + 1] - baseline[i + 1]) + Math.Abs(image[i + 2] - baseline[i + 2]);
+                var luma = .0722 * image[i] + .7152 * image[i + 1] + .2126 * image[i + 2];
+                if (delta > 36 && luma > 45) count++;
+            }
+            return count;
+        }
         byte[] HalfSize(byte[] image)
         {
             var halfWidth = width / 2; var halfHeight = height / 2;
@@ -310,14 +321,16 @@ internal static partial class VerificationSuite
         // 2×2 box-filtered result; halving the render target would also change the stage's world-space height.
         var blankSmall = HalfSize(blank);
         var gemSmallVisible = ChangedPixels(HalfSize(gem3D), blankSmall);
-        var crystalSmallVisible = ChangedPixels(HalfSize(crystal2D), blankSmall);
-        Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20,
-            $"Gem and Crystal Outline must change real GPU pixels on WARP at full and half size (full {gemVisible}/{crystalVisible}, half {gemSmallVisible}/{crystalSmallVisible}).");
+        var crystalSmallImage = HalfSize(crystal2D);
+        var crystalSmallVisible = ChangedPixels(crystalSmallImage, blankSmall);
+        var crystalBrightHalf = BrightChangedPixels(crystalSmallImage, blankSmall);
+        Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20 && crystalBrightHalf > 12,
+            $"Gem and Crystal Outline must change real GPU pixels on WARP at full and half size, with a bright Crystal contour surviving the 2×2 downsample (full {gemVisible}/{crystalVisible}, half {gemSmallVisible}/{crystalSmallVisible}, bright {crystalBrightHalf}).");
         Assert(!solid.AsSpan().SequenceEqual(gem2D) && !solid.AsSpan().SequenceEqual(crystal2D) && !gem2D.AsSpan().SequenceEqual(crystal2D),
             "The GPU shader must render Gem and Crystal Outline as distinct materials, not the Solid fallback.");
         Assert(!gem2D.AsSpan().SequenceEqual(gem3D) && crystal2D.AsSpan().SequenceEqual(crystal3D),
             "The GPU depth input must change Gem shading while Crystal Outline remains flat.");
-        Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); Gem responds to 2D/3D while Crystal Outline stays flat.");
+        Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); bright Crystal contour at half-size {crystalBrightHalf}; Gem responds to 2D/3D while Crystal Outline stays flat.");
     }
 
     /// <summary>

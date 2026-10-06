@@ -1271,7 +1271,7 @@ internal sealed partial class PianoStage : FrameworkElement
         if (!ghostPass) DrawFallingTrail(dc, r, color, opacity, pitch, rising);
         // Outer bloom shared by every style: stacked rounded shells with exponentially decaying alpha so the
         // glow falls off like real light instead of showing two flat banded rings; neon spreads further.
-        var bloomScale = style switch { "Neon" => 1.4, "Gem" => .78, "CrystalOutline" => .2, _ => 1 };
+        var bloomScale = style switch { "Neon" => 1.4, "Gem" => .78, "CrystalOutline" => .28, _ => 1 };
         for (var layer = 4; layer >= 1; layer--)
         {
             var f = layer / 4.0;
@@ -1358,18 +1358,18 @@ internal sealed partial class PianoStage : FrameworkElement
             {
                 // A genuinely see-through, chamfered contour: the center stays quiet while the pale rim
                 // and a few internal facets keep its pitch/length legible on both dark and busy stages.
-                var fill = Color.FromArgb(Alpha(34 * opacity * tint), cr, cg, cb);
+                var fill = Color.FromArgb(Alpha(40 * opacity * tint), cr, cg, cb);
                 dc.PushTransform(UnitTransform(r));
                 dc.DrawGeometry(Brush(fill), null, CrystalUnitShape);
                 dc.Pop();
                 var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
                 if (edgeFactor > 0)
                 {
-                    var rimColor = Blend(color, Colors.White, .68);
-                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(Alpha(250 * opacity * edgeFactor), rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * .86, 1.05, 2.8)));
+                    var rimColor = Blend(color, Colors.White, .82);
+                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(Alpha(255 * opacity * edgeFactor), rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * 1.2, 1.4, 3.2)));
                 }
-                var facet = Blend(color, Colors.White, .58);
-                DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(148 * opacity), facet.R, facet.G, facet.B), .85, roundCaps: true));
+                var facet = Blend(color, Colors.White, .68);
+                DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(176 * opacity), facet.R, facet.G, facet.B), 1.0, roundCaps: true));
                 break;
             }
             default:

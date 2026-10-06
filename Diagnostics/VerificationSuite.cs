@@ -4352,18 +4352,39 @@ internal static partial class VerificationSuite
                 return pixels;
             }
 
-            (int Count, int MinX, int MinY, int MaxX, int MaxY) Visible(byte[] pixels)
+            (int Count, int MinX, int MinY, int MaxX, int MaxY) Visible(byte[] pixels, int imageWidth, int imageHeight)
             {
-                var count = 0; var minX = width; var minY = height; var maxX = -1; var maxY = -1;
-                for (var y = 0; y < height; y++)
-                    for (var x = 0; x < width; x++)
+                var count = 0; var minX = imageWidth; var minY = imageHeight; var maxX = -1; var maxY = -1;
+                for (var y = 0; y < imageHeight; y++)
+                    for (var x = 0; x < imageWidth; x++)
                     {
-                        if (pixels[(y * width + x) * 4 + 3] <= 24) continue;
+                        if (pixels[(y * imageWidth + x) * 4 + 3] <= 24) continue;
                         count++;
                         minX = Math.Min(minX, x); minY = Math.Min(minY, y);
                         maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
                     }
                 return (count, minX, minY, maxX, maxY);
+            }
+            byte[] Average2x2(byte[] pixels)
+            {
+                var halfWidth = width / 2; var halfHeight = height / 2;
+                var half = new byte[halfWidth * halfHeight * 4];
+                for (var y = 0; y < halfHeight; y++)
+                    for (var x = 0; x < halfWidth; x++)
+                        for (var channel = 0; channel < 4; channel++)
+                        {
+                            var source = ((y * 2 * width) + x * 2) * 4 + channel;
+                            var sum = pixels[source] + pixels[source + 4] + pixels[source + width * 4] + pixels[source + width * 4 + 4];
+                            half[(y * halfWidth + x) * 4 + channel] = (byte)((sum + 2) / 4);
+                        }
+                return half;
+            }
+            int BrightOutlinePixels(byte[] pixels)
+            {
+                var count = 0;
+                for (var i = 0; i < pixels.Length; i += 4)
+                    if (pixels[i + 3] > 24 && pixels[i] + pixels[i + 1] + pixels[i + 2] > 125) count++;
+                return count;
             }
 
             var solid = Capture("Solid", false);
@@ -4371,16 +4392,20 @@ internal static partial class VerificationSuite
             var gem3D = Capture("Gem", true);
             var crystal2D = Capture("CrystalOutline", false);
             var crystal3D = Capture("CrystalOutline", true);
-            var gemSmall = Visible(Capture("Gem", true, halfSize: true));
-            var crystalSmall = Visible(Capture("CrystalOutline", false, halfSize: true));
+            var gemSmall = Visible(Capture("Gem", true, halfSize: true), width, height);
+            var crystalSmall = Visible(Capture("CrystalOutline", false, halfSize: true), width, height);
+            var crystalAverageHalf = Average2x2(crystal2D);
+            var crystalHalf = Visible(crystalAverageHalf, width / 2, height / 2);
+            var crystalHalfBright = BrightOutlinePixels(crystalAverageHalf);
             Assert(!gem2D.SequenceEqual(solid) && !crystal2D.SequenceEqual(solid) && !gem2D.SequenceEqual(crystal2D),
                 "Gem and Crystal Outline must paint distinct geometry rather than falling through to Solid on the WPF path.");
             Assert(!gem2D.SequenceEqual(gem3D) && crystal2D.SequenceEqual(crystal3D),
                 "The 3D toggle must deepen Gem while Crystal Outline remains the deliberately flat material.");
             Assert(gemSmall.Count > 300 && gemSmall.MaxX - gemSmall.MinX >= 18 && gemSmall.MaxY - gemSmall.MinY >= 68
-                    && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68,
-                $"Both new note silhouettes must remain legible at 50% size (Gem: {gemSmall.Count} pixels, Crystal Outline: {crystalSmall.Count}).");
-            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct pixel output; Gem 2D/3D differ; Crystal Outline stays flat; both retain readable 50% silhouettes.");
+                    && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68
+                    && crystalHalf.Count > 40 && crystalHalfBright > 12,
+                $"Both new note silhouettes must remain legible at 50% size (Gem: {gemSmall.Count} pixels, Crystal Outline small/full-filtered: {crystalSmall.Count}/{crystalHalf.Count}, bright filtered edge {crystalHalfBright}).");
+            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct pixel output; Gem 2D/3D differ; Crystal Outline stays flat and its bright contour survives an average 2×2 downsample.");
         }
         finally
         {

@@ -422,7 +422,7 @@ float4 PsNote(NoteOut v) : SV_Target
     float glowR = max(NoteA.w, 1.0);
 
     // Exponential falloff reads as light rather than a flat ring; faceted materials keep a lower halo so their planes survive at 50%.
-    float materialHalo = style < 4.5 ? 0.78 : style < 5.5 ? 0.22 : 1.0;
+    float materialHalo = style < 4.5 ? 0.78 : style < 5.5 ? 0.30 : 1.0;
     float halo = exp(-outsideD / (glowR * 0.33)) * saturate(1.0 - outsideD / glowR) * materialHalo;
     float3 emit = col * halo * NoteC.z * (0.55 + 0.75 * sounding) * (1.0 - inside);
     float alpha = 0.0;
@@ -517,19 +517,19 @@ float4 PsNote(NoteOut v) : SV_Target
         // Crystal Outline: a translucent center with a crisp, luminous angular contour and quiet internal planes.
         float xN = p.x / hb.x;
         float yN = p.y / hb.y;
-        float rimWidth = max(edgeW * 0.42, 0.7);
+        float rimWidth = max(edgeW * 0.60, 1.1);
         float rim = exp(-abs(d + edgeW * 0.48) / rimWidth) * NoteB.y;
-        float innerRim = exp(-abs(d + edgeW * 1.55) / max(edgeW * 0.75, 1.0)) * NoteB.y;
+        float innerRim = exp(-abs(d + edgeW * 1.55) / max(edgeW * 0.85, 1.2)) * NoteB.y;
         float spine = exp(-abs(xN) * 34.0);
         float facetA = exp(-abs(xN - yN * 0.12 - 0.5) * 24.0);
         float facetB = exp(-abs(xN + yN * 0.12 + 0.5) * 24.0);
-        float3 edgeColor = lerp(col, 1.0, 0.72);
-        float3 planeColor = lerp(col, 1.0, 0.58);
-        float facet = (spine * 0.15 + facetA * 0.2 + facetB * 0.2) * inside;
-        emit += col * inside * (0.035 + 0.035 * NoteB.x);
-        emit += edgeColor * (rim * 1.1 + innerRim * 0.24);
-        emit += planeColor * facet * 0.55;
-        alpha = max(inside * 0.055, rim * 0.48 + facet * 0.12);
+        float3 edgeColor = lerp(col, 1.0, 0.82);
+        float3 planeColor = lerp(col, 1.0, 0.68);
+        float facet = (spine * 0.18 + facetA * 0.22 + facetB * 0.22) * inside;
+        emit += col * inside * (0.04 + 0.04 * NoteB.x);
+        emit += edgeColor * (rim * 1.25 + innerRim * 0.32);
+        emit += planeColor * facet * 0.62;
+        alpha = max(inside * 0.07, rim * 0.58 + facet * 0.16);
     }
     else
     {
