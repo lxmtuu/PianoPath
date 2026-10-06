@@ -58,6 +58,7 @@ internal sealed class PianoVisualSettings
     public bool ShowCounter { get; set; } = false;
     public bool ShowFps { get; set; } = false;
     public bool AnimateKeys { get; set; } = true;
+    /// <summary>Independent note depth toggle; material and trail are separate style dimensions. Used by Solid, Glass and Gem.</summary>
     public bool Notes3D { get; set; } = true;
     public bool BackgroundGuide { get; set; }
     public bool BackgroundGradient { get; set; }
@@ -155,7 +156,7 @@ internal sealed class PianoVisualSettings
     public int PracticeMissThreshold { get; set; } = 3;
 
     // ---- Note shape ---------------------------------------------------------------------------------
-    /// <summary>Solid, Neon (hollow glowing outline), Glass or Fire (burning texture).</summary>
+    /// <summary>Note material: Solid, Neon, Glass, Fire, Gem or CrystalOutline. Trail and optional depth remain independent.</summary>
     public string NoteStyle { get; set; } = "Neon";
     public double NoteWidth { get; set; } = 80;
     public double NoteMinLength { get; set; } = 16;
@@ -418,7 +419,8 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
-    internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
+    // Array order is the stable integer ID sent to the GPU shader; append new materials without moving the shipped IDs.
+    internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
     internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave", "Ripple"];

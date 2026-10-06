@@ -64,6 +64,10 @@ public partial class App : Application
         // CI renders the preset gallery with it, each from a private settings folder.
         var presetName = e.Args.FirstOrDefault(argument => argument.StartsWith("--preset=", StringComparison.Ordinal))?["--preset=".Length..];
         if (!string.IsNullOrWhiteSpace(presetName)) window.PreviewPreset(presetName);
+        // These material/depth overrides are for reproducible visual studies; PreviewNoteStyle applies them in-memory only.
+        var noteStyle = e.Args.FirstOrDefault(argument => argument.StartsWith("--note-style=", StringComparison.Ordinal))?["--note-style=".Length..];
+        var noteDepth = e.Args.FirstOrDefault(argument => argument.StartsWith("--note-depth=", StringComparison.Ordinal))?["--note-depth=".Length..];
+        if (!string.IsNullOrWhiteSpace(noteStyle) || !string.IsNullOrWhiteSpace(noteDepth)) window.PreviewNoteStyle(noteStyle, noteDepth);
         // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches
         // the settings file: MainWindow.PreviewBackgroundImage sets the stage directly instead of going
         // through the row handlers that arm the auto-save timer. CI uses it to render the README preview

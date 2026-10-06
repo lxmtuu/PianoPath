@@ -78,6 +78,8 @@ public partial class MainWindow
     private static readonly Dictionary<string, string> SearchSynonyms = new(StringComparer.Ordinal)
     {
         [nameof(PianoVisualSettings.NoteFallSpeed)] = "tempo speed velocity scroll fast slow fps",
+        [nameof(PianoVisualSettings.NoteStyle)] = "material surface gemstone crystal prism facets outline flat",
+        [nameof(PianoVisualSettings.Notes3D)] = "depth bevel dimensional flat 2d 3d",
         [nameof(PianoVisualSettings.NoteGlow)] = "brightness halo shine luminance",
         [nameof(PianoVisualSettings.NoteTint)] = "opacity alpha transparency",
         [nameof(PianoVisualSettings.NoteWidth)] = "thickness bar lane size",
@@ -214,9 +216,36 @@ public partial class MainWindow
         var preset = VisualPresets.BuiltIn.Concat(CommunityPresets.All)
             .FirstOrDefault(candidate => Key(candidate.Name) == Key(name));
         if (preset is null) return;
-        ApplyPreset(preset);
+        // This is a capture override, not a user action: never arm the settings auto-save timer or
+        // make the user's current profile/presets follow a CI/command-line preview.
+        _visualSettings.CopyFrom(preset.Settings, keepBackgroundImage: true);
+        _visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;
+        if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";
+        RefreshSettingControls();
+        Stage.SetVisualSettings(_visualSettings);
+        ApplyRenderBackend();
+        SyncCameraOverlay();
+        ApplyChromeTheme();
+        SyncPlayInlineControls(refreshThemeChips: false);
+        RefreshHandStatus();
         LoadPresetList(preset.Name);
         RefreshMenuStageLook();
+    }
+
+    /// <summary>Temporarily overrides the note material/depth for a reproducible preview without saving to the user's settings.</summary>
+    internal void PreviewNoteStyle(string? styleName, string? depthName)
+    {
+        static string Key(string value) => new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        var style = string.IsNullOrWhiteSpace(styleName) ? null
+            : PianoVisualSettings.NoteStyles.FirstOrDefault(value => Key(value) == Key(styleName));
+        bool? depth = string.IsNullOrWhiteSpace(depthName) ? null : depthName.ToLowerInvariant() switch { "2d" => false, "3d" => true, _ => null };
+        if ((!string.IsNullOrWhiteSpace(styleName) && style is null) || (!string.IsNullOrWhiteSpace(depthName) && depth is null)) return;
+        if (style is null && depth is null) return;
+        if (style is not null) _visualSettings.NoteStyle = style;
+        if (depth is not null) _visualSettings.Notes3D = depth.Value;
+        RefreshSettingControls();
+        Stage.SetVisualSettings(_visualSettings);
+        ApplyRenderBackend();
     }
 
     /// <summary>Applies a built-in preset by name (used by the Theme page quick looks).</summary>
@@ -289,14 +318,14 @@ public partial class MainWindow
         SliderRow(color, "Rainbow speed", nameof(PianoVisualSettings.RainbowSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.ColorMode == "RainbowTime";
 
         var shape = Card(NoteSettingsHost, "SHAPE & STYLE", "Silhouette of the falling bars.");
-        Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Solid bars, hollow neon tubes, glossy glass or burning fire notes.",
-            ("Solid", "Solid"), ("Neon", "Neon outline"), ("Glass", "Glass"), ("Fire", "Fire / burning"));
+        Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Choose the note material without changing pitch, timing or width. Gem uses faceted luminous planes; Crystal Outline is an angular, translucent contour.",
+            ("Solid", "Solid"), ("Neon", "Neon outline"), ("Glass", "Glass"), ("Fire", "Fire / burning"), ("Gem", "Gem"), ("CrystalOutline", "Crystal Outline"));
         SliderRow(shape, "Note width", nameof(PianoVisualSettings.NoteWidth), 30, 100, "Width of a note relative to its key lane.");
         SliderRow(shape, "Corner roundness", nameof(PianoVisualSettings.NoteRoundness), 0, 100, "Rounded corners of every bar.");
         SliderRow(shape, "Minimum length", nameof(PianoVisualSettings.NoteMinLength), 4, 60, "Very short notes are stretched to at least this many pixels.");
         SliderRow(shape, "Gap between notes", nameof(PianoVisualSettings.NoteGap), 0, 12, "Space carved between consecutive notes of the same key.");
         SliderRow(shape, "Fire texture", nameof(PianoVisualSettings.NoteTexture), 0, 100, "Strength of the animated ember holes in the Fire style.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire";
-        Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Inner shadow and highlight on solid and glass notes.");
+        Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Adds a subtle bevel to Solid and Glass, and stronger faceted depth to Gem. Off is the flatter 2D treatment; Crystal Outline stays intentionally flat.");
         Toggle(shape, "Note names on bars", nameof(PianoVisualSettings.ShowNoteLabels), "Print the note name inside each bar when there is room.");
 
         var glow = Card(NoteSettingsHost, "GLOW & EDGES", "Bloom, outline and highlights.");

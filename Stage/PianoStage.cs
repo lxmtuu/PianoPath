@@ -31,6 +31,14 @@ internal sealed partial class PianoStage : FrameworkElement
     private static readonly Brush KeyWhiteGlass = Freeze(new LinearGradientBrush(Color.FromArgb(150, 255, 255, 255), Color.FromArgb(70, 200, 210, 235), 90));
     private static readonly Brush KeyBlackGlass = Freeze(new LinearGradientBrush(Color.FromArgb(220, 30, 32, 44), Color.FromArgb(200, 4, 5, 10), 90));
     private static readonly BitmapSource FireMask = BuildFireMask();
+    // Normalized silhouettes keep material geometry resolution-independent on both tiny lanes and long notes.
+    // These IDs are material looks only; NoteStyle/Notes3D remain separate settings and Streak remains a trail.
+    private static readonly Point[] GemOutline = [new(.14, 0), new(.86, 0), new(1, .1), new(1, .9), new(.86, 1), new(.14, 1), new(0, .9), new(0, .1)];
+    private static readonly Point[] GemFacets = [new(.14, 0), new(.5, .18), new(.86, 0), new(.5, .18), new(.5, .18), new(.5, .82), new(.5, .82), new(.14, 1), new(.5, .82), new(.86, 1), new(.24, .08), new(.38, .5), new(.76, .08), new(.62, .5)];
+    private static readonly StreamGeometry GemUnitShape = UnitPolygon(GemOutline);
+    private static readonly Point[] CrystalOutline = [new(.24, 0), new(.76, 0), new(1, .14), new(1, .86), new(.76, 1), new(.24, 1), new(0, .86), new(0, .14)];
+    private static readonly Point[] CrystalFacets = [new(.24, .12), new(.5, .28), new(.76, .12), new(.5, .28), new(.5, .28), new(.5, .72), new(.5, .72), new(.24, .88), new(.5, .72), new(.76, .88)];
+    private static readonly StreamGeometry CrystalUnitShape = UnitPolygon(CrystalOutline);
     private readonly Dictionary<uint, SolidColorBrush> _brushCache = [];
     private readonly Dictionary<ulong, Brush> _gradientCache = [];
     private readonly List<Star> _stars = [];
@@ -1060,7 +1068,7 @@ internal sealed partial class PianoStage : FrameworkElement
         if (!ghostPass) DrawFallingTrail(dc, r, color, opacity, pitch, rising);
         // Outer bloom shared by every style: stacked rounded shells with exponentially decaying alpha so the
         // glow falls off like real light instead of showing two flat banded rings; neon spreads further.
-        var bloomScale = style == "Neon" ? 1.4 : 1;
+        var bloomScale = style switch { "Neon" => 1.4, "Gem" => .78, "CrystalOutline" => .2, _ => 1 };
         for (var layer = 4; layer >= 1; layer--)
         {
             var f = layer / 4.0;
@@ -1122,6 +1130,45 @@ internal sealed partial class PianoStage : FrameworkElement
                 }
                 break;
             }
+            case "Gem":
+            {
+                // A solid, readable crystal body with cut shoulders and facet seams. Its wider halo is
+                // intentionally restrained so the planes survive at half-size instead of blooming together.
+                dc.PushTransform(UnitTransform(r));
+                dc.PushOpacity(Math.Clamp(opacity * tint, 0, 1));
+                dc.DrawGeometry(GemBrush(color, _visual.Notes3D), null, GemUnitShape);
+                dc.Pop();
+                dc.Pop();
+                var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
+                if (edgeFactor > 0)
+                {
+                    var rimColor = Blend(color, Colors.White, _visual.Notes3D ? .56 : .42);
+                    DrawUnitOutline(dc, r, GemOutline, Pen(Color.FromArgb(Alpha(235 * opacity * edgeFactor), rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * .78, 1, 2.6)));
+                }
+                var facet = Blend(color, Colors.White, _visual.Notes3D ? .55 : .38);
+                DrawUnitSegments(dc, r, GemFacets, Pen(Color.FromArgb(Alpha((_visual.Notes3D ? 145 : 102) * opacity), facet.R, facet.G, facet.B), .9, roundCaps: true));
+                if (_visual.Notes3D && r.Width > 10 && r.Height > 24)
+                    dc.DrawLine(Pen(Color.FromArgb(Alpha(105 * opacity), 255, 255, 255), 1), InUnitRect(r, new Point(.29, .18)), InUnitRect(r, new Point(.29, .82)));
+                break;
+            }
+            case "CrystalOutline":
+            {
+                // A genuinely see-through, chamfered contour: the center stays quiet while the pale rim
+                // and a few internal facets keep its pitch/length legible on both dark and busy stages.
+                var fill = Color.FromArgb(Alpha(34 * opacity * tint), cr, cg, cb);
+                dc.PushTransform(UnitTransform(r));
+                dc.DrawGeometry(Brush(fill), null, CrystalUnitShape);
+                dc.Pop();
+                var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
+                if (edgeFactor > 0)
+                {
+                    var rimColor = Blend(color, Colors.White, .68);
+                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(Alpha(250 * opacity * edgeFactor), rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * .86, 1.05, 2.8)));
+                }
+                var facet = Blend(color, Colors.White, .58);
+                DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(148 * opacity), facet.R, facet.G, facet.B), .85, roundCaps: true));
+                break;
+            }
             default:
             {
                 if (_visual.Notes3D)
@@ -1146,7 +1193,8 @@ internal sealed partial class PianoStage : FrameworkElement
         }
         if (_visual.NoteRefraction > 0 && r.Width > 6)
         {
-            var fringe = Alpha((style == "Neon" ? 90 : 170) * opacity * _visual.NoteRefraction / 100);
+            var materialRefraction = style switch { "Neon" => 90, "Gem" => 130, "CrystalOutline" => 72, _ => 170 };
+            var fringe = Alpha(materialRefraction * opacity * _visual.NoteRefraction / 100);
             dc.DrawLine(Pen(Color.FromArgb(fringe, 255, 255, 255), 1), new Point(r.X + 2, r.Y + 3), new Point(r.X + 2, r.Bottom - 3));
         }
         if (_visual.Notes3D && r.Height > 20 && style is "Solid" or "Glass")
@@ -1173,11 +1221,39 @@ internal sealed partial class PianoStage : FrameworkElement
         {
             var label = r.Width >= 20 ? NoteLabel(pitch) : ShortNoteLabel(pitch);
             var luminance = .2126 * cr + .7152 * cg + .0722 * cb;
-            var textColor = style == "Neon" ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
+            var textColor = (style is "Neon" or "CrystalOutline") ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
         }
         if (_visual.FallingGhost && !ghostPass && r.Height > 4) DrawNoteGhosts(dc, r, color, opacity, pitch, rising);
         if (_visual.HoldBar && sounding && !ghostPass) DrawHoldBar(dc, r, color, opacity);
+    }
+
+    private static StreamGeometry UnitPolygon(Point[] points)
+    {
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(points[0], isFilled: true, isClosed: true);
+            for (var i = 1; i < points.Length; i++) context.LineTo(points[i], isStroked: true, isSmoothJoin: false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    private static MatrixTransform UnitTransform(Rect bounds) => new(new Matrix(bounds.Width, 0, 0, bounds.Height, bounds.X, bounds.Y));
+
+    private static Point InUnitRect(Rect bounds, Point point) => new(bounds.X + point.X * bounds.Width, bounds.Y + point.Y * bounds.Height);
+
+    private void DrawUnitOutline(DrawingContext dc, Rect bounds, Point[] points, Pen pen)
+    {
+        for (var i = 0; i < points.Length; i++)
+            dc.DrawLine(pen, InUnitRect(bounds, points[i]), InUnitRect(bounds, points[(i + 1) % points.Length]));
+    }
+
+    private void DrawUnitSegments(DrawingContext dc, Rect bounds, Point[] points, Pen pen)
+    {
+        for (var i = 0; i + 1 < points.Length; i += 2)
+            dc.DrawLine(pen, InUnitRect(bounds, points[i]), InUnitRect(bounds, points[i + 1]));
     }
 
     /// <summary>Vertical bevel for solid note bars: a lit top edge, the saturated core and a shadowed bottom.</summary>
@@ -1235,6 +1311,26 @@ internal sealed partial class PianoStage : FrameworkElement
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .28));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(specular.R, specular.G, specular.B), .46));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(color.R, color.G, color.B), .68));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 1));
+        gradient.Freeze();
+        return CacheGradient(key, gradient);
+    }
+
+    /// <summary>Cut-gem material: broad color planes in 2D, a sharper specular shoulder and deep edge facets in 3D.</summary>
+    private Brush GemBrush(Color color, bool depth)
+    {
+        var key = GradientKey(depth ? (byte)9 : (byte)10, Color.FromArgb(255, color.R, color.G, color.B));
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        var edge = Blend(color, Color.FromRgb(6, 4, 18), depth ? .38 : .16);
+        var shoulder = Blend(color, Colors.White, depth ? .22 : .08);
+        var specular = Blend(color, Colors.White, depth ? .58 : .24);
+        var core = Blend(color, Colors.White, depth ? .04 : .015);
+        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 0));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .16));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(specular.R, specular.G, specular.B), depth ? .39 : .30));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(core.R, core.G, core.B), .52));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .82));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 1));
         gradient.Freeze();
         return CacheGradient(key, gradient);

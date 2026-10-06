@@ -279,6 +279,16 @@ internal static partial class VerificationSuite
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
+        var legacyStyleIds = new[] { "Solid", "Neon", "Glass", "Fire" };
+        Assert(PianoVisualSettings.NoteStyles.Take(legacyStyleIds.Length).SequenceEqual(legacyStyleIds)
+                && PianoVisualSettings.NoteStyles.SequenceEqual([.. legacyStyleIds, "Gem", "CrystalOutline"]),
+            "New note materials must be appended so the four shipped GPU style IDs keep their original values.");
+        foreach (var material in new[] { "Gem", "CrystalOutline" })
+        {
+            var roundTrip = PianoVisualSettings.FromJson(new PianoVisualSettings { NoteStyle = material, Notes3D = true }.ToJson());
+            Assert(roundTrip.NoteStyle == material && roundTrip.Notes3D,
+                $"The new material {material} should survive the existing JSON format without a schema migration.");
+        }
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
@@ -1786,6 +1796,9 @@ internal static partial class VerificationSuite
                 && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMotion)) && choices.ContainsKey(nameof(PianoVisualSettings.HaloPulseStyle))
                 && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)) && toggles.ContainsKey(nameof(PianoVisualSettings.HaloPulse)),
             "Note style, background motion, hit-line style, keyboard style and their effect switches should be editable from the dock.");
+        Assert(PianoVisualSettings.NoteStyles.SequenceEqual(["Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline"])
+                && choices[nameof(PianoVisualSettings.NoteStyle)].Items.Count == PianoVisualSettings.NoteStyles.Length,
+            "The Notes page picker should expose Gem and Crystal Outline as materials alongside the legacy styles.");
         var initialBackgroundMotion = visualSettings.BackgroundMotion;
         choices[nameof(PianoVisualSettings.BackgroundMotion)].SelectedValue = "Ocean Flow";
         Assert(visualSettings.BackgroundMotion == "Ocean Flow", "Choosing a procedural background should update the live visual settings.");
@@ -1794,7 +1807,24 @@ internal static partial class VerificationSuite
         choices[nameof(PianoVisualSettings.HaloPulseStyle)].SelectedValue = "Twin Comets";
         Assert(visualSettings.HaloPulseStyle == "Twin Comets", "Choosing a hit-line animation should update the live visual settings.");
         choices[nameof(PianoVisualSettings.HaloPulseStyle)].SelectedValue = initialHaloPulseStyle;
-        var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode;
+        var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode; var originalDepth = visualSettings.Notes3D;
+        var settingsSaveTimer = (DispatcherTimer)Field(window, "_settingsSaveTimer");
+        settingsSaveTimer.Stop();
+        window.PreviewNoteStyle("Gem", "2d");
+        Assert(visualSettings.NoteStyle == "Gem" && !visualSettings.Notes3D && !settingsSaveTimer.IsEnabled,
+            "A command-line material preview should update the live stage in memory without arming settings auto-save.");
+        window.PreviewNoteStyle("Crystal Outline", "3d");
+        Assert(visualSettings.NoteStyle == "CrystalOutline" && visualSettings.Notes3D && !settingsSaveTimer.IsEnabled,
+            "The preview should normalize the display name but keep the stable CrystalOutline ID, without saving it.");
+        window.PreviewNoteStyle(originalStyle, originalDepth ? "3d" : "2d");
+        var beforePresetPreview = visualSettings.ToJson();
+        window.PreviewPreset("ConcertGold");
+        Assert(visualSettings.PresetName == "Concert Gold" && !settingsSaveTimer.IsEnabled,
+            "A command-line preset preview should also stay in memory and never arm the settings auto-save timer.");
+        visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforePresetPreview), keepBackgroundImage: true);
+        Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        Invoke(window, "ApplyChromeTheme"); Invoke(window, "RefreshMenuStageLook");
+        Run(nameof(VerifyNoteMaterialRendering), () => VerifyNoteMaterialRendering(stage, visualSettings));
         choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = "Fire";
         Assert(visualSettings.NoteStyle == "Fire" && visualSettings.PresetModified, "Choosing a note style should update the renderer settings and flag the preset as modified.");
         choices[nameof(PianoVisualSettings.ColorMode)].SelectedValue = "PerHand";
@@ -4284,6 +4314,79 @@ internal static partial class VerificationSuite
     /// Impact phase FX (effects-redesign v1): the Particles page exposes the wave style choice and
     /// the flash switch; hits spawn waves/flashes that paint real geometry and fade over time.
     /// </summary>
+    /// <summary>Checks both new materials on the real WPF draw path, including their half-size silhouette and independent depth toggle.</summary>
+    private static void VerifyNoteMaterialRendering(PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var saved = PianoVisualSettings.FromJson(visualSettings.ToJson());
+        try
+        {
+            visualSettings.NoteGlow = 0;
+            visualSettings.NoteHeadGlow = 0;
+            visualSettings.NoteRefraction = 0;
+            visualSettings.NoteEdge = 88;
+            visualSettings.NoteEdgeWidth = 48;
+            visualSettings.NoteTint = 78;
+            visualSettings.FallingTrail = "None";
+            visualSettings.FallingGhost = false;
+            visualSettings.FallingPulse = false;
+            visualSettings.ShowNoteLabels = false;
+            visualSettings.HoldBar = false;
+            stage.SetVisualSettings(visualSettings);
+
+            const int width = 128, height = 192;
+            byte[] Capture(string style, bool depth3D, bool halfSize = false)
+            {
+                visualSettings.NoteStyle = style;
+                visualSettings.Notes3D = depth3D;
+                stage.SetVisualSettings(visualSettings);
+                var visual = new DrawingVisual();
+                var bounds = halfSize ? new Rect(53, 55, 22, 76) : new Rect(42, 32, 44, 152);
+                using (var dc = visual.RenderOpen())
+                    Invoke(stage, "DrawConfiguredNote", dc, bounds, Color.FromRgb(64, 176, 250), 1d, false, 60, false, false);
+                var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(visual);
+                var pixels = new byte[width * height * 4];
+                bitmap.CopyPixels(pixels, width * 4, 0);
+                return pixels;
+            }
+
+            (int Count, int MinX, int MinY, int MaxX, int MaxY) Visible(byte[] pixels)
+            {
+                var count = 0; var minX = width; var minY = height; var maxX = -1; var maxY = -1;
+                for (var y = 0; y < height; y++)
+                    for (var x = 0; x < width; x++)
+                    {
+                        if (pixels[(y * width + x) * 4 + 3] <= 24) continue;
+                        count++;
+                        minX = Math.Min(minX, x); minY = Math.Min(minY, y);
+                        maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
+                    }
+                return (count, minX, minY, maxX, maxY);
+            }
+
+            var solid = Capture("Solid", false);
+            var gem2D = Capture("Gem", false);
+            var gem3D = Capture("Gem", true);
+            var crystal2D = Capture("CrystalOutline", false);
+            var crystal3D = Capture("CrystalOutline", true);
+            var gemSmall = Visible(Capture("Gem", true, halfSize: true));
+            var crystalSmall = Visible(Capture("CrystalOutline", false, halfSize: true));
+            Assert(!gem2D.SequenceEqual(solid) && !crystal2D.SequenceEqual(solid) && !gem2D.SequenceEqual(crystal2D),
+                "Gem and Crystal Outline must paint distinct geometry rather than falling through to Solid on the WPF path.");
+            Assert(!gem2D.SequenceEqual(gem3D) && crystal2D.SequenceEqual(crystal3D),
+                "The 3D toggle must deepen Gem while Crystal Outline remains the deliberately flat material.");
+            Assert(gemSmall.Count > 300 && gemSmall.MaxX - gemSmall.MinX >= 18 && gemSmall.MaxY - gemSmall.MinY >= 68
+                    && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68,
+                $"Both new note silhouettes must remain legible at 50% size (Gem: {gemSmall.Count} pixels, Crystal Outline: {crystalSmall.Count}).");
+            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct pixel output; Gem 2D/3D differ; Crystal Outline stays flat; both retain readable 50% silhouettes.");
+        }
+        finally
+        {
+            visualSettings.CopyFrom(saved, keepBackgroundImage: true);
+            stage.SetVisualSettings(visualSettings);
+        }
+    }
+
     private static void VerifyImpactFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
     {
         var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");

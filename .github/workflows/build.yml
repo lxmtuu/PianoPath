@@ -430,6 +430,68 @@ jobs:
           $sheet.Dispose()
           "preset gallery: $([math]::Round((Get-Item 'docs/previews/presets.jpg').Length / 1KB)) KB"
 
+      # The left/right pair is the WPF and GPU path; each 540×350 cell is exactly half of the 1080×700
+      # compact capture, so outline/facet readability is checked at 50%, not inferred from full-size art.
+      - name: Render the note-material gallery at 50%
+        id: render-note-styles
+        shell: pwsh
+        run: |
+          $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
+          $styles = @(
+            @{ Id = 'Solid-2D'; Style = 'Solid'; Depth = '2d' }
+            @{ Id = 'Solid-3D'; Style = 'Solid'; Depth = '3d' }
+            @{ Id = 'Glass-2D'; Style = 'Glass'; Depth = '2d' }
+            @{ Id = 'Glass-3D'; Style = 'Glass'; Depth = '3d' }
+            @{ Id = 'Neon'; Style = 'Neon'; Depth = '2d' }
+            @{ Id = 'Fire'; Style = 'Fire'; Depth = '2d' }
+            @{ Id = 'Gem-2D'; Style = 'Gem'; Depth = '2d' }
+            @{ Id = 'Gem-3D'; Style = 'Gem'; Depth = '3d' }
+            @{ Id = 'Crystal-Outline'; Style = 'CrystalOutline'; Depth = '2d' }
+          )
+          $engines = @('sw', 'gpu')
+          $work = Join-Path $env:TEMP 'keyflow-note-styles-gallery'
+          Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $work | Out-Null
+          foreach ($style in $styles) {
+            foreach ($engine in $engines) {
+              $target = Join-Path $work "$($style.Id)-$engine.png"
+              $settings = Join-Path $work "settings-$($style.Id)-$engine"
+              $args = @('--snapshot', $target, '--compact', '--lang=en', "--settings-dir=$settings", '--play-preview', '--play-chord', '--preset=ConcertGold', "--note-style=$($style.Style)", "--note-depth=$($style.Depth)")
+              if ($engine -eq 'gpu') { $args += '--gpu' } else { $args += '--software' }
+              $process = Start-Process -FilePath $exe -ArgumentList $args -PassThru -Wait
+              if ($process.ExitCode -ne 0 -or -not (Test-Path $target)) { throw "Note-style capture failed: $($style.Id) ($engine), exit $($process.ExitCode)" }
+            }
+          }
+          Add-Type -AssemblyName System.Drawing
+          $cellW = 540; $cellH = 350; $label = 26
+          $sheet = New-Object System.Drawing.Bitmap ($cellW * 2), (($cellH + $label) * $styles.Count)
+          $g = [System.Drawing.Graphics]::FromImage($sheet)
+          $g.Clear([System.Drawing.Color]::FromArgb(12, 12, 16))
+          $g.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
+          $font = New-Object System.Drawing.Font 'Segoe UI', 11
+          $brush = [System.Drawing.Brushes]::White
+          for ($i = 0; $i -lt $styles.Count; $i++) {
+            $y = $i * ($cellH + $label)
+            $col = 0
+            foreach ($engine in $engines) {
+              $engineLabel = if ($engine -eq 'sw') { 'WPF / software' } else { 'GPU (WARP)' }
+              $g.DrawString("$($styles[$i].Id) — $engineLabel", $font, $brush, ($col * $cellW + 8), ($y + 4))
+              $file = Join-Path $work "$($styles[$i].Id)-$engine.png"
+              $img = [System.Drawing.Image]::FromFile($file)
+              $g.DrawImage($img, (New-Object System.Drawing.Rectangle ($col * $cellW), ($y + $label), $cellW, $cellH))
+              $img.Dispose()
+              $col++
+            }
+          }
+          $g.Dispose()
+          $codec = [System.Drawing.Imaging.ImageCodecInfo]::GetImageEncoders() | Where-Object { $_.MimeType -eq 'image/jpeg' }
+          $params = New-Object System.Drawing.Imaging.EncoderParameters 1
+          $params.Param[0] = New-Object System.Drawing.Imaging.EncoderParameter ([System.Drawing.Imaging.Encoder]::Quality), 88L
+          New-Item -ItemType Directory -Force -Path 'docs/previews' | Out-Null
+          $sheet.Save((Join-Path $PWD 'docs/previews/note-styles.jpg'), $codec, $params)
+          $sheet.Dispose()
+          "note-style gallery (50%): $([math]::Round((Get-Item 'docs/previews/note-styles.jpg').Length / 1KB)) KB"
+
       - name: Upload README previews
         if: always()
         uses: actions/upload-artifact@v7
@@ -438,6 +500,7 @@ jobs:
           path: |
             docs/previews/**/*.png
             docs/previews/presets.jpg
+            docs/previews/note-styles.jpg
           if-no-files-found: warn
 
       # Only when the second render disagreed with the first: both pictures, so the difference can be
@@ -509,13 +572,13 @@ jobs:
       #     and the check went quiet on run 36836190788 with the drift exactly as unresolved as before.
       #
       # So: diff the working tree against $GITHUB_SHA, the commit this run started from, to see what the
-      # build re-rendered, and ask the commit step whether that refresh actually *landed* on the branch.
+      # build re-rendered (README sets, preset gallery and note-material gallery), and ask the commit step whether that refresh actually *landed* on the branch.
       # Only "re-rendered and not landed" is drift worth reporting; a landed refresh and an untouched
       # folder both get a plain line. A warning rather than an error on purpose: with the branch rules in
       # place the workflow's own token cannot push, so making it red would paint every pull request red
       # for a thing only a human — or a bypass rule — can settle.
       - name: Report preview drift
-        if: always() && steps.render-previews.outcome == 'success' && steps.render-gallery.outcome == 'success'
+        if: always() && steps.render-previews.outcome == 'success' && steps.render-gallery.outcome == 'success' && steps.render-note-styles.outcome == 'success'
         shell: bash
         run: |
           drifted=$(git diff --name-only "$GITHUB_SHA" -- docs/previews)

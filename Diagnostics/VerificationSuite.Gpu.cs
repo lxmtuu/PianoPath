@@ -147,6 +147,7 @@ internal static partial class VerificationSuite
         Assert(keyboard > 60, $"The GPU frame should show a lit white-key keyboard along the bottom (average luma {keyboard:0}).");
         Assert(keyboard > sky + 20, $"The keyboard should stand out from the dark stage above it (keys {keyboard:0}, stage {sky:0}).");
         Assert(distinct.Count > 40, $"The GPU frame should be a picture, not a flat fill ({distinct.Count} distinct sampled colours).");
+        VerifyGpuNoteMaterials(width, height);
         var motionFeed = new GpuStageFeed(); motionFeed.SetStageHeight(height);
         var motionSettings = new PianoVisualSettings
         {
@@ -236,6 +237,73 @@ internal static partial class VerificationSuite
         Assert(recorded >= 3 && recordedKeys > 60, $"A take on the GPU stage should receive exact-size frames with the keyboard in them ({recorded} frames, keys {recordedKeys:0}).");
         Results.Add($"PASS gpu recording: {recorded} frames of 320×180 rendered by the loop with no window and no preview (keys {recordedKeys:0}).");
         Results.Add($"PASS gpu stage effects: {ambient.Count} ambient shapes, a {atlas.Width}×{atlas.Height} glyph atlas ({inked} inked px), sky {plainSky:0.0} → {fxSky:0.0} with the galaxy on.");
+    }
+
+    /// <summary>Renders each new material through the embedded HLSL on WARP and checks its shader ID and visible pixels.</summary>
+    private static void VerifyGpuNoteMaterials(int width, int height)
+    {
+        var expectedIds = new[] { "Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline" };
+        for (var i = 0; i < expectedIds.Length; i++)
+        {
+            var look = GpuLook.From(new PianoVisualSettings { NoteStyle = expectedIds[i] }, (pitch, track) => Color.FromRgb(64, 176, 250), .205);
+            Assert(look.NoteStyle == i, $"GPU material {expectedIds[i]} must use the stable style ID {i}, preserving every older ID.");
+        }
+
+        var notes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = .6, Duration = 2.0 },
+            new() { Pitch = 64, Start = .6, Duration = 2.0 },
+            new() { Pitch = 67, Start = .6, Duration = 2.0 }
+        };
+        byte[] Render(string style, bool depth3D, bool showNotes = true, int resolutionScale = 1)
+        {
+            var settings = new PianoVisualSettings
+            {
+                NoteStyle = style, Notes3D = depth3D, NoteWidth = 100, NoteFallSpeed = 550,
+                NoteGlow = 0, NoteHeadGlow = 0, NoteRefraction = 0, NoteEdge = 88, NoteEdgeWidth = 48,
+                NoteTint = 78, NoteRoundness = 30, FallingTrail = "None", ShowNoteLabels = false,
+                ShowBackground = false, ShowHalo = false, ShowKeys = false, ShowEmbers = false,
+                ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+                ShowLightBeams = false, ShowPetals = false, ShowStars = false, BackgroundMotion = "None",
+                HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+            };
+            settings.ShowNotes = showNotes;
+            var feed = new GpuStageFeed();
+            var renderWidth = width / resolutionScale; var renderHeight = height / resolutionScale;
+            feed.SetStageHeight(renderHeight);
+            feed.SetLook(GpuLook.From(settings, (pitch, track) => Color.FromRgb(64, 176, 250), .205));
+            feed.SetState(notes, 1.5, true, new HashSet<int>());
+            return GpuRenderLoop.RenderOnce(feed, renderWidth, renderHeight, 12, 1 / 60.0, out _, forceWarp: true);
+        }
+
+        var blank = Render("Solid", false, showNotes: false);
+        var solid = Render("Solid", false);
+        var gem2D = Render("Gem", false);
+        var gem3D = Render("Gem", true);
+        var crystal2D = Render("CrystalOutline", false);
+        var crystal3D = Render("CrystalOutline", true);
+        int ChangedPixels(byte[] image, byte[] baseline)
+        {
+            var count = 0;
+            for (var i = 0; i < image.Length; i += 4)
+            {
+                var delta = Math.Abs(image[i] - baseline[i]) + Math.Abs(image[i + 1] - baseline[i + 1]) + Math.Abs(image[i + 2] - baseline[i + 2]);
+                if (delta > 18) count++;
+            }
+            return count;
+        }
+        var gemVisible = ChangedPixels(gem2D, blank);
+        var crystalVisible = ChangedPixels(crystal2D, blank);
+        var blankSmall = Render("Solid", false, showNotes: false, resolutionScale: 2);
+        var gemSmallVisible = ChangedPixels(Render("Gem", true, resolutionScale: 2), blankSmall);
+        var crystalSmallVisible = ChangedPixels(Render("CrystalOutline", false, resolutionScale: 2), blankSmall);
+        Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20,
+            $"Gem and Crystal Outline must change real GPU pixels on WARP at full and half size (full {gemVisible}/{crystalVisible}, half {gemSmallVisible}/{crystalSmallVisible}).");
+        Assert(!solid.AsSpan().SequenceEqual(gem2D) && !solid.AsSpan().SequenceEqual(crystal2D) && !gem2D.AsSpan().SequenceEqual(crystal2D),
+            "The GPU shader must render Gem and Crystal Outline as distinct materials, not the Solid fallback.");
+        Assert(!gem2D.AsSpan().SequenceEqual(gem3D) && crystal2D.AsSpan().SequenceEqual(crystal3D),
+            "The GPU depth input must change Gem shading while Crystal Outline remains flat.");
+        Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); Gem responds to 2D/3D while Crystal Outline stays flat.");
     }
 
     /// <summary>

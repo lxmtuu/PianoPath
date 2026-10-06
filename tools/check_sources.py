@@ -712,7 +712,10 @@ def scan_readme():
     # ``docs/previews`` is rendered by CI and committed back, so a shot the workflow knows about can be
     # one commit behind the README line that introduces it. Every other image has to exist right now.
     workflow = ROOT / ".github" / "workflows" / "build.yml"
-    rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow.read_text(encoding="utf-8"))) if workflow.exists() else set()
+    workflow_text = workflow.read_text(encoding="utf-8") if workflow.exists() else ""
+    rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow_text))
+    # Shared JPEG studies are assembled from per-engine captures and saved outside the language-specific $shots list.
+    rendered.update(re.findall(r"\$sheet\.Save\(\(Join-Path \$PWD 'docs/previews/([^']+\.jpe?g)'", workflow_text))
     pending = []
     # Each edition shows the interface in its own language, so every preview a README points at has to sit
     # in that edition's own set — and the workflow has to render both sets in the first place.
@@ -736,7 +739,12 @@ def scan_readme():
                 continue
             relative = target.replace("\\", "/")
             if relative.startswith("docs/previews/"):
-                if relative.split("/")[2] != own:
+                parts = relative.split("/")
+                # Shared root-level galleries (preset/material studies) are not language-specific; CI renders them separately.
+                if len(parts) == 3 and Path(target).name in rendered:
+                    pending.append(f"{name}:{Path(target).name}")
+                    continue
+                if parts[2] != own:
                     errors.append(f"{name} shows the preview '{target}', which is not the '{own}' set this edition reads")
                     continue
                 if Path(target).name in rendered:
@@ -817,12 +825,13 @@ def scan_cli_and_samples():
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     if not workflow.exists():
         return errors
-    shots = re.search(r"\$shots = @\((.*?)\n\s*\)\n", workflow.read_text(encoding="utf-8"), re.S)
+    workflow_text = workflow.read_text(encoding="utf-8")
+    shots = re.search(r"\$shots = @\((.*?)\n\s*\)\n", workflow_text, re.S)
     if not shots:
         return errors + ["build.yml lost the $shots list that renders the README previews"]
     block = shots.group(1)
     # The preset gallery renders every shipped look by name (spaces dropped, as --preset accepts them).
-    gallery = re.search(r"\$presets = @\(([^)]*)\)", workflow.read_text(encoding="utf-8"))
+    gallery = re.search(r"\$presets = @\(([^)]*)\)", workflow_text)
     presets_source = ROOT / "Stage" / "VisualPresets.cs"
     if gallery and presets_source.exists():
         text = presets_source.read_text(encoding="utf-8")
@@ -835,6 +844,48 @@ def scan_cli_and_samples():
             errors.append(f"build.yml's preset gallery leaves out the shipped preset {name}")
         for name in sorted(listed - wanted):
             errors.append(f"build.yml's preset gallery renders {name}, which is not a shipped preset")
+    # The note-material study is its own render gate: all legacy styles plus the two new materials,
+    # both depth states where supported, and one capture for each stage renderer.
+    note_step = re.search(r"^      - name: Render the note-material gallery at 50%\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    note_gallery = re.search(r"\$styles = @\((.*?)\n\s*\)", note_step.group(1), re.S) if note_step else None
+    required_styles = {
+        "Solid-2D": ("Solid", "2d"), "Solid-3D": ("Solid", "3d"),
+        "Glass-2D": ("Glass", "2d"), "Glass-3D": ("Glass", "3d"),
+        "Neon": ("Neon", "2d"), "Fire": ("Fire", "2d"),
+        "Gem-2D": ("Gem", "2d"), "Gem-3D": ("Gem", "3d"),
+        "Crystal-Outline": ("CrystalOutline", "2d"),
+    }
+    if not note_gallery:
+        errors.append("build.yml lost the $styles list that renders the note-material gallery")
+    else:
+        entries = {
+            match.group(1): (match.group(2), match.group(3))
+            for match in re.finditer(r"@\{\s*Id\s*=\s*'([^']+)'\s*;\s*Style\s*=\s*'([^']+)'\s*;\s*Depth\s*=\s*'([^']+)'\s*\}", note_gallery.group(1))
+        }
+        for name, expected in required_styles.items():
+            if entries.get(name) != expected:
+                errors.append(f"build.yml's note-material gallery needs {name} = {expected[0]}/{expected[1]}")
+        for name in sorted(entries.keys() - required_styles.keys()):
+            errors.append(f"build.yml's note-material gallery renders the unplanned case {name}")
+        engines = re.search(r"\$engines = @\(([^)]*)\)", note_step.group(1)) if note_step else None
+        if not engines or set(re.findall(r"'([^']+)'", engines.group(1))) != {"sw", "gpu"}:
+            errors.append("build.yml's note-material gallery must render both WPF/software and GPU/WARP")
+        if not note_step or not re.search(r"\$cellW\s*=\s*540\s*;\s*\$cellH\s*=\s*350", note_step.group(1)) or "'--compact'" not in note_step.group(1):
+            errors.append("build.yml's note-material gallery must reduce a 1080×700 capture to 540×350 (50%)")
+        if not note_step or "'docs/previews/note-styles.jpg'" not in note_step.group(1):
+            errors.append("build.yml's note-material gallery must write docs/previews/note-styles.jpg")
+        if note_step and any(token not in note_step.group(1) for token in (
+            "foreach ($style in $styles)", "foreach ($engine in $engines)",
+            '"--note-style=$($style.Style)"', '"--note-depth=$($style.Depth)"',
+            "if ($engine -eq 'gpu')", "'--software'",
+        )):
+            errors.append("build.yml must render every note material/depth through both explicit engine overrides")
+    artifact_step = re.search(r"^      - name: Upload README previews\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    if not artifact_step or "docs/previews/note-styles.jpg" not in artifact_step.group(1):
+        errors.append("build.yml's README preview artifact must include docs/previews/note-styles.jpg")
+    drift_step = re.search(r"^      - name: Report preview drift\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    if not drift_step or not re.search(r"steps\.render-note-styles\.outcome\s*==\s*'success'", drift_step.group(1)):
+        errors.append("build.yml must report preview drift only after the note-material gallery succeeds")
     for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", block)) - parsed):
         errors.append(f"build.yml passes {flag} to PianoPath.exe, which does not parse it")
     for path in sorted(set(re.findall(r"((?:docs|Assets)/[A-Za-z0-9_./-]+)", block))):
