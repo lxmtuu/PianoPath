@@ -6,6 +6,7 @@ using System.Text.Json;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace PianoPath;
 
@@ -149,8 +150,19 @@ internal static class Phase1VisualReview
         }
     }
 
+    private static void FlushWpfRenderPass()
+    {
+        // RenderTargetBitmap.Render snapshots the last retained drawing; it does not run a same-tick
+        // InvalidateVisual through OnRender. Pump WPF's render priority before every off-screen capture.
+        var frame = new DispatcherFrame();
+        var dispatcher = Dispatcher.CurrentDispatcher;
+        dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => frame.Continue = false));
+        dispatcher.PushFrame(frame);
+    }
+
     private static byte[] CaptureWpfFrame(PianoStage stage, ReviewScene scene)
     {
+        FlushWpfRenderPass();
         var bitmap = new RenderTargetBitmap(scene.Width, scene.Height, scene.Dpi, scene.Dpi, PixelFormats.Pbgra32);
         bitmap.Render(stage);
         if (!bitmap.CanFreeze) throw new InvalidOperationException("The WPF review capture could not be frozen.");
