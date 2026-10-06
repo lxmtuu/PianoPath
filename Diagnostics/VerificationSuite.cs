@@ -4446,11 +4446,17 @@ internal static partial class VerificationSuite
             && EffectCatalog.AmbientLight.All.All(e => e.Status == EffectStatus.Available)
             && EffectCatalog.AmbientCosmic.All.All(e => e.Status == EffectStatus.Available),
             "All four ambient catalogues should be implemented in v5.");
-        var wasEnergy = visualSettings.AmbientEnergy; var wasNature = visualSettings.AmbientNature;
-        var wasLight = visualSettings.AmbientLight; var wasLightAmount = visualSettings.AmbientLightAmount; var wasCosmic = visualSettings.AmbientCosmic;
+        var wasEnergy = visualSettings.AmbientEnergy; var wasEnergyAmount = visualSettings.AmbientEnergyAmount;
+        var wasNature = visualSettings.AmbientNature; var wasNatureAmount = visualSettings.AmbientNatureAmount;
+        var wasLight = visualSettings.AmbientLight; var wasLightAmount = visualSettings.AmbientLightAmount;
+        var wasCosmic = visualSettings.AmbientCosmic; var wasCosmicAmount = visualSettings.AmbientCosmicAmount;
         var wasWave = visualSettings.ImpactWave;
-        visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientNature = "Snow";
-        visualSettings.AmbientLight = "Prism"; visualSettings.AmbientCosmic = "Galaxy";
+        // The curated default intentionally zeros inactive layer intensities, so enable each selected layer
+        // explicitly instead of relying on model-default amounts left behind by a different preset.
+        visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientEnergyAmount = 60;
+        visualSettings.AmbientNature = "Snow"; visualSettings.AmbientNatureAmount = 60;
+        visualSettings.AmbientLight = "Prism"; visualSettings.AmbientLightAmount = 60;
+        visualSettings.AmbientCosmic = "Galaxy"; visualSettings.AmbientCosmicAmount = 60;
         visualSettings.ImpactWave = "Ripple";
         stage.SetVisualSettings(visualSettings);
         Assert(stage.HasActiveEffects, "Enabled ambient layers should keep the stage animating.");
@@ -4489,9 +4495,11 @@ internal static partial class VerificationSuite
         Assert(ripples.Drawing is not null && ripples.Drawing.Bounds.Width > 10, "Water ripples should paint geometry.");
         for (var i = 0; i < 40; i++) stage.Advance(.05);
         Assert(stage.RingCount == 0, "Ripple waves should fade out over time.");
-        visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientNature = wasNature;
+        visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientEnergyAmount = wasEnergyAmount;
+        visualSettings.AmbientNature = wasNature; visualSettings.AmbientNatureAmount = wasNatureAmount;
         visualSettings.AmbientLight = wasLight; visualSettings.AmbientLightAmount = wasLightAmount;
-        visualSettings.AmbientCosmic = wasCosmic; visualSettings.ImpactWave = wasWave;
+        visualSettings.AmbientCosmic = wasCosmic; visualSettings.AmbientCosmicAmount = wasCosmicAmount;
+        visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
     }
