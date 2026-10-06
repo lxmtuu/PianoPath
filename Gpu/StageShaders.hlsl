@@ -517,19 +517,20 @@ float4 PsNote(NoteOut v) : SV_Target
         // Crystal Outline: a translucent center with a crisp, luminous angular contour and quiet internal planes.
         float xN = p.x / hb.x;
         float yN = p.y / hb.y;
-        float rimWidth = max(edgeW * 0.60, 1.1);
-        float rim = exp(-abs(d + edgeW * 0.48) / rimWidth) * NoteB.y;
-        float innerRim = exp(-abs(d + edgeW * 1.55) / max(edgeW * 0.85, 1.2)) * NoteB.y;
+        // A two-pixel-scale rim (and a softer inner echo) survives a half-size box filter without filling the crystal.
+        float rimWidth = max(edgeW * 0.84, 1.6);
+        float rim = exp(-abs(d + edgeW * 0.45) / rimWidth) * NoteB.y;
+        float innerRim = exp(-abs(d + edgeW * 1.5) / max(edgeW * 0.92, 1.5)) * NoteB.y;
         float spine = exp(-abs(xN) * 34.0);
         float facetA = exp(-abs(xN - yN * 0.12 - 0.5) * 24.0);
         float facetB = exp(-abs(xN + yN * 0.12 + 0.5) * 24.0);
-        float3 edgeColor = lerp(col, 1.0, 0.82);
-        float3 planeColor = lerp(col, 1.0, 0.68);
+        float3 edgeColor = lerp(col, 1.0, 0.90);
+        float3 planeColor = lerp(col, 1.0, 0.72);
         float facet = (spine * 0.18 + facetA * 0.22 + facetB * 0.22) * inside;
         emit += col * inside * (0.04 + 0.04 * NoteB.x);
-        emit += edgeColor * (rim * 1.25 + innerRim * 0.32);
-        emit += planeColor * facet * 0.62;
-        alpha = max(inside * 0.07, rim * 0.58 + facet * 0.16);
+        emit += edgeColor * (rim * 1.45 + innerRim * 0.42);
+        emit += planeColor * facet * 0.68;
+        alpha = max(inside * 0.07, rim * 0.72 + facet * 0.19);
     }
     else
     {

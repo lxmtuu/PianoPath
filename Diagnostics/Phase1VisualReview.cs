@@ -19,7 +19,9 @@ internal static class Phase1VisualReview
     private sealed record ReviewImage(
         string LookId, string Look, string Preset, string CheckpointId, double TimeSeconds,
         string Renderer, string Adapter, int ScalePercent, int Width, int Height,
-        string File, string? DerivedFrom, string? Downsample);
+        string File, string? DerivedFrom, string? Downsample, int? NoteLayerChangedPixels);
+
+    private readonly record struct NotePixelMetric(int FullSizePixels, int HalfSizePixels);
 
     internal static int Render(string outputDirectory)
     {
@@ -128,15 +130,96 @@ internal static class Phase1VisualReview
             stage.Advance(dt);
 
             if (!byFrame.TryGetValue(frame, out var checkpoint)) continue;
-            var bitmap = new RenderTargetBitmap(scene.Width, scene.Height, scene.Dpi, scene.Dpi, PixelFormats.Pbgra32);
-            bitmap.Render(stage);
-            if (!bitmap.CanFreeze) throw new InvalidOperationException("The WPF review capture could not be frozen.");
-            bitmap.Freeze();
-            var pixels = new byte[scene.Width * scene.Height * 4];
-            bitmap.CopyPixels(pixels, scene.Width * 4, 0);
+            var pixels = CaptureWpfFrame(stage, scene);
+            var withoutNotes = CaptureWpfFrameWithoutNotes(stage, settings, scene);
+            var notePixels = MeasureNoteLayerPixels(stage, settings, pixels, withoutNotes, scene);
+            const int visibleFullThreshold = 250, visibleHalfThreshold = 80;
+            const int quietFullThreshold = 24, quietHalfThreshold = 12;
+            if (checkpoint.Id == "release-and-rest")
+            {
+                if (notePixels.FullSizePixels > quietFullThreshold || notePixels.HalfSizePixels > quietHalfThreshold)
+                    throw new InvalidOperationException($"WPF left visible note pixels during the release/rest checkpoint at {checkpoint.TimeSeconds:0.##} s ({notePixels.FullSizePixels} full, {notePixels.HalfSizePixels} downsampled); the fixture expects the note roll to be quiet.");
+            }
+            else if (notePixels.FullSizePixels < visibleFullThreshold || notePixels.HalfSizePixels < visibleHalfThreshold)
+            {
+                throw new InvalidOperationException($"WPF did not rasterize the active note layer at {checkpoint.TimeSeconds:0.##} s ({notePixels.FullSizePixels} full, {notePixels.HalfSizePixels} downsampled changed pixels; expected at least {visibleFullThreshold}/{visibleHalfThreshold}).");
+            }
             AddCapture(output, images, look, checkpoint, "WPF", "WPF software stage", pixels,
-                scene.Width, scene.Height, PixelFormats.Pbgra32);
+                scene.Width, scene.Height, PixelFormats.Pbgra32, notePixels);
         }
+    }
+
+    private static byte[] CaptureWpfFrame(PianoStage stage, ReviewScene scene)
+    {
+        var bitmap = new RenderTargetBitmap(scene.Width, scene.Height, scene.Dpi, scene.Dpi, PixelFormats.Pbgra32);
+        bitmap.Render(stage);
+        if (!bitmap.CanFreeze) throw new InvalidOperationException("The WPF review capture could not be frozen.");
+        bitmap.Freeze();
+        var pixels = new byte[scene.Width * scene.Height * 4];
+        bitmap.CopyPixels(pixels, scene.Width * 4, 0);
+        return pixels;
+    }
+
+    private static byte[] CaptureWpfFrameWithoutNotes(PianoStage stage, PianoVisualSettings settings, ReviewScene scene)
+    {
+        if (!settings.ShowNotes)
+            throw new InvalidOperationException("The Phase 1 WPF note-visibility check requires ShowNotes=true in the selected look.");
+        try
+        {
+            settings.ShowNotes = false;
+            stage.SetVisualSettings(settings);
+            return CaptureWpfFrame(stage, scene);
+        }
+        finally
+        {
+            settings.ShowNotes = true;
+            stage.SetVisualSettings(settings);
+        }
+    }
+
+    /// <summary>
+    /// Counts pixels in the transformed piano-roll viewport that change when only ShowNotes is switched off.
+    /// The lower keyboard is excluded, and the same full-size frame is box-filtered before the 50% count.
+    /// </summary>
+    private static NotePixelMetric MeasureNoteLayerPixels(PianoStage stage, PianoVisualSettings settings,
+        byte[] withNotes, byte[] withoutNotes, ReviewScene scene)
+    {
+        var zoom = settings.CameraZoom / 100;
+        var parallax = settings.CameraParallax / 100;
+        var offsetX = (scene.Width - scene.Width * zoom) * settings.CameraOffset / 100 + (.5 - .5) * parallax * 28;
+        var offsetY = (scene.Height - scene.Height * zoom) * .5 + (.5 - .5) * parallax * 20;
+        var right = offsetX + scene.Width * zoom;
+        var bottom = offsetY + (stage.ActualHeight - stage.KeyboardHeight + 2) * zoom;
+        var full = CountChangedPixels(withNotes, withoutNotes, scene.Width, scene.Height,
+            offsetX, offsetY, right, bottom, minimumRgbDelta: 24);
+
+        var withHalf = DownsampleAverage2x2(withNotes, scene.Width, scene.Height);
+        var withoutHalf = DownsampleAverage2x2(withoutNotes, scene.Width, scene.Height);
+        var half = CountChangedPixels(withHalf, withoutHalf, scene.Width / 2, scene.Height / 2,
+            offsetX / 2, offsetY / 2, right / 2, bottom / 2, minimumRgbDelta: 12);
+        return new NotePixelMetric(full, half);
+    }
+
+    private static int CountChangedPixels(byte[] image, byte[] baseline, int width, int height,
+        double left, double top, double right, double bottom, int minimumRgbDelta)
+    {
+        if (image.Length != baseline.Length || image.Length != checked(width * height * 4))
+            throw new InvalidOperationException("The WPF note-layer comparison received incompatible pixel buffers.");
+        var x0 = Math.Clamp((int)Math.Floor(left), 0, width);
+        var y0 = Math.Clamp((int)Math.Floor(top), 0, height);
+        var x1 = Math.Clamp((int)Math.Ceiling(right), 0, width);
+        var y1 = Math.Clamp((int)Math.Ceiling(bottom), 0, height);
+        var changed = 0;
+        for (var y = y0; y < y1; y++)
+        for (var x = x0; x < x1; x++)
+        {
+            var i = (y * width + x) * 4;
+            var delta = Math.Abs(image[i] - baseline[i])
+                + Math.Abs(image[i + 1] - baseline[i + 1])
+                + Math.Abs(image[i + 2] - baseline[i + 2]);
+            if (delta >= minimumRgbDelta) changed++;
+        }
+        return changed;
     }
 
     private static void RenderGpuLook(GpuStageRenderer renderer, GpuLook lookData,
@@ -170,7 +253,7 @@ internal static class Phase1VisualReview
 
     private static void AddCapture(string output, List<ReviewImage> images, ReviewLook look,
         ReviewCheckpoint checkpoint, string renderer, string adapter, byte[] pixels,
-        int width, int height, PixelFormat pixelFormat)
+        int width, int height, PixelFormat pixelFormat, NotePixelMetric? notePixelMetric = null)
     {
         ValidateCapture(pixels, width, height, renderer, checkpoint);
         var presetSlug = Slug(look.ReferencePreset);
@@ -179,7 +262,7 @@ internal static class Phase1VisualReview
         var fullPath = Path.Combine(output, relativeFull);
         WritePng(fullPath, width, height, pixelFormat, pixels);
         images.Add(new ReviewImage(look.Id, look.Name, look.ReferencePreset, checkpoint.Id, checkpoint.TimeSeconds,
-            renderer, adapter, 100, width, height, ToManifestPath(relativeFull), null, null));
+            renderer, adapter, 100, width, height, ToManifestPath(relativeFull), null, null, notePixelMetric?.FullSizePixels));
 
         var halfWidth = width / 2;
         var halfHeight = height / 2;
@@ -188,7 +271,7 @@ internal static class Phase1VisualReview
         WritePng(Path.Combine(output, relativeHalf), halfWidth, halfHeight, pixelFormat, halfPixels);
         images.Add(new ReviewImage(look.Id, look.Name, look.ReferencePreset, checkpoint.Id, checkpoint.TimeSeconds,
             renderer, adapter, 50, halfWidth, halfHeight, ToManifestPath(relativeHalf),
-            ToManifestPath(relativeFull), "2×2 arithmetic mean from the 1920×1080 capture; no smaller re-render."));
+            ToManifestPath(relativeFull), "2×2 arithmetic mean from the 1920×1080 capture; no smaller re-render.", notePixelMetric?.HalfSizePixels));
     }
 
     private static void ValidateCapture(byte[] pixels, int width, int height, string renderer, ReviewCheckpoint checkpoint)
@@ -291,7 +374,7 @@ internal static class Phase1VisualReview
         html.AppendLine("<title>PianoPath · Phase 1 visual review</title><style>");
         html.AppendLine("body{margin:0;background:#090d16;color:#e9eef7;font:15px/1.5 system-ui,sans-serif}main{max-width:1500px;margin:auto;padding:28px}h1,h2,h3{line-height:1.2}h1{margin-bottom:.25em}header{color:#b9c5d8;margin-bottom:28px}.look{margin:32px 0;padding-top:18px;border-top:1px solid #344052}.checkpoint{margin:22px 0}.checks{color:#aab7ca}.pair{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.renderer{background:#111827;padding:12px;border-radius:10px}.samples{display:grid;grid-template-columns:1fr 1fr;gap:10px}.sample img{display:block;width:100%;height:auto;background:#000;border:1px solid #384558}.sample a{color:#a8d8ff}.caption{display:flex;justify-content:space-between;gap:8px;margin:5px 0}.small{font-size:12px;color:#9eacc0}@media(max-width:850px){.pair{grid-template-columns:1fr}main{padding:16px}}</style></head><body><main>");
         html.AppendLine("<h1>Phase 1 visual review</h1>");
-        html.AppendLine($"<header>48 captures · {scene.Width}×{scene.Height} at 100%, plus 2×2-averaged 50% images · WPF and Direct3D WARP. The 50% files are derived from their matching full-size capture; scene geometry is unchanged.</header>");
+        html.AppendLine($"<header>48 captures · {scene.Width}×{scene.Height} at 100%, plus 2×2-averaged 50% images · WPF and Direct3D WARP. The 50% files are derived from their matching full-size capture; scene geometry is unchanged. WPF captions report note-layer pixels changed against a same-frame ShowNotes-off baseline (RGB delta ≥24 at 100%, ≥12 at 50%); active checkpoints require visible counts, while release/rest must stay quiet.</header>");
         foreach (var look in scene.Looks)
         {
             html.AppendLine($"<section class=\"look\"><h2>{Html(look.Name)} <span class=\"small\">· {Html(look.ReferencePreset)}</span></h2>");
@@ -322,7 +405,10 @@ internal static class Phase1VisualReview
     private static void AppendFigure(StringBuilder html, ReviewImage image)
     {
         var path = Html(ToManifestPath(image.File));
-        html.AppendLine($"<figure class=\"sample\"><div class=\"caption\"><a href=\"{path}\">{image.ScalePercent}% · {image.Width}×{image.Height}</a><span class=\"small\">{Html(image.Renderer)}</span></div><a href=\"{path}\"><img loading=\"lazy\" src=\"{path}\" alt=\"{Html(image.Look)} / {Html(image.CheckpointId)} / {Html(image.Renderer)} / {image.ScalePercent}%\"></a></figure>");
+        var notePixels = image.NoteLayerChangedPixels is int count
+            ? $" · note Δ {count.ToString("N0", CultureInfo.InvariantCulture)} px"
+            : "";
+        html.AppendLine($"<figure class=\"sample\"><div class=\"caption\"><a href=\"{path}\">{image.ScalePercent}% · {image.Width}×{image.Height}</a><span class=\"small\">{Html(image.Renderer)}{notePixels}</span></div><a href=\"{path}\"><img loading=\"lazy\" src=\"{path}\" alt=\"{Html(image.Look)} / {Html(image.CheckpointId)} / {Html(image.Renderer)} / {image.ScalePercent}%\"></a></figure>");
     }
 
     private static string Slug(string value) => string.Join("-", value.Split(' ', StringSplitOptions.RemoveEmptyEntries)).ToLowerInvariant();

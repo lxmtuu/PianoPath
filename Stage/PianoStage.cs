@@ -1365,11 +1365,14 @@ internal sealed partial class PianoStage : FrameworkElement
                 var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
                 if (edgeFactor > 0)
                 {
-                    var rimColor = Blend(color, Colors.White, .82);
-                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(Alpha(255 * opacity * edgeFactor), rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * 1.2, 1.4, 3.2)));
+                    // Keep the hollow center transparent while giving its contour enough screen-space width
+                    // to survive the review's 2×2 box downsample (a 1.4 px rim became a subpixel hairline).
+                    var rimColor = Blend(color, Colors.White, .9);
+                    var rimAlpha = Alpha(255 * opacity * Math.Min(1, edgeFactor * 1.2));
+                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(rimAlpha, rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * 1.8, 2.0, 3.6)));
                 }
-                var facet = Blend(color, Colors.White, .68);
-                DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(176 * opacity), facet.R, facet.G, facet.B), 1.0, roundCaps: true));
+                var facet = Blend(color, Colors.White, .72);
+                DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(205 * opacity), facet.R, facet.G, facet.B), 1.2, roundCaps: true));
                 break;
             }
             default:

@@ -4403,7 +4403,7 @@ internal static partial class VerificationSuite
                 "The 3D toggle must deepen Gem while Crystal Outline remains the deliberately flat material.");
             Assert(gemSmall.Count > 300 && gemSmall.MaxX - gemSmall.MinX >= 18 && gemSmall.MaxY - gemSmall.MinY >= 68
                     && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68
-                    && crystalHalf.Count > 40 && crystalHalfBright > 12,
+                    && crystalHalf.Count > 40 && crystalHalfBright > 30,
                 $"Both new note silhouettes must remain legible at 50% size (Gem: {gemSmall.Count} pixels, Crystal Outline small/full-filtered: {crystalSmall.Count}/{crystalHalf.Count}, bright filtered edge {crystalHalfBright}).");
             Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct pixel output; Gem 2D/3D differ; Crystal Outline stays flat and its bright contour survives an average 2×2 downsample.");
         }

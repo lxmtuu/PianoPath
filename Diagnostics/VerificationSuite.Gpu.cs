@@ -324,7 +324,7 @@ internal static partial class VerificationSuite
         var crystalSmallImage = HalfSize(crystal2D);
         var crystalSmallVisible = ChangedPixels(crystalSmallImage, blankSmall);
         var crystalBrightHalf = BrightChangedPixels(crystalSmallImage, blankSmall);
-        Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20 && crystalBrightHalf > 12,
+        Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20 && crystalBrightHalf > 30,
             $"Gem and Crystal Outline must change real GPU pixels on WARP at full and half size, with a bright Crystal contour surviving the 2×2 downsample (full {gemVisible}/{crystalVisible}, half {gemSmallVisible}/{crystalSmallVisible}, bright {crystalBrightHalf}).");
         Assert(!solid.AsSpan().SequenceEqual(gem2D) && !solid.AsSpan().SequenceEqual(crystal2D) && !gem2D.AsSpan().SequenceEqual(crystal2D),
             "The GPU shader must render Gem and Crystal Outline as distinct materials, not the Solid fallback.");
