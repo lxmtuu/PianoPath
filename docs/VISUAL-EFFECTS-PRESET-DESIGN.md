@@ -2,7 +2,7 @@
 
 > **Ngày:** 2026-10-06  
 > **Phạm vi:** 14 preset built-in và 3 preset community trong `presets/`; không sửa preset cá nhân.  
-> **Tình trạng (2026-10-06):** recipe, mô tả và default wiring cho đủ 17 preset đã được cập nhật. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass static, portable tests, Windows build, `--verify` (2.169 assertions, 0 skipped) và render gallery WPF/software + GPU/WARP; ảnh được cập nhật ở commit `3b2acf8`. Đã xem tổng quan gallery và default Concert Gold stage; review từng look theo fixed scene/100%/50% và hardware vẫn chưa hoàn tất.
+> **Tình trạng (2026-10-06):** recipe, mô tả và default wiring cho đủ 17 preset đã được cập nhật; không sửa preset cá nhân. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass static, portable tests, Windows build, `--verify` (2.169 assertions, 0 skipped) và render gallery preset WPF/software + GPU/WARP; ảnh ở commit `3b2acf8`. Lát vật liệu Gem/Crystal Outline được xác minh riêng bởi CI [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612): 2.188 assertions, 0 skipped, hai renderer và gallery 9 cấu hình ở 50% (`note-styles.jpg`, commit `3a3bd93`). Preset recipe/default/schema không đổi vì lát này; review từng look theo fixed scene/100%/50% và hardware vẫn chưa hoàn tất.
 
 ## 1. Quyết định thiết kế
 
@@ -47,7 +47,13 @@ Thứ tự picker bắt đầu bằng default rồi tới hai hướng creator/l
 
 Gallery CI run `37480841688` dùng `--preset` cho 14 built-in + 3 community và render mỗi recipe qua WPF/software cùng GPU/WARP. Gallery 17×2 được refresh trong `docs/previews/presets.jpg` ở commit `3b2acf8`; ảnh xác nhận hai code path trên runner, không thay thế review đầy đủ ở fixed scene hoặc đo phần cứng.
 
-## 4. Default, compatibility và dữ liệu người dùng
+## 4. Lát note material — tách khỏi recipe preset
+
+`Gem` và `Crystal Outline` là lựa chọn vật liệu của renderer, không phải preset mới: không đổi `Concert Gold`, `Neon Violet`, `Two Hands` hay bất kỳ recipe/default nào. `Notes3D` là trục depth riêng (Gem hỗ trợ 2D/3D, Crystal Outline cố ý phẳng); `Streak` vẫn thuộc giai đoạn trail sau. CLI preview chỉ áp các override vào memory và gallery dùng thư mục settings tạm riêng, không ghi đè settings/preset người dùng. AR chưa được nhận hỗ trợ vì layer hiện tại vẫn vẽ note qua quad phẳng riêng.
+
+CI [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) đã build và chạy `--verify` (2.188 assertions, 0 skipped), kiểm pixel WPF/GPU-WARP, rồi tạo `docs/previews/note-styles.jpg`: 9 material/depth cases × hai engine, mỗi capture 1080×700 thu còn 540×350. Đây là automated WPF + WARP gate, không phải GPU thật hay AR acceptance; readability/accessibility của toàn bộ 17 preset vẫn mở.
+
+## 5. Default, compatibility và dữ liệu người dùng
 
 - `Concert Gold` là preset đầu picker, `DefaultPresetName`, look cho thư mục settings mới và target của thao tác **Reset**.
 - Store chỉ tạo `Concert Gold` khi chưa có tệp hoặc tệp hiện tại không đọc được. Tệp hợp lệ hiện có tiếp tục đi qua migration/clamp bình thường; không tự áp look mới, không đổi palette hay preset name của người dùng.
@@ -55,7 +61,7 @@ Gallery CI run `37480841688` dùng `--preset` cho 14 built-in + 3 community và 
 - Community files được cập nhật từ generator; local user presets, thumbnails, preset import và file người dùng tự tạo không bị rewrite.
 - Chọn lại một preset built-in/community là thao tác chủ động áp recipe mới; mọi cài đặt cá nhân đang lưu vẫn không bị chạm cho tới khi người dùng chọn/reset/save.
 
-## 5. Cổng kiểm chứng bắt buộc
+## 6. Cổng kiểm chứng bắt buộc
 
 1. **[x]** `python3 tools/check_sources.py` pass trên CI: locale, gallery đủ 17 look, generator và preset JSON đồng bộ.
 2. **[x]** Windows build, portable xUnit và `--verify` pass; suite xác nhận tên/clamp, first-run/reset, saved-look preservation và community profiles (2.169 assertions, 0 skipped).

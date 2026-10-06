@@ -1,6 +1,6 @@
 # PianoPath Concert FX — design bible (Phase 1, direction selected)
 
-> **Trạng thái (2026-10-06):** người dùng đã chọn art direction Concert / Neon / Learning và cả 17 recipe đã được nối vào runtime. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass build, portable tests, `--verify` (2.169 assertions, 0 skipped) và render gallery qua WPF/software + GPU/WARP; preview được làm mới ở `3b2acf8`. Đã xem tổng quan gallery và default Concert Gold stage. Phase 1 **chưa đóng**: còn review theo 3 checkpoint ở 100%/50%, accessibility/contrast, bố cục Visual Effects Studio và chấp thuận fixture. WARP không chứng minh chất lượng/performance trên GPU thật.
+> **Trạng thái (2026-10-06):** người dùng đã chọn art direction Concert / Neon / Learning và cả 17 recipe đã được nối vào runtime. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass build, portable tests, `--verify` (2.169 assertions, 0 skipped) và render gallery preset qua WPF/software + GPU/WARP; preview được làm mới ở `3b2acf8`. CI [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) tiếp tục pass build/tests/`--verify` (2.188 assertions, 0 skipped), pixel checks Gem/Crystal Outline, và gallery note-material 9 cấu hình ở 50%; `docs/previews/note-styles.jpg` được làm mới ở `3a3bd93`. Đã xem tổng quan các gallery, nhưng Phase 1 **chưa đóng**: còn review đủ 17 preset theo 3 checkpoint ở 100%/50%, accessibility/contrast, bố cục Visual Effects Studio và chấp thuận fixture. WARP xác nhận code path, không chứng minh chất lượng/performance trên GPU thật hay AR.
 > **Ngày:** 2026-10-06
 > **Cùng bộ:** [Visual Effects Studio wireframe](VISUAL-EFFECTS-STUDIO-WIREFRAME.md) · [reference scene JSON](samples/visual-effects-phase1-scene.json) · [preview prototype](prototypes/visual-effects-phase1/index.html) · [master roadmap](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
@@ -116,13 +116,13 @@ Nguồn sự thật là [`visual-effects-phase1-scene.json`](samples/visual-effe
 2. **4.1 s — Held chord and impact:** hai tay, velocity, note giữ, hit cục bộ.
 3. **11.25 s — Release and rest:** decay và khoảng nghỉ sạch.
 
-Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không phải ảnh do PianoPath/WPF/GPU render**. Gallery CI hiện render preset bằng `PianoPath.exe --snapshot` cho WPF/software và GPU/WARP; ảnh này mới là bằng chứng runtime cần review. WARP không chứng minh FPS/phẩm chất trên GPU hoặc webcam thật.
+Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không phải ảnh do PianoPath/WPF/GPU render**. Gallery CI preset dùng `PianoPath.exe --snapshot` cho WPF/software và GPU/WARP; note-material gallery riêng có 9 cấu hình Solid/Gem/Crystal/… × hai engine, mỗi ô 540×350 (50%). Đây là ảnh runtime/pixel evidence để review; WARP không chứng minh FPS/phẩm chất trên GPU thật hoặc webcam thật.
 
 ## 7. Chuyển thiết kế sang code hiện có
 
 | Cụm thiết kế | Điểm bám hiện tại | Trạng thái Phase 1 |
 |---|---|---|
-| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Cả 17 recipe đã được test/render trên WPF/software + GPU/WARP; review 3 checkpoint, tương phản 100%/50% còn mở. |
+| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Cả 17 preset và Gem/Crystal Outline đã build/render trên WPF/software + GPU/WARP; note-style pixel tests và gallery 50% pass CI [37495463612]. Review contrast/fixed-scene đầy đủ của preset vẫn còn mở; hardware/AR chưa được xác nhận. |
 | Motion theo note | `FallingTrail`, `FallingPulse`, `Hold*`, `ReleaseEffect`, `Impact*` | Recipe đã chọn lọc lớp và qua suite hiện có; Phase 3/4 vẫn phải kiểm tra từng behavior/capability. |
 | Atmosphere/compositor | `Ambient*`, `BackgroundMotion`, `Bloom*`, `PianoStage` và GPU passes | Gallery xác nhận code path WPF/WARP, không khẳng định parity trên hardware hay AR. |
 | Color Gradient | `ColorMode="Gradient"` | Hiện là theo pitch. Gradient head-to-tail vẫn là `Planned` trong `EffectCatalog`. |
@@ -136,11 +136,12 @@ Phase 1 gồm mapping recipe và wiring cần thiết cho fresh-install/reset; k
 - [x] Người dùng chọn hướng Concert / Neon / Learning áp lên toàn bộ preset đã ship; Concert Gold là default/reset.
 - [ ] Xác nhận màu hand/track có dễ đọc và phân biệt trong 3 checkpoint ở 100% và 50% kích thước.
 - [ ] Xác nhận Learning giữ nốt/nhãn rõ hơn trang trí, không phát flash toàn màn; kiểm tra contrast thực tế, không suy từ hex.
-- [x] CI run [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) render đủ 17 look qua WPF/software + GPU/WARP; đã xem tổng quan full sheet và preview Concert Gold.
+- [x] CI run [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) render đủ 17 preset qua WPF/software + GPU/WARP; đã xem tổng quan gallery và preview Concert Gold.
+- [x] CI run [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) build/test/`--verify` pass (2.188 assertions, 0 skipped), kiểm tra pixel Gem/Crystal Outline và render gallery 9 material/depth configs × hai engine tại 50%; ảnh nằm ở `docs/previews/note-styles.jpg` (commit `3a3bd93`). Đây là WPF + WARP code-path gate, không phải hardware/AR approval.
 - [ ] Review từng profile ở 100%/50%, cùng hợp âm dày, note-held/pedal, đoạn nghỉ và chroma edge; sửa sai lệch trước khi kết luận.
 - [ ] Duyệt bố cục Visual Effects Studio ba pane và **Quick / Advanced** bằng wireframe riêng; đây chưa phải UI đã triển khai.
 - [ ] Chấp thuận scene 12 giây + tempo map + seed làm fixture dùng chung cho Phase 3 trở đi.
-- [x] Windows build, portable xUnit và `--verify` pass; verification báo 2.169 assertions, 0 skipped.
+- [x] Windows build, portable xUnit và `--verify` pass trên cả hai CI gates; lượt note-material mới nhất báo 2.188 assertions, 0 skipped.
 - [ ] Sau khi review thị giác/accessibility và các mục còn lại được xác nhận, mới đóng Phase 1 rồi mở Effect Contract / compatibility.
 
 Prototype HTML vẫn chỉ là minh họa; không dùng nó để chứng minh renderer. Runtime code path đã được dựng và kiểm tra trên WARP, nhưng **chưa xác nhận hardware performance** và chưa tuyên bố quality review đầy đủ.

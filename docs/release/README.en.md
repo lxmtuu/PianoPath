@@ -204,7 +204,7 @@ Every built-in preset, drawn by both engines side by side (software | GPU), is i
 
 ![Note materials at 50% — WPF/software on the left, GPU/WARP on the right](docs/previews/note-styles.jpg)
 
-`Gem` and `Crystal Outline` are WPF/GPU stage materials; they do not change pitch/duration and are not trails. `Notes3D` is an independent depth axis; `Streak` remains a later trail phase. AR still draws through its separate flat-quad shader, so these two new materials are not claimed as AR-supported. CI rebuilds both galleries; `tools/check_sources.py` checks the preset gallery against `Stage/VisualPresets.cs`.
+`Gem` and `Crystal Outline` are WPF/GPU stage materials; they do not change pitch/duration and are not trails. `Notes3D` is an independent depth axis; `Streak` remains a later trail phase. AR still draws through its separate flat-quad shader, so these two new materials are not claimed as AR-supported. CI rebuilds both galleries; `tools/check_sources.py` checks the preset gallery against `Stage/VisualPresets.cs` and enforces the note-material gallery's 9×2 matrix, artifact entry and drift gate.
 
 ### Audio, MIDI & practice
 

@@ -268,7 +268,7 @@ Mọi preset có sẵn, mỗi preset vẽ bằng cả hai engine cạnh nhau (ph
 
 ![Các vật liệu nốt ở 50% — WPF/software bên trái, GPU/WARP bên phải](docs/previews/note-styles.jpg)
 
-`Gem` và `Crystal Outline` là material của sân khấu WPF/GPU, không đổi pitch/thời lượng và không phải trail. `Notes3D` là trục depth độc lập; `Streak` vẫn để giai đoạn trail sau. AR hiện vẽ bằng quad shader phẳng riêng, nên chưa tuyên bố hỗ trợ hai material mới. Workflow dựng lại cả hai gallery; `tools/check_sources.py` đối chiếu preset gallery với `Stage/VisualPresets.cs`.
+`Gem` và `Crystal Outline` là material của sân khấu WPF/GPU, không đổi pitch/thời lượng và không phải trail. `Notes3D` là trục depth độc lập; `Streak` vẫn để giai đoạn trail sau. AR hiện vẽ bằng quad shader phẳng riêng, nên chưa tuyên bố hỗ trợ hai material mới. Workflow dựng lại cả hai gallery; `tools/check_sources.py` đối chiếu preset gallery với `Stage/VisualPresets.cs` và kiểm tra ma trận 9×2, artifact cùng drift gate của note-material gallery.
 
 ### Âm thanh, MIDI & luyện tập
 
