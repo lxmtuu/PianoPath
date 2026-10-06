@@ -1,7 +1,7 @@
 # Audit độ phủ hiệu ứng — Phase 0
 
 > **Phạm vi:** đối chiếu inventory với settings, UI, software/WPF, GPU, kiểm thử và AR.  
-> **Ngày:** 2026-10-06 · **Trạng thái:** audit tĩnh + một sửa chữa parity nhỏ; renderer patch chưa được chạy trên Windows/.NET.
+> **Ngày:** 2026-10-06 · **Trạng thái:** Phase 0 gate đạt trên Windows CI run [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020), commit `68bcc466`; chỉ xác nhận WARP/synthetic inputs, không xác nhận phần cứng GPU/camera.
 > **Lộ trình tổng:** [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md) · **Inventory thiết kế cũ:** [`EFFECTS-REDESIGN.md`](EFFECTS-REDESIGN.md).
 
 ## 1. Phương pháp và giới hạn xác minh
@@ -15,21 +15,22 @@
 - `Gpu/GpuLook.cs`, `Gpu/GpuStageSimulation.cs`, `Gpu/GpuStageSimulation.Effects.cs`, `Gpu/GpuStageSimulation.Ambient.cs`, `Gpu/GpuArLayer.cs`
 - Các hàm `VerifyImpactFx`, `VerifyFallingFx`, `VerifyHoldFx`, `VerifyReleaseFx`, `VerifyAmbientFx`, `VerifySmartFx`, `VerifyThemes`, `VerifyGpuStage`.
 
-**Đã chạy:** `python3 tools/check_sources.py` — PASS; checker rà 179 file C#, XAML/resource, README/link, preset, localization, project XML và các kiểm tra tĩnh khác.  
-**Không chạy được:** `dotnet --info` trả `dotnet: command not found`; vì vậy lượt này không chạy build, xUnit, `--verify`, `--snapshot` hoặc `--bench`. Không có webcam/GPU phần cứng để xác nhận AR/performance. Các trạng thái dưới đây là **đối chiếu mã tĩnh**, không được hiểu là đã xem hình runtime trên máy.
+**Đã chạy cục bộ:** `python3 tools/check_sources.py` — PASS; checker rà 179 file C#, XAML/resource, README/link, preset, localization, project XML và các kiểm tra tĩnh khác. `git diff --check` cũng PASS.
+**Windows CI:** run [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020) trên commit `68bcc466` — static, portable xUnit, Release build, `--verify`, `--bench`/`--bench-ar`, installer, README previews và preset gallery đều PASS. CI dùng WARP cùng AR/camera tổng hợp; benchmark JSON được lưu thành artifact của run. Sandbox không có `dotnet`, webcam hoặc GPU phần cứng, nên không tuyên bố đo performance/phép chiếu trên thiết bị thật. Các bảng dưới đây vẫn phân biệt code-path đã verify với parity/capability chưa chứng minh.
 
 ## 2. Kết luận nhanh
 
 | Hạng mục | Kết quả audit |
 |---|---|
 | Số mục trong catalog | 87; 86 mang `Available`, `falling.color-gradient` hiện được đánh dấu `Planned` vì ColorMode=Gradient chỉ trải màu theo pitch, chưa hòa hai màu dọc thân nốt. |
+| CI gate hiện tại | Run [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020), commit `68bcc466`: static, xUnit, Release build, verification, bench, installer, previews/gallery đều PASS; dùng WARP/synthetic input. |
 | Phân loại | 40 lifecycle + 31 ambient + 9 modulators + 7 themes; các nhóm có alias/chia sẻ kênh, không phải 87 renderer riêng. |
 | Nguồn metadata runtime | `EffectCatalog` không được UI/renderer dùng làm nguồn options hay capability trong app hiện tại; tham chiếu ngoài chính tệp catalog chủ yếu là verification/docs. UI và settings khai báo riêng trong `PianoVisualSettings`/`MainWindow.Settings`. |
 | “Available” có chặn UI không? | Không. Runtime không đọc `EffectStatus` để lọc options; hiện có 86 `Available`, 1 `Planned`. `Planned` chỉ đúng metadata trong inventory, không tự ẩn một control UI tương ứng. |
 | Test độ phủ | Có kiểm chứng theo **nhóm** và một vài style mẫu, không có bằng chứng tự động cho từng option/ID hoặc parity pixel giữa mọi renderer. |
 | AR | GPU có camera/composite, key patches và calibrated note quads; `GpuArLayer` không đọc `EffectCatalog`. Một số ambient pass vẫn vẽ bằng tọa độ sân khấu 2D, không được chiếu qua calibration. Stage effect ID chưa có capability AR riêng được chứng minh. |
 | Audio-reactive | `AudioReactive` hiện dùng energy/onset envelope trong stage; chưa phải lựa chọn spectrum FFT từ PCM đã xác minh. |
-| Lỗi renderer cụ thể | Audit phát hiện `AmbientLight="Spotlights"` có option/GPU path nhưng thiếu nhánh WPF; preset `Concert Gold` chọn giá trị này. Đã thêm WPF shaft/pool và regression assertion trong `VerifyAmbientFx`; chưa chạy được Windows `--verify` ở môi trường hiện tại nên chưa đóng issue. |
+| Lỗi renderer cụ thể | `AmbientLight="Spotlights"` từng có GPU path nhưng thiếu WPF path; preset `Concert Gold` chọn giá trị này. Đã thêm shaft/pool; regression kiểm tra tắt, bounds và hơn 1.000 pixel raster PASS trong Windows CI run `37467081020`. Chưa đo parity pixel với GPU thật. |
 
 ### Các option thực sự có trong settings
 
@@ -40,7 +41,7 @@
 - `ImpactFlashStyle`: Flash, Lightning, Plasma.
 - `ReleaseEffect`: Fade, Float Up, Dissolve, Smoke, Snap Back, Echo Rings.
 - Bốn ambient slot có tổng 20 style hoạt động: Energy 4, Nature 7, Light 4, Cosmic 5. Một số mục trong catalog nằm ở setting khác, không nằm trong slot có tên ambient.
-- `AmbientLight` còn có `Spotlights` (ngoài 7 tên trong `EffectCatalog.AmbientLight`). GPU có render; audit tìm thấy WPF thiếu nhánh, nay đã có renderer và regression assertion nhưng chưa chạy được trên Windows/.NET.
+- `AmbientLight` còn có `Spotlights` (ngoài 7 tên trong `EffectCatalog.AmbientLight`). GPU có render; WPF shaft/pool và regression assertions (zero amount, bounds, raster pixels) đã PASS trên Windows CI run `37467081020`. Choice này vẫn là control ngoài 87 catalog IDs; xem P1 gap bên dưới.
 - Petals, Stars/Shooting Stars, Bloom, Note Glow, Rainbow Trail, hit-line pulse và keyboard light là các control hoạt động riêng, không phải tất cả đều là option của bốn ambient slot.
 
 ## 3. Ký hiệu trong bảng
@@ -196,17 +197,17 @@
 
 ## 5. Khoảng trống ưu tiên
 
-### P0 — trước khi coi catalog là metadata runtime
+### P0 — quyết định đã chốt và yêu cầu trước typed runtime registry
 
 1. **Quyết định nguồn dữ liệu — đã chốt cho Phase 0:** các khai báo settings/default/normalize và danh sách lựa chọn UI hiện có tiếp tục là nguồn runtime; `EffectCatalog` được giữ đúng vai trò inventory/metadata cho audit/diagnostics, không lọc UI và không chứng minh capability. Chỉ đưa một typed registry vào runtime sau khi Phase 1 chuẩn hóa ID/alias/capability; không nối `EffectStatus` vội.
-2. **Đóng capability parity `AmbientLight=Spotlights`.** Đã thêm renderer WPF (ba shaft/pool theo màu, tốc độ và activity) cùng kiểm tra zero-intensity, bounds và pixel raster vào `VerifyAmbientFx`. Còn mở cho đến khi Windows `--verify` xác nhận test/build; không đánh dấu parity đã đạt trước đó.
+2. **Đã sửa và verify WPF path `AmbientLight=Spotlights`.** Renderer ba shaft/pool theo màu, tốc độ và activity cùng kiểm tra zero-intensity, bounds và pixel raster đã PASS trong Windows CI run `37467081020`. Phạm vi kết luận chỉ là WPF/WARP test; parity pixel trên GPU thật chưa được đo.
 3. **Gán AR capability cho từng effect ở phase thiết kế/runtime registry.** Không thể đánh dấu cả catalog Available rồi suy ra AR chạy. `GpuArLayer` hiện tạo key patches và note quads theo calibration; không đọc catalog ID hay dùng trọn các event/effect channels của stage. Một số ambient pass vẫn overlay theo screen-space, không phải AR-projected.
 4. **Đã chốt nghĩa `falling.color-gradient`:** giữ yêu cầu chuyển màu đầu–đuôi; `ColorMode="Gradient"` hiện tại là gradient theo pitch và không thay thế được. Entry đã chuyển sang `Planned`; renderer/settings/test dọc thân nốt được đưa vào Phase 4, không làm lẫn hai hành vi.
 
 ### P1 — độ rõ của sản phẩm/kiểm chứng
 
 5. Phân biệt event-triggered `Embers/Fire/Explosion/Plasma/Water Ripple` với ambient chạy nền, đồng thời giữ alias cũ khi migrate preset.
-6. Bổ sung catalogue cho option `Spotlights` (assertion WPF đã được thêm nhưng chưa chạy), rồi lập catalogue/verification cho `ShowStars`, `ShowPetals`, Shooting Stars, note landing glow, note shimmer, halo pulse và background motion — những control tồn tại nhưng chưa được mô tả nhất quán trong danh sách 87.
+6. `Spotlights` là setting/UI choice bổ sung ngoài 87 ID hiện tại; WPF path và regression đã PASS trên CI. Trong Phase 2 ID normalization, quyết định có thêm ID explicit hay gộp vào Ambient Light capability; đồng thời lập mapping/verification cho `ShowStars`, `ShowPetals`, Shooting Stars, note landing glow, note shimmer, halo pulse và background motion — các control tồn tại nhưng không thuộc inventory 87 hiện tại.
 7. Mở rộng verify từ “một mẫu mỗi nhóm” sang từng Choice value tối thiểu: spawn/draw/decay, màu/size/speed/amount, disabled, seek/reset, preset round-trip.
 8. Kiểm tra pixel parity GPU/software trên tập scene chung; hiện có thể khẳng định cùng settings có đường code ở cả hai, nhưng chưa có bằng chứng mọi style render giống/đạt chất lượng tương đương.
 9. Tách `AudioReactive` envelope hiện tại khỏi mục tiêu FFT thật; chỉ quảng bá low/mid/high spectrum sau khi đường PCM → analyzer → smoothing → render đã được kiểm thử.
@@ -216,14 +217,14 @@
 | Nhóm verify | Bằng chứng trong mã | Chưa chứng minh |
 |---|---|---|
 | `VerifyImpactFx` | UI wave/flash; Shockwave + Flash sinh geometry và decay. | Mọi wave/burst/morph/flash value, GPU/AR parity. |
-| `VerifyFallingFx` | UI trail/pulse/ghost; Sparkles + Confetti/Shatter/Lightning sample; trail vẽ ra ngoài note; status assertion giữ `falling.color-gradient` ở Planned. | Gradient head-to-tail chưa có renderer; 7 trail options còn lại chưa được verify riêng; GPU parity chưa được chứng minh. |
+| `VerifyFallingFx` | UI trail/pulse/ghost; Sparkles + Confetti/Shatter/Lightning sample; trail vẽ ra ngoài note; inventory assertion (87 total, 86 Available, head-to-tail Planned) PASS trong run `37467081020`. | Gradient head-to-tail chưa có renderer; 7 trail options còn lại chưa được verify riêng; GPU parity chưa được chứng minh. |
 | `VerifyHoldFx` | UI các toggle; sounding note và Electric Arc geometry. | Flame/Wisps/Energy Column, từng modulation rate/amount và mọi renderer. |
 | `VerifyReleaseFx` | Echo Rings live + MIDI note-end + seek ngược + decay. | 5 release styles còn lại và GPU parity. |
-| `VerifyAmbientFx` | Bốn selector; sample Fireworks/Snow/Prism/Galaxy, 4 pass có geometry; thêm WPF `Spotlights` zero-intensity, drawing-bounds và rasterized-pixel assertions cùng test Ripple. | Chưa chạy test trong sandbox; mọi ambient choice khác và parity pixel GPU/WPF vẫn chưa được chứng minh. |
+| `VerifyAmbientFx` | Bốn selector; sample Fireworks/Snow/Prism/Galaxy, 4 pass có geometry; WPF `Spotlights` zero-intensity, drawing-bounds và rasterized-pixel assertions cùng test Ripple PASS trong run `37467081020`. | Mọi ambient choice khác và parity pixel GPU/WPF vẫn chưa được chứng minh. |
 | `VerifySmartFx` | Octave recolor; velocity particle count; bass/treble zone; halo render sau khi bật boosts. | Đo riêng pedal/tempo/audio boost; FFT/latency/curve. |
 | `VerifyThemes` | Bảy preset graph có một số setting đại diện. | Render thumbnail/ảnh và settings đầy đủ của từng theme. |
 | `VerifyGpuStage` | Một bundle nhiều setting; WARP render, ambient count, recording tap. | Ma trận từng effect/option và GPU thật. |
-| `tests/PianoPath.Tests` | Có test thuần cho AR/layout/audio/math. | Không có project test riêng cho toàn bộ lifecycle effect renderer. |
+| `tests/PianoPath.Tests` | Project test thuần cho AR/layout/audio/math PASS trong run `37467081020`. | Không có project test riêng cho toàn bộ lifecycle effect renderer. |
 
 ### AR capability baseline (source audit)
 
@@ -243,12 +244,13 @@
 
 Phase 0 chỉ đóng khi:
 
-- [x] Inventory 87 mục được đối chiếu với setting/UI/renderer ở mức source.
-- [x] Chạy static source checker.
-- [ ] Chạy build, `--verify`, xUnit và benchmark trên Windows/.NET; ghi kết quả ảnh/perf baseline cho commit hiện tại.
+- [x] Inventory 87 mục được đối chiếu với setting/UI/renderer ở mức source; alias, entry chưa độc lập và control nằm ngoài inventory được ghi rõ.
+- [x] Chạy static source checker và `git diff --check`.
+- [x] Windows CI [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020), commit `68bcc466`: Release build, `--verify`, portable xUnit và benchmark (`--bench`/`--bench-ar`) đều PASS.
+- [x] README previews/preset gallery và bench JSON được sinh/lưu từ run; đây là WARP/synthetic baseline, không phải đo GPU/camera thật.
 - [x] Chốt source-of-truth: `EffectCatalog` là inventory/metadata; settings/defaults và UI vẫn là runtime source.
-- [x] Có quyết định, WPF fix và regression assertions cho `Spotlights` software path (bounds, tắt và raster pixels).
+- [x] Có WPF fix và regression assertions cho `Spotlights` software path (bounds, tắt và raster pixels); assertion raster PASS trên Windows CI.
 - [x] Chốt nghĩa `falling.color-gradient`: head-to-tail vẫn là yêu cầu riêng, đánh dấu `Planned`; gradient hiện tại là theo pitch.
 - [x] Ghi AR capability baseline, ranh giới overlay và alias/entry chưa độc lập.
 
-**Phase 0 hiện vẫn mở** cho tới khi Windows CI xác nhận build, `--verify`, xUnit và benchmark của commit chứa các regression test mới; môi trường sandbox không có `dotnet`. Chưa bắt đầu Phase 1/2 implementation.
+**Phase 0 gate đã đạt** theo mã nguồn và Windows CI nêu trên. Kết luận này không nâng các giới hạn đã nêu thành capability: kiểm thử hình ảnh chạy trên WARP/synthetic inputs, chưa xác nhận GPU/camera/đàn thật hay AR world-space. Các gap còn lại được chuyển thành backlog Phase 2/4/8; không được mô tả như tính năng đã hoàn tất.

@@ -2,7 +2,7 @@
 
 > **Mục đích:** lộ trình tái thiết kế art direction, chức năng và đường render của toàn bộ hiệu ứng PianoPath; chuẩn bị để cùng một effect chạy trên sân khấu GPU, bản ghi và AR overlay đàn thật.  
 > **Ngày lập:** 2026-10-06  
-> **Trạng thái:** roadmap đã chốt; Phase 0 chưa đóng. Đã bổ sung WPF `Spotlights` và regression assertion; còn chờ build/`--verify` trên Windows/.NET.  
+> **Trạng thái:** roadmap đã chốt; Phase 0 gate đạt 2026-10-06 trên Windows CI run [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020), commit `68bcc466`. CI dùng WARP/synthetic inputs; GPU/camera phần cứng vẫn chưa được xác nhận.
 > **Tài liệu nền:** [`EFFECTS-REDESIGN.md`](EFFECTS-REDESIGN.md), [`AR-OVERLAY-ROADMAP.md`](AR-OVERLAY-ROADMAP.md), [`SETTINGS-WIRING-AUDIT.md`](SETTINGS-WIRING-AUDIT.md), [`UI-SHADER-REVIEW.md`](UI-SHADER-REVIEW.md).
 
 ---
@@ -372,7 +372,7 @@ UI nên đi từ “mở nhiều trang cài đặt và dò slider” sang ba đ�
 
 | Phase | Scope | Cỡ việc | Deliverable chính | Gate để sang phase sau |
 |---|---|---:|---|---|
-| **0. Audit + baseline** | Đối chiếu toàn bộ 87 mục, settings, UI, GPU, WPF/software, preset, MIDI/live, recording, AR; capture ảnh/perf hiện tại. | S | Ma trận coverage và bug/gap list có bằng chứng. | Không còn mục “Available” chưa biết nó thực sự vẽ ở đâu; default/preset baseline được lưu; xác nhận control nào dead/duplicate. |
+| ✅ **0. Audit + baseline** | Đối chiếu 87 mục với settings, UI, GPU, WPF/software, preset, MIDI/live, recording và AR; chốt ảnh/perf baseline WARP. | S | Ma trận [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md), gap list, README previews/preset gallery và bench artifact CI. | **Đạt 2026-10-06:** Windows CI [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020) PASS trên `68bcc466`; baseline là WARP/synthetic, chưa xác nhận phần cứng. |
 | **1. Art direction + UX spec** | Chốt style language, palette/material/motion, thứ tự render, wireframe Visual Effects Studio, 3 preview target. | S–M | Design bible ngắn + wireframe + deterministic sample scene. | Có tiêu chí nhận diện “đẹp/đọc được” và duyệt được ba look mẫu trước khi refactor renderer. |
 | **2. Effect contract + compatibility** | Chuẩn hóa ID/phase/trigger/anchor/parameter/capability/cost/accessibility; thống nhất clock, seed và keyboard coordinates; version migration. | M | Metadata/effect schema dùng thật; mapping settings cũ → ID mới. | JSON/preset cũ round-trip; không đổi default; test contract và tọa độ; UI không đọc danh sách riêng rời rạc. |
 | **3. Lát dọc tham chiếu (4 phase + AR Surface)** | Hoàn thiện một effect đại diện cho Falling, Impact, Hold, Release; cùng đường MIDI-file/live → preview → GPU → recording → synthetic AR. | M | Bộ mẫu Glow/Ribbon, Ripple/Burst, Hold Glow, Release Dissolve có đủ UI, preset, AR Surface. | Effect kích hoạt đúng event/velocity/pitch, không mất khi ghi, project đúng lên ảnh camera tổng hợp, có `--verify` + perf. Chỉ sau đây mới nhân rộng. |
