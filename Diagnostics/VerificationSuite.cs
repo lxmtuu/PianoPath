@@ -4574,6 +4574,12 @@ internal static partial class VerificationSuite
         var wasBackgroundMotionColor = visualSettings.BackgroundMotionColor;
         var wasBackgroundMode = visualSettings.BackgroundMode;
         var wasShowBackground = visualSettings.ShowBackground;
+        var wasBeamIntensity = visualSettings.BeamIntensity;
+        var wasShowLightBeams = visualSettings.ShowLightBeams;
+        var activeKeys = (bool[])Field(stage, "_activeKey");
+        var activeKeyColors = (Color[])Field(stage, "_activeKeyColor");
+        var savedActiveKeys = (bool[])activeKeys.Clone();
+        var savedActiveKeyColors = (Color[])activeKeyColors.Clone();
         var wasWave = visualSettings.ImpactWave;
         // The curated default intentionally zeros inactive layer intensities, so enable each selected layer
         // explicitly instead of relying on model-default amounts left behind by a different preset.
@@ -4613,6 +4619,31 @@ internal static partial class VerificationSuite
         for (var i = 3; i < spotlightPixels.Length; i += 4) if (spotlightPixels[i] > 8) litPixels++;
         Assert(litPixels > 1000, $"Spotlights should rasterize visible pixels in the WPF fallback (found {litPixels}).");
 
+        visualSettings.ShowLightBeams = true;
+        visualSettings.BeamIntensity = 45;
+        stage.SetVisualSettings(visualSettings);
+        Array.Clear(activeKeys);
+        Array.Clear(activeKeyColors);
+        activeKeys[60] = true;
+        activeKeyColors[60] = Color.FromRgb(58, 218, 255);
+        var keyBeam = new DrawingVisual();
+        using (var dc = keyBeam.RenderOpen()) { Invoke(stage, "DrawKeyBeams", dc, 1280d, 480d, 12d); }
+        Assert(keyBeam.Drawing is not null && keyBeam.Drawing.Bounds.Height > 300 && keyBeam.Drawing.Bounds.Width > 50,
+            "A sounding key should render a broad software beam and its soft halo.");
+        var keyBeamRaster = new RenderTargetBitmap(1280, 480, 96, 96, PixelFormats.Pbgra32);
+        keyBeamRaster.Render(keyBeam);
+        var keyBeamPixels = new byte[1280 * 480 * 4];
+        keyBeamRaster.CopyPixels(keyBeamPixels, 1280 * 4, 0);
+        var keyBeamLitPixels = 0;
+        byte keyBeamPeakAlpha = 0;
+        for (var i = 3; i < keyBeamPixels.Length; i += 4)
+        {
+            if (keyBeamPixels[i] > 8) keyBeamLitPixels++;
+            if (keyBeamPixels[i] > keyBeamPeakAlpha) keyBeamPeakAlpha = keyBeamPixels[i];
+        }
+        Assert(keyBeamLitPixels > 1000 && keyBeamPeakAlpha > 80,
+            $"WPF key beams should rasterize a bright shaft and bloom halo (pixels={keyBeamLitPixels}, peak alpha={keyBeamPeakAlpha}).");
+
         visualSettings.BackgroundMode = "Solid";
         visualSettings.ShowBackground = true;
         visualSettings.BackgroundMotionAmount = 60;
@@ -4650,10 +4681,14 @@ internal static partial class VerificationSuite
         visualSettings.BackgroundMotionColor = wasBackgroundMotionColor;
         visualSettings.BackgroundMode = wasBackgroundMode;
         visualSettings.ShowBackground = wasShowBackground;
+        visualSettings.BeamIntensity = wasBeamIntensity;
+        visualSettings.ShowLightBeams = wasShowLightBeams;
+        Array.Copy(savedActiveKeys, activeKeys, activeKeys.Length);
+        Array.Copy(savedActiveKeyColors, activeKeyColors, activeKeyColors.Length);
         visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
-        Results.Add("PASS ambient WPF: Spotlights, all six procedural background motions and ripple geometry render; chroma-key remains clean.");
+        Results.Add("PASS WPF lighting: Spotlights, six background motions, sounding-key beams with bloom, and ripple geometry render; chroma-key remains clean.");
     }
 
     /// <summary>

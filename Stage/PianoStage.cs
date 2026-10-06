@@ -1000,22 +1000,45 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void DrawKeyBeams(DrawingContext dc, double width, double keyTop, double lane)
     {
-        // Soft light columns rise from every sounding key, tinted with that key's note color.
+        // The GPU accumulates these beams as linear emission and then blooms them. Approximate that
+        // light in display-space WPF with a radial soft halo beneath the brighter, key-coloured shaft.
         var beamWidth = Math.Max(18, lane * 2.8);
+        var intensity = Math.Clamp(_visual.BeamIntensity, 0, 100);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!_activeKey[pitch]) continue;
             var color = AdjustColor(_activeKeyColor[pitch]);
-            var key = GradientKey(2, Color.FromArgb((byte)Math.Clamp(_visual.BeamIntensity, 0, 255), color.R, color.G, color.B));
+            var x = KeyCenter(pitch) * width;
+
+            var haloKey = GradientKey(11, Color.FromArgb((byte)intensity, color.R, color.G, color.B));
+            if (!_gradientCache.TryGetValue(haloKey, out var halo))
+            {
+                var glow = new RadialGradientBrush
+                {
+                    Center = new Point(.5, 1), GradientOrigin = new Point(.5, 1),
+                    RadiusX = .5, RadiusY = 1, MappingMode = BrushMappingMode.RelativeToBoundingBox,
+                    SpreadMethod = GradientSpreadMethod.Pad
+                };
+                var coreAlpha = Alpha(intensity * 1.1);
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(coreAlpha, color.R, color.G, color.B), 0));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .72), color.R, color.G, color.B), .18));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .40), color.R, color.G, color.B), .46));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .13), color.R, color.G, color.B), .76));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+                glow.Freeze(); halo = CacheGradient(haloKey, glow);
+            }
+            var haloWidth = beamWidth * 1.5;
+            dc.DrawRectangle(halo, null, new Rect(x - haloWidth, 0, haloWidth * 2, keyTop));
+
+            var key = GradientKey(2, Color.FromArgb((byte)intensity, color.R, color.G, color.B));
             if (!_gradientCache.TryGetValue(key, out var brush))
             {
                 var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 0));
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(10 + _visual.BeamIntensity * .55), color.R, color.G, color.B), .78));
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(20 + _visual.BeamIntensity * .9), color.R, color.G, color.B), 1));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(24 + intensity * 1.45), color.R, color.G, color.B), .78));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(40 + intensity * 2.1), color.R, color.G, color.B), 1));
                 gradient.Freeze(); brush = CacheGradient(key, gradient);
             }
-            var x = KeyCenter(pitch) * width;
             dc.DrawRectangle(brush, null, new Rect(x - beamWidth / 2, 0, beamWidth, keyTop));
         }
     }
