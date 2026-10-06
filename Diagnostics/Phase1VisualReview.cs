@@ -157,7 +157,7 @@ internal static class Phase1VisualReview
         var frame = new DispatcherFrame();
         var dispatcher = Dispatcher.CurrentDispatcher;
         dispatcher.BeginInvoke(DispatcherPriority.Render, new Action(() => frame.Continue = false));
-        dispatcher.PushFrame(frame);
+        Dispatcher.PushFrame(frame);
     }
 
     private static byte[] CaptureWpfFrame(PianoStage stage, ReviewScene scene)
