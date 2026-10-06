@@ -255,7 +255,7 @@ internal static partial class VerificationSuite
             new() { Pitch = 64, Start = .6, Duration = 2.0 },
             new() { Pitch = 67, Start = .6, Duration = 2.0 }
         };
-        byte[] Render(string style, bool depth3D, bool showNotes = true, int resolutionScale = 1)
+        byte[] Render(string style, bool depth3D, bool showNotes = true)
         {
             var settings = new PianoVisualSettings
             {
@@ -268,12 +268,10 @@ internal static partial class VerificationSuite
                 HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
             };
             settings.ShowNotes = showNotes;
-            var feed = new GpuStageFeed();
-            var renderWidth = width / resolutionScale; var renderHeight = height / resolutionScale;
-            feed.SetStageHeight(renderHeight);
+            var feed = new GpuStageFeed(); feed.SetStageHeight(height);
             feed.SetLook(GpuLook.From(settings, (pitch, track) => Color.FromRgb(64, 176, 250), .205));
             feed.SetState(notes, 1.5, true, new HashSet<int>());
-            return GpuRenderLoop.RenderOnce(feed, renderWidth, renderHeight, 12, 1 / 60.0, out _, forceWarp: true);
+            return GpuRenderLoop.RenderOnce(feed, width, height, 12, 1 / 60.0, out _, forceWarp: true);
         }
 
         var blank = Render("Solid", false, showNotes: false);
@@ -292,11 +290,27 @@ internal static partial class VerificationSuite
             }
             return count;
         }
+        byte[] HalfSize(byte[] image)
+        {
+            var halfWidth = width / 2; var halfHeight = height / 2;
+            var half = new byte[halfWidth * halfHeight * 4];
+            for (var y = 0; y < halfHeight; y++)
+                for (var x = 0; x < halfWidth; x++)
+                    for (var channel = 0; channel < 4; channel++)
+                    {
+                        var source = ((y * 2 * width) + x * 2) * 4 + channel;
+                        var sum = image[source] + image[source + 4] + image[source + width * 4] + image[source + width * 4 + 4];
+                        half[(y * halfWidth + x) * 4 + channel] = (byte)((sum + 2) / 4);
+                    }
+            return half;
+        }
         var gemVisible = ChangedPixels(gem2D, blank);
         var crystalVisible = ChangedPixels(crystal2D, blank);
-        var blankSmall = Render("Solid", false, showNotes: false, resolutionScale: 2);
-        var gemSmallVisible = ChangedPixels(Render("Gem", true, resolutionScale: 2), blankSmall);
-        var crystalSmallVisible = ChangedPixels(Render("CrystalOutline", false, resolutionScale: 2), blankSmall);
+        // The gallery captures a full-size frame and then downsamples each cell. Inspect that same
+        // 2×2 box-filtered result; halving the render target would also change the stage's world-space height.
+        var blankSmall = HalfSize(blank);
+        var gemSmallVisible = ChangedPixels(HalfSize(gem3D), blankSmall);
+        var crystalSmallVisible = ChangedPixels(HalfSize(crystal2D), blankSmall);
         Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20,
             $"Gem and Crystal Outline must change real GPU pixels on WARP at full and half size (full {gemVisible}/{crystalVisible}, half {gemSmallVisible}/{crystalSmallVisible}).");
         Assert(!solid.AsSpan().SequenceEqual(gem2D) && !solid.AsSpan().SequenceEqual(crystal2D) && !gem2D.AsSpan().SequenceEqual(crystal2D),
