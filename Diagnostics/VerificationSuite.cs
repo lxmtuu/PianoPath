@@ -1653,7 +1653,22 @@ internal static partial class VerificationSuite
         MoveMouse(); PressEscape(); PressEscape();
         Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Escape should toggle the settings panel.");
         var visualSettings = (PianoVisualSettings)Field(window, "_visualSettings"); var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
-        Assert(sliders.Count >= 30 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "The detailed scene, note, particle and camera controls should drive the renderer configuration.");
+        var stageVisual = (PianoVisualSettings)Field(stage, "_visual");
+        Assert(sliders.Count >= 30 && stageVisual.ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),
+            "The detailed scene, note, particle and camera controls should drive the renderer configuration, adjusted only by the accessibility policy.");
+        // Live wiring of the global toggles: a Reduced Motion switch flipped in the dock must reach the
+        // stage through the policy, and flipping it back restores the user's own motion setting.
+        visualSettings.BackgroundMotion = "Aurora";
+        visualSettings.ReducedMotion = true;
+        stage.SetVisualSettings(visualSettings);
+        Assert(((PianoVisualSettings)Field(stage, "_visual")).BackgroundMotion == "None",
+            "Turning on Reduced motion should freeze the stage's background motion through the accessibility policy.");
+        visualSettings.ReducedMotion = false;
+        visualSettings.BackgroundMotion = "None";
+        stage.SetVisualSettings(visualSettings);
+        Assert(((PianoVisualSettings)Field(stage, "_visual")).BackgroundMotion == "None"
+                && ((PianoVisualSettings)Field(stage, "_visual")).ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),
+            "Turning Reduced motion back off should restore the user's own motion setting on the stage.");
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
         Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
@@ -1680,7 +1695,7 @@ internal static partial class VerificationSuite
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
         var glowSlider = sliders[nameof(PianoVisualSettings.NoteGlow)]; var originalGlow = glowSlider.Value; glowSlider.Value = 127;
-        Assert(visualSettings.NoteGlow == 127 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "Adjusting note bloom should update the stage renderer immediately.");
+        Assert(visualSettings.NoteGlow == 127 && ((PianoVisualSettings)Field(stage, "_visual")).NoteGlow == 127, "Adjusting note bloom should update the stage renderer immediately.");
         glowSlider.Value = originalGlow; ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         var wasShowingEmbers = visualSettings.ShowEmbers;
         // The claim is about bursts this impact would add, so anything still in the air from a check above is
@@ -2079,8 +2094,9 @@ internal static partial class VerificationSuite
         var beforeName = visualSettings.PresetName; var beforeJson = visualSettings.ToJson();
         presetList.SelectedIndex = VisualPresets.BuiltIn.ToList().FindIndex(p => p.Name == "Classic Roll");
         Invoke(window, "ApplyPreset_Click", window, new RoutedEventArgs());
-        Assert(visualSettings.PresetName == "Classic Roll" && !visualSettings.PresetModified && visualSettings.NoteStyle == "Solid" && !visualSettings.ShowEmbers && ReferenceEquals(Field(stage, "_visual"), visualSettings),
-            "Applying a preset should rewrite the live settings in place so the renderer keeps its reference.");
+        Assert(visualSettings.PresetName == "Classic Roll" && !visualSettings.PresetModified && visualSettings.NoteStyle == "Solid" && !visualSettings.ShowEmbers
+                && ((PianoVisualSettings)Field(stage, "_visual")).ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),
+            "Applying a preset should rewrite the live settings in place and the stage should draw exactly that look, adjusted only by the accessibility policy.");
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices));
