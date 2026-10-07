@@ -169,7 +169,7 @@ internal sealed class GpuStageRenderer : IDisposable
             using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
             var adapters = new List<IDXGIAdapter1>();
             var names = new List<string>();
-            for (var i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            for (uint i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
             {
                 adapters.Add(adapter);
                 names.Add(adapter.Description1.Description);
