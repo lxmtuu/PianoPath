@@ -369,7 +369,7 @@ internal sealed class PianoVisualSettings
     public bool ReducedMotion { get; set; } = false;
     /// <summary>Global contract: suppress the flash channel (impact flash) instead of letting it strobe.</summary>
     public bool ReduceFlashes { get; set; } = false;
-    /// <summary>Global contract placeholder: high-contrast shape cues land with renderer work; no visual channel yet.</summary>
+    /// <summary>Global contract: give every note a strong bright outline so shape, not color alone, carries the information.</summary>
     public bool HighContrast { get; set; } = false;
 
     // ---- Recording ----------------------------------------------------------------------------------
@@ -508,6 +508,12 @@ internal sealed class PianoVisualSettings
                         result.HaloPulse = false;
                         result.FallingPulse = false;
                         result.HoldBreath = false;
+                        break;
+                    case AccessibilityChannel.NoteShapeCue:
+                        // Floors, not fixed values: a look with a stronger outline than the floor keeps it.
+                        // 160/80 sit well above the 88/55 defaults without pegging the 200/100 clamps.
+                        result.NoteEdge = Math.Max(result.NoteEdge, 160);
+                        result.NoteEdgeWidth = Math.Max(result.NoteEdgeWidth, 80);
                         break;
                 }
             }

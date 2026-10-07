@@ -131,6 +131,7 @@ public partial class MainWindow
         [nameof(PianoVisualSettings.BackdropDensity)] = "motes dust density backdrop",
         [nameof(PianoVisualSettings.ReducedMotion)] = "vestibular animation motion still calm freeze",
         [nameof(PianoVisualSettings.ReduceFlashes)] = "strobe flash epilepsy photosensitive blink",
+        [nameof(PianoVisualSettings.HighContrast)] = "outline shape cue colour color vision contrast edge",
     };
 
     // =====================================================================================================
@@ -854,7 +855,7 @@ public partial class MainWindow
         var access = Card(GeneralSettingsHost, "ACCESSIBILITY", "Comfort switches for the whole stage. While one is on it overrides the matching effect settings everywhere — every preset, every page — and it is saved with your profile.");
         Toggle(access, "Reduced motion", nameof(PianoVisualSettings.ReducedMotion), "Freeze the stage's own animation: the background stops drifting and the halo, falling and breathing pulses go still. The notes themselves keep falling exactly as before.");
         Toggle(access, "Reduce flashes", nameof(PianoVisualSettings.ReduceFlashes), "Silence the bright impact flash when notes land. The impact wave, the sparks and everything else about the hit stay.");
-        Note(access, "High contrast is planned as shape cues on the notes themselves; its switch appears once it actually changes the picture.");
+        Toggle(access, "High contrast", nameof(PianoVisualSettings.HighContrast), "Give every note a strong bright outline so its shape carries the information, not its colour alone. Looks that already draw a stronger outline keep theirs.");
 
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));

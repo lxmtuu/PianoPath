@@ -48,6 +48,8 @@ internal enum AccessibilityChannel
     ImpactFlash,
     /// <summary>Intrinsic animation channels: background motion, halo pulse, falling pulse, held-key breathing.</summary>
     IndependentMotion,
+    /// <summary>The note outline channel: a bright, wide edge so shape carries information that color alone would have to.</summary>
+    NoteShapeCue,
 }
 
 /// <summary>One toggle's override policy; an empty channel list means metadata-only until renderer work exists.</summary>
@@ -88,8 +90,8 @@ internal static class AccessibilityContractResolver
     });
 
     /// <summary>
-    /// Which settings channels each toggle overrides. High Contrast stays metadata-only: its shape-cue work
-    /// lives in the renderers and lands later, so enabling it changes no pixel today by design.
+    /// Which settings channels each toggle overrides. High Contrast rides the existing note-edge channel:
+    /// both renderers already draw the outline, so the shape cue needs no new renderer work.
     /// </summary>
     internal static IReadOnlyList<AccessibilityTogglePolicy> Policies { get; } = Array.AsReadOnly(new[]
     {
@@ -98,7 +100,7 @@ internal static class AccessibilityContractResolver
         new AccessibilityTogglePolicy(AccessibilityToggle.ReduceFlashes,
             Array.AsReadOnly(new[] { AccessibilityChannel.ImpactFlash })),
         new AccessibilityTogglePolicy(AccessibilityToggle.HighContrast,
-            Array.AsReadOnly(Array.Empty<AccessibilityChannel>())),
+            Array.AsReadOnly(new[] { AccessibilityChannel.NoteShapeCue })),
     });
 
     internal static bool IsCatalogWellFormed =>

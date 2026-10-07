@@ -20,7 +20,7 @@ public sealed class AccessibilityContractTests
     }
 
     [Fact]
-    public void Toggle_policies_cover_every_toggle_and_pin_high_contrast_as_metadata_only()
+    public void Toggle_policies_cover_every_toggle_with_their_reviewed_channels()
     {
         Assert.Equal(
             AccessibilityContractResolver.Toggles.Select(toggle => toggle.Toggle),
@@ -31,7 +31,8 @@ public sealed class AccessibilityContractTests
         Assert.Equal(
             new[] { AccessibilityChannel.ImpactFlash },
             AccessibilityContractResolver.Policies.Single(policy => policy.Toggle == AccessibilityToggle.ReduceFlashes).Channels);
-        Assert.Empty(
+        Assert.Equal(
+            new[] { AccessibilityChannel.NoteShapeCue },
             AccessibilityContractResolver.Policies.Single(policy => policy.Toggle == AccessibilityToggle.HighContrast).Channels);
     }
 

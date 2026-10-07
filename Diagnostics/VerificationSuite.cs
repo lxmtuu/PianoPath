@@ -444,14 +444,20 @@ internal static partial class VerificationSuite
 
         busy.ReduceFlashes = false;
         busy.HighContrast = true;
-        Assert(busy.WithAccessibilityTogglesApplied().ToJson() == busy.ToJson(),
-            "High Contrast must stay metadata-only: enabling it changes no visual channel until shape-cue renderer work lands.");
+        var outlined = busy.WithAccessibilityTogglesApplied();
+        Assert(outlined.NoteEdge == 160 && outlined.NoteEdgeWidth == 80
+                && outlined.ShowImpactFlash && outlined.ImpactFlashIntensity == 80 && outlined.BackgroundMotion == "Aurora",
+            "High Contrast must lift the note outline to the shape-cue floors and leave the flash and motion channels alone.");
+        var alreadyStrong = PianoVisualSettings.FromJson(new PianoVisualSettings { NoteEdge = 185, NoteEdgeWidth = 90, HighContrast = true }.ToJson());
+        var kept = alreadyStrong.WithAccessibilityTogglesApplied();
+        Assert(kept.NoteEdge == 185 && kept.NoteEdgeWidth == 90,
+            "High Contrast must keep an outline that is already stronger than the shape-cue floors.");
 
         Assert(busy.ShowImpactFlash && busy.ImpactFlashIntensity == 80 && busy.BackgroundMotion == "Aurora"
                 && busy.HaloPulse && busy.FallingPulse && busy.HoldBreath,
             "Applying the accessibility policy must never mutate the user's own settings object.");
 
-        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion and Reduce Flashes override exactly their reviewed channels on a copy, High Contrast stays metadata-only, and user settings are never mutated. Enforcement into the live renderers lands in a later Phase 2 slice.");
+        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion and Reduce Flashes override exactly their reviewed channels on a copy, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
     }
 
     /// <summary>
