@@ -309,6 +309,8 @@ internal static partial class VerificationSuite
         var contracts = EffectContractCatalog.NoteMaterialPilot;
         Assert(EffectContractCatalog.IsPilotWellFormed && contracts.Count == 3,
             "The typed note-material pilot should contain the three well-formed, uniquely aliased materials.");
+        Assert(AccessibilityContractResolver.IsCatalogWellFormed,
+            "The global accessibility toggle catalogue should be stable, unique and off by default.");
 
         foreach (var contract in contracts)
         {
@@ -349,6 +351,14 @@ internal static partial class VerificationSuite
                     && evidence.Contains("NOTE-MATERIAL-GPU-BENCHMARK", StringComparison.Ordinal)
                     && contract.Cost.GpuStage.IsWellFormed,
                 $"The {alias} GPU-stage cost must be the reviewed physical-adapter measurement cited from docs/NOTE-MATERIAL-GPU-BENCHMARK.md, not an invented number.");
+            var defaultLook = AccessibilityContractResolver.Resolve(contract.Accessibility, false, false, false);
+            Assert(defaultLook.Flash == FlashSuppression.NoChange
+                    && defaultLook.Motion == MotionSuppression.NoChange
+                    && !defaultLook.NeedsNonColorCueWork && defaultLook.IsWellFormed,
+                $"The {alias} material must keep its current look while every accessibility toggle is off.");
+            Assert(AccessibilityContractResolver.Resolve(contract.Accessibility, false, true, false).Flash != FlashSuppression.NoChange
+                    || contract.Accessibility.FlashRisk == EffectFlashRisk.None,
+                $"The {alias} flash-safety resolution must act on any intrinsic flash under Reduce Flashes.");
 
             foreach (var parameter in contract.Parameters)
             {
