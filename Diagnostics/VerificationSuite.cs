@@ -418,11 +418,13 @@ internal static partial class VerificationSuite
                 && legacy.BloomIntensity == 50,
             "Accessibility keys saved by older builds must load with every toggle off and keep the saved look.");
 
-        var busy = new PianoVisualSettings
+        // User settings always arrive through FromJson (migrated, clamped), e.g. BackgroundAppearanceVersion
+        // has already advanced to 2; the policy is checked against that loaded state.
+        var busy = PianoVisualSettings.FromJson(new PianoVisualSettings
         {
             ShowImpactFlash = true, ImpactFlashIntensity = 80,
             BackgroundMotion = "Aurora", HaloPulse = true, FallingPulse = true, HoldBreath = true,
-        };
+        }.ToJson());
         var identity = busy.WithAccessibilityTogglesApplied();
         Assert(identity.ToJson() == busy.ToJson() && !ReferenceEquals(identity, busy),
             "With every toggle off the applied settings must be an untouched copy, preserving the signed-off default look.");
