@@ -339,9 +339,16 @@ internal static partial class VerificationSuite
                     && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                     && contract.Accessibility.NonColorCue != EffectShapeCue.None,
                 $"The {alias} material should declare its intrinsic flash/motion behavior and a non-color shape cue.");
-            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null && cost.IsWellFormed),
-                $"The {alias} contract must not invent an isolated performance measurement.");
+                $"The {alias} contract must keep WPF/recording/AR costs unmeasured until their own evidence exists.");
+            var expectedGpuP95 = alias == "Gem" ? 0.02688 : 0.0268;
+            Assert(contract.Cost.GpuStage.State == EffectCostState.Measured
+                    && contract.Cost.GpuStage.P95Milliseconds == expectedGpuP95
+                    && contract.Cost.GpuStage.EvidenceId is { Length: > 0 } evidence
+                    && evidence.Contains("NOTE-MATERIAL-GPU-BENCHMARK", StringComparison.Ordinal)
+                    && contract.Cost.GpuStage.IsWellFormed,
+                $"The {alias} GPU-stage cost must be the reviewed physical-adapter measurement cited from docs/NOTE-MATERIAL-GPU-BENCHMARK.md, not an invented number.");
 
             foreach (var parameter in contract.Parameters)
             {
