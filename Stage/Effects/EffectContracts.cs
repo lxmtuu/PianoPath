@@ -106,6 +106,8 @@ internal enum EffectFlashRisk
 internal enum EffectReducedMotionBehavior
 {
     NoIndependentAnimation,
+    /// <summary>The effect animates on its own clock (pulses, twinkles) even when the note sits still.</summary>
+    IntrinsicAnimation,
     Unverified,
 }
 
@@ -217,7 +219,7 @@ internal sealed record EffectAccessibilityContract(
 {
     internal bool IsWellFormed =>
         (FlashRisk is EffectFlashRisk.None or EffectFlashRisk.Local or EffectFlashRisk.FullFrame or EffectFlashRisk.Unverified)
-        && (ReducedMotionBehavior is EffectReducedMotionBehavior.NoIndependentAnimation or EffectReducedMotionBehavior.Unverified)
+        && (ReducedMotionBehavior is EffectReducedMotionBehavior.NoIndependentAnimation or EffectReducedMotionBehavior.IntrinsicAnimation or EffectReducedMotionBehavior.Unverified)
         && (NonColorCue is EffectShapeCue.None or EffectShapeCue.FacetPlanes or EffectShapeCue.AngularContourAndFacets or EffectShapeCue.OpaqueBodyAndRim);
 }
 
@@ -267,6 +269,7 @@ internal static class EffectContractCatalog
 
     private static readonly EffectBackendCapability Native = new(EffectBackendState.Native);
     private static readonly EffectBackendCapability Unverified = new(EffectBackendState.Unverified);
+    private static readonly EffectBackendCapability Unsupported = new(EffectBackendState.Unsupported);
     private static readonly EffectBackendCapability ArFlatFallback = new(EffectBackendState.Fallback, ArFlatQuadFallbackId);
     private static readonly EffectParameterBindingProfile NativeParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
@@ -466,6 +469,62 @@ internal static class EffectContractCatalog
         ImpactFxPilot.Count == 4
         && ImpactFxPilot.All(contract => contract.IsWellFormed)
         && ImpactFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == ImpactFxPilot.Count;
+
+    /// <summary>
+    /// The third contract pilot: what rides along while a note travels. Trail and pulse/ghost are drawn by
+    /// both renderers; the shimmer is the one GPU-only member — the WPF stage never reads
+    /// <c>NoteShimmer</c> (verified by source inspection), so it is Unsupported there rather than silently
+    /// claimed. Motion classification is honest: trails and ghosts derive from the note's own travel, while
+    /// the pulse and the shimmer twinkle on their own clock (IntrinsicAnimation). Costs all Unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<EffectFamilyContract> FallingFxPilot { get; } = Array.AsReadOnly(new[]
+    {
+        new EffectFamilyContract(
+            "falling.trail",
+            EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("FallingTrail"),
+                Percentage("FallingTrailIntensity", 0, 100),
+                Percentage("FallingTrailLength", 0, 100),
+                Boolean("FallingGhost"),
+                Percentage("FallingGhostAmount", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "falling.pulse",
+            EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("FallingPulse"),
+                Percentage("FallingPulseRate", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "falling.shimmer",
+            EffectPhase.Falling, EffectTrigger.NoteBodyRendered, EffectLifecycle.WhileNoteVisible, EffectAnchor.NoteBody,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("NoteShimmer"),
+                Percentage("NoteShimmerAmount", 0, 100),
+            }),
+            new EffectCapabilityProfile(Unsupported, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+    });
+
+    /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
+    internal static bool IsFallingPilotWellFormed =>
+        FallingFxPilot.Count == 3
+        && FallingFxPilot.All(contract => contract.IsWellFormed)
+        && FallingFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == FallingFxPilot.Count;
 
     /// <summary>Checks IDs, aliases, parameter schemas and capability/fallback claims before consumers opt in.</summary>
     internal static bool IsPilotWellFormed

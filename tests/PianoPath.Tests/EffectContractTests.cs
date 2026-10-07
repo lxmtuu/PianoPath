@@ -166,4 +166,33 @@ public sealed class EffectContractTests
             new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay },
             cost => Assert.Equal(EffectCostState.Unmeasured, cost.State)));
     }
+
+    [Fact]
+    public void Falling_fx_pilot_classifies_motion_honestly_and_names_the_gpu_only_shimmer()
+    {
+        Assert.True(EffectContractCatalog.IsFallingPilotWellFormed);
+        var trail = EffectContractCatalog.FallingFxPilot.Single(contract => contract.Id == "falling.trail");
+        var pulse = EffectContractCatalog.FallingFxPilot.Single(contract => contract.Id == "falling.pulse");
+        var shimmer = EffectContractCatalog.FallingFxPilot.Single(contract => contract.Id == "falling.shimmer");
+
+        Assert.Equal(EffectReducedMotionBehavior.NoIndependentAnimation, trail.Accessibility.ReducedMotionBehavior);
+        Assert.Equal(EffectReducedMotionBehavior.IntrinsicAnimation, pulse.Accessibility.ReducedMotionBehavior);
+        Assert.Equal(EffectReducedMotionBehavior.IntrinsicAnimation, shimmer.Accessibility.ReducedMotionBehavior);
+
+        // Reduced Motion freezes the self-animated families and leaves the travel-derived trail alone.
+        Assert.Equal(MotionSuppression.FreezeIntrinsicAnimation, AccessibilityContractResolver.Resolve(pulse.Accessibility, true, false, false).Motion);
+        Assert.Equal(MotionSuppression.FreezeIntrinsicAnimation, AccessibilityContractResolver.Resolve(shimmer.Accessibility, true, false, false).Motion);
+        Assert.Equal(MotionSuppression.NoChange, AccessibilityContractResolver.Resolve(trail.Accessibility, true, false, false).Motion);
+
+        // The shimmer is the GPU-only member: WPF never reads NoteShimmer, so no capability claim may say Native there.
+        Assert.Equal(EffectBackendState.Unsupported, shimmer.Capabilities.WpfStage.State);
+        Assert.Null(shimmer.Capabilities.WpfStage.FallbackId);
+        Assert.Equal(EffectBackendState.Native, shimmer.Capabilities.GpuStage.State);
+        Assert.Equal(EffectBackendState.Native, trail.Capabilities.WpfStage.State);
+        Assert.Equal(EffectBackendState.Native, pulse.Capabilities.WpfStage.State);
+
+        Assert.All(EffectContractCatalog.FallingFxPilot, contract => Assert.All(
+            new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay },
+            cost => Assert.Equal(EffectCostState.Unmeasured, cost.State)));
+    }
 }

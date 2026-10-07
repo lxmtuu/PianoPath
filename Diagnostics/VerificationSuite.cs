@@ -294,6 +294,7 @@ internal static partial class VerificationSuite
         VerifyEffectContractPilot();
         VerifyAccessibilityTogglePolicy();
         VerifyImpactFxPilot();
+        VerifyFallingPilot();
         VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
@@ -456,6 +457,60 @@ internal static partial class VerificationSuite
                 && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
             "The key morph should keep its current behavior while every accessibility toggle is off.");
         Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, recording/AR stay Unverified, all costs stay Unmeasured, and the flash-safety resolution acts exactly on the declared risks. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
+    /// Cross-checks the falling-FX pilot: trail/ghost derive from the note's travel, pulse and shimmer own
+    /// their clock; the shimmer is honestly GPU-only (the WPF stage never reads NoteShimmer) and therefore
+    /// Unsupported there; Reduced Motion freezes exactly the intrinsically animated families; every cost
+    /// stays Unmeasured. Metadata coherence only; no renderer changed.
+    /// </summary>
+    private static void VerifyFallingPilot()
+    {
+        var pilot = EffectContractCatalog.FallingFxPilot;
+        Assert(EffectContractCatalog.IsFallingPilotWellFormed && pilot.Count == 3,
+            "The falling-FX pilot should contain the three well-formed, uniquely identified families.");
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        Assert(byId["falling.trail"].Capabilities.WpfStage.State == EffectBackendState.Native
+                && byId["falling.trail"].Capabilities.GpuStage.State == EffectBackendState.Native
+                && byId["falling.pulse"].Capabilities.WpfStage.State == EffectBackendState.Native
+                && byId["falling.pulse"].Capabilities.GpuStage.State == EffectBackendState.Native,
+            "Trail and pulse are drawn by both stage renderers in shipped code.");
+        Assert(byId["falling.shimmer"].Capabilities.WpfStage.State == EffectBackendState.Unsupported
+                && byId["falling.shimmer"].Capabilities.GpuStage.State == EffectBackendState.Native,
+            "The shimmer must stay honest: GPU-native, and Unsupported on the WPF stage that never reads NoteShimmer.");
+        Assert(byId["falling.trail"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                && byId["falling.pulse"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
+                && byId["falling.shimmer"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
+            "Trails derive from the note's travel; the pulse and the shimmer animate on their own clock.");
+        Assert(AccessibilityContractResolver.Resolve(byId["falling.pulse"].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation
+                && AccessibilityContractResolver.Resolve(byId["falling.shimmer"].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation
+                && AccessibilityContractResolver.Resolve(byId["falling.trail"].Accessibility, true, false, false).Motion == MotionSuppression.NoChange,
+            "Reduced Motion must freeze exactly the intrinsically animated families and leave the travel-derived trail alone.");
+        Assert(AccessibilityContractResolver.Resolve(byId["falling.shimmer"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress
+                && AccessibilityContractResolver.Resolve(byId["falling.trail"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "The twinkling shimmer's un-analysed flash risk resolves conservatively; the flash-less trail stays untouched.");
+        foreach (var contract in pilot)
+        {
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        Results.Add("PASS falling-FX contract metadata: trail/ghost travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
     }
 
     /// <summary>

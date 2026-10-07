@@ -132,6 +132,7 @@ internal static class AccessibilityContractResolver
             : effect.ReducedMotionBehavior switch
             {
                 EffectReducedMotionBehavior.NoIndependentAnimation => MotionSuppression.NoChange,
+                EffectReducedMotionBehavior.IntrinsicAnimation => MotionSuppression.FreezeIntrinsicAnimation,
                 EffectReducedMotionBehavior.Unverified => MotionSuppression.FreezeIntrinsicAnimation,
                 _ => MotionSuppression.FreezeIntrinsicAnimation,
             };
