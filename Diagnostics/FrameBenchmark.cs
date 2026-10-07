@@ -53,6 +53,11 @@ internal static class FrameBenchmark
             ? path
             : Path.Combine(Path.GetTempPath(), "keyflow-bench.json");
         var previous = Read(Value(args, "--bench-baseline="));
+        // --bench-adapter=<name> pins the run to one GPU by a substring of its DXGI description ("RTX 4050",
+        // "Radeon"). Hybrid laptops otherwise measure whichever adapter Windows assigned to the executable,
+        // and a hardware gate that silently measured the wrong GPU would be worse than no gate at all:
+        // a name that matches none or several adapters fails the run instead of falling back.
+        var adapterRequest = Value(args, "--bench-adapter=");
         // --bench-ar adds the AR overlay scene to the run (and is a run of its own, with that one scene, when --bench is not there).
         var withAr = args.Contains("--bench-ar");
         IReadOnlyList<FrameBudget> budgets = withAr
@@ -62,7 +67,7 @@ internal static class FrameBenchmark
         var scenes = new List<FrameBenchReport>();
         var notes = MainWindow.CreateDemoSong();
         var feed = new GpuStageFeed();
-        using (var loop = new GpuRenderLoop(feed))
+        using (var loop = new GpuRenderLoop(feed, adapterRequest: adapterRequest))
         {
             if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)) || loop.Error is not null)
             {

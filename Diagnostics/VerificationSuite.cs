@@ -293,6 +293,7 @@ internal static partial class VerificationSuite
         }
         VerifyEffectContractPilot();
         VerifyAccessibilityTogglePolicy();
+        VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
@@ -458,6 +459,30 @@ internal static partial class VerificationSuite
             "Applying the accessibility policy must never mutate the user's own settings object.");
 
         Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion and Reduce Flashes override exactly their reviewed channels on a copy, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
+    }
+
+    /// <summary>
+    /// --bench-adapter pins a hardware run to one GPU by name, so a hybrid laptop can be measured on its
+    /// dGPU as well as its iGPU. The selection rules must be strict: only a unique case-insensitive
+    /// substring selects an adapter; anything else keeps the OS default (no request) or fails the run with
+    /// a message naming the candidates (no match, ambiguous match) — never measure a GPU silently.
+    /// </summary>
+    private static void VerifyAdapterSelection()
+    {
+        string[] hybrid = ["AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 4050 Laptop GPU"];
+        Assert(GpuAdapterSelection.Select(hybrid, null).Index == -1 && GpuAdapterSelection.Select(hybrid, null).Problem is null
+                && GpuAdapterSelection.Select(hybrid, "   ").Index == -1,
+            "With no adapter request the benchmark must keep the OS default adapter.");
+        Assert(GpuAdapterSelection.Select(hybrid, "rtx 4050").Index == 1 && GpuAdapterSelection.Select(hybrid, "radeon").Index == 0
+                && GpuAdapterSelection.Select(hybrid, "rtx 4050").Problem is null,
+            "A unique case-insensitive substring must select exactly that adapter.");
+        var none = GpuAdapterSelection.Select(hybrid, "Intel Arc");
+        var ambiguous = GpuAdapterSelection.Select(new[] { "NVIDIA GeForce RTX 4050", "NVIDIA GeForce RTX 4090" }, "NVIDIA");
+        Assert(none.Index == -1 && none.Problem is not null && none.Problem.Contains("RTX 4050", StringComparison.Ordinal),
+            "An adapter name matching nothing must fail with a message naming every adapter on the machine.");
+        Assert(ambiguous.Index == -1 && ambiguous.Problem is not null && ambiguous.Problem.Contains("longer name", StringComparison.Ordinal),
+            "An ambiguous adapter name must fail instead of picking a GPU at random.");
+        Results.Add("PASS adapter selection: --bench-adapter resolves only a unique case-insensitive substring, keeps the OS default when not asked, and fails with the machine's adapter list on no match or an ambiguous one.");
     }
 
     /// <summary>

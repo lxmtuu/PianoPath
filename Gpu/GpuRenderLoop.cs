@@ -29,6 +29,8 @@ internal sealed class GpuRenderLoop : IDisposable
 
     private readonly GpuStageFeed _feed;
     private readonly GpuNotePassSampleBuffer? _notePassSamples;
+    /// <summary>Set by --bench-adapter: the substring identifying the one adapter to measure on a hybrid machine.</summary>
+    private readonly string? _adapterRequest;
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _started = new();
     private volatile bool _running = true;
@@ -53,11 +55,12 @@ internal sealed class GpuRenderLoop : IDisposable
     /// </summary>
     internal static bool ForceWarpForSession { get; set; }
 
-    internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false, GpuNotePassSampleBuffer? notePassSamples = null)
+    internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false, GpuNotePassSampleBuffer? notePassSamples = null, string? adapterRequest = null)
     {
         _feed = feed;
         _notePassSamples = notePassSamples;
         ForceWarp = forceWarp || ForceWarpForSession;
+        _adapterRequest = adapterRequest;
         _thread = new Thread(Run) { IsBackground = true, Name = "Keyflow GPU stage", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
     }
@@ -235,7 +238,7 @@ internal sealed class GpuRenderLoop : IDisposable
         var nextRecordFrame = 0.0;
         try
         {
-            renderer = GpuStageRenderer.Create(ForceWarp);
+            renderer = GpuStageRenderer.Create(ForceWarp, _adapterRequest);
             AdapterName = renderer.AdapterName; IsWarp = renderer.IsWarp; ShaderCompileMilliseconds = renderer.ShaderCompileMilliseconds;
             if (_notePassSamples is not null)
             {

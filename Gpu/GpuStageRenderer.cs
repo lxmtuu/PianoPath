@@ -155,9 +155,38 @@ internal sealed class GpuStageRenderer : IDisposable
     }
 
     /// <summary>Creates the device (hardware first, WARP as the fallback) and compiles every shader.</summary>
-    internal static GpuStageRenderer Create(bool forceWarp = false)
+    /// <remarks>
+    /// With <paramref name="adapterRequest"/> the device is created on the one adapter whose DXGI
+    /// description contains that text (case-insensitive, must be unique); a request that matches none or
+    /// several throws with the machine's adapter list, so a hardware gate can never silently measure the
+    /// wrong GPU. Without it the OS default adapter is used, exactly as the main window always has.
+    /// </remarks>
+    internal static GpuStageRenderer Create(bool forceWarp = false, string? adapterRequest = null)
     {
         var flags = DeviceCreationFlags.BgraSupport;
+        if (!forceWarp && !string.IsNullOrWhiteSpace(adapterRequest))
+        {
+            using var factory = DXGI.CreateDXGIFactory1<IDXGIFactory1>();
+            var adapters = new List<IDXGIAdapter1>();
+            var names = new List<string>();
+            for (var i = 0; factory.EnumAdapters1(i, out var adapter).Success; i++)
+            {
+                adapters.Add(adapter);
+                names.Add(adapter.Description1.Description);
+            }
+            try
+            {
+                var (index, problem) = GpuAdapterSelection.Select(names, adapterRequest);
+                if (problem is not null) throw new InvalidOperationException(problem);
+                var result = D3D11.D3D11CreateDevice(adapters[index], DriverType.Hardware, flags, FeatureLevels, out ID3D11Device device, out FeatureLevel level, out ID3D11DeviceContext context);
+                result.CheckError();
+                return new GpuStageRenderer(device, context, level, false);
+            }
+            finally
+            {
+                foreach (var adapter in adapters) adapter.Dispose();
+            }
+        }
         if (!forceWarp)
         {
             var result = D3D11.D3D11CreateDevice((IDXGIAdapter?)null, DriverType.Hardware, flags, FeatureLevels, out ID3D11Device device, out FeatureLevel level, out ID3D11DeviceContext context);
