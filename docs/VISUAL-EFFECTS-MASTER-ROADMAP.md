@@ -550,3 +550,26 @@ work ở default ≈ 11.6 ms. Giả thuyết chi phí có bằng chứng: Concer
 Voyage (44/52) — default ít hạt hơn nhưng đuôi p95 cao hơn. Lát tối ưu thuộc Phase 5
 (compositor/Adaptive Quality) vì đụng bloom là đụng pixel và kéo theo render lại gallery
 fixed-scene để người dùng duyệt lại; không xen ngang các phase hiện tại.
+
+### 11.5 Kết quả dGPU đầu tiên — NVIDIA GeForce RTX 4050 Laptop (2026-10-08)
+
+Cùng máy với §11.4 (Ryzen 5 7535HS, Windows 11 build 26200, Balanced), đo bằng
+`--bench-ar --bench-adapter="RTX 4050"` — adapter được ghim bằng cờ mới, không qua thiết lập đồ hoạ
+của Windows. JSON báo `adapter: NVIDIA GeForce RTX 4050 Laptop GPU`, `warp: false`,
+`takenUtc 2026-10-07T18:59:27Z`, shader compile 646 ms. Các thống kê dưới đây đã được tính lại độc
+lập từ mảng `frameMs` trong JSON và khớp đúng báo cáo của app.
+
+| Scene | Budget p95 | Kết quả |
+|---|---:|---|
+| ar (camera tổng hợp 720p60) | 16 | **Đạt** — p95 3.25 ms; mean 2.71; median 2.63; max 4.13 ms; camera age mean 1.67 / worst 12.10 ms |
+
+So với iGPU cùng máy (§11.4): ar p95 8.84 → 3.25 ms; camera age worst 15.74 → 12.10 ms. Phân phối
+khung đều (2.28–4.13 ms), không còn cụm chu kỳ 3 khung lấn át như trên iGPU — chi phí readback-ring
+không còn đáng kể cạnh thời gian khung của dGPU.
+
+**Chưa đo trên dGPU: scene `default` và `heavy`.** Ba lượt `--bench --bench-adapter="RTX 4050"` của
+người dùng chưa sinh báo cáo mới: cả bốn lần đọc `%TEMP%\keyflow-bench.json` đều trả về cùng một
+file `takenUtc 18:59:27.7725329Z` của lượt `--bench-ar` duy nhất. PowerShell không chờ một exe
+GUI-subsystem kết thúc, nên `Get-Content` chạy trước khi lượt đo kịp ghi file. Lượt đo lại phải
+chờ tiến trình thoát (`Start-Process -Wait`) rồi mới đọc JSON. Kết luận fail của default ở §11.4
+vẫn là của riêng iGPU; chưa có phát ngôn nào về default/heavy trên RTX 4050.
