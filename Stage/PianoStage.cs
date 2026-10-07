@@ -146,7 +146,9 @@ internal sealed partial class PianoStage : FrameworkElement
         KeyboardLayout.Use(settings.KeyboardLayoutChoice);
         var requestedPath = settings.BackgroundImagePath?.Trim() ?? "";
         var backgroundChanged = !string.Equals(_loadedBackgroundPath, requestedPath, StringComparison.OrdinalIgnoreCase);
-        _visual = settings;
+        // The stage always draws the accessibility-adjusted copy: with every toggle off it is a faithful
+        // clone, and the dock keeps working on the user's original object.
+        _visual = settings.WithAccessibilityTogglesApplied();
         if (backgroundChanged || reloadBackground)
         {
             _loadedBackgroundPath = requestedPath;

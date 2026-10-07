@@ -129,6 +129,8 @@ public partial class MainWindow
         [nameof(PianoVisualSettings.ShellTheme)] = "theme shell colour palette skin",
         [nameof(PianoVisualSettings.ChromeMotion)] = "animation transitions easing",
         [nameof(PianoVisualSettings.BackdropDensity)] = "motes dust density backdrop",
+        [nameof(PianoVisualSettings.ReducedMotion)] = "vestibular animation motion still calm freeze",
+        [nameof(PianoVisualSettings.ReduceFlashes)] = "strobe flash epilepsy photosensitive blink",
     };
 
     // =====================================================================================================
@@ -848,6 +850,11 @@ public partial class MainWindow
         _gpuStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
         Register(graphics, _gpuStatusLabel, null, "gpu direct3d graphics engine renderer status adapter");
         RefreshGpuStatus();
+
+        var access = Card(GeneralSettingsHost, "ACCESSIBILITY", "Comfort switches for the whole stage. While one is on it overrides the matching effect settings everywhere — every preset, every page — and it is saved with your profile.");
+        Toggle(access, "Reduced motion", nameof(PianoVisualSettings.ReducedMotion), "Freeze the stage's own animation: the background stops drifting and the halo, falling and breathing pulses go still. The notes themselves keep falling exactly as before.");
+        Toggle(access, "Reduce flashes", nameof(PianoVisualSettings.ReduceFlashes), "Silence the bright impact flash when notes land. The impact wave, the sparks and everything else about the hit stay.");
+        Note(access, "High contrast is planned as shape cues on the notes themselves; its switch appears once it actually changes the picture.");
 
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));
