@@ -1,7 +1,7 @@
 # PianoPath — Visual Effects Master Roadmap
 
-> **Mục đích:** lộ trình tái thiết kế art direction, chức năng và đường render của toàn bộ hiệu ứng PianoPath; chuẩn bị để cùng một effect chạy trên sân khấu GPU, bản ghi và AR overlay đàn thật.  
-> **Ngày lập:** 2026-10-06  
+> **Mục đích:** lộ trình tái thiết kế art direction, chức năng và đường render của toàn bộ hiệu ứng PianoPath; chuẩn bị để cùng một effect chạy trên sân khấu GPU, bản ghi và AR overlay đàn thật.<br>
+> **Ngày lập:** 2026-10-06<br>
 > **Trạng thái (2026-10-07):** Phase 0 đã đạt trên WARP/synthetic inputs; art direction Concert / Neon / Learning và 17 preset recipes đã được cập nhật, tương thích preset được giữ nguyên. **Phase 1 fixed-scene visual gate cho ba profile tham chiếu đã được người dùng duyệt** sau khi xem gallery 48 ảnh (run [37576179305](https://github.com/lxmtuu/PianoPath/actions/runs/37576179305)): ba profile × bốn checkpoint × WPF/GPU-WARP × 100%/50%; ảnh 50% là trung bình 2×2 từ capture 100%. Các checkpoint đang chơi/chord/pedal được chấp nhận; cả ba rest đều có WPF note Δ 0 px ở 100% và 50%. Bản tinh chỉnh beam cuối (`ba154e3`) sau đó cũng pass build, `--verify`, tests và tạo gallery mới trong run [37580688870](https://github.com/lxmtuu/PianoPath/actions/runs/37580688870). **Sign-off này là chấp thuận thị giác của người dùng, không tuyên bố pixel-perfect WPF/GPU parity hay chứng nhận GPU phần cứng/FPS/AR.** Mở rộng review toàn bộ 17 preset, chroma/accessibility và hardware gates vẫn là follow-up.
 > **Tài liệu nền:** [`EFFECTS-REDESIGN.md`](EFFECTS-REDESIGN.md), [`AR-OVERLAY-ROADMAP.md`](AR-OVERLAY-ROADMAP.md), [`SETTINGS-WIRING-AUDIT.md`](SETTINGS-WIRING-AUDIT.md), [`UI-SHADER-REVIEW.md`](UI-SHADER-REVIEW.md).
 

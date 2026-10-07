@@ -132,7 +132,7 @@ COMMUNITY_BASE: dict[str, object] = {
     "HaloColor": "#F3C56E", "HaloIntensity": 38, "HaloPulse": False, "HaloPulseIntensity": 0, "HaloPulseStyle": "Pulse", "HaloPulseSpeed": 18,
     "NoteLandingGlow": False, "NoteLandingGlowAmount": 0,
     "FallingTrail": "None", "FallingTrailIntensity": 0, "FallingTrailLength": 30, "FallingPulse": False, "FallingGhost": False,
-    "NoteShimmer": False, "NoteShimmerAmount": 0, "ShootingStars": False,
+    "NoteShimmer": False, "NoteShimmerAmount": 0,
     "ParticleAmount": 0, "ParticleVelocity": 100, "ParticleSpeed": 100, "ParticleResponse": 42, "ParticleSpread": 38, "ParticleLife": 0.6,
     "ParticleLifeRandomness": 25, "ParticleSize": 1.1, "ParticleGlow": 0, "ParticleRandomness": 28, "Gravity": 220, "Drag": 34,
     "WispAmount": 0, "FlameIntensity": 0, "FlameHeight": 30,

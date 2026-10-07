@@ -28,6 +28,7 @@ internal sealed class GpuRenderLoop : IDisposable
     private const int StagingRing = 3;
 
     private readonly GpuStageFeed _feed;
+    private readonly GpuNotePassSampleBuffer? _notePassSamples;
     private readonly Thread _thread;
     private readonly ManualResetEventSlim _started = new();
     private volatile bool _running = true;
@@ -52,9 +53,10 @@ internal sealed class GpuRenderLoop : IDisposable
     /// </summary>
     internal static bool ForceWarpForSession { get; set; }
 
-    internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false)
+    internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false, GpuNotePassSampleBuffer? notePassSamples = null)
     {
         _feed = feed;
+        _notePassSamples = notePassSamples;
         ForceWarp = forceWarp || ForceWarpForSession;
         _thread = new Thread(Run) { IsBackground = true, Name = "Keyflow GPU stage", Priority = ThreadPriority.AboveNormal };
         _thread.Start();
@@ -235,6 +237,11 @@ internal sealed class GpuRenderLoop : IDisposable
         {
             renderer = GpuStageRenderer.Create(ForceWarp);
             AdapterName = renderer.AdapterName; IsWarp = renderer.IsWarp; ShaderCompileMilliseconds = renderer.ShaderCompileMilliseconds;
+            if (_notePassSamples is not null)
+            {
+                try { renderer.EnableNotePassProfiling(_notePassSamples); }
+                catch (Exception profileError) { _notePassSamples.SetInitializationError(profileError.Message); }
+            }
             try { using var dxgi = renderer.Device.QueryInterface<IDXGIDevice1>(); dxgi.MaximumFrameLatency = 1; } catch { }
             IsReady = true;
         }

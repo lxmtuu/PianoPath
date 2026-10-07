@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Windows.Media;
 
 namespace PianoPath;
@@ -148,6 +149,7 @@ internal static partial class VerificationSuite
         Assert(keyboard > sky + 20, $"The keyboard should stand out from the dark stage above it (keys {keyboard:0}, stage {sky:0}).");
         Assert(distinct.Count > 40, $"The GPU frame should be a picture, not a flat fill ({distinct.Count} distinct sampled colours).");
         VerifyGpuNoteMaterials(width, height);
+        VerifyGpuNotePassQueries(width, height);
         var motionFeed = new GpuStageFeed(); motionFeed.SetStageHeight(height);
         var motionSettings = new PianoVisualSettings
         {
@@ -335,6 +337,133 @@ internal static partial class VerificationSuite
         Assert(!gem2D.AsSpan().SequenceEqual(gemWithRefraction) && crystal2D.AsSpan().SequenceEqual(crystalWithRefraction),
             "GPU Gem should consume NoteRefraction while the Crystal Outline shader should leave that input unused.");
         Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); bright Crystal contour at half-size {crystalBrightHalf}; Gem responds to 2D/3D and NoteRefraction while Crystal Outline stays flat and does not consume NoteRefraction.");
+    }
+
+    /// <summary>Checks that D3D11 timestamp queries complete and preserve the report shape on WARP; no cost conclusion is drawn.</summary>
+    private static void VerifyGpuNotePassQueries(int width, int height)
+    {
+        const int requestedSamples = 8;
+        var defaultPlan = NoteMaterialGpuBenchmark.BuildSamplingPlan(FrameBudget.DefaultFrames);
+        var smallPlan = NoteMaterialGpuBenchmark.BuildSamplingPlan(20);
+        var materialIds = new[] { "Solid", "Gem", "CrystalOutline" };
+        Assert(defaultPlan.Count == 3 && defaultPlan.All(round => round.Order.Count == 3 && round.Order.Distinct().Count() == 3)
+            && materialIds.All(id => defaultPlan.Count(round => round.Order[0] == id) == 1
+                && defaultPlan.Count(round => round.Order[1] == id) == 1
+                && defaultPlan.Count(round => round.Order[2] == id) == 1)
+            && defaultPlan.All(round => round.SamplesPerMaterial == 40)
+            && smallPlan.Select(round => round.SamplesPerMaterial).SequenceEqual(new[] { 7, 7, 6 })
+            && smallPlan.Sum(round => round.SamplesPerMaterial) == 20,
+            "Material samples should be split evenly across three cyclic orders so each style occupies every run position once.");
+        using (var planJson = JsonDocument.Parse(new NoteMaterialGpuRun { SamplingPlan = defaultPlan }.ToJson()))
+        {
+            var serializedRounds = planJson.RootElement.GetProperty("samplingProtocol").GetProperty("rounds");
+            Assert(serializedRounds.GetArrayLength() == 3
+                && serializedRounds[0].GetProperty("order")[0].GetString() == "Solid"
+                && serializedRounds[1].GetProperty("order")[0].GetString() == "Gem"
+                && serializedRounds[2].GetProperty("order")[0].GetString() == "CrystalOutline",
+                "The JSON report should preserve all three counterbalanced orders, not just the aggregate samples.");
+        }
+        Results.Add("PASS note-material sampling plan: three cyclic orders balance first/second/third position; JSON preserves the orders; 120 samples split 40 per round and 20 split 7/7/6.");
+
+        var settings = new PianoVisualSettings
+        {
+            ShowNotes = true, NoteStyle = "Gem", NoteWidth = 100, NoteFallSpeed = 550, Notes3D = false,
+            NoteGlow = 0, NoteHeadGlow = 0, NoteRefraction = 100, NoteEdge = 88, NoteEdgeWidth = 48, NoteTint = 78, NoteRoundness = 30,
+            FallingPulse = false, FallingTrail = "None", FallingGhost = false, NoteShimmer = false, NoteLandingGlow = false,
+            HoldBar = false, HoldBreath = false, HoldVibration = false, HoldColorCycle = false, HoldElectricArc = false,
+            ShowEmbers = false, ShowWisps = false, ShowFlame = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowKeys = false, ShowHalo = false, ShowBackground = false, ShowStars = false, ShowLightBeams = false, ShowPetals = false,
+            AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None", BloomIntensity = 0
+        };
+        var feed = new GpuStageFeed { LabelAtlas = PianoStage.GpuGlyphAtlas };
+        feed.SetStageHeight(height);
+        feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(64, 176, 250), .205));
+        feed.ClearTransient();
+        feed.SetDeterministicState([new NoteEvent { Pitch = 60, Start = .6, Duration = 2.0, Track = 0 }], 1.5, true, new HashSet<int>());
+        feed.SetDeterministicBeatPulse(0);
+        var sampleBuffer = new GpuNotePassSampleBuffer();
+        using var loop = new GpuRenderLoop(feed, forceWarp: true, notePassSamples: sampleBuffer);
+        Assert(loop.WaitUntilStarted(TimeSpan.FromSeconds(60)), "WARP should start for the note-pass timestamp-query correctness check.");
+        Assert(loop.Error is null && loop.IsWarp && sampleBuffer.InitializationError is null,
+            $"WARP should initialize the timestamp-query ring ({loop.Error ?? sampleBuffer.InitializationError}, warp={loop.IsWarp}).");
+        loop.SetEmbedded(true, width, height);
+        loop.TargetFps = 0;
+
+        var warmupStart = loop.FramesRendered;
+        var warmupClock = Stopwatch.StartNew();
+        while ((loop.FramesRendered - warmupStart < FrameBudget.DefaultWarmupFrames || warmupClock.Elapsed.TotalSeconds < FrameBudget.WarmupSeconds)
+            && loop.Error is null && warmupClock.Elapsed.TotalSeconds < FrameBudget.SceneTimeoutSeconds)
+            Thread.Sleep(4);
+        var warmupFrames = (int)Math.Clamp(loop.FramesRendered - warmupStart, 0, int.MaxValue);
+        Assert(loop.Error is null && warmupFrames >= FrameBudget.DefaultWarmupFrames && warmupClock.Elapsed.TotalSeconds >= FrameBudget.WarmupSeconds,
+            $"WARP should warm the static fixture before querying it ({warmupFrames} frames, {warmupClock.Elapsed.TotalSeconds:0.00} s, {loop.Error}).");
+
+        var run = sampleBuffer.Start(requestedSamples);
+        var sampleStart = loop.FramesRendered;
+        var queryClock = Stopwatch.StartNew();
+        while (!run.IsComplete && loop.Error is null && queryClock.Elapsed.TotalSeconds < FrameBudget.SceneTimeoutSeconds)
+            Thread.Sleep(4);
+        var samples = run.SnapshotSamples();
+        var renderedFrames = (int)Math.Clamp(loop.FramesRendered - sampleStart, 0, int.MaxValue);
+        loop.SetEmbedded(false, 0, 0);
+        var fixtureValid = samples.Length > 0 && samples.All(sample => sample.DrawInstances == 1) && loop.ParticleCount == 0;
+        Assert(loop.Error is null && run.IsComplete && run.Issued == requestedSamples && run.QueryErrors == 0
+            && fixtureValid && samples.All(sample => double.IsFinite(sample.Milliseconds) && sample.Milliseconds >= 0 && sample.FrequencyHz > 0),
+            $"WARP should drain non-blocking note-pass queries for one draw instance (complete={run.IsComplete}, issued={run.Issued}, valid={samples.Length}, disjoint={run.DisjointCount}, busy={run.BusyFrames}, queryErrors={run.QueryErrors}, error={loop.Error}).");
+
+        var stats = FrameStats.From(samples.Select(sample => sample.Milliseconds).ToArray());
+        var smokeStatus = run.DisjointCount > 0 ? "complete-with-disjoint-exclusions" : "complete";
+        var measurement = new NoteMaterialMeasurement("Gem", "2D", requestedSamples, run.Issued, run.DisjointCount, run.BusyFrames, run.QueryErrors,
+            renderedFrames, warmupFrames, warmupClock.Elapsed.TotalMilliseconds, samples, stats, fixtureValid, run.IsComplete, smokeStatus, "")
+        {
+            Batches =
+            [
+                new NoteMaterialBatchSummary(1, 0, requestedSamples, run.Issued, samples.Length, run.DisjointCount,
+                    run.BusyFrames, run.QueryErrors, run.IsComplete && run.QueryErrors == 0, smokeStatus, "")
+            ]
+        };
+        var smokePlan = new[] { new NoteMaterialSamplingRound(1, requestedSamples, new[] { "Gem" }) };
+        var report = new NoteMaterialGpuRun
+        {
+            TakenUtc = DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+            AppVersion = AppInfo.Version,
+            Adapter = loop.AdapterName,
+            Backend = "Direct3D 11 / WARP",
+            Warp = true,
+            SoftwareAdapter = true,
+            ShaderCompileMs = loop.ShaderCompileMilliseconds,
+            Width = width,
+            Height = height,
+            RequestedSamples = requestedSamples,
+            SamplingPlan = smokePlan,
+            Fixture = "WARP correctness/schema smoke: one static MIDI 60 note, 2D, all unrelated visual layers off.",
+            MeasurementScope = "D3D11 timestamp + timestamp-disjoint queries around only the note DrawInstanced call.",
+            Interpretation = "Diagnostic-only WARP result; not hardware performance evidence and not an EffectCostAssessment update.",
+            Materials = [measurement]
+        };
+        using var json = JsonDocument.Parse(report.ToJson());
+        var root = json.RootElement;
+        var materialReport = root.GetProperty("materials")[0];
+        Assert(root.GetProperty("measurement").GetString() == "d3d11-note-pass-timestamp"
+            && root.GetProperty("backend").GetString() == "Direct3D 11 / WARP"
+            && root.GetProperty("adapter").GetString() == loop.AdapterName
+            && root.GetProperty("warp").GetBoolean() && root.GetProperty("softwareAdapter").GetBoolean()
+            && root.GetProperty("width").GetInt32() == width && root.GetProperty("height").GetInt32() == height
+            && root.GetProperty("warmupProtocol").GetProperty("minimumFrames").GetInt32() == FrameBudget.DefaultWarmupFrames
+            && root.GetProperty("warmupProtocol").GetProperty("minimumMilliseconds").GetInt32() == (int)(FrameBudget.WarmupSeconds * 1000)
+            && root.GetProperty("samplingProtocol").GetProperty("strategy").GetString() == "verification-smoke"
+            && root.GetProperty("samplingProtocol").GetProperty("rounds").GetArrayLength() == 1
+            && root.GetProperty("samplingProtocol").GetProperty("rounds")[0].GetProperty("order")[0].GetString() == "Gem"
+            && materialReport.GetProperty("batches").GetArrayLength() == 1
+            && materialReport.GetProperty("batches")[0].GetProperty("sampleOffset").GetInt32() == 0
+            && materialReport.GetProperty("batches")[0].GetProperty("validSamples").GetInt32() == samples.Length
+            && materialReport.GetProperty("validSamples").GetInt32() == samples.Length
+            && materialReport.GetProperty("samplesGpuMs").GetArrayLength() == samples.Length
+            && materialReport.GetProperty("sampleClock").GetArrayLength() == samples.Length
+            && materialReport.GetProperty("drawInstancesMin").GetInt32() == 1
+            && materialReport.GetProperty("drawInstancesMax").GetInt32() == 1,
+            "The material-query JSON schema should retain backend, size, sample count, raw samples, timestamp clocks and the single-instance fixture.");
+        Results.Add($"PASS note-pass timestamp/WARP correctness: {samples.Length}/{requestedSamples} valid async D3D11 query samples around one note draw; report schema keeps size, backend, samples and timestamp frequency. Diagnostic only; no GPU cost conclusion.");
     }
 
     /// <summary>

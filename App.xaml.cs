@@ -18,6 +18,15 @@ public partial class App : Application
 
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
+        // --bench-note-materials=<samples> is a separate diagnostic: one static note, and D3D11 timestamp
+        // queries around only the note DrawInstanced call. It does not use full-frame p95 as material cost.
+        if (e.Args.Any(argument => argument.StartsWith("--bench-note-materials=", StringComparison.Ordinal)))
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            Shutdown(NoteMaterialGpuBenchmark.Run(e.Args));
+            return;
+        }
+
         // --bench[=<frames>] is the perf gate: run the GPU stage for a number of frames and write how long each
         // one took, so a frame budget is judged by a measurement instead of by feel. It opens no window — the
         // render loop, the simulation and the read-back are the whole of what is being measured.

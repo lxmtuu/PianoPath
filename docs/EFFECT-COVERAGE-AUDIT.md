@@ -1,6 +1,6 @@
 # Audit độ phủ hiệu ứng — Phase 0
 
-> **Phạm vi:** đối chiếu inventory với settings, UI, software/WPF, GPU, kiểm thử và AR.  
+> **Phạm vi:** đối chiếu inventory với settings, UI, software/WPF, GPU, kiểm thử và AR.<br>
 > **Ngày:** 2026-10-06 · **Trạng thái:** Phase 0 gate đạt trên Windows CI run [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020), commit `68bcc466`; chỉ xác nhận WARP/synthetic inputs, không xác nhận phần cứng GPU/camera.
 > **Lộ trình tổng:** [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md) · **Inventory thiết kế cũ:** [`EFFECTS-REDESIGN.md`](EFFECTS-REDESIGN.md).
 

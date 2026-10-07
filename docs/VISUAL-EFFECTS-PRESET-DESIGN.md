@@ -1,7 +1,7 @@
 # PianoPath — art direction cho preset đã ship
 
-> **Ngày:** 2026-10-06  
-> **Phạm vi:** 14 preset built-in và 3 preset community trong `presets/`; không sửa preset cá nhân.  
+> **Ngày:** 2026-10-06<br>
+> **Phạm vi:** 14 preset built-in và 3 preset community trong `presets/`; không sửa preset cá nhân.<br>
 > **Tình trạng (2026-10-06):** recipe, mô tả và default wiring cho đủ 17 preset đã được cập nhật; không sửa preset cá nhân. CI [37480841688](https://github.com/lxmtuu/PianoPath/actions/runs/37480841688) pass static, portable tests, Windows build, `--verify` (2.169 assertions, 0 skipped) và render gallery preset WPF/software + GPU/WARP; ảnh ở commit `3b2acf8`. Lát vật liệu Gem/Crystal Outline được xác minh riêng bởi CI [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612): 2.188 assertions, 0 skipped, hai renderer và gallery 9 cấu hình ở 50% (`note-styles.jpg`, commit `3a3bd93`). Preset recipe/default/schema không đổi vì lát này; review từng look theo fixed scene/100%/50% và hardware vẫn chưa hoàn tất.
 
 ## 1. Quyết định thiết kế

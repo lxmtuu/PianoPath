@@ -122,6 +122,7 @@ internal sealed class GpuStageRenderer : IDisposable
     // SV_InstanceID restarts at 0 for every draw, so one buffer cannot serve two sprite batches
     private readonly DynamicStructuredBuffer<GpuSpriteInstance> _ambient;
     private readonly GpuInstanceList<GpuSpriteInstance> _ambientList = new(2048);
+    private GpuNotePassQueryProfiler? _notePassProfiler;
     private ID3D11Texture2D? _atlasTexture;
     private ID3D11ShaderResourceView? _atlasView;
     private long _atlasVersion = -1;
@@ -164,6 +165,13 @@ internal sealed class GpuStageRenderer : IDisposable
         }
         D3D11.D3D11CreateDevice((IDXGIAdapter?)null, DriverType.Warp, flags, FeatureLevels, out ID3D11Device warpDevice, out FeatureLevel warpLevel, out ID3D11DeviceContext warpContext).CheckError();
         return new GpuStageRenderer(warpDevice, warpContext, warpLevel, true);
+    }
+
+    /// <summary>Enables optional D3D11 timestamp-query instrumentation for a diagnostic run only.</summary>
+    internal void EnableNotePassProfiling(GpuNotePassSampleBuffer samples)
+    {
+        if (_notePassProfiler is not null) throw new InvalidOperationException("Note-pass timestamp profiling is already enabled.");
+        _notePassProfiler = new GpuNotePassQueryProfiler(Device, Context, samples);
     }
 
     internal static string ShaderSource()
@@ -287,6 +295,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal void Render(GpuRenderTarget target, ID3D11RenderTargetView output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
         GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites)
     {
+        _notePassProfiler?.CollectReady();
         var look = input.Look;
         simulation.BuildNotes(input, layout, notes);
         simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
@@ -352,7 +361,9 @@ internal sealed class GpuStageRenderer : IDisposable
             context.VSSetShader(_vsNote);
             context.PSSetShader(_psNote);
             context.VSSetShaderResource(2, _notes.View);
+            var notePassQuery = _notePassProfiler?.BeginDraw(notes.Count) ?? -1;
             context.DrawInstanced(6, (uint)notes.Count, 0, 0);
+            _notePassProfiler?.EndDraw(notePassQuery);
         }
         if (keys.Count > 0)
         {
@@ -518,6 +529,8 @@ internal sealed class GpuStageRenderer : IDisposable
         _atlasView?.Dispose(); _atlasTexture?.Dispose();
         _backgroundView?.Dispose(); _backgroundTexture?.Dispose();
         _camera?.Dispose();
+        _notePassProfiler?.Dispose();
+        _notePassProfiler = null;
         foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
             _blendPremultiplied, _blendAdditive, _blendOpaque, _depthOff, _depthWrite, _depthRead, _raster, _linear, _point, _frameBuffer, _passBuffer })
             disposable?.Dispose();
