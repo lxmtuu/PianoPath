@@ -509,3 +509,24 @@ Ghi đủ model GPU/CPU/camera/MIDI, driver/Windows build, độ phân giải m�
 2. Mỗi nhóm phần cứng: lưu artifact/metadata và kết quả; đo lại sau thay đổi renderer/compositor/camera.
 3. Nếu chỉ một nhóm fail, điều chỉnh capability/quality fallback của nhóm đó trước; không hạ chất lượng mọi GPU để né lỗi.
 4. Không đánh dấu Phase 8/9/10 xong khi camera thật, record dài hoặc GPU thật chưa chạy. Ghi “chưa xác nhận” cạnh đúng mục còn thiếu.
+
+### 11.4 Kết quả đo đầu tiên — iGPU AMD (2026-10-07)
+
+Máy người dùng, `--bench` / `--bench --bench-ar` trên bản Release của `bad6dde` (code bench không đổi
+tới `30b1296`), adapter reported `AMD Radeon(TM) Graphics`, `warp: false`, Direct3D 11, 1920×1080,
+app 1.0.0, shader compile 551–658 ms. **Chưa ghi nhận:** model CPU, driver GPU, Windows build và
+power scheme — sẽ bổ sung khi người dùng cung cấp; các kết luận dưới đây vẫn giữ nhãn này.
+
+| Scene | Budget p95 | ba lượt đo (ms) | Kết luận |
+|---|---:|---|---|
+| default (Concert Gold) | 8 | 9.59 / 11.20 / 11.43 | **Chưa đạt** — fail 3/3 lượt, vượt 20–43% |
+| heavy (Galaxy Voyage) | 16 | 13.13 / 9.01 / 8.26 | Đạt — nhưng phương sai lớn (nhiệt/power) |
+| ar (camera tổng hợp 720p60) | 16 | 8.84 | Đạt — camera age mean 1.77 ms, worst 15.74 ms (dưới 1 khung 60 fps ≈ 16.7 ms nhưng sát biên) |
+
+Đọc phân phối: mọi scene có chu kỳ 3 khung (2 khung GPU-bound + 1 khung ~1.5 ms do readback-ring
+trùng gối trong loop bench, xem `GpuRenderLoop`), nên p95 luôn thuộc cụm khung work; p95 của cụm
+work ở default ≈ 11.6 ms. Giả thuyết chi phí có bằng chứng: Concert Gold mặc định
+`BloomIntensity 80 / BloomSize 70` đẩy chuỗi bloom (6 cấp FP16, cấp 0 full-res) mạnh hơn Galaxy
+Voyage (44/52) — default ít hạt hơn nhưng đuôi p95 cao hơn. Lát tối ưu thuộc Phase 5
+(compositor/Adaptive Quality) vì đụng bloom là đụng pixel và kéo theo render lại gallery
+fixed-scene để người dùng duyệt lại; không xen ngang các phase hiện tại.
