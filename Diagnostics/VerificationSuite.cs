@@ -4379,6 +4379,22 @@ internal static partial class VerificationSuite
                         }
                 return half;
             }
+            byte MaxCrystalCoreAlpha(byte[] pixels, int imageWidth, int imageHeight, Rect bounds)
+            {
+                var y0 = Math.Clamp((int)Math.Floor(bounds.Top + bounds.Height * .4), 0, imageHeight);
+                var y1 = Math.Clamp((int)Math.Ceiling(bounds.Top + bounds.Height * .6), 0, imageHeight);
+                var ranges = new[]
+                {
+                    (Start: (int)Math.Floor(bounds.Left + bounds.Width * .34), End: (int)Math.Ceiling(bounds.Left + bounds.Width * .44)),
+                    (Start: (int)Math.Floor(bounds.Left + bounds.Width * .56), End: (int)Math.Ceiling(bounds.Left + bounds.Width * .66))
+                };
+                byte max = 0;
+                foreach (var (start, end) in ranges)
+                for (var y = y0; y < y1; y++)
+                for (var x = Math.Clamp(start, 0, imageWidth); x < Math.Clamp(end, 0, imageWidth); x++)
+                    max = Math.Max(max, pixels[(y * imageWidth + x) * 4 + 3]);
+                return max;
+            }
             int BrightOutlinePixels(byte[] pixels)
             {
                 var count = 0;
@@ -4393,19 +4409,23 @@ internal static partial class VerificationSuite
             var crystal2D = Capture("CrystalOutline", false);
             var crystal3D = Capture("CrystalOutline", true);
             var gemSmall = Visible(Capture("Gem", true, halfSize: true), width, height);
-            var crystalSmall = Visible(Capture("CrystalOutline", false, halfSize: true), width, height);
+            var crystalSmallPixels = Capture("CrystalOutline", false, halfSize: true);
+            var crystalSmall = Visible(crystalSmallPixels, width, height);
             var crystalAverageHalf = Average2x2(crystal2D);
             var crystalHalf = Visible(crystalAverageHalf, width / 2, height / 2);
             var crystalHalfBright = BrightOutlinePixels(crystalAverageHalf);
+            var crystalCoreAlpha = MaxCrystalCoreAlpha(crystal2D, width, height, new Rect(42, 32, 44, 152));
+            var crystalHalfCoreAlpha = MaxCrystalCoreAlpha(crystalAverageHalf, width / 2, height / 2, new Rect(21, 16, 22, 76));
             Assert(!gem2D.SequenceEqual(solid) && !crystal2D.SequenceEqual(solid) && !gem2D.SequenceEqual(crystal2D),
                 "Gem and Crystal Outline must paint distinct geometry rather than falling through to Solid on the WPF path.");
             Assert(!gem2D.SequenceEqual(gem3D) && crystal2D.SequenceEqual(crystal3D),
                 "The 3D toggle must deepen Gem while Crystal Outline remains the deliberately flat material.");
             Assert(gemSmall.Count > 300 && gemSmall.MaxX - gemSmall.MinX >= 18 && gemSmall.MaxY - gemSmall.MinY >= 68
                     && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68
-                    && crystalHalf.Count > 40 && crystalHalfBright > 30,
-                $"Both new note silhouettes must remain legible at 50% size (Gem: {gemSmall.Count} pixels, Crystal Outline small/full-filtered: {crystalSmall.Count}/{crystalHalf.Count}, bright filtered edge {crystalHalfBright}).");
-            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct pixel output; Gem 2D/3D differ; Crystal Outline stays flat and its bright contour survives an average 2×2 downsample.");
+                    && crystalHalf.Count > 40 && crystalHalfBright > 40
+                    && crystalCoreAlpha <= 60 && crystalHalfCoreAlpha <= 60,
+                $"Gem and Crystal Outline must remain legible at 50% while Crystal keeps a transparent core (Gem {gemSmall.Count} px; Crystal {crystalSmall.Count}/{crystalHalf.Count} px; bright 2×2 rim {crystalHalfBright}; core alpha full/half {crystalCoreAlpha}/{crystalHalfCoreAlpha}).");
+            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct output; Gem responds to 3D while Crystal stays flat, its rim survives a 2×2 downsample, and its center stays transparent.");
         }
         finally
         {
@@ -4649,6 +4669,10 @@ internal static partial class VerificationSuite
         }
         Assert(litPixels > 1000 && spotlightPeakAlpha > 80,
             $"Concert Gold Spotlights should rasterize visible, warm WPF light at its shipped intensity (pixels={litPixels}, peak alpha={spotlightPeakAlpha}).");
+        var spotlightCoreEnergy = PianoStage.SpotlightEnergyScaleAtOffset(1280, 0);
+        var spotlightShoulderEnergy = PianoStage.SpotlightEnergyScaleAtOffset(1280, 1);
+        Assert(spotlightCoreEnergy > .90 && spotlightShoulderEnergy < .11,
+            $"WPF spotlights should preserve their central energy while keeping the broad penumbra restrained (core {spotlightCoreEnergy:0.000}, one-sigma shoulder {spotlightShoulderEnergy:0.000}).");
 
         visualSettings.ShowLightBeams = true;
         visualSettings.BeamIntensity = 45;
@@ -4719,7 +4743,7 @@ internal static partial class VerificationSuite
         visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
-        Results.Add("PASS WPF lighting: Spotlights, six background motions, sounding-key beams with bloom, and ripple geometry render; chroma-key remains clean.");
+        Results.Add("PASS WPF lighting: spotlight cores stay bright while broad penumbrae are restrained; six background motions, key-beam bloom, ripple geometry, and clean chroma-key remain intact.");
     }
 
     /// <summary>

@@ -1365,11 +1365,11 @@ internal sealed partial class PianoStage : FrameworkElement
                 var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
                 if (edgeFactor > 0)
                 {
-                    // Keep the hollow center transparent while giving its contour enough screen-space width
-                    // to survive the review's 2×2 box downsample (a 1.4 px rim became a subpixel hairline).
-                    var rimColor = Blend(color, Colors.White, .9);
+                    // Keep the low-alpha core transparent, but give the pale contour enough physical width
+                    // to survive the 2×2 review downsample and the WPF viewport's softer pen rasterization.
+                    var rimColor = Blend(color, Colors.White, .96);
                     var rimAlpha = Alpha(255 * opacity * Math.Min(1, edgeFactor * 1.2));
-                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(rimAlpha, rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * 1.8, 2.0, 3.6)));
+                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(rimAlpha, rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * 2.0, 3.0, 4.2)));
                 }
                 var facet = Blend(color, Colors.White, .72);
                 DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(205 * opacity), facet.R, facet.G, facet.B), 1.2, roundCaps: true));
@@ -1646,14 +1646,17 @@ internal sealed partial class PianoStage : FrameworkElement
             Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.B) + (ToLinearChannel(b.B) - ToLinearChannel(a.B)) * t) * 255)));
     }
 
-    private static double SpotlightEnergyScaleAtOffset(double width, double radius)
+    internal static double SpotlightEnergyScaleAtOffset(double width, double radius)
     {
         var distance = width * .096 * radius;
         var inner = width * .028;
         var middle = width * .062;
         var outer = width * .096;
         static double Falloff(double offset, double halfWidth) => Math.Exp(-.7 * Math.Pow(offset / Math.Max(1, halfWidth), 2));
-        return .48 * Falloff(distance, inner) + .2875 * Falloff(distance, middle) + .14 * Falloff(distance, outer);
+        // Keep the summed centre energy at .9075, but move a little weight from the broadest Gaussian
+        // into the narrow core. WPF's source-over raster left a gray veil around the GPU's additive shafts;
+        // the beam core stays stable while the far penumbra better matches the blacker WARP backdrop.
+        return .52 * Falloff(distance, inner) + .2875 * Falloff(distance, middle) + .10 * Falloff(distance, outer);
     }
 
     /// <summary>Maps additive linear GPU emission through the same filmic transfer into WPF source-over opacity.</summary>
