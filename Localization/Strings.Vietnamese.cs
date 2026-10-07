@@ -1067,7 +1067,7 @@ internal static class StringsVietnamese
         ["Showing {0} of {1} matching songs"] = "Đang hiện {0} trong {1} bài khớp",
         ["Sideways waving of the stream."] = "Độ lượn ngang của dòng khói.",
         ["Sideways wind that varies with height."] = "Gió ngang thay đổi theo độ cao.",
-        ["Silence the bright impact flash when notes land. The impact wave, the sparks and everything else about the hit stay."] = "Tắt chớp sáng mạnh khi nốt chạm phím. Sóng va chạm, tia lửa và mọi thứ khác của cú chạm vẫn giữ nguyên.",
+        ["Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay."] = "Tắt chớp sáng mạnh khi nốt chạm phím và nén chùm tia lửa nhấp nháy trong khi chờ phân tích strobe. Sóng va chạm và mọi thứ khác của cú chạm vẫn giữ nguyên.",
         ["Silhouette of the falling bars."] = "Hình dáng của các thanh nốt rơi.",
         ["Silver-blue glass bars, a sparse starfield and soft moonlit keyboard lighting."] = "Nốt thủy tinh xanh bạc, nền sao thưa và ánh phím dịu như trăng.",
         ["Size"] = "Kích thước",

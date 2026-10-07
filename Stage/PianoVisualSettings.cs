@@ -518,6 +518,27 @@ internal sealed class PianoVisualSettings
                 }
             }
         }
+        // Contract-driven flash safety: a family whose declared flash risk resolves to suppression under
+        // Reduce Flashes loses its visibility channel, so safety follows the catalog instead of a hand-
+        // maintained channel list. The impact flash mirrors the reviewed channel policy above; the spark
+        // burst is Unverified and therefore suppressed until its strobe analysis exists.
+        if (ReduceFlashes)
+        {
+            foreach (var family in EffectContractCatalog.ImpactFxPilot)
+            {
+                if (AccessibilityContractResolver.Resolve(family.Accessibility, false, true, false).Flash != FlashSuppression.Suppress) continue;
+                switch (family.Id)
+                {
+                    case "impact.flash":
+                        result.ShowImpactFlash = false;
+                        result.ImpactFlashIntensity = 0;
+                        break;
+                    case "impact.burst":
+                        result.ShowEmbers = false;
+                        break;
+                }
+            }
+        }
         return result;
     }
 

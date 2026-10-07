@@ -1067,7 +1067,7 @@ internal static class StringsEnglish
         ["Showing {0} of {1} matching songs"] = "Showing {0} of {1} matching songs",
         ["Sideways waving of the stream."] = "Sideways waving of the stream.",
         ["Sideways wind that varies with height."] = "Sideways wind that varies with height.",
-        ["Silence the bright impact flash when notes land. The impact wave, the sparks and everything else about the hit stay."] = "Silence the bright impact flash when notes land. The impact wave, the sparks and everything else about the hit stay.",
+        ["Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay."] = "Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay.",
         ["Silhouette of the falling bars."] = "Silhouette of the falling bars.",
         ["Silver-blue glass bars, a sparse starfield and soft moonlit keyboard lighting."] = "Silver-blue glass bars, a sparse starfield and soft moonlit keyboard lighting.",
         ["Size"] = "Size",
