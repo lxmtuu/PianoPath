@@ -296,6 +296,7 @@ internal static partial class VerificationSuite
         VerifyImpactFxPilot();
         VerifyFallingPilot();
         VerifyHoldPilot();
+        VerifyAmbientPilot();
         VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
@@ -571,6 +572,61 @@ internal static partial class VerificationSuite
         Assert(AccessibilityContractResolver.Resolve(byId["hold.breath"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "Reduce Flashes must leave the flash-less breathing glow alone.");
         Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
+    /// Cross-checks the ambient/atmosphere pilot: every member owns its clock and freezes under Reduced
+    /// Motion; shooting stars are the second GPU-only member (the WPF stage has no meteor pass) and stay
+    /// Unsupported there; the star twinkle's un-analysed flash risk resolves conservatively while the slow
+    /// layers keep the sky untouched under Reduce Flashes; no cost is invented. Metadata coherence only.
+    /// </summary>
+    private static void VerifyAmbientPilot()
+    {
+        var pilot = EffectContractCatalog.AmbientFxPilot;
+        Assert(EffectContractCatalog.IsAmbientPilotWellFormed && pilot.Count == 8,
+            "The ambient pilot should contain the eight well-formed, uniquely identified families.");
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        foreach (var contract in pilot)
+        {
+            Assert(contract.Phase == EffectPhase.Ambient && contract.Trigger == EffectTrigger.SceneTick
+                    && contract.Lifecycle == EffectLifecycle.Continuous && contract.Anchor == EffectAnchor.Stage,
+                $"{contract.Id} should be a continuous stage-wide layer.");
+            Assert(contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
+                    && AccessibilityContractResolver.Resolve(contract.Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation,
+                $"Reduced Motion must freeze {contract.Id}: every ambient member owns its clock.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        Assert(byId["atmosphere.shooting-stars"].Capabilities.WpfStage.State == EffectBackendState.Unsupported
+                && byId["atmosphere.shooting-stars"].Capabilities.GpuStage.State == EffectBackendState.Native,
+            "Shooting stars are GPU-only: the WPF stage has no meteor pass, so no Native claim may stand there.");
+        foreach (var id in new[] { "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic", "atmosphere.stars", "atmosphere.petals", "atmosphere.beams" })
+        {
+            Assert(byId[id].Capabilities.WpfStage.State == EffectBackendState.Native
+                    && byId[id].Capabilities.GpuStage.State == EffectBackendState.Native,
+                $"{id} is drawn by both stage renderers in shipped code.");
+        }
+        Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.stars"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "The twinkling star field's un-analysed flash risk resolves conservatively to suppression.");
+        Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.beams"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange
+                && AccessibilityContractResolver.Resolve(byId["ambient.energy"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "Reduce Flashes must leave the slow, flash-less sky layers untouched.");
+        Results.Add("PASS ambient contract metadata: the four ambient layers, stars, petals and beams are native on both renderers, shooting stars stay honestly GPU-only, every member freezes under Reduced Motion, the star twinkle resolves conservatively under Reduce Flashes, and no cost is invented. Metadata coherence only; no renderer changed.");
     }
 
     /// <summary>

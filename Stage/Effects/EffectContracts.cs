@@ -604,6 +604,124 @@ internal static class EffectContractCatalog
         && HoldFxPilot.All(contract => contract.IsWellFormed)
         && HoldFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == HoldFxPilot.Count;
 
+    /// <summary>
+    /// The fifth contract pilot: the stage-wide decorative sky. The four ambient layers, the star field, the
+    /// petals and the light beams are drawn by both renderers; shooting stars are the second GPU-only member
+    /// (the WPF stage has no meteor pass), so WPF stays Unsupported there. Every member drifts or twinkles on
+    /// its own clock (IntrinsicAnimation) and freezes under Reduced Motion. The star twinkle has no strobe
+    /// analysis yet (Unverified, resolves to suppression); the slow layers carry no flash. Costs all
+    /// Unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<EffectFamilyContract> AmbientFxPilot { get; } = Array.AsReadOnly(new[]
+    {
+        new EffectFamilyContract(
+            "ambient.energy",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("AmbientEnergy"),
+                Percentage("AmbientEnergyAmount", 0, 100),
+                Percentage("AmbientEnergySpeed", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "ambient.nature",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("AmbientNature"),
+                Percentage("AmbientNatureAmount", 0, 100),
+                Percentage("AmbientNatureSpeed", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "ambient.light",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("AmbientLight"),
+                Percentage("AmbientLightAmount", 0, 100),
+                Percentage("AmbientLightSpeed", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "ambient.cosmic",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("AmbientCosmic"),
+                Percentage("AmbientCosmicAmount", 0, 100),
+                Percentage("AmbientCosmicSpeed", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "atmosphere.stars",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowStars"),
+                Percentage("StarDensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "atmosphere.shooting-stars",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShootingStars"),
+                Percentage("ShootingStarsAmount", 0, 100),
+            }),
+            new EffectCapabilityProfile(Unsupported, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "atmosphere.petals",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowPetals"),
+                Percentage("PetalAmount", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "atmosphere.beams",
+            EffectPhase.Ambient, EffectTrigger.SceneTick, EffectLifecycle.Continuous, EffectAnchor.Stage,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowLightBeams"),
+                Percentage("BeamIntensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+    });
+
+    /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
+    internal static bool IsAmbientPilotWellFormed =>
+        AmbientFxPilot.Count == 8
+        && AmbientFxPilot.All(contract => contract.IsWellFormed)
+        && AmbientFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == AmbientFxPilot.Count;
+
     /// <summary>Checks IDs, aliases, parameter schemas and capability/fallback claims before consumers opt in.</summary>
     internal static bool IsPilotWellFormed
     {

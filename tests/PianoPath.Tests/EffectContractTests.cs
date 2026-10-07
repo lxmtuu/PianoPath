@@ -226,4 +226,27 @@ public sealed class EffectContractTests
             Assert.Equal(EffectBackendState.Native, contract.Capabilities.GpuStage.State);
         });
     }
+
+    [Fact]
+    public void Ambient_pilot_freezes_every_layer_and_names_the_gpu_only_meteors()
+    {
+        Assert.True(EffectContractCatalog.IsAmbientPilotWellFormed);
+        var stars = EffectContractCatalog.AmbientFxPilot.Single(contract => contract.Id == "atmosphere.stars");
+        var meteors = EffectContractCatalog.AmbientFxPilot.Single(contract => contract.Id == "atmosphere.shooting-stars");
+        var energy = EffectContractCatalog.AmbientFxPilot.Single(contract => contract.Id == "ambient.energy");
+
+        // The whole sky animates on its own clock, so Reduced Motion freezes all of it.
+        Assert.All(EffectContractCatalog.AmbientFxPilot, contract =>
+            Assert.Equal(EffectReducedMotionBehavior.IntrinsicAnimation, contract.Accessibility.ReducedMotionBehavior));
+        Assert.All(EffectContractCatalog.AmbientFxPilot, contract =>
+            Assert.Equal(MotionSuppression.FreezeIntrinsicAnimation, AccessibilityContractResolver.Resolve(contract.Accessibility, true, false, false).Motion));
+
+        // Meteors are the second GPU-only member; the star twinkle is un-analysed flash risk.
+        Assert.Equal(EffectBackendState.Unsupported, meteors.Capabilities.WpfStage.State);
+        Assert.Equal(EffectBackendState.Native, meteors.Capabilities.GpuStage.State);
+        Assert.Equal(EffectFlashRisk.Unverified, stars.Accessibility.FlashRisk);
+        Assert.Equal(FlashSuppression.Suppress, AccessibilityContractResolver.Resolve(stars.Accessibility, false, true, false).Flash);
+        Assert.Equal(EffectFlashRisk.None, energy.Accessibility.FlashRisk);
+        Assert.Equal(FlashSuppression.NoChange, AccessibilityContractResolver.Resolve(energy.Accessibility, false, true, false).Flash);
+    }
 }
