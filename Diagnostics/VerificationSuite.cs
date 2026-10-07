@@ -295,6 +295,7 @@ internal static partial class VerificationSuite
         VerifyAccessibilityTogglePolicy();
         VerifyImpactFxPilot();
         VerifyFallingPilot();
+        VerifyHoldPilot();
         VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
@@ -511,6 +512,65 @@ internal static partial class VerificationSuite
             }
         }
         Results.Add("PASS falling-FX contract metadata: trail/ghost travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
+    /// Cross-checks the hold-FX pilot: the bar mirrors the note's remaining duration while breathing,
+    /// vibration, hue cycling and arc flicker own their clock and freeze under Reduced Motion; the arc's
+    /// un-analysed flicker resolves to suppression under Reduce Flashes; both renderers are native for all
+    /// five and no cost is invented. Metadata coherence only; no renderer changed.
+    /// </summary>
+    private static void VerifyHoldPilot()
+    {
+        var pilot = EffectContractCatalog.HoldFxPilot;
+        Assert(EffectContractCatalog.IsHoldPilotWellFormed && pilot.Count == 5,
+            "The hold-FX pilot should contain the five well-formed, uniquely identified families.");
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        foreach (var contract in pilot)
+        {
+            Assert(contract.Phase == EffectPhase.Hold && contract.Trigger == EffectTrigger.NoteHeld
+                    && contract.Lifecycle == EffectLifecycle.WhileNoteHeld,
+                $"{contract.Id} should live exactly as long as the key stays down.");
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers in shipped code; recording and AR stay Unverified.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        Assert(byId["hold.bar"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                && byId["hold.bar"].Clock == EffectClock.SongPosition,
+            "The hold bar mirrors the note's remaining duration; it owns no clock of its own.");
+        foreach (var id in new[] { "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc" })
+        {
+            Assert(byId[id].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
+                $"{id} animates on its own clock and must be classified as intrinsic animation.");
+            Assert(AccessibilityContractResolver.Resolve(byId[id].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation,
+                $"Reduced Motion must freeze {id}.");
+        }
+        Assert(AccessibilityContractResolver.Resolve(byId["hold.bar"].Accessibility, true, false, false).Motion == MotionSuppression.NoChange,
+            "Reduced Motion must leave the duration-derived hold bar alone.");
+        Assert(AccessibilityContractResolver.Resolve(byId["hold.arc"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "The flickering arc's un-analysed flash risk resolves conservatively to suppression.");
+        Assert(AccessibilityContractResolver.Resolve(byId["hold.breath"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "Reduce Flashes must leave the flash-less breathing glow alone.");
+        Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
     }
 
     /// <summary>

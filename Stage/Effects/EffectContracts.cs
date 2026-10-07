@@ -526,6 +526,84 @@ internal static class EffectContractCatalog
         && FallingFxPilot.All(contract => contract.IsWellFormed)
         && FallingFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == FallingFxPilot.Count;
 
+    /// <summary>
+    /// The fourth contract pilot: what sounding notes and held keys do while the key stays down. All five are
+    /// drawn by both renderers. Four own their clock (breathing, vibration, hue cycling, arc flicker) and are
+    /// IntrinsicAnimation; the hold bar merely mirrors the note's remaining duration, so it derives its motion
+    /// from the song and stays NoIndependentAnimation. The electric arc flickers bright and has no strobe
+    /// analysis yet: flash risk Unverified, safety resolution suppresses. The hue cycle is color-only and
+    /// declares no shape cue. Costs all Unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<EffectFamilyContract> HoldFxPilot { get; } = Array.AsReadOnly(new[]
+    {
+        new EffectFamilyContract(
+            "hold.bar",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.NoteBody,
+            EffectClock.SongPosition, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("HoldBar"),
+                Percentage("HoldBarIntensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "hold.breath",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("HoldBreath"),
+                Percentage("HoldBreathRate", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "hold.vibration",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("HoldVibration"),
+                Percentage("HoldVibrationAmount", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "hold.color-cycle",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("HoldColorCycle"),
+                Percentage("HoldColorCycleSpeed", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "hold.arc",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("HoldElectricArc"),
+                Percentage("HoldArcIntensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+    });
+
+    /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
+    internal static bool IsHoldPilotWellFormed =>
+        HoldFxPilot.Count == 5
+        && HoldFxPilot.All(contract => contract.IsWellFormed)
+        && HoldFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == HoldFxPilot.Count;
+
     /// <summary>Checks IDs, aliases, parameter schemas and capability/fallback claims before consumers opt in.</summary>
     internal static bool IsPilotWellFormed
     {

@@ -195,4 +195,35 @@ public sealed class EffectContractTests
             new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay },
             cost => Assert.Equal(EffectCostState.Unmeasured, cost.State)));
     }
+
+    [Fact]
+    public void Hold_fx_pilot_separates_the_duration_bar_from_the_self_animated_families()
+    {
+        Assert.True(EffectContractCatalog.IsHoldPilotWellFormed);
+        var bar = EffectContractCatalog.HoldFxPilot.Single(contract => contract.Id == "hold.bar");
+        var arc = EffectContractCatalog.HoldFxPilot.Single(contract => contract.Id == "hold.arc");
+        var breath = EffectContractCatalog.HoldFxPilot.Single(contract => contract.Id == "hold.breath");
+
+        // The bar derives its motion from the held note's remaining duration; the rest own their clock.
+        Assert.Equal(EffectReducedMotionBehavior.NoIndependentAnimation, bar.Accessibility.ReducedMotionBehavior);
+        Assert.Equal(EffectClock.SongPosition, bar.Clock);
+        Assert.Equal(EffectReducedMotionBehavior.IntrinsicAnimation, breath.Accessibility.ReducedMotionBehavior);
+        Assert.Equal(EffectReducedMotionBehavior.IntrinsicAnimation, arc.Accessibility.ReducedMotionBehavior);
+        Assert.Equal(MotionSuppression.NoChange, AccessibilityContractResolver.Resolve(bar.Accessibility, true, false, false).Motion);
+        Assert.Equal(MotionSuppression.FreezeIntrinsicAnimation, AccessibilityContractResolver.Resolve(breath.Accessibility, true, false, false).Motion);
+
+        // The flickering arc has no strobe analysis yet; breathing carries no flash.
+        Assert.Equal(EffectFlashRisk.Unverified, arc.Accessibility.FlashRisk);
+        Assert.Equal(FlashSuppression.Suppress, AccessibilityContractResolver.Resolve(arc.Accessibility, false, true, false).Flash);
+        Assert.Equal(EffectFlashRisk.None, breath.Accessibility.FlashRisk);
+        Assert.Equal(FlashSuppression.NoChange, AccessibilityContractResolver.Resolve(breath.Accessibility, false, true, false).Flash);
+
+        // Every hold family lives exactly as long as the key stays down, on both stage renderers.
+        Assert.All(EffectContractCatalog.HoldFxPilot, contract =>
+        {
+            Assert.Equal(EffectLifecycle.WhileNoteHeld, contract.Lifecycle);
+            Assert.Equal(EffectBackendState.Native, contract.Capabilities.WpfStage.State);
+            Assert.Equal(EffectBackendState.Native, contract.Capabilities.GpuStage.State);
+        });
+    }
 }
