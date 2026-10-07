@@ -514,8 +514,26 @@ Ghi đủ model GPU/CPU/camera/MIDI, driver/Windows build, độ phân giải m�
 
 Máy người dùng, `--bench` / `--bench --bench-ar` trên bản Release của `bad6dde` (code bench không đổi
 tới `30b1296`), adapter reported `AMD Radeon(TM) Graphics`, `warp: false`, Direct3D 11, 1920×1080,
-app 1.0.0, shader compile 551–658 ms. **Chưa ghi nhận:** model CPU, driver GPU, Windows build và
-power scheme — sẽ bổ sung khi người dùng cung cấp; các kết luận dưới đây vẫn giữ nhãn này.
+app 1.0.0, shader compile 551–658 ms.
+
+**Metadata máy đo (người dùng cung cấp 2026-10-08):**
+
+| Mục | Giá trị |
+|---|---|
+| CPU | AMD Ryzen 5 7535HS with Radeon Graphics |
+| GPU trong máy | **Hai adapter:** iGPU `AMD Radeon(TM) Graphics` (driver 32.0.21045.5002) — adapter mà ba lượt bench đã chạy; và dGPU `NVIDIA GeForce RTX 4050 Laptop GPU` (driver 32.0.16.1714) — **chưa đo** |
+| OS | Microsoft Windows 11 Home Single Language, build 26200 |
+| Power scheme | Balanced (`381b4222-…`, `powercfg /getactivescheme`) |
+
+Hai hệ quả phải giữ kèm kết quả bên dưới:
+
+1. **Ba lượt fail của default là kết quả của riêng iGPU**, không phải của cả máy: renderer tạo device
+   bằng `D3D11CreateDevice(null, Hardware, …)` (`GpuStageRenderer`) nên bench chạy trên adapter mặc
+   định mà Windows gán cho `PianoPath.exe` — ở đây là iGPU. RTX 4050 cùng máy thuộc nhóm "dGPU tầm
+   trung" của §11.1 và cần một lượt đo riêng trước khi kết luận gì về nó.
+2. **Power scheme Balanced trên laptop iGPU** nhất quán với phương sai lớn của heavy giữa các lượt
+   (13.13 → 9.01 → 8.26 ms): xung iGPU bị điều phối theo pin/nhiệt. Lượt đo lại nên ghi kèm power
+   scheme và, nếu so sánh nghiêm túc, đo ở cùng một scheme.
 
 | Scene | Budget p95 | ba lượt đo (ms) | Kết luận |
 |---|---:|---|---|
