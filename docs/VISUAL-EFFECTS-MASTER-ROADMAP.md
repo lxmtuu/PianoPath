@@ -570,9 +570,28 @@ So với iGPU cùng máy (§11.4): ar p95 8.84 → 3.25 ms; camera age worst 15.
 khung đều (2.28–4.13 ms), không còn cụm chu kỳ 3 khung lấn át như trên iGPU — chi phí readback-ring
 không còn đáng kể cạnh thời gian khung của dGPU.
 
-**Chưa đo trên dGPU: scene `default` và `heavy`.** Ba lượt `--bench --bench-adapter="RTX 4050"`
-của người dùng không sinh báo cáo: vòng render không khởi động được (mã thoát 2 cả ba lượt, JSON
-không bị ghi đè — `takenUtc` vẫn là `18:59:27` của lượt ar). Nguyên nhân thật: bug
-`E_INVALIDARG` của đường code ghim adapter nói trên, không phải do shell. Sau bản sửa, cần đo lại
-default/heavy trên dGPU. Kết luận fail của default ở §11.4 vẫn là của riêng iGPU; chưa có phát
-ngôn nào về default/heavy trên RTX 4050.
+**Bổ sung sau bản sửa `eb7b00f`: default và heavy đã đo trên dGPU.** Ba lượt
+`--bench --bench-adapter="RTX 4050"`, mã thoát 0 cả ba, `takenUtc` mới từng lượt
+(2026-10-07T20:35:05Z / 20:37:12Z / 20:38:49Z) — bằng chứng đầu tiên đường ghim adapter hoạt động
+trên phần cứng thật, đúng adapter được yêu cầu.
+
+| Scene | Budget p95 | lượt 1 | lượt 2 | lượt 3 | Kết luận |
+|---|---:|---|---|---|---|
+| default (Concert Gold) | 8 | 3.32 | 3.29 | 3.39 | **Đạt 3/3** — dư ~2.4× ngân sách |
+| heavy (Galaxy Voyage) | 16 | 2.97 | 3.09 | 3.17 | Đạt 3/3 — cực ổn định |
+
+Đối chiếu iGPU §11.4 cùng máy: default 9.59 / 11.20 / 11.43 (fail 3/3, vượt 20–43%);
+heavy 13.13 / 9.01 / 8.26 (đạt nhưng phương sai lớn). Trên dGPU cả hai scene nằm gọn dưới 3.4 ms.
+
+Kết luận rút ra:
+
+1. **Default fail là vấn đề của riêng nhóm iGPU, không phải của renderer.** Cùng một scene Concert
+   Gold với bloom 80/70 (giả thuyết chi phí của §11.4) chỉ tốn ~3.3 ms p95 trên RTX 4050. Câu hỏi
+   Phase 5 do đó thu hẹp: tối ưu bloom default chỉ đáng làm cho iGPU; hướng đúng tinh thần §11.3 là
+   chỉnh capability/quality fallback của nhóm iGPU (Adaptive Quality hạ cấp bloom khi vượt ngân sách)
+   thay vì hạ chất lượng cho mọi GPU.
+2. **Phương sai heavy của iGPU (13.13 → 8.26) nhất quán với giả thuyết pin/nhiệt**: cùng scene trên
+   dGPU chạy 2.97–3.17 ms, gần như phẳng; Balanced power scheme chỉ bóp xung iGPU.
+3. Cổng phần cứng giờ có đủ dữ liệu cho hai nhóm §11.1 (iGPU phổ biến, dGPU tầm trung) với cả ba
+   scene; WARP/fallback đã do CI cover về correctness; camera/AR có số trên cả hai adapter. Còn thiếu:
+   nhóm MIDI/audio thật và soak dài trên phần cứng.
