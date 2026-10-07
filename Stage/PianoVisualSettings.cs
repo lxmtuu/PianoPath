@@ -364,6 +364,14 @@ internal sealed class PianoVisualSettings
     public double BloomIntensity { get; set; } = 80;
     public double BloomSize { get; set; } = 70;
 
+    // ---- Accessibility -------------------------------------------------------------------------------
+    /// <summary>Global contract: freeze effects' intrinsic animation (background motion, pulses, breathing). Never touches the note's own travel.</summary>
+    public bool ReducedMotion { get; set; } = false;
+    /// <summary>Global contract: suppress the flash channel (impact flash) instead of letting it strobe.</summary>
+    public bool ReduceFlashes { get; set; } = false;
+    /// <summary>Global contract placeholder: high-contrast shape cues land with renderer work; no visual channel yet.</summary>
+    public bool HighContrast { get; set; } = false;
+
     // ---- Recording ----------------------------------------------------------------------------------
     /// <summary>Window, 720p or 1080p.</summary>
     public string RecordingResolution { get; set; } = "Window";
@@ -468,6 +476,44 @@ internal sealed class PianoVisualSettings
         KeyboardLayout.ForKeyCount(int.TryParse(KeyboardSize, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var keys) ? keys : 88);
 
     internal string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
+
+    /// <summary>
+    /// The look a renderer should draw while the global accessibility toggles are on: a copy of these settings
+    /// with the policy's channels overridden (see <c>AccessibilityContractResolver.Policies</c>). Toggles off
+    /// returns an identical copy, so the signed-off default look is untouched; user settings are never mutated.
+    /// </summary>
+    internal PianoVisualSettings WithAccessibilityTogglesApplied()
+    {
+        var result = Clone();
+        foreach (var policy in AccessibilityContractResolver.Policies)
+        {
+            var enabled = policy.Toggle switch
+            {
+                AccessibilityToggle.ReducedMotion => ReducedMotion,
+                AccessibilityToggle.ReduceFlashes => ReduceFlashes,
+                AccessibilityToggle.HighContrast => HighContrast,
+                _ => false,
+            };
+            if (!enabled) continue;
+            foreach (var channel in policy.Channels)
+            {
+                switch (channel)
+                {
+                    case AccessibilityChannel.ImpactFlash:
+                        result.ShowImpactFlash = false;
+                        result.ImpactFlashIntensity = 0;
+                        break;
+                    case AccessibilityChannel.IndependentMotion:
+                        result.BackgroundMotion = "None";
+                        result.HaloPulse = false;
+                        result.FallingPulse = false;
+                        result.HoldBreath = false;
+                        break;
+                }
+            }
+        }
+        return result;
+    }
 
     /// <summary>Deep copy used by the preset system so a preset can be applied without sharing list instances.</summary>
     internal PianoVisualSettings Clone() => FromJson(ToJson());

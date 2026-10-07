@@ -292,6 +292,7 @@ internal static partial class VerificationSuite
                 $"The new material {material} should survive the existing JSON format without a schema migration.");
         }
         VerifyEffectContractPilot();
+        VerifyAccessibilityTogglePolicy();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
@@ -396,6 +397,59 @@ internal static partial class VerificationSuite
         }
 
         Results.Add("PASS effect contract metadata: Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; existing clamps match; recording stays Unverified, AR names the flat-quad fallback, and isolated cost remains unmeasured. This is metadata coherence, not a new renderer/performance gate.");
+    }
+
+    /// <summary>
+    /// Verifies the persisted accessibility toggles and the settings-level override policy they drive: old JSON
+    /// loads with every toggle off, toggles off reproduce the saved look byte-for-byte, and toggles on override
+    /// exactly their reviewed channels on a copy without mutating the user's settings. High Contrast is
+    /// metadata-only until renderer shape-cue work exists, which this check pins as an explicit decision.
+    /// </summary>
+    private static void VerifyAccessibilityTogglePolicy()
+    {
+        var legacyJson = string.Join('\n', new PianoVisualSettings { BloomIntensity = 50 }.ToJson()
+            .Split('\n')
+            .Where(line => !line.Contains("ReducedMotion", StringComparison.Ordinal)
+                && !line.Contains("ReduceFlashes", StringComparison.Ordinal)
+                && !line.Contains("HighContrast", StringComparison.Ordinal)));
+        var legacy = PianoVisualSettings.FromJson(legacyJson);
+        Assert(!legacyJson.Contains("ReducedMotion", StringComparison.Ordinal)
+                && !legacy.ReducedMotion && !legacy.ReduceFlashes && !legacy.HighContrast
+                && legacy.BloomIntensity == 50,
+            "Accessibility keys saved by older builds must load with every toggle off and keep the saved look.");
+
+        var busy = new PianoVisualSettings
+        {
+            ShowImpactFlash = true, ImpactFlashIntensity = 80,
+            BackgroundMotion = "Aurora", HaloPulse = true, FallingPulse = true, HoldBreath = true,
+        };
+        var identity = busy.WithAccessibilityTogglesApplied();
+        Assert(identity.ToJson() == busy.ToJson() && !ReferenceEquals(identity, busy),
+            "With every toggle off the applied settings must be an untouched copy, preserving the signed-off default look.");
+
+        busy.ReducedMotion = true;
+        var calmed = busy.WithAccessibilityTogglesApplied();
+        Assert(calmed.BackgroundMotion == "None" && !calmed.HaloPulse && !calmed.FallingPulse && !calmed.HoldBreath
+                && calmed.ShowImpactFlash && calmed.ImpactFlashIntensity == 80,
+            "Reduced Motion must freeze exactly its intrinsic-animation channels on a copy and leave the flash channel alone.");
+
+        busy.ReducedMotion = false;
+        busy.ReduceFlashes = true;
+        var unflashed = busy.WithAccessibilityTogglesApplied();
+        Assert(!unflashed.ShowImpactFlash && unflashed.ImpactFlashIntensity == 0
+                && unflashed.BackgroundMotion == "Aurora" && unflashed.HaloPulse && unflashed.FallingPulse && unflashed.HoldBreath,
+            "Reduce Flashes must silence exactly the flash channel on a copy and leave intrinsic motion alone.");
+
+        busy.ReduceFlashes = false;
+        busy.HighContrast = true;
+        Assert(busy.WithAccessibilityTogglesApplied().ToJson() == busy.ToJson(),
+            "High Contrast must stay metadata-only: enabling it changes no visual channel until shape-cue renderer work lands.");
+
+        Assert(busy.ShowImpactFlash && busy.ImpactFlashIntensity == 80 && busy.BackgroundMotion == "Aurora"
+                && busy.HaloPulse && busy.FallingPulse && busy.HoldBreath,
+            "Applying the accessibility policy must never mutate the user's own settings object.");
+
+        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion and Reduce Flashes override exactly their reviewed channels on a copy, High Contrast stays metadata-only, and user settings are never mutated. Enforcement into the live renderers lands in a later Phase 2 slice.");
     }
 
     /// <summary>

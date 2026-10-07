@@ -20,6 +20,22 @@ public sealed class AccessibilityContractTests
     }
 
     [Fact]
+    public void Toggle_policies_cover_every_toggle_and_pin_high_contrast_as_metadata_only()
+    {
+        Assert.Equal(
+            AccessibilityContractResolver.Toggles.Select(toggle => toggle.Toggle),
+            AccessibilityContractResolver.Policies.Select(policy => policy.Toggle));
+        Assert.Equal(
+            new[] { AccessibilityChannel.IndependentMotion },
+            AccessibilityContractResolver.Policies.Single(policy => policy.Toggle == AccessibilityToggle.ReducedMotion).Channels);
+        Assert.Equal(
+            new[] { AccessibilityChannel.ImpactFlash },
+            AccessibilityContractResolver.Policies.Single(policy => policy.Toggle == AccessibilityToggle.ReduceFlashes).Channels);
+        Assert.Empty(
+            AccessibilityContractResolver.Policies.Single(policy => policy.Toggle == AccessibilityToggle.HighContrast).Channels);
+    }
+
+    [Fact]
     public void All_toggles_off_keeps_every_pilot_material_untouched()
     {
         foreach (var contract in EffectContractCatalog.NoteMaterialPilot)
