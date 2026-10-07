@@ -182,7 +182,7 @@ internal static class NoteMaterialGpuBenchmark
 
         foreach (var line in report.LogLines()) Console.WriteLine(line);
         Write(report, output);
-        var allMeasured = results.Count == Materials.Length
+        var allMeasured = results.Length == Materials.Length
             && results.All(result => result.Complete && result.FixtureValid && result.Stats.Count > 0 && result.QueryErrors == 0);
         return allMeasured ? 0 : ExitProbeUnavailable;
     }
