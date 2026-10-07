@@ -81,6 +81,8 @@ internal enum EffectParameterKind
 {
     Boolean,
     Percentage,
+    /// <summary>A persisted choice string ("Ring", "Embers", …); the allowed values stay owned by the settings model.</summary>
+    Choice,
 }
 
 /// <summary>Whether a backend consumes a setting for this particular effect.</summary>
@@ -148,7 +150,7 @@ internal sealed record EffectParameterContract(
 {
     internal bool IsWellFormed => Bindings is not null && Bindings.IsWellFormed && (Kind switch
     {
-        EffectParameterKind.Boolean => Minimum is null && Maximum is null,
+        EffectParameterKind.Boolean or EffectParameterKind.Choice => Minimum is null && Maximum is null,
         EffectParameterKind.Percentage => Minimum is double min && Maximum is double max
             && double.IsFinite(min) && double.IsFinite(max) && min <= max,
         _ => false,
@@ -371,6 +373,100 @@ internal static class EffectContractCatalog
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.AngularContourAndFacets)),
     });
 
+    /// <summary>
+    /// Typed metadata for a non-material effect family. Unlike <see cref="EffectContract"/> it carries no
+    /// persisted alias and no GPU style index: impact effects are selected by their own settings and never
+    /// by a stored style string.
+    /// </summary>
+    internal sealed record EffectFamilyContract(
+        string Id,
+        EffectPhase Phase,
+        EffectTrigger Trigger,
+        EffectLifecycle Lifecycle,
+        EffectAnchor Anchor,
+        EffectClock Clock,
+        EffectSeedPolicy SeedPolicy,
+        IReadOnlyList<EffectParameterContract> Parameters,
+        EffectCapabilityProfile Capabilities,
+        EffectCostProfile Cost,
+        EffectAccessibilityContract Accessibility)
+    {
+        internal bool IsWellFormed => !string.IsNullOrWhiteSpace(Id)
+            && Parameters.All(parameter => !string.IsNullOrWhiteSpace(parameter.SettingName) && parameter.IsWellFormed)
+            && Parameters.Select(parameter => parameter.SettingName).Distinct(StringComparer.Ordinal).Count() == Parameters.Count
+            && Capabilities.IsWellFormed
+            && Cost.IsWellFormed
+            && Accessibility is not null && Accessibility.IsWellFormed;
+    }
+
+    /// <summary>
+    /// The second contract pilot: the four impact families that fire when a note lands. Both renderers draw
+    /// all four (grep-verified in <c>PianoStage.cs</c> and the GPU simulation), hence Native there; recording
+    /// and AR stay Unverified until captured evidence exists. Costs are all Unmeasured — no isolated probe
+    /// has measured any of them, and this catalog must not invent numbers. Flash classification is kept
+    /// conservative: the flash is a localised bright pulse (Local), the spark burst flickers without a
+    /// strobe-area analysis (Unverified, so safety resolution suppresses it), wave and morph carry no flash.
+    /// </summary>
+    internal static IReadOnlyList<EffectFamilyContract> ImpactFxPilot { get; } = Array.AsReadOnly(new[]
+    {
+        new EffectFamilyContract(
+            "impact.wave",
+            EffectPhase.Impact, EffectTrigger.NoteOn, EffectLifecycle.FixedDuration, EffectAnchor.HitPoint,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowImpactRings"),
+                Choice("ImpactWave"),
+                Percentage("ImpactWaveIntensity", 0, 150),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "impact.flash",
+            EffectPhase.Impact, EffectTrigger.NoteOn, EffectLifecycle.FixedDuration, EffectAnchor.HitPoint,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowImpactFlash"),
+                Choice("ImpactFlashStyle"),
+                Percentage("ImpactFlashIntensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Local, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "impact.burst",
+            EffectPhase.Impact, EffectTrigger.NoteOn, EffectLifecycle.FixedDuration, EffectAnchor.HitPoint,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowEmbers"),
+                Choice("ImpactBurst"),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "impact.morph",
+            EffectPhase.Impact, EffectTrigger.NoteOn, EffectLifecycle.FixedDuration, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("ImpactMorph"),
+                Percentage("ImpactMorphIntensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+    });
+
+    /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
+    internal static bool IsImpactPilotWellFormed =>
+        ImpactFxPilot.Count == 4
+        && ImpactFxPilot.All(contract => contract.IsWellFormed)
+        && ImpactFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == ImpactFxPilot.Count;
+
     /// <summary>Checks IDs, aliases, parameter schemas and capability/fallback claims before consumers opt in.</summary>
     internal static bool IsPilotWellFormed
     {
@@ -404,4 +500,7 @@ internal static class EffectContractCatalog
 
     private static EffectParameterContract Boolean(string settingName) =>
         new(settingName, EffectParameterKind.Boolean, null, null, NativeParameterBindings);
+
+    private static EffectParameterContract Choice(string settingName) =>
+        new(settingName, EffectParameterKind.Choice, null, null, NativeParameterBindings);
 }

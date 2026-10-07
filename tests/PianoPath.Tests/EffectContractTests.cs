@@ -141,4 +141,29 @@ public sealed class EffectContractTests
         Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.Recording);
         Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.ArOverlay);
     }
+
+    [Fact]
+    public void Impact_fx_pilot_is_well_formed_with_conservative_flash_classification()
+    {
+        Assert.True(EffectContractCatalog.IsImpactPilotWellFormed);
+        var wave = EffectContractCatalog.ImpactFxPilot.Single(contract => contract.Id == "impact.wave");
+        var flash = EffectContractCatalog.ImpactFxPilot.Single(contract => contract.Id == "impact.flash");
+        var burst = EffectContractCatalog.ImpactFxPilot.Single(contract => contract.Id == "impact.burst");
+        var morph = EffectContractCatalog.ImpactFxPilot.Single(contract => contract.Id == "impact.morph");
+        Assert.Equal(EffectFlashRisk.None, wave.Accessibility.FlashRisk);
+        Assert.Equal(EffectFlashRisk.Local, flash.Accessibility.FlashRisk);
+        Assert.Equal(EffectFlashRisk.Unverified, burst.Accessibility.FlashRisk);
+        Assert.Equal(EffectFlashRisk.None, morph.Accessibility.FlashRisk);
+
+        // Reduce Flashes scales with each family's declared risk and stays off otherwise.
+        Assert.Equal(FlashSuppression.NoChange, AccessibilityContractResolver.Resolve(wave.Accessibility, false, true, false).Flash);
+        Assert.NotEqual(FlashSuppression.NoChange, AccessibilityContractResolver.Resolve(flash.Accessibility, false, true, false).Flash);
+        Assert.Equal(FlashSuppression.Suppress, AccessibilityContractResolver.Resolve(burst.Accessibility, false, true, false).Flash);
+        Assert.Equal(FlashSuppression.NoChange, AccessibilityContractResolver.Resolve(morph.Accessibility, false, false, false).Flash);
+
+        // No isolated probe measured any impact family yet: no cost may be fabricated.
+        Assert.All(EffectContractCatalog.ImpactFxPilot, contract => Assert.All(
+            new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay },
+            cost => Assert.Equal(EffectCostState.Unmeasured, cost.State)));
+    }
 }

@@ -293,6 +293,7 @@ internal static partial class VerificationSuite
         }
         VerifyEffectContractPilot();
         VerifyAccessibilityTogglePolicy();
+        VerifyImpactFxPilot();
         VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
@@ -398,6 +399,63 @@ internal static partial class VerificationSuite
         }
 
         Results.Add("PASS effect contract metadata: Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; existing clamps match; recording stays Unverified, AR names the flat-quad fallback, and isolated cost remains unmeasured. This is metadata coherence, not a new renderer/performance gate.");
+    }
+
+    /// <summary>
+    /// Cross-checks the impact-FX contract pilot (wave/flash/burst/morph) against the settings model and the
+    /// safety resolver: IDs unique and well-formed, parameters name real settings with the right kind, WPF/GPU
+    /// Native matches the code both renderers ship, every cost stays Unmeasured, and Reduce Flashes acts on
+    /// the flash by its own risk while leaving the flash-less wave alone and conservatively suppressing the
+    /// un-analysed spark burst.
+    /// </summary>
+    private static void VerifyImpactFxPilot()
+    {
+        var pilot = EffectContractCatalog.ImpactFxPilot;
+        Assert(EffectContractCatalog.IsImpactPilotWellFormed && pilot.Count == 4,
+            "The impact-FX pilot should contain the four well-formed, uniquely identified families.");
+        foreach (var contract in pilot)
+        {
+            Assert(contract.Phase == EffectPhase.Impact
+                    && contract.Trigger == EffectTrigger.NoteOn
+                    && contract.Lifecycle == EffectLifecycle.FixedDuration
+                    && contract.Clock == EffectClock.RenderElapsed,
+                $"{contract.Id} should be a fixed-duration, note-on impact effect on the render clock.");
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers in shipped code; recording and AR stay Unverified.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
+            Assert(contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation,
+                $"{contract.Id} is event-driven decay with no idle animation.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.flash"].Accessibility, false, true, false).Flash != FlashSuppression.NoChange,
+            "Reduce Flashes must act on the impact flash by its declared Local risk.");
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.wave"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "Reduce Flashes must leave the flash-less impact wave alone.");
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.burst"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "The un-analysed spark burst must resolve conservatively to suppression under Reduce Flashes.");
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Flash == FlashSuppression.NoChange
+                && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
+            "The key morph should keep its current behavior while every accessibility toggle is off.");
+        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, recording/AR stay Unverified, all costs stay Unmeasured, and the flash-safety resolution acts exactly on the declared risks. Metadata coherence only; no renderer changed.");
     }
 
     /// <summary>
