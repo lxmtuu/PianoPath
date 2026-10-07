@@ -4683,8 +4683,9 @@ internal static partial class VerificationSuite
         activeKeyColors[60] = Color.FromRgb(58, 218, 255);
         var keyBeam = new DrawingVisual();
         using (var dc = keyBeam.RenderOpen()) { Invoke(stage, "DrawKeyBeams", dc, 1280d, 480d, 12d); }
-        Assert(keyBeam.Drawing is not null && keyBeam.Drawing.Bounds.Height > 300 && keyBeam.Drawing.Bounds.Width > 50,
-            "A sounding key should render a broad software beam and its soft halo.");
+        Assert(keyBeam.Drawing is not null && keyBeam.Drawing.Bounds.Height > 300
+            && keyBeam.Drawing.Bounds.Width > 50 && keyBeam.Drawing.Bounds.Width < 100,
+            $"A sounding key should render a tall, localized shaft with a soft halo (bounds={keyBeam.Drawing?.Bounds}).");
         var keyBeamRaster = new RenderTargetBitmap(1280, 480, 96, 96, PixelFormats.Pbgra32);
         keyBeamRaster.Render(keyBeam);
         var keyBeamPixels = new byte[1280 * 480 * 4];

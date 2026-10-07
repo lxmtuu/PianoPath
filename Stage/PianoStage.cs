@@ -1002,9 +1002,9 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void DrawKeyBeams(DrawingContext dc, double width, double keyTop, double lane)
     {
-        // The GPU accumulates these beams as linear emission and then blooms them. Approximate that
-        // light in display-space WPF with a radial soft halo beneath the brighter, key-coloured shaft.
-        var beamWidth = Math.Max(18, lane * 2.8);
+        // The GPU shaft is about 2.2 key lanes wide before its bloom. Keep the WPF core at that width
+        // and reduce only the software halo radius so active keys stay local instead of fogging nearby notes.
+        var beamWidth = Math.Max(18, lane * 2.2);
         var intensity = Math.Clamp(_visual.BeamIntensity, 0, 100);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
@@ -1029,7 +1029,7 @@ internal sealed partial class PianoStage : FrameworkElement
                 glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
                 glow.Freeze(); halo = CacheGradient(haloKey, glow);
             }
-            var haloWidth = beamWidth * 1.5;
+            var haloWidth = beamWidth * 1.1;
             dc.DrawRectangle(halo, null, new Rect(x - haloWidth, 0, haloWidth * 2, keyTop));
 
             var key = GradientKey(2, Color.FromArgb((byte)intensity, color.R, color.G, color.B));
