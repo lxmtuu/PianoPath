@@ -2099,7 +2099,7 @@ internal static partial class VerificationSuite
             "Applying a preset should rewrite the live settings in place and the stage should draw exactly that look, adjusted only by the accessibility policy.");
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
-        Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices));
+        Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices, visualSettings));
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         Results.Add("PASS settings dock: thirteen pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
     }
@@ -5067,14 +5067,16 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>The dock switch must really change what the stage renders, and the bake must be cached.</summary>
-    private static void VerifyShadedStage(PianoStage stage, Dictionary<string, ComboBox> choices)
+    private static void VerifyShadedStage(PianoStage stage, Dictionary<string, ComboBox> choices, PianoVisualSettings windowSettings)
     {
         var shading = choices[nameof(PianoVisualSettings.ShadingQuality)];
         Assert((string?)shading.SelectedValue == "Balanced", "The default look should start on the Balanced shading engine.");
         // Drive the shaded-keyboard pass directly with an explicit DrawingContext so the bake
         // accounting does not depend on WPF render scheduling or window resize churn.
         var off = new PianoStage();
-        var settings = (PianoVisualSettings)Field(stage, "_visual");
+        // The dock writes to the window's settings object; the stage draws a policy-adjusted copy of it,
+        // so assertions about dock switches must read the window object, not the stage's copy.
+        var settings = windowSettings;
         off.SetVisualSettings(settings);
         Assert(ShadeOnce(off), "The default look should drive the stage with the ray-traced keyboard.");
         Assert(off.IsShadedKeyboardActive && off.ShadedBakeCount >= 1,
