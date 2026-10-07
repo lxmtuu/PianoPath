@@ -61,20 +61,23 @@ public sealed class EffectContractTests
             Assert.Equal(EffectBackendState.Fallback, contract.Capabilities.ArOverlay.State);
             Assert.Equal("ar.note.flat-quad", contract.Capabilities.ArOverlay.FallbackId);
 
-            var costs = new[]
-            {
-                contract.Cost.WpfStage,
-                contract.Cost.GpuStage,
-                contract.Cost.Recording,
-                contract.Cost.ArOverlay,
-            };
-            Assert.All(costs, cost =>
+            foreach (var cost in new[] { contract.Cost.WpfStage, contract.Cost.Recording, contract.Cost.ArOverlay })
             {
                 Assert.Equal(EffectCostState.Unmeasured, cost.State);
                 Assert.Null(cost.P95Milliseconds);
                 Assert.Null(cost.EvidenceId);
                 Assert.True(cost.IsWellFormed);
-            });
+            }
+
+            // The GPU-stage entry is the manual-review record of the isolated physical-adapter probe:
+            // a note-pass p95 with an evidence pointer, not a budget and not a whole-frame number.
+            var gpuCost = contract.Cost.GpuStage;
+            Assert.Equal(EffectCostState.Measured, gpuCost.State);
+            Assert.Contains("NOTE-MATERIAL-GPU-BENCHMARK", gpuCost.EvidenceId);
+            Assert.Contains("AMD Radeon(TM) Graphics", gpuCost.EvidenceId);
+            var expectedP95 = contract.Id == "note.material.gem" ? 0.02688 : 0.0268;
+            Assert.Equal(expectedP95, gpuCost.P95Milliseconds!.Value, 10);
+            Assert.True(gpuCost.IsWellFormed);
         }
     }
 

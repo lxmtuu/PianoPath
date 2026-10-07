@@ -190,7 +190,8 @@ internal sealed record EffectCostAssessment(
     };
 }
 
-/// <summary>Cost evidence is kept per output; no Gem/Crystal material-only benchmark exists yet.</summary>
+/// <summary>Cost evidence is kept per output; a GPU-stage entry may cite the isolated physical-adapter
+/// benchmark in <c>docs/NOTE-MATERIAL-GPU-BENCHMARK.md</c> — a note-pass number, never a whole-frame budget.</summary>
 internal sealed record EffectCostProfile(
     EffectCostAssessment WpfStage,
     EffectCostAssessment GpuStage,
@@ -269,8 +270,20 @@ internal static class EffectContractCatalog
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
-    private static readonly EffectCostProfile UnmeasuredCosts = new(
-        UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost);
+
+    // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
+    // isolated p95 around the note DrawInstanced only. The probe itself never writes these values;
+    // WPF, recording and AR stay Unmeasured until their own evidence exists.
+    private const string GpuNotePassCostEvidence =
+        "docs/NOTE-MATERIAL-GPU-BENCHMARK.md, run 2026-10-07T12:50:58Z, adapter AMD Radeon(TM) Graphics";
+    private static readonly EffectCostProfile GemCosts = new(
+        UnmeasuredCost,
+        new EffectCostAssessment(EffectCostState.Measured, 0.02688, GpuNotePassCostEvidence),
+        UnmeasuredCost, UnmeasuredCost);
+    private static readonly EffectCostProfile CrystalOutlineCosts = new(
+        UnmeasuredCost,
+        new EffectCostAssessment(EffectCostState.Measured, 0.0268, GpuNotePassCostEvidence),
+        UnmeasuredCost, UnmeasuredCost);
 
     private static readonly IReadOnlyList<EffectParameterContract> GemParameters = Array.AsReadOnly(new[]
     {
@@ -307,7 +320,7 @@ internal static class EffectContractCatalog
             EffectSeedPolicy.None,
             GemParameters,
             new EffectCapabilityProfile(Native, Native, Unverified, ArFlatFallback),
-            UnmeasuredCosts,
+            GemCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.FacetPlanes)),
         new EffectContract(
             "note.material.crystal-outline",
@@ -321,7 +334,7 @@ internal static class EffectContractCatalog
             EffectSeedPolicy.None,
             CrystalOutlineParameters,
             new EffectCapabilityProfile(Native, Native, Unverified, ArFlatFallback),
-            UnmeasuredCosts,
+            CrystalOutlineCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.AngularContourAndFacets)),
     });
 
