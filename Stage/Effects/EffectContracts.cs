@@ -113,6 +113,8 @@ internal enum EffectShapeCue
     None,
     FacetPlanes,
     AngularContourAndFacets,
+    /// <summary>The opaque body plus rim contour stays legible without hue (Solid).</summary>
+    OpaqueBodyAndRim,
 }
 
 /// <summary>Whether an isolated, backend-specific cost measurement exists.</summary>
@@ -214,7 +216,7 @@ internal sealed record EffectAccessibilityContract(
     internal bool IsWellFormed =>
         (FlashRisk is EffectFlashRisk.None or EffectFlashRisk.Local or EffectFlashRisk.FullFrame or EffectFlashRisk.Unverified)
         && (ReducedMotionBehavior is EffectReducedMotionBehavior.NoIndependentAnimation or EffectReducedMotionBehavior.Unverified)
-        && (NonColorCue is EffectShapeCue.None or EffectShapeCue.FacetPlanes or EffectShapeCue.AngularContourAndFacets);
+        && (NonColorCue is EffectShapeCue.None or EffectShapeCue.FacetPlanes or EffectShapeCue.AngularContourAndFacets or EffectShapeCue.OpaqueBodyAndRim);
 }
 
 /// <summary>
@@ -249,13 +251,14 @@ internal sealed record EffectContract(
         && Accessibility is not null && Accessibility.IsWellFormed;
 }
 
-/// <summary>
-/// The first runtime-contract pilot: Gem and CrystalOutline. This registry is deliberately separate from the
-/// descriptive <c>EffectCatalog</c> and does not drive settings serialization, UI filtering or renderer dispatch.
-/// WPF and GPU are marked Native because their direct note-material render checks exercise these two styles;
-/// recording stays Unverified until a material-specific captured-frame check exists. AR names its actual flat-quad
-/// fallback instead of claiming native facet/material support.
-/// </summary>
+    /// <summary>
+    /// The first runtime-contract pilot: Solid, Gem and CrystalOutline — the complete note-material family.
+    /// This registry is deliberately separate from the descriptive <c>EffectCatalog</c> and does not drive
+    /// settings serialization, UI filtering or renderer dispatch. WPF and GPU are marked Native because their
+    /// direct note-material render checks exercise these three styles; recording stays Unverified until a
+    /// material-specific captured-frame check exists. AR names its actual flat-quad fallback instead of claiming
+    /// native facet/material support.
+    /// </summary>
 internal static class EffectContractCatalog
 {
     internal const string ArFlatQuadFallbackId = "ar.note.flat-quad";
@@ -280,10 +283,26 @@ internal static class EffectContractCatalog
         UnmeasuredCost,
         new EffectCostAssessment(EffectCostState.Measured, 0.02688, GpuNotePassCostEvidence),
         UnmeasuredCost, UnmeasuredCost);
+    private static readonly EffectCostProfile SolidCosts = new(
+        UnmeasuredCost,
+        new EffectCostAssessment(EffectCostState.Measured, 0.02356, GpuNotePassCostEvidence),
+        UnmeasuredCost, UnmeasuredCost);
     private static readonly EffectCostProfile CrystalOutlineCosts = new(
         UnmeasuredCost,
         new EffectCostAssessment(EffectCostState.Measured, 0.0268, GpuNotePassCostEvidence),
         UnmeasuredCost, UnmeasuredCost);
+
+    // Solid consumes all six look settings on both renderers: the WPF default branch draws tint/glow/edge/
+    // edge-width/3D and the shared refraction fringe, and the GPU Solid branch reads the same uniforms.
+    private static readonly IReadOnlyList<EffectParameterContract> SolidParameters = Array.AsReadOnly(new[]
+    {
+        Percentage("NoteTint", 0, 100),
+        Percentage("NoteGlow", 0, 200),
+        Percentage("NoteEdge", 0, 200),
+        Percentage("NoteEdgeWidth", 0, 100),
+        Percentage("NoteRefraction", 0, 100),
+        Boolean("Notes3D"),
+    });
 
     private static readonly IReadOnlyList<EffectParameterContract> GemParameters = Array.AsReadOnly(new[]
     {
@@ -308,6 +327,20 @@ internal static class EffectContractCatalog
     /// <summary>The intentionally narrow pilot. Add other families only after their own evidence review.</summary>
     internal static IReadOnlyList<EffectContract> NoteMaterialPilot { get; } = Array.AsReadOnly(new[]
     {
+        new EffectContract(
+            "note.material.solid",
+            Array.AsReadOnly(new[] { "Solid" }),
+            0,
+            EffectPhase.NoteMaterial,
+            EffectTrigger.NoteBodyRendered,
+            EffectLifecycle.WhileNoteVisible,
+            EffectAnchor.NoteBody,
+            EffectClock.None,
+            EffectSeedPolicy.None,
+            SolidParameters,
+            new EffectCapabilityProfile(Native, Native, Unverified, ArFlatFallback),
+            SolidCosts,
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.OpaqueBodyAndRim)),
         new EffectContract(
             "note.material.gem",
             Array.AsReadOnly(new[] { "Gem" }),
@@ -345,7 +378,7 @@ internal static class EffectContractCatalog
         {
             var contracts = NoteMaterialPilot;
             var aliases = contracts.SelectMany(contract => contract.LegacyAliases).ToArray();
-            return contracts.Count == 2
+            return contracts.Count == 3
                 && contracts.All(contract => contract.IsWellFormed)
                 && contracts.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == contracts.Count
                 && contracts.Select(contract => contract.GpuStyleId).Distinct().Count() == contracts.Count

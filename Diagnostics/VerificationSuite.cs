@@ -307,8 +307,8 @@ internal static partial class VerificationSuite
     private static void VerifyEffectContractPilot()
     {
         var contracts = EffectContractCatalog.NoteMaterialPilot;
-        Assert(EffectContractCatalog.IsPilotWellFormed && contracts.Count == 2,
-            "The typed note-material pilot should contain only two well-formed, uniquely aliased contracts.");
+        Assert(EffectContractCatalog.IsPilotWellFormed && contracts.Count == 3,
+            "The typed note-material pilot should contain the three well-formed, uniquely aliased materials.");
 
         foreach (var contract in contracts)
         {
@@ -342,7 +342,7 @@ internal static partial class VerificationSuite
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null && cost.IsWellFormed),
                 $"The {alias} contract must keep WPF/recording/AR costs unmeasured until their own evidence exists.");
-            var expectedGpuP95 = alias == "Gem" ? 0.02688 : 0.0268;
+            var expectedGpuP95 = alias == "Gem" ? 0.02688 : alias == "Solid" ? 0.02356 : 0.0268;
             Assert(contract.Cost.GpuStage.State == EffectCostState.Measured
                     && contract.Cost.GpuStage.P95Milliseconds == expectedGpuP95
                     && contract.Cost.GpuStage.EvidenceId is { Length: > 0 } evidence

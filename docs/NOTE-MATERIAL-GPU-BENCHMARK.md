@@ -81,7 +81,8 @@ trong thời gian đo.
 Sau review thủ công, p95 GPU-stage của hai vật liệu được ghi vào
 [`Stage/Effects/EffectContracts.cs`](../Stage/Effects/EffectContracts.cs)
 (`EffectCostProfile.GpuStage = Measured`, `EvidenceId` trỏ về tài liệu này và lượt đo
-`2026-10-07T12:50:58Z`): Gem 0.02688 ms, Crystal Outline 0.0268 ms. Ba đầu ra còn lại
+`2026-10-07T12:50:58Z`): Solid 0.02356 ms, Gem 0.02688 ms, Crystal Outline 0.0268 ms.
+Ba đầu ra còn lại
 (WPF/recording/AR) giữ `Unmeasured` cho tới khi có bằng chứng riêng. Probe vẫn không tự ghi
 gì: đây là bản ghi chép của người review, không phải budget và không cập nhật tự động.
 

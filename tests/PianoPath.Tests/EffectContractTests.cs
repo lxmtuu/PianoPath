@@ -10,7 +10,8 @@ public sealed class EffectContractTests
         var contracts = EffectContractCatalog.NoteMaterialPilot;
 
         Assert.True(EffectContractCatalog.IsPilotWellFormed);
-        Assert.Equal(new[] { "note.material.gem", "note.material.crystal-outline" }, contracts.Select(contract => contract.Id));
+        Assert.Equal(new[] { "note.material.solid", "note.material.gem", "note.material.crystal-outline" }, contracts.Select(contract => contract.Id));
+        Assert.Equal("note.material.solid", EffectContractCatalog.FindByLegacyAlias("Solid")?.Id);
         Assert.Equal("note.material.gem", EffectContractCatalog.FindByLegacyAlias("Gem")?.Id);
         Assert.Equal("note.material.crystal-outline", EffectContractCatalog.FindByLegacyAlias("CrystalOutline")?.Id);
         Assert.Null(EffectContractCatalog.FindByLegacyAlias("gem"));
@@ -21,15 +22,19 @@ public sealed class EffectContractTests
     [Fact]
     public void Pilot_keeps_the_existing_gpu_material_ids_and_render_lifecycle()
     {
+        var solid = EffectContractCatalog.FindById("note.material.solid")!;
         var gem = EffectContractCatalog.FindById("note.material.gem")!;
         var crystal = EffectContractCatalog.FindById("note.material.crystal-outline")!;
 
+        Assert.Equal("Solid", Assert.Single(solid.LegacyAliases));
         Assert.Equal("Gem", Assert.Single(gem.LegacyAliases));
         Assert.Equal("CrystalOutline", Assert.Single(crystal.LegacyAliases));
+        Assert.Equal(0, solid.GpuStyleId);
         Assert.Equal(4, gem.GpuStyleId);
         Assert.Equal(5, crystal.GpuStyleId);
+        Assert.Equal(EffectShapeCue.OpaqueBodyAndRim, solid.Accessibility.NonColorCue);
 
-        foreach (var contract in new[] { gem, crystal })
+        foreach (var contract in new[] { solid, gem, crystal })
         {
             Assert.Equal(EffectPhase.NoteMaterial, contract.Phase);
             Assert.Equal(EffectTrigger.NoteBodyRendered, contract.Trigger);
@@ -42,7 +47,7 @@ public sealed class EffectContractTests
 
         Assert.Equal(EffectShapeCue.FacetPlanes, gem.Accessibility.NonColorCue);
         Assert.Equal(EffectShapeCue.AngularContourAndFacets, crystal.Accessibility.NonColorCue);
-        Assert.All(new[] { gem, crystal }, contract =>
+        Assert.All(new[] { solid, gem, crystal }, contract =>
         {
             Assert.Equal(EffectFlashRisk.None, contract.Accessibility.FlashRisk);
             Assert.Equal(EffectReducedMotionBehavior.NoIndependentAnimation, contract.Accessibility.ReducedMotionBehavior);
@@ -75,7 +80,9 @@ public sealed class EffectContractTests
             Assert.Equal(EffectCostState.Measured, gpuCost.State);
             Assert.Contains("NOTE-MATERIAL-GPU-BENCHMARK", gpuCost.EvidenceId);
             Assert.Contains("AMD Radeon(TM) Graphics", gpuCost.EvidenceId);
-            var expectedP95 = contract.Id == "note.material.gem" ? 0.02688 : 0.0268;
+            var expectedP95 = contract.Id == "note.material.gem" ? 0.02688
+                : contract.Id == "note.material.solid" ? 0.02356
+                : 0.0268;
             Assert.Equal(expectedP95, gpuCost.P95Milliseconds!.Value, 10);
             Assert.True(gpuCost.IsWellFormed);
         }
@@ -105,12 +112,16 @@ public sealed class EffectContractTests
             }
         }
 
+        var solid = EffectContractCatalog.FindById("note.material.solid")!;
         var gem = EffectContractCatalog.FindById("note.material.gem")!;
         var crystal = EffectContractCatalog.FindById("note.material.crystal-outline")!;
+        Assert.Contains(solid.Parameters, parameter => parameter.SettingName == "Notes3D" && parameter.Kind == EffectParameterKind.Boolean);
         Assert.Contains(gem.Parameters, parameter => parameter.SettingName == "Notes3D" && parameter.Kind == EffectParameterKind.Boolean);
         Assert.DoesNotContain(crystal.Parameters, parameter => parameter.SettingName == "Notes3D");
 
-        Assert.All(gem.Parameters, parameter =>
+        // Solid and Gem consume every look setting on both stage renderers; the evidence lives in the
+        // WPF default branch and the GPU Solid/Gem shader branches.
+        Assert.All(solid.Parameters.Concat(gem.Parameters), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
