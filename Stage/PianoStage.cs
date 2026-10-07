@@ -1002,8 +1002,8 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void DrawKeyBeams(DrawingContext dc, double width, double keyTop, double lane)
     {
-        // The GPU shaft is about 2.2 key lanes wide before its bloom. Keep the WPF core at that width
-        // and reduce only the software halo radius so active keys stay local instead of fogging nearby notes.
+        // The GPU shaft is about 2.2 key lanes wide before its bloom. Match that footprint and keep the
+        // software halo local; a modest alpha lift compensates for WPF source-over versus GPU additive light.
         var beamWidth = Math.Max(18, lane * 2.2);
         var intensity = Math.Clamp(_visual.BeamIntensity, 0, 100);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
@@ -1021,7 +1021,7 @@ internal sealed partial class PianoStage : FrameworkElement
                     RadiusX = .5, RadiusY = 1, MappingMode = BrushMappingMode.RelativeToBoundingBox,
                     SpreadMethod = GradientSpreadMethod.Pad
                 };
-                var coreAlpha = Alpha(intensity * 1.1);
+                var coreAlpha = Alpha(intensity * 1.25);
                 glow.GradientStops.Add(new GradientStop(Color.FromArgb(coreAlpha, color.R, color.G, color.B), 0));
                 glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .72), color.R, color.G, color.B), .18));
                 glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .40), color.R, color.G, color.B), .46));
@@ -1037,8 +1037,8 @@ internal sealed partial class PianoStage : FrameworkElement
             {
                 var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 0));
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(24 + intensity * 1.45), color.R, color.G, color.B), .78));
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(40 + intensity * 2.1), color.R, color.G, color.B), 1));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(24 + intensity * 1.65), color.R, color.G, color.B), .78));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(40 + intensity * 2.3), color.R, color.G, color.B), 1));
                 gradient.Freeze(); brush = CacheGradient(key, gradient);
             }
             dc.DrawRectangle(brush, null, new Rect(x - beamWidth / 2, 0, beamWidth, keyTop));
