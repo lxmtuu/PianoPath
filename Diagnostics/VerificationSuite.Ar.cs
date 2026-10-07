@@ -39,9 +39,10 @@ internal static partial class VerificationSuite
             Gradient(buffer, w, h);
             ring.Publish(slot, w, h, Stopwatch.GetTimestamp());
         }
-        GpuStageFeed MakeFeed(GpuCameraInput? camera, bool chroma = false)
+        GpuStageFeed MakeFeed(GpuCameraInput? camera, bool chroma = false, string noteStyle = "Neon")
         {
-            var settings = quiet.Clone(); if (chroma) settings.BackgroundMode = "ChromaGreen";
+            var settings = quiet.Clone(); settings.NoteStyle = noteStyle;
+            if (chroma) settings.BackgroundMode = "ChromaGreen";
             var feed = new GpuStageFeed(); feed.SetStageHeight(height);
             feed.SetLook(GpuLook.From(settings, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
             feed.SetState([], 0, false, new HashSet<int>());
@@ -166,9 +167,9 @@ internal static partial class VerificationSuite
             new() { Pitch = 48, Start = 12.9, Duration = .5 },    // not in reach yet
         };
         arNotes.Sort((a, b) => a.Start.CompareTo(b.Start));
-        GpuStageFeed MakeArFeed(GpuCameraInput? camera, GpuArInput? ar, bool playing = true)
+        GpuStageFeed MakeArFeed(GpuCameraInput? camera, GpuArInput? ar, bool playing = true, string noteStyle = "Neon")
         {
-            var feed = MakeFeed(camera);
+            var feed = MakeFeed(camera, noteStyle: noteStyle);
             feed.SetState(arNotes, 10, playing, new HashSet<int>());
             feed.Ar = ar;
             return feed;
@@ -202,6 +203,10 @@ internal static partial class VerificationSuite
         var arFrame = Render(MakeArFeed(flatInput, arInput));
         // the sounding G4 also lights its key, so the keys are counted apart from the notes
         Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 4 && renderer.ArKeyQuadCount >= 1, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount} quads, {renderer.ArKeyQuadCount} of them keys).");
+        var gemArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "Gem"));
+        var crystalArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "CrystalOutline"));
+        Assert(arFrame.AsSpan().SequenceEqual(gemArFrame) && arFrame.AsSpan().SequenceEqual(crystalArFrame),
+            "AR should retain its projected flat-quad material fallback for Gem and Crystal Outline, not claim their stage facets.");
         var plain = Look(arFrame, width, height, (20, 20))!.Value;
         Assert(plain.Off <= 3 && plain.Spread <= 3, $"Away from every note the picture is the camera's grey (off by {plain.Off}).");
         foreach (var shape in expected)
@@ -288,7 +293,7 @@ internal static partial class VerificationSuite
         Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
         Results.Add($"PASS ar keys: three held keys are five rectangles, each tinted where it is in the picture and nothing around it, black keys beside a held white key left alone; read back against the same frame without the layer.");
-        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; paused, zero opacity, no layer and a camera of another size draw nothing.");
+        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal selections keep the flat-quad fallback; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
     }
 

@@ -255,12 +255,12 @@ internal static partial class VerificationSuite
             new() { Pitch = 64, Start = .6, Duration = 2.0 },
             new() { Pitch = 67, Start = .6, Duration = 2.0 }
         };
-        byte[] Render(string style, bool depth3D, bool showNotes = true)
+        byte[] Render(string style, bool depth3D, bool showNotes = true, double refraction = 0)
         {
             var settings = new PianoVisualSettings
             {
                 NoteStyle = style, Notes3D = depth3D, NoteWidth = 100, NoteFallSpeed = 550,
-                NoteGlow = 0, NoteHeadGlow = 0, NoteRefraction = 0, NoteEdge = 88, NoteEdgeWidth = 48,
+                NoteGlow = 0, NoteHeadGlow = 0, NoteRefraction = refraction, NoteEdge = 88, NoteEdgeWidth = 48,
                 NoteTint = 78, NoteRoundness = 30, FallingTrail = "None", ShowNoteLabels = false,
                 ShowBackground = false, ShowHalo = false, ShowKeys = false, ShowEmbers = false,
                 ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
@@ -278,8 +278,10 @@ internal static partial class VerificationSuite
         var solid = Render("Solid", false);
         var gem2D = Render("Gem", false);
         var gem3D = Render("Gem", true);
+        var gemWithRefraction = Render("Gem", false, refraction: 100);
         var crystal2D = Render("CrystalOutline", false);
         var crystal3D = Render("CrystalOutline", true);
+        var crystalWithRefraction = Render("CrystalOutline", false, refraction: 100);
         int ChangedPixels(byte[] image, byte[] baseline)
         {
             var count = 0;
@@ -330,7 +332,9 @@ internal static partial class VerificationSuite
             "The GPU shader must render Gem and Crystal Outline as distinct materials, not the Solid fallback.");
         Assert(!gem2D.AsSpan().SequenceEqual(gem3D) && crystal2D.AsSpan().SequenceEqual(crystal3D),
             "The GPU depth input must change Gem shading while Crystal Outline remains flat.");
-        Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); bright Crystal contour at half-size {crystalBrightHalf}; Gem responds to 2D/3D while Crystal Outline stays flat.");
+        Assert(!gem2D.AsSpan().SequenceEqual(gemWithRefraction) && crystal2D.AsSpan().SequenceEqual(crystalWithRefraction),
+            "GPU Gem should consume NoteRefraction while the Crystal Outline shader should leave that input unused.");
+        Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); bright Crystal contour at half-size {crystalBrightHalf}; Gem responds to 2D/3D and NoteRefraction while Crystal Outline stays flat and does not consume NoteRefraction.");
     }
 
     /// <summary>

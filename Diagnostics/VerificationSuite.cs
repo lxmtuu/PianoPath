@@ -291,11 +291,94 @@ internal static partial class VerificationSuite
             Assert(roundTrip.NoteStyle == material && roundTrip.Notes3D,
                 $"The new material {material} should survive the existing JSON format without a schema migration.");
         }
+        VerifyEffectContractPilot();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
         Results.Add("PASS stage settings: automated runs isolated from the user settings folder, black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+    }
+
+    /// <summary>
+    /// Cross-checks the typed Gem/Crystal Outline pilot against the shipped setting strings, GPU indices and
+    /// existing clamps. This verifies metadata compatibility only; the separate WPF/GPU image checks remain
+    /// responsible for rendering evidence, while recording and AR retain their conservative contract states.
+    /// </summary>
+    private static void VerifyEffectContractPilot()
+    {
+        var contracts = EffectContractCatalog.NoteMaterialPilot;
+        Assert(EffectContractCatalog.IsPilotWellFormed && contracts.Count == 2,
+            "The typed note-material pilot should contain only two well-formed, uniquely aliased contracts.");
+
+        foreach (var contract in contracts)
+        {
+            var alias = contract.LegacyAliases.Single();
+            Assert(EffectContractCatalog.FindByLegacyAlias(alias)?.Id == contract.Id
+                    && EffectContractCatalog.FindById(contract.Id)?.LegacyAliases.Contains(alias) == true,
+                $"The stable contract ID {contract.Id} should resolve to its exact persisted style alias {alias}.");
+            Assert(contract.GpuStyleId >= 0 && contract.GpuStyleId < PianoVisualSettings.NoteStyles.Length
+                    && PianoVisualSettings.NoteStyles[contract.GpuStyleId] == alias,
+                $"The contract for {alias} must keep the GPU style ID already assigned by NoteStyles.");
+            var jsonRoundTrip = PianoVisualSettings.FromJson(new PianoVisualSettings { NoteStyle = alias }.ToJson());
+            Assert(jsonRoundTrip.NoteStyle == alias,
+                $"Adding the typed contract must not migrate the existing JSON value {alias}.");
+            Assert(contract.Phase == EffectPhase.NoteMaterial
+                    && contract.Trigger == EffectTrigger.NoteBodyRendered
+                    && contract.Lifecycle == EffectLifecycle.WhileNoteVisible
+                    && contract.Anchor == EffectAnchor.NoteBody
+                    && contract.Clock == EffectClock.None
+                    && contract.SeedPolicy == EffectSeedPolicy.None,
+                $"The {alias} material should be a deterministic, note-body effect with an explicit render lifecycle.");
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Fallback
+                    && contract.Capabilities.ArOverlay.FallbackId == "ar.note.flat-quad",
+                $"The {alias} contract must separate native WPF/GPU, unverified recording, and the actual flat AR fallback.");
+            Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
+                    && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                    && contract.Accessibility.NonColorCue != EffectShapeCue.None,
+                $"The {alias} material should declare its intrinsic flash/motion behavior and a non-color shape cue.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null && cost.IsWellFormed),
+                $"The {alias} contract must not invent an isolated performance measurement.");
+
+            foreach (var parameter in contract.Parameters)
+            {
+                var expectedGpuBinding = alias == "CrystalOutline" && parameter.SettingName == "NoteRefraction"
+                    ? EffectParameterBindingState.Ignored
+                    : EffectParameterBindingState.Applied;
+                Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
+                        && parameter.Bindings.GpuStage == expectedGpuBinding
+                        && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
+                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Ignored,
+                    $"The {alias} input {parameter.SettingName} should describe its actual per-output binding, including AR's flat fallback.");
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                if (parameter.Kind == EffectParameterKind.Boolean)
+                {
+                    Assert(property.PropertyType == typeof(bool) && parameter.Minimum is null && parameter.Maximum is null,
+                        $"The {alias} toggle {parameter.SettingName} should be Boolean and have no numeric clamp.");
+                    continue;
+                }
+
+                var hasRange = property.PropertyType == typeof(double) && parameter.Minimum is double && parameter.Maximum is double;
+                Assert(hasRange, $"The {alias} numeric parameter {parameter.SettingName} should have a double setting and a finite clamp range.");
+                if (!hasRange) continue;
+                var below = new PianoVisualSettings();
+                property.SetValue(below, parameter.Minimum!.Value - 1000);
+                below.Clamp();
+                var above = new PianoVisualSettings();
+                property.SetValue(above, parameter.Maximum!.Value + 1000);
+                above.Clamp();
+                Assert((double)property.GetValue(below)! == parameter.Minimum!.Value
+                        && (double)property.GetValue(above)! == parameter.Maximum!.Value,
+                    $"The existing settings clamp for {parameter.SettingName} should match the {alias} contract range {parameter.Minimum}..{parameter.Maximum}.");
+            }
+        }
+
+        Results.Add("PASS effect contract metadata: Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; existing clamps match; recording stays Unverified, AR names the flat-quad fallback, and isolated cost remains unmeasured. This is metadata coherence, not a new renderer/performance gate.");
     }
 
     /// <summary>
@@ -4336,10 +4419,11 @@ internal static partial class VerificationSuite
             stage.SetVisualSettings(visualSettings);
 
             const int width = 128, height = 192;
-            byte[] Capture(string style, bool depth3D, bool halfSize = false)
+            byte[] Capture(string style, bool depth3D, bool halfSize = false, double refraction = 0)
             {
                 visualSettings.NoteStyle = style;
                 visualSettings.Notes3D = depth3D;
+                visualSettings.NoteRefraction = refraction;
                 stage.SetVisualSettings(visualSettings);
                 var visual = new DrawingVisual();
                 var bounds = halfSize ? new Rect(53, 55, 22, 76) : new Rect(42, 32, 44, 152);
@@ -4406,8 +4490,10 @@ internal static partial class VerificationSuite
             var solid = Capture("Solid", false);
             var gem2D = Capture("Gem", false);
             var gem3D = Capture("Gem", true);
+            var gemWithRefraction = Capture("Gem", false, refraction: 100);
             var crystal2D = Capture("CrystalOutline", false);
             var crystal3D = Capture("CrystalOutline", true);
+            var crystalWithRefraction = Capture("CrystalOutline", false, refraction: 100);
             var gemSmall = Visible(Capture("Gem", true, halfSize: true), width, height);
             var crystalSmallPixels = Capture("CrystalOutline", false, halfSize: true);
             var crystalSmall = Visible(crystalSmallPixels, width, height);
@@ -4420,12 +4506,14 @@ internal static partial class VerificationSuite
                 "Gem and Crystal Outline must paint distinct geometry rather than falling through to Solid on the WPF path.");
             Assert(!gem2D.SequenceEqual(gem3D) && crystal2D.SequenceEqual(crystal3D),
                 "The 3D toggle must deepen Gem while Crystal Outline remains the deliberately flat material.");
+            Assert(!gem2D.SequenceEqual(gemWithRefraction) && !crystal2D.SequenceEqual(crystalWithRefraction),
+                "The WPF path should apply NoteRefraction to both Gem and Crystal Outline.");
             Assert(gemSmall.Count > 300 && gemSmall.MaxX - gemSmall.MinX >= 18 && gemSmall.MaxY - gemSmall.MinY >= 68
                     && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68
                     && crystalHalf.Count > 40 && crystalHalfBright > 40
                     && crystalCoreAlpha <= 60 && crystalHalfCoreAlpha <= 60,
                 $"Gem and Crystal Outline must remain legible at 50% while Crystal keeps a transparent core (Gem {gemSmall.Count} px; Crystal {crystalSmall.Count}/{crystalHalf.Count} px; bright 2×2 rim {crystalHalfBright}; core alpha full/half {crystalCoreAlpha}/{crystalHalfCoreAlpha}).");
-            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct output; Gem responds to 3D while Crystal stays flat, its rim survives a 2×2 downsample, and its center stays transparent.");
+            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct output; Gem responds to 3D; both consume NoteRefraction; Crystal stays flat, its rim survives a 2×2 downsample, and its center stays transparent.");
         }
         finally
         {
