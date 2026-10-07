@@ -178,7 +178,9 @@ internal sealed class GpuStageRenderer : IDisposable
             {
                 var (index, problem) = GpuAdapterSelection.Select(names, adapterRequest);
                 if (problem is not null) throw new InvalidOperationException(problem);
-                var result = D3D11.D3D11CreateDevice(adapters[index], DriverType.Hardware, flags, FeatureLevels, out ID3D11Device device, out FeatureLevel level, out ID3D11DeviceContext context);
+                // D3D11CreateDevice demands DriverType.Unknown when an explicit adapter is passed —
+                // Hardware with a non-null adapter is E_INVALIDARG (it only works with the null adapter).
+                var result = D3D11.D3D11CreateDevice(adapters[index], DriverType.Unknown, flags, FeatureLevels, out ID3D11Device device, out FeatureLevel level, out ID3D11DeviceContext context);
                 result.CheckError();
                 return new GpuStageRenderer(device, context, level, false);
             }

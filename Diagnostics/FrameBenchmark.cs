@@ -73,6 +73,11 @@ internal static class FrameBenchmark
             {
                 var why = loop.Error ?? "it reported no device within 60 s";
                 Console.WriteLine($"FAIL perf: the GPU render loop did not start ({why}), so no frame was measured");
+                // This exe is GUI-subsystem: at a terminal the user sees only the exit code, no console
+                // lines. A start-up failure (an --bench-adapter name matching nothing, a device that
+                // refuses to start) therefore also leaves its reason beside the report path.
+                try { File.WriteAllText(Path.ChangeExtension(output, ".startup-error.txt"), $"The GPU render loop did not start: {why}{Environment.NewLine}"); }
+                catch (IOException) { }
                 return ExitNoDevice;
             }
             // The glyph atlas is drawn with WPF's text stack, which needs this (STA) thread; the render thread

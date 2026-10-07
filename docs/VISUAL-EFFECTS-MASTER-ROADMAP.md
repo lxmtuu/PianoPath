@@ -553,11 +553,14 @@ fixed-scene để người dùng duyệt lại; không xen ngang các phase hi�
 
 ### 11.5 Kết quả dGPU đầu tiên — NVIDIA GeForce RTX 4050 Laptop (2026-10-08)
 
-Cùng máy với §11.4 (Ryzen 5 7535HS, Windows 11 build 26200, Balanced), đo bằng
-`--bench-ar --bench-adapter="RTX 4050"` — adapter được ghim bằng cờ mới, không qua thiết lập đồ hoạ
-của Windows. JSON báo `adapter: NVIDIA GeForce RTX 4050 Laptop GPU`, `warp: false`,
-`takenUtc 2026-10-07T18:59:27Z`, shader compile 646 ms. Các thống kê dưới đây đã được tính lại độc
-lập từ mảng `frameMs` trong JSON và khớp đúng báo cáo của app.
+Cùng máy với §11.4 (Ryzen 5 7535HS, Windows 11 build 26200, Balanced), đo bằng `--bench-ar`.
+JSON báo `adapter: NVIDIA GeForce RTX 4050 Laptop GPU`, `warp: false`,
+`takenUtc 2026-10-07T18:59:27Z`, shader compile 646 ms. **Lưu ý cơ chế chọn adapter:** lượt đo này
+diễn ra khi đường code `--bench-adapter` còn lỗi `E_INVALIDARG` (truyền `DriverType.Hardware` cùng
+adapter tường minh — đã sửa sau đó), tức lệnh chạy với cờ không thể tạo device; adapter NVIDIA trong
+JSON là do bộ chọn adapter mặc định của OS cho exe, không phải do cờ ghim. Con số vẫn là đo thật
+trên RTX 4050 (`adapter` + `warp:false` trong chính báo cáo). Các thống kê dưới đây đã được tính lại
+độc lập từ mảng `frameMs` trong JSON và khớp đúng báo cáo của app.
 
 | Scene | Budget p95 | Kết quả |
 |---|---:|---|
@@ -567,9 +570,9 @@ So với iGPU cùng máy (§11.4): ar p95 8.84 → 3.25 ms; camera age worst 15.
 khung đều (2.28–4.13 ms), không còn cụm chu kỳ 3 khung lấn át như trên iGPU — chi phí readback-ring
 không còn đáng kể cạnh thời gian khung của dGPU.
 
-**Chưa đo trên dGPU: scene `default` và `heavy`.** Ba lượt `--bench --bench-adapter="RTX 4050"` của
-người dùng chưa sinh báo cáo mới: cả bốn lần đọc `%TEMP%\keyflow-bench.json` đều trả về cùng một
-file `takenUtc 18:59:27.7725329Z` của lượt `--bench-ar` duy nhất. PowerShell không chờ một exe
-GUI-subsystem kết thúc, nên `Get-Content` chạy trước khi lượt đo kịp ghi file. Lượt đo lại phải
-chờ tiến trình thoát (`Start-Process -Wait`) rồi mới đọc JSON. Kết luận fail của default ở §11.4
-vẫn là của riêng iGPU; chưa có phát ngôn nào về default/heavy trên RTX 4050.
+**Chưa đo trên dGPU: scene `default` và `heavy`.** Ba lượt `--bench --bench-adapter="RTX 4050"`
+của người dùng không sinh báo cáo: vòng render không khởi động được (mã thoát 2 cả ba lượt, JSON
+không bị ghi đè — `takenUtc` vẫn là `18:59:27` của lượt ar). Nguyên nhân thật: bug
+`E_INVALIDARG` của đường code ghim adapter nói trên, không phải do shell. Sau bản sửa, cần đo lại
+default/heavy trên dGPU. Kết luận fail của default ở §11.4 vẫn là của riêng iGPU; chưa có phát
+ngôn nào về default/heavy trên RTX 4050.
