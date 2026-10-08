@@ -38,9 +38,14 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     internal static readonly ArOptions Default = new(false, ArModes.Learn, OpacityDefault, LookaheadDefault, KeyLightDefault);
 
     /// <summary>The same choices pulled into range: a number that is not a number takes its default, an unknown mode becomes Learn.</summary>
-    internal ArOptions Normalised() => new(Enabled, ArModes.Normalize(Mode),
-        Fit(Opacity, OpacityMin, OpacityMax, OpacityDefault), Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
-        Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault), Fit(Delay, DelayMin, DelayMax, DelayDefault));
+    internal ArOptions Normalised() => this with
+    {
+        Mode = ArModes.Normalize(Mode),
+        Opacity = Fit(Opacity, OpacityMin, OpacityMax, OpacityDefault),
+        Lookahead = Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
+        KeyLight = Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault),
+        Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault)
+    };
 
     internal static double Fit(double value, double minimum, double maximum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
