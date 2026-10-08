@@ -1757,6 +1757,8 @@ public partial class MainWindow : Window
         var changed = down ? _pedalsDown.Add(pedal) : _pedalsDown.Remove(pedal);
         if (!changed) return;
         Stage.SetSustainPedal(_pedalsDown.Contains(PianoPedal.Sustain));
+        Stage.Simulation.SetSostenuto(_pedalsDown.Contains(PianoPedal.Sostenuto));
+        Stage.Simulation.SetSoft(_pedalsDown.Contains(PianoPedal.Soft));
         var controller = MidiDeviceService.ControllerFor(pedal);
         if (!_liveAudioSent) _audio.ControlChange(controller, down ? 127 : 0);
         _updatingPedals = true;

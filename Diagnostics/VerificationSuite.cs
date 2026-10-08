@@ -54,7 +54,7 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -1594,6 +1594,59 @@ internal static partial class VerificationSuite
             Assert(!engine.StringResonanceEnabled, "The string-resonance toggle should reach the audio engine.");
         }
         Results.Add("PASS piano effects: sympathetic string resonance rings under the pedal, damps on release and bypasses bit-identically when disabled.");
+    }
+
+    /// <summary>
+    /// AR-S1: the shared piano simulation (docs/AR-OVERLAY-ROADMAP.md §14). Reads the numbers straight
+    /// out of the model - activity from the velocity band, the register-dependent die-off, the damper
+    /// versus the three pedals, notes per second and the total - the values the AR elements will build on.
+    /// </summary>
+    private static void VerifyPianoSimulation()
+    {
+        var sim = new PianoSimulation { VelocityFloor = 20, VelocityCeiling = 100 };
+        sim.NoteOn(60, 10);
+        Assert(sim.Activity(60) == 0, "A strike below the velocity floor should carry no activity.");
+        sim.NoteOn(60, 60);
+        Assert(Math.Abs(sim.Activity(60) - .5) < 1e-9, "A strike halfway up the velocity band should carry half the activity.");
+        sim.NoteOn(60, 127);
+        Assert(sim.Activity(60) == 1, "A strike past the ceiling should clamp to full activity.");
+        Assert(Math.Abs(PianoSimulation.NaturalDieOffSeconds(21) - 2.2) < 1e-9 && Math.Abs(PianoSimulation.NaturalDieOffSeconds(108) - .45) < 1e-9,
+            "The die-off should run from 2.2 s at A0 to 0.45 s at C8.");
+        sim = new PianoSimulation();
+        sim.NoteOn(21, 127); sim.NoteOn(108, 127); sim.Advance(1);
+        Assert(sim.Activity(21) > sim.Activity(108) + .3, "A bass string should ring far longer than a treble string.");
+        double Released(double sustain, double seconds)
+        {
+            var probe = new PianoSimulation();
+            probe.SetSustain(sustain);
+            probe.NoteOn(60, 127);
+            probe.NoteOff(60);
+            probe.Advance(seconds);
+            return probe.Activity(60);
+        }
+        var damped = Released(0, .2); var half = Released(.5, .2); var sustained = Released(1, .2);
+        Assert(damped < .05 && sustained > .7 && half > damped && half < sustained,
+            $"The damper should choke a released note while the sustain pedal leaves it ringing, half-pedalling in between ({damped:0.000}/{half:0.000}/{sustained:0.000}).");
+        sim = new PianoSimulation();
+        sim.NoteOn(60, 127); sim.NoteOn(62, 127);
+        sim.SetSostenuto(true);
+        sim.NoteOff(60); sim.NoteOff(62);
+        sim.NoteOn(64, 127); sim.NoteOff(64);
+        sim.Advance(.3);
+        Assert(sim.Activity(60) > .6 && sim.Activity(62) > .6 && sim.Activity(64) < .05,
+            "Sostenuto should hold the keys that were down and leave later keys to the damper.");
+        sim.SetSostenuto(false);
+        sim.Advance(.3);
+        Assert(sim.Activity(60) < .05 && sim.Activity(62) < .05, "Lifting sostenuto should drop the caught dampers.");
+        sim = new PianoSimulation();
+        sim.NoteOn(60, 100); sim.Advance(.4); sim.NoteOn(62, 100); sim.Advance(.5); sim.NoteOn(64, 100); sim.Advance(.05);
+        Assert(sim.NotesPerSecond == 3, "Three note-ons inside the last second should read as three notes per second.");
+        sim.Advance(.6);
+        Assert(sim.NotesPerSecond == 1, "Note-ons should slide out of the one-second window as time passes.");
+        sim.NoteOn(60, 127); sim.NoteOn(64, 127);
+        Assert(Math.Abs(sim.TotalActivity - (sim.Activity(60) + sim.Activity(64) + sim.Activity(62))) < 1e-9,
+            "Total activity should be the sum over the keys.");
+        Results.Add("PASS piano simulation (AR-S1): velocity band, register die-off, damper/sustain/sostenuto, notes per second and total activity.");
     }
 
     /// <summary>
