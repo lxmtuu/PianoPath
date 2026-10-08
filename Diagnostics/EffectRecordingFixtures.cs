@@ -72,7 +72,8 @@ internal static class EffectRecordingFixtures
             EffectRecordingEvent.Impact, WpfAdvanceSteps: 1, GpuSettleFrames: 1, GpuSampleFrames: 5),
         new EffectRecordingCaptureFixture(
             "impact.morph", EffectRecordingScene.Quiet,
-            settings => { settings.ImpactMorph = "Shatter"; settings.ImpactMorphIntensity = 100; },
+            // WPF stores the shards in the shared particle list, so the particle draw layer must be on; amount 0 keeps the burst channel quiet.
+            settings => { settings.ShowEmbers = true; settings.ImpactMorph = "Shatter"; settings.ImpactMorphIntensity = 100; },
             EffectRecordingEvent.Impact, WpfAdvanceSteps: 1, GpuSettleFrames: 1, GpuSampleFrames: 4),
         new EffectRecordingCaptureFixture(
             "falling.trail", EffectRecordingScene.FallingNote,
