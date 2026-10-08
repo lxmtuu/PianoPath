@@ -164,6 +164,7 @@ internal static class ArNotes
     /// <param name="simulation">Maps a note's raw velocity through the velocity band before the style's graphs walk it; null maps velocity straight onto 0..1.</param>
     internal static void Build(ArCalibration calibration, ArView view, IReadOnlyList<NoteEvent> notes, double position, double maxNoteDuration, ArNoteStyle style, List<ArNoteShape> into, PianoSimulation? simulation = null)
     {
+    {
         into.Clear();
         if (!style.IsUsable || !double.IsFinite(position) || !view.Valid || notes.Count == 0) return;
         var layout = calibration.Layout;
