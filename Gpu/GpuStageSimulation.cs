@@ -630,6 +630,10 @@ internal sealed partial class GpuStageSimulation
         var hitY = layout.HitY;
         var glowGain = .9f + look.ParticleGlow * 1.6f;
 
+        // The AR overlay only draws the calibrated camera and its separately projected notes/keys.
+        // Stage-anchored sprites are not mapped to the keyboard; suppress even transients already in flight.
+        if (look.OverCamera) return;
+
         if (look.ShowLightBeams && look.BeamIntensity > 0)
         {
             for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)

@@ -298,6 +298,7 @@ internal static partial class VerificationSuite
         VerifyHoldPilot();
         VerifyAmbientPilot();
         VerifyParticlesReleasePilot();
+        VerifyArOverlayExclusions();
         VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
@@ -309,7 +310,7 @@ internal static partial class VerificationSuite
     /// <summary>
     /// Cross-checks the typed Gem/Crystal Outline pilot against the shipped setting strings, GPU indices and
     /// existing clamps. This verifies metadata compatibility only; the separate WPF/GPU image checks remain
-    /// responsible for rendering evidence, while recording and AR retain their conservative contract states.
+    /// responsible for rendering evidence, Recording stays Unverified, and AR retains its explicit flat-quad fallback.
     /// </summary>
     private static void VerifyEffectContractPilot()
     {
@@ -427,8 +428,8 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Unverified
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
-                $"{contract.Id} is drawn by both stage renderers in shipped code; recording and AR stay Unverified.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
+                $"{contract.Id} is drawn by both stage renderers in shipped code; Recording stays Unverified and AR deliberately suppresses all stage-anchored impact output.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
@@ -459,7 +460,7 @@ internal static partial class VerificationSuite
         Assert(AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Flash == FlashSuppression.NoChange
                 && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
             "The key morph should keep its current behavior while every accessibility toggle is off.");
-        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, recording/AR stay Unverified, all costs stay Unmeasured, and the flash-safety resolution acts exactly on the declared risks. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, Recording stays Unverified while AR is explicitly Unsupported, all costs stay Unmeasured, and the flash-safety resolution acts exactly on the declared risks. Metadata coherence only; see the separate AR compositor capture check.");
     }
 
     /// <summary>
@@ -480,8 +481,10 @@ internal static partial class VerificationSuite
                 && byId["falling.pulse"].Capabilities.GpuStage.State == EffectBackendState.Native,
             "Trail and pulse are drawn by both stage renderers in shipped code.");
         Assert(byId["falling.shimmer"].Capabilities.WpfStage.State == EffectBackendState.Unsupported
-                && byId["falling.shimmer"].Capabilities.GpuStage.State == EffectBackendState.Native,
-            "The shimmer must stay honest: GPU-native, and Unsupported on the WPF stage that never reads NoteShimmer.");
+                && byId["falling.shimmer"].Capabilities.GpuStage.State == EffectBackendState.Native
+                && byId["falling.shimmer"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Ignored
+                    && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied),
+            "The shimmer must stay honest: GPU-native, and Unsupported/ignored on the WPF stage that never reads NoteShimmer.");
         Assert(byId["falling.trail"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                 && byId["falling.pulse"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
                 && byId["falling.shimmer"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
@@ -536,8 +539,8 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Unverified
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
-                $"{contract.Id} is drawn by both stage renderers in shipped code; recording and AR stay Unverified.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
+                $"{contract.Id} is drawn by both stage renderers in shipped code; the AR overlay deliberately leaves out notes and keys, so the hold effects are excluded there.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
@@ -614,8 +617,11 @@ internal static partial class VerificationSuite
             }
         }
         Assert(byId["atmosphere.shooting-stars"].Capabilities.WpfStage.State == EffectBackendState.Unsupported
-                && byId["atmosphere.shooting-stars"].Capabilities.GpuStage.State == EffectBackendState.Native,
-            "Shooting stars are GPU-only: the WPF stage has no meteor pass, so no Native claim may stand there.");
+                && byId["atmosphere.shooting-stars"].Capabilities.GpuStage.State == EffectBackendState.Native
+                && byId["atmosphere.shooting-stars"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Ignored
+                    && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied
+                    && parameter.Bindings.ArOverlay == EffectParameterBindingState.Applied),
+            "Shooting stars are GPU-only: WPF ignores the settings, while the GPU stage and captured AR compositor consume them.");
         foreach (var id in new[] { "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic", "atmosphere.stars", "atmosphere.petals", "atmosphere.beams" })
         {
             Assert(byId[id].Capabilities.WpfStage.State == EffectBackendState.Native
@@ -647,8 +653,8 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Unverified
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
-                $"{contract.Id} is drawn by both stage renderers in shipped code; recording and AR stay Unverified.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
+                $"{contract.Id} is drawn by both stage renderers in shipped code; Recording stays Unverified and AR suppresses all unprojected particle/release effects.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");

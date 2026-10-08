@@ -28,7 +28,7 @@
 | Nguồn metadata runtime | `EffectCatalog` không được UI/renderer dùng làm nguồn options hay capability trong app hiện tại; tham chiếu ngoài chính tệp catalog chủ yếu là verification/docs. UI và settings khai báo riêng trong `PianoVisualSettings`/`MainWindow.Settings`. |
 | “Available” có chặn UI không? | Không. Runtime không đọc `EffectStatus` để lọc options; hiện có 86 `Available`, 1 `Planned`. `Planned` chỉ đúng metadata trong inventory, không tự ẩn một control UI tương ứng. |
 | Test độ phủ | Có kiểm chứng theo **nhóm** và một vài style mẫu, không có bằng chứng tự động cho từng option/ID hoặc parity pixel giữa mọi renderer. |
-| AR | GPU có camera/composite, key patches và calibrated note quads; `GpuArLayer` không đọc `EffectCatalog`. Một số ambient pass vẫn vẽ bằng tọa độ sân khấu 2D, không được chiếu qua calibration. Stage effect ID chưa có capability AR riêng được chứng minh. |
+| AR | Capability đã được gán rõ cho pilot typed: trong 24 family, 6 lớp screen-space (4 ambient + shooting stars + petals) là `Native` theo WARP captured-frame check; 18 lớp gắn nốt/phím hoặc backdrop bị `Unsupported` và bị ẩn khi overlay bật. Ba note materials vẫn là `Fallback` `ar.note.flat-quad`. `Native` ở đây chỉ có nghĩa là được composited trên ảnh camera, **không** phải chiếu qua homography/world-space. |
 | Audio-reactive | `AudioReactive` hiện dùng energy/onset envelope trong stage; chưa phải lựa chọn spectrum FFT từ PCM đã xác minh. |
 | Lỗi renderer cụ thể | `AmbientLight="Spotlights"` từng có GPU path nhưng thiếu WPF path; preset `Concert Gold` chọn giá trị này. Đã thêm shaft/pool; regression kiểm tra tắt, bounds và hơn 1.000 pixel raster PASS trong Windows CI run `37467081020`. Chưa đo parity pixel với GPU thật. |
 
@@ -52,7 +52,7 @@
 - **Implicit** — do dữ liệu âm nhạc/setting chung điều khiển, không có toggle riêng.
 - **Preset** — tổ hợp cài đặt trong `VisualPresets`; không có code renderer riêng.
 - **Sampled test** — `--verify` có kiểm tra nhóm, nhưng chưa kiểm từng giá trị trong dòng.
-- **AR chưa nối** — catalog ID chưa có mapping/capability riêng vào `GpuArLayer`; camera, key patches và note quads đã hoạt động, còn ambient có thể vẽ screen-space mà không qua homography. Xem baseline AR ở §6.
+- **AR typed pilot** — 24 effect families đã có support state riêng: 6 screen-space composite `Native`, 18 unprojected families `Unsupported`; note materials giữ flat-quad fallback. Điều này chưa phủ 87 descriptive IDs và không tạo surface/world-space projection. Xem §6.
 
 Đường stage thông thường dùng `PianoStage` cho software/WPF và `GpuLook` + `GpuStageSimulation*` cho GPU. Có chung settings/ý nghĩa không có nghĩa hai ảnh pixel giống nhau; parity cần test riêng. Các mục `Verify*Fx` bên dưới hiện nằm trong `Diagnostics/VerificationSuite.cs` và chỉ chạy khi có môi trường Windows/.NET tương ứng.
 
@@ -62,12 +62,12 @@
 
 | ID | Mapping runtime hiện tại | Độ phủ / lưu ý |
 |---|---|---|
-| `falling.glow-trail` | `FallingTrail="Glow"`; `DrawFallingTrail` / `AddNoteTrail`. | Choice; test nhóm falling có chọn `Sparkles`, chưa test riêng Glow. AR chưa nối. |
-| `falling.motion-blur` | `FallingTrail="Blur"`. | Choice; cùng control/renderer trail; chưa test riêng option Blur. AR chưa nối. |
+| `falling.glow-trail` | `FallingTrail="Glow"`; `DrawFallingTrail` / `AddNoteTrail`. | Choice; test nhóm falling có chọn `Sparkles`, chưa test riêng Glow. AR: `Unsupported` trên camera composite; không được project qua calibration. |
+| `falling.motion-blur` | `FallingTrail="Blur"`. | Choice; cùng control/renderer trail; chưa test riêng option Blur. AR: `Unsupported` trên camera composite; không được project qua calibration. |
 | `falling.sparkle-tail` | `FallingTrail="Sparkles"`. | Choice; được chọn trong `VerifyFallingFx`, nhưng test kết hợp pulse/ghost và không chứng minh parity GPU/WPF. |
 | `falling.color-gradient` | Không có control/render pass head-to-tail; `ColorMode="Gradient"`/`Palette` → `NoteColorCore` chỉ trải màu theo pitch. | Catalog entry đã được đổi sang `Planned`; giữ nghĩa head-to-tail, không đánh đồng với gradient low-to-high của bàn phím. Cần setting/màu/renderer/test riêng ở Phase 4. |
 | `falling.pulsing` | `FallingPulse` + `FallingPulseRate`. | Toggle/value; `VerifyFallingFx` vẽ chung với trail/ghost, chưa cô lập phép đo pulse. |
-| `falling.ribbon-twist` | `FallingTrail="Ribbon"`. | Choice; cùng renderer trail với Glow/Blur; “twist” là tên style, không có điều khiển riêng. AR chưa nối. |
+| `falling.ribbon-twist` | `FallingTrail="Ribbon"`. | Choice; cùng renderer trail với Glow/Blur; “twist” là tên style, không có điều khiển riêng. AR: `Unsupported` trên camera composite; không được project qua calibration. |
 | `falling.particle-stream` | `FallingTrail="Stream"`. | Choice; chưa test riêng option Stream. |
 | `falling.ghost-notes` | `FallingGhost` + `FallingGhostAmount`. | Toggle/value; được vẽ cùng falling sample, chưa assert riêng số/alpha ghost. |
 | `falling.speed-lines` | `FallingTrail="Speed Lines"`. | Choice; chưa test riêng option Speed Lines. |
@@ -80,7 +80,7 @@
 | `impact.burst` | `ImpactBurst` + `ShowEmbers` + particle physics/response; `Impact()` phát burst. | Shared family; không phải lựa chọn thứ sáu ngoài 5 `ImpactBurst` styles. Test sample Confetti, không phải từng style. |
 | `impact.ember-burst` | `ImpactBurst="Embers"` trong cùng burst engine. | Shared/alias với `impact.burst`; style Embers là default. |
 | `impact.ripple-ring` | `ShowImpactRings` + `ImpactWave="Ring"` + `RingSize`/intensity. | Choice; `VerifyImpactFx` kiểm geometry với Shockwave, không kiểm riêng Ring. |
-| `impact.shockwave` | `ImpactWave="Shockwave"`. | Choice; geometry/decay được `VerifyImpactFx` kiểm. AR chưa nối. |
+| `impact.shockwave` | `ImpactWave="Shockwave"`. | Choice; geometry/decay được `VerifyImpactFx` kiểm. AR: `Unsupported` trên camera composite; không được project qua calibration. |
 | `impact.flash` | `ShowImpactFlash` + `ImpactFlashStyle="Flash"` + intensity. | Choice/toggle; `VerifyImpactFx` kiểm flash geometry/decay, chưa kiểm từng style. |
 | `impact.key-glow` | `KeyLighting`, `KeyGlowRadius`, `PressedKeyColorMode` và key state. | Shared/alias: không có “impact key glow” selector riêng; AR vẽ key patches cơ bản nhưng không có cùng pass impact. |
 | `impact.splash` | `ImpactBurst="Splash"`; kind droplet/physics riêng. | Choice; chưa có test riêng cho kiểu Splash. |
@@ -105,7 +105,7 @@
 | `hold.breathing-glow` | `HoldBreath` + `HoldBreathRate` / `BreathFactor`. | Toggle/value; được bật trong test nhóm, chưa assert riêng chu kỳ/tần số. |
 | `hold.vibration` | `HoldVibration` + `HoldVibrationAmount`. | Toggle/value; được bật trong test nhóm, chưa assert displacement/giới hạn riêng. |
 | `hold.color-cycle` | `HoldColorCycle` + speed. | Toggle/value; được bật trong test nhóm, chưa test màu theo thời gian riêng. |
-| `hold.electric-arc` | `HoldElectricArc` + intensity; GPU procedural arc/WPF `DrawElectricArcs`. | Test kiểm geometry giữa hai phím. AR chưa nối. |
+| `hold.electric-arc` | `HoldElectricArc` + intensity; GPU procedural arc/WPF `DrawElectricArcs`. | Test kiểm geometry giữa hai phím. AR: `Unsupported` trên camera composite; không được project qua calibration. |
 
 ### 4.4 Release — 6 mục
 
@@ -201,7 +201,7 @@
 
 1. **Quyết định nguồn dữ liệu — đã chốt cho Phase 0:** các khai báo settings/default/normalize và danh sách lựa chọn UI hiện có tiếp tục là nguồn runtime; `EffectCatalog` được giữ đúng vai trò inventory/metadata cho audit/diagnostics, không lọc UI và không chứng minh capability. Chỉ đưa một typed registry vào runtime sau khi Phase 1 chuẩn hóa ID/alias/capability; không nối `EffectStatus` vội.
 2. **Đã sửa và verify WPF path `AmbientLight=Spotlights`.** Renderer ba shaft/pool theo màu, tốc độ và activity cùng kiểm tra zero-intensity, bounds và pixel raster đã PASS trong Windows CI run `37467081020`. Phạm vi kết luận chỉ là WPF/WARP test; parity pixel trên GPU thật chưa được đo.
-3. **Gán AR capability cho từng effect ở phase thiết kế/runtime registry.** Không thể đánh dấu cả catalog Available rồi suy ra AR chạy. `GpuArLayer` hiện tạo key patches và note quads theo calibration; không đọc catalog ID hay dùng trọn các event/effect channels của stage. Một số ambient pass vẫn overlay theo screen-space, không phải AR-projected.
+3. **AR capability theo typed family — đã có lát kiểm chứng đầu.** `EffectContractCatalog` ghi trạng thái riêng cho 24 effect families: sáu ambient pass-through là `Native` chỉ trong screen-space camera composite; 18 stage-anchored/backdrop families là `Unsupported` trên AR overlay vì không được chiếu lên keyboard thật. Ba note materials giữ `Fallback` `ar.note.flat-quad`. `VerifyArOverlayCapturedFrames` đọc lại các lớp pass-through và suppression trên WARP. Phạm vi này chưa bao phủ toàn bộ 87 ID của descriptive inventory, chưa có AR surface/world-space geometry, và không nâng `Recording` khỏi `Unverified`.
 4. **Đã chốt nghĩa `falling.color-gradient`:** giữ yêu cầu chuyển màu đầu–đuôi; `ColorMode="Gradient"` hiện tại là gradient theo pitch và không thay thế được. Entry đã chuyển sang `Planned`; renderer/settings/test dọc thân nốt được đưa vào Phase 4, không làm lẫn hai hành vi.
 
 ### P1 — độ rõ của sản phẩm/kiểm chứng
@@ -234,9 +234,9 @@
 | Camera & mapping | Camera ring → GPU texture; Fit/Fill, mirror, opacity; `ArView` và homography dùng chung cho nền camera và các điểm chiếu. | Kiểm tra trên camera/webcam thật tùy thiết bị; verify dùng WARP và khung synthetic. |
 | Phím thật | `GpuArLayer` lấy glow/color từ simulation rồi gọi `ArKeys.Patches` để chiếu phần nhìn thấy của key trắng/đen thành quad; có `KeyLight`/opacity/delay. | Là light overlay trên ảnh, không phải dựng lại phím 3D hay che khuất theo bàn tay tự động. |
 | Nốt Learn | `ArNotes.Build` tạo note quad theo calibration, màu `GpuLook.NoteColor`, trạng thái played/missed và fade; `ArNoteStyle` điều khiển fall speed/reach/length/gap/width; `ArOptions` điều khiển Learn/Perform, lookahead, opacity và delay. | Đây là hình học AR riêng, không lấy trọn `NoteStyle`/material của stage (3D, glass/refraction, note shimmer, trails, note labels). |
-| Stage lifecycle effects | Khi overlay Active, `GpuLook.From(..., overCamera: true)` tắt stage-space notes/keys, embers, wisps, flame, impact rings/flash, halo và key beams để tránh vẽ lệch phím thật. | `GpuArLayer` không nhận catalog ID/effect events; impact/hold/release/trails không được chiếu theo homography và không có capability AR riêng. |
-| Ambient / screen-space | GPU `BuildAmbient` vẫn có thể vẽ guide lanes, petals, shooting stars và 4 ambient slots trên mặt camera theo tọa độ sân khấu; bloom/grade được áp vào overlay GPU. | Các lớp này **không** được perspective-project vào mặt phím và không được tính là AR-native; chúng chỉ là overlay 2D. Ảnh camera được ghép sau bước grade của overlay sân khấu. |
-| Verify hiện có | `VerifyArCameraLayer`, `VerifyArRecording`, `VerifyArDelay` và `VerifyArLatency`; WARP test đo camera transform, note/key quad pixels, pause/opacity/size guards, delay và ghi hình. | Chưa có ma trận AR theo từng catalog ID hoặc test image cho từng style/capability. |
+| Stage lifecycle effects | Khi overlay Active, `GpuLook.From(..., overCamera: true)` ẩn notes/keys, disable emitter/impact/release channels; `BuildNotes` bỏ các falling/hold effect và `GpuStageSimulation.BuildSprites` bỏ cả sprite transients đã ở giữa đời. | 18 trong 24 effect families hiện là `Unsupported` trên AR overlay; chúng chưa được project lên keyboard thật. Đây là suppression, không phải tuyên bố renderer AR cho các FX đó. |
+| Ambient / screen-space | GPU `BuildAmbient` composited lên ảnh camera: bốn ambient slots, shooting stars và petals đã được bật riêng, render và đọc lại thành frame WARP. Các families này mang capability `Native` riêng cho chế độ screen-space overlay. | Không perspective-project qua calibration và không phải surface/world-space AR; sao nền và key beams bị loại vì camera thay backdrop và stage-local key-light sai vị trí. Guide lanes chưa thuộc family typed này. |
+| Verify hiện có | `VerifyArCameraLayer`, `VerifyArOverlayExclusions`, `VerifyArOverlayCapturedFrames`, `VerifyArRecording`, `VerifyArDelay` và `VerifyArLatency`; captured-frame test kiểm riêng sáu lớp pass-through, sao/beams bị loại, và transients in-flight bị ẩn. | `Gem`/`CrystalOutline` trên phím thật vẫn là `ar.note.flat-quad`; Recording capability của effect families vẫn `Unverified` và chờ capture-specific slice. |
 
 **Quyết định Phase 0:** catalog giữ vai trò inventory/audit; các setting/default và lựa chọn UI hiện tại là nguồn runtime. Chưa gắn `EffectStatus` để lọc UI. Phase sau chỉ đưa typed registry vào runtime sau khi ID/alias/capability được chuẩn hóa; AR capability phải là thuộc tính explicit, không suy từ `Available`.
 

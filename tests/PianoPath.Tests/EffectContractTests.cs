@@ -190,6 +190,11 @@ public sealed class EffectContractTests
         Assert.Equal(EffectBackendState.Native, shimmer.Capabilities.GpuStage.State);
         Assert.Equal(EffectBackendState.Native, trail.Capabilities.WpfStage.State);
         Assert.Equal(EffectBackendState.Native, pulse.Capabilities.WpfStage.State);
+        Assert.All(shimmer.Parameters, parameter =>
+        {
+            Assert.Equal(EffectParameterBindingState.Ignored, parameter.Bindings.WpfStage);
+            Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
+        });
 
         Assert.All(EffectContractCatalog.FallingFxPilot, contract => Assert.All(
             new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay },
@@ -237,6 +242,41 @@ public sealed class EffectContractTests
                 .Concat(EffectContractCatalog.ParticlesFxPilot).Concat(EffectContractCatalog.ReleaseFxPilot)
                 .Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal),
             EffectContractCatalog.AllFamilies.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
+    public void Ar_overlay_support_is_limited_to_the_captured_ambient_layers()
+    {
+        var nativeInAr = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic",
+            "atmosphere.shooting-stars", "atmosphere.petals",
+        };
+        Assert.Equal(6, EffectContractCatalog.AllFamilies.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native));
+        foreach (var family in EffectContractCatalog.AllFamilies)
+        {
+            Assert.Equal(nativeInAr.Contains(family.Id) ? EffectBackendState.Native : EffectBackendState.Unsupported,
+                family.Capabilities.ArOverlay.State);
+            Assert.All(family.Parameters, parameter => Assert.Equal(
+                nativeInAr.Contains(family.Id) ? EffectParameterBindingState.Applied : EffectParameterBindingState.Ignored,
+                parameter.Bindings.ArOverlay));
+            Assert.Equal(EffectBackendState.Unverified, family.Capabilities.Recording.State);
+        }
+        var shootingStars = EffectContractCatalog.AllFamilies.Single(family => family.Id == "atmosphere.shooting-stars");
+        Assert.Equal(EffectBackendState.Unsupported, shootingStars.Capabilities.WpfStage.State);
+        Assert.All(shootingStars.Parameters, parameter =>
+        {
+            Assert.Equal(EffectParameterBindingState.Ignored, parameter.Bindings.WpfStage);
+            Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
+            Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.ArOverlay);
+        });
+        Assert.Equal(150d, EffectContractCatalog.AllFamilies.Single(family => family.Id == "atmosphere.petals")
+            .Parameters.Single(parameter => parameter.SettingName == "PetalAmount").Maximum!.Value);
+        Assert.All(EffectContractCatalog.NoteMaterialPilot, material =>
+        {
+            Assert.Equal(EffectBackendState.Fallback, material.Capabilities.ArOverlay.State);
+            Assert.Equal("ar.note.flat-quad", material.Capabilities.ArOverlay.FallbackId);
+        });
     }
 
     [Fact]

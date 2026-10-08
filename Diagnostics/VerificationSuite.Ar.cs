@@ -8,6 +8,42 @@ namespace PianoPath;
 internal static partial class VerificationSuite
 {
     /// <summary>
+    /// Pins AR support to the actual composite contract: six ambient layers are verified over the camera;
+    /// stage-anchored note/key effects are suppressed, and note materials keep their explicit flat-quad fallback.
+    /// Pixel-level evidence for the visible and suppressed groups is exercised by VerifyArOverlayCapturedFrames.
+    /// </summary>
+    private static void VerifyArOverlayExclusions()
+    {
+        var nativeInAr = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic",
+            "atmosphere.shooting-stars", "atmosphere.petals",
+        };
+        var families = EffectContractCatalog.AllFamilies;
+        Assert(families.Count == 24, "AR classification should cover all 24 typed effect families.");
+        Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
+            "Only the four ambient layers, shooting stars and petals are verified as native over the camera.");
+        foreach (var family in families)
+        {
+            var expected = nativeInAr.Contains(family.Id) ? EffectBackendState.Native : EffectBackendState.Unsupported;
+            Assert(family.Capabilities.ArOverlay.State == expected,
+                $"{family.Id} must match the captured AR compositor evidence ({expected}).");
+            var expectedBinding = expected == EffectBackendState.Native ? EffectParameterBindingState.Applied : EffectParameterBindingState.Ignored;
+            Assert(family.Parameters.All(parameter => parameter.Bindings.ArOverlay == expectedBinding),
+                $"{family.Id} parameter bindings should match its AR output support state.");
+            Assert(family.Capabilities.Recording.State == EffectBackendState.Unverified,
+                $"{family.Id} recording support remains Unverified until the recording-specific capture slice is complete.");
+        }
+        foreach (var material in EffectContractCatalog.NoteMaterialPilot)
+        {
+            Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Fallback
+                    && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
+                $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
+        }
+        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback, and Recording stays Unverified.");
+    }
+
+    /// <summary>
     /// AR-1.1, the camera picture as a GPU layer: frames taken from the ring, the texture kept and only re-created when the
     /// camera changes size, bad frames refused without harm, and — on one WARP device, read back — the picture landing
     /// where <see cref="ArView"/> says it does: fit with bars, fill with a crop, mirrored, dimmed, gone when the layer is
@@ -292,9 +328,123 @@ internal static partial class VerificationSuite
         Render(MakeArFeed(null, arInput));
         Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
+        VerifyArOverlayCapturedFrames(renderer);
         Results.Add($"PASS ar keys: three held keys are five rectangles, each tinted where it is in the picture and nothing around it, black keys beside a held white key left alone; read back against the same frame without the layer.");
         Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal selections keep the flat-quad fallback; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
+    }
+
+    /// <summary>Read-back check of what is and is not composited over a camera in the AR stage look.</summary>
+    private static void VerifyArOverlayCapturedFrames(GpuStageRenderer renderer)
+    {
+        const int width = 320, height = 180;
+        var cameraRing = new CameraFrameRing();
+        var image = cameraRing.BeginWrite(width * height * 4, out var slot);
+        for (var i = 0; i < image.Length; i += 4)
+        {
+            image[i] = image[i + 1] = image[i + 2] = 90;
+            image[i + 3] = 255;
+        }
+        cameraRing.Publish(slot, width, height, Stopwatch.GetTimestamp());
+        var camera = new GpuCameraInput(cameraRing, PictureFit.Fit, false, 1f);
+        var notes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = 1.2, Duration = .7 },
+            new() { Pitch = 61, Start = 1.25, Duration = .5 },
+        };
+        var held = new HashSet<int> { 60, 61 };
+        var quiet = new PianoVisualSettings
+        {
+            ShowBackground = true, BackgroundMode = "Solid", BackgroundGradient = false, BackgroundMotion = "None",
+            ShowNotes = false, ShowKeys = false, ShowHalo = false, ShowStars = false,
+            ShowEmbers = false, ShowWisps = false, ShowFlame = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowLightBeams = false, ShowPetals = false, ShootingStars = false,
+            AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
+            HorizonGlow = 0, BloomIntensity = 0, Vignette = 0,
+        };
+        GpuStageFeed MakeFeed(PianoVisualSettings settings, bool overCamera, bool sounding = true)
+        {
+            var feed = new GpuStageFeed();
+            feed.SetStageHeight(height);
+            feed.SetLook(GpuLook.From(settings, (pitch, track) => Color.FromRgb(255, 80, 220), .205, overCamera: overCamera));
+            IReadOnlyList<NoteEvent> stateNotes = sounding ? notes : Array.Empty<NoteEvent>();
+            IReadOnlySet<int> pressed = sounding ? held : new HashSet<int>();
+            feed.SetDeterministicState(stateNotes, sounding ? 1 : 0, sounding, pressed);
+            feed.Camera = camera;
+            return feed;
+        }
+        byte[] Capture(GpuStageFeed feed, Action<int>? beforeFrame = null) =>
+            GpuRenderLoop.RenderFrames(renderer, feed, width, height, 4, .02, false, out _, beforeFrame, 20261008);
+        static int ChangedPixels(byte[] a, byte[] b, int threshold = 4)
+        {
+            var changed = 0;
+            for (var i = 0; i < a.Length; i += 4)
+                if (Math.Abs(a[i] - b[i]) >= threshold || Math.Abs(a[i + 1] - b[i + 1]) >= threshold || Math.Abs(a[i + 2] - b[i + 2]) >= threshold)
+                    changed++;
+            return changed;
+        }
+
+        var background = Capture(MakeFeed(quiet, overCamera: true));
+        var visibleLayers = new (string Id, Action<PianoVisualSettings> Enable)[]
+        {
+            ("ambient.energy", s => { s.AmbientEnergy = "Lightning Storm"; s.AmbientEnergyAmount = 100; }),
+            ("ambient.nature", s => { s.AmbientNature = "Rain"; s.AmbientNatureAmount = 100; }),
+            ("ambient.light", s => { s.AmbientLight = "Prism"; s.AmbientLightAmount = 100; }),
+            ("ambient.cosmic", s => { s.AmbientCosmic = "Geometric"; s.AmbientCosmicAmount = 100; }),
+            ("atmosphere.shooting-stars", s => { s.ShootingStars = true; s.ShootingStarsAmount = 100; }),
+            ("atmosphere.petals", s => { s.ShowPetals = true; s.PetalAmount = 150; }),
+        };
+        foreach (var (id, enable) in visibleLayers)
+        {
+            var settings = quiet.Clone(); enable(settings);
+            var captured = Capture(MakeFeed(settings, overCamera: true, sounding: false));
+            var changed = ChangedPixels(background, captured);
+            Assert(changed > 0, $"The {id} layer should appear in the captured camera composite (changed {changed} pixels).");
+        }
+        var stars = quiet.Clone(); stars.ShowStars = true;
+        Assert(background.AsSpan().SequenceEqual(Capture(MakeFeed(stars, overCamera: true))),
+            "The star field belongs to the replaced backdrop, so it must not be drawn over the camera picture.");
+        var beams = quiet.Clone(); beams.ShowLightBeams = true;
+        Assert(background.AsSpan().SequenceEqual(Capture(MakeFeed(beams, overCamera: true))),
+            "Key-anchored beams must stay out of the camera composite.");
+
+        var busy = quiet.Clone();
+        busy.ShowNotes = true; busy.ShowKeys = true; busy.ShowHalo = true; busy.ShowStars = true;
+        busy.NoteShimmer = true; busy.FallingTrail = "Ribbon"; busy.FallingPulse = true;
+        busy.HoldBar = true; busy.HoldBreath = true; busy.HoldVibration = true; busy.HoldColorCycle = true; busy.HoldElectricArc = true;
+        busy.ShowEmbers = true; busy.ParticleAmount = 120; busy.ShowWisps = true; busy.WispAmount = 150;
+        busy.ShowFlame = true; busy.FlameIntensity = 100;
+        busy.ShowImpactRings = true; busy.ImpactWave = "Shockwave"; busy.ImpactWaveIntensity = 100;
+        busy.ShowImpactFlash = true; busy.ImpactFlashIntensity = 100; busy.ImpactFlashStyle = "Lightning";
+        busy.ImpactMorph = "Shatter"; busy.ImpactMorphIntensity = 100;
+        busy.ReleaseEffect = "Dissolve"; busy.ReleaseIntensity = 100;
+        busy.ShowLightBeams = true; busy.BeamIntensity = 100;
+        var overCameraLook = GpuLook.From(busy, (pitch, track) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
+        Assert(overCameraLook.OverCamera && !overCameraLook.ShowNotes && !overCameraLook.ShowKeys
+                && !overCameraLook.ShowEmbers && !overCameraLook.ShowWisps && !overCameraLook.ShowFlame
+                && !overCameraLook.ShowImpactRings && !overCameraLook.ShowImpactFlash && !overCameraLook.ShowLightBeams
+                && !overCameraLook.HoldElectricArc && overCameraLook.ImpactWave == "None" && overCameraLook.ImpactMorph == "None"
+                && overCameraLook.ReleaseEffect == "Fade" && overCameraLook.ReleaseIntensity == 0,
+            "The AR look must disable note/key effects before simulation and mark the camera composition for transient suppression.");
+        GpuStageFeed BusyFeed()
+        {
+            var feed = MakeFeed(busy, overCamera: false);
+            feed.Impact(60, 1);
+            feed.LiveNote(60, true, 1);
+            feed.LiveNote(60, false, 1);
+            return feed;
+        }
+        var stageImage = Capture(BusyFeed());
+        Assert(ChangedPixels(background, stageImage, threshold: 8) > 30,
+            "The busy fixture must visibly contain stage notes, keys and transients before its camera overlay is enabled.");
+        var transitioning = BusyFeed();
+        var hidden = Capture(transitioning, frame =>
+        {
+            if (frame == 1) transitioning.SetLook(overCameraLook);
+        });
+        Assert(background.AsSpan().SequenceEqual(hidden),
+            "The AR camera composite must hide active stage notes, keys and transients that were already in flight when the overlay turned on.");
+        Results.Add("PASS AR over-camera captured frames: WARP readback shows all six camera-composited ambient families, omits backdrop stars and key beams, and hides notes/keys plus in-flight impact, particle, hold and release effects when AR turns on.");
     }
 
     /// <summary>
