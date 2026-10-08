@@ -3356,7 +3356,7 @@ internal static partial class VerificationSuite
             Assert(clearPixels > total / 40 && clearPixels < opaquePixels - total / 3,
                 $"A transparent export should drop the background and keep the piano: {opaquePixels} opaque pixels with the background, {clearPixels} without (of {total}).");
 
-            // Record the three typed note materials through the software-stage PNG path, then decode the actual files.
+            // Record distinct note materials and two Fire tints through the software-stage PNG path, then decode the actual files.
             Assert(!stage.UsesGpuFrame, "The transparent PNG path must capture the WPF/software stage in this verification session.");
             var savedNotes = (IReadOnlyList<NoteEvent>)Field(stage, "_notes")!;
             var savedPosition = (double)Field(stage, "_position")!;
@@ -3368,10 +3368,14 @@ internal static partial class VerificationSuite
                 new() { Pitch = 64, Start = 1.2, Duration = .7 },
                 new() { Pitch = 67, Start = 1.2, Duration = .7 },
             };
-            byte[] CaptureMaterial(string style)
+            byte[] CaptureMaterial(string style, string? perHandTint = null)
             {
                 var materialLook = flat.Clone();
                 materialLook.NoteStyle = style; materialLook.Notes3D = false; materialLook.ShowNotes = true;
+                if (perHandTint is not null)
+                {
+                    materialLook.ColorMode = "PerHand"; materialLook.HandSplitPitch = 108; materialLook.LeftHandColor = perHandTint;
+                }
                 materialLook.ShowKeys = false; materialLook.ShowHalo = false; materialLook.ShowStars = false;
                 materialLook.ShowNoteLabels = false; materialLook.ShowWatermark = false; materialLook.ShowCounter = false; materialLook.ShowFps = false;
                 materialLook.NoteGlow = 0; materialLook.NoteHeadGlow = 0; materialLook.NoteRefraction = 0;
@@ -3393,11 +3397,10 @@ internal static partial class VerificationSuite
             using (var materialRecorder = new PngSequenceRecorder(materialDirectory, 640, 360, 24))
             {
                 foreach (var style in new[] { "Solid", "Gem", "CrystalOutline" })
-                {
-                    var materialFrame = CaptureMaterial(style);
-                    materialRecorder.WriteFrame(materialFrame);
-                }
-                Assert(materialRecorder.FrameCount == 3, "Each typed note material should be submitted as one frame to the real PNG recorder.");
+                    materialRecorder.WriteFrame(CaptureMaterial(style));
+                materialRecorder.WriteFrame(CaptureMaterial("Fire", "#0878FF"));
+                materialRecorder.WriteFrame(CaptureMaterial("Fire", "#FFAA0C"));
+                Assert(materialRecorder.FrameCount == 5, "The material recorder should capture Solid/Gem/Crystal and two Fire note-color variants as PNG frames.");
             }
             static byte[] DecodeMaterialPng(string path)
             {
@@ -3411,6 +3414,8 @@ internal static partial class VerificationSuite
             var solidRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000001.png"));
             var gemRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000002.png"));
             var crystalRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000003.png"));
+            var fireBlueRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000004.png"));
+            var fireAmberRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000005.png"));
             static int DifferentPixels(byte[] left, byte[] right)
             {
                 var count = 0;
@@ -3420,14 +3425,16 @@ internal static partial class VerificationSuite
             }
             var solidGemChanges = DifferentPixels(solidRecorded, gemRecorded);
             var gemCrystalChanges = DifferentPixels(gemRecorded, crystalRecorded);
+            var fireColorChanges = DifferentPixels(fireBlueRecorded, fireAmberRecorded);
             Assert(solidRecorded.Length == 640 * 360 * 4 && gemRecorded.Length == solidRecorded.Length && crystalRecorded.Length == solidRecorded.Length
-                    && solidGemChanges > 20 && gemCrystalChanges > 20,
-                $"The decoded PNG frames should preserve distinct Solid/Gem/Crystal Outline stage materials ({solidGemChanges}/{gemCrystalChanges} changed pixels).");
+                    && fireBlueRecorded.Length == solidRecorded.Length && fireAmberRecorded.Length == solidRecorded.Length
+                    && solidGemChanges > 20 && gemCrystalChanges > 20 && fireColorChanges > 50,
+                $"The decoded PNG frames should preserve distinct Solid/Gem/Crystal Outline materials and visibly change Fire with PerHand color ({solidGemChanges}/{gemCrystalChanges}/{fireColorChanges} changed pixels).");
             stage.SetState(savedNotes, savedPosition, savedPlaying, savedPressed);
             var restored = PianoVisualSettings.FromJson(hadLook);
             ((PianoVisualSettings)Field(window, "_visualSettings")!).CopyFrom(restored);
             stage.SetVisualSettings(restored); Invoke(window, "RefreshSettingControls");
-            Results.Add("PASS PNG sequence: 32-bit frames, repeats, manifest, bad sizes and transparent alpha; WPF recording capture writes/reads distinct Solid, Gem and Crystal Outline stage frames through actual PNG files.");
+            Results.Add($"PASS PNG sequence: 32-bit frames, repeats, manifest, bad sizes and transparent alpha; WPF/PNG captures preserve Solid, Gem and Crystal Outline and distinguish Fire using contrasting PerHand note colors ({fireColorChanges} pixels).");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }

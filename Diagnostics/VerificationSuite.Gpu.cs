@@ -253,11 +253,11 @@ internal static partial class VerificationSuite
 
         var notes = new List<NoteEvent>
         {
-            new() { Pitch = 60, Start = .6, Duration = 2.0 },
-            new() { Pitch = 64, Start = .6, Duration = 2.0 },
-            new() { Pitch = 67, Start = .6, Duration = 2.0 }
+            new() { Pitch = 60, Start = 2.0, Duration = 2.0 },
+            new() { Pitch = 64, Start = 2.0, Duration = 2.0 },
+            new() { Pitch = 67, Start = 2.0, Duration = 2.0 }
         };
-        byte[] Render(string style, bool depth3D, bool showNotes = true, double refraction = 0)
+        byte[] Render(string style, bool depth3D, bool showNotes = true, double refraction = 0, Color? noteTint = null)
         {
             var settings = new PianoVisualSettings
             {
@@ -271,13 +271,17 @@ internal static partial class VerificationSuite
             };
             settings.ShowNotes = showNotes;
             var feed = new GpuStageFeed(); feed.SetStageHeight(height);
-            feed.SetLook(GpuLook.From(settings, (pitch, track) => Color.FromRgb(64, 176, 250), .205));
-            feed.SetState(notes, 1.5, true, new HashSet<int>());
+            feed.SetLook(GpuLook.From(settings, (pitch, track) => noteTint ?? Color.FromRgb(64, 176, 250), .205));
+            feed.SetDeterministicState(notes, 1.5, true, new HashSet<int>());
+            feed.SetDeterministicBeatPulse(0);
             return GpuRenderLoop.RenderOnce(feed, width, height, 12, 1 / 60.0, out _, forceWarp: true);
         }
 
         var blank = Render("Solid", false, showNotes: false);
         var solid = Render("Solid", false);
+        var fireBlank = Render("Fire", false, showNotes: false);
+        var fireBlue = Render("Fire", false, noteTint: Color.FromRgb(8, 120, 255));
+        var fireAmber = Render("Fire", false, noteTint: Color.FromRgb(255, 170, 12));
         var gem2D = Render("Gem", false);
         var gem3D = Render("Gem", true);
         var gemWithRefraction = Render("Gem", false, refraction: 100);
@@ -293,6 +297,25 @@ internal static partial class VerificationSuite
                 if (delta > 18) count++;
             }
             return count;
+        }
+        (double BlueRedBias, int VisiblePixels) FireTintEvidence(byte[] image, byte[] baseline)
+        {
+            // Ignore the bottom 150 stage pixels, where the material intentionally warms as it nears the keys.
+            var topRows = Math.Clamp((int)(height * (1.0 - .205) - 150.0), 1, height);
+            double blue = 0, red = 0;
+            var visible = 0;
+            for (var y = 0; y < topRows; y++)
+                for (var x = 0; x < width; x++)
+                {
+                    var i = (y * width + x) * 4;
+                    var delta = Math.Abs(image[i] - baseline[i]) + Math.Abs(image[i + 1] - baseline[i + 1]) + Math.Abs(image[i + 2] - baseline[i + 2]);
+                    var luma = .0722 * image[i] + .7152 * image[i + 1] + .2126 * image[i + 2];
+                    if (delta <= 18 || luma <= 35) continue;
+                    blue += image[i];
+                    red += image[i + 2];
+                    visible++;
+                }
+            return (visible == 0 ? 0 : (blue - red) / visible, visible);
         }
         int BrightChangedPixels(byte[] image, byte[] baseline)
         {
@@ -336,6 +359,13 @@ internal static partial class VerificationSuite
             "The GPU depth input must change Gem shading while Crystal Outline remains flat.");
         Assert(!gem2D.AsSpan().SequenceEqual(gemWithRefraction) && crystal2D.AsSpan().SequenceEqual(crystalWithRefraction),
             "GPU Gem should consume NoteRefraction while the Crystal Outline shader should leave that input unused.");
+        var fireBlueEvidence = FireTintEvidence(fireBlue, fireBlank);
+        var fireAmberEvidence = FireTintEvidence(fireAmber, fireBlank);
+        var fireColorChanges = ChangedPixels(fireBlue, fireAmber);
+        Assert(fireBlueEvidence.VisiblePixels > 100 && fireAmberEvidence.VisiblePixels > 100 && fireColorChanges > 100
+                && fireBlueEvidence.BlueRedBias > 10 && fireAmberEvidence.BlueRedBias < -10,
+            $"GPU Fire should carry contrasting note colors through its upper body while retaining its ember texture (blue bias {fireBlueEvidence.BlueRedBias:0.0}, amber bias {fireAmberEvidence.BlueRedBias:0.0}, visible {fireBlueEvidence.VisiblePixels}/{fireAmberEvidence.VisiblePixels}, changed {fireColorChanges}).");
+        Results.Add($"PASS Fire note tint GPU/WARP: contrasting blue and amber tints reverse the upper-body blue/red bias ({fireBlueEvidence.BlueRedBias:0.0}/{fireAmberEvidence.BlueRedBias:0.0}) across {fireColorChanges} changed pixels.");
         Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); bright Crystal contour at half-size {crystalBrightHalf}; Gem responds to 2D/3D and NoteRefraction while Crystal Outline stays flat and does not consume NoteRefraction.");
     }
 

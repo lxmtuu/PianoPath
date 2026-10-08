@@ -472,25 +472,29 @@ float4 PsNote(NoteOut v) : SV_Target
     }
     else if (style < 3.5)
     {
-        // Fire / lava: a cream-hot body cut by dark crusted cracks that crawl over it, glowing orange at
-        // the rim and turning red-hot as it nears the keys
-        // coarse enough that a crack stays several pixels wide on a narrow bar (the software stage's texture)
+        // Fire / lava: keep the chosen note hue as the pigment of the ember body and crust; cream hot spots
+        // and a warm rim preserve the fire read without drowning out PerHand/PerTrack/custom note colors.
+        // The moving crack field stays coarse enough to survive on a narrow bar (as in the software stage).
         float2 q = float2(p.x / max(hb.x, 1.0) * 0.7, (v.SceneY + v.Misc.y * 97.0) / (22.0 * SceneB.y));
         q.y -= ScreenTime.z * 0.35;
         float n = Fbm(q * float2(1.6, 1.0));
         float cracks = smoothstep(0.34, 0.5, n) * (0.35 + 0.65 * NoteC.x) + (1.0 - NoteC.x) * 0.65;
         float veins = 1.0 - exp(-pow((n - 0.42) * 14.0, 2.0));
         float heat = saturate(1.0 - (ScreenTime.w - v.SceneY) / max(NoteC.w, 1.0));
-        float3 hot = lerp(float3(1.0, 0.93, 0.72), col, 0.22);
-        float3 crust = float3(0.3, 0.02, 0.008);
+        float3 fireTint = saturate(col);
+        float3 hot = lerp(float3(1.0, 0.93, 0.72), fireTint, 0.68);
+        float3 crust = lerp(float3(0.3, 0.02, 0.008), fireTint * 0.18, 0.68);
         float3 body = lerp(crust, hot, saturate(cracks * veins));
-        body = lerp(body, body * float3(1.0, 0.38, 0.2) + float3(0.25, 0.0, 0.0), heat * 0.75);
+        float3 heatTint = lerp(fireTint, float3(1.0, 0.22, 0.035), 0.42);
+        body = lerp(body, heatTint, heat * 0.32);
+        float3 warmEdge = lerp(float3(1.0, 0.36, 0.06), fireTint, 0.66);
+        float3 warmGlow = lerp(float3(1.0, 0.3, 0.05), fireTint, 0.70);
+        float3 warmCore = lerp(float3(1.0, 0.55, 0.2), fireTint, 0.55);
         float rim = exp(-abs(d + edgeW * 0.3) / (edgeW * 0.45));
-        // kept under the bloom threshold (1.8) so the cream body and its dark cracks read instead of
-        // blooming into one white column; the orange rim and the halo carry the heat
-        emit += (body * (0.62 + 0.36 * NoteB.x) + float3(1.0, 0.36, 0.06) * rim * 0.7 * NoteB.y) * inside;
-        emit += float3(1.0, 0.3, 0.05) * exp(-outsideD / (glowR * 0.25)) * 0.55 * NoteC.z * (1.0 - inside);
-        emit += float3(1.0, 0.55, 0.2) * sounding * 0.25 * inside;
+        // Keep the burn below the bloom threshold (1.8) so both the note tint and the moving ember texture remain legible.
+        emit += (body * (0.62 + 0.36 * NoteB.x) + warmEdge * rim * 0.7 * NoteB.y) * inside;
+        emit += warmGlow * exp(-outsideD / (glowR * 0.25)) * 0.55 * NoteC.z * (1.0 - inside);
+        emit += warmCore * sounding * 0.25 * inside;
         alpha = inside;
     }
     else if (style < 4.5)

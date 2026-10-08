@@ -321,8 +321,9 @@ public partial class MainWindow
         SliderRow(color, "Rainbow speed", nameof(PianoVisualSettings.RainbowSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.ColorMode == "RainbowTime";
 
         var shape = Card(NoteSettingsHost, "SHAPE & STYLE", "Silhouette of the falling bars.");
-        Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Choose the note material without changing pitch, timing or width. Gem uses faceted luminous planes; Crystal Outline is an angular, translucent contour.",
+        Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Choose the note material without changing pitch, timing or width. Fire / burning follows the active note-color mode; Gem uses faceted luminous planes; Crystal Outline is an angular, translucent contour.",
             ("Solid", "Solid"), ("Neon", "Neon outline"), ("Glass", "Glass"), ("Fire", "Fire / burning"), ("Gem", "Gem"), ("CrystalOutline", "Crystal Outline"));
+        Note(shape, "Fire / burning bars follow the active note colors in COLOR above. In Gradient mode, set Palette to Custom or edit the start/end swatches; PerHand and PerTrack use their own color controls. Flame color on the Particles page changes separate flames around sounding keys, not note bars.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire";
         SliderRow(shape, "Note width", nameof(PianoVisualSettings.NoteWidth), 30, 100, "Width of a note relative to its key lane.");
         SliderRow(shape, "Corner roundness", nameof(PianoVisualSettings.NoteRoundness), 0, 100, "Rounded corners of every bar.");
         SliderRow(shape, "Minimum length", nameof(PianoVisualSettings.NoteMinLength), 4, 60, "Very short notes are stretched to at least this many pixels.");
@@ -448,7 +449,7 @@ public partial class MainWindow
         Toggle(flames, "Enable flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts while a key sounds.");
         SliderRow(flames, "Flame intensity", nameof(PianoVisualSettings.FlameIntensity), 0, 100, "Brightness and size of the fire.");
         SliderRow(flames, "Flame height", nameof(PianoVisualSettings.FlameHeight), 0, 100, "How tall the flames reach.");
-        Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Classic warm fire or the color of the note.", ("Warm", "Warm fire"), ("Note", "Note color"));
+        Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Color of the separate flames around sounding keys: classic warm fire or the note color. This does not change the Fire / burning note material.", ("Warm", "Warm fire"), ("Note", "Note color"));
     }
 
     private void BuildKeyboardPage()
