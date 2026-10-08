@@ -501,7 +501,7 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality)).Normalised();
 
     /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
     internal KeyboardLayout KeyboardLayoutChoice =>
@@ -741,7 +741,7 @@ internal sealed class PianoVisualSettings
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         ArViewProfileId = ArCalibrationProfiles.Normalize(ArViewProfileId).Id;
         ArQuality = ArQualityTiers.Normalize(ArQuality);
-        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity).Normalised();
+        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality)).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);

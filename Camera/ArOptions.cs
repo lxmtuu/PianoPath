@@ -27,8 +27,9 @@ internal static class ArModes
 /// <param name="Delay">How late the camera's picture is, milliseconds: what the overlay is held back by so that it shows what the picture shows.</param>
 /// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
 /// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
+/// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
-    GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null)
+    GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
