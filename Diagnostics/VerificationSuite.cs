@@ -3473,7 +3473,8 @@ internal static partial class VerificationSuite
                 byte[] Capture(bool enabled)
                 {
                     stage.ClearTransient();
-                    stage.TransparentBackdrop = true;
+                    // Opaque paired frames keep subtle layers such as the star field measurable; the existing PNG test separately verifies alpha export.
+                    stage.TransparentBackdrop = false;
                     var look = EffectRecordingFixtures.NeutralLook();
                     if (enabled) fixture.Enable(look);
                     stage.SetVisualSettings(look);
