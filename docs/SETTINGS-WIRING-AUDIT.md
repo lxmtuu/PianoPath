@@ -8,7 +8,7 @@ không phát hiện cài đặt nào "chết" (có trong UI nhưng không có co
 cột "Logic tiêu thụ" chỉ đúng file:line nơi giá trị thực sự ảnh hưởng hành vi.
 
 Phương pháp:
-1. Đối chiếu toàn bộ **223 thuộc tính public** hiện có của `PianoVisualSettings` với các hàng được đăng ký lúc chạy, control tĩnh trong XAML và các trường metadata/migration được loại trừ có lý do. Dùng reflection guard trong `VerifySettingsDock` để property mới không thể bị bỏ quên.
+1. Đối chiếu toàn bộ **223 thuộc tính public** hiện có của `PianoVisualSettings` với các hàng được đăng ký lúc chạy, control tĩnh trong XAML, control của workflow hành động và các trường metadata/migration được loại trừ có lý do. Dùng reflection guard trong `VerifySettingsDock` để property mới không thể bị bỏ quên.
 2. Kiểm tra từng control tĩnh trong XAML (tab Audio/MIDI/Practice/Recording, header, footer,
    Play dialog, main menu) xem handler của nó có thực sự thay đổi trạng thái/logic không; grep consumer trong `PianoStage.cs`, `Shading/*`, `MainWindow*.cs`, `PianoAudioEngine.cs`, `SfzSynthesizer.cs`, `SalamanderPiano.cs`, `AviVideoRecorder.cs`…
 3. Chạy `python tools/check_sources.py` (cân bằng cú pháp C#, XML XAML hợp lệ, mọi
@@ -260,9 +260,9 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
 
 ### Độ phủ cài đặt
 
-Đối chiếu hiện tại có **223 thuộc tính public** trong `PianoVisualSettings`: **212** thuộc tính được đăng ký thành các hàng điều khiển động ở dock; **7** giá trị được nối với control tĩnh trong XAML Audio/Practice; **4** giá trị không phải hàng cài đặt trực tiếp — `BackgroundAppearanceVersion` là migration, `PresetName`/`PresetModified` là metadata của luồng preset, `RenderBackend` là id máy được giữ cố định ở GPU với WPF fallback tự động. Không có thuộc tính model người dùng nào hiện bị bỏ quên khỏi UI.
+Đối chiếu hiện tại có **223 thuộc tính public** trong `PianoVisualSettings`: **209** thuộc tính có hàng cài đặt động; **7** giá trị nối với control tĩnh trong XAML Audio/Practice; **3** giá trị được điều khiển qua workflow nút — `Language` qua các chip ngôn ngữ, `BackgroundImagePath` qua nút chọn/xóa ảnh, `CameraVideoPath` qua nút chọn video/dùng camera; **4** giá trị không phải hàng điều khiển — `BackgroundAppearanceVersion` là migration, `PresetName`/`PresetModified` là metadata luồng preset, `RenderBackend` là id máy giữ ở GPU với WPF fallback tự động. Không có thuộc tính model người dùng nào bị bỏ quên khỏi UI. Ba workflow properties không gắn vào `SettingRow.Property` để lệnh đặt lại trang không vô tình reset ngôn ngữ hoặc đường dẫn media về giá trị preset.
 
-`VerifySettingsDock` hiện đối chiếu bằng reflection toàn bộ property model với các hàng được đăng ký lúc chạy, danh sách 7 control XAML và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS sau các nhãn mới; kết quả Windows runtime của guard này chờ CI.
+`VerifySettingsDock` đối chiếu bằng reflection toàn bộ property model với hàng động, 7 control XAML, 3 hàng workflow có nút và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS; kết quả Windows runtime của guard này đang được kiểm lại sau khi CI chỉ ra ba thuộc tính workflow chưa được phân loại.
 
 Hai giới hạn được giữ rõ, không biến thành tuyên bố lỗi renderer:
 

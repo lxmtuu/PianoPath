@@ -2322,10 +2322,17 @@ internal static partial class VerificationSuite
             "The first section should open on Style and the last one should close on the pages of the application itself.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         var settingRows = ((System.Collections.IEnumerable)Field(window, "_settingRows")).Cast<object>().ToArray();
-        var rowSettingProperties = settingRows
-            .Select(row => (string?)row.GetType().GetField("Property")!.GetValue(row))
-            .Where(property => !string.IsNullOrWhiteSpace(property))
-            .Select(property => property!)
+        var rowDetails = settingRows.Select(row =>
+        {
+            var rowType = row.GetType();
+            return (
+                Property: (string?)rowType.GetField("Property")!.GetValue(row),
+                SearchKeys: (string[])rowType.GetField("SearchKeys")!.GetValue(row)!,
+                Element: (FrameworkElement)rowType.GetField("Element")!.GetValue(row)!);
+        }).ToArray();
+        var rowSettingProperties = rowDetails
+            .Where(row => !string.IsNullOrWhiteSpace(row.Property))
+            .Select(row => row.Property!)
             .ToHashSet(StringComparer.Ordinal);
         var staticSettingControls = new (string Property, string ControlName)[]
         {
@@ -2336,6 +2343,12 @@ internal static partial class VerificationSuite
             (nameof(PianoVisualSettings.ReverbImpulseFile), "ReverbImpulseButton"),
             (nameof(PianoVisualSettings.PracticeAutoTempo), "AutoPracticeTempoCheck"),
             (nameof(PianoVisualSettings.PracticeMissThreshold), "AutoPracticeMissSlider"),
+        };
+        var workflowSettingControls = new (string Property, string SearchKey)[]
+        {
+            (nameof(PianoVisualSettings.Language), "language interface english vietnamese tiếng việt"),
+            (nameof(PianoVisualSettings.BackgroundImagePath), "CHOOSE IMAGE…"),
+            (nameof(PianoVisualSettings.CameraVideoPath), "CHOOSE VIDEO…"),
         };
         var nonControlProperties = new HashSet<string>(StringComparer.Ordinal)
         {
@@ -2349,15 +2362,24 @@ internal static partial class VerificationSuite
             .Select(property => property.Name)
             .ToHashSet(StringComparer.Ordinal);
         var staticProperties = staticSettingControls.Select(control => control.Property).ToHashSet(StringComparer.Ordinal);
-        var classifiedProperties = rowSettingProperties.Concat(staticProperties).Concat(nonControlProperties).ToHashSet(StringComparer.Ordinal);
+        var workflowProperties = workflowSettingControls.Select(control => control.Property).ToHashSet(StringComparer.Ordinal);
+        var workflowControlsMissing = workflowSettingControls
+            .Where(control => !rowDetails.Any(row => row.SearchKeys.Contains(control.SearchKey, StringComparer.Ordinal)
+                && row.Element is Panel panel && panel.Children.OfType<Button>().Any()))
+            .Select(control => control.Property)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        var classifiedProperties = rowSettingProperties.Concat(staticProperties).Concat(workflowProperties).Concat(nonControlProperties).ToHashSet(StringComparer.Ordinal);
         var unclassifiedProperties = publicSettings.Except(classifiedProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
         var unexpectedClassifications = classifiedProperties.Except(publicSettings).OrderBy(name => name, StringComparer.Ordinal).ToArray();
-        var expectedRowProperties = publicSettings.Except(staticProperties).Except(nonControlProperties).ToHashSet(StringComparer.Ordinal);
+        var classificationCount = rowSettingProperties.Count + staticProperties.Count + workflowProperties.Count + nonControlProperties.Count;
+        var expectedRowProperties = publicSettings.Except(staticProperties).Except(workflowProperties).Except(nonControlProperties).ToHashSet(StringComparer.Ordinal);
         var missingRows = expectedRowProperties.Except(rowSettingProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
         var unexpectedRows = rowSettingProperties.Except(expectedRowProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
         Assert(unclassifiedProperties.Length == 0 && unexpectedClassifications.Length == 0
+                && classificationCount == classifiedProperties.Count && workflowControlsMissing.Length == 0
                 && missingRows.Length == 0 && unexpectedRows.Length == 0,
-            $"Every public visual setting should be a generated row, a mapped static XAML control, or explicitly classified metadata; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+            $"Every public visual setting should be a generated row, a mapped static XAML control, a mapped workflow control, or explicitly classified metadata; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing workflow controls={string.Join(",", workflowControlsMissing)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
         foreach (var (property, controlName) in staticSettingControls)
             Assert(publicSettings.Contains(property) && window.FindName(controlName) is FrameworkElement,
                 $"Static setting {property} should have its XAML control {controlName}.");
@@ -2497,7 +2519,7 @@ internal static partial class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices, visualSettings));
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add($"PASS settings dock: thirteen pages grouped into four navigation sections, {rowSettingProperties.Count} generated setting rows plus {staticSettingControls.Length} static controls covering the public model, theme and effect controls, scoped search, preset application and keyboard shading.");
+        Results.Add($"PASS settings dock: thirteen pages grouped into four navigation sections, {rowSettingProperties.Count} generated setting rows, {staticSettingControls.Length} static controls and {workflowSettingControls.Length} workflow controls covering the public model, theme and effect controls, scoped search, preset application and keyboard shading.");
     }
 
     /// <summary>
