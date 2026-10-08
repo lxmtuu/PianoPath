@@ -209,8 +209,10 @@ public class ArNotesTests
         Near(note.Patch.FrontLeft.X, bar.Patch.FrontLeft.X, 1e-9);
         Near(note.Patch.FrontRight.X, bar.Patch.FrontRight.X, 1e-9);
         Near(note.Patch.FrontLeft.Y, bar.Patch.FrontLeft.Y, 1e-9);
-        Near(note.Patch.BackLeft.X, bar.Patch.BackLeft.X, 1e-9);
-        Near(note.Patch.BackRight.X, bar.Patch.BackRight.X, 1e-9);
+        // both cover the same lane of the keyboard — the same four lines, the same two u values
+        Near(Keys(note.Patch.FrontLeft).U, Keys(bar.Patch.FrontLeft).U, 1e-6);
+        Near(Keys(note.Patch.BackLeft).U, Keys(bar.Patch.BackLeft).U, 1e-6);
+        Near(Keys(note.Patch.BackRight).U, Keys(bar.Patch.BackRight).U, 1e-6);
         // the only difference is the gap a note keeps so two of them do not touch
         Near(Keys(note.Patch.BackLeft).V, Keys(bar.Patch.BackLeft).V + Style.Gap, 1e-6);
     }
