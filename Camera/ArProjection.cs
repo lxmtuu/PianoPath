@@ -118,7 +118,6 @@ internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, dou
     /// <summary>How much of its key's width a note with this velocity fills, 0..1: the flat share, or the graph walked by the velocity.</summary>
     internal double WidthShareFor(double velocity) => Math.Clamp(WidthGraph.Sample(velocity) * WidthShare, 0, 1);
 }
-
 /// <summary>A note on its way to the keys.</summary>
 /// <param name="Patch">Where it is, on the output.</param>
 /// <param name="Pitch">The key it is for.</param>
