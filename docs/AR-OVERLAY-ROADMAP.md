@@ -11,6 +11,11 @@ trạng thái hiện tại nằm ở `README.md`.
 > Môi trường làm việc **không có .NET SDK, không có webcam, không có GPU thật** nên mọi thay đổi C# được xác nhận bằng CI
 > Windows (`build`: `--verify` và ngân sách khung hình trên WARP; `test`: xUnit trên Linux). Các con số "hiện có" ở §1 được
 > đối chiếu với mã ở commit `2133a19` (trước khi bắt đầu).
+>
+> **Cập nhật 2026‑10‑09:** AR‑1.1–1.7 đã xong và CI xanh (PR #55: camera là texture, homography phẳng, 4 điểm
+> calibrate theo **khung nhìn**, nốt của bài, phím sáng, và **vệt cho từng phím người chơi tự bấm** ở cả Learn lẫn
+> Perform — `ArNotes.BuildLive`, `GpuStageSimulation.LivePresses`). **§14 là bản thiết kế lại toàn bộ hệ thống AR
+> "piano live play"** (tham chiếu Keysight), có hiệu lực từ 2026‑10‑09; §4/§5/§13 giữ lại để đối chiếu lịch sử.
 
 ## 0. Mục tiêu, và thế nào là "xong"
 
@@ -81,6 +86,9 @@ Các khối mới (mỗi khối một tệp, hàm thuần, có test):
 | `HandMask` | `Camera/HandMask.cs` | Mặt nạ da độ phân giải đầy đủ để che hiệu ứng (AR‑4) |
 
 ## 4. Các giai đoạn
+
+> ⚠ **Từ 2026‑10‑09, bản có hiệu lực là §14** (thiết kế lại theo tham chiếu Keysight, gồm ánh xạ mã cũ ↔ mới ở
+> §14.10). Các mục AR‑0…AR‑6 dưới đây giữ nguyên để tra cứu lịch sử và đối chiếu tiến độ.
 
 Ký hiệu: **Phụ thuộc** = phải xong trước. **Kiểm chứng** = lớp bảo đảm theo luật §0 của roadmap chung. Ước lượng theo kiểu của `docs/ROADMAP.md` §6 (một người, đã quen repo).
 
@@ -191,6 +199,8 @@ Hiện `HandTracker` chỉ biết **một** bàn tay lớn nhất, ngón chỉ �
 **Phụ thuộc:** 6.1–6.2 sau AR‑3; 6.3 sau AR‑2; 6.4 sau AR‑1; 6.5 sau 6.4. Vì cần **vừa quay vừa stream**, 6.4/6.5 vào v1.3 và nên bắt đầu ngay khi AR‑1 xong. **Ước lượng:** 3–4 tuần.
 
 ## 5. Bản đồ phiên bản (đã chỉnh theo §8)
+
+> Bảng này tạm giữ nguyên; §14.10 xếp lại thứ tự thi công và sẽ cập nhật bảng này khi chốt các slice mới.
 
 | Đợt | Nội dung | Độ lớn | Giá trị người dùng thấy |
 |---|---|---|---|
@@ -342,3 +352,208 @@ Chủ repo đưa hai ảnh cần đạt: **(A)** nhìn thẳng từ trên xuốn
 | Tài liệu người dùng (README, CHANGELOG song ngữ) | ✅ mục **Unreleased** | | | README chưa có mục tả AR, chỉ có cờ `--bench-ar`; viết khi AR ra bản |
 
 **Còn nợ kỹ thuật đã biết:** `ArDelay` toàn cục (đề xuất AR‑3.5); mở camera chặn luồng giao diện tới 20 s; `StartCameraOverlay` đồng bộ; AR không áp `NoteStyle` và các hiệu ứng (§12).
+
+**Từ 2026‑10‑09:** thiết kế lại toàn bộ hệ thống AR — xem §14. Mục AR‑6.2 trong bảng trên ("vệt phẳng cho phím tự bấm") là **AR‑S0** của bản mới; phần style nốt/hiệu ứng chuyển thành AR‑S4/AR‑S5.
+
+## 14. Thiết kế lại AR OVERLAY — "piano live play" (2026‑10‑09, tham chiếu Keysight)
+
+### 14.0 Vì sao Keysight, và những gì đã đọc
+
+[Keysight](https://egglyberts.live/keysight/wiki/) (Egglyberts, Unreal Engine) là visualiser MIDI "live play" được dùng và
+tài liệu hoá kỹ nhất hiện có: nó đã đi hết không gian thiết kế mà mình đang bước vào — phần tử, tham số theo vận tốc,
+tầng Z, chế độ trong suốt cho OBS, căn chỉnh AR bằng tay, render ra video. Mình **không** bắt chước engine của nó
+(UE4, PBR, 3D thật, đàn 3D, không âm thanh); mình lấy **kiến trúc ý tưởng** rồi ánh xạ lên AR phẳng `flat-quad` của
+Keyflow. Ghi chú trung thực: nhiều trang của wiki còn là **stub** (`pulses`, `particles`, `piano`, `dampers`, `backdrop`,
+`overlay`, `light bars`, `octave lines`, hướng dẫn hiệu năng, time wizard, video background vẫn "UNDER CONSTRUCTION"), nên
+phần chi tiết của các phần tử đó lấy từ trang intro/effect/gallery chứ không phải từ trang riêng.
+
+| Trang (đọc 2026‑10‑09) | Lấy gì |
+|---|---|
+| [`guide_basic_intro`](https://egglyberts.live/keysight/wiki/guide_basic_intro/) | Lối dùng: chuẩn / live / "generic" / **AR** / máy tạo hạt; bốn giới hạn (không âm thanh, một instance, khó học, không nền video) |
+| [`docu_effect_intro`](https://egglyberts.live/keysight/wiki/docu_effect_intro/) | Hai họ phần tử: **Scene** (tĩnh) và **Effect** (sinh ra khi có nốt); effect chia theo ý nghĩa: *indicator / emphasis / velocity* |
+| [`docu_effect_note`](https://egglyberts.live/keysight/wiki/docu_effect_note/) | Nốt: 5 shape × trắng/đen, mọc từ 0 theo 3 mảnh, đường thẳng theo pitch, Z-height riêng, **minimum note scaling**, **new note truncates**, **key-size graph theo velocity**, pitch bend, sustain kéo dài |
+| [`docu_effect_keypress`](https://egglyberts.live/keysight/wiki/docu_effect_keypress/) | Phủ lên phím đang giữ: coverage (Clean/Inset/Full), animation (alpha/ngang/dọc), lifetime, **graph fade-over-lifetime chạy trái→phải khi bấm và phải→trái khi nhả** |
+| [`docu_effect_impact`](https://egglyberts.live/keysight/wiki/docu_effect_impact/) | Đèn điểm ở hàng phím cho biết phím nào đang xuống/kêu: sáng theo velocity (không qua floor/ceiling), candle flicker, Z-height/radius/falloff, kéo dài khi có sustain |
+| [`docu_effect_note_light`](https://egglyberts.live/keysight/wiki/docu_effect_note_light/) | Đèn chữ nhật vô hình trên nốt → **hắt sáng xuống**; cảnh báo **lệch khi nhìn nghiêng** vì độ cao bị phản chiếu |
+| [`docu_concept_graph`](https://egglyberts.live/keysight/wiki/docu_concept_graph/) | **Biến graph**: `Mode(Flat/Graph) × Start/Stop/Min/Max/Curve`; đầu vào luôn 0..1 (velocity đã chuẩn hoá, hay tỉ lệ của một giá trị như "lifetime"); kẹp ngoài khoảng, curve −1..1 |
+| [`docu_feat_simulation`](https://egglyberts.live/keysight/wiki/docu_feat_simulation/) | **"Activity"**: velocity 0–127 → 0..1 qua **floor/ceiling**; tắt dần theo thời gian với thời gian tắt khác nhau theo pitch và theo **damping**; sustain 0..1 **không nhị phân**; sostenuto/soft; notes/sec; total activity |
+| [`docu_concept_layout`](https://egglyberts.live/keysight/wiki/docu_concept_layout/) | Ba trục X/Y/Z, gốc ở giữa E/F, đơn vị cm; **Note direction** bottom-up (live) vs top-down (delay); "key length 1.00 = đúng kích thước thật"; note speed graph |
+| [`docu_concept_layers`](https://egglyberts.live/keysight/wiki/docu_concept_layers/) | **Cao độ Z quyết định thứ tự vẽ**; chống z-fighting; xếp hạng pulse/particle theo `Z×1000`, mới nhất lên trên; bảng độ cao (pulse/particle 0.10, light bar 1.25–1.30, nốt 0.1) |
+| [`docu_concept_colour`](https://egglyberts.live/keysight/wiki/docu_concept_colour/) | **Màu động**: Static (đổi ô theo từng nốt), **Channel** (theo kênh MIDI → tách hai tay), Velocity, Gradient, Key series, Cycling, Notes/sec, Activity, Random |
+| [`docu_concept_material`](https://egglyberts.live/keysight/wiki/docu_concept_material/) | Bốn mode material (Basic/Advanced/Blended/Transparent); **self-emissive** độc lập với ánh sáng; chỉ `Transparent` mới bán trong suốt, và nó hoàn toàn emissive |
+| [`docu_feat_graphics`](https://egglyberts.live/keysight/wiki/docu_feat_graphics/) | Resolution scale; **mask mode ép scale = 100**; max framerate vs v-sync (v-sync mượt hơn khi capture); preset thấp **bỏ đèn, nốt tự phát sáng** |
+| [`docu_feat_mask_mode`](https://egglyberts.live/keysight/wiki/docu_feat_mask_mode/) + [`guide_adv_mask_mode`](https://egglyberts.live/keysight/wiki/guide_adv_mask_mode/) | Trong suốt: **stencil nhị phân nhét vào kênh blue** (×0.495, +0.5), shader OBS giải mã; tách **geometry/glow** hai lớp rồi cộng dồn; lịch sử: chroma key → artifact vì bloom/hạt |
+| [`docu_feat_render`](https://egglyberts.live/keysight/wiki/docu_feat_render/) | Render-to-video: profile, fps 10–240, downsample 4×/16×, audio, fade/watermark, **bước thời gian cố định**, frame → ffmpeg; **particle rendering mode** vì khung hình bị hỏng khi vừa mô phỏng vừa xuất |
+| [`guide_adv_ar`](https://egglyberts.live/keysight/wiki/guide_adv_ar/) | Quy trình căn AR: **góc máy** (qua vai, tránh tay nằm trong vùng hiệu ứng), ảnh alignment đúng tỉ lệ, preset tham chiếu, FoV, **Z-height của effect phải chỉnh lại cho AR (mặc định là cho 2D)**, tắt planar shadow, **backup ảnh alignment để thấy camera xê dịch**, "preset mặc định cho randomizer" |
+| [`docu_feat_midi`](https://egglyberts.live/keysight/wiki/docu_feat_midi/) | Chỉ hiểu **kênh** (không track), CC 64/66/67, pitch bend, note test giả lập (Q / turbo) |
+
+### 14.1 Mười ba bài học → hệ quả cho Keyflow
+
+| # | Bài học từ Keysight | Hệ quả ở Keyflow | Hôm nay |
+|---|---|---|---|
+| 1 | Hai họ phần tử: Scene (tĩnh) và Effect (sinh theo nốt) | Catalogue AR tường minh: mỗi phần tử có `ArElement` (họ), độ cao, cờ AR, pass vẽ | ❌ chưa có catalogue |
+| 2 | **Biến graph** cho mọi tham số | `Stage/GraphVariable.cs`: `Flat\|Graph` + `Start/Stop/Min/Max/Curve`, `Sample(input 0..1)` | ❌ (hằng số + vài thanh trượt tuyến tính) |
+| 3 | **Simulation** dùng chung cho mọi hiệu ứng | Một hợp đồng `PianoSimulation`: `Activity(pitch)` (floor/ceiling + tắt dần), `Damping`, `Pedals`, `NotesPerSecond`, `TotalActivity` | 🟡 `GpuStageSimulation` đã có velocity/glow/heat/spill; thiếu decay/pedal/damping |
+| 4 | **Thứ tự theo độ cao Z**, mặc định là cho 2D | Bảng thứ tự vẽ + **độ cao cm** cho từng phần tử AR; mặc định AR khác mặc định 2D | ❌ mọi thứ cùng một mặt phẳng |
+| 5 | Nốt: mọc theo mảnh, min-scale, truncate, size graph | Port vào pass nốt AR thay vì quad phẳng cứng | ❌ |
+| 6 | Keypress: phủ phím + fade hai chiều | Vệt phẳng hiện tại là lát đầu; thêm coverage + fade graph, giữ `ReleaseLife` | 🟡 (vệt 2026‑10‑08 + phím sáng) |
+| 7 | Impact light: đèn ở hàng phím, sáng theo velocity, kéo dài theo pedal | Nâng key-glow/landing-glow thành blob sáng theo velocity | 🟡 |
+| 8 | Note light: hắt sáng xuống; nghiêng thì lệch | `spill` hiện có; trong AR vẽ **trên mặt phẳng** chứ không phản chiếu | 🟡 |
+| 9 | Màu theo **kênh MIDI** = tách hai tay | Thêm chế độ `Channel` (mỗi tay một màu) + `Activity`/`Notes‑sec` | 🟡 (màu theo track + velocity tint) |
+| 10 | Trên ảnh camera chỉ dùng được material **emissive/alpha** | Bộ "AR material": flat emissive, gradient, texture, additive glow; `Gem`/`CrystalOutline` cần biến thể AR hoặc bị loại | ❌ |
+| 11 | Mức đồ hoạ (Low→Ultra): bậc thấp **bỏ đèn, nốt tự phát sáng** | `AR‑Lite / AR‑Standard / AR‑Ultra`; bậc Lite = quad phẳng tự phát sáng (đúng thứ đang có) | ❌ chưa có tên/khái niệm |
+| 12 | Đầu ra: stencil/alpha, tách glow, render-to-video | Thay chroma bằng alpha/stencil thật; tách geometry/glow cho OBS; render profile AR | ❌ (chỉ composite) |
+| 13 | Căn chỉnh: ảnh alignment, phát hiện xê dịch, khuyến nghị góc máy, fisheye | Giữ 4 điểm + khung nhìn; thêm overlay kiểm tra + đo trôi + hướng dẫn | 🟡 (4 điểm + khung nhìn ✅) |
+
+### 14.2 Kiến trúc 5 tầng
+
+```
+MIDI ─► PianoSimulation ──► Element spawner ──► Effect elements (nốt, keypress, impact,
+         (activity, damping,      │               note light, pulse, hạt)
+          pedal, notes/s)         │  tham số = GraphVariable.Sample(input)
+                                  ▼
+    Colour modes (Static/Channel/Velocity/Activity/…)   ArProjection: cảnh → ảnh
+                                  │                     (homography + độ cao + w)
+    Scene elements (camera, phím, damper, octave lines, light bars, HUD)
+                                  ▼
+                    AR passes ─► Output modes (composite / alpha / glow / stencil / render)
+```
+
+| Tầng | Nội dung | Hôm nay |
+|---|---|---|
+| 1. Simulation | activity có floor/ceiling, tắt dần theo pitch + damping, 3 pedal, notes/sec, total | một phần, nằm rải trong `GpuStageSimulation` |
+| 2. Tham số | `GraphVariable` + catalogue đầu vào (velocity, tiến trình, pitch, notes/sec, activity, damping) | chưa có |
+| 3. Phần tử | Scene + Effect (§14.3), mỗi cái có độ cao cm + cờ AR | chưa có catalogue |
+| 4. Chiếu | homography cảnh→ảnh trong **chính** pass của sân khấu (§12), cộng độ cao → scale/phối cảnh | chưa (§12 là đề xuất) |
+| 5. Đầu ra | composite / alpha-effects / geometry+glow / stencil / render / camera ảo | chỉ composite + ghi hình |
+
+**Độ cao (analog của Z-axis).** Mọi phần tử AR có `Height` tính bằng cm trên mặt phẳng phím. `ArProjection` hiện đã có
+homography + trọng số `w`; thêm độ cao thì một điểm ở `Height` được vẽ lệch theo pháp tuyến của mặt phẳng trong ảnh và
+nhân tỉ lệ cục bộ (độ lớn tỉ lệ với khoảng cách trong ảnh) — đúng cách Keysight xếp tầng, nhưng trên một mặt phẳng thay
+vì một cảnh 3D. Bảng mặc định dự kiến (cm): phím 0 · damper 0.1 · nốt 0.1 · keypress 0.15 · impact glow 0.2 ·
+note-light spill 0.05 · pulse 0.3 · hạt 0.4 · HUD 0 (vẽ cuối, không qua homography). Đây là **số khởi đầu cho 2D**;
+bài học AR của Keysight là phải chỉnh lại theo góc máy — nên mỗi khung nhìn (45°/90°) có bộ độ cao trong preset AR.
+
+### 14.3 Catalogue phần tử AR
+
+| Phần tử | Họ | Hôm nay | Việc cần | Pass |
+|---|---|---|---|---|
+| `Piano keys` (thân phím) | Scene | ✅ `ArKeys.Patches` (trắng = mặt + thân, đen = một hình) | thêm animation nhấn (giữ ngắn) | `VsArQuad` |
+| `Dampers` (dải mép sau phím) | Scene | ❌ | dải mỏng nhích lên theo damping 0..1 (sustain 0..1 chứ không nhị phân) | `VsArQuad` |
+| `Octave lines` | Scene | ❌ | vạch mờ mỗi quãng tám, theo dõi `KeyboardLayout` | `VsArQuad` |
+| `Light bars` (viền/hắt mép) | Scene | ❌ | gradient quanh mép phím; **không** đổ bóng (bài học AR) | `VsArQuad` |
+| `Overlay / HUD` | Scene | ❌ | đếm nốt, hiển thị pedal, tên nốt, watermark; vẽ sau cùng, **không** qua homography | pass riêng |
+| `Note objects` | Effect | 🟡 quad phẳng (`ArNotes.Build`) | shape × trắng/đen, min-scale, truncate, size graph, mọc theo mảnh | `VsNote` qua projection (S4) |
+| `Keypresses` | Effect | 🟡 phím sáng + vệt (`ArLiveBar`) | coverage, fade graph hai chiều, màu theo velocity | `VsArQuad`/`VsSprite` |
+| `Impact lights` | Effect | 🟡 glow phím | blob ở mép phím theo velocity, "đèn" kéo dài khi sustain, candle flicker tuỳ chọn | `VsSprite` |
+| `Note lights` (spill) | Effect | 🟡 `spill` của sân khấu | hắt sáng trên mặt phẳng, bán kính theo graph | `VsSprite` |
+| `Pulses` | Effect | ❌ (rings của sân khấu bị tắt trong AR) | vòng tại điểm chạm, ripple, "hit ring" | `VsSprite` |
+| `Particles` | Effect | ❌ | hạt nổi trên mặt phẳng (bụi, tia, mưa như "Raindrops" trong gallery) | pass hạt qua projection |
+
+### 14.4 An toàn trên ảnh camera (AR safety)
+
+- **Không** bóng đổ / planar shadow trong AR (bài học light bar của Keysight).
+- **Không** blur toàn khung (đã bị tắt trong AR từ trước; giữ nguyên và ghi vào catalogue).
+- **Độ cao phải theo khung nhìn**: mặc định 2D thường sai khi camera nghiêng; mỗi khung nhìn có bộ độ cao riêng.
+- **Tay**: ưu tiên góc máy *qua vai* để tay nằm ngoài vùng hiệu ứng; nếu không được thì dùng mặt nạ tay (AR‑4).
+- **Fisheye**: homography phẳng không uốn được; phải khử méo trước khi calibrate (cảnh báo + hướng dẫn ngay trong cửa
+  sổ calibrate, kèm khuyến nghị góc máy như trên).
+- **Material**: chỉ emissive/alpha trên ảnh camera; reflection/PBR chỉ có nghĩa trong ảnh dựng hoàn toàn (render).
+- **Alpha/stencil mode**: khoá `Resolution scale = 100` (bài học mask mode) và phải giữ pixel không bị resample.
+
+### 14.5 Tham số hoá: `GraphVariable`
+
+```csharp
+internal readonly record struct GraphVariable(bool Graph, double Start, double Stop, double Min, double Max, double Curve)
+{
+    internal double Sample(double input);   // kẹp ngoài [Start, Stop]; curve −1..1 giữa hai mốc
+}
+```
+
+- **Đầu vào** luôn 0..1: velocity đã chuẩn hoá qua **floor/ceiling** của simulation; tiến trình của một effect (0→1);
+  vị trí pitch trên đàn; notes/sec; activity; damping. Không có đầu vào nào khác — đúng luật của Keysight.
+- **Dùng cho**: độ sáng, kích thước nốt, độ dài vệt, bán kính spill, số hạt, lifetime pulse, độ cao (Y displacement),
+  tốc độ. Mỗi tham số là flat hoặc graph, mặc định flat để không phá preset cũ.
+- **Lưu**: graph thuộc *look* → đi theo preset và mã chia sẻ; độ cao/khung nhìn thuộc máy như calibration.
+- **Kiểm chứng**: test thuần cho `Sample` (kẹp, curve, NaN), và `--verify` đọc lại pixel cho vài graph mẫu.
+
+### 14.6 Đầu ra (output modes)
+
+| Mode | Dùng khi | Cần gì | Kiểm chứng |
+|---|---|---|---|
+| `composite` (đang có) | chơi/xem tại chỗ, quay | như hiện tại | `VerifyArCameraLayer` |
+| `alpha-effects` | OBS/stream: lớp AR **trong suốt** để OBS ghép lên nguồn camera riêng | swap chain có alpha + "Allow Transparency"; scale 100 | ảnh PNG alpha đọc lại điểm ảnh |
+| `geometry+glow` | ghép glow kiểu cộng dồn cho đẹp (như guide mask mode) | tách pass sáng viền/đầu nốt thành lớp riêng | hai ảnh PNG, so pixel |
+| `stencil-kênh` | ai buộc phải key/chroma (tương thích cách Keysight) | stencil nhị phân nhét vào kênh blue + shader OBS (tài liệu hoá) | kiểm bằng ảnh mẫu + hướng dẫn |
+| `render-to-video` | làm video | profile (độ phân giải/fps/downsample), audio, fade/watermark, bước thời gian cố định | so khung live ↔ render |
+| `virtual camera` / `OBS window` | stream/call (AR‑6.4/6.5 giữ nguyên) | dùng lại các mode trên | như cũ |
+
+Chroma key cũ (nền xanh) giữ làm đường lui nhưng **không khuyến khích** — đúng lịch sử của Keysight: bloom và hạt nhỏ
+làm artifact.
+
+### 14.7 Căn chỉnh: giữ gì, thêm gì
+
+- **Giữ**: 4 điểm + khung nhìn (đã xong), calibration thuộc máy, `ArDelay` toàn cục (AR‑3.5 vẫn cần chủ repo duyệt).
+- **Thêm 1 — overlay kiểm tra**: vẽ lưới phím + 4 góc đã lưu lên ảnh camera đang chạy (nút "ALIGNMENT CHECK"), để thấy
+  ngay camera có bị xê dịch — analog của "ảnh alignment" bên Keysight.
+- **Thêm 2 — đo trôi**: so mép hàng phím trong khung mới với calibration; lệch quá ngưỡng → nhắc đánh dấu lại
+  (không tự sửa).
+- **Thêm 3 — xuất/nhập bản sao căn chỉnh** (JSON + ảnh chụp) để backup trước khi chỉnh chân máy.
+- **Thêm 4 — hướng dẫn ngay trong cửa sổ**: góc máy qua vai, tránh fisheye, tay ngoài vùng.
+- **Thêm 5 — preset AR theo khung nhìn**: độ cao/phần tử khác nhau cho 45° và 90° (đi cùng `ArViewProfileId`).
+
+### 14.8 Ngân sách hiệu năng: AR‑Lite / AR‑Standard / AR‑Ultra
+
+| Bậc | Có gì | Ghi chú |
+|---|---|---|
+| `AR‑Lite` | phím, keypress, nốt phẳng tự phát sáng (đúng thứ đang có) | chạy được trên GPU yếu; là mức mặc định khi máy không theo kịp |
+| `AR‑Standard` | + shape nốt/min-scale, impact glow, spill | mục tiêu 60 fps ở 1080p |
+| `AR‑Ultra` | + pulse, hạt, note light đầy đủ, light bars | cần card thật; `--bench-ar` làm cổng |
+
+Thứ tự cắt khi vượt ngân sách (tất định, test được): **hạt → pulse → note light → light bars → style nốt → impact glow**;
+không bao giờ cắt phím/nốt/keypress. Nối vào `GpuAdaptiveQuality` sẵn có.
+
+### 14.9 Cài đặt, preset, mã chia sẻ
+
+- Thẻ AR thêm mục **Look** (bật/tắt từng phần tử + graph), **Output** (mode, màn hình), **Quality** (3 bậc); giữ
+  View / Mode / Delay / Calibrate.
+- Mã chia sẻ mang look + graph ⇒ cần **`KEYFLOW-LOOK-2`** (đọc được mã bản 1); `docs/SETTINGS-WIRING-AUDIT.md` cập nhật.
+- Máy‑cục‑bộ vẫn là: calibration, khung nhìn, delay, màn hình xuất, camera.
+
+### 14.10 Thứ tự thi công (AR‑S0…AR‑S9)
+
+| Slice | Việc | Phụ thuộc | Kiểm chứng | Ánh xạ bản cũ |
+|---|---|---|---|---|
+| **AR‑S0** ✅ | nền AR‑0/AR‑1: layout, khung mẫu, camera texture, homography, 4 điểm, khung nhìn, vệt phím tự bấm | — | CI xanh (PR #55) | AR‑0, AR‑1.1–1.7 |
+| **AR‑S1** | `PianoSimulation`: activity (floor/ceiling), tắt dần theo pitch + damping, 3 pedal, notes/sec, total | — | test thuần + `--verify` đọc số | mở rộng AR‑3 |
+| **AR‑S2** | `GraphVariable` + biên tập cho 3 tham số đầu (màu theo velocity, size nốt, độ sáng vệt) | S1 | test thuần + `check_sources` + ảnh | mới |
+| **AR‑S3** | Catalogue phần tử + cờ AR + 3 bậc chất lượng + "preset AR mặc định" (chống bật thứ phá AR) | S2 | test thuần + preset shelf + `--verify` | mới (bài học randomizer) |
+| **AR‑S4** | Phép chiếu cảnh→ảnh trong `VsNote`/`VsSprite` (§12) + nốt có shape/min-scale/truncate | S1–S3 | đọc lại điểm ảnh trên WARP | **AR‑6.2** |
+| **AR‑S5** | Độ cao + thứ tự vẽ; note light/impact light đúng phối cảnh; pulse + hạt trong AR | S4 | pixel + `--bench-ar` | AR‑6.2/6.3 |
+| **AR‑S6** | Đầu ra: alpha-effects, tách geometry/glow, stencil-kênh | S4 | ảnh PNG alpha đọc lại | **AR‑6.4** |
+| **AR‑S7** | Render-to-video AR: profile, fps, downsample, audio, watermark | S6 | so khung live ↔ render | AR‑6.6 |
+| **AR‑S8** | HUD: đếm nốt, pedal, tên nốt, octave lines, light bars | S3 | `--verify` + ảnh | mới (overlay/scene) |
+| **AR‑S9** | AR‑2 dò tự động, AR‑2b, AR‑4 tay, AR‑5 ngón, AR‑6.5 webcam ảo | như bản cũ | như bản cũ | AR‑2/2b/4/5/6.5 |
+
+Ưu tiên stream/call của chủ repo (AR‑6.4/6.5) được giữ: **S6 chen ngay sau S4**, không đợi hết S5.
+Ước lượng thô: S1–S3 ≈ 3 tuần, S4–S5 ≈ 3–4 tuần, S6–S8 ≈ 3 tuần, S9 như bản cũ. Mọi slice vẫn theo luật §0:
+toán thuần + test khung tổng hợp trước, máy thật để **Unverified** cho tới khi chủ repo thử.
+
+### 14.11 Những gì **không** đổi (ràng buộc của chủ repo)
+
+- Phép chiếu phẳng `flat-quad`; **không** camera 3D tự do, không dựng lại đàn 3D.
+- `ArDelay` vẫn toàn cục (AR‑3.5 chỉ làm khi chủ repo duyệt).
+- Calibration thuộc máy (camera + khung nhìn), preset/mã chia sẻ không đổi nó.
+- MIDI là sự thật; không nhận phím từ hình/âm thanh; không model nặng trong gói mặc định.
+- Không âm thanh; không telemetry; mọi thứ kiểm chứng bằng khung tổng hợp.
+
+### 14.12 Rủi ro mới
+
+| Rủi ro | Giảm |
+|---|---|
+| Khối lượng 9 slice (ước 9–11 tuần một người) | làm đúng thứ tự; S1–S3 là logic thuần, rẻ; S4 mới là slice rủi ro |
+| Biên tập graph làm UI phức tạp | chỉ 2 handle + 1 curve; mặc định flat; không vẽ đồ thị trong bảng cài đặt |
+| Port `Gem`/`CrystalOutline` sang AR dễ vỡ | mỗi style một biến thể emissive; style chưa port thì bị loại khỏi AR chứ không vẽ sai |
+| Alpha mode không chạy trên mọi GPU/OBS | giữ stencil-kênh làm đường lui; tài liệu hoá cả hai |
+| Hai hệ shader cho cùng hiệu ứng | bắt buộc dùng lại pass sân khấu qua projection (S4), không viết lại hiệu ứng cho AR |
+| Độ cao sai theo góc máy | preset AR theo khung nhìn + overlay kiểm tra + ảnh mẫu trong `--verify` |
