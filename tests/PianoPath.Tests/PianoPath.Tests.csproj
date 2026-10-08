@@ -62,6 +62,7 @@
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
     <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
     <Compile Include="..\..\Camera\ArCalibration.cs" Link="Product\Camera\ArCalibration.cs" />
+    <Compile Include="..\..\Camera\ArCalibrationProfile.cs" Link="Product\Camera\ArCalibrationProfile.cs" />
     <Compile Include="..\..\Camera\ArView.cs" Link="Product\Camera\ArView.cs" />
     <Compile Include="..\..\Camera\ArProjection.cs" Link="Product\Camera\ArProjection.cs" />
     <Compile Include="..\..\Camera\ArKeys.cs" Link="Product\Camera\ArKeys.cs" />

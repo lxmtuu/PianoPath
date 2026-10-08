@@ -66,11 +66,13 @@ internal static class CalibrationLaunchRules
     }
 
     /// <summary>
-    /// True when the session is still about the camera, picture size and keyboard it was when the window opened. The window is modal
-    /// but the camera is not: it can be unplugged or reopened at another size behind it, and corners marked for the old picture must
-    /// not be saved for the new one. Resetting or saving in between changes only the calibration, not what is open.
+    /// True when the session is still about the camera, the view of it, the picture size and the keyboard it was when the
+    /// window opened. The window is modal but the camera is not: it can be unplugged or reopened at another size behind it,
+    /// and corners marked for the old picture — or for the view the camera stood at then — must not be saved for the new one.
+    /// Resetting or saving in between changes only the calibration, not what is open.
     /// </summary>
     internal static bool SameSource(ArCalibrationSnapshot before, ArCalibrationSnapshot after) =>
         after.State != ArCalibrationState.NoSource && string.Equals(before.Source, after.Source, StringComparison.OrdinalIgnoreCase)
+        && string.Equals(before.Profile.Id, after.Profile.Id, StringComparison.OrdinalIgnoreCase)
         && before.ImageWidth == after.ImageWidth && before.ImageHeight == after.ImageHeight && before.KeyCount == after.KeyCount;
 }

@@ -1386,6 +1386,20 @@ internal static partial class VerificationSuite
             "The overlay's size, opacity and key tolerance belong on sliders, so they can be found by sliding.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.CameraSourceLink)) && choices.ContainsKey(nameof(PianoVisualSettings.CameraCorner)),
             "The overlay should offer a camera picker and the four-corner picker.");
+        // The AR card offers the view of the camera, so the keys marked at one angle are never the ones used at another.
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)),
+            "The AR card should offer a picker for the view of the camera whose key area is in force.");
+        var viewWas = visualSettings.ArViewProfileId;
+        var viewPicker = choices[nameof(PianoVisualSettings.ArViewProfileId)];
+        Assert(viewPicker.Items.Count == ArCalibrationProfiles.All.Length,
+            $"The view picker should offer every view the app knows (found {viewPicker.Items.Count}).");
+        viewPicker.SelectedValue = ArCalibrationProfiles.Overhead90.Id;
+        Assert(visualSettings.ArViewProfileId == ArCalibrationProfiles.Overhead90.Id,
+            "Picking a view should store the identifier the calibration file is keyed by, not the caption.");
+        visualSettings.ArViewProfileId = "a view this app does not know"; visualSettings.Clamp();
+        Assert(visualSettings.ArViewProfileId == ArCalibrationProfiles.LegacyId,
+            "A stored view the app does not know must fall back to the default view rather than to nothing.");
+        visualSettings.ArViewProfileId = viewWas;
         var corner = choices[nameof(PianoVisualSettings.CameraCorner)];
         Assert(corner.Items.Count == CameraOverlay.Corners.Length, $"The corner picker should offer every corner (found {corner.Items.Count}).");
         corner.SelectedValue = "Top left";

@@ -600,6 +600,8 @@ public partial class MainWindow
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
         SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound you hear is never delayed, but a recording with the camera in it starts its sound this much later, so the finger and the sound line up in the file. Zero changes nothing.");
+        Choice(ar, "View", nameof(PianoVisualSettings.ArViewProfileId), "Which way the camera looks at the keys: about 45° down from behind the player, straight down at 90° overhead, or the default the app has always used. Every view keeps its own marked key area and the overlay draws only with the one chosen here, so turning the camera means choosing the view that matches it and marking the keys for that view — an unmarked view asks to be marked instead of using the corners marked at another angle.",
+            ArViewProfileChoices());
         ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"), ("MEASURE DELAY", MeasureArDelay_Click, "IconMotion"));
         Note(ar, "Measure how late the camera's picture is: press about twenty keys on your keyboard while the camera watches your hands, and the camera delay is set to match.");
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
@@ -626,6 +628,9 @@ public partial class MainWindow
     {
         var snapshot = _arCalibration?.Snapshot ?? NoArSource;
         var keys = _visualSettings.KeyboardLayoutChoice.KeyCount;
+        // The view the overlay is set up for, always said in the lines below that name one: a person who turned the camera
+        // has to be able to see at a glance which view's key area is in force.
+        var view = Loc.T(ArCalibrationProfiles.Normalize(_visualSettings.ArViewProfileId).Name);
         if (MeasuringArDelay) return LatencyText.Collecting(_latency.Presses);
         if (_latencyText.Length > 0 && _arPlan.ArLayer) return _latencyText;          // what the last run found, until the overlay stops drawing
         return _arPlan.Status switch
@@ -634,9 +639,9 @@ public partial class MainWindow
             ArStatus.NeedsGpu => Loc.T("The AR overlay needs the Direct3D 11 engine; the software renderer is drawing the stage."),
             ArStatus.ChromaBackground => Loc.T("A green-screen background takes the camera's place. Choose another stage background for the AR overlay."),
             ArStatus.NoCamera => CameraStatus.Length > 0 ? Loc.F("Waiting for the camera. {0}", CameraStatus) : Loc.T("Waiting for the camera."),
-            ArStatus.NeedsCalibration => Loc.F("The camera runs at {0} × {1}. The keys have not been marked yet for a {2}-key keyboard.", snapshot.ImageWidth, snapshot.ImageHeight, keys),
-            ArStatus.Outdated => Loc.F("The saved key area was marked for another picture size or keyboard size. Mark it again for {0} × {1} and {2} keys.", snapshot.ImageWidth, snapshot.ImageHeight, keys),
-            _ => Loc.F("AR overlay on · {0} × {1} · {2} keys · {3}", snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
+            ArStatus.NeedsCalibration => Loc.F("The camera runs at {0} × {1}. The keys have not been marked yet for the {2} view on a {3}-key keyboard.", snapshot.ImageWidth, snapshot.ImageHeight, view, keys),
+            ArStatus.Outdated => Loc.F("The saved key area of the {2} view was marked for another picture size or keyboard size. Mark it again for {0} × {1} and {3} keys.", snapshot.ImageWidth, snapshot.ImageHeight, view, keys),
+            _ => Loc.F("AR overlay on · {0} view · {1} × {2} · {3} keys · {4}", view, snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
                 + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default),
         };
     }
@@ -648,7 +653,7 @@ public partial class MainWindow
     private void RefreshArStatus()
     {
         if (_arStatus is null) return;
-        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
+        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, _visualSettings.ArViewProfileId, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
         if (key == _arStatusKey) return;
         _arStatusKey = key;
         Loc.Bind(_arStatus, ArStatusText);
@@ -675,7 +680,8 @@ public partial class MainWindow
         }
         var window = new CalibrationWindow(picture!, _visualSettings.KeyboardLayoutChoice, _visualSettings.CameraMirror,
             () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames),
-            before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null);
+            before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null,
+            before.Profile);
         if (show is null && IsLoaded) window.Owner = this;
         bool? accepted;
         _calibrating = true;                     // the camera is left alone while the keys are being marked
@@ -692,7 +698,7 @@ public partial class MainWindow
         }
         switch (session.Save(result.Corners, out _))
         {
-            case ArSaveResult.Saved: Loc.Set(SettingsSaveLabel, "Key area saved for this camera and keyboard size"); break;
+            case ArSaveResult.Saved: Loc.Format(SettingsSaveLabel, "Key area saved for the {0} view of this camera and keyboard size", Loc.T(before.Profile.Name)); break;
             case ArSaveResult.NotWritten:
                 Loc.Set(SettingsSaveLabel, "Key area marked, but not saved to disk");
                 ShowMessage(Loc.T("The key area is marked, but it could not be saved to disk, so it will be asked for again next time."), "Mark the keys", MessageBoxImage.Information);
@@ -704,10 +710,18 @@ public partial class MainWindow
 
     private void ResetArCalibration_Click(object sender, RoutedEventArgs e)
     {
+        var view = Loc.T(ArCalibrationProfiles.Normalize(_visualSettings.ArViewProfileId).Name);
         var had = _arCalibration?.Reset() == true;
         UpdateArFeed();
-        Loc.Set(SettingsSaveLabel, had ? "Calibration forgotten for this camera" : "There was no saved calibration to forget");
+        Loc.Format(SettingsSaveLabel, had ? "Key area forgotten for the {0} view" : "There was no saved key area to forget for the {0} view", view);
     }
+
+    /// <summary>
+    /// The picker's rows for the views of the camera, in catalogue order. The caption is the English name, which is a key
+    /// of the string tables, so the picker is translated and re-painted on a language switch like every other choice row.
+    /// </summary>
+    private static (string Value, string Caption)[] ArViewProfileChoices() =>
+        [.. ArCalibrationProfiles.All.Select(profile => (profile.Id, profile.Name))];
 
     /// <summary>Rows of the camera picker built from the machine's own list, refreshed on demand.</summary>
     private (string Value, string Caption)[] CameraChoices()

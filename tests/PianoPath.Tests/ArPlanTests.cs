@@ -8,11 +8,11 @@ public class ArPlanTests
     private static readonly ArOptions On = ArOptions.Default with { Enabled = true };
     private static readonly ArCalibration Calibration = ArProjectionTests.Calibrate([(70, 292), (1214, 268), (1236, 421), (52, 449)]);
 
-    private static ArCalibrationSnapshot Snapshot(ArCalibrationState state) => state switch
+    private static ArCalibrationSnapshot Snapshot(ArCalibrationState state, ArCalibrationProfile? profile = null) => state switch
     {
-        ArCalibrationState.NoSource => new(state, null, "", 0, 0, 0, 1),
-        ArCalibrationState.Ready => new(state, Calibration, "cam", 1280, 720, 88, 1),
-        _ => new(state, null, "cam", 1280, 720, 88, 1),
+        ArCalibrationState.NoSource => new(state, null, profile ?? ArCalibrationProfiles.Legacy, "", 0, 0, 0, 1),
+        ArCalibrationState.Ready => new(state, Calibration, profile ?? ArCalibrationProfiles.Legacy, "cam", 1280, 720, 88, 1),
+        _ => new(state, null, profile ?? ArCalibrationProfiles.Legacy, "cam", 1280, 720, 88, 1),
     };
 
     [Theory]
@@ -77,7 +77,7 @@ public class ArPlanTests
     [Fact]
     public void A_ready_state_without_a_calibration_is_not_trusted()
     {
-        var broken = new ArCalibrationSnapshot(ArCalibrationState.Ready, null, "cam", 1280, 720, 88, 1);
+        var broken = new ArCalibrationSnapshot(ArCalibrationState.Ready, null, ArCalibrationProfiles.Tilt45, "cam", 1280, 720, 88, 1);
         var plan = ArPlan.Decide(On, true, true, broken, false);
         Assert.False(plan.ArLayer || plan.HideStageLayers);
     }
@@ -98,6 +98,16 @@ public class ArPlanTests
                     Assert.True(!plan.CameraLayer || (gpu && source && !chroma));
                     Assert.True(!plan.NeedsCamera || gpu);
                 }
+    }
+
+    [Fact]
+    public void Which_view_of_the_camera_is_in_force_never_changes_what_the_stage_does()
+    {
+        foreach (var profile in ArCalibrationProfiles.All)
+        {
+            Assert.Equal(ArStatus.Active, ArPlan.Decide(On, true, true, Snapshot(ArCalibrationState.Ready, profile), false).Status);
+            Assert.Equal(ArStatus.NeedsCalibration, ArPlan.Decide(On, true, true, Snapshot(ArCalibrationState.NotCalibrated, profile), false).Status);
+        }
     }
 
     [Fact]

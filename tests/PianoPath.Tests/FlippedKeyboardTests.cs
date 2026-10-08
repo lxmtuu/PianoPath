@@ -138,10 +138,10 @@ public sealed class FlippedKeyboardTests : IDisposable
 
         // saved for this camera, and found again by a fresh run, with the same keys
         var session = new ArCalibrationSession(new ArCalibrationStore(_dir));
-        session.Use("usb#flipped", W, H, layout);
+        session.Use("usb#flipped", W, H, layout, ArCalibrationProfiles.LegacyId);
         Assert.Equal(ArSaveResult.Saved, session.Save(calibration.Corners, out _));
         var next = new ArCalibrationSession(new ArCalibrationStore(_dir));
-        next.Use("usb#flipped", W, H, layout);
+        next.Use("usb#flipped", W, H, layout, ArCalibrationProfiles.LegacyId);
         Assert.Equal(ArCalibrationState.Ready, next.State);
         Assert.Equal(calibration.Corners, next.Current!.Corners);
         // and the window opens on the same choice the next time

@@ -234,6 +234,7 @@
     "ArOpacity": 100.0,
     "ArLookahead": 3.0,
     "ArKeyLight": 60.0,
-    "ArDelay": 0.0
+    "ArDelay": 0.0,
+    "ArViewProfileId": "default"
   }
 }

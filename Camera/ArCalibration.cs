@@ -380,14 +380,16 @@ internal sealed class CalibrationEditor
 }
 
 /// <summary>
-/// The calibrations kept on this computer, one file in the settings folder. Each is for one camera at one picture
-/// size and one keyboard size — moving the camera, changing its resolution or the keyboard size means the old four
-/// corners no longer mean anything — and a settings preset or a share code never carries one.
+/// The calibrations kept on this computer, one file in the settings folder. Each is for one camera, one view of that
+/// camera, one picture size and one keyboard size — turning the camera to another angle, changing its resolution or the
+/// keyboard size means the old four corners no longer mean anything — and a settings preset or a share code never
+/// carries one.
 ///
 /// <para>
 /// A file that cannot be read, or an entry that would not pass <see cref="CalibrationQuad.CheckAnyWinding"/>, is dropped
-/// instead of trusted: the worst a damaged file can do is ask for a new calibration. Saving writes a temporary file
-/// and moves it into place, so a crash cannot leave half a file.
+/// instead of trusted: the worst a damaged file can do is ask for a new calibration. So is an entry that names a view the
+/// app does not know, which is what keeps corners marked for one angle from ever being read as another angle's. Saving
+/// writes a temporary file and moves it into place, so a crash cannot leave half a file.
 /// </para>
 /// </summary>
 internal sealed class ArCalibrationStore
@@ -396,6 +398,12 @@ internal sealed class ArCalibrationStore
     internal const int MaxEntries = 64;
 
     internal const string FileName = "ar-calibration.json";
+
+    /// <summary>
+    /// The version this app writes. Version 2 adds the view each key area was marked for; a file from 1 has no such
+    /// field and its entries read as <see cref="ArCalibrationProfiles.LegacyId"/>, which is the view the app starts on.
+    /// </summary>
+    internal const int FormatVersion = 2;
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -413,37 +421,40 @@ internal sealed class ArCalibrationStore
 
     internal int Count { get { lock (_gate) return _entries.Count; } }
 
-    /// <summary>The corners saved for this camera, picture size and keyboard size, or null when there are none.</summary>
-    internal (double X, double Y)[]? Get(string cameraLink, int imageWidth, int imageHeight, int keyCount)
+    /// <summary>The corners saved for this camera, view, picture size and keyboard size, or null when there are none.</summary>
+    internal (double X, double Y)[]? Get(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount)
     {
         lock (_gate)
         {
-            var entry = _entries.FirstOrDefault(e => Matches(e, cameraLink, imageWidth, imageHeight, keyCount));
+            var entry = _entries.FirstOrDefault(e => Matches(e, cameraLink, profileId, imageWidth, imageHeight, keyCount));
             return entry is null ? null : Points(entry);
         }
     }
 
     /// <summary>
-    /// True when this camera has a calibration at some other picture size or keyboard size but not at this one, which
-    /// is what lets the app say "calibrate again" instead of "never calibrated".
+    /// True when this camera and view have a calibration at some other picture size or keyboard size but not at this one,
+    /// which is what lets the app say "calibrate again" instead of "never calibrated".
     /// </summary>
-    internal bool HasOtherSize(string cameraLink, int imageWidth, int imageHeight, int keyCount)
+    internal bool HasOtherSize(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount)
     {
+        var profile = ArCalibrationProfiles.Normalize(profileId).Id;
         lock (_gate)
-            return !_entries.Any(e => Matches(e, cameraLink, imageWidth, imageHeight, keyCount)) &&
-                   _entries.Any(e => string.Equals(e.CameraLink, cameraLink, StringComparison.OrdinalIgnoreCase));
+            return !_entries.Any(e => Matches(e, cameraLink, profile, imageWidth, imageHeight, keyCount)) &&
+                   _entries.Any(e => string.Equals(e.CameraLink, cameraLink, StringComparison.OrdinalIgnoreCase) &&
+                                     string.Equals(e.Profile, profile, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Saves the corners for this camera, picture size and keyboard size, replacing the earlier ones, and writes the file. False when the corners are not good enough or the file cannot be written.</summary>
-    internal bool Set(string cameraLink, int imageWidth, int imageHeight, int keyCount, IReadOnlyList<(double X, double Y)> corners)
+    /// <summary>Saves the corners for this camera, view, picture size and keyboard size, replacing the earlier ones, and writes the file. False when the corners are not good enough or the file cannot be written.</summary>
+    internal bool Set(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount, IReadOnlyList<(double X, double Y)> corners)
     {
         if (CalibrationQuad.CheckAnyWinding(corners, imageWidth, imageHeight) != CalibrationProblem.None) return false;
+        var profile = ArCalibrationProfiles.Normalize(profileId).Id;
         lock (_gate)
         {
-            _entries.RemoveAll(e => Matches(e, cameraLink, imageWidth, imageHeight, keyCount));
+            _entries.RemoveAll(e => Matches(e, cameraLink, profile, imageWidth, imageHeight, keyCount));
             _entries.Add(new Entry
             {
-                CameraLink = cameraLink ?? "", ImageWidth = imageWidth, ImageHeight = imageHeight, KeyCount = keyCount,
+                CameraLink = cameraLink ?? "", Profile = profile, ImageWidth = imageWidth, ImageHeight = imageHeight, KeyCount = keyCount,
                 Corners = corners.SelectMany(p => new[] { p.X, p.Y }).ToArray(),
             });
             if (_entries.Count > MaxEntries) _entries.RemoveRange(0, _entries.Count - MaxEntries);
@@ -451,12 +462,13 @@ internal sealed class ArCalibrationStore
         }
     }
 
-    /// <summary>Forgets the calibration for this camera, picture size and keyboard size ("Reset calibration"); true when there was one.</summary>
-    internal bool Remove(string cameraLink, int imageWidth, int imageHeight, int keyCount)
+    /// <summary>Forgets the key area of this camera and view at this picture size and keyboard size ("Reset calibration"); true when there was one.</summary>
+    internal bool Remove(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount)
     {
+        var profile = ArCalibrationProfiles.Normalize(profileId).Id;
         lock (_gate)
         {
-            var removed = _entries.RemoveAll(e => Matches(e, cameraLink, imageWidth, imageHeight, keyCount)) > 0;
+            var removed = _entries.RemoveAll(e => Matches(e, cameraLink, profile, imageWidth, imageHeight, keyCount)) > 0;
             if (removed) Write();
             return removed;
         }
@@ -477,8 +489,13 @@ internal sealed class ArCalibrationStore
                 {
                     if (entry is null || entry.Corners is not { Length: 8 } || entry.ImageWidth <= 0 || entry.ImageHeight <= 0 || entry.KeyCount <= 0) continue;
                     if (CalibrationQuad.CheckAnyWinding(Points(entry), entry.ImageWidth, entry.ImageHeight) != CalibrationProblem.None) continue;
+                    // A file written before views existed has no profile: those corners are the ones the person has been
+                    // playing with, so they belong to the view the app starts on rather than to nothing.
+                    if (string.IsNullOrWhiteSpace(entry.Profile)) entry.Profile = ArCalibrationProfiles.LegacyId;
+                    if (!ArCalibrationProfiles.IsKnown(entry.Profile)) continue;      // a view this app cannot use: ask for a new calibration instead of guessing
+                    entry.Profile = ArCalibrationProfiles.Normalize(entry.Profile).Id;
                     entry.CameraLink ??= "";
-                    _entries.RemoveAll(e => Matches(e, entry.CameraLink, entry.ImageWidth, entry.ImageHeight, entry.KeyCount));
+                    _entries.RemoveAll(e => Matches(e, entry.CameraLink, entry.Profile, entry.ImageWidth, entry.ImageHeight, entry.KeyCount));
                     _entries.Add(entry);
                 }
                 if (_entries.Count > MaxEntries) _entries.RemoveRange(0, _entries.Count - MaxEntries);
@@ -493,15 +510,17 @@ internal sealed class ArCalibrationStore
         {
             Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
             var temp = _path + ".tmp";
-            File.WriteAllText(temp, JsonSerializer.Serialize(new FileShape { Version = 1, Entries = _entries }, Options));
+            File.WriteAllText(temp, JsonSerializer.Serialize(new FileShape { Version = FormatVersion, Entries = _entries }, Options));
             File.Move(temp, _path, true);
             return true;
         }
         catch { return false; }
     }
 
-    private static bool Matches(Entry e, string link, int width, int height, int keys) =>
-        string.Equals(e.CameraLink ?? "", link ?? "", StringComparison.OrdinalIgnoreCase) && e.ImageWidth == width && e.ImageHeight == height && e.KeyCount == keys;
+    private static bool Matches(Entry e, string link, string profile, int width, int height, int keys) =>
+        string.Equals(e.CameraLink ?? "", link ?? "", StringComparison.OrdinalIgnoreCase) &&
+        string.Equals(e.Profile ?? "", ArCalibrationProfiles.Normalize(profile).Id, StringComparison.OrdinalIgnoreCase) &&
+        e.ImageWidth == width && e.ImageHeight == height && e.KeyCount == keys;
 
     private static (double X, double Y)[] Points(Entry e) =>
         [(e.Corners[0], e.Corners[1]), (e.Corners[2], e.Corners[3]), (e.Corners[4], e.Corners[5]), (e.Corners[6], e.Corners[7])];
@@ -515,6 +534,8 @@ internal sealed class ArCalibrationStore
     private sealed class Entry
     {
         public string? CameraLink { get; set; }
+        /// <summary>The view these corners were marked for, one of <see cref="ArCalibrationProfiles.All"/>; empty only in a file written before views existed.</summary>
+        public string? Profile { get; set; }
         public int ImageWidth { get; set; }
         public int ImageHeight { get; set; }
         public int KeyCount { get; set; }

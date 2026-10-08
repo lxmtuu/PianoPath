@@ -730,9 +730,13 @@ internal static partial class VerificationSuite
         const int W = 1280, H = 720;
         var ring = (CameraFrameRing)Field(window, "_cameraFrames");
         var mirrorWas = visualSettings.CameraMirror;
+        var viewWas = visualSettings.ArViewProfileId;
+        var view = ArCalibrationProfiles.Normalize(viewWas).Id;
+        var otherView = ArCalibrationProfiles.All.First(profile => profile.Id != view);
         var keyCount = visualSettings.KeyboardLayoutChoice.KeyCount;
         (double X, double Y)[] truth = [(70, 292), (1214, 268), (1236, 421), (52, 449)];
         (double X, double Y)[] flat = [(100, 300), (400, 300), (700, 300), (1000, 300)];
+        (double X, double Y)[] moved = [(94, 274), (1238, 250), (1260, 403), (76, 431)];      // a key area of its own, to tell a save that landed from one that did not
 
         // the left half of the picture is red, the right half green: a picture turned round shows at once
         var halves = new byte[W * H * 4];
@@ -845,7 +849,8 @@ internal static partial class VerificationSuite
             Assert(opened == before + 1, "A camera with a picture of the right size should open the window once.");
             Assert(window.ArCalibration.State == ArCalibrationState.Ready && SameCorners(window.ArCalibration.Current?.Corners, truth),
                 $"Four clicks and Done should calibrate this camera with the corners that were marked on the picture as delivered (mirror {mirror}).");
-            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", W, H, keyCount), truth), "The calibration should be stored for this camera, picture size and keyboard size.");
+            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
+                "The calibration should be stored for this camera, view, picture size and keyboard size.");
         }
 
         // ---- corners that cannot be used keep Done shut ----
@@ -894,18 +899,78 @@ internal static partial class VerificationSuite
             return w.Result is not null;
         });
         Assert(window.ArCalibration.Snapshot.Source == "another camera" && window.ArCalibration.Current is null
-                && window.ArCalibration.Store.Get("verification camera", W, H, keyCount) is null && window.ArCalibration.Store.Get("another camera", W, H, keyCount) is null,
+                && window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount) is null && window.ArCalibration.Store.Get("another camera", view, W, H, keyCount) is null,
             "Corners marked for one camera must not be saved for another that replaced it while the window was open.");
 
-        // ---- leave everything as it was ----
+        // ---- a view of the camera whose keys were never marked ----
+        Invoke(window, "InjectCameraFrame", halves, W, H);
+        visualSettings.ArViewProfileId = view;
         Invoke(window, "ApplyArSource", "verification camera", W, H);
-        window.ArCalibration.Reset();
+        Open(w => { Arrange(w); Click(w, truth); w.Accept(); return w.Result is not null; });
+        Assert(window.ArCalibration.State == ArCalibrationState.Ready && window.ArCalibration.Snapshot.Profile.Id == view
+                && SameCorners(window.ArCalibration.Current?.Corners, truth),
+            "The view the camera stands at should be the one marked, and should be in force.");
+        // Turning the camera to another angle: the other view asks to be marked, and no note may be drawn with corners
+        // that were marked for the first angle.
+        visualSettings.ArViewProfileId = otherView.Id;
+        Invoke(window, "ApplyArSource", "verification camera", W, H);
+        Assert(window.ArCalibration.State == ArCalibrationState.NotCalibrated && window.ArCalibration.Current is null
+                && window.ArCalibration.Snapshot.Profile.Id == otherView.Id,
+            $"Choosing the {otherView.Id} view of a camera marked at {view} must ask for its keys to be marked, not draw with the corners of the other angle.");
+        var arWasOn = visualSettings.ArEnabled;
+        visualSettings.ArEnabled = true;             // so the card speaks about the calibration rather than about the switch
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status != ArStatus.Active,
+            $"Turning the camera to the {otherView.Id} view must not keep drawing with the corners marked at {view}.");
+        if (window.ArPlanNow.Status == ArStatus.NeedsCalibration)     // with the engine running: the card names the view whose keys are to be marked
+            Assert(Field(window, "_arStatus") is TextBlock line && line.Text.Contains(Loc.T(otherView.Name), StringComparison.Ordinal),
+                $"The AR card should name the view whose keys have to be marked ({otherView.Name}).");
+        visualSettings.ArEnabled = arWasOn;
+        Invoke(window, "UpdateArFeed");
+        Open(w =>
+        {
+            Arrange(w);
+            Assert(w.Title == Loc.F("Mark the keys for the {0} view", Loc.T(otherView.Name)),
+                $"The window should say which view of the camera is being marked (found “{w.Title}”).");
+            Click(w, truth);
+            w.Accept();
+            return w.Result is not null;
+        });
+        Assert(window.ArCalibration.State == ArCalibrationState.Ready && window.ArCalibration.Snapshot.Profile.Id == otherView.Id
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", otherView.Id, W, H, keyCount), truth)
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
+            "Each view keeps its own key area: marking the second one must leave the first exactly as it was.");
+        // The view changing behind the open window is not a save either: those corners were marked for the angle the camera
+        // was at when the window opened, and both views must be left exactly as they were.
+        visualSettings.ArViewProfileId = view;
+        Open(w =>
+        {
+            Arrange(w);
+            Click(w, moved);
+            visualSettings.ArViewProfileId = otherView.Id;
+            Invoke(window, "ApplyArSource", "verification camera", W, H);
+            w.Accept();
+            return w.Result is not null;
+        });
+        Assert(window.ArCalibration.Snapshot.Profile.Id == otherView.Id
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", otherView.Id, W, H, keyCount), truth)
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
+            "A view chosen while the window is open must not be given the corners marked for the view the window was opened on.");
+
+        // ---- leave everything as it was ----
+        foreach (var profile in new[] { view, otherView.Id })
+        {
+            visualSettings.ArViewProfileId = profile;
+            Invoke(window, "ApplyArSource", "verification camera", W, H);
+            window.ArCalibration.Reset();
+        }
+        visualSettings.ArViewProfileId = viewWas;
         Invoke(window, "ApplyArSource", "another camera", W, H);
         window.ArCalibration.Reset();
         Invoke(window, "ApplyArSource", null!, 0, 0);
         ring.Clear();
         visualSettings.CameraMirror = mirrorWas;
         Invoke(window, "UpdateArFeed");
-        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled or when the camera changed behind it.");
+        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled, when the camera changed behind it, or when the view of the camera did; each view keeps its own key area and an unmarked view asks to be marked.");
     }
 }
