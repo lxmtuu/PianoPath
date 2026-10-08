@@ -54,7 +54,7 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -1501,9 +1501,10 @@ internal static partial class VerificationSuite
         Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
             "With the AR switch off the overlay leaves the stage alone.");
         Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
+                && choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)) && choices.ContainsKey(nameof(PianoVisualSettings.ArQuality))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay)),
-            "The Camera & FX page should carry the AR switch, the mode picker and the four sliders.");
+            "The Camera & FX page should carry the AR switch, the mode/view/quality pickers and the four sliders.");
         var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
         Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;
@@ -1691,6 +1692,39 @@ internal static partial class VerificationSuite
         Assert(!target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100,
             "Applying a look should not change the overlay's velocity graphs.");
         Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade graphs wired from settings to the note style.");
+    }
+
+    /// <summary>
+    /// AR-S3: the element catalogue, the three quality tiers and the look guard (docs/AR-OVERLAY-ROADMAP.md
+    /// §14.3, §14.8). Lite draws the keys, the notes and the player's bars — what the overlay has always
+    /// drawn. A note style the overlay cannot render keeps its flat fallback, and a look never changes the
+    /// tier the overlay is drawn at.
+    /// </summary>
+    private static void VerifyArQualityTiers()
+    {
+        Assert(ArElementCatalog.ForTier(ArQualityTier.Lite).SetEquals(new[] { ArElement.PianoKeys, ArElement.NoteObjects, ArElement.Keypresses }),
+            "Lite should draw only the keys, the notes and the player's bars.");
+        Assert(ArElementCatalog.ForTier(ArQualityTier.Standard).IsSupersetOf(ArElementCatalog.ForTier(ArQualityTier.Lite)),
+            "Standard must draw at least everything Lite draws.");
+        Assert.Contains(ArElement.Particles, ArElementCatalog.ForTier(ArQualityTier.Ultra));
+        Assert(!ArElementCatalog.DropOrder.Intersect(ArElementCatalog.NeverDropped).Any(),
+            "The drop order must never include an element the overlay cannot drop.");
+        Assert(ArElement.Particles == ArElementCatalog.DropOrder[0] && ArElement.ImpactLights == ArElementCatalog.DropOrder.Last(),
+            "Particles should be the first thing an over-budget frame drops, key glow the last.");
+        Assert(!ArLookGuard.IsPortedToAr("Gem") && !ArLookGuard.IsPortedToAr("CrystalOutline"),
+            "Gem and Crystal Outline still have no AR variant.");
+        Assert(ArLookGuard.StyleForAr("Gem") == ArLookGuard.ArFallbackStyle,
+            "An unported note style should fall back to Neon rather than claiming a facet look the flat projection cannot draw.");
+        Assert(ArLookGuard.StyleForAr("Neon") == "Neon" && ArLookGuard.StyleForAr("Fire") == "Fire",
+            "The styles that are ported should be passed through unchanged.");
+        var settings = new PianoVisualSettings();
+        Assert(settings.ArQuality == ArQualityTiers.StandardName, "Standard should be the default tier — not Lite, so existing users do not lose their key glow after upgrading.");
+        var kept = new PianoVisualSettings { ArQuality = ArQualityTiers.LiteName };
+        kept.CopyFrom(new PianoVisualSettings { ArQuality = ArQualityTiers.UltraName });
+        Assert(kept.ArQuality == ArQualityTiers.LiteName, "Applying a look should not change the AR quality tier.");
+        settings.ArQuality = "rubbish"; settings.Clamp();
+        Assert(settings.ArQuality == ArQualityTiers.StandardName, "An unknown tier should clamp back to Standard rather than drawing nothing.");
+        Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, Gem/Crystal fallback, tier belongs to the machine.");
     }
 
     /// <summary>

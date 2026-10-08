@@ -235,6 +235,7 @@
     "ArLookahead": 3.0,
     "ArKeyLight": 60.0,
     "ArDelay": 0.0,
+    "ArQuality": "Standard",
     "ArNoteWidthByVelocity": false,
     "ArNoteWidthSoft": 100.0,
     "ArNoteWidthHard": 100.0,

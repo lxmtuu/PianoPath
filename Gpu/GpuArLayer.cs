@@ -26,7 +26,8 @@ internal struct GpuArQuad
 /// <param name="KeyLight">0..1, how strongly a held key is tinted: the share of the camera picture that the key's colour replaces at full glow.</param>
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0);
+/// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard);
 
 /// <summary>Turns the song's notes at this moment into quads for the AR pass.</summary>
 internal sealed class GpuArLayer
@@ -65,7 +66,7 @@ internal sealed class GpuArLayer
         LiveBarCount = 0;
         if (ar.Opacity <= 0) return;
         var opacity = Math.Clamp(ar.Opacity, 0f, 1f);
-        var keyLight = Math.Clamp(ar.KeyLight, 0f, 1f);
+        var keyLight = ar.Quality == ArQualityTier.Lite ? 0f : Math.Clamp(ar.KeyLight, 0f, 1f); // Lite leaves the camera's keys alone
         var layout = ar.Calibration.Layout;
         for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch && pitch < keyColors.Count; pitch++)
         {
@@ -83,23 +84,26 @@ internal sealed class GpuArLayer
         if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
         {
             ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes, VelocityBand);
+            var arColors = ArLookGuard.IsPortedToAr(NoteStyleName(look)) ? look : look with { NoteStyle = ArLookGuard.StyleIndexForAr(look.NoteStyle) };
             foreach (var shape in _shapes)
             {
                 var note = input.Notes[shape.NoteIndex];
                 var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
                     : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
-                    : look.NoteColor(note.Pitch, note.Track);
+                    : arColors.NoteColor(note.Pitch, note.Track);
                 quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity, new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
             }
         }
+        // Only Standard and Ultra draw the bars with the stage's velocity tint: Lite keeps them flat, the colour the note colour picker gave them.
+        var barLook = ar.Quality == ArQualityTier.Lite ? look with { VelocityColor = false, VelocityColorAmount = 0 } : look;
         // the keys under the player's own fingers, drawn over the notes of the song as the stage draws its live trails
         if (live.Count == 0) return;
         ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
         foreach (var bar in _liveBars)
         {
-            var color = look.NoteColor(bar.Pitch, 0);
-            if (look.VelocityColor && look.VelocityColorAmount > 0)
-                color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), look.VelocityColorAmount);
+            var color = barLook.NoteColor(bar.Pitch, 0);
+            if (barLook.VelocityColor && barLook.VelocityColorAmount > 0)
+                color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), barLook.VelocityColorAmount);
             quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
             LiveBarCount++;
         }
@@ -113,4 +117,6 @@ internal sealed class GpuArLayer
         Color = new Vector4(color, alpha),
         Misc = misc
     };
+
+    private static string NoteStyleName(GpuLook look) => ArLookGuard.StyleName(look.NoteStyle);
 }

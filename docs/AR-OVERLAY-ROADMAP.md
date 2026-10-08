@@ -477,6 +477,7 @@ internal readonly record struct GraphVariable(bool Graph, double Start, double S
 - **Lưu**: graph thuộc *look* → đi theo preset và mã chia sẻ; độ cao/khung nhìn thuộc máy như calibration.
 - **Kiểm chứng**: test thuần cho `Sample` (kẹp, curve, NaN) — ✅ AR‑S2; `--verify` đọc lại pixel cho vài graph mẫu — đợi AR‑S4 (phép chiếu vào pass nốt).
 - **UI (AR‑S2)**: mỗi graph chỉ 2 tay cầm (mềm ↔ mạnh) + công tắc bật/tắt; `Curve`/`Start`/`Stop` chưa mở ra giao diện — đúng như §14.9 đã hứa (không vẽ đồ thị trong bảng cài đặt).
+- **AR‑S3 ✅ (2026‑10‑09)**: `ArElementCatalog` định nghĩa 11 phần tử (họ scene/effect, pass vẽ, tier tối thiểu); `ArQualityTier` Lite/Standard/Ultra với thứ tự cắt tất định (hạt → pulse → light bars → HUD → note light → damper → octave lines → impact lights), phím/nốt/vệt không bao giờ bị cắt; picker **Quality** trong thẻ AR, mặc định Standard (nâng cấp không mất ánh phím), thuộc máy nên áp look không đổi; `ArLookGuard` chuyển `Gem`/`CrystalOutline` về `Neon` phẳng thay vì vẽ sai.
 
 ### 14.6 Đầu ra (output modes)
 
@@ -528,7 +529,7 @@ không bao giờ cắt phím/nốt/keypress. Nối vào `GpuAdaptiveQuality` s�
 | **AR‑S0** ✅ | nền AR‑0/AR‑1: layout, khung mẫu, camera texture, homography, 4 điểm, khung nhìn, vệt phím tự bấm | — | CI xanh (PR #55) | AR‑0, AR‑1.1–1.7 |
 | **AR‑S1** ✅ | `PianoSimulation`: activity (floor/ceiling), tắt dần theo pitch + damping, 3 pedal, notes/sec, total | — | test thuần (`PianoSimulationTests`, 11 fact) + `--verify` đọc số (`VerifyPianoSimulation`) | mở rộng AR‑3 |
 | **AR‑S2** ✅ | `GraphVariable` + 2 graph đầu của AR: độ rộng và độ hiện của nốt/vệt theo velocity (bảng cài đặt: 2 công tắc + 4 thanh trượt, curve chưa mở) | S1 | test thuần (`GraphVariableTests` 7 fact, `ArGraphTests` 6 fact) + `--verify` (`VerifyArGraphVariable`) | mới |
-| **AR‑S3** | Catalogue phần tử + cờ AR + 3 bậc chất lượng + "preset AR mặc định" (chống bật thứ phá AR) | S2 | test thuần + preset shelf + `--verify` | mới (bài học randomizer) |
+| **AR‑S3** ✅ | Catalogue phần tử + 3 bậc chất lượng (Lite/Standard/Ultra, Lite giữ nốt/vệt phẳng, Standard thêm ánh phím + impact/note light, Ultra thêm pulse/hạt), `ArLookGuard` (Gem/CrystalOutline → Neon) | S2 | test thuần (`ArElementCatalogTests` 7 fact, `ArQualityTests` 5 fact, `ArLookGuardTests` 3 fact) + `--verify` (`VerifyArQualityTiers`); picker "Quality" trong thẻ AR; presets regenerated | mới (bài học randomizer) |
 | **AR‑S4** | Phép chiếu cảnh→ảnh trong `VsNote`/`VsSprite` (§12) + nốt có shape/min-scale/truncate | S1–S3 | đọc lại điểm ảnh trên WARP | **AR‑6.2** |
 | **AR‑S5** | Độ cao + thứ tự vẽ; note light/impact light đúng phối cảnh; pulse + hạt trong AR | S4 | pixel + `--bench-ar` | AR‑6.2/6.3 |
 | **AR‑S6** | Đầu ra: alpha-effects, tách geometry/glow, stencil-kênh | S4 | ảnh PNG alpha đọc lại | **AR‑6.4** |
