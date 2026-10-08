@@ -1967,7 +1967,8 @@ internal static partial class VerificationSuite
         var stage = (PianoStage)window.FindName("Stage"); var mode = (ComboBox)window.FindName("ModeCombo"); var tracks = (ComboBox)window.FindName("TrackCombo");
         var panel = (Border)window.FindName("SettingsPanel"); var overlay = (Grid)window.FindName("LiveChromeOverlay"); var recordButton = (Button)window.FindName("RecordButton");
         var headerChrome = (Border)window.FindName("HeaderChrome"); var footerChrome = (Border)window.FindName("FooterChrome");
-        var rowDefinitions = ((Grid)window.Content).RowDefinitions;
+        var rootGrid = (Grid)window.Content;
+        var rowDefinitions = rootGrid.RowDefinitions;
         var source = PresentationSource.FromVisual(window)!;
         void PressEscape() => Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
         void MoveMouse() { SetField(window, "_lastPointerPoint", null!); Invoke(window, "Window_MouseMove", window, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent }); }
@@ -1975,14 +1976,21 @@ internal static partial class VerificationSuite
         window.UpdateLayout();
         var headerRowHeight = rowDefinitions[0].ActualHeight; var footerRowHeight = rowDefinitions[2].ActualHeight;
         var stageWidth = stage.ActualWidth; var stageHeight = stage.ActualHeight;
+        bool StageFillsClient()
+        {
+            var bounds = stage.TransformToAncestor(rootGrid).TransformBounds(new Rect(0, 0, stage.ActualWidth, stage.ActualHeight));
+            return Math.Abs(bounds.X) < .5 && Math.Abs(bounds.Y) < .5
+                && Math.Abs(bounds.Width - rootGrid.ActualWidth) < .5 && Math.Abs(bounds.Height - rootGrid.ActualHeight) < .5;
+        }
         bool StageViewportStable()
         {
             window.UpdateLayout();
             return Math.Abs(stage.ActualWidth - stageWidth) < .5 && Math.Abs(stage.ActualHeight - stageHeight) < .5
+                && StageFillsClient()
                 && Math.Abs(rowDefinitions[0].ActualHeight - headerRowHeight) < .5 && Math.Abs(rowDefinitions[2].ActualHeight - footerRowHeight) < .5;
         }
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && stageWidth > 0 && stageHeight > 0,
-            "Live Play should start with settings hidden, the idle toolbar available and a measured stage viewport.");
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && stageWidth > 0 && stageHeight > 0 && StageFillsClient(),
+            "Live Play should start with settings hidden, the idle toolbar available and the stage canvas filling the full window client area.");
         GoIdle();
         Assert(overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
                 && headerChrome.Opacity == 0 && footerChrome.Opacity == 0 && StageViewportStable(),

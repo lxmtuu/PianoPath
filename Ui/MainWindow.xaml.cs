@@ -878,7 +878,7 @@ public partial class MainWindow : Window
         if (OwnedWindows.Count > 0 || Mouse.Captured is not null) return;
         if (DateTime.UtcNow - _lastPointerActivity >= ChromeIdleDelay) HideChromeForIdle();
     }
-    /// <summary>Idle state fades the hover chrome; its reserved rows keep the stage viewport the same size as it was before the pointer moved.</summary>
+    /// <summary>Idle state fades the hover chrome over the full-window stage, so the keyboard stays anchored at the bottom.</summary>
     private void HideChromeForIdle()
     {
         if (SettingsPanel?.Visibility == Visibility.Visible) return;
@@ -956,8 +956,8 @@ public partial class MainWindow : Window
         }
         else
         {
-            // Fade only the chrome. HeaderRow/FooterRow stay allocated, so revealing the controls never
-            // changes the stage's actual render size or relays out notes and keys under a stationary pointer.
+            // Fade only the chrome layered over the full-window stage; revealing controls never changes
+            // the stage's render size or moves notes and keys under a stationary pointer.
             if (ChromeMotion.Enabled) { ChromeMotion.FadeOut(HeaderChrome, 170); ChromeMotion.FadeOut(FooterChrome, 170); }
             else { HeaderChrome.Opacity = 0; FooterChrome.Opacity = 0; }
         }

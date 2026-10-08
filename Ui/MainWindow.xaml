@@ -17,6 +17,9 @@
             <RowDefinition x:Name="FooterRow" Height="94"/>
         </Grid.RowDefinitions>
 
+        <!-- The stage is the fixed full-window canvas; chrome is drawn over it, never reserved out of its height. -->
+        <local:PianoStage x:Name="Stage" Grid.Row="0" Grid.RowSpan="3" ClipToBounds="True" Panel.ZIndex="0" PianoKeyChanged="Stage_PianoKeyChanged"/>
+
         <!-- ===================== HEADER ===================== -->
         <Border x:Name="HeaderChrome" Grid.Row="0" Margin="22,12,22,0" Padding="14,8" Style="{StaticResource PanelChromeStyle}" Panel.ZIndex="3">
             <Grid>
@@ -65,10 +68,8 @@
             </Grid>
         </Border>
 
-        <!-- ===================== STAGE ===================== -->
+        <!-- ===================== STAGE OVERLAYS ===================== -->
         <Grid Grid.Row="1" ClipToBounds="True">
-            <local:PianoStage x:Name="Stage" PianoKeyChanged="Stage_PianoKeyChanged"/>
-
             <!-- Settings dock: full height, docked to the right, category navigation on the left. -->
             <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="672" Margin="0,8,0,8" KeyboardNavigation.TabNavigation="Cycle" Background="{DynamicResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
                 <Grid>
