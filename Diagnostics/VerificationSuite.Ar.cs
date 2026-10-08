@@ -943,9 +943,12 @@ internal static partial class VerificationSuite
         // The view changing behind the open window is not a save either: those corners were marked for the angle the camera
         // was at when the window opened, and both views must be left exactly as they were.
         visualSettings.ArViewProfileId = view;
+        Invoke(window, "ApplyArSource", "verification camera", W, H);          // the camera is back at the first view, with the window shut
         Open(w =>
         {
             Arrange(w);
+            Assert(w.Title == Loc.F("Mark the keys for the {0} view", Loc.T(ArCalibrationProfiles.Normalize(view).Name)),
+                $"The window that opens for the {view} view should say so (found “{w.Title}”).");
             Click(w, moved);
             visualSettings.ArViewProfileId = otherView.Id;
             Invoke(window, "ApplyArSource", "verification camera", W, H);
