@@ -923,7 +923,7 @@ internal static partial class VerificationSuite
         Assert(window.ArPlanNow.Status != ArStatus.Active,
             $"Turning the camera to the {otherView.Id} view must not keep drawing with the corners marked at {view}.");
         if (window.ArPlanNow.Status == ArStatus.NeedsCalibration)     // with the engine running: the card names the view whose keys are to be marked
-            Assert(Field(window, "_arStatus") is TextBlock line && line.Text.Contains(Loc.T(otherView.Name), StringComparison.Ordinal),
+            Assert(Field(window, "_arStatus") is System.Windows.Controls.TextBlock line && line.Text.Contains(Loc.T(otherView.Name), StringComparison.Ordinal),
                 $"The AR card should name the view whose keys have to be marked ({otherView.Name}).");
         visualSettings.ArEnabled = arWasOn;
         Invoke(window, "UpdateArFeed");

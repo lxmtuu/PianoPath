@@ -280,7 +280,7 @@ public sealed class ArCalibrationSessionTests : IDisposable
     }
 
     [Fact]
-    public void A_thread_drawing_while_the_window_changes_cameras_never_sees_a_mixed_state()
+    public async Task A_thread_drawing_while_the_window_changes_cameras_never_sees_a_mixed_state()
     {
         var session = NewSession();
         session.Use(Cam, 1280, 720, Full, Default); session.Save(Corners(88), out _);
@@ -311,7 +311,7 @@ public sealed class ArCalibrationSessionTests : IDisposable
             if (i % 13 == 0) session.Use(Cam, 1280, 720, Full, view);                  // same things again: must not publish
         }
         stop.Cancel();
-        reader.Wait();
+        await reader;
         Assert.Empty(bad);
     }
 }

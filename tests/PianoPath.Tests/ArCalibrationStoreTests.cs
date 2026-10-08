@@ -61,9 +61,13 @@ public sealed class ArCalibrationStoreTests : IDisposable
         Assert.True(store.Set("cam", "TILT45", W, H, 88, Sample()));
         Assert.NotNull(store.Get("cam", "tilt45", W, H, 88));
         Assert.NotNull(store.Get("cam", "Tilt45", W, H, 88));
-        // An id the app does not know cannot name a key area, so it is the default view rather than a fourth one.
-        Assert.NotNull(store.Get("cam", "some-future-view", W, H, 88));
         Assert.Null(store.Get("cam", ArCalibrationProfiles.Overhead90.Id, W, H, 88));
+        // An id the app does not know cannot name a key area of its own: it is read as, and written to, the default view.
+        Assert.Null(store.Get("cam", "some-future-view", W, H, 88));                    // this camera was marked at 45°, nothing at the default view
+        Assert.True(store.Set("cam2", "some-future-view", W, H, 88, Sample()));
+        Assert.NotNull(store.Get("cam2", Default, W, H, 88));
+        Assert.Null(store.Get("cam2", ArCalibrationProfiles.Tilt45.Id, W, H, 88));
+        Assert.Contains("\"Profile\": \"default\"", File.ReadAllText(store.FilePath));
     }
 
     [Fact]
