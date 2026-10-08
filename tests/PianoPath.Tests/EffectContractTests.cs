@@ -55,14 +55,14 @@ public sealed class EffectContractTests
     }
 
     [Fact]
-    public void Capability_states_do_not_overclaim_recording_or_ar_material_support()
+    public void Material_recording_is_verified_but_ar_keeps_the_flat_quad_fallback()
     {
         Assert.Equal("ar.note.flat-quad", EffectContractCatalog.ArFlatQuadFallbackId);
         foreach (var contract in EffectContractCatalog.NoteMaterialPilot)
         {
             Assert.Equal(EffectBackendState.Native, contract.Capabilities.WpfStage.State);
             Assert.Equal(EffectBackendState.Native, contract.Capabilities.GpuStage.State);
-            Assert.Equal(EffectBackendState.Unverified, contract.Capabilities.Recording.State);
+            Assert.Equal(EffectBackendState.Native, contract.Capabilities.Recording.State);
             Assert.Equal(EffectBackendState.Fallback, contract.Capabilities.ArOverlay.State);
             Assert.Equal("ar.note.flat-quad", contract.Capabilities.ArOverlay.FallbackId);
 
@@ -119,8 +119,8 @@ public sealed class EffectContractTests
         Assert.Contains(gem.Parameters, parameter => parameter.SettingName == "Notes3D" && parameter.Kind == EffectParameterKind.Boolean);
         Assert.DoesNotContain(crystal.Parameters, parameter => parameter.SettingName == "Notes3D");
 
-        // Solid and Gem consume every look setting on both stage renderers; the evidence lives in the
-        // WPF default branch and the GPU Solid/Gem shader branches.
+        // Solid and Gem consume every look setting on both stage renderers. Captured WPF PNG/GPU tap frames
+        // verify the material family is preserved in Recording, not every parameter's individual binding.
         Assert.All(solid.Parameters.Concat(gem.Parameters), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);

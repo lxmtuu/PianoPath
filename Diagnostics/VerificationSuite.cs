@@ -309,8 +309,8 @@ internal static partial class VerificationSuite
 
     /// <summary>
     /// Cross-checks the typed Gem/Crystal Outline pilot against the shipped setting strings, GPU indices and
-    /// existing clamps. This verifies metadata compatibility only; the separate WPF/GPU image checks remain
-    /// responsible for rendering evidence, Recording stays Unverified, and AR retains its explicit flat-quad fallback.
+    /// existing clamps. WPF, GPU and both captured recording routes now have material-specific read-back checks;
+    /// AR remains the explicit flat-quad fallback and the isolated GPU cost stays a separate evidence gate.
     /// </summary>
     private static void VerifyEffectContractPilot()
     {
@@ -341,10 +341,10 @@ internal static partial class VerificationSuite
                 $"The {alias} material should be a deterministic, note-body effect with an explicit render lifecycle.");
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
-                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
                     && contract.Capabilities.ArOverlay.State == EffectBackendState.Fallback
                     && contract.Capabilities.ArOverlay.FallbackId == "ar.note.flat-quad",
-                $"The {alias} contract must separate native WPF/GPU, unverified recording, and the actual flat AR fallback.");
+                $"The {alias} contract must separate native WPF/GPU/recording capture from the actual flat AR fallback.");
             Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
                     && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                     && contract.Accessibility.NonColorCue != EffectShapeCue.None,
@@ -370,14 +370,13 @@ internal static partial class VerificationSuite
 
             foreach (var parameter in contract.Parameters)
             {
-                var expectedGpuBinding = alias == "CrystalOutline" && parameter.SettingName == "NoteRefraction"
-                    ? EffectParameterBindingState.Ignored
-                    : EffectParameterBindingState.Applied;
+                var crystalRefraction = alias == "CrystalOutline" && parameter.SettingName == "NoteRefraction";
+                var expectedGpuBinding = crystalRefraction ? EffectParameterBindingState.Ignored : EffectParameterBindingState.Applied;
                 Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
                         && parameter.Bindings.GpuStage == expectedGpuBinding
                         && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
                         && parameter.Bindings.ArOverlay == EffectParameterBindingState.Ignored,
-                    $"The {alias} input {parameter.SettingName} should describe its actual per-output binding, including AR's flat fallback.");
+                    $"The {alias} input {parameter.SettingName} should describe its actual per-output binding, including captured recording and AR's flat fallback.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -403,7 +402,7 @@ internal static partial class VerificationSuite
             }
         }
 
-        Results.Add("PASS effect contract metadata: Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; existing clamps match; recording stays Unverified, AR names the flat-quad fallback, and isolated cost remains unmeasured. This is metadata coherence, not a new renderer/performance gate.");
+        Results.Add("PASS effect contract metadata: Solid, Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; WPF/PNG and GPU/GpuRecordingTap captures verify all three, AR names the flat-quad fallback, and isolated recording cost remains unmeasured.");
     }
 
     /// <summary>
@@ -3355,10 +3354,85 @@ internal static partial class VerificationSuite
                 $"The stage normally paints a full background: {opaquePixels} of {total} pixels were opaque.");
             Assert(clearPixels > total / 40 && clearPixels < opaquePixels - total / 3,
                 $"A transparent export should drop the background and keep the piano: {opaquePixels} opaque pixels with the background, {clearPixels} without (of {total}).");
+
+            // Record the three typed note materials through the software-stage PNG path, then decode the actual files.
+            Assert(!stage.UsesGpuFrame, "The transparent PNG path must capture the WPF/software stage in this verification session.");
+            var savedNotes = (IReadOnlyList<NoteEvent>)Field(stage, "_notes")!;
+            var savedPosition = (double)Field(stage, "_position")!;
+            var savedPlaying = (bool)Field(stage, "_playing")!;
+            var savedPressed = (IReadOnlySet<int>)Field(stage, "_pressed")!;
+            var materialNotes = new List<NoteEvent>
+            {
+                new() { Pitch = 60, Start = 1.2, Duration = .7 },
+                new() { Pitch = 64, Start = 1.2, Duration = .7 },
+                new() { Pitch = 67, Start = 1.2, Duration = .7 },
+            };
+            byte[] CaptureMaterial(string style)
+            {
+                var materialLook = flat.Clone();
+                materialLook.NoteStyle = style; materialLook.Notes3D = false; materialLook.ShowNotes = true;
+                materialLook.ShowKeys = false; materialLook.ShowHalo = false; materialLook.ShowStars = false;
+                materialLook.ShowNoteLabels = false; materialLook.ShowWatermark = false; materialLook.ShowCounter = false; materialLook.ShowFps = false;
+                materialLook.NoteGlow = 0; materialLook.NoteHeadGlow = 0; materialLook.NoteRefraction = 0;
+                materialLook.NoteTint = 78; materialLook.NoteEdge = 100; materialLook.NoteEdgeWidth = 55;
+                materialLook.FallingTrail = "None"; materialLook.FallingPulse = false; materialLook.NoteShimmer = false; materialLook.NoteLandingGlow = false;
+                materialLook.HoldBar = false; materialLook.HoldBreath = false; materialLook.HoldVibration = false; materialLook.HoldColorCycle = false; materialLook.HoldElectricArc = false;
+                materialLook.ShowEmbers = false; materialLook.ShowWisps = false; materialLook.ShowFlame = false; materialLook.ShowImpactRings = false; materialLook.ShowImpactFlash = false;
+                materialLook.ShowLightBeams = false; materialLook.ShowPetals = false; materialLook.ShootingStars = false;
+                materialLook.AmbientEnergy = "None"; materialLook.AmbientNature = "None"; materialLook.AmbientLight = "None"; materialLook.AmbientCosmic = "None";
+                materialLook.HorizonGlow = 0; materialLook.BloomIntensity = 0; materialLook.Vignette = 0;
+                materialLook.ReducedMotion = false; materialLook.ReduceFlashes = false; materialLook.HighContrast = false;
+                stage.SetVisualSettings(materialLook);
+                stage.SetState(materialNotes, 1, true, new HashSet<int>());
+                stage.UpdateLayout();
+                var captured = (byte[])InvokeReturn(window, "CaptureStageBgra", 640, 360)!;
+                return (byte[])captured.Clone();
+            }
+            var materialDirectory = Path.Combine(directory, "material-captures");
+            var materialFrames = new Dictionary<string, byte[]>(StringComparer.Ordinal);
+            using (var materialRecorder = new PngSequenceRecorder(materialDirectory, 640, 360, 24))
+            {
+                foreach (var style in new[] { "Solid", "Gem", "CrystalOutline" })
+                {
+                    var frame = CaptureMaterial(style);
+                    materialFrames.Add(style, frame);
+                    materialRecorder.WriteFrame(frame);
+                }
+                Assert(materialRecorder.FrameCount == 3, "Each typed note material should be submitted as one frame to the real PNG recorder.");
+            }
+            static byte[] DecodeMaterialPng(string path)
+            {
+                using var stream = File.OpenRead(path);
+                var bitmap = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+                var pixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+                converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+                return pixels;
+            }
+            var solidRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000001.png"));
+            var gemRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000002.png"));
+            var crystalRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000003.png"));
+            static int DifferentPixels(byte[] left, byte[] right)
+            {
+                var count = 0;
+                for (var i = 0; i < left.Length; i += 4)
+                    if (Math.Abs(left[i] - right[i]) + Math.Abs(left[i + 1] - right[i + 1]) + Math.Abs(left[i + 2] - right[i + 2]) > 24) count++;
+                return count;
+            }
+            var solidGemChanges = DifferentPixels(solidRecorded, gemRecorded);
+            var gemCrystalChanges = DifferentPixels(gemRecorded, crystalRecorded);
+            Assert(solidRecorded.Length == 640 * 360 * 4 && gemRecorded.Length == solidRecorded.Length && crystalRecorded.Length == solidRecorded.Length
+                    && solidGemChanges > 20 && gemCrystalChanges > 20,
+                $"The decoded PNG frames should preserve distinct Solid/Gem/Crystal Outline stage materials ({solidGemChanges}/{gemCrystalChanges} changed pixels).");
+            Assert(solidRecorded.AsSpan().SequenceEqual(materialFrames["Solid"])
+                    && gemRecorded.AsSpan().SequenceEqual(materialFrames["Gem"])
+                    && crystalRecorded.AsSpan().SequenceEqual(materialFrames["CrystalOutline"]),
+                "The PNG recorder should round-trip the exact pixels the WPF stage supplied for all three typed materials.");
+            stage.SetState(savedNotes, savedPosition, savedPlaying, savedPressed);
             var restored = PianoVisualSettings.FromJson(hadLook);
             ((PianoVisualSettings)Field(window, "_visualSettings")!).CopyFrom(restored);
             stage.SetVisualSettings(restored); Invoke(window, "RefreshSettingControls");
-            Results.Add("PASS PNG sequence: 32-bit frames of the chosen size, repeated frames written once per copy, a manifest with the pattern and the ffmpeg line, bad sizes refused, and a transparent stage that really produces clear pixels.");
+            Results.Add("PASS PNG sequence: 32-bit frames, repeats, manifest, bad sizes and transparent alpha; WPF recording capture writes/reads distinct Solid, Gem and Crystal Outline stage frames through actual PNG files.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }

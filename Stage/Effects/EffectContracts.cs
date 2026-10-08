@@ -258,10 +258,11 @@ internal sealed record EffectContract(
     /// <summary>
     /// The first runtime-contract pilot: Solid, Gem and CrystalOutline — the complete note-material family.
     /// This registry is deliberately separate from the descriptive <c>EffectCatalog</c> and does not drive
-    /// settings serialization, UI filtering or renderer dispatch. WPF and GPU are marked Native because their
-    /// direct note-material render checks exercise these three styles; recording stays Unverified until a
-    /// material-specific captured-frame check exists. AR names its actual flat-quad fallback instead of claiming
-    /// native facet/material support.
+    /// settings serialization, UI filtering or renderer dispatch. WPF, GPU and Recording are Native after
+    /// material-specific read-back checks in <c>VerifyPngSequenceRecorder</c>, <c>VerifyGpuNotePassQueries</c>
+    /// and <c>VerifyGpuNoteMaterials</c> (WPF PNG files and GPU <c>GpuRecordingTap</c> frames). Individual
+    /// parameter-to-recording bindings remain Unverified until each setting is exercised separately. AR names
+    /// its actual flat-quad fallback instead of claiming native facet/material support.
     /// </summary>
 internal static class EffectContractCatalog
 {
@@ -352,7 +353,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             SolidParameters,
-            new EffectCapabilityProfile(Native, Native, Unverified, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
             SolidCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.OpaqueBodyAndRim)),
         new EffectContract(
@@ -366,7 +367,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             GemParameters,
-            new EffectCapabilityProfile(Native, Native, Unverified, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
             GemCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.FacetPlanes)),
         new EffectContract(
@@ -380,7 +381,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             CrystalOutlineParameters,
-            new EffectCapabilityProfile(Native, Native, Unverified, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
             CrystalOutlineCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.AngularContourAndFacets)),
     });

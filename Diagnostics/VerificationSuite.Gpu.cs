@@ -463,6 +463,53 @@ internal static partial class VerificationSuite
             && materialReport.GetProperty("drawInstancesMin").GetInt32() == 1
             && materialReport.GetProperty("drawInstancesMax").GetInt32() == 1,
             "The material-query JSON schema should retain backend, size, sample count, raw samples, timestamp clocks and the single-instance fixture.");
+
+        // The actual take path, not RenderOnce: read the exact-size frames that GpuRecordingTap publishes.
+        var materialRecordingNotes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = .6, Duration = 2.0 },
+            new() { Pitch = 64, Start = .6, Duration = 2.0 },
+            new() { Pitch = 67, Start = .6, Duration = 2.0 },
+        };
+        feed.SetDeterministicState(materialRecordingNotes, 1.5, true, new HashSet<int>());
+        var recordingTap = new GpuRecordingTap(width, height, 30);
+        feed.Camera = null; feed.Ar = null; feed.Recording = recordingTap;
+        byte[] CaptureRecordedMaterial(string style, bool showNotes)
+        {
+            var recordingSettings = settings.Clone();
+            recordingSettings.NoteStyle = style; recordingSettings.NoteRefraction = 0; recordingSettings.ShowNotes = showNotes;
+            feed.SetLook(GpuLook.From(recordingSettings, (_, _) => Color.FromRgb(64, 176, 250), .205));
+            var targetSerial = recordingTap.Serial + 4;
+            var captureClock = Stopwatch.StartNew();
+            while (recordingTap.Serial < targetSerial && loop.Error is null && captureClock.Elapsed.TotalSeconds < 20) Thread.Sleep(5);
+            Assert(loop.Error is null && recordingTap.Serial >= targetSerial,
+                $"GpuRecordingTap should publish a frame after switching to {style} (showNotes={showNotes}, serial={recordingTap.Serial}, {loop.Error}).");
+            byte[]? copy = null;
+            Assert(recordingTap.TryRead(frame => copy = (byte[])frame.Clone()), "The material take should expose its latest read-back frame.");
+            return copy!;
+        }
+        static int MaterialFrameChanges(byte[] left, byte[] right)
+        {
+            var count = 0;
+            for (var i = 0; i < left.Length; i += 4)
+                if (Math.Abs(left[i] - right[i]) + Math.Abs(left[i + 1] - right[i + 1]) + Math.Abs(left[i + 2] - right[i + 2]) > 24) count++;
+            return count;
+        }
+        var recordingBlank = CaptureRecordedMaterial("Solid", showNotes: false);
+        var recordingSolid = CaptureRecordedMaterial("Solid", showNotes: true);
+        var recordingGem = CaptureRecordedMaterial("Gem", showNotes: true);
+        var recordingCrystal = CaptureRecordedMaterial("CrystalOutline", showNotes: true);
+        feed.Recording = null;
+        var recordedSolidPixels = MaterialFrameChanges(recordingBlank, recordingSolid);
+        var recordedGemPixels = MaterialFrameChanges(recordingBlank, recordingGem);
+        var recordedCrystalPixels = MaterialFrameChanges(recordingBlank, recordingCrystal);
+        var recordedSolidGem = MaterialFrameChanges(recordingSolid, recordingGem);
+        var recordedGemCrystal = MaterialFrameChanges(recordingGem, recordingCrystal);
+        Assert(recordingSolid.Length == width * height * 4 && recordingGem.Length == recordingSolid.Length && recordingCrystal.Length == recordingSolid.Length
+                && recordedSolidPixels > 50 && recordedGemPixels > 50 && recordedCrystalPixels > 50
+                && recordedSolidGem > 20 && recordedGemCrystal > 20,
+            $"Recorded WARP frames should contain visible and distinct Solid/Gem/Crystal Outline notes ({recordedSolidPixels}/{recordedGemPixels}/{recordedCrystalPixels} vs blank; pair changes {recordedSolidGem}/{recordedGemCrystal}).");
+        Results.Add($"PASS note-material GPU recording capture: GpuRecordingTap read back {width}×{height} frames that contain and distinguish Solid, Gem and Crystal Outline ({recordedSolidGem}/{recordedGemCrystal} pair-change pixels).");
         Results.Add($"PASS note-pass timestamp/WARP correctness: {samples.Length}/{requestedSamples} valid async D3D11 query samples around one note draw; report schema keeps size, backend, samples and timestamp frequency. Diagnostic only; no GPU cost conclusion.");
     }
 

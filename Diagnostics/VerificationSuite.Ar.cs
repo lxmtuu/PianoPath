@@ -40,7 +40,7 @@ internal static partial class VerificationSuite
                     && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
                 $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
         }
-        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback, and Recording stays Unverified.");
+        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback; non-material Recording remains Unverified.");
     }
 
     /// <summary>
