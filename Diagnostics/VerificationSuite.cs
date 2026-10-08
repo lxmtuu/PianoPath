@@ -3544,7 +3544,7 @@ internal static partial class VerificationSuite
                         && neutralReadback.Pixels.Length == EffectRecordingFixtures.Width * EffectRecordingFixtures.Height * 4
                         && effectReadback.Pixels.Length == neutralReadback.Pixels.Length
                         && changed >= fixture.MinimumChangedPixels,
-                    $"The decoded WPF PNG take for {fixture.FamilyId} should contain its own visible effect (minimum {fixture.MinimumChangedPixels} pixels with channel delta >24; saw {changed}, any={pixelDiff.AnyDifference}, max delta={pixelDiff.MaximumDelta}; applied ShowBackground/ShowStars/StarDensity={appliedLook.ShowBackground}/{appliedLook.ShowStars}/{appliedLook.StarDensity}, ReleaseEffect/Intensity={appliedLook.ReleaseEffect}/{appliedLook.ReleaseIntensity}, ShowImpactRings={appliedLook.ShowImpactRings}, rings={stage.RingCount}, transparent={stage.TransparentBackdrop}).");
+                    $"The decoded WPF PNG take for {fixture.FamilyId} should contain its own visible effect (minimum {fixture.MinimumChangedPixels} pixels with channel delta >24; saw {changed}, any={pixelDiff.AnyDifference}, max delta={pixelDiff.MaximumDelta}; applied ShowBackground/ShowStars/StarDensity={appliedLook.ShowBackground}/{appliedLook.ShowStars}/{appliedLook.StarDensity}, ReleaseEffect/Intensity={appliedLook.ReleaseEffect}/{appliedLook.ReleaseIntensity}, ShowImpactRings/ImpactWaveIntensity/RingSize={appliedLook.ShowImpactRings}/{appliedLook.ImpactWaveIntensity}/{appliedLook.RingSize}, rings={stage.RingCount}, transparent={stage.TransparentBackdrop}).");
                 evidence.Add($"{fixture.FamilyId}={changed}");
             }
 
