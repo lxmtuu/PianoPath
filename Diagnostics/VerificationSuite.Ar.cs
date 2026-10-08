@@ -275,7 +275,7 @@ internal static partial class VerificationSuite
         Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 0, "A paused song draws no notes, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
         Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
-        Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: false)));
+        Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false)));
         Assert(renderer.ArQuadCount == renderer.ArKeyQuadCount && renderer.ArKeyQuadCount >= 1,
             "Perform mode draws no notes to come but still lights the key of the note that sounds.");
         // ---- AR-1.4: held keys lit where they are in the picture ---------------------------------------------
@@ -334,7 +334,7 @@ internal static partial class VerificationSuite
         {
             var feed = MakeFeed(flatInput);
             feed.SetState([], 0, false, new HashSet<int>(pitches));
-            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, .6f, ShowNotes: false);   // Perform: the song's notes are left out
+            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false);   // Perform: the song's notes are left out
             if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
             return feed;
         }
@@ -725,7 +725,7 @@ internal static partial class VerificationSuite
             feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
             feed.SetState(song, 10, true, new HashSet<int>());
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
-            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, delay);
+            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: true, DelaySeconds: delay);
             PublishGrey();
             return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
         }
@@ -753,13 +753,13 @@ internal static partial class VerificationSuite
             int Grey() { var v = 0; tap.TryRead(frame => { var i = ((int)ky * width + (int)kx) * 4; v = Math.Max(frame[i], Math.Max(frame[i + 1], frame[i + 2])) - Math.Min(frame[i], Math.Min(frame[i + 1], frame[i + 2])); }); return v; }
             // first with no delay and the key up until the last glow of an earlier press has died away, so the history starts dark
             feedKeys.SetState([], 0, false, new HashSet<int>());
-            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, 0f);
+            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: true, DelaySeconds: 0f);
             PublishGrey();
             feedKeys.Recording = tap;
             var wait = Stopwatch.StartNew();
             while ((tap.Serial < 8 || Grey() > 3) && loop.Error is null && wait.Elapsed.TotalSeconds < 30) Thread.Sleep(10);
             Assert(loop.Error is null && tap.Serial >= 8 && Grey() <= 3, $"Before the key is pressed its place in the picture is the camera's grey ({loop.Error}).");
-            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, delay);
+            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: true, DelaySeconds: delay);
             Thread.Sleep((int)(delay * 1000) + 250);                               // the delayed history now holds only dark
             Assert(Grey() <= 3, "Switching the delay on must not light anything by itself.");
             var pressed = Stopwatch.StartNew();
