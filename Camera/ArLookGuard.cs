@@ -10,10 +10,10 @@ namespace PianoPath;
 internal static class ArLookGuard
 {
     /// <summary>The note styles the app ships (mirrors <c>PianoVisualSettings.NoteStyles</c>, kept here so this file needs no WPF-leaning types).</summary>
-    internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline"];
+    internal static readonly string[] NoteStyles = new[] { "Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline" };
 
     /// <summary>The note styles with no AR variant: the overlay draws them flat.</summary>
-    internal static readonly string[] UnportedNoteStyles = ["Gem", "CrystalOutline"];
+    internal static readonly string[] UnportedNoteStyles = new[] { "Gem", "CrystalOutline" };
 
     /// <summary>The style the overlay draws a note with when the look's own style has no AR variant.</summary>
     internal const string ArFallbackStyle = "Neon";
