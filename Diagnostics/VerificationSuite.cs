@@ -3509,16 +3509,18 @@ internal static partial class VerificationSuite
                     return (converted.PixelWidth, converted.PixelHeight, pixels);
                 }
 
-                static int ChangedPixels(byte[] first, byte[] second)
+                static (int Changed, int AnyDifference, int MaximumDelta) ComparePixels(byte[] first, byte[] second)
                 {
-                    var changed = 0;
+                    var changed = 0; var anyDifference = 0; var maximumDelta = 0;
                     for (var i = 0; i < first.Length; i += 4)
                     {
                         var delta = Math.Abs(first[i] - second[i]) + Math.Abs(first[i + 1] - second[i + 1])
                             + Math.Abs(first[i + 2] - second[i + 2]) + Math.Abs(first[i + 3] - second[i + 3]);
+                        if (delta > 0) anyDifference++;
                         if (delta > 24) changed++;
+                        maximumDelta = Math.Max(maximumDelta, delta);
                     }
-                    return changed;
+                    return (changed, anyDifference, maximumDelta);
                 }
 
                 var neutral = Capture(enabled: false);
@@ -3534,13 +3536,15 @@ internal static partial class VerificationSuite
 
                 var neutralReadback = DecodePng(Path.Combine(familyDirectory, "frame-000001.png"));
                 var effectReadback = DecodePng(Path.Combine(familyDirectory, "frame-000002.png"));
-                var changed = ChangedPixels(neutralReadback.Pixels, effectReadback.Pixels);
+                var pixelDiff = ComparePixels(neutralReadback.Pixels, effectReadback.Pixels);
+                var changed = pixelDiff.Changed;
+                var appliedLook = (PianoVisualSettings)Field(stage, "_visual")!;
                 Assert(neutralReadback.Width == EffectRecordingFixtures.Width && neutralReadback.Height == EffectRecordingFixtures.Height
                         && effectReadback.Width == neutralReadback.Width && effectReadback.Height == neutralReadback.Height
                         && neutralReadback.Pixels.Length == EffectRecordingFixtures.Width * EffectRecordingFixtures.Height * 4
                         && effectReadback.Pixels.Length == neutralReadback.Pixels.Length
                         && changed >= fixture.MinimumChangedPixels,
-                    $"The decoded WPF PNG take for {fixture.FamilyId} should contain its own visible effect (minimum {fixture.MinimumChangedPixels} changed pixels; saw {changed}).");
+                    $"The decoded WPF PNG take for {fixture.FamilyId} should contain its own visible effect (minimum {fixture.MinimumChangedPixels} pixels with channel delta >24; saw {changed}, any={pixelDiff.AnyDifference}, max delta={pixelDiff.MaximumDelta}; applied ShowBackground/ShowStars/StarDensity={appliedLook.ShowBackground}/{appliedLook.ShowStars}/{appliedLook.StarDensity}, transparent={stage.TransparentBackdrop}).");
                 evidence.Add($"{fixture.FamilyId}={changed}");
             }
 
