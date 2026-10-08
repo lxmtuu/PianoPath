@@ -72,6 +72,7 @@ internal sealed partial class GpuStageSimulation
     private readonly List<Ring> _rings = [];
     private readonly List<Flash> _flashes = [];
     private readonly List<LiveTrail> _trails = [];
+    private readonly List<ArLivePress> _livePresses = [];
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128];
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
     private readonly bool[] _active = new bool[128];
@@ -87,6 +88,13 @@ internal sealed partial class GpuStageSimulation
     internal double Time => _time;
     internal int ParticleCount => _count;
     internal int LiveTrailCount => _trails.Count;
+
+    /// <summary>
+    /// The keys the player is pressing, or has just let go of, one entry per live trail, written where the trails are
+    /// aged (<see cref="Step"/>) and read by the AR layer. The player's own hands: a song's notes travel in the notes
+    /// list, this is what the keys under the fingers draw.
+    /// </summary>
+    internal IReadOnlyList<ArLivePress> LivePresses => _livePresses;
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
     private float _pedalBoost = 1;
@@ -114,7 +122,8 @@ internal sealed partial class GpuStageSimulation
         };
     }
 
-    private static Vector3 VelocityTint(float strength)
+    /// <summary>The colour a hard press tints toward, for the live trails and for the AR bars of the keys the player presses.</summary>
+    internal static Vector3 VelocityTint(float strength)
     {
         var t = Math.Clamp(strength, 0, 1.2f) / 1.2f;
         return Vector3.Lerp(new Vector3(80 / 255f, 140 / 255f, 1f), new Vector3(1f, 70 / 255f, 60 / 255f), t);
@@ -357,6 +366,9 @@ internal sealed partial class GpuStageSimulation
                 if (trail.Released && tailY > layout.HitY + 32) _trails.RemoveAt(i);
             }
         }
+        // what the AR layer draws for the player's own hands, in the order the keys went down
+        _livePresses.Clear();
+        foreach (var trail in _trails) _livePresses.Add(new ArLivePress(trail.Pitch, trail.Age, trail.Held, trail.KeyDown, trail.Strength));
     }
 
     private void Spawn(in Particle particle)

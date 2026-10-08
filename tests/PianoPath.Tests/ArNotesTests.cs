@@ -168,6 +168,140 @@ public class ArNotesTests
         Assert.Equal(new[] { 60, 64 }, found.Select(s => s.Pitch).Order());
     }
 
+    // ---- the keys under the player's own hands: a bar of their own -------------------------------------------------
+
+    private static List<ArLiveBar> BuildLive(IReadOnlyList<ArLivePress> presses, ArNoteStyle? style = null, ArCalibration? calibration = null, ArView? view = null)
+    {
+        var into = new List<ArLiveBar> { default };        // proves the list is cleared first
+        ArNotes.BuildLive(calibration ?? Calibration, view ?? View, presses, style ?? Style, into);
+        return into;
+    }
+
+    private static ArLivePress Down(int pitch, double heldSeconds, float strength = 1f) => new(pitch, heldSeconds, heldSeconds, true, strength);
+    private static ArLivePress LetGo(int pitch, double heldSeconds, double since = 0, float strength = 1f) => new(pitch, heldSeconds + since, heldSeconds, false, strength);
+
+    [Fact]
+    public void A_pressed_key_draws_a_bar_that_leaves_the_key_along_the_keyboard()
+    {
+        var bar = Assert.Single(BuildLive([Down(60, .5)]));
+        var (left, right) = Calibration.Layout.Span(60);
+        var centre = (left + right) / 2; var half = (right - left) / 2 * Style.WidthShare;
+        var length = .5 * Style.FallSpeed;
+        // the leading edge is on the back edge of the keys, where the song's notes reach them, and the tail is how long the key has been down
+        var (flx, fly) = Out(centre - half, 0); var (frx, fry) = Out(centre + half, 0);
+        Near(flx, bar.Patch.FrontLeft.X); Near(fly, bar.Patch.FrontLeft.Y); Near(frx, bar.Patch.FrontRight.X); Near(fry, bar.Patch.FrontRight.Y);
+        var (blx, bly) = Out(centre - half, -length); var (brx, bry) = Out(centre + half, -length);
+        Near(blx, bar.Patch.BackLeft.X); Near(bly, bar.Patch.BackLeft.Y); Near(brx, bar.Patch.BackRight.X); Near(bry, bar.Patch.BackRight.Y);
+        Assert.True(bar.Held); Assert.Equal(60, bar.Pitch); Assert.Equal(1f, bar.Strength);
+        Near(1 - length / Style.Reach, bar.Fade, 1e-9);
+        Assert.True(Keys(bar.Patch.FrontRight).U - Keys(bar.Patch.FrontLeft).U < Calibration.Layout.WhiteWidth, "a bar is narrower than its key, as a note is");
+        // twice as long a press, twice as far from the key
+        var later = Assert.Single(BuildLive([Down(60, 1)]));
+        Near(-2 * length, Keys(later.Patch.BackLeft).V, 1e-6);
+        Near(0, Keys(later.Patch.FrontLeft).V, 1e-6);
+    }
+
+    [Fact]
+    public void A_bar_of_a_press_and_a_note_of_the_song_take_the_same_lane()
+    {
+        var bar = Assert.Single(BuildLive([Down(60, .5)]));
+        var note = Assert.Single(Build([Note(60, 10, .5)], 10));            // the same key, its leading edge just reaching the keys
+        Near(note.Patch.FrontLeft.X, bar.Patch.FrontLeft.X, 1e-9);
+        Near(note.Patch.FrontRight.X, bar.Patch.FrontRight.X, 1e-9);
+        Near(note.Patch.FrontLeft.Y, bar.Patch.FrontLeft.Y, 1e-9);
+        Near(note.Patch.BackLeft.X, bar.Patch.BackLeft.X, 1e-9);
+        Near(note.Patch.BackRight.X, bar.Patch.BackRight.X, 1e-9);
+        // the only difference is the gap a note keeps so two of them do not touch
+        Near(Keys(note.Patch.BackLeft).V, Keys(bar.Patch.BackLeft).V + Style.Gap, 1e-6);
+    }
+
+    [Fact]
+    public void The_bar_follows_the_keyboard_whichever_way_the_camera_sees_it()
+    {
+        var corners61 = new (double X, double Y)[] { (190, 276), (1088, 258), (1106, 432), (172, 452) };
+        var mirrored88 = new (double X, double Y)[] { (1214, 268), (70, 292), (52, 449), (1236, 421) };
+        foreach (var (calibration, what) in new[]
+        {
+            (Calibration, "the sample keyboard"),
+            (ArProjectionTests.Calibrate(corners61, KeyboardLayout.ForKeyCount(61)), "a 61-key keyboard"),
+            (ArProjectionTests.Calibrate(mirrored88), "the keyboard seen the other way round"),
+        })
+        {
+            var bar = Assert.Single(BuildLive([Down(60, .5)], calibration: calibration));
+            Near(0, Keys(bar.Patch.FrontLeft, calibration).V, 1e-6);              // the leading edge is on the back edge of the keys
+            Near(-.75, Keys(bar.Patch.BackLeft, calibration).V, 1e-6);            // the tail lies along the keyboard's own v axis
+            Assert.True(bar.Patch.Area > 0, $"{what}: the bar must not be inside out");
+        }
+        // the mirror is the same keyboard seen from the other side: the bar still leaves the key away from the player, up the picture
+        var plain = Assert.Single(BuildLive([Down(60, .5)]));
+        var flipped = Assert.Single(BuildLive([Down(60, .5)], calibration: ArProjectionTests.Calibrate(mirrored88)));
+        Assert.True(plain.Patch.BackLeft.Y < plain.Patch.FrontLeft.Y && flipped.Patch.BackRight.Y < flipped.Patch.FrontRight.Y,
+            "the bar goes away from the keys up the picture, whichever side of the keyboard the picture puts it on");
+    }
+
+    [Fact]
+    public void A_key_that_went_down_this_instant_has_no_bar_yet()
+    {
+        Assert.Empty(BuildLive([Down(60, 0)]));
+        Assert.Empty(BuildLive([Down(60, Style.MinLength / Style.FallSpeed - 1e-6)]));
+        Assert.Single(BuildLive([Down(60, Style.MinLength / Style.FallSpeed + 1e-6)]));
+    }
+
+    [Fact]
+    public void A_bar_stops_at_the_reach_and_dims_as_it_stretches()
+    {
+        var bar = Assert.Single(BuildLive([Down(60, 20)]));
+        Near(-Style.Reach, Keys(bar.Patch.BackLeft).V, 1e-6);
+        Near(.08, bar.Fade, 1e-9);                                          // the floor: a key still down still says so
+        Assert.True(bar.Held);
+    }
+
+    [Fact]
+    public void A_key_that_was_let_go_stops_its_bar_and_takes_it_away_a_moment_later()
+    {
+        var held = Assert.Single(BuildLive([Down(60, .5)]));
+        var justLetGo = Assert.Single(BuildLive([LetGo(60, .5)]));
+        Assert.Equal(held.Patch, justLetGo.Patch);                          // the hand let go; the geometry did not change
+        Assert.True(justLetGo.Fade < held.Fade);
+        Assert.False(justLetGo.Held); Assert.True(held.Held);
+        Assert.Equal(.9f, Assert.Single(BuildLive([Down(60, .5, .9f)])).Strength);
+        // a moment later the bar is where the finger left it, only dimmer — it never grows after the key is up
+        var later = Assert.Single(BuildLive([LetGo(60, .5, .12)]));
+        Assert.Equal(held.Patch, later.Patch);
+        Assert.True(later.Fade < justLetGo.Fade);
+        // and once the moment has passed it is gone: the bar is about what the hand just did, not about the key
+        Assert.Single(BuildLive([LetGo(60, .5, ArNotes.ReleaseLife - 1e-6)]));
+        Assert.Empty(BuildLive([LetGo(60, .5, ArNotes.ReleaseLife)]));
+        Assert.Empty(BuildLive([LetGo(60, .5, 5)]));
+    }
+
+    [Fact]
+    public void Black_keys_are_drawn_after_the_white_ones_at_their_own_width()
+    {
+        var bars = BuildLive([Down(61, .5), Down(60, .5), Down(63, .5), Down(62, .5)]).ToList();
+        Assert.Equal(new[] { false, false, true, true }, bars.Select(bar => KeyboardLayout.IsBlack(bar.Pitch)));
+        var white = bars.First(bar => bar.Pitch == 60); var black = bars.First(bar => bar.Pitch == 61);
+        var whiteWidth = Keys(white.Patch.FrontRight).U - Keys(white.Patch.FrontLeft).U;
+        var blackWidth = Keys(black.Patch.FrontRight).U - Keys(black.Patch.FrontLeft).U;
+        Near(Calibration.Layout.WhiteWidth * Style.WidthShare, whiteWidth, 1e-6);
+        Near(Calibration.Layout.WhiteWidth * KeyboardLayout.BlackWidthShare * Style.WidthShare, blackWidth, 1e-6);
+    }
+
+    [Fact]
+    public void Keys_the_calibrated_keyboard_does_not_have_are_skipped_and_nothing_is_drawn_when_nothing_can_be()
+    {
+        var presses = new[] { Down(20, .5), Down(21, .5), Down(108, .5), Down(109, .5) };
+        Assert.Equal(new[] { 21, 108 }, BuildLive(presses).Select(bar => bar.Pitch).Order());
+        foreach (var style in new[] { new ArNoteStyle(FallSpeed: 0), new ArNoteStyle(Reach: -1), new ArNoteStyle(MinLength: 0), new ArNoteStyle(WidthShare: 0) })
+            Assert.Empty(BuildLive([Down(60, .5)], style));
+        Assert.Empty(BuildLive([Down(60, .5)], view: new ArView(0, 0, 10, 10, PictureFit.Fit, false)));
+        Assert.Empty(BuildLive([]));
+        // ages that make no sense: not a number, never went down, let go before it went down
+        Assert.Empty(BuildLive([new ArLivePress(60, double.NaN, .5, true, 1f), new ArLivePress(64, double.PositiveInfinity, .5, true, 1f)]));
+        Assert.Empty(BuildLive([new ArLivePress(67, 1, double.NaN, true, 1f), new ArLivePress(69, 1, double.PositiveInfinity, true, 1f)]));
+        Assert.Empty(BuildLive([LetGo(60, .5, -.2)]));
+    }
+
     [Fact]
     public void A_whole_song_at_any_moment_draws_what_a_plain_count_says_it_should()
     {

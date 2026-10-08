@@ -591,9 +591,9 @@ public partial class MainWindow
         Register(overlay, _cameraStatus, null, "camera overlay status green screen chroma key");
 
         // The AR overlay is its own card: it uses the camera picked above but draws on the real keyboard in the picture.
-        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Play on your real keyboard: the camera is the background, the notes fall onto the real keys and the keys you press light up. It needs the Direct3D engine and a camera looking at the keys (the one picked above).");
-        Toggle(ar, "AR overlay", nameof(PianoVisualSettings.ArEnabled), "Use the camera as the background and draw the notes and lit keys over your real keyboard. Mark the four corners of the keys once per camera, picture size and keyboard size.");
-        Choice(ar, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the notes of the song falling onto the real keys. Perform shows only the keys you press lighting up, for playing freely or filming.",
+        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Play on your real keyboard: the camera is the background, the notes fall onto the real keys, and the keys you press light up with a bar rising from each one. It needs the Direct3D engine and a camera looking at the keys (the one picked above).");
+        Toggle(ar, "AR overlay", nameof(PianoVisualSettings.ArEnabled), "Use the camera as the background and draw the notes and lit keys over your real keyboard. Mark the four corners of the keys once per camera, view, picture size and keyboard size.");
+        Choice(ar, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the notes of the song falling onto the real keys. Perform leaves the song's notes out and shows the keys you press, with a bar rising from each one as you play.",
             (ArModes.Learn, "Learn"), (ArModes.Perform, "Perform"));
         SliderRow(ar, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "How solid the falling notes and the lit keys are over the camera picture.");
         SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")

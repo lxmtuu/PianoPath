@@ -116,9 +116,32 @@ internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, dou
 /// <param name="Fade">0..1, how far the note has come into view: it fades in over the last quarter of the reach instead of appearing from nothing.</param>
 internal readonly record struct ArNoteShape(ArPatch Patch, int Pitch, int NoteIndex, bool Black, bool Sounding, double Fade);
 
+/// <summary>
+/// One key the player is pressing, or has just let go, as the render thread's simulation holds it: what a bar is drawn
+/// from. A song's notes come out of the notes list; this is the player's own hands.
+/// </summary>
+/// <param name="Pitch">The key.</param>
+/// <param name="Age">Seconds since the key went down.</param>
+/// <param name="HeldSeconds">Seconds the key has been down: it stops growing when the finger leaves, so the bar stops stretching where the finger left it.</param>
+/// <param name="Down">True while the finger is still on the key.</param>
+/// <param name="Strength">How hard it was pressed, 0..1 (MIDI velocity), for the colour.</param>
+internal readonly record struct ArLivePress(int Pitch, double Age, double HeldSeconds, bool Down, float Strength);
+
+/// <summary>One bar of a pressed key: the patch to draw and how solid it is. There is no note behind it, so unlike
+/// <see cref="ArNoteShape"/> it carries no index into a song.</summary>
+/// <param name="Patch">Where on the output the bar goes: its leading edge on the back edge of the keys.</param>
+/// <param name="Pitch">The key it belongs to.</param>
+/// <param name="Fade">0..1: the opacity the bar is drawn with, falling as the bar stretches away from the key.</param>
+/// <param name="Held">True while the key is still down.</param>
+/// <param name="Strength">How hard it was pressed, 0..1, for the colour.</param>
+internal readonly record struct ArLiveBar(ArPatch Patch, int Pitch, double Fade, bool Held, float Strength);
+
 /// <summary>Works out where the notes of a song are on the picture for a moment of the song.</summary>
 internal static class ArNotes
 {
+    /// <summary>How long the bar of a key that was let go stays on the picture after the finger left it, fading out.</summary>
+    internal const double ReleaseLife = .35;
+
     /// <summary>
     /// Fills <paramref name="into"/> (cleared first) with the notes to draw at <paramref name="position"/> seconds: those that
     /// are within <see cref="ArNoteStyle.Reach"/> of the keys, or sounding now. A note's leading edge reaches the back of
@@ -152,6 +175,44 @@ internal static class ArNotes
                 if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, far, near, out var patch, out _, out _)) continue;
                 var fade = Math.Clamp((style.Reach + leading) / (style.Reach * .25), 0, 1);
                 into.Add(new ArNoteShape(patch, note.Pitch, index, wantBlack, note.Start <= position && note.End > position, fade));
+            }
+        }
+    }
+
+    /// <summary>
+    /// Fills <paramref name="into"/> (cleared first) with a bar for every key the player is pressing, or has just let go
+    /// of: the bar's leading edge sits on the back edge of the key (where the song's notes reach it) and its tail
+    /// stretches away along the keyboard's own direction as the key is held, up to <see cref="ArNoteStyle.Reach"/>, fading
+    /// as it stretches. Letting the key go stops the bar where the finger left it, dims it and takes it away
+    /// <see cref="ReleaseLife"/> seconds later. It is the mark of the player's own hand, so it is drawn whatever the mode
+    /// is — a song's notes to come are what Perform leaves out. A key the calibrated keyboard does not have is skipped.
+    /// </summary>
+    internal static void BuildLive(ArCalibration calibration, ArView view, IReadOnlyList<ArLivePress> presses, ArNoteStyle style, List<ArLiveBar> into)
+    {
+        into.Clear();
+        if (!style.IsUsable || !view.Valid || presses.Count == 0) return;
+        var layout = calibration.Layout;
+        // black keys last, over the white ones, exactly as the notes are drawn
+        for (var pass = 0; pass < 2; pass++)
+        {
+            var wantBlack = pass == 1;
+            foreach (var press in presses)
+            {
+                if (!layout.Contains(press.Pitch) || KeyboardLayout.IsBlack(press.Pitch) != wantBlack) continue;
+                if (!double.IsFinite(press.Age) || !double.IsFinite(press.HeldSeconds) || press.HeldSeconds <= 0) continue;
+                var gone = 1.0;                                 // how much of the bar is left now the finger may have left the key
+                if (!press.Down)
+                {
+                    var since = press.Age - press.HeldSeconds;
+                    if (!(since >= 0) || since >= ReleaseLife) continue;   // let go and already gone, or an age that makes no sense
+                    gone = .65 * Math.Clamp(1 - since / ReleaseLife, 0, 1);
+                }
+                var length = Math.Min(style.Reach, press.HeldSeconds * style.FallSpeed);
+                if (length < style.MinLength) continue;         // a key that went down this instant has not left the key yet; its light says it is down
+                var (left, right) = layout.Span(press.Pitch);
+                var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShare;
+                if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, -length, 0, out var patch, out _, out _)) continue;
+                into.Add(new ArLiveBar(patch, press.Pitch, Math.Clamp(1 - length / style.Reach, .08, 1) * gone, press.Down, press.Strength));
             }
         }
     }
