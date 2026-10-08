@@ -483,7 +483,7 @@ public partial class MainWindow
             "Every pixel of the keyboard is shaded with a real light transport model: a GGX specular lobe, a softbox with true penumbra shadows, contact occlusion in the gaps, colored lights from every sounding key and an ACES filmic tonemapper.");
         // The GPU stage shades the keys in real time and reads the same sliders every frame; the picker
         // shapes the software renderer, which transparent PNG takes and the automatic fallback still draw.
-        Choice(shader, "Shading engine", nameof(PianoVisualSettings.ShadingQuality),
+        Choice(shader, "Software shading quality", nameof(PianoVisualSettings.ShadingQuality),
             "The GPU stage always renders the keys in 3D with real-time lights and shadows every frame, and the sliders below shape it. This picker shapes the software renderer, which transparent PNG takes and the automatic fallback still draw: Off is flat vector keys, Fast, Balanced and Cinematic trade bake time for shadow and occlusion samples.",
             ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"));
         SliderRow(shader, "Camera tilt", nameof(PianoVisualSettings.ShaderCameraTilt), 0, 100, "Low camera exaggerates the perspective and lengthens the black key shadows; high camera flattens the bed.");

@@ -2321,6 +2321,46 @@ internal static partial class VerificationSuite
         Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.General),
             "The first section should open on Style and the last one should close on the pages of the application itself.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        var settingRows = ((System.Collections.IEnumerable)Field(window, "_settingRows")).Cast<object>().ToArray();
+        var rowSettingProperties = settingRows
+            .Select(row => (string?)row.GetType().GetField("Property")!.GetValue(row))
+            .Where(property => !string.IsNullOrWhiteSpace(property))
+            .Select(property => property!)
+            .ToHashSet(StringComparer.Ordinal);
+        var staticSettingControls = new (string Property, string ControlName)[]
+        {
+            (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
+            (nameof(PianoVisualSettings.AudioLatencyMs), "AudioLatencyCombo"),
+            (nameof(PianoVisualSettings.AudioMasterGain), "AudioGainSlider"),
+            (nameof(PianoVisualSettings.ReverbStyle), "ReverbStyleCombo"),
+            (nameof(PianoVisualSettings.ReverbImpulseFile), "ReverbImpulseButton"),
+            (nameof(PianoVisualSettings.PracticeAutoTempo), "AutoPracticeTempoCheck"),
+            (nameof(PianoVisualSettings.PracticeMissThreshold), "AutoPracticeMissSlider"),
+        };
+        var nonControlProperties = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(PianoVisualSettings.BackgroundAppearanceVersion), // JSON compatibility migration
+            nameof(PianoVisualSettings.PresetName),                 // preset workflow metadata
+            nameof(PianoVisualSettings.PresetModified),             // preset workflow metadata
+            nameof(PianoVisualSettings.RenderBackend),              // fixed to GPU; WPF remains an automatic fallback
+        };
+        var publicSettings = typeof(PianoVisualSettings)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var staticProperties = staticSettingControls.Select(control => control.Property).ToHashSet(StringComparer.Ordinal);
+        var classifiedProperties = rowSettingProperties.Concat(staticProperties).Concat(nonControlProperties).ToHashSet(StringComparer.Ordinal);
+        var unclassifiedProperties = publicSettings.Except(classifiedProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var unexpectedClassifications = classifiedProperties.Except(publicSettings).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var expectedRowProperties = publicSettings.Except(staticProperties).Except(nonControlProperties).ToHashSet(StringComparer.Ordinal);
+        var missingRows = expectedRowProperties.Except(rowSettingProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var unexpectedRows = rowSettingProperties.Except(expectedRowProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        Assert(unclassifiedProperties.Length == 0 && unexpectedClassifications.Length == 0
+                && missingRows.Length == 0 && unexpectedRows.Length == 0,
+            $"Every public visual setting should be a generated row, a mapped static XAML control, or explicitly classified metadata; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+        foreach (var (property, controlName) in staticSettingControls)
+            Assert(publicSettings.Contains(property) && window.FindName(controlName) is FrameworkElement,
+                $"Static setting {property} should have its XAML control {controlName}.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode))
                 && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMotion)) && choices.ContainsKey(nameof(PianoVisualSettings.HaloPulseStyle))
                 && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)) && toggles.ContainsKey(nameof(PianoVisualSettings.HaloPulse)),
@@ -2457,7 +2497,7 @@ internal static partial class VerificationSuite
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
         Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices, visualSettings));
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: thirteen pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add($"PASS settings dock: thirteen pages grouped into four navigation sections, {rowSettingProperties.Count} generated setting rows plus {staticSettingControls.Length} static controls covering the public model, theme and effect controls, scoped search, preset application and keyboard shading.");
     }
 
     /// <summary>
