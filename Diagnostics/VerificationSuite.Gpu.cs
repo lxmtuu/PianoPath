@@ -499,6 +499,7 @@ internal static partial class VerificationSuite
         var recordingSolid = CaptureRecordedMaterial("Solid", showNotes: true);
         var recordingGem = CaptureRecordedMaterial("Gem", showNotes: true);
         var recordingCrystal = CaptureRecordedMaterial("CrystalOutline", showNotes: true);
+        VerifyEffectFamilyGpuRecordingCaptures(feed, loop, recordingTap, width, height);
         feed.Recording = null;
         var recordedSolidPixels = MaterialFrameChanges(recordingBlank, recordingSolid);
         var recordedGemPixels = MaterialFrameChanges(recordingBlank, recordingGem);
@@ -511,6 +512,113 @@ internal static partial class VerificationSuite
             $"Recorded WARP frames should contain visible and distinct Solid/Gem/Crystal Outline notes ({recordedSolidPixels}/{recordedGemPixels}/{recordedCrystalPixels} vs blank; pair changes {recordedSolidGem}/{recordedGemCrystal}).");
         Results.Add($"PASS note-material GPU recording capture: GpuRecordingTap read back {width}×{height} frames that contain and distinguish Solid, Gem and Crystal Outline ({recordedSolidGem}/{recordedGemCrystal} pair-change pixels).");
         Results.Add($"PASS note-pass timestamp/WARP correctness: {samples.Length}/{requestedSamples} valid async D3D11 query samples around one note draw; report schema keeps size, backend, samples and timestamp frequency. Diagnostic only; no GPU cost conclusion.");
+    }
+
+    /// <summary>
+    /// Captures each typed non-material family through the real exact-size GPU take path, changing one family at
+    /// a time against a matching neutral frame. This verifies that each pilot family survives the recording
+    /// read-back; it does not exercise every style/parameter binding or measure recording cost.
+    /// </summary>
+    private static void VerifyEffectFamilyGpuRecordingCaptures(GpuStageFeed feed, GpuRenderLoop loop, GpuRecordingTap tap, int width, int height)
+    {
+        var fixtures = EffectRecordingFixtures.All;
+        var families = EffectContractCatalog.AllFamilies;
+        Assert(fixtures.Count == 24
+                && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
+                && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
+                    .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
+            "The GPU recording capture fixtures must cover each of the 24 typed families exactly once.");
+        Assert(width == EffectRecordingFixtures.Width && height == EffectRecordingFixtures.Height
+                && tap.Width == width && tap.Height == height,
+            "The per-family recording captures must use the exact-size 640×360 output of the real GPU recording tap.");
+
+        var frameBytes = width * height * 4;
+        var baseline = new byte[frameBytes];
+        var sample = new byte[frameBytes];
+        var evidence = new List<string>(fixtures.Count);
+        var color = Color.FromRgb(64, 176, 250);
+
+        void SetCase(EffectRecordingCaptureFixture fixture, bool enabled)
+        {
+            feed.ClearTransient();
+            feed.SetSustain(false);
+            feed.SetStageHeight(height);
+            var scene = EffectRecordingFixtures.SceneState(fixture.Scene);
+            feed.SetDeterministicState(scene.Notes, scene.Position, scene.Playing, scene.Pressed);
+            feed.SetDeterministicBeatPulse(0);
+            var look = EffectRecordingFixtures.NeutralLook();
+            if (enabled) fixture.Enable(look);
+            feed.SetLook(GpuLook.From(look, (_, _) => color, .205));
+        }
+
+        void ReadNextFrame(string familyId)
+        {
+            var wantedSerial = tap.Serial + 1;
+            var timeout = Stopwatch.StartNew();
+            while (tap.Serial < wantedSerial && loop.Error is null && timeout.Elapsed.TotalSeconds < 20) Thread.Sleep(5);
+            Assert(loop.Error is null && tap.Serial >= wantedSerial,
+                $"GpuRecordingTap did not publish the next {width}×{height} fixture frame for {familyId} ({loop.Error}).");
+        }
+
+        void CopyNewestFrame(byte[] destination, string familyId)
+        {
+            var copied = tap.TryRead(frame => Buffer.BlockCopy(frame, 0, destination, 0, frameBytes));
+            Assert(copied, $"GpuRecordingTap should expose a decoded BGRA frame for {familyId}.");
+        }
+
+        static int ChangedPixels(byte[] first, byte[] second)
+        {
+            var changed = 0;
+            for (var i = 0; i < first.Length; i += 4)
+            {
+                var delta = Math.Abs(first[i] - second[i]) + Math.Abs(first[i + 1] - second[i + 1]) + Math.Abs(first[i + 2] - second[i + 2]);
+                if (delta > 24) changed++;
+            }
+            return changed;
+        }
+
+        foreach (var fixture in fixtures)
+        {
+            // Neutral: use the same notes/held keys for an anchored family, but no family setting or event.
+            SetCase(fixture, enabled: false);
+            var neutralFrames = fixture.Scene == EffectRecordingScene.SongNoteRelease ? 1 : Math.Max(1, fixture.GpuSettleFrames + 1);
+            for (var i = 0; i < neutralFrames; i++) ReadNextFrame(fixture.FamilyId);
+            if (fixture.Scene == EffectRecordingScene.SongNoteRelease)
+                feed.SetDeterministicState(EffectRecordingFixtures.SceneState(fixture.Scene).Notes, .15, true, EffectRecordingFixtures.SceneState(fixture.Scene).Pressed);
+            ReadNextFrame(fixture.FamilyId);
+            CopyNewestFrame(baseline, fixture.FamilyId);
+
+            // Enabled: start from a cleared simulation, let the actual recorder publish its frames, and
+            // inject the hit only after the family settings and neutral state reached the render thread.
+            SetCase(fixture, enabled: true);
+            var settle = fixture.Scene == EffectRecordingScene.SongNoteRelease ? 1 : fixture.GpuSettleFrames;
+            for (var i = 0; i < settle; i++) ReadNextFrame(fixture.FamilyId);
+            if (fixture.Scene == EffectRecordingScene.SongNoteRelease)
+                feed.SetDeterministicState(EffectRecordingFixtures.SceneState(fixture.Scene).Notes, .15, true, EffectRecordingFixtures.SceneState(fixture.Scene).Pressed);
+            else if (fixture.Event == EffectRecordingEvent.Impact)
+                feed.Impact(60, 1);
+
+            var maxChanged = 0;
+            var captureCount = Math.Max(1, fixture.GpuSampleFrames);
+            for (var i = 0; i < captureCount; i++)
+            {
+                ReadNextFrame(fixture.FamilyId);
+                CopyNewestFrame(sample, fixture.FamilyId);
+                maxChanged = Math.Max(maxChanged, ChangedPixels(baseline, sample));
+                if (maxChanged >= fixture.MinimumChangedPixels) break;
+            }
+            Assert(maxChanged >= fixture.MinimumChangedPixels,
+                $"The actual GPU recording frame for {fixture.FamilyId} should differ from its matched neutral capture by at least {fixture.MinimumChangedPixels} pixels (saw {maxChanged}).");
+            evidence.Add($"{fixture.FamilyId}={maxChanged}");
+        }
+
+        Assert(families.All(family => family.Capabilities.Recording.State == EffectBackendState.Native),
+            "Only the families with an individual successful GpuRecordingTap capture may be Native for Recording.");
+        Assert(families.SelectMany(family => family.Parameters).All(parameter => parameter.Bindings.Recording == EffectParameterBindingState.Unverified),
+            "Family-level captured output must not silently verify each input's recording binding.");
+        Assert(families.SelectMany(family => new[] { family.Cost.Recording }).All(cost => cost.State == EffectCostState.Unmeasured),
+            "Pixel captures are not timing measurements; every non-material Recording cost stays Unmeasured.");
+        Results.Add($"PASS GPU Recording family captures: {fixtures.Count} individually isolated families read back through GpuRecordingTap at {width}×{height}; changed-pixel evidence [{string.Join(", ", evidence)}]. Parameter bindings remain Unverified and recording cost remains Unmeasured.");
     }
 
     /// <summary>

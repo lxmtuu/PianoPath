@@ -389,7 +389,11 @@ internal static class EffectContractCatalog
     /// <summary>
     /// Typed metadata for a non-material effect family. Unlike <see cref="EffectContract"/> it carries no
     /// persisted alias and no GPU style index: impact effects are selected by their own settings and never
-    /// by a stored style string.
+    /// by a stored style string. Its Recording state is Native only after its own isolated GPU
+    /// <see cref="GpuRecordingTap"/> frame is read back by <c>VerifyEffectFamilyGpuRecordingCaptures</c>;
+    /// WPF-native families also pass actual PNG write/read capture fixtures. The two GPU-only families have
+    /// no WPF capture claim. This is family-presence evidence only: each setting's Recording binding stays
+    /// Unverified and recording cost stays Unmeasured.
     /// </summary>
     internal sealed record EffectFamilyContract(
         string Id,
@@ -414,8 +418,9 @@ internal static class EffectContractCatalog
 
     /// <summary>
     /// The second contract pilot: the four impact families that fire when a note lands. Both renderers draw
-    /// all four (grep-verified in <c>PianoStage.cs</c> and the GPU simulation), hence Native there; recording
-    /// stays Unverified until captured evidence exists. The AR overlay intentionally omits stage-anchored
+    /// all four (grep-verified in <c>PianoStage.cs</c> and the GPU simulation), hence Native there. Each
+    /// family now also has its own GPU recording-tap read-back fixture (and WPF PNG write/read fixture), while
+    /// parameter bindings remain Unverified. The AR overlay intentionally omits stage-anchored
     /// impact output: <c>GpuLook.From(overCamera)</c> disables new hits and <c>GpuStageSimulation.BuildSprites</c>
     /// hides transients already in flight. All four impact families are therefore Unsupported in AR. Costs
     /// are all Unmeasured — no isolated probe has measured any of them, and this catalog must not invent
@@ -435,7 +440,7 @@ internal static class EffectContractCatalog
                 Choice("ImpactWave"),
                 Percentage("ImpactWaveIntensity", 0, 150),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -448,7 +453,7 @@ internal static class EffectContractCatalog
                 Choice("ImpactFlashStyle"),
                 Percentage("ImpactFlashIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Local, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -460,7 +465,7 @@ internal static class EffectContractCatalog
                 Boolean("ShowEmbers"),
                 Choice("ImpactBurst"),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -472,7 +477,7 @@ internal static class EffectContractCatalog
                 Choice("ImpactMorph"),
                 Percentage("ImpactMorphIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
     });
@@ -506,7 +511,7 @@ internal static class EffectContractCatalog
                 Boolean("FallingGhost"),
                 Percentage("FallingGhostAmount", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -518,7 +523,7 @@ internal static class EffectContractCatalog
                 Boolean("FallingPulse"),
                 Percentage("FallingPulseRate", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -530,7 +535,7 @@ internal static class EffectContractCatalog
                 Boolean("NoteShimmer", GpuOnlyParameterBindings),
                 Percentage("NoteShimmerAmount", 0, 100, GpuOnlyParameterBindings),
             }),
-            new EffectCapabilityProfile(Unsupported, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Unsupported, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -562,7 +567,7 @@ internal static class EffectContractCatalog
                 Boolean("HoldBar"),
                 Percentage("HoldBarIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -574,7 +579,7 @@ internal static class EffectContractCatalog
                 Boolean("HoldBreath"),
                 Percentage("HoldBreathRate", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -586,7 +591,7 @@ internal static class EffectContractCatalog
                 Boolean("HoldVibration"),
                 Percentage("HoldVibrationAmount", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -598,7 +603,7 @@ internal static class EffectContractCatalog
                 Boolean("HoldColorCycle"),
                 Percentage("HoldColorCycleSpeed", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -610,7 +615,7 @@ internal static class EffectContractCatalog
                 Boolean("HoldElectricArc"),
                 Percentage("HoldArcIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -644,7 +649,7 @@ internal static class EffectContractCatalog
                 Percentage("AmbientEnergyAmount", 0, 100, ArAmbientParameterBindings),
                 Percentage("AmbientEnergySpeed", 0, 100, ArAmbientParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Native),
+            new EffectCapabilityProfile(Native, Native, Native, Native),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -657,7 +662,7 @@ internal static class EffectContractCatalog
                 Percentage("AmbientNatureAmount", 0, 100, ArAmbientParameterBindings),
                 Percentage("AmbientNatureSpeed", 0, 100, ArAmbientParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Native),
+            new EffectCapabilityProfile(Native, Native, Native, Native),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -670,7 +675,7 @@ internal static class EffectContractCatalog
                 Percentage("AmbientLightAmount", 0, 100, ArAmbientParameterBindings),
                 Percentage("AmbientLightSpeed", 0, 100, ArAmbientParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Native),
+            new EffectCapabilityProfile(Native, Native, Native, Native),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -683,7 +688,7 @@ internal static class EffectContractCatalog
                 Percentage("AmbientCosmicAmount", 0, 100, ArAmbientParameterBindings),
                 Percentage("AmbientCosmicSpeed", 0, 100, ArAmbientParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Native),
+            new EffectCapabilityProfile(Native, Native, Native, Native),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -695,7 +700,7 @@ internal static class EffectContractCatalog
                 Boolean("ShowStars"),
                 Percentage("StarDensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -707,7 +712,7 @@ internal static class EffectContractCatalog
                 Boolean("ShootingStars", GpuOnlyArAmbientParameterBindings),
                 Percentage("ShootingStarsAmount", 0, 100, GpuOnlyArAmbientParameterBindings),
             }),
-            new EffectCapabilityProfile(Unsupported, Native, Unverified, Native),
+            new EffectCapabilityProfile(Unsupported, Native, Native, Native),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -719,7 +724,7 @@ internal static class EffectContractCatalog
                 Boolean("ShowPetals", GpuOnlyArAmbientParameterBindings),
                 Percentage("PetalAmount", 0, 150, GpuOnlyArAmbientParameterBindings),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Native),
+            new EffectCapabilityProfile(Native, Native, Native, Native),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -731,7 +736,7 @@ internal static class EffectContractCatalog
                 Boolean("ShowLightBeams"),
                 Percentage("BeamIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -759,7 +764,7 @@ internal static class EffectContractCatalog
                 Percentage("ParticleGlow", 0, 200),
                 Percentage("ParticleLife", .05, 3),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -774,7 +779,7 @@ internal static class EffectContractCatalog
                 Percentage("WispTurbulence", 0, 100),
                 Percentage("WispGlow", 0, 200),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -787,7 +792,7 @@ internal static class EffectContractCatalog
                 Percentage("FlameIntensity", 0, 100),
                 Percentage("FlameHeight", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -815,7 +820,7 @@ internal static class EffectContractCatalog
                 Choice("ReleaseEffect"),
                 Percentage("ReleaseIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Unverified, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
     });

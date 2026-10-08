@@ -260,7 +260,10 @@ public sealed class EffectContractTests
             Assert.All(family.Parameters, parameter => Assert.Equal(
                 nativeInAr.Contains(family.Id) ? EffectParameterBindingState.Applied : EffectParameterBindingState.Ignored,
                 parameter.Bindings.ArOverlay));
-            Assert.Equal(EffectBackendState.Unverified, family.Capabilities.Recording.State);
+            Assert.Equal(EffectBackendState.Native, family.Capabilities.Recording.State);
+            Assert.All(family.Parameters, parameter => Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording));
+            Assert.All(new[] { family.Cost.WpfStage, family.Cost.GpuStage, family.Cost.Recording, family.Cost.ArOverlay },
+                cost => Assert.Equal(EffectCostState.Unmeasured, cost.State));
         }
         var shootingStars = EffectContractCatalog.AllFamilies.Single(family => family.Id == "atmosphere.shooting-stars");
         Assert.Equal(EffectBackendState.Unsupported, shootingStars.Capabilities.WpfStage.State);

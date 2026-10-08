@@ -426,9 +426,9 @@ internal static partial class VerificationSuite
                 $"{contract.Id} should be a fixed-duration, note-on impact effect on the render clock.");
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
-                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
                     && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers in shipped code; Recording stays Unverified and AR deliberately suppresses all stage-anchored impact output.");
+                $"{contract.Id} is drawn by both stage renderers and has its own captured recording frame; AR deliberately suppresses all stage-anchored impact output.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
@@ -459,7 +459,7 @@ internal static partial class VerificationSuite
         Assert(AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Flash == FlashSuppression.NoChange
                 && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
             "The key morph should keep its current behavior while every accessibility toggle is off.");
-        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, Recording stays Unverified while AR is explicitly Unsupported, all costs stay Unmeasured, and the flash-safety resolution acts exactly on the declared risks. Metadata coherence only; see the separate AR compositor capture check.");
+        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, family Recording is verified by isolated captures, parameter bindings remain Unverified, AR is explicitly Unsupported, all costs stay Unmeasured, and flash-safety resolution matches the declared risks.");
     }
 
     /// <summary>
@@ -537,9 +537,9 @@ internal static partial class VerificationSuite
                 $"{contract.Id} should live exactly as long as the key stays down.");
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
-                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
                     && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers in shipped code; the AR overlay deliberately leaves out notes and keys, so the hold effects are excluded there.");
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; the AR overlay deliberately leaves out notes and keys, so the hold effect is excluded there.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
@@ -651,9 +651,9 @@ internal static partial class VerificationSuite
         {
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
-                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
                     && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers in shipped code; Recording stays Unverified and AR suppresses all unprojected particle/release effects.");
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; AR suppresses all unprojected particle/release effects.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
@@ -688,7 +688,7 @@ internal static partial class VerificationSuite
         Assert(byId["particles.wisps"].Accessibility.FlashRisk == EffectFlashRisk.None
                 && AccessibilityContractResolver.Resolve(byId["particles.wisps"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "The soft plasma wisps carry no flash and must stay untouched under Reduce Flashes.");
-        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, the flickering sparks and flames resolve conservatively under Reduce Flashes while wisps stay untouched, the release effect is a plain note-off decay, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, flickering sparks/flames resolve conservatively under Reduce Flashes, release is a plain note-off decay, family recording has isolated captures, parameter bindings stay Unverified and cost remains Unmeasured.");
     }
 
     /// <summary>
@@ -2018,6 +2018,7 @@ internal static partial class VerificationSuite
         Run(nameof(VerifyCommunityPresets), () => VerifyCommunityPresets(window));
         Run(nameof(VerifyUserShellThemes), () => VerifyUserShellThemes(window));
         Run(nameof(VerifyPngSequenceRecorder), () => VerifyPngSequenceRecorder(window));
+        Run(nameof(VerifyEffectFamilyWpfRecordingCaptures), () => VerifyEffectFamilyWpfRecordingCaptures(window, stage));
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
@@ -3429,6 +3430,133 @@ internal static partial class VerificationSuite
             Results.Add("PASS PNG sequence: 32-bit frames, repeats, manifest, bad sizes and transparent alpha; WPF recording capture writes/reads distinct Solid, Gem and Crystal Outline stage frames through actual PNG files.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
+    }
+
+    /// <summary>
+    /// Captures every WPF-native pilot family as its own paired neutral/effect PNG take and reads the actual
+    /// files back. The two GPU-only families are deliberately not inferred from the WPF renderer; their own
+    /// GPU recording-tap evidence is checked separately.
+    /// </summary>
+    private static void VerifyEffectFamilyWpfRecordingCaptures(MainWindow window, PianoStage stage)
+    {
+        var fixtures = EffectRecordingFixtures.All;
+        var families = EffectContractCatalog.AllFamilies;
+        Assert(fixtures.Count == 24
+                && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
+                && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
+                    .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
+            "WPF recording capture fixtures must cover each of the 24 typed families exactly once before backend filtering.");
+        Assert(!stage.UsesGpuFrame,
+            "The WPF PNG family captures must exercise the software-stage renderer, not a cached GPU preview.");
+
+        var wpfOnlyUnsupported = families.Where(family => family.Capabilities.WpfStage.State != EffectBackendState.Native)
+            .Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        Assert(wpfOnlyUnsupported.SequenceEqual(new[] { "atmosphere.shooting-stars", "falling.shimmer" }),
+            "Only shooting stars and note shimmer are GPU-only; their WPF capture status must remain Unsupported.");
+
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-effect-recording-wpf-" + Guid.NewGuid().ToString("N"));
+        var originalSettings = PianoVisualSettings.FromJson(((PianoVisualSettings)Field(window, "_visualSettings")!).ToJson());
+        var originalNotes = (IReadOnlyList<NoteEvent>)Field(stage, "_notes")!;
+        var originalPosition = (double)Field(stage, "_position")!;
+        var originalPlaying = (bool)Field(stage, "_playing")!;
+        var originalPressed = (IReadOnlySet<int>)Field(stage, "_pressed")!;
+        var originalTransparent = stage.TransparentBackdrop;
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var evidence = new List<string>();
+            foreach (var fixture in fixtures)
+            {
+                var family = families.Single(candidate => candidate.Id == fixture.FamilyId);
+                if (family.Capabilities.WpfStage.State != EffectBackendState.Native) continue;
+
+                byte[] Capture(bool enabled)
+                {
+                    stage.ClearTransient();
+                    stage.TransparentBackdrop = true;
+                    var look = EffectRecordingFixtures.NeutralLook();
+                    if (enabled) fixture.Enable(look);
+                    stage.SetVisualSettings(look);
+                    stage.ResetAnimation(20261008);
+                    var scene = EffectRecordingFixtures.SceneState(fixture.Scene);
+                    stage.SetState(scene.Notes, scene.Position, scene.Playing, scene.Pressed);
+
+                    if (fixture.Scene == EffectRecordingScene.SongNoteRelease)
+                    {
+                        // Give the render thread a sample before the end, then cross the MIDI note-off.
+                        stage.Advance(.05);
+                        stage.SetState(scene.Notes, .15, true, scene.Pressed);
+                    }
+                    else if (enabled && fixture.Event == EffectRecordingEvent.Impact)
+                    {
+                        stage.Impact(60, 1);
+                    }
+
+                    for (var frame = 0; frame < fixture.WpfAdvanceSteps; frame++) stage.Advance(.05);
+                    stage.UpdateLayout();
+                    var pixels = (byte[])InvokeReturn(window, "CaptureStageBgra", EffectRecordingFixtures.Width, EffectRecordingFixtures.Height)!;
+                    return (byte[])pixels.Clone();
+                }
+
+                static (int Width, int Height, byte[] Pixels) DecodePng(string path)
+                {
+                    using var stream = File.OpenRead(path);
+                    var bitmap = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                    var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+                    var pixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+                    converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+                    return (converted.PixelWidth, converted.PixelHeight, pixels);
+                }
+
+                static int ChangedPixels(byte[] first, byte[] second)
+                {
+                    var changed = 0;
+                    for (var i = 0; i < first.Length; i += 4)
+                    {
+                        var delta = Math.Abs(first[i] - second[i]) + Math.Abs(first[i + 1] - second[i + 1])
+                            + Math.Abs(first[i + 2] - second[i + 2]) + Math.Abs(first[i + 3] - second[i + 3]);
+                        if (delta > 24) changed++;
+                    }
+                    return changed;
+                }
+
+                var neutral = Capture(enabled: false);
+                var effect = Capture(enabled: true);
+                var familyDirectory = Path.Combine(directory, fixture.FamilyId.Replace('.', '-'));
+                using (var recorder = new PngSequenceRecorder(familyDirectory, EffectRecordingFixtures.Width, EffectRecordingFixtures.Height, 30))
+                {
+                    recorder.WriteFrame(neutral);
+                    recorder.WriteFrame(effect);
+                    Assert(recorder.FrameCount == 2,
+                        $"{fixture.FamilyId} must write both its matched neutral frame and effect frame through PngSequenceRecorder.");
+                }
+
+                var neutralReadback = DecodePng(Path.Combine(familyDirectory, "frame-000001.png"));
+                var effectReadback = DecodePng(Path.Combine(familyDirectory, "frame-000002.png"));
+                var changed = ChangedPixels(neutralReadback.Pixels, effectReadback.Pixels);
+                Assert(neutralReadback.Width == EffectRecordingFixtures.Width && neutralReadback.Height == EffectRecordingFixtures.Height
+                        && effectReadback.Width == neutralReadback.Width && effectReadback.Height == neutralReadback.Height
+                        && neutralReadback.Pixels.Length == EffectRecordingFixtures.Width * EffectRecordingFixtures.Height * 4
+                        && effectReadback.Pixels.Length == neutralReadback.Pixels.Length
+                        && changed >= fixture.MinimumChangedPixels,
+                    $"The decoded WPF PNG take for {fixture.FamilyId} should contain its own visible effect (minimum {fixture.MinimumChangedPixels} changed pixels; saw {changed}).");
+                evidence.Add($"{fixture.FamilyId}={changed}");
+            }
+
+            Assert(evidence.Count == 22,
+                $"WPF PNG capture evidence should cover exactly the 22 WPF-native families, not the two GPU-only effects (captured {evidence.Count}).");
+            Results.Add($"PASS WPF Recording family captures: {evidence.Count} individually isolated families were written and read back through real 640×360 PNG sequence files [{string.Join(", ", evidence)}]. Shooting Stars and Note Shimmer remain WPF Unsupported and are covered only by their GPU tap frames; parameter bindings stay Unverified and cost stays Unmeasured.");
+        }
+        finally
+        {
+            stage.ClearTransient();
+            stage.TransparentBackdrop = originalTransparent;
+            stage.SetState(originalNotes, originalPosition, originalPlaying, originalPressed);
+            stage.SetVisualSettings(originalSettings);
+            stage.ResetAnimation();
+            Invoke(window, "RefreshSettingControls");
+            try { Directory.Delete(directory, true); } catch { }
+        }
     }
 
     /// <summary>

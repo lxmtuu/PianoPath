@@ -31,8 +31,13 @@ internal static partial class VerificationSuite
             var expectedBinding = expected == EffectBackendState.Native ? EffectParameterBindingState.Applied : EffectParameterBindingState.Ignored;
             Assert(family.Parameters.All(parameter => parameter.Bindings.ArOverlay == expectedBinding),
                 $"{family.Id} parameter bindings should match its AR output support state.");
-            Assert(family.Capabilities.Recording.State == EffectBackendState.Unverified,
-                $"{family.Id} recording support remains Unverified until the recording-specific capture slice is complete.");
+            Assert(family.Capabilities.Recording.State == EffectBackendState.Native,
+                $"{family.Id} may be Native for Recording only because its own family capture fixture reads back a real GPU take frame.");
+            Assert(family.Parameters.All(parameter => parameter.Bindings.Recording == EffectParameterBindingState.Unverified),
+                $"{family.Id} family-level capture must not claim that every individual setting is applied by Recording.");
+            Assert(new[] { family.Cost.WpfStage, family.Cost.GpuStage, family.Cost.Recording, family.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{family.Id} pixel capture evidence must not invent a renderer or recording cost.");
         }
         foreach (var material in EffectContractCatalog.NoteMaterialPilot)
         {
@@ -40,7 +45,7 @@ internal static partial class VerificationSuite
                     && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
                 $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
         }
-        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback; non-material Recording remains Unverified.");
+        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback; all 24 family-level Recording claims have isolated capture fixtures, while parameter bindings remain Unverified.");
     }
 
     /// <summary>
