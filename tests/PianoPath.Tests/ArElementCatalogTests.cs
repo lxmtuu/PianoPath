@@ -8,17 +8,18 @@ namespace PianoPath.Tests;
 /// </summary>
 public class ArElementCatalogTests
 {
+    private static void SameSet(IReadOnlySet<ArElement> actual, params ArElement[] expected)
+    {
+        var missing = expected.Where(e => !actual.Contains(e)).ToList();
+        var extra = actual.Where(e => !expected.Contains(e)).ToList();
+        Assert.True(missing.Count == 0 && extra.Count == 0,
+            $"Expected [{string.Join(", ", expected)}]; got [{string.Join(", ", actual)}] (missing {string.Join(", ", missing)}, extra {string.Join(", ", extra)}).");
+    }
+
     [Fact]
     public void Lite_draws_the_keys_the_notes_and_the_bars_of_the_keys_the_player_presses()
     {
-        var lite = ArElementCatalog.ForTier(ArQualityTier.Lite);
-        Assert.Contains(ArElement.PianoKeys, lite);
-        Assert.Contains(ArElement.NoteObjects, lite);
-        Assert.Contains(ArElement.Keypresses, lite);
-        Assert.DoesNotContain(ArElement.Particles, lite);
-        Assert.DoesNotContain(ArElement.LightBars, lite);
-        Assert.DoesNotContain(ArElement.ImpactLights, lite);
-        Assert.DoesNotContain(ArElement.Dampers, lite);
+        SameSet(ArElementCatalog.ForTier(ArQualityTier.Lite), ArElement.PianoKeys, ArElement.NoteObjects, ArElement.Keypresses);
     }
 
     [Fact]
@@ -31,6 +32,8 @@ public class ArElementCatalogTests
         Assert.DoesNotContain(ArElement.Particles, standard);
         Assert.DoesNotContain(ArElement.Pulses, standard);
         Assert.DoesNotContain(ArElement.LightBars, standard);
+        // Standard must draw at least everything Lite draws
+        foreach (var floor in ArElementCatalog.NeverDropped) Assert.True(standard.Contains(floor));
     }
 
     [Fact]
@@ -53,7 +56,7 @@ public class ArElementCatalogTests
     [Fact]
     public void The_drop_order_puts_the_expensive_fills_first_and_ends_at_the_floor()
     {
-        Assert.DoesNotContain(ArElementCatalog.NeverDropped, ArElementCatalog.DropOrder);
+        foreach (var floor in ArElementCatalog.NeverDropped) Assert.DoesNotContain(floor, ArElementCatalog.DropOrder);
         Assert.Equal(ArElement.ImpactLights, ArElementCatalog.DropOrder.Last());
         Assert.Equal(ArElement.Particles, ArElementCatalog.DropOrder[0]);
     }

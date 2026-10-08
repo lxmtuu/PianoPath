@@ -1702,13 +1702,14 @@ internal static partial class VerificationSuite
     /// </summary>
     private static void VerifyArQualityTiers()
     {
-        Assert(ArElementCatalog.ForTier(ArQualityTier.Lite).SetEquals(new[] { ArElement.PianoKeys, ArElement.NoteObjects, ArElement.Keypresses }),
-            "Lite should draw only the keys, the notes and the player's bars.");
-        Assert(ArElementCatalog.ForTier(ArQualityTier.Standard).IsSupersetOf(ArElementCatalog.ForTier(ArQualityTier.Lite)),
-            "Standard must draw at least everything Lite draws.");
+        var lite = ArElementCatalog.ForTier(ArQualityTier.Lite);
+        Assert(lite.Contains(ArElement.PianoKeys) && lite.Contains(ArElement.NoteObjects) && lite.Contains(ArElement.Keypresses) && lite.Count == 3,
+            $"Lite should draw only the keys, the notes and the player's bars ({lite.Count} elements).");
+        var standard = ArElementCatalog.ForTier(ArQualityTier.Standard);
+        foreach (var floor in ArElementCatalog.NeverDropped) Assert(standard.Contains(floor), "Standard must draw at least everything Lite draws.");
         Assert.Contains(ArElement.Particles, ArElementCatalog.ForTier(ArQualityTier.Ultra));
-        Assert(!ArElementCatalog.DropOrder.Intersect(ArElementCatalog.NeverDropped).Any(),
-            "The drop order must never include an element the overlay cannot drop.");
+        foreach (var floor in ArElementCatalog.NeverDropped) foreach (var drop in ArElementCatalog.DropOrder)
+                Assert(floor != drop, $"The drop order must never include the floor element {floor}.");
         Assert(ArElement.Particles == ArElementCatalog.DropOrder[0] && ArElement.ImpactLights == ArElementCatalog.DropOrder.Last(),
             "Particles should be the first thing an over-budget frame drops, key glow the last.");
         Assert(!ArLookGuard.IsPortedToAr("Gem") && !ArLookGuard.IsPortedToAr("CrystalOutline"),
