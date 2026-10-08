@@ -160,6 +160,8 @@ internal static class EffectRecordingFixtures
     internal static PianoVisualSettings NeutralLook() => new()
     {
         BackgroundMode = "Solid",
+        // SetVisualSettings clones through FromJson. The v0 migration would otherwise
+        // turn off ShowStars after fixture.Enable.
         BackgroundAppearanceVersion = 2,
         BackgroundGradient = false,
         BackgroundMotion = "None",
