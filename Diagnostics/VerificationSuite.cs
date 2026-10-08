@@ -3394,9 +3394,9 @@ internal static partial class VerificationSuite
             {
                 foreach (var style in new[] { "Solid", "Gem", "CrystalOutline" })
                 {
-                    var frame = CaptureMaterial(style);
-                    materialFrames.Add(style, frame);
-                    materialRecorder.WriteFrame(frame);
+                    var materialFrame = CaptureMaterial(style);
+                    materialFrames.Add(style, materialFrame);
+                    materialRecorder.WriteFrame(materialFrame);
                 }
                 Assert(materialRecorder.FrameCount == 3, "Each typed note material should be submitted as one frame to the real PNG recorder.");
             }
