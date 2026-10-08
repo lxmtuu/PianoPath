@@ -25,9 +25,8 @@ public class ArQualityTests
     [Fact]
     public void Normalize_returns_one_of_the_three_known_names()
     {
-        string[] all = ArQualityTiers.All;
         bool foundLite = false, foundStandard = false, foundUltra = false;
-        foreach (var name in all)
+        foreach (var name in ArQualityTiers.All)
         {
             if (name == "Lite") foundLite = true;
             if (name == "Standard") foundStandard = true;
@@ -37,24 +36,5 @@ public class ArQualityTests
         Assert.Equal("Standard", ArQualityTiers.Normalize("garbage"));
         Assert.Equal("Lite", ArQualityTiers.NameOf(ArQualityTier.Lite));
         Assert.Equal("Ultra", ArQualityTiers.NameOf(ArQualityTier.Ultra));
-    }
-
-    [Fact]
-    public void Clamp_keeps_the_quality_in_range()
-    {
-        var settings = new PianoVisualSettings { ArQuality = "nonsense" };
-        settings.Clamp();
-        Assert.Equal("Standard", settings.ArQuality);
-        settings.ArQuality = "Lite"; settings.Clamp();
-        Assert.Equal("Lite", settings.ArQuality);
-    }
-
-    [Fact]
-    public void Applying_a_look_never_changes_the_quality_tier()
-    {
-        var target = new PianoVisualSettings { ArQuality = "Lite" };
-        var look = new PianoVisualSettings { ArQuality = "Ultra" };
-        target.CopyFrom(look);
-        Assert.Equal("Lite", target.ArQuality);
     }
 }

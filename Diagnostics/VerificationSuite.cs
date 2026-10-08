@@ -1727,6 +1727,7 @@ internal static partial class VerificationSuite
         Assert(kept.ArQuality == ArQualityTiers.LiteName, "Applying a look should not change the AR quality tier.");
         settings.ArQuality = "rubbish"; settings.Clamp();
         Assert(settings.ArQuality == ArQualityTiers.StandardName, "An unknown tier should clamp back to Standard rather than drawing nothing.");
+        Assert(ArQualityTiers.Normalize("rubbish") == ArQualityTiers.StandardName, "The tier normaliser should also read an unknown name as Standard.");
         Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, Gem/Crystal fallback, tier belongs to the machine.");
     }
 
