@@ -36,8 +36,8 @@
   <ItemGroup>
     <Compile Include="..\..\Stage\PianoSimulation.cs" Link="Product\Stage\PianoSimulation.cs" />
     <Compile Include="..\..\Stage\GraphVariable.cs" Link="Product\Stage\GraphVariable.cs" />
-    <Compile Include="
-    <Compile Include="
+    <Compile Include="..\..\Camera\ArElementCatalog.cs" Link="Product\Camera\ArElementCatalog.cs" />
+    <Compile Include="..\..\Camera\ArLookGuard.cs" Link="Product\Camera\ArLookGuard.cs" />
     <Compile Include="..\..\Localization\Loc.cs" Link="Product\Localization\Loc.cs" />
     <Compile Include="..\..\Localization\Strings.English.cs" Link="Product\Localization\Strings.English.cs" />
     <Compile Include="..\..\Localization\Strings.Vietnamese.cs" Link="Product\Localization\Strings.Vietnamese.cs" />
