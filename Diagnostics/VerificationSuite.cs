@@ -1966,26 +1966,47 @@ internal static partial class VerificationSuite
     {
         var stage = (PianoStage)window.FindName("Stage"); var mode = (ComboBox)window.FindName("ModeCombo"); var tracks = (ComboBox)window.FindName("TrackCombo");
         var panel = (Border)window.FindName("SettingsPanel"); var overlay = (Grid)window.FindName("LiveChromeOverlay"); var recordButton = (Button)window.FindName("RecordButton");
+        var headerChrome = (Border)window.FindName("HeaderChrome"); var footerChrome = (Border)window.FindName("FooterChrome");
         var rowDefinitions = ((Grid)window.Content).RowDefinitions;
         var source = PresentationSource.FromVisual(window)!;
         void PressEscape() => Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
         void MoveMouse() { SetField(window, "_lastPointerPoint", null!); Invoke(window, "Window_MouseMove", window, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent }); }
         void GoIdle() { SetField(window, "_lastPointerActivity", DateTime.UtcNow.AddSeconds(-4)); Invoke(window, "CheckChromeIdle"); }
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Live Play should start immersive with settings hidden and the idle toolbar available.");
+        window.UpdateLayout();
+        var headerRowHeight = rowDefinitions[0].ActualHeight; var footerRowHeight = rowDefinitions[2].ActualHeight;
+        var stageWidth = stage.ActualWidth; var stageHeight = stage.ActualHeight;
+        bool StageViewportStable()
+        {
+            window.UpdateLayout();
+            return Math.Abs(stage.ActualWidth - stageWidth) < .5 && Math.Abs(stage.ActualHeight - stageHeight) < .5
+                && Math.Abs(rowDefinitions[0].ActualHeight - headerRowHeight) < .5 && Math.Abs(rowDefinitions[2].ActualHeight - footerRowHeight) < .5;
+        }
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && stageWidth > 0 && stageHeight > 0,
+            "Live Play should start with settings hidden, the idle toolbar available and a measured stage viewport.");
         GoIdle();
-        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, $"An idle pointer should hide the toolbar, menu and REC so only the stage remains (rows {rowDefinitions[0].Height.Value} and {rowDefinitions[2].Height.Value}, expected 0).");
+        Assert(overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
+                && headerChrome.Opacity == 0 && footerChrome.Opacity == 0 && StageViewportStable(),
+            $"Idle should fade the toolbar and REC without resizing the stage viewport (stage {stage.ActualWidth:0}×{stage.ActualHeight:0}, chrome rows {rowDefinitions[0].ActualHeight:0}/{rowDefinitions[2].ActualHeight:0}).");
         MoveMouse();
-        Assert(overlay.Visibility == Visibility.Visible && rowDefinitions[0].Height.Value > 0 && recordButton.Visibility == Visibility.Visible && panel.Visibility == Visibility.Collapsed, "Mouse movement should bring the toolbar, menu and REC back without opening settings.");
+        Assert(overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Visible && panel.Visibility == Visibility.Collapsed
+                && headerChrome.Opacity == 1 && footerChrome.Opacity == 1 && StageViewportStable(),
+            "Mouse movement should reveal the toolbar and REC without opening settings or changing the stage viewport.");
         GoIdle(); PressEscape();
-        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value > 0, "Escape should open the Stage Design panel directly, even from the idle stage.");
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && StageViewportStable(),
+            "Escape should open the Stage Design panel directly, even from the idle stage, without changing its viewport.");
         GoIdle();
-        Assert(panel.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "An idle pointer should also hide an open settings panel.");
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
+                && headerChrome.Opacity == 1 && footerChrome.Opacity == 1 && StageViewportStable(),
+            "An open advanced settings dock and its chrome should remain visible while the pointer is idle.");
         MoveMouse();
-        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed, "Mouse movement should restore the settings panel that idle hid.");
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed && StageViewportStable(),
+            "Mouse movement while the settings dock is open must not dismiss it or resize the stage.");
         PressEscape();
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Collapsed, "Escape should close Stage Design and restore the live toolbar.");
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Collapsed && StageViewportStable(),
+            "Escape should close Stage Design and restore the live toolbar without changing the stage viewport.");
         MoveMouse(); PressEscape(); PressEscape();
         Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Escape should toggle the settings panel.");
+        Results.Add("PASS hover/idle chrome: the stage viewport stays fixed as the toolbar hides and returns, and an open advanced settings dock remains visible through idle.");
         var visualSettings = (PianoVisualSettings)Field(window, "_visualSettings"); var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
         var stageVisual = (PianoVisualSettings)Field(stage, "_visual");
         Assert(sliders.Count >= 30 && stageVisual.ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),

@@ -58,7 +58,6 @@ public partial class MainWindow : Window
     private bool _inputChoiceByUser;
     private DateTime _lastPointerActivity = DateTime.UtcNow;
     private Point? _lastPointerPoint;
-    private bool _settingsHiddenByIdle;
     /// <summary>Notes before this index are already played, missed or intentionally skipped by a seek; only later notes can still be missed.</summary>
     private int _missScanIndex;
     private IReadOnlyList<double> _beatTimes = [];
@@ -826,7 +825,7 @@ public partial class MainWindow : Window
                 e.Handled = true; return;
             }
             if (SettingsSearchBox.IsKeyboardFocused && SettingsSearchBox.Text.Length > 0) { SettingsSearchBox.Text = ""; e.Handled = true; return; }
-            if (SettingsPanel.Visibility == Visibility.Visible || _settingsHiddenByIdle) ReturnFromSettings();
+            if (SettingsPanel.Visibility == Visibility.Visible) ReturnFromSettings();
             else if (MainMenuOverlay.Visibility == Visibility.Visible) { HideStartupMenu(); SetChromeVisible(true); Stage.Focus(); }
             else OpenSettingsPanel();
             e.Handled = true; return;
@@ -838,7 +837,6 @@ public partial class MainWindow : Window
             && QuickAdjustOverlay.Visibility != Visibility.Visible
             && MainMenuOverlay.Visibility != Visibility.Visible
             && SettingsPanel.Visibility != Visibility.Visible
-            && !_settingsHiddenByIdle
             && !ShortcutsVisible)
         {
             OpenPlayDialog();
@@ -860,29 +858,30 @@ public partial class MainWindow : Window
     }
     private void Window_MouseMove(object sender, MouseEventArgs e)
     {
-        // WPF re-raises MouseMove when the layout under a stationary cursor changes (which hiding the toolbar does); only real movement counts.
+        // WPF can re-raise MouseMove when chrome hit-test targets change; only actual pointer movement counts.
         var point = e.GetPosition(this);
         if (_lastPointerPoint is { } last && Math.Abs(last.X - point.X) < .5 && Math.Abs(last.Y - point.Y) < .5) return;
         _lastPointerPoint = point;
         _lastPointerActivity = DateTime.UtcNow;
         if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible
             || QuickAdjustOverlay?.Visibility == Visibility.Visible || ShortcutsVisible) return;
-        if (_settingsHiddenByIdle) { _settingsHiddenByIdle = false; SettingsPanel.Visibility = Visibility.Visible; }
         SetChromeVisible(true, showRecordButton: true);
         if (Stage is not null) Stage.SetPointerPosition(e.GetPosition(Stage));
     }
     private void CheckChromeIdle()
     {
         if (_closing || !AutoHideChrome) return;
-        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible || ShortcutsVisible) return;
+        // Modal surfaces and the advanced settings dock are explicit destinations, not hover chrome: leave them open until the user closes them.
+        if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible
+            || QuickAdjustOverlay?.Visibility == Visibility.Visible || SettingsPanel?.Visibility == Visibility.Visible || ShortcutsVisible) return;
         // Keep everything on screen while a color picker is open or the user is dragging a slider / browsing a drop-down.
         if (OwnedWindows.Count > 0 || Mouse.Captured is not null) return;
         if (DateTime.UtcNow - _lastPointerActivity >= ChromeIdleDelay) HideChromeForIdle();
     }
-    /// <summary>Idle state: only the stage (keys, background, falling notes) stays visible; the toolbar and settings return on mouse movement.</summary>
+    /// <summary>Idle state fades the hover chrome; its reserved rows keep the stage viewport the same size as it was before the pointer moved.</summary>
     private void HideChromeForIdle()
     {
-        if (SettingsPanel.Visibility == Visibility.Visible) { _settingsHiddenByIdle = true; SettingsPanel.Visibility = Visibility.Collapsed; }
+        if (SettingsPanel?.Visibility == Visibility.Visible) return;
         SetChromeVisible(false);
     }
     private void OpenSettingsPanel() => OpenSettingsPanelFor(NavigationSurface.Stage);
@@ -891,7 +890,6 @@ public partial class MainWindow : Window
     {
         _settingsReturnSurface = returnSurface;
         UpdateSettingsReturnButton();
-        _settingsHiddenByIdle = false;
         SettingsTabs.SelectedIndex = Math.Max(0, SettingsTabs.SelectedIndex);
         var wasHidden = SettingsPanel.Visibility != Visibility.Visible;
         SettingsPanel.Visibility = Visibility.Visible;
@@ -941,7 +939,6 @@ public partial class MainWindow : Window
 
     private void CloseSettingsPanel()
     {
-        _settingsHiddenByIdle = false;
         SettingsPanel.Visibility = Visibility.Collapsed;
         SetChromeVisible(true, showRecordButton: false); _lastPointerActivity = DateTime.UtcNow;
         Stage.Focus();
@@ -954,23 +951,15 @@ public partial class MainWindow : Window
         _chromeVisible = visible;
         if (visible)
         {
-            HeaderRow.Height = new GridLength(74);
-            FooterRow.Height = new GridLength(94);
             HeaderChrome.Opacity = 1; FooterChrome.Opacity = 1;
             ChromeMotion.FadeIn(HeaderChrome, 240); ChromeMotion.FadeIn(FooterChrome, 240);
         }
         else
         {
-            // Fade first, then collapse the rows: collapsing instantly while the fade runs would make
-            // the stage jump twice. The guard keeps a re-show during the fade from leaving a 0-height row.
-            var remaining = 2;
-            void Collapse()
-            {
-                if (--remaining > 0 || _chromeVisible) return;
-                HeaderRow.Height = new GridLength(0); FooterRow.Height = new GridLength(0);
-            }
-            if (ChromeMotion.Enabled) { ChromeMotion.FadeOut(HeaderChrome, 170, Collapse); ChromeMotion.FadeOut(FooterChrome, 170, Collapse); }
-            else { HeaderChrome.Opacity = 0; FooterChrome.Opacity = 0; Collapse(); Collapse(); }
+            // Fade only the chrome. HeaderRow/FooterRow stay allocated, so revealing the controls never
+            // changes the stage's actual render size or relays out notes and keys under a stationary pointer.
+            if (ChromeMotion.Enabled) { ChromeMotion.FadeOut(HeaderChrome, 170); ChromeMotion.FadeOut(FooterChrome, 170); }
+            else { HeaderChrome.Opacity = 0; FooterChrome.Opacity = 0; }
         }
         HeaderChrome.IsHitTestVisible = visible; FooterChrome.IsHitTestVisible = visible;
         LiveChromeOverlay.Visibility = showOverlay ? Visibility.Visible : Visibility.Collapsed;

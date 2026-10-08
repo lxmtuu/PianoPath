@@ -455,7 +455,7 @@ public partial class MainWindow
     private void OpenQuickAdjust(NavigationSurface returnSurface)
     {
         _quickAdjustReturnSurface = returnSurface;
-        if (SettingsPanel.Visibility == Visibility.Visible || _settingsHiddenByIdle) CloseSettingsPanel();
+        if (SettingsPanel.Visibility == Visibility.Visible) CloseSettingsPanel();
         if (returnSurface == NavigationSurface.MainMenu) HideStartupMenu();
         else if (returnSurface == NavigationSurface.PlayDialog) PlayDialogOverlay.Visibility = Visibility.Collapsed;
 
