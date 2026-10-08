@@ -98,10 +98,10 @@ internal static class ArProjection
 /// <param name="MinLength">Shortest a note is drawn, in key depths, so a staccato note is still a note.</param>
 /// <param name="Gap">What is taken off a note's length so two notes of the same key do not touch, in key depths.</param>
 /// <param name="WidthShare">How much of its key's width a note fills at full size, 0..1.</param>
-/// <param name="WidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/> over the simulation's 0..1 activity): flat keeps every note the same width, a graph makes hard strikes wider. Lives in the look, so presets carry it.</param>
-/// <param name="FadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/> over the same input): flat keeps the fade the same for every note, a graph brings hard strikes in faster.</param>
+/// <param name="WidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/> over the simulation's 0..1 activity): null or flat keeps every note the same width, a graph makes hard strikes wider. Lives in the look, so presets carry it.</param>
+/// <param name="FadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/> over the same input): null or flat keeps the fade the same for every note, a graph brings hard strikes in faster.</param>
 internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, double MinLength = .06, double Gap = .015, double WidthShare = .86,
-    GraphVariable WidthVelocity = default, GraphVariable FadeVelocity = default)
+    GraphVariable? WidthVelocity = null, GraphVariable? FadeVelocity = null)
 {
     internal static readonly ArNoteStyle Default = new();
 
@@ -109,8 +109,14 @@ internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, dou
     internal bool IsUsable => double.IsFinite(FallSpeed) && FallSpeed > 0 && double.IsFinite(Reach) && Reach > 0
         && double.IsFinite(MinLength) && MinLength > 0 && double.IsFinite(Gap) && Gap >= 0 && double.IsFinite(WidthShare) && WidthShare is > 0 and <= 1;
 
+    /// <summary>The width graph, never null: a style without one draws every note the same width.</summary>
+    internal GraphVariable WidthGraph => WidthVelocity ?? GraphVariable.Flat;
+
+    /// <summary>The fade graph, never null: a style without one fades every note in the same way.</summary>
+    internal GraphVariable FadeGraph => FadeVelocity ?? GraphVariable.Flat;
+
     /// <summary>How much of its key's width a note with this velocity fills, 0..1: the flat share, or the graph walked by the velocity.</summary>
-    internal double WidthShareFor(double velocity) => Math.Clamp(WidthVelocity.Sample(velocity) * WidthShare, 0, 1);
+    internal double WidthShareFor(double velocity) => Math.Clamp(WidthGraph.Sample(velocity) * WidthShare, 0, 1);
 }
 
 /// <summary>A note on its way to the keys.</summary>
@@ -181,7 +187,7 @@ internal static class ArNotes
                 var (left, right) = layout.Span(note.Pitch);
                 var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShareFor(velocity);
                 if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, far, near, out var patch, out _, out _)) continue;
-                var fade = Math.Clamp((style.Reach + leading) / (style.Reach * .25), 0, 1) * style.FadeVelocity.Sample(velocity);
+                var fade = Math.Clamp((style.Reach + leading) / (style.Reach * .25), 0, 1) * style.FadeGraph.Sample(velocity);
                 into.Add(new ArNoteShape(patch, note.Pitch, index, wantBlack, note.Start <= position && note.End > position, fade));
             }
         }
@@ -222,7 +228,7 @@ internal static class ArNotes
                 var (left, right) = layout.Span(press.Pitch);
                 var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShareFor(velocity);
                 if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, -length, 0, out var patch, out _, out _)) continue;
-                into.Add(new ArLiveBar(patch, press.Pitch, Math.Clamp(1 - length / style.Reach, .08, 1) * gone * style.FadeVelocity.Sample(velocity), press.Down, press.Strength));
+                into.Add(new ArLiveBar(patch, press.Pitch, Math.Clamp(1 - length / style.Reach, .08, 1) * gone * style.FadeGraph.Sample(velocity), press.Down, press.Strength));
             }
         }
     }

@@ -17,8 +17,8 @@ internal readonly record struct GraphVariable(bool Graph = false, double Start =
 {
     internal const double CurveMin = -1, CurveMax = 1;
 
-    /// <summary>The fixed value: Max, so a flat parameter does not depend on the other fields.</summary>
-    internal static readonly GraphVariable Flat = new();
+    /// <summary>The fixed value: Max, so a flat parameter does not depend on the other fields. Written out in full because <c>default(GraphVariable)</c> is all zeros, not this.</summary>
+    internal static readonly GraphVariable Flat = new(Graph: false, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: 0);
 
     /// <summary>The value for an input in 0..1. Flat returns <see cref="Max"/>; a graph clamps outside its window and walks between its ends with the curve.</summary>
     internal double Sample(double input)
@@ -30,8 +30,8 @@ internal readonly record struct GraphVariable(bool Graph = false, double Start =
         var t = Math.Clamp((input - start) / (stop - start), 0, 1);
         if (t is 0 or 1) return Finite(t == 0 ? Min : Max, 0);
         var curve = Math.Clamp(Finite(Curve, 0), CurveMin, CurveMax);
-        // Power curve: -1 starts slow and ends fast, +1 the other way round; 0 is the straight line.
-        var bent = curve == 0 ? t : Math.Pow(t, 1 - curve);
+        // Power curve: -1 squares the walk (slow in, fast out), +1 square-roots it (fast in, slow out), 0 is the straight line.
+        var bent = curve == 0 ? t : Math.Pow(t, Math.Pow(2, -curve));
         return Finite(Min, 0) + (Finite(Max, 0) - Finite(Min, 0)) * bent;
     }
 

@@ -52,12 +52,16 @@ public class GraphVariableTests
         var slowIn = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: -1);
         var fastIn = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: 1);
         Assert.True(slowIn.Sample(.25) < .25, "A -1 curve should sit under the straight line early on.");
-        Assert.True(slowIn.Sample(.75) > .75, "A -1 curve should sit over the straight line late.");
+        Assert.True(slowIn.Sample(.75) - slowIn.Sample(.5) > slowIn.Sample(.5) - slowIn.Sample(0),
+            "A -1 curve should cover more ground in its second half than in its first: slow in, fast out.");
         Assert.True(fastIn.Sample(.25) > .25, "A +1 curve should sit over the straight line early on.");
-        Assert.True(fastIn.Sample(.75) < .75, "A +1 curve should sit under the straight line late.");
+        Assert.True(fastIn.Sample(.5) - fastIn.Sample(0) > fastIn.Sample(.75) - fastIn.Sample(.5),
+            "A +1 curve should cover more ground in its first half than in its second: fast in, slow out.");
         Near(0, slowIn.Sample(0)); Near(1, slowIn.Sample(1));   // the ends never move
         Near(0, fastIn.Sample(0)); Near(1, fastIn.Sample(1));
         Near(.5, new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: 0).Sample(.5));
+        Near(.25, slowIn.Sample(.5), 1e-9);                    // -1 squares the walk
+        Near(.5, fastIn.Sample(.25), 1e-9);                    // +1 square-roots it
     }
 
     [Fact]

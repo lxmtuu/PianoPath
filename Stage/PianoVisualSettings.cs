@@ -489,15 +489,15 @@ internal sealed class PianoVisualSettings
     internal int GpuTargetFps => int.TryParse(GpuFrameRate, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var fps) ? fps : 0;
 
     /// <summary>The AR values as one record, in range.</summary>
-    /// <summary>The width graph of a note: flat unless the player asked for one, walking the soft width to the hard width over the strike's velocity.</summary>
-    internal GraphVariable ArNoteWidthVelocity => ArNoteWidthByVelocity
+    /// <summary>The width graph of a note: null (flat) unless the player asked for one, walking the soft width to the hard width over the strike's velocity.</summary>
+    internal GraphVariable? ArNoteWidthVelocity => ArNoteWidthByVelocity
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteWidthSoft / 100, Max: ArNoteWidthHard / 100)
-        : GraphVariable.Flat;
+        : null;
 
     /// <summary>The fade graph of a note, built the same way from <see cref="ArNoteFadeByVelocity"/>.</summary>
-    internal GraphVariable ArNoteFadeVelocity => ArNoteFadeByVelocity
+    internal GraphVariable? ArNoteFadeVelocity => ArNoteFadeByVelocity
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
-        : GraphVariable.Flat;
+        : null;
 
     internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity).Normalised();
 

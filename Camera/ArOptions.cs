@@ -25,10 +25,10 @@ internal static class ArModes
 /// <param name="Lookahead">How many seconds before it sounds a note starts to show.</param>
 /// <param name="KeyLight">How strongly a played key is tinted, percent.</param>
 /// <param name="Delay">How late the camera's picture is, milliseconds: what the overlay is held back by so that it shows what the picture shows.</param>
-/// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); flat keeps every note the same width.</param>
-/// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); flat keeps the fade the same for every note.</param>
+/// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
+/// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
-    GraphVariable NoteWidthVelocity = default, GraphVariable NoteFadeVelocity = default)
+    GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
@@ -65,7 +65,7 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     internal ArNoteStyle NoteStyle => ArNoteStyle.Default with
     {
         Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed,
-        WidthVelocity = Normalised().NoteWidthVelocity.Normalised(),
-        FadeVelocity = Normalised().NoteFadeVelocity.Normalised()
+        WidthVelocity = (Normalised().NoteWidthVelocity ?? GraphVariable.Flat).Normalised(),
+        FadeVelocity = (Normalised().NoteFadeVelocity ?? GraphVariable.Flat).Normalised()
     };
 }

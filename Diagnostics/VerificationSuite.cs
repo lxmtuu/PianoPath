@@ -1662,20 +1662,21 @@ internal static partial class VerificationSuite
         Assert(graph.Sample(0) == .2 && graph.Sample(1) == .8, "A graph should clamp outside its window.");
         Assert(Math.Abs(graph.Sample(.5) - .5) < 1e-9, "A straight graph should walk its middle at the input's middle.");
         var slowIn = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: -1);
-        Assert(slowIn.Sample(.25) < .25 && slowIn.Sample(.75) > .75, "A -1 curve should start slow and end fast.");
+        Assert(slowIn.Sample(.25) < .25 && slowIn.Sample(.75) - slowIn.Sample(.5) > slowIn.Sample(.5) - slowIn.Sample(0),
+            "A -1 curve should start slow and end fast: under the line early, more ground in its second half.");
         Assert(new GraphVariable(Graph: true, Start: .5, Stop: .5, Min: .1, Max: .9).Sample(.5) == .9, "An empty window should be a flat max.");
         Assert(double.IsFinite(new GraphVariable(Graph: true, Start: double.NaN, Stop: double.NaN, Min: double.NaN, Max: double.NaN).Sample(.5)),
             "A graph of NaNs should still sample a finite number.");
         // The settings reach the style: flat by default, and the two toggles build their graphs from the sliders.
         var settings = new PianoVisualSettings();
-        Assert(settings.ArOptionsValue.NoteStyle.WidthVelocity.Sample(.5) == 1 && settings.ArOptionsValue.NoteStyle.FadeVelocity.Sample(.5) == 1,
+        Assert(settings.ArOptionsValue.NoteStyle.WidthGraph.Sample(.5) == 1 && settings.ArOptionsValue.NoteStyle.FadeGraph.Sample(.5) == 1,
             "The default overlay should carry flat graphs: every strike the same width and the same fade.");
         settings.ArNoteWidthByVelocity = true; settings.ArNoteWidthSoft = 50; settings.ArNoteWidthHard = 150;
         settings.ArNoteFadeByVelocity = true; settings.ArNoteFadeSoft = 40; settings.ArNoteFadeHard = 100;
         var style = settings.ArOptionsValue.NoteStyle;
-        Assert(Math.Abs(style.WidthVelocity.Sample(0) - .5) < 1e-9 && Math.Abs(style.WidthVelocity.Sample(1) - 1.5) < 1e-9,
+        Assert(Math.Abs(style.WidthGraph.Sample(0) - .5) < 1e-9 && Math.Abs(style.WidthGraph.Sample(1) - 1.5) < 1e-9,
             "The width graph should walk the soft slider to the hard slider over the strike's velocity.");
-        Assert(Math.Abs(style.FadeVelocity.Sample(0) - .4) < 1e-9 && Math.Abs(style.FadeVelocity.Sample(1) - 1) < 1e-9,
+        Assert(Math.Abs(style.FadeGraph.Sample(0) - .4) < 1e-9 && Math.Abs(style.FadeGraph.Sample(1) - 1) < 1e-9,
             "The fade graph should walk the soft slider to the hard slider over the strike's velocity.");
         Assert(style.WidthShareFor(0) <= style.WidthShare && Math.Abs(style.WidthShareFor(1) - Math.Min(1, style.WidthShare * 1.5)) < 1e-9,
             "The width a graph picks should stay a share of the key's width, clamped to the key.");
