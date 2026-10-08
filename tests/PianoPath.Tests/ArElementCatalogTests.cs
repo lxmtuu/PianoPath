@@ -3,41 +3,29 @@ using Xunit;
 
 namespace PianoPath.Tests;
 
-/// <summary>
-/// AR-S3: the AR element catalogue (docs/AR-OVERLAY-ROADMAP.md §14.3 and §14.8) — what is always there,
-/// which elements each quality tier may draw, and the order an over-budget frame drops them in.
-/// </summary>
 public class ArElementCatalogTests
 {
-    private static void SameSet(IReadOnlySet<ArElement> actual, params ArElement[] expected)
-    {
-        var missing = new List<ArElement>();
-        var extra = new List<ArElement>();
-        foreach (var e in expected) if (!actual.Contains(e)) missing.Add(e);
-        foreach (var e in actual) if (Array.IndexOf(expected, e) < 0) extra.Add(e);
-        Assert.True(missing.Count == 0 && extra.Count == 0,
-            $"Expected [{string.Join(", ", expected)}]; got [{string.Join(", ", Cast(actual))}] (missing {string.Join(", ", missing)}, extra {string.Join(", ", extra)}).");
-    }
-
-    private static IEnumerable<ArElement> Cast(IReadOnlySet<ArElement> set) { foreach (var e in set) yield return e; }
-
     [Fact]
     public void Lite_draws_the_keys_the_notes_and_the_bars_of_the_keys_the_player_presses()
     {
-        SameSet(ArElementCatalog.ForTier(ArQualityTier.Lite), ArElement.PianoKeys, ArElement.NoteObjects, ArElement.Keypresses);
+        var lite = ArElementCatalog.ForTier(ArQualityTier.Lite);
+        Assert.True(lite.Contains(ArElement.PianoKeys));
+        Assert.True(lite.Contains(ArElement.NoteObjects));
+        Assert.True(lite.Contains(ArElement.Keypresses));
+        var count = 0; foreach (var _ in lite) count++;
+        Assert.Equal(3, count);
     }
 
     [Fact]
-    public void Standard_adds_the_key_and_impact_glows_but_keeps_the_calm_stuff_off()
+    public void Standard_adds_the_key_and_impact_glows_and_keeps_the_calm_stuff_off()
     {
         var standard = ArElementCatalog.ForTier(ArQualityTier.Standard);
-        Assert.Contains(ArElement.ImpactLights, standard);
-        Assert.Contains(ArElement.NoteLights, standard);
-        Assert.Contains(ArElement.Dampers, standard);
-        Assert.DoesNotContain(ArElement.Particles, standard);
-        Assert.DoesNotContain(ArElement.Pulses, standard);
-        Assert.DoesNotContain(ArElement.LightBars, standard);
-        // Standard must draw at least everything Lite draws
+        Assert.True(standard.Contains(ArElement.ImpactLights));
+        Assert.True(standard.Contains(ArElement.NoteLights));
+        Assert.True(standard.Contains(ArElement.Dampers));
+        Assert.False(standard.Contains(ArElement.Particles));
+        Assert.False(standard.Contains(ArElement.Pulses));
+        Assert.False(standard.Contains(ArElement.LightBars));
         foreach (var floor in ArElementCatalog.NeverDropped) Assert.True(standard.Contains(floor));
     }
 
@@ -54,16 +42,18 @@ public class ArElementCatalogTests
         foreach (ArQualityTier tier in Enum.GetValues<ArQualityTier>())
         {
             var set = ArElementCatalog.ForTier(tier);
-            foreach (var floor in ArElementCatalog.NeverDropped) Assert.True(set.Contains(floor), $"Tier {tier} must never drop {floor}.");
+            foreach (var floor in ArElementCatalog.NeverDropped) Assert.True(set.Contains(floor));
         }
     }
 
     [Fact]
     public void The_drop_order_puts_the_expensive_fills_first_and_ends_at_the_floor()
     {
-        foreach (var floor in ArElementCatalog.NeverDropped) Assert.DoesNotContain(floor, ArElementCatalog.DropOrder);
-        Assert.Equal(ArElement.ImpactLights, ArElementCatalog.DropOrder.Last());
-        Assert.Equal(ArElement.Particles, ArElementCatalog.DropOrder[0]);
+        var drop = ArElementCatalog.DropOrder;
+        foreach (var floor in ArElementCatalog.NeverDropped)
+            foreach (var d in drop) Assert.True(floor != d);
+        Assert.Equal(ArElement.Particles, drop[0]);
+        Assert.Equal(ArElement.ImpactLights, drop[drop.Length - 1]);
     }
 
     [Fact]
@@ -80,7 +70,7 @@ public class ArElementCatalogTests
     {
         foreach (ArElement element in Enum.GetValues<ArElement>())
         {
-            Assert.False(string.IsNullOrWhiteSpace(ArElementCatalog.PassOf(element)), $"Every element must name the pass it is drawn in ({element}).");
+            Assert.False(string.IsNullOrWhiteSpace(ArElementCatalog.PassOf(element)));
             Assert.True(ArElementCatalog.MinTierOf(element) <= ArQualityTier.Ultra);
             Assert.True(ArElementCatalog.CanDraw(ArQualityTier.Ultra, element));
         }
