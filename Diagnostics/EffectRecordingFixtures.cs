@@ -153,7 +153,7 @@ internal static class EffectRecordingFixtures
             WpfAdvanceSteps: 6, GpuSettleFrames: 2, GpuSampleFrames: 12),
         new EffectRecordingCaptureFixture(
             "release.fx", EffectRecordingScene.SongNoteRelease,
-            settings => { settings.ReleaseEffect = "Echo Rings"; settings.ReleaseIntensity = 100; },
+            settings => { settings.ReleaseEffect = "Echo Rings"; settings.ReleaseIntensity = 100; settings.ShowImpactRings = true; },
             WpfAdvanceSteps: 2, GpuSettleFrames: 0, GpuSampleFrames: 5),
     });
 
