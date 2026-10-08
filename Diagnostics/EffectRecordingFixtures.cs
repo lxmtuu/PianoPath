@@ -160,6 +160,7 @@ internal static class EffectRecordingFixtures
     internal static PianoVisualSettings NeutralLook() => new()
     {
         BackgroundMode = "Solid",
+        BackgroundAppearanceVersion = 2,
         BackgroundGradient = false,
         BackgroundMotion = "None",
         BackgroundMotionAmount = 0,
