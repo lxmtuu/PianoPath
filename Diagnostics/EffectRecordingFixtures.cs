@@ -179,7 +179,6 @@ internal static class EffectRecordingFixtures
         ShowLightBeams = false,
         BeamIntensity = 0,
         HorizonGlow = 0,
-        BloomIntensity = 0,
         Vignette = 0,
         ShowEmbers = false,
         ShowWisps = false,
