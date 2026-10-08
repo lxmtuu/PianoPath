@@ -504,10 +504,10 @@ internal sealed class PianoVisualSettings
                         result.ImpactFlashIntensity = 0;
                         break;
                     case AccessibilityChannel.IndependentMotion:
+                        // Only the two layers without a typed family yet stay on the reviewed channel
+                        // list; every catalogued family is owned by the resolution loop below.
                         result.BackgroundMotion = "None";
                         result.HaloPulse = false;
-                        result.FallingPulse = false;
-                        result.HoldBreath = false;
                         break;
                     case AccessibilityChannel.NoteShapeCue:
                         // Floors, not fixed values: a look with a stronger outline than the floor keeps it.
@@ -518,24 +518,45 @@ internal sealed class PianoVisualSettings
                 }
             }
         }
-        // Contract-driven flash safety: a family whose declared flash risk resolves to suppression under
-        // Reduce Flashes loses its visibility channel, so safety follows the catalog instead of a hand-
-        // maintained channel list. The impact flash mirrors the reviewed channel policy above; the spark
-        // burst is Unverified and therefore suppressed until its strobe analysis exists.
-        if (ReduceFlashes)
+        // Catalog-driven safety: each typed family's resolved suppression owns its channels, so the
+        // toggles follow the contracts instead of a hand-maintained channel list. The reviewed channel
+        // policy above keeps the two layers that have no typed family yet (background motion, halo
+        // pulse). Freeze means "stand still" where a still image exists; layers whose whole purpose is
+        // motion (meteors, petals, twinkles) switch off, and the ambient layers lose their amount
+        // because the WPF sky cannot freeze its drift (its speed floor is 0.25, verified in source).
+        if (ReduceFlashes || ReducedMotion)
         {
-            foreach (var family in EffectContractCatalog.ImpactFxPilot)
+            foreach (var family in EffectContractCatalog.AllFamilies)
             {
-                if (AccessibilityContractResolver.Resolve(family.Accessibility, false, true, false).Flash != FlashSuppression.Suppress) continue;
-                switch (family.Id)
+                var resolution = AccessibilityContractResolver.Resolve(family.Accessibility, ReducedMotion, ReduceFlashes, false);
+                if (ReduceFlashes && resolution.Flash == FlashSuppression.Suppress)
                 {
-                    case "impact.flash":
-                        result.ShowImpactFlash = false;
-                        result.ImpactFlashIntensity = 0;
-                        break;
-                    case "impact.burst":
-                        result.ShowEmbers = false;
-                        break;
+                    switch (family.Id)
+                    {
+                        case "impact.flash": result.ShowImpactFlash = false; result.ImpactFlashIntensity = 0; break;
+                        case "impact.burst": result.ShowEmbers = false; break;
+                        case "atmosphere.stars": result.ShowStars = false; break;
+                    }
+                }
+                if (ReducedMotion && resolution.Motion == MotionSuppression.FreezeIntrinsicAnimation)
+                {
+                    switch (family.Id)
+                    {
+                        case "falling.pulse": result.FallingPulse = false; break;
+                        case "falling.shimmer": result.NoteShimmer = false; break;
+                        case "hold.breath": result.HoldBreath = false; break;
+                        case "hold.vibration": result.HoldVibration = false; break;
+                        case "hold.color-cycle": result.HoldColorCycle = false; break;
+                        case "hold.arc": result.HoldElectricArc = false; break;
+                        case "ambient.energy": result.AmbientEnergyAmount = 0; break;
+                        case "ambient.nature": result.AmbientNatureAmount = 0; break;
+                        case "ambient.light": result.AmbientLightAmount = 0; break;
+                        case "ambient.cosmic": result.AmbientCosmicAmount = 0; break;
+                        case "atmosphere.stars": result.ShowStars = false; break;
+                        case "atmosphere.shooting-stars": result.ShootingStars = false; break;
+                        case "atmosphere.petals": result.ShowPetals = false; break;
+                        case "atmosphere.beams": result.ShowLightBeams = false; break;
+                    }
                 }
             }
         }

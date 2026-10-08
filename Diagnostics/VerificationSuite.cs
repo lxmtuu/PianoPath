@@ -654,6 +654,9 @@ internal static partial class VerificationSuite
         {
             ShowImpactFlash = true, ImpactFlashIntensity = 80,
             BackgroundMotion = "Aurora", HaloPulse = true, FallingPulse = true, HoldBreath = true,
+            NoteShimmer = true, ShowStars = true, ShootingStars = true, ShowPetals = true, ShowLightBeams = true,
+            HoldVibration = true, HoldColorCycle = true, HoldElectricArc = true,
+            AmbientEnergy = "Nebula", AmbientEnergyAmount = 60,
         }.ToJson());
         var identity = busy.WithAccessibilityTogglesApplied();
         Assert(identity.ToJson() == busy.ToJson() && !ReferenceEquals(identity, busy),
@@ -662,16 +665,19 @@ internal static partial class VerificationSuite
         busy.ReducedMotion = true;
         var calmed = busy.WithAccessibilityTogglesApplied();
         Assert(calmed.BackgroundMotion == "None" && !calmed.HaloPulse && !calmed.FallingPulse && !calmed.HoldBreath
+                && !calmed.NoteShimmer && !calmed.ShowStars && !calmed.ShootingStars && !calmed.ShowPetals && !calmed.ShowLightBeams
+                && !calmed.HoldVibration && !calmed.HoldColorCycle && !calmed.HoldElectricArc && calmed.AmbientEnergyAmount == 0
                 && calmed.ShowImpactFlash && calmed.ImpactFlashIntensity == 80,
-            "Reduced Motion must freeze exactly its intrinsic-animation channels on a copy and leave the flash channel alone.");
+            "Reduced Motion must freeze every catalogued self-animated family — pulses, shimmer, the whole ambient sky, vibration, colour cycle and arc — and leave the flash channel alone.");
 
         busy.ReducedMotion = false;
         busy.ReduceFlashes = true;
         var unflashed = busy.WithAccessibilityTogglesApplied();
         Assert(!unflashed.ShowImpactFlash && unflashed.ImpactFlashIntensity == 0
-                && !unflashed.ShowEmbers
-                && unflashed.BackgroundMotion == "Aurora" && unflashed.HaloPulse && unflashed.FallingPulse && unflashed.HoldBreath,
-            "Reduce Flashes must silence the flash channel on a copy and suppress the un-analysed spark burst, leaving intrinsic motion alone.");
+                && !unflashed.ShowEmbers && !unflashed.ShowStars
+                && unflashed.BackgroundMotion == "Aurora" && unflashed.HaloPulse && unflashed.FallingPulse && unflashed.HoldBreath
+                && unflashed.ShowPetals && unflashed.ShootingStars && unflashed.ShowLightBeams && unflashed.AmbientEnergyAmount == 60,
+            "Reduce Flashes must silence the flash channel, suppress the un-analysed spark burst and star twinkle, and leave every motion-only layer exactly as the user set it.");
         Assert(unflashed.ImpactWaveIntensity == busy.ImpactWaveIntensity,
             "Reduce Flashes must leave the flash-less impact wave's intensity exactly as the user set it.");
 
@@ -690,7 +696,7 @@ internal static partial class VerificationSuite
                 && busy.HaloPulse && busy.FallingPulse && busy.HoldBreath,
             "Applying the accessibility policy must never mutate the user's own settings object.");
 
-        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion overrides exactly its reviewed motion channels on a copy, Reduce Flashes silences the flash channel and suppresses the catalog-classified spark burst while leaving the wave untouched, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
+        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion freezes every catalogued self-animated family (pulses, shimmer, ambient sky, stars, petals, meteors, beams, vibration, colour cycle, arc) while Reduce Flashes silences the flash channel and suppresses the un-analysed burst and star twinkle, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
     }
 
     /// <summary>

@@ -228,6 +228,17 @@ public sealed class EffectContractTests
     }
 
     [Fact]
+    public void All_families_union_covers_every_pilot_exactly_once()
+    {
+        Assert.Equal(20, EffectContractCatalog.AllFamilies.Count);
+        Assert.Equal(
+            EffectContractCatalog.ImpactFxPilot.Concat(EffectContractCatalog.FallingFxPilot)
+                .Concat(EffectContractCatalog.HoldFxPilot).Concat(EffectContractCatalog.AmbientFxPilot)
+                .Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal),
+            EffectContractCatalog.AllFamilies.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal));
+    }
+
+    [Fact]
     public void Ambient_pilot_freezes_every_layer_and_names_the_gpu_only_meteors()
     {
         Assert.True(EffectContractCatalog.IsAmbientPilotWellFormed);

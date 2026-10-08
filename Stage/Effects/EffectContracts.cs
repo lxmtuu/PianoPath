@@ -722,6 +722,10 @@ internal static class EffectContractCatalog
         && AmbientFxPilot.All(contract => contract.IsWellFormed)
         && AmbientFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == AmbientFxPilot.Count;
 
+    /// <summary>Every typed family across the pilots, for catalog-driven global toggles.</summary>
+    internal static IReadOnlyList<EffectFamilyContract> AllFamilies { get; } =
+        Array.AsReadOnly(ImpactFxPilot.Concat(FallingFxPilot).Concat(HoldFxPilot).Concat(AmbientFxPilot).ToArray());
+
     /// <summary>Checks IDs, aliases, parameter schemas and capability/fallback claims before consumers opt in.</summary>
     internal static bool IsPilotWellFormed
     {

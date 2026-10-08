@@ -853,7 +853,7 @@ public partial class MainWindow
         RefreshGpuStatus();
 
         var access = Card(GeneralSettingsHost, "ACCESSIBILITY", "Comfort switches for the whole stage. While one is on it overrides the matching effect settings everywhere — every preset, every page — and it is saved with your profile.");
-        Toggle(access, "Reduced motion", nameof(PianoVisualSettings.ReducedMotion), "Freeze the stage's own animation: the background stops drifting and the halo, falling and breathing pulses go still. The notes themselves keep falling exactly as before.");
+        Toggle(access, "Reduced motion", nameof(PianoVisualSettings.ReducedMotion), "Freeze the stage's own animation: the background and the whole ambient sky go still, and every pulse, vibration, colour cycle, arc and shimmer stands down. The notes themselves keep falling exactly as before.");
         Toggle(access, "Reduce flashes", nameof(PianoVisualSettings.ReduceFlashes), "Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay.");
         Toggle(access, "High contrast", nameof(PianoVisualSettings.HighContrast), "Give every note a strong bright outline so its shape carries the information, not its colour alone. Looks that already draw a stronger outline keep theirs.");
 
