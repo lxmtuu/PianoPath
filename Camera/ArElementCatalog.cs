@@ -11,7 +11,7 @@ internal static class ArQualityTiers
     internal const string UltraName = "Ultra";
     internal const string DefaultQuality = StandardName;
 
-    internal static readonly string[] All = [LiteName, StandardName, UltraName];
+    internal static readonly string[] All = new[] { LiteName, StandardName, UltraName };
 
     /// <summary>The stored name for a tier, so a picker caption or a settings file round-trips.</summary>
     internal static string NameOf(ArQualityTier tier) => tier switch
@@ -71,18 +71,18 @@ internal enum ArElement
 internal static class ArElementCatalog
 {
     /// <summary>The elements that are never dropped, whatever the tier or the frame budget: without them the overlay is not an overlay.</summary>
-    internal static readonly ArElement[] NeverDropped = [ArElement.PianoKeys, ArElement.NoteObjects, ArElement.Keypresses];
+    internal static readonly ArElement[] NeverDropped = new[] { ArElement.PianoKeys, ArElement.NoteObjects, ArElement.Keypresses };
 
     /// <summary>
     /// The order an over-budget frame drops elements in (roadmap §14.8): the expensive fill first,
     /// the key glow last before the floor. A note's style is a property of <see cref="ArElement.NoteObjects"/>,
     /// not an element: dropping style means drawing the note flat, and the note itself stays.
     /// </summary>
-    internal static readonly ArElement[] DropOrder =
-    [
+    internal static readonly ArElement[] DropOrder = new[]
+    {
         ArElement.Particles, ArElement.Pulses, ArElement.LightBars, ArElement.Hud,
         ArElement.NoteLights, ArElement.Dampers, ArElement.OctaveLines, ArElement.ImpactLights
-    ];
+    };
 
     internal static ArElementFamily FamilyOf(ArElement element) => element switch
     {
