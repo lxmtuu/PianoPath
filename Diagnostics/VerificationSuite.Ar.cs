@@ -350,11 +350,11 @@ internal static partial class VerificationSuite
             var i = (y * width + x) * 4;
             return Math.Max(Math.Abs(withBar[i] - withoutBar[i]), Math.Max(Math.Abs(withBar[i + 1] - withoutBar[i + 1]), Math.Abs(withBar[i + 2] - withoutBar[i + 2])));
         }
-        var plain = Draw(ArFeed([60, 61], press: false), 30);        // the same keys held, with no press behind them
-        var pressed = Draw(ArFeed([60, 61], press: true), 30);
-        Assert(pressed.Bars == 2 && pressed.Keys == 3 && pressed.Quads == 5,
-            $"Two keys pressed should light their three key rectangles and draw one bar each ({pressed.Quads} quads: {pressed.Keys} key, {pressed.Bars} bar).");
-        int Bar((double X, double Y) at) => Probe(pressed.Pixels, plain.Pixels, at);
+        var withoutBars = Draw(ArFeed([60, 61], press: false), 30);        // the same keys held, with no press behind them
+        var withBars = Draw(ArFeed([60, 61], press: true), 30);
+        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Quads == 5,
+            $"Two keys pressed should light their three key rectangles and draw one bar each ({withBars.Quads} quads: {withBars.Keys} key, {withBars.Bars} bar).");
+        int Bar((double X, double Y) at) => Probe(withBars.Pixels, withoutBars.Pixels, at);
         var behindC4 = KeyPoint(layout.CenterX(60), -.05); var behindCs4 = KeyPoint(layout.CenterX(61), -.05);
         Assert(Bar(behindC4) > 25 && Bar(behindCs4) > 25,
             $"A bar should be drawn just behind each key that was pressed (white {Bar(behindC4)}, black {Bar(behindCs4)}).");
@@ -363,28 +363,28 @@ internal static partial class VerificationSuite
         var farProbe = KeyPoint(layout.CenterX(60), -1.2);
         Assert(Bar(farProbe) <= 2, $"A key held half a second has a short bar, well short of the look-ahead ({Bar(farProbe)} at -1.2).");
         // held twice as long: the bar has stretched past where it reached at half a second, in the keyboard's own direction
-        var stretched = Draw(ArFeed([60, 61], press: true), 60);
-        var plainLong = Draw(ArFeed([60, 61], press: false), 60);
-        Assert(stretched.Bars == 2 && Probe(stretched.Pixels, plainLong.Pixels, farProbe) > 25,
-            $"The bar stretches as the key is held: past where half a second reached ({Probe(stretched.Pixels, plainLong.Pixels, farProbe)} at -1.2).");
+        var stretchedBars = Draw(ArFeed([60, 61], press: true), 60);
+        var withoutBarsLong = Draw(ArFeed([60, 61], press: false), 60);
+        Assert(stretchedBars.Bars == 2 && Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe) > 25,
+            $"The bar stretches as the key is held: past where half a second reached ({Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe)} at -1.2).");
         // let go: the bar ends a moment later, while the key stays lit — the light is what the key is, the bar is what the hand did
-        var releaseFeed = ArFeed([60, 61], press: true);
-        var released = Draw(releaseFeed, 80, frame =>
+        var letGoFeed = ArFeed([60, 61], press: true);
+        var afterRelease = Draw(letGoFeed, 80, frame =>
         {
             if (frame != 20) return;
-            releaseFeed.LiveNote(60, false, 0); releaseFeed.LiveNote(61, false, 0);
+            letGoFeed.LiveNote(60, false, 0); letGoFeed.LiveNote(61, false, 0);
         });
-        Assert(released.Bars == 0 && released.Keys == 3 && released.Quads == 3,
-            $"Letting go ends the bars while the keys stay lit ({released.Quads} quads: {released.Keys} key, {released.Bars} bar).");
+        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Quads == 3,
+            $"Letting go ends the bars while the keys stay lit ({afterRelease.Quads} quads: {afterRelease.Keys} key, {afterRelease.Bars} bar).");
         // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
-        var lettingGo = ArFeed([60, 61], press: true);
-        var justLetGo = Draw(lettingGo, 25, frame =>
+        var fadingFeed = ArFeed([60, 61], press: true);
+        var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
         {
             if (frame != 20) return;
-            lettingGo.LiveNote(60, false, 0); lettingGo.LiveNote(61, false, 0);
+            fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
-        Assert(justLetGo.Bars == 2 && justLetGo.Quads == 5,
-            $"A key just let go keeps its bar for a moment ({justLetGo.Quads} quads: {justLetGo.Keys} key, {justLetGo.Bars} bar five frames after the release).");
+        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Quads == 5,
+            $"A key just let go keeps its bar for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} key, {fadingAfterRelease.Bars} bar five frames after the release).");
         Results.Add("PASS ar live keys: the keys the player presses draw their own bars behind them, white or black, stretching along the keyboard as they are held and stopping at the look-ahead, gone a moment after the key is let go while the lit key stays; nothing is drawn over the key, behind a key that was not pressed, or beyond the reach — and Perform mode keeps them.");
 
         Render(MakeArFeed(flatInput, null));
