@@ -112,6 +112,9 @@ public sealed class ArCalibrationStoreTests : IDisposable
         // Another view of the same camera is a view nothing is known about, not an out-of-date one: it must ask for
         // keys to be marked rather than say the old marks were the wrong size.
         Assert.False(store.HasOtherSize("cam", ArCalibrationProfiles.Tilt45.Id, W, H, 88));
+        // An id the app does not know is read as the default view here as well, so it answers about that view's corners.
+        Assert.False(store.HasOtherSize("cam", "some-future-view", W, H, 88));
+        Assert.True(store.HasOtherSize("cam", "some-future-view", 1920, 1080, 88));
     }
 
     [Fact]
