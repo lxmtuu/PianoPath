@@ -1708,9 +1708,11 @@ internal static partial class VerificationSuite
         var standard = ArElementCatalog.ForTier(ArQualityTier.Standard);
         foreach (var floor in ArElementCatalog.NeverDropped) Assert(standard.Contains(floor), "Standard must draw at least everything Lite draws.");
         Assert.Contains(ArElement.Particles, ArElementCatalog.ForTier(ArQualityTier.Ultra));
-        foreach (var floor in ArElementCatalog.NeverDropped) foreach (var drop in ArElementCatalog.DropOrder)
+        var dropOrder = ArElementCatalog.DropOrder;
+        foreach (var floor in ArElementCatalog.NeverDropped) foreach (var drop in dropOrder)
                 Assert(floor != drop, $"The drop order must never include the floor element {floor}.");
-        Assert(ArElement.Particles == ArElementCatalog.DropOrder[0] && ArElement.ImpactLights == ArElementCatalog.DropOrder.Last(),
+        var lastDropIndex = dropOrder.Length - 1;
+        Assert(ArElement.Particles == dropOrder[0] && ArElement.ImpactLights == dropOrder[lastDropIndex],
             "Particles should be the first thing an over-budget frame drops, key glow the last.");
         Assert(!ArLookGuard.IsPortedToAr("Gem") && !ArLookGuard.IsPortedToAr("CrystalOutline"),
             "Gem and Crystal Outline still have no AR variant.");
