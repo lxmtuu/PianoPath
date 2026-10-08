@@ -262,7 +262,7 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
 
 Đối chiếu hiện tại có **223 thuộc tính public** trong `PianoVisualSettings`: **209** thuộc tính có hàng cài đặt động; **7** giá trị nối với control tĩnh trong XAML Audio/Practice; **3** giá trị được điều khiển qua workflow nút — `Language` qua các chip ngôn ngữ, `BackgroundImagePath` qua nút chọn/xóa ảnh, `CameraVideoPath` qua nút chọn video/dùng camera; **4** giá trị không phải hàng điều khiển — `BackgroundAppearanceVersion` là migration, `PresetName`/`PresetModified` là metadata luồng preset, `RenderBackend` là id máy giữ ở GPU với WPF fallback tự động. Không có thuộc tính model người dùng nào bị bỏ quên khỏi UI. Ba workflow properties không gắn vào `SettingRow.Property` để lệnh đặt lại trang không vô tình reset ngôn ngữ hoặc đường dẫn media về giá trị preset.
 
-`VerifySettingsDock` đối chiếu bằng reflection toàn bộ property model với hàng động, 7 control XAML, 3 hàng workflow có nút và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS; kết quả Windows runtime của guard này đang được kiểm lại sau khi CI chỉ ra ba thuộc tính workflow chưa được phân loại.
+`VerifySettingsDock` đối chiếu bằng reflection toàn bộ property model với hàng động, 7 control XAML, 3 hàng workflow có nút và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS; guard mới cũng PASS trong Windows build/verification CI [37776545276](https://github.com/lxmtuu/PianoPath/actions/runs/37776545276).
 
 Hai giới hạn được giữ rõ, không biến thành tuyên bố lỗi renderer:
 
