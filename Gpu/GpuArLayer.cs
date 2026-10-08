@@ -84,13 +84,15 @@ internal sealed class GpuArLayer
         if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
         {
             ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes, VelocityBand);
-            var arColors = ArLookGuard.IsPortedToAr(NoteStyleName(look)) ? look : look with { NoteStyle = ArLookGuard.StyleIndexForAr(look.NoteStyle) };
+            // The AR layer always draws flat emissive quads. An unported note style (Gem, Crystal Outline, named by
+            // ArLookGuard) keeps its track colour and the flat fallback material until AR-S4 ports the style onto the
+            // projected note pass; today the colours are the same either way, so the guard is an assertion target.
             foreach (var shape in _shapes)
             {
                 var note = input.Notes[shape.NoteIndex];
                 var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
                     : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
-                    : arColors.NoteColor(note.Pitch, note.Track);
+                    : look.NoteColor(note.Pitch, note.Track);
                 quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity, new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
             }
         }
@@ -117,6 +119,4 @@ internal sealed class GpuArLayer
         Color = new Vector4(color, alpha),
         Misc = misc
     };
-
-    private static string NoteStyleName(GpuLook look) => ArLookGuard.StyleName(look.NoteStyle);
 }
