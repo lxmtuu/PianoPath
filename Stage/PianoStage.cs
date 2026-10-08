@@ -15,7 +15,7 @@ internal sealed partial class PianoStage : FrameworkElement
     internal static int FirstPitch => KeyboardLayout.Active.FirstPitch;
     /// <summary>How many keys the keyboard being drawn has; 88 on the full keyboard.</summary>
     internal static int KeyCount => KeyboardLayout.Active.KeyCount;
-    private const double FallSpeed = 258;
+    internal const double FallSpeed = 258;
     private const int FireMaskWidth = 96, FireMaskHeight = 384;
     /// <summary>MIDI pitches of the white keys of the keyboard being drawn, in keyboard order.</summary>
     private static int[] WhitePitches => KeyboardLayout.Active.WhitePitches;
@@ -31,6 +31,16 @@ internal sealed partial class PianoStage : FrameworkElement
     private static readonly Brush KeyWhiteGlass = Freeze(new LinearGradientBrush(Color.FromArgb(150, 255, 255, 255), Color.FromArgb(70, 200, 210, 235), 90));
     private static readonly Brush KeyBlackGlass = Freeze(new LinearGradientBrush(Color.FromArgb(220, 30, 32, 44), Color.FromArgb(200, 4, 5, 10), 90));
     private static readonly BitmapSource FireMask = BuildFireMask();
+    // Normalized silhouettes keep material geometry resolution-independent on both tiny lanes and long notes.
+    // These IDs are material looks only; NoteStyle/Notes3D remain separate settings and Streak remains a trail.
+    private static readonly Point[] GemOutline = [new(.14, 0), new(.86, 0), new(1, .1), new(1, .9), new(.86, 1), new(.14, 1), new(0, .9), new(0, .1)];
+    private static readonly Point[] GemFacets = [new(.14, 0), new(.5, .18), new(.86, 0), new(.5, .18), new(.5, .18), new(.5, .82), new(.5, .82), new(.14, 1), new(.5, .82), new(.86, 1), new(.24, .08), new(.38, .5), new(.76, .08), new(.62, .5)];
+    private static readonly StreamGeometry GemUnitShape = UnitPolygon(GemOutline);
+    private static readonly Point[] CrystalOutline = [new(.24, 0), new(.76, 0), new(1, .14), new(1, .86), new(.76, 1), new(.24, 1), new(0, .86), new(0, .14)];
+    private static readonly Point[] CrystalFacets = [new(.24, .12), new(.5, .28), new(.76, .12), new(.5, .28), new(.5, .28), new(.5, .72), new(.5, .72), new(.24, .88), new(.5, .72), new(.76, .88)];
+    private static readonly StreamGeometry CrystalUnitShape = UnitPolygon(CrystalOutline);
+    // Concentric samples of the GPU line shader's exp(-distance² * 0.7) glow, drawn outer-to-inner by WPF.
+    private static readonly double[] SpotlightGaussianRadii = [3.0, 2.4, 1.9, 1.5, 1.1, .8, .55, .32, .14, .04, 0];
     private readonly Dictionary<uint, SolidColorBrush> _brushCache = [];
     private readonly Dictionary<ulong, Brush> _gradientCache = [];
     private readonly List<Star> _stars = [];
@@ -119,6 +129,8 @@ internal sealed partial class PianoStage : FrameworkElement
     public double ShadedBakeMilliseconds => _shadedMilliseconds;
     /// <summary>How many times the keyboard had to be re-shaded; a slider that does not affect the shader must not raise it.</summary>
     public int ShadedBakeCount => _shadedBakes;
+    /// <summary>Capture-only switch: fully bake lit-key tiles before an off-screen review snapshot.</summary>
+    internal bool SynchronousReviewKeyTileBake { get; set; }
     public double FirstLiveTrailY => _liveTrails.Count == 0 ? -1 : _liveTrails[0].Age * _visual.NoteFallSpeed;
     /// <summary>Length of the visual bar for a pitch: falling notes keep the 28 px spawn offset at the top, rising notes are born at the key line.</summary>
     public double LiveTrailHeightFor(int pitch)
@@ -134,7 +146,9 @@ internal sealed partial class PianoStage : FrameworkElement
         KeyboardLayout.Use(settings.KeyboardLayoutChoice);
         var requestedPath = settings.BackgroundImagePath?.Trim() ?? "";
         var backgroundChanged = !string.Equals(_loadedBackgroundPath, requestedPath, StringComparison.OrdinalIgnoreCase);
-        _visual = settings;
+        // The stage always draws the accessibility-adjusted copy: with every toggle off it is a faithful
+        // clone, and the dock keeps working on the user's original object.
+        _visual = settings.WithAccessibilityTogglesApplied();
         if (backgroundChanged || reloadBackground)
         {
             _loadedBackgroundPath = requestedPath;
@@ -558,7 +572,9 @@ internal sealed partial class PianoStage : FrameworkElement
     /// differs from one runner to the next, which is what made the README previews differ byte for byte
     /// between two builds of the same interface.
     /// </summary>
-    internal void ResetAnimation()
+    internal void ResetAnimation() => ResetAnimation(null);
+
+    internal void ResetAnimation(int? seed)
     {
         _elapsed = 0;
         _beatPulse = 0; _energyLevel = 0;
@@ -566,8 +582,8 @@ internal sealed partial class PianoStage : FrameworkElement
         _petals.Clear(); _petalCount = -1;
         Array.Clear(_keyHeat);
         Array.Clear(_wispBudget);
-        _petalRandom = new Random(PetalSeed);
-        _random = new Random(ParticleSeed);
+        _petalRandom = new Random(seed is int value ? unchecked(value * 397 ^ PetalSeed) : PetalSeed);
+        _random = new Random(seed ?? ParticleSeed);
         InvalidateVisual();
     }
 
@@ -711,6 +727,7 @@ internal sealed partial class PianoStage : FrameworkElement
                 aura.GradientStops.Add(new GradientStop(Color.FromArgb(15, 49, 50, 137), .5)); aura.GradientStops.Add(new GradientStop(Color.FromArgb(0, 5, 4, 13), 1));
                 aura.Freeze(); dc.DrawRectangle(aura, null, new Rect(0, 0, width, keyTop));
             }
+            if (!_transparentBackdrop && _visual.ShowBackground) DrawBackgroundMotion(dc, width, keyTop);
             if (_visual.ShowBackground)
             {
                 if (_visual.ShowStars) DrawStars(dc, width, keyTop);
@@ -812,24 +829,220 @@ internal sealed partial class PianoStage : FrameworkElement
         dc.DrawRectangle(brush, null, new Rect(0, keyTop - glowHeight, width, glowHeight));
     }
 
+    /// <summary>Software approximation of the six GPU procedural skies, tuned to preserve their colour and motion identity.</summary>
+    private void DrawBackgroundMotion(DrawingContext dc, double width, double height)
+    {
+        var amount = Math.Clamp(_visual.BackgroundMotionAmount / 100, 0, 1);
+        var mode = _visual.BackgroundMotion;
+        if (!_visual.ShowBackground || _visual.BackgroundMode == "ChromaGreen" || _transparentBackdrop
+            || mode == "None" || amount <= .001 || width < 1 || height < 1) return;
+
+        var time = _elapsed * Math.Max(.05, _visual.BackgroundMotionSpeed / 100);
+        var tint = AdjustColor(ParseColor(_visual.BackgroundMotionColor, ColorFromHue(266)));
+        var peak = mode switch
+        {
+            "Aurora" => .42,
+            "Nebula" => .56,
+            "Prism" => .22,
+            "Ember Haze" => .46,
+            "Ocean Flow" => .50,
+            "Retro Grid" => .72,
+            _ => 0
+        };
+        if (peak <= 0) return;
+        var alpha = BackgroundMotionAlpha(amount, peak);
+        dc.PushClip(new RectangleGeometry(new Rect(0, 0, width, height)));
+        switch (mode)
+        {
+            case "Aurora":
+            {
+                var aurora = Blend(tint, Color.FromRgb(54, 190, 154), .38);
+                for (var i = 0; i < 2; i++)
+                {
+                    var phase = time * .65 + i * 2.2;
+                    var centreY = height * (.27 + i * .11 + Math.Sin(phase) * .018);
+                    var ribbon = WavyMotionRibbon(width, centreY, height * .055, height * .026, phase, height * .025);
+                    dc.DrawGeometry(BackgroundMotionBand(aurora, alpha), null, ribbon);
+                }
+                DrawMotionCloud(dc, new Point(width * (.48 + Math.Sin(time * .2) * .08), height * .34), width * .42, height * .30, aurora, Alpha(alpha * .48));
+                break;
+            }
+            case "Nebula":
+            {
+                var indigo = Blend(tint, Color.FromRgb(105, 74, 180), .34);
+                var rose = Blend(tint, Color.FromRgb(166, 52, 112), .54);
+                DrawMotionCloud(dc, new Point(width * (.38 + Math.Sin(time * .12) * .035), height * .40), width * .46, height * .35, indigo, alpha);
+                DrawMotionCloud(dc, new Point(width * (.69 + Math.Sin(time * .09 + 1.7) * .04), height * .51), width * .34, height * .30, rose, Alpha(alpha * .60));
+                DrawMotionCloud(dc, new Point(width * .53, height * .25), width * .30, height * .22, tint, Alpha(alpha * .45));
+                break;
+            }
+            case "Prism":
+            {
+                var prismColors = new[]
+                {
+                    Blend(tint, Color.FromRgb(111, 89, 220), .42),
+                    Blend(tint, Color.FromRgb(64, 197, 213), .42),
+                    Blend(tint, Color.FromRgb(226, 137, 187), .50)
+                };
+                for (var i = 0; i < prismColors.Length; i++)
+                {
+                    var centreY = height * (.34 + i * .13);
+                    var ribbon = WavyMotionRibbon(width, centreY, height * .027, height * .018, time * .3 + i * 2.1, (i - 1) * height * .16);
+                    dc.DrawGeometry(BackgroundMotionBand(prismColors[i], Alpha(alpha * .52)), null, ribbon);
+                }
+                break;
+            }
+            case "Ember Haze":
+            {
+                var ember = Blend(tint, Color.FromRgb(207, 69, 34), .38);
+                var haze = new LinearGradientBrush
+                {
+                    StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
+                    MappingMode = BrushMappingMode.RelativeToBoundingBox
+                };
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(0, ember.R, ember.G, ember.B), 0));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(0, ember.R, ember.G, ember.B), .50));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .20), ember.R, ember.G, ember.B), .68));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .72), ember.R, ember.G, ember.B), .91));
+                haze.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .32), ember.R, ember.G, ember.B), 1));
+                haze.Freeze();
+                dc.DrawRectangle(haze, null, new Rect(0, 0, width, height));
+                DrawMotionCloud(dc, new Point(width * (.50 + Math.Sin(time * .16) * .04), height * .86), width * .48, height * .20, ember, Alpha(alpha * .58));
+                break;
+            }
+            case "Ocean Flow":
+            {
+                var deep = Blend(tint, Color.FromRgb(24, 99, 150), .42);
+                var surface = Blend(tint, Color.FromRgb(45, 183, 183), .40);
+                var lower = WavyMotionRibbon(width, height * .67, height * .045, height * .026, time * .45, height * .018);
+                var upper = WavyMotionRibbon(width, height * .49, height * .030, height * .020, time * .38 + 2, -height * .014);
+                dc.DrawGeometry(BackgroundMotionBand(deep, Alpha(alpha * .62)), null, lower);
+                dc.DrawGeometry(BackgroundMotionBand(surface, Alpha(alpha * .44)), null, upper);
+                DrawMotionCloud(dc, new Point(width * .5, height * .67), width * .55, height * .33, deep, Alpha(alpha * .36));
+                break;
+            }
+            case "Retro Grid":
+            {
+                var horizonY = height * (.43 + .012 * Math.Sin(time * .42));
+                var gridColor = Color.FromArgb(Alpha(alpha * .40), tint.R, tint.G, tint.B);
+                var centerX = width * .5;
+                for (var i = 0; i <= 18; i++)
+                {
+                    var bottomX = width * i / 18;
+                    var horizonX = centerX + (bottomX - centerX) * .055;
+                    dc.DrawLine(Pen(gridColor, .8), new Point(horizonX, horizonY), new Point(bottomX, height));
+                }
+                for (var i = 1; i <= 8; i++)
+                {
+                    var depth = i / 8.0;
+                    var y = horizonY + (height - horizonY) * depth * depth;
+                    var lineColor = Color.FromArgb(Alpha(alpha * (.18 + .48 * depth)), tint.R, tint.G, tint.B);
+                    dc.DrawLine(Pen(lineColor, .8), new Point(0, y), new Point(width, y));
+                }
+                break;
+            }
+        }
+        dc.Pop();
+    }
+
+    private static byte BackgroundMotionAlpha(double amount, double peak)
+        => Alpha(Math.Min(128, 255 * Math.Sqrt(Math.Clamp(amount * peak, 0, 1)) * .64));
+
+    private static LinearGradientBrush BackgroundMotionBand(Color color, byte alpha)
+    {
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0), EndPoint = new Point(0, 1),
+            MappingMode = BrushMappingMode.RelativeToBoundingBox
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 0));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .44), color.R, color.G, color.B), .28));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, color.R, color.G, color.B), .52));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .40), color.R, color.G, color.B), .78));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+        brush.Freeze();
+        return brush;
+    }
+
+    private static StreamGeometry WavyMotionRibbon(double width, double centreY, double halfHeight,
+        double waveHeight, double phase, double slope)
+    {
+        const int steps = 24;
+        var points = new Point[(steps + 1) * 2];
+        for (var i = 0; i <= steps; i++)
+        {
+            var f = i / (double)steps;
+            var centre = centreY + (f - .5) * slope + Math.Sin(f * Math.PI * 3 + phase) * waveHeight;
+            points[i] = new Point(width * f, centre - halfHeight);
+            points[steps * 2 + 1 - i] = new Point(width * f, centre + halfHeight);
+        }
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(points[0], true, true);
+            for (var i = 1; i < points.Length; i++) context.LineTo(points[i], true, false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    private static void DrawMotionCloud(DrawingContext dc, Point centre, double radiusX, double radiusY, Color color, byte alpha)
+    {
+        if (alpha == 0 || radiusX <= 0 || radiusY <= 0) return;
+        var brush = new RadialGradientBrush
+        {
+            Center = new Point(.5, .5), GradientOrigin = new Point(.5, .5),
+            RadiusX = .5, RadiusY = .5, MappingMode = BrushMappingMode.RelativeToBoundingBox
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .72), color.R, color.G, color.B), 0));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(alpha, color.R, color.G, color.B), .32));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(alpha * .42), color.R, color.G, color.B), .68));
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+        brush.Freeze();
+        dc.DrawEllipse(brush, null, centre, radiusX, radiusY);
+    }
+
     private void DrawKeyBeams(DrawingContext dc, double width, double keyTop, double lane)
     {
-        // Soft light columns rise from every sounding key, tinted with that key's note color.
-        var beamWidth = Math.Max(18, lane * 2.8);
+        // The GPU shaft is about 2.2 key lanes wide before its bloom. Match that footprint and keep the
+        // software halo local; a modest alpha lift compensates for WPF source-over versus GPU additive light.
+        var beamWidth = Math.Max(18, lane * 2.2);
+        var intensity = Math.Clamp(_visual.BeamIntensity, 0, 100);
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             if (!_activeKey[pitch]) continue;
             var color = AdjustColor(_activeKeyColor[pitch]);
-            var key = GradientKey(2, Color.FromArgb((byte)Math.Clamp(_visual.BeamIntensity, 0, 255), color.R, color.G, color.B));
+            var x = KeyCenter(pitch) * width;
+
+            var haloKey = GradientKey(11, Color.FromArgb((byte)intensity, color.R, color.G, color.B));
+            if (!_gradientCache.TryGetValue(haloKey, out var halo))
+            {
+                var glow = new RadialGradientBrush
+                {
+                    Center = new Point(.5, 1), GradientOrigin = new Point(.5, 1),
+                    RadiusX = .5, RadiusY = 1, MappingMode = BrushMappingMode.RelativeToBoundingBox,
+                    SpreadMethod = GradientSpreadMethod.Pad
+                };
+                var coreAlpha = Alpha(intensity * 1.25);
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(coreAlpha, color.R, color.G, color.B), 0));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .72), color.R, color.G, color.B), .18));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .40), color.R, color.G, color.B), .46));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(coreAlpha * .13), color.R, color.G, color.B), .76));
+                glow.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 1));
+                glow.Freeze(); halo = CacheGradient(haloKey, glow);
+            }
+            var haloWidth = beamWidth * 1.1;
+            dc.DrawRectangle(halo, null, new Rect(x - haloWidth, 0, haloWidth * 2, keyTop));
+
+            var key = GradientKey(2, Color.FromArgb((byte)intensity, color.R, color.G, color.B));
             if (!_gradientCache.TryGetValue(key, out var brush))
             {
                 var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(0, 1), MappingMode = BrushMappingMode.RelativeToBoundingBox };
                 gradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, color.R, color.G, color.B), 0));
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(10 + _visual.BeamIntensity * .55), color.R, color.G, color.B), .78));
-                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(20 + _visual.BeamIntensity * .9), color.R, color.G, color.B), 1));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(24 + intensity * 1.65), color.R, color.G, color.B), .78));
+                gradient.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(40 + intensity * 2.3), color.R, color.G, color.B), 1));
                 gradient.Freeze(); brush = CacheGradient(key, gradient);
             }
-            var x = KeyCenter(pitch) * width;
             dc.DrawRectangle(brush, null, new Rect(x - beamWidth / 2, 0, beamWidth, keyTop));
         }
     }
@@ -1060,7 +1273,7 @@ internal sealed partial class PianoStage : FrameworkElement
         if (!ghostPass) DrawFallingTrail(dc, r, color, opacity, pitch, rising);
         // Outer bloom shared by every style: stacked rounded shells with exponentially decaying alpha so the
         // glow falls off like real light instead of showing two flat banded rings; neon spreads further.
-        var bloomScale = style == "Neon" ? 1.4 : 1;
+        var bloomScale = style switch { "Neon" => 1.4, "Gem" => .78, "CrystalOutline" => .28, _ => 1 };
         for (var layer = 4; layer >= 1; layer--)
         {
             var f = layer / 4.0;
@@ -1122,6 +1335,48 @@ internal sealed partial class PianoStage : FrameworkElement
                 }
                 break;
             }
+            case "Gem":
+            {
+                // A solid, readable crystal body with cut shoulders and facet seams. Its wider halo is
+                // intentionally restrained so the planes survive at half-size instead of blooming together.
+                dc.PushTransform(UnitTransform(r));
+                dc.PushOpacity(Math.Clamp(opacity * tint, 0, 1));
+                dc.DrawGeometry(GemBrush(color, _visual.Notes3D), null, GemUnitShape);
+                dc.Pop();
+                dc.Pop();
+                var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
+                if (edgeFactor > 0)
+                {
+                    var rimColor = Blend(color, Colors.White, _visual.Notes3D ? .56 : .42);
+                    DrawUnitOutline(dc, r, GemOutline, Pen(Color.FromArgb(Alpha(235 * opacity * edgeFactor), rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * .78, 1, 2.6)));
+                }
+                var facet = Blend(color, Colors.White, _visual.Notes3D ? .55 : .38);
+                DrawUnitSegments(dc, r, GemFacets, Pen(Color.FromArgb(Alpha((_visual.Notes3D ? 145 : 102) * opacity), facet.R, facet.G, facet.B), .9, roundCaps: true));
+                if (_visual.Notes3D && r.Width > 10 && r.Height > 24)
+                    dc.DrawLine(Pen(Color.FromArgb(Alpha(105 * opacity), 255, 255, 255), 1), InUnitRect(r, new Point(.29, .18)), InUnitRect(r, new Point(.29, .82)));
+                break;
+            }
+            case "CrystalOutline":
+            {
+                // A genuinely see-through, chamfered contour: the center stays quiet while the pale rim
+                // and a few internal facets keep its pitch/length legible on both dark and busy stages.
+                var fill = Color.FromArgb(Alpha(40 * opacity * tint), cr, cg, cb);
+                dc.PushTransform(UnitTransform(r));
+                dc.DrawGeometry(Brush(fill), null, CrystalUnitShape);
+                dc.Pop();
+                var edgeFactor = Math.Min(1, _visual.NoteEdge / 100);
+                if (edgeFactor > 0)
+                {
+                    // Keep the low-alpha core transparent, but give the pale contour enough physical width
+                    // to survive the 2×2 review downsample and the WPF viewport's softer pen rasterization.
+                    var rimColor = Blend(color, Colors.White, .96);
+                    var rimAlpha = Alpha(255 * opacity * Math.Min(1, edgeFactor * 1.2));
+                    DrawUnitOutline(dc, r, CrystalOutline, Pen(Color.FromArgb(rimAlpha, rimColor.R, rimColor.G, rimColor.B), Math.Clamp(edgeWidth * 2.0, 3.0, 4.2)));
+                }
+                var facet = Blend(color, Colors.White, .72);
+                DrawUnitSegments(dc, r, CrystalFacets, Pen(Color.FromArgb(Alpha(205 * opacity), facet.R, facet.G, facet.B), 1.2, roundCaps: true));
+                break;
+            }
             default:
             {
                 if (_visual.Notes3D)
@@ -1146,7 +1401,8 @@ internal sealed partial class PianoStage : FrameworkElement
         }
         if (_visual.NoteRefraction > 0 && r.Width > 6)
         {
-            var fringe = Alpha((style == "Neon" ? 90 : 170) * opacity * _visual.NoteRefraction / 100);
+            var materialRefraction = style switch { "Neon" => 90, "Gem" => 130, "CrystalOutline" => 72, _ => 170 };
+            var fringe = Alpha(materialRefraction * opacity * _visual.NoteRefraction / 100);
             dc.DrawLine(Pen(Color.FromArgb(fringe, 255, 255, 255), 1), new Point(r.X + 2, r.Y + 3), new Point(r.X + 2, r.Bottom - 3));
         }
         if (_visual.Notes3D && r.Height > 20 && style is "Solid" or "Glass")
@@ -1173,11 +1429,39 @@ internal sealed partial class PianoStage : FrameworkElement
         {
             var label = r.Width >= 20 ? NoteLabel(pitch) : ShortNoteLabel(pitch);
             var luminance = .2126 * cr + .7152 * cg + .0722 * cb;
-            var textColor = style == "Neon" ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
+            var textColor = (style is "Neon" or "CrystalOutline") ? Colors.White : luminance > 150 ? Color.FromRgb(12, 8, 20) : Colors.White;
             DrawLabel(dc, label, new Point(r.X + r.Width / 2, r.Bottom - Math.Min(12, r.Height / 2)), Math.Min(11, r.Width * .62), Color.FromArgb(Alpha(230 * opacity), textColor.R, textColor.G, textColor.B), true);
         }
         if (_visual.FallingGhost && !ghostPass && r.Height > 4) DrawNoteGhosts(dc, r, color, opacity, pitch, rising);
         if (_visual.HoldBar && sounding && !ghostPass) DrawHoldBar(dc, r, color, opacity);
+    }
+
+    private static StreamGeometry UnitPolygon(Point[] points)
+    {
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(points[0], isFilled: true, isClosed: true);
+            for (var i = 1; i < points.Length; i++) context.LineTo(points[i], isStroked: true, isSmoothJoin: false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    private static MatrixTransform UnitTransform(Rect bounds) => new(new Matrix(bounds.Width, 0, 0, bounds.Height, bounds.X, bounds.Y));
+
+    private static Point InUnitRect(Rect bounds, Point point) => new(bounds.X + point.X * bounds.Width, bounds.Y + point.Y * bounds.Height);
+
+    private void DrawUnitOutline(DrawingContext dc, Rect bounds, Point[] points, Pen pen)
+    {
+        for (var i = 0; i < points.Length; i++)
+            dc.DrawLine(pen, InUnitRect(bounds, points[i]), InUnitRect(bounds, points[(i + 1) % points.Length]));
+    }
+
+    private void DrawUnitSegments(DrawingContext dc, Rect bounds, Point[] points, Pen pen)
+    {
+        for (var i = 0; i + 1 < points.Length; i += 2)
+            dc.DrawLine(pen, InUnitRect(bounds, points[i]), InUnitRect(bounds, points[i + 1]));
     }
 
     /// <summary>Vertical bevel for solid note bars: a lit top edge, the saturated core and a shadowed bottom.</summary>
@@ -1235,6 +1519,26 @@ internal sealed partial class PianoStage : FrameworkElement
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .28));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(specular.R, specular.G, specular.B), .46));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(color.R, color.G, color.B), .68));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 1));
+        gradient.Freeze();
+        return CacheGradient(key, gradient);
+    }
+
+    /// <summary>Cut-gem material: broad color planes in 2D, a sharper specular shoulder and deep edge facets in 3D.</summary>
+    private Brush GemBrush(Color color, bool depth)
+    {
+        var key = GradientKey(depth ? (byte)9 : (byte)10, Color.FromArgb(255, color.R, color.G, color.B));
+        if (_gradientCache.TryGetValue(key, out var cached)) return cached;
+        var edge = Blend(color, Color.FromRgb(6, 4, 18), depth ? .38 : .16);
+        var shoulder = Blend(color, Colors.White, depth ? .22 : .08);
+        var specular = Blend(color, Colors.White, depth ? .58 : .24);
+        var core = Blend(color, Colors.White, depth ? .04 : .015);
+        var gradient = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0), MappingMode = BrushMappingMode.RelativeToBoundingBox };
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 0));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .16));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(specular.R, specular.G, specular.B), depth ? .39 : .30));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(core.R, core.G, core.B), .52));
+        gradient.GradientStops.Add(new GradientStop(Color.FromRgb(shoulder.R, shoulder.G, shoulder.B), .82));
         gradient.GradientStops.Add(new GradientStop(Color.FromRgb(edge.R, edge.G, edge.B), 1));
         gradient.Freeze();
         return CacheGradient(key, gradient);
@@ -1325,7 +1629,7 @@ internal sealed partial class PianoStage : FrameworkElement
     /// <summary>Pedal Glow: 1 normally, brighter while the sustain pedal is held down.</summary>
     private double PedalBoost() => _sustainPedal && _visual.PedalGlow ? 1 + _visual.PedalGlowIntensity / 100 : 1;
 
-    private Color AdjustColor(Color input)
+    internal Color AdjustColor(Color input)
     {
         var saturation = _visual.Saturation / 100;
         var gray = .2126 * input.R + .7152 * input.G + .0722 * input.B;
@@ -1335,6 +1639,74 @@ internal sealed partial class PianoStage : FrameworkElement
     }
 
     private static Color Blend(Color a, Color b, double t) => Color.FromRgb((byte)(a.R + (b.R - a.R) * t), (byte)(a.G + (b.G - a.G) * t), (byte)(a.B + (b.B - a.B) * t));
+    private static Color BlendLinear(Color a, Color b, double t)
+    {
+        t = Math.Clamp(t, 0, 1);
+        return Color.FromRgb(
+            Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.R) + (ToLinearChannel(b.R) - ToLinearChannel(a.R)) * t) * 255)),
+            Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.G) + (ToLinearChannel(b.G) - ToLinearChannel(a.G)) * t) * 255)),
+            Alpha(Math.Round(ToSrgbChannel(ToLinearChannel(a.B) + (ToLinearChannel(b.B) - ToLinearChannel(a.B)) * t) * 255)));
+    }
+
+    internal static double SpotlightEnergyScaleAtOffset(double width, double radius)
+    {
+        var distance = width * .096 * radius;
+        var inner = width * .028;
+        var middle = width * .062;
+        var outer = width * .096;
+        static double Falloff(double offset, double halfWidth) => Math.Exp(-.7 * Math.Pow(offset / Math.Max(1, halfWidth), 2));
+        // Keep the summed centre energy at .9075, but move a little weight from the broadest Gaussian
+        // into the narrow core. WPF's source-over raster left a gray veil around the GPU's additive shafts;
+        // the beam core stays stable while the far penumbra better matches the blacker WARP backdrop.
+        return .52 * Falloff(distance, inner) + .2875 * Falloff(distance, middle) + .10 * Falloff(distance, outer);
+    }
+
+    /// <summary>Maps additive linear GPU emission through the same filmic transfer into WPF source-over opacity.</summary>
+    private static double SpotlightDisplayOpacity(Color shaft, double amount, double energyScale, bool filmic, double exposure)
+    {
+        var gain = Math.Clamp(amount, 0, 1.2) * energyScale * Math.Clamp(exposure / 100, 0, 4);
+        var r = ToLinearChannel(shaft.R) * gain;
+        var g = ToLinearChannel(shaft.G) * gain;
+        var b = ToLinearChannel(shaft.B) * gain;
+        if (filmic)
+        {
+            r *= 1.25; g *= 1.25; b *= 1.25;
+            var inR = .59719 * r + .35458 * g + .04823 * b;
+            var inG = .07600 * r + .90834 * g + .01566 * b;
+            var inB = .02840 * r + .13383 * g + .83777 * b;
+            static double Fit(double value) => (value * (value + .0245786) - .000090537)
+                / (value * (.983729 * value + .432951) + .238081);
+            var fitR = Fit(inR); var fitG = Fit(inG); var fitB = Fit(inB);
+            (r, g, b) = (
+                Math.Clamp(1.60475 * fitR - .53108 * fitG - .07367 * fitB, 0, 1),
+                Math.Clamp(-.10208 * fitR + 1.10813 * fitG - .00605 * fitB, 0, 1),
+                Math.Clamp(-.00327 * fitR - .07276 * fitG + 1.07602 * fitB, 0, 1));
+        }
+        else
+        {
+            var luma = .2126 * r + .7152 * g + .0722 * b;
+            var scale = 1 / (1 + Math.Max(luma - 1, 0));
+            r *= scale; g *= scale; b *= scale;
+        }
+
+        var sourceLuma = .2126 * (shaft.R / 255.0) + .7152 * (shaft.G / 255.0) + .0722 * (shaft.B / 255.0);
+        if (sourceLuma <= 1e-6) return 0;
+        var displayLuma = .2126 * ToSrgbChannel(r) + .7152 * ToSrgbChannel(g) + .0722 * ToSrgbChannel(b);
+        return Math.Clamp(displayLuma / sourceLuma, 0, .96);
+    }
+
+    private static double ToLinearChannel(byte channel)
+    {
+        var srgb = channel / 255.0;
+        return srgb <= .04045 ? srgb / 12.92 : Math.Pow((srgb + .055) / 1.055, 2.4);
+    }
+
+    private static double ToSrgbChannel(double linear)
+    {
+        linear = Math.Clamp(linear, 0, 1);
+        return linear <= .0031308 ? linear * 12.92 : 1.055 * Math.Pow(linear, 1 / 2.4) - .055;
+    }
+
     private static byte Alpha(double value) => (byte)Math.Clamp(value, 0, 255);
 
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)
@@ -2166,7 +2538,31 @@ internal sealed partial class PianoStage : FrameworkElement
         }
     }
 
-    /// <summary>Ambient layer, Light &amp; Color family: gradient waves, prisms or color splashes.</summary>
+    /// <summary>Creates a tapered spotlight shaft between its ceiling anchor and key-side target.</summary>
+    private static StreamGeometry SpotlightBeam(Point origin, Point target, double originHalfWidth, double targetHalfWidth)
+    {
+        var direction = target - origin;
+        if (direction.Length < 1)
+        {
+            var empty = new StreamGeometry();
+            empty.Freeze();
+            return empty;
+        }
+        direction.Normalize();
+        var side = new Vector(-direction.Y, direction.X);
+        var geometry = new StreamGeometry();
+        using (var context = geometry.Open())
+        {
+            context.BeginFigure(origin + side * originHalfWidth, true, true);
+            context.LineTo(target + side * targetHalfWidth, true, false);
+            context.LineTo(target - side * targetHalfWidth, true, false);
+            context.LineTo(origin - side * originHalfWidth, true, false);
+        }
+        geometry.Freeze();
+        return geometry;
+    }
+
+    /// <summary>Ambient layer, Light &amp; Color family: spotlights, gradient waves, prisms or color splashes.</summary>
     private void DrawAmbientLight(DrawingContext dc, double width, double height)
     {
         var amount = _visual.AmbientLightAmount / 100;
@@ -2175,6 +2571,68 @@ internal sealed partial class PianoStage : FrameworkElement
         var tint = AdjustColor(ParseColor(_visual.AmbientLightColor, ColorFromHue(266)));
         switch (_visual.AmbientLight)
         {
+            case "Spotlights":
+            {
+                // Match the GPU stage's three warm key lights: broad shafts, a stronger core and a pool
+                // at the keyboard. Blend the tint in linear light, then map GPU HDR emission to WPF opacity.
+                var activity = Math.Clamp(_visual.TempoSync ? _beatPulse : _energyLevel, 0, 1);
+                var shaft = BlendLinear(Color.FromRgb(255, 244, 224), tint, .45);
+                for (var i = 0; i < 3; i++)
+                {
+                    var anchorX = width * (.22 + .28 * i);
+                    var sway = Math.Sin(_elapsed * speed * .35 + i * 2.1 + activity * (1.4 + i * .3));
+                    var targetX = anchorX + sway * width * (.07 + activity * .05)
+                        + Math.Sin(_elapsed * speed * .13 + i * 1.3) * width * .03;
+                    var flicker = .92 + .08 * Math.Sin(_elapsed * (9 + i * 2.3) + i * 5) + activity * .12;
+                    var origin = new Point(anchorX, -12);
+                    var target = new Point(targetX, height * .97);
+
+                    // The GPU lines are constant-width soft segments, not solid tapered wedges. Approximate
+                    // their Gaussian lateral falloff with nested feather samples; this removes the hard bands
+                    // visible in software captures while keeping WARP's three-layer energy profile.
+                    var beamGradient = new LinearGradientBrush
+                    {
+                        StartPoint = origin,
+                        EndPoint = target,
+                        MappingMode = BrushMappingMode.Absolute,
+                        SpreadMethod = GradientSpreadMethod.Pad
+                    };
+                    beamGradient.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 0));
+                    beamGradient.GradientStops.Add(new GradientStop(Color.FromArgb(115, shaft.R, shaft.G, shaft.B), .55));
+                    beamGradient.GradientStops.Add(new GradientStop(Color.FromArgb(255, shaft.R, shaft.G, shaft.B), 1));
+                    beamGradient.Freeze();
+                    var previousOpacity = 0d;
+                    foreach (var radius in SpotlightGaussianRadii)
+                    {
+                        var energyScale = SpotlightEnergyScaleAtOffset(width, radius);
+                        var opacity = SpotlightDisplayOpacity(shaft, amount * flicker, energyScale, _visual.ShaderFilmic, _visual.ShaderExposure);
+                        var shellOpacity = (opacity - previousOpacity) / Math.Max(.001, 1 - previousOpacity);
+                        previousOpacity = opacity;
+                        if (shellOpacity <= .001) continue;
+                        var halfWidth = Math.Max(1.5, width * .096 * radius);
+                        var beam = SpotlightBeam(origin, target, halfWidth, halfWidth);
+                        dc.PushOpacity(Math.Clamp(shellOpacity, 0, 1));
+                        dc.DrawGeometry(beamGradient, null, beam);
+                        dc.Pop();
+                    }
+
+                    var pool = new RadialGradientBrush
+                    {
+                        Center = new Point(.5, .5),
+                        GradientOrigin = new Point(.5, .5),
+                        RadiusX = .5,
+                        RadiusY = .5,
+                        MappingMode = BrushMappingMode.RelativeToBoundingBox
+                    };
+                    var poolAlpha = SpotlightDisplayOpacity(shaft, amount * flicker, .54, _visual.ShaderFilmic, _visual.ShaderExposure);
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(poolAlpha * 255), shaft.R, shaft.G, shaft.B), 0));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(poolAlpha * 255 * .38), shaft.R, shaft.G, shaft.B), .45));
+                    pool.GradientStops.Add(new GradientStop(Color.FromArgb(0, shaft.R, shaft.G, shaft.B), 1));
+                    pool.Freeze();
+                    dc.DrawEllipse(pool, null, target, width * .05, 11);
+                }
+                break;
+            }
             case "Gradient Wave":
             {
                 var bands = 5;
@@ -2653,9 +3111,14 @@ internal sealed partial class PianoStage : FrameworkElement
             var color = KeyColor(pitch);
             var cacheKey = ((long)pitch << 20) | (uint)ColorBucket(color);
             if (_shadedTiles.TryGetValue(cacheKey, out var cached)) { dc.DrawImage(cached.Bitmap, cached.Where); continue; }
+            if (SynchronousReviewKeyTileBake)
+            {
+                RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
+                if (_shadedTiles.TryGetValue(cacheKey, out var bakedNow)) { dc.DrawImage(bakedNow.Bitmap, bakedNow.Where); continue; }
+            }
             if (_lastTile.TryGetValue(pitch, out var previous)) dc.DrawImage(previous.Bitmap, previous.Where);
             else DrawLitKeyPlaceholder(dc, pitch, color, width, bandHeight, top);
-            RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
+            if (!SynchronousReviewKeyTileBake) RequestKeyTile(cacheKey, pitch, color, scene, width, bandHeight, top);
         }
     }
 
@@ -2670,7 +3133,7 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void RequestKeyTile(long cacheKey, int pitch, Color color, PianoShaderScene scene, double width, double bandHeight, double top)
     {
-        if (!_pendingTiles.Add(cacheKey)) return;
+        if (!SynchronousReviewKeyTileBake && !_pendingTiles.Add(cacheKey)) return;
         var requestedFor = _shadedSceneKey;
         var bleed = Math.Max(2, (int)Math.Ceiling(2.5 / scene.Keys.WhiteCount * scene.BandWidth));
         var center = scene.Keys.WorldCenters[pitch] / scene.Keys.WhiteCount * scene.BandWidth;
@@ -2679,6 +3142,19 @@ internal sealed partial class PianoStage : FrameworkElement
         var where = new Rect(x0 / (double)scene.BandWidth * width, top, tileWidth / (double)scene.BandWidth * width, bandHeight);
         var lights = new KeyLightState();
         lights.Light(pitch, color, 1);
+        if (SynchronousReviewKeyTileBake)
+        {
+            BitmapSource? bitmap = null;
+            try { bitmap = PianoKeyboardRenderer.Render(scene, lights, x0, 0, tileWidth, scene.BandHeight, pitch); }
+            catch (Exception) { /* the placeholder glow stays; a failed review tile must never take the stage down */ }
+            if (bitmap is null || !_hasShadedSceneKey || !requestedFor.Equals(_shadedSceneKey)) return;
+            if (_shadedTiles.Count > 192) { _shadedTiles.Clear(); _lastTile.Clear(); }
+            var tile = new ShadedKeyTile(bitmap, where);
+            _shadedTiles[cacheKey] = tile;
+            if (_lastTile.Count > 128) _lastTile.Clear();
+            _lastTile[pitch] = tile;
+            return;
+        }
         _ = Task.Run(async () =>
         {
             BitmapSource? bitmap = null;

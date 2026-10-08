@@ -58,6 +58,7 @@ internal sealed class PianoVisualSettings
     public bool ShowCounter { get; set; } = false;
     public bool ShowFps { get; set; } = false;
     public bool AnimateKeys { get; set; } = true;
+    /// <summary>Independent note depth toggle; material and trail are separate style dimensions. Used by Solid, Glass and Gem.</summary>
     public bool Notes3D { get; set; } = true;
     public bool BackgroundGuide { get; set; }
     public bool BackgroundGradient { get; set; }
@@ -155,7 +156,7 @@ internal sealed class PianoVisualSettings
     public int PracticeMissThreshold { get; set; } = 3;
 
     // ---- Note shape ---------------------------------------------------------------------------------
-    /// <summary>Solid, Neon (hollow glowing outline), Glass or Fire (burning texture).</summary>
+    /// <summary>Note material: Solid, Neon, Glass, Fire, Gem or CrystalOutline. Trail and optional depth remain independent.</summary>
     public string NoteStyle { get; set; } = "Neon";
     public double NoteWidth { get; set; } = 80;
     public double NoteMinLength { get; set; } = 16;
@@ -281,7 +282,7 @@ internal sealed class PianoVisualSettings
     public string AmbientNature { get; set; } = "None";
     public double AmbientNatureAmount { get; set; } = 60;
     public double AmbientNatureSpeed { get; set; } = 50;
-    /// <summary>Light &amp; Color layer: None, Gradient Wave, Prism or Color Splash.</summary>
+    /// <summary>Light &amp; Color layer: None, Gradient Wave, Prism, Color Splash or Spotlights.</summary>
     public string AmbientLight { get; set; } = "None";
     public double AmbientLightAmount { get; set; } = 60;
     public double AmbientLightSpeed { get; set; } = 50;
@@ -363,6 +364,14 @@ internal sealed class PianoVisualSettings
     public double BloomIntensity { get; set; } = 80;
     public double BloomSize { get; set; } = 70;
 
+    // ---- Accessibility -------------------------------------------------------------------------------
+    /// <summary>Global contract: freeze effects' intrinsic animation (background motion, pulses, breathing). Never touches the note's own travel.</summary>
+    public bool ReducedMotion { get; set; } = false;
+    /// <summary>Global contract: suppress the flash channel (impact flash) instead of letting it strobe.</summary>
+    public bool ReduceFlashes { get; set; } = false;
+    /// <summary>Global contract: give every note a strong bright outline so shape, not color alone, carries the information.</summary>
+    public bool HighContrast { get; set; } = false;
+
     // ---- Recording ----------------------------------------------------------------------------------
     /// <summary>Window, 720p or 1080p.</summary>
     public string RecordingResolution { get; set; } = "Window";
@@ -418,7 +427,8 @@ internal sealed class PianoVisualSettings
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
-    internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire"];
+    // Array order is the stable integer ID sent to the GPU shader; append new materials without moving the shipped IDs.
+    internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
     internal static readonly string[] FlameColorModes = ["Warm", "Note"];
     internal static readonly string[] ImpactWaves = ["None", "Ring", "Shockwave", "Ripple"];
@@ -466,6 +476,96 @@ internal sealed class PianoVisualSettings
         KeyboardLayout.ForKeyCount(int.TryParse(KeyboardSize, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var keys) ? keys : 88);
 
     internal string ToJson() => JsonSerializer.Serialize(this, JsonOptions);
+
+    /// <summary>
+    /// The look a renderer should draw while the global accessibility toggles are on: a copy of these settings
+    /// with the policy's channels overridden (see <c>AccessibilityContractResolver.Policies</c>). Toggles off
+    /// returns an identical copy, so the signed-off default look is untouched; user settings are never mutated.
+    /// </summary>
+    internal PianoVisualSettings WithAccessibilityTogglesApplied()
+    {
+        var result = Clone();
+        foreach (var policy in AccessibilityContractResolver.Policies)
+        {
+            var enabled = policy.Toggle switch
+            {
+                AccessibilityToggle.ReducedMotion => ReducedMotion,
+                AccessibilityToggle.ReduceFlashes => ReduceFlashes,
+                AccessibilityToggle.HighContrast => HighContrast,
+                _ => false,
+            };
+            if (!enabled) continue;
+            foreach (var channel in policy.Channels)
+            {
+                switch (channel)
+                {
+                    case AccessibilityChannel.ImpactFlash:
+                        result.ShowImpactFlash = false;
+                        result.ImpactFlashIntensity = 0;
+                        break;
+                    case AccessibilityChannel.IndependentMotion:
+                        // Only the two layers without a typed family yet stay on the reviewed channel
+                        // list; every catalogued family is owned by the resolution loop below.
+                        result.BackgroundMotion = "None";
+                        result.HaloPulse = false;
+                        break;
+                    case AccessibilityChannel.NoteShapeCue:
+                        // Floors, not fixed values: a look with a stronger outline than the floor keeps it.
+                        // 160/80 sit well above the 88/55 defaults without pegging the 200/100 clamps.
+                        result.NoteEdge = Math.Max(result.NoteEdge, 160);
+                        result.NoteEdgeWidth = Math.Max(result.NoteEdgeWidth, 80);
+                        break;
+                }
+            }
+        }
+        // Catalog-driven safety: each typed family's resolved suppression owns its channels, so the
+        // toggles follow the contracts instead of a hand-maintained channel list. The reviewed channel
+        // policy above keeps the two layers that have no typed family yet (background motion, halo
+        // pulse). Freeze means "stand still" where a still image exists; layers whose whole purpose is
+        // motion (meteors, petals, twinkles) switch off, and the ambient layers lose their amount
+        // because the WPF sky cannot freeze its drift (its speed floor is 0.25, verified in source).
+        if (ReduceFlashes || ReducedMotion)
+        {
+            foreach (var family in EffectContractCatalog.AllFamilies)
+            {
+                var resolution = AccessibilityContractResolver.Resolve(family.Accessibility, ReducedMotion, ReduceFlashes, false);
+                if (ReduceFlashes && resolution.Flash == FlashSuppression.Suppress)
+                {
+                    switch (family.Id)
+                    {
+                        case "impact.flash": result.ShowImpactFlash = false; result.ImpactFlashIntensity = 0; break;
+                        case "impact.burst": result.ShowEmbers = false; break;
+                        case "atmosphere.stars": result.ShowStars = false; break;
+                        case "particles.flames": result.ShowFlame = false; break;
+                    }
+                }
+                if (ReducedMotion && resolution.Motion == MotionSuppression.FreezeIntrinsicAnimation)
+                {
+                    switch (family.Id)
+                    {
+                        case "falling.pulse": result.FallingPulse = false; break;
+                        case "falling.shimmer": result.NoteShimmer = false; break;
+                        case "hold.breath": result.HoldBreath = false; break;
+                        case "hold.vibration": result.HoldVibration = false; break;
+                        case "hold.color-cycle": result.HoldColorCycle = false; break;
+                        case "hold.arc": result.HoldElectricArc = false; break;
+                        case "ambient.energy": result.AmbientEnergyAmount = 0; break;
+                        case "ambient.nature": result.AmbientNatureAmount = 0; break;
+                        case "ambient.light": result.AmbientLightAmount = 0; break;
+                        case "ambient.cosmic": result.AmbientCosmicAmount = 0; break;
+                        case "atmosphere.stars": result.ShowStars = false; break;
+                        case "atmosphere.shooting-stars": result.ShootingStars = false; break;
+                        case "atmosphere.petals": result.ShowPetals = false; break;
+                        case "atmosphere.beams": result.ShowLightBeams = false; break;
+                        case "particles.sparks": result.ShowEmbers = false; break;
+                        case "particles.wisps": result.ShowWisps = false; break;
+                        case "particles.flames": result.ShowFlame = false; break;
+                    }
+                }
+            }
+        }
+        return result;
+    }
 
     /// <summary>Deep copy used by the preset system so a preset can be applied without sharing list instances.</summary>
     internal PianoVisualSettings Clone() => FromJson(ToJson());
@@ -673,9 +773,15 @@ internal static class PianoVisualSettingsStore
         try
         {
             if (File.Exists(SettingsPath)) return PianoVisualSettings.FromJson(File.ReadAllText(SettingsPath));
-            var settings = new PianoVisualSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
+            // A new install and a settings reset should start from the same curated look the preset
+            // picker calls "default". Existing files are returned untouched apart from their own
+            // normal schema migrations; changing the shipped preset never recolors a user's setup.
+            var settings = VisualPresets.CreateDefaultSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
         }
-        catch { var settings = new PianoVisualSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings; }
+        catch
+        {
+            var settings = VisualPresets.CreateDefaultSettings(); settings.ApplyMigrations(); settings.Clamp(); return settings;
+        }
     }
 
     internal static void Save(PianoVisualSettings settings)

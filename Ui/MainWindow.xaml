@@ -17,6 +17,9 @@
             <RowDefinition x:Name="FooterRow" Height="94"/>
         </Grid.RowDefinitions>
 
+        <!-- The stage is the fixed full-window canvas; chrome is drawn over it, never reserved out of its height. -->
+        <local:PianoStage x:Name="Stage" Grid.Row="0" Grid.RowSpan="3" ClipToBounds="True" Panel.ZIndex="0" PianoKeyChanged="Stage_PianoKeyChanged"/>
+
         <!-- ===================== HEADER ===================== -->
         <Border x:Name="HeaderChrome" Grid.Row="0" Margin="22,12,22,0" Padding="14,8" Style="{StaticResource PanelChromeStyle}" Panel.ZIndex="3">
             <Grid>
@@ -47,7 +50,7 @@
                 <Border Grid.Column="1" Padding="12,6" CornerRadius="10" Background="#0E1017" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="LOOK" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <TextBlock x:Name="HeaderPresetLabel" Text="Neon Violet" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="HeaderPresetLabel" Text="Concert Gold" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
                         <Button Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconSliders}" Margin="8,0,0,0" Click="StyleQuick_Click" ToolTip="Open the style presets" local:Loc.Localize="True"/>
                     </StackPanel>
                 </Border>
@@ -65,10 +68,8 @@
             </Grid>
         </Border>
 
-        <!-- ===================== STAGE ===================== -->
+        <!-- ===================== STAGE OVERLAYS ===================== -->
         <Grid Grid.Row="1" ClipToBounds="True">
-            <local:PianoStage x:Name="Stage" PianoKeyChanged="Stage_PianoKeyChanged"/>
-
             <!-- Settings dock: full height, docked to the right, category navigation on the left. -->
             <Border x:Name="SettingsPanel" Visibility="Collapsed" HorizontalAlignment="Right" VerticalAlignment="Stretch" Width="672" Margin="0,8,0,8" KeyboardNavigation.TabNavigation="Cycle" Background="{DynamicResource PanelBrush}" CornerRadius="18,0,0,18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1,1,0,1" Effect="{StaticResource DockShadow}" Panel.ZIndex="6">
                 <Grid>
@@ -93,10 +94,10 @@
                                         <TextBlock Text="LIVE" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
                                     </Border>
                                 </StackPanel>
-                                <TextBlock x:Name="PresetNameLabel" Text="Preset · Neon Violet" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="PresetNameLabel" Text="Preset · Concert Gold" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
                             </StackPanel>
                             <Grid Grid.Column="1" VerticalAlignment="Center" MaxWidth="268" HorizontalAlignment="Stretch">
-                                <TextBox x:Name="SettingsSearchBox" Height="32" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Filter the settings on every page" local:Loc.Localize="True"/>
+                                <TextBox x:Name="SettingsSearchBox" Height="32" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Search detailed stage, recording and app settings. Audio, MIDI, Practice and History are not included." local:Loc.Localize="True"/>
                                 <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
                                 <TextBlock x:Name="SettingsSearchHint" Text="Search settings" local:Loc.Localize="True" Foreground="{StaticResource DimTextBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="31,0,0,0" IsHitTestVisible="False"/>
                             </Grid>

@@ -18,6 +18,15 @@ public partial class App : Application
 
         if (e.Args.Contains("--verify")) { ShutdownMode = ShutdownMode.OnExplicitShutdown; VerificationSuite.Run(e.Args, this); return; }
 
+        // --bench-note-materials=<samples> is a separate diagnostic: one static note, and D3D11 timestamp
+        // queries around only the note DrawInstanced call. It does not use full-frame p95 as material cost.
+        if (e.Args.Any(argument => argument.StartsWith("--bench-note-materials=", StringComparison.Ordinal)))
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            Shutdown(NoteMaterialGpuBenchmark.Run(e.Args));
+            return;
+        }
+
         // --bench[=<frames>] is the perf gate: run the GPU stage for a number of frames and write how long each
         // one took, so a frame budget is judged by a measurement instead of by feel. It opens no window — the
         // render loop, the simulation and the read-back are the whole of what is being measured.
@@ -60,10 +69,14 @@ public partial class App : Application
         // column of the preset gallery) without touching the settings file.
         if (e.Args.Contains("--gpu")) window.UseGpuForSession();
         if (e.Args.Contains("--software")) window.UseSoftwareForSession();
-        // --preset=<name> applies a built-in look (spaces optional: --preset=GalaxyVoyage); CI renders the
-        // GPU effect previews with it, each from a private settings folder.
+        // --preset=<name> applies a shipped built-in or community look (spaces optional: --preset=GalaxyVoyage);
+        // CI renders the preset gallery with it, each from a private settings folder.
         var presetName = e.Args.FirstOrDefault(argument => argument.StartsWith("--preset=", StringComparison.Ordinal))?["--preset=".Length..];
         if (!string.IsNullOrWhiteSpace(presetName)) window.PreviewPreset(presetName);
+        // These material/depth overrides are for reproducible visual studies; PreviewNoteStyle applies them in-memory only.
+        var noteStyle = e.Args.FirstOrDefault(argument => argument.StartsWith("--note-style=", StringComparison.Ordinal))?["--note-style=".Length..];
+        var noteDepth = e.Args.FirstOrDefault(argument => argument.StartsWith("--note-depth=", StringComparison.Ordinal))?["--note-depth=".Length..];
+        if (!string.IsNullOrWhiteSpace(noteStyle) || !string.IsNullOrWhiteSpace(noteDepth)) window.PreviewNoteStyle(noteStyle, noteDepth);
         // --background-image=<path> hangs a picture behind the keys for this run only. Nothing reaches
         // the settings file: MainWindow.PreviewBackgroundImage sets the stage directly instead of going
         // through the row handlers that arm the auto-save timer. CI uses it to render the README preview

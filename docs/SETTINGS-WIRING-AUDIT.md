@@ -8,12 +8,9 @@ không phát hiện cài đặt nào "chết" (có trong UI nhưng không có co
 cột "Logic tiêu thụ" chỉ đúng file:line nơi giá trị thực sự ảnh hưởng hành vi.
 
 Phương pháp:
-1. Lấy toàn bộ ~100 thuộc tính của `PianoVisualSettings` (model cài đặt sân khấu) và grep từng
-   thuộc tính trong toàn bộ code logic (`PianoStage.cs`, `Shading/*`, `MainWindow*.cs`,
-   `PianoAudioEngine.cs`, `SfzSynthesizer.cs`, `SalamanderPiano.cs`, `AviVideoRecorder.cs`…); loại các tham chiếu
-   chỉ thuộc về UI (sinh control, lưu/hiển thị giá trị).
+1. Đối chiếu toàn bộ **223 thuộc tính public** hiện có của `PianoVisualSettings` với các hàng được đăng ký lúc chạy, control tĩnh trong XAML, control của workflow hành động và các trường metadata/migration được loại trừ có lý do. Dùng reflection guard trong `VerifySettingsDock` để property mới không thể bị bỏ quên.
 2. Kiểm tra từng control tĩnh trong XAML (tab Audio/MIDI/Practice/Recording, header, footer,
-   Play dialog, main menu) xem handler của nó có thực sự thay đổi trạng thái/logic không.
+   Play dialog, main menu) xem handler của nó có thực sự thay đổi trạng thái/logic không; grep consumer trong `PianoStage.cs`, `Shading/*`, `MainWindow*.cs`, `PianoAudioEngine.cs`, `SfzSynthesizer.cs`, `SalamanderPiano.cs`, `AviVideoRecorder.cs`…
 3. Chạy `python tools/check_sources.py` (cân bằng cú pháp C#, XML XAML hợp lệ, mọi
    `StaticResource` có định nghĩa, mọi event handler trong XAML đều tồn tại trong C#) → **PASS**.
 
@@ -100,7 +97,7 @@ Phương pháp:
 | Animate pressed keys | `AnimateKeys` | `PianoStage.cs:838, :850, :863` |
 | Pressed key color (Note/Fixed) | `PressedKeyColorMode`, `PressedKeyColor` | `PianoStage.cs:780` |
 | Light intensity / Glow radius / Press depth | `KeyLighting`, `KeyGlowRadius`, `KeyPressDepth` | `PianoStage.cs:801-806, :791, :790` |
-| Shading engine + 8 tham số + filmic | `ShadingQuality`, `ShaderKeyLight…ShaderFilmic` | `PianoStage.cs:914, :923` (chọn vector hay shader) → `Shading/PianoShaderScene.cs:142-166` (mọi tham số ánh xạ vào giá trị scene: GGX roughness, penumbra, AO, rim, emissive, exposure, tilt camera, ACES on/off) |
+| Software shading quality + 8 tham số + filmic | `ShadingQuality`, `ShaderKeyLight…ShaderFilmic` | `PianoStage.cs:914, :923` (chọn vector hay shader) → `Shading/PianoShaderScene.cs:142-166` (mọi tham số ánh xạ vào giá trị scene: GGX roughness, penumbra, AO, rim, emissive, exposure, tilt camera, ACES on/off) |
 
 ## 5. Trang Background & Camera
 
@@ -168,8 +165,8 @@ Phương pháp:
    (`PianoStage.cs:620`), nó đi vào nhánh mặc định `_ =>` (hue theo cao độ) và vẫn render đúng;
    `Clamp()` giữ giá trị hợp lệ.
 3. Ô tìm kiếm chỉ lọc hàng đã đăng ký trên Style/Theme/Notes/Particles/Keyboard/Background/Camera/Recording/General;
-   các trang Audio/MIDI/Practice/History dựng tĩnh từ XAML nên chưa được lọc. Tooltip “Filter the settings on every page”
-   vì thế rộng hơn phạm vi thật; đây là giới hạn UX, không phải cài đặt chết.
+   các trang Audio/MIDI/Practice/History dựng tĩnh từ XAML nên chưa được lọc. Tooltip đã được sửa ngày
+   2026-10-08 để nói đúng giới hạn này; mở rộng tìm kiếm qua các trang tĩnh vẫn là việc UX riêng.
 4. Metronome chỉ bật điểm click khi **có bài MIDI** (cần tempo map `_beatTimes`); checkbox được
    kích hoạt theo piano đã nạp. Click phát bằng cùng Salamander SFZ engine.
 5. Nút đặt lại trang (icon) trên các trang tĩnh hiển thị "This page has no visual settings to reset" — đúng
@@ -227,12 +224,13 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
 - **Impact phase hoàn thiện theo kênh**: hạt (`ShowEmbers` + hệ sparks), sóng (`ShowImpactRings` +
   `ImpactWave` Ring/Shockwave/None + `RingSize` + `ImpactWaveIntensity`), chớp (`ShowImpactFlash` +
   `ImpactFlashIntensity`). Độ lớn/độ sáng theo lực nhấn (modulator velocity đầu tiên).
-- **Bảng tổng hợp**: `Stage/Effects/EffectCatalog.cs` liệt kê toàn bộ 87 effects (4 phase nốt +
-  4 họ ambient + modulators + themes), mỗi effect ghi rõ kênh renderer và trạng thái
-  Available/Planned. Quy tắc: effect Planned không hiện UI cho đến khi có renderer thật.
+- **Inventory hiệu ứng**: `Stage/Effects/EffectCatalog.cs` liệt kê 87 ID (4 phase nốt +
+  4 họ ambient + modulators + themes), kèm channel label và status metadata. Catalog hiện
+  không cung cấp runtime options/capability và `Planned` không tự lọc UI; settings/defaults
+  cùng các control hiện hữu mới là đường runtime. Xem `EFFECT-COVERAGE-AUDIT.md`.
 - Xem chi tiết kiến trúc và roadmap trong `docs/EFFECTS-REDESIGN.md`.
 
-## 12. Đợt effects-redesign v2–v7: hoàn thiện toàn bộ 87 effects
+## 12. Đợt effects-redesign v2–v7: lịch sử triển khai theo nhóm (87 mục inventory)
 
 - **v2 Falling + Impact còn lại**: `FallingTrail` 7 kiểu + Intensity/Length, `FallingPulse` +
   Rate, `FallingGhost` + Amount (trang Notes, card FALLING FX); `ImpactBurst` 5 kiểu
@@ -256,4 +254,29 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
   MODULATORS; test `VerifySmartFx`.
 - **v7 Themes**: 7 preset graphs (Inferno, Ice Crystal, Sakura Nocturne nâng cấp + Galaxy
   Voyage, Electric Storm, Ocean Depths, Retro Arcade mới); test `VerifyThemes`. Toàn bộ
-  87/87 effects trong `EffectCatalog` đã Available; mọi control trên UI đều có logic thật.
+  `EffectCatalog` có 87 mục: 86 `Available` và `falling.color-gradient` là `Planned` vì renderer head-to-tail chưa có. **Cập nhật audit 2026-10-06:** đây là inventory/metadata, chưa phải nguồn options runtime và nhãn này chưa chứng minh parity từng option trên GPU/software/AR. `AmbientLight="Spotlights"` từng thiếu nhánh trong `PianoStage.DrawAmbientLight`; WPF pass và regression assertions PASS trong Windows CI [37467081020](https://github.com/lxmtuu/PianoPath/actions/runs/37467081020), không chứng minh parity với GPU thật. Xem ma trận [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md).
+
+## 13. Tái kiểm độ phủ model và quyết định đồ họa (2026-10-08)
+
+### Độ phủ cài đặt
+
+Đối chiếu hiện tại có **223 thuộc tính public** trong `PianoVisualSettings`: **209** thuộc tính có hàng cài đặt động; **7** giá trị nối với control tĩnh trong XAML Audio/Practice; **3** giá trị được điều khiển qua workflow nút — `Language` qua các chip ngôn ngữ, `BackgroundImagePath` qua nút chọn/xóa ảnh, `CameraVideoPath` qua nút chọn video/dùng camera; **4** giá trị không phải hàng điều khiển — `BackgroundAppearanceVersion` là migration, `PresetName`/`PresetModified` là metadata luồng preset, `RenderBackend` là id máy giữ ở GPU với WPF fallback tự động. Không có thuộc tính model người dùng nào bị bỏ quên khỏi UI. Ba workflow properties không gắn vào `SettingRow.Property` để lệnh đặt lại trang không vô tình reset ngôn ngữ hoặc đường dẫn media về giá trị preset.
+
+`VerifySettingsDock` đối chiếu bằng reflection toàn bộ property model với hàng động, 7 control XAML, 3 hàng workflow có nút và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS; guard mới cũng PASS trong Windows build/verification CI [37776545276](https://github.com/lxmtuu/PianoPath/actions/runs/37776545276).
+
+Hai giới hạn được giữ rõ, không biến thành tuyên bố lỗi renderer:
+
+- Ô tìm kiếm chỉ lọc các hàng chi tiết đã đăng ký; **Audio, MIDI, Practice và History không được lọc** vì các control đó dựng tĩnh trong XAML. Tooltip đã được sửa để nói đúng phạm vi; chức năng tìm kiếm tĩnh chưa được mở rộng.
+- `ReverbToggle` và `ResonanceToggle` là công tắc live trong phiên, mặc định bật, nhưng trạng thái không nằm trong `PianoVisualSettings` nên không được lưu cùng profile. Chưa thêm property JSON: cần quyết định riêng về việc lưu trạng thái audio và bảo đảm preset không được thay đổi nó.
+
+`falling.color-gradient` vẫn là một **hành vi chưa triển khai** (gradient dọc thân note), không phải một property hiện có bị thiếu control. Giữ `Planned`; không gộp nhầm với Gradient theo pitch.
+
+### Quyết định đồ họa nâng cao
+
+`ShadingQuality` điều khiển chất lượng bake của renderer WPF/software (fallback và bản ghi PNG trong suốt); stage GPU dùng chung các thanh trượt chiếu sáng nhưng không đọc quality tier này. Nhãn control đã đổi thành **Software shading quality** để nói đúng phạm vi. `RenderBackend` cũng không phải lựa chọn người dùng: GPU là stage chính, software là fallback tự động.
+
+Có bằng chứng phần cứng cho một cải tiến có mục tiêu, không phải cho việc hạ chất lượng toàn cục: bench 1080p trên Radeon iGPU ghi default p95 **9.59 / 11.20 / 11.43 ms** so với mục tiêu **<8 ms**; cùng máy, RTX 4050 ghi **3.32 / 3.29 / 3.39 ms** (xem [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md) §11.4–11.5). Đây là hai adapter cụ thể, không phải bảo đảm cho mọi iGPU/dGPU; WARP/CI chỉ xác minh code path, không chứng minh hiệu năng phần cứng.
+
+**Quyết định:** có lý do để làm một lát **Adaptive Quality có hysteresis cho iGPU**, ưu tiên hạ chi phí bloom/ambient trước khi đụng đến hình học, timing, pitch hoặc bàn phím note. Không hạ default/preset toàn cục: RTX 4050 còn dư ngân sách rõ rệt. Việc này cần phase riêng với frame-time capture trên adapter thật, ảnh fixed-scene/color/alpha, xác minh recording/AR và kiểm tra giữ nguyên hình học note; chưa triển khai trong lượt audit này. Compute particles, depth of field, velocity-buffer motion blur và GPU sheet cũng chưa được ưu tiên khi chưa có bằng chứng nhu cầu/lợi ích trên phần cứng.
+
+Phạm vi thay đổi 2026-10-08 chỉ gồm nhãn tìm kiếm/shading, guard độ phủ và tài liệu. Không đổi preset (kể cả preset cá nhân), giá trị mặc định, JSON schema/alias, hoặc capability evidence: `parameter.Bindings.Recording` vẫn `Unverified`, chi phí recording vẫn `Unmeasured`; `falling.shimmer` và `atmosphere.shooting-stars` vẫn WPF `Unsupported`; Gem/Crystal Outline trên AR vẫn `Fallback: ar.note.flat-quad`.

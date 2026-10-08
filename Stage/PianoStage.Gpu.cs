@@ -100,8 +100,9 @@ internal sealed partial class PianoStage
     private bool _arOverlay;
 
     /// <summary>
-    /// True while the AR overlay draws over the camera: the GPU look then leaves out the stage's own notes, keys and the effects
-    /// that sit on them (see <see cref="GpuLook.From"/>). Only the look changes; the settings are untouched.
+    /// True while the AR overlay draws over the camera: the GPU look leaves out stage notes, keys and new note/key FX,
+    /// while <see cref="GpuStageSimulation.BuildSprites"/> also hides transients already in flight. Ambient screen-space
+    /// layers remain composited over the camera. Only the look changes; the saved settings are untouched.
     /// </summary>
     internal bool ArOverlayActive
     {

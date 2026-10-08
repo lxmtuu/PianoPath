@@ -18,6 +18,9 @@ internal sealed class GpuLook
 {
     internal const int TrackSlots = 8;
 
+    // The AR overlay keeps the camera view and projected AR notes, but hides the stage's own note/key layers.
+    public bool OverCamera { get; init; }
+
     // ---- note roll ----
     public bool ShowNotes { get; init; } = true;
     public int NoteStyle { get; init; } = 1;
@@ -239,9 +242,10 @@ internal sealed class GpuLook
 
     /// <summary>
     /// Builds the look from the settings. <paramref name="noteColor"/> is the stage's own colour function
-    /// (note colour with every modulator and the saturation/contrast grade applied). <paramref name="overCamera"/> leaves out the
-    /// stage's own notes, keys and the effects that sit on them: the AR overlay draws over a real keyboard in the camera picture, and
-    /// these would be drawn on top of it at the stage's own key positions.
+    /// (note colour with every modulator and the saturation/contrast grade applied). <paramref name="overCamera"/> suppresses
+    /// the stage's own notes, keys and all key-anchored transients (including ones already in flight): the AR overlay draws
+    /// projected notes on a real keyboard in the camera picture, so unprojected stage geometry would land in the wrong place.
+    /// Ambient layers that are composited over the camera remain enabled.
     /// </summary>
     internal static GpuLook From(PianoVisualSettings s, Func<int, int, WpfColor> noteColor, double keyboardFraction, Func<WpfColor, WpfColor>? adjustColor = null, bool overCamera = false)
     {
@@ -254,6 +258,7 @@ internal sealed class GpuLook
         static float Speed(double value) => (float)(.25 + value / 100 * 1.75);
         return new GpuLook
         {
+            OverCamera = overCamera,
             ShowNotes = s.ShowNotes && !overCamera,
             NoteStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.NoteStyles, s.NoteStyle)),
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
@@ -274,15 +279,16 @@ internal sealed class GpuLook
             NoteLandingGlow = s.NoteLandingGlow, NoteLandingGlowAmount = P(s.NoteLandingGlowAmount),
             HoldBar = s.HoldBar, HoldBarIntensity = P(s.HoldBarIntensity), HoldBreath = s.HoldBreath, HoldBreathRate = P(s.HoldBreathRate),
             HoldVibration = s.HoldVibration, HoldVibrationAmount = P(s.HoldVibrationAmount),
-            HoldElectricArc = s.HoldElectricArc, HoldArcIntensity = P(s.HoldArcIntensity),
+            HoldElectricArc = s.HoldElectricArc && !overCamera, HoldArcIntensity = P(s.HoldArcIntensity),
 
             ShowEmbers = s.ShowEmbers && !overCamera, ShowWisps = s.ShowWisps && !overCamera, ShowFlame = s.ShowFlame && s.FlameIntensity > 0 && !overCamera,
             ShowImpactRings = s.ShowImpactRings && !overCamera, ShowImpactFlash = s.ShowImpactFlash && !overCamera,
-            ImpactBurst = s.ZoneSplit ? "Zone" : s.ImpactBurst, ImpactWave = s.ImpactWave, ImpactWaveIntensity = P(s.ImpactWaveIntensity),
+            ImpactBurst = s.ZoneSplit ? "Zone" : s.ImpactBurst,
+            ImpactWave = overCamera ? "None" : s.ImpactWave, ImpactWaveIntensity = overCamera ? 0 : P(s.ImpactWaveIntensity),
             ImpactFlashIntensity = P(s.ImpactFlashIntensity), RingSize = P(s.RingSize), RingSizeRaw = (float)s.RingSize,
             ImpactFlashStyle = s.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 },
-            ImpactMorph = s.ImpactMorph, ImpactMorphIntensity = P(s.ImpactMorphIntensity), ZoneSplitPitch = (int)Math.Round(s.ZoneSplitPitch),
-            ReleaseEffect = s.ReleaseEffect, ReleaseIntensity = P(s.ReleaseIntensity),
+            ImpactMorph = overCamera ? "None" : s.ImpactMorph, ImpactMorphIntensity = overCamera ? 0 : P(s.ImpactMorphIntensity), ZoneSplitPitch = (int)Math.Round(s.ZoneSplitPitch),
+            ReleaseEffect = overCamera ? "Fade" : s.ReleaseEffect, ReleaseIntensity = overCamera ? 0 : P(s.ReleaseIntensity),
             ParticleAmount = (float)s.ParticleAmount, ParticleResponse = (float)s.ParticleResponse, ParticleVelocity = (float)s.ParticleVelocity,
             ParticleSpeed = P(s.ParticleSpeed), ParticleRandomness = P(s.ParticleRandomness), ParticleSpread = P(s.ParticleSpread),
             ParticleLife = (float)s.ParticleLife, ParticleLifeRandomness = P(s.ParticleLifeRandomness), ParticleSize = (float)s.ParticleSize,

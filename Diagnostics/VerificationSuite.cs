@@ -51,8 +51,10 @@ internal static partial class VerificationSuite
         Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
         Results.Clear(); _assertions = 0;
         var logOption = args.FirstOrDefault(a => a.StartsWith("--verify-log=", StringComparison.Ordinal));
+        var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
+        var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -279,11 +281,511 @@ internal static partial class VerificationSuite
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
+        var legacyStyleIds = new[] { "Solid", "Neon", "Glass", "Fire" };
+        Assert(PianoVisualSettings.NoteStyles.Take(legacyStyleIds.Length).SequenceEqual(legacyStyleIds)
+                && PianoVisualSettings.NoteStyles.SequenceEqual([.. legacyStyleIds, "Gem", "CrystalOutline"]),
+            "New note materials must be appended so the four shipped GPU style IDs keep their original values.");
+        foreach (var material in new[] { "Gem", "CrystalOutline" })
+        {
+            var roundTrip = PianoVisualSettings.FromJson(new PianoVisualSettings { NoteStyle = material, Notes3D = true }.ToJson());
+            Assert(roundTrip.NoteStyle == material && roundTrip.Notes3D,
+                $"The new material {material} should survive the existing JSON format without a schema migration.");
+        }
+        VerifyEffectContractPilot();
+        VerifyAccessibilityTogglePolicy();
+        VerifyImpactFxPilot();
+        VerifyFallingPilot();
+        VerifyHoldPilot();
+        VerifyAmbientPilot();
+        VerifyParticlesReleasePilot();
+        VerifyArOverlayExclusions();
+        VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
         var purple = ColorPickerWindow.ToHsv(Color.FromRgb(128, 0, 128));
         Assert(Math.Abs(purple.Hue - 300) < .01 && Math.Abs(purple.Saturation - 1) < .01 && ColorPickerWindow.ToHex(ColorPickerWindow.FromHsv(purple.Hue, purple.Saturation, purple.Value)) == "#800080", "The color picker should round-trip custom RGB colors through HSV and hex.");
         Results.Add("PASS stage settings: automated runs isolated from the user settings folder, black background defaults/migration, color picker HSV/hex conversion, range limits and JSON round-trip.");
+    }
+
+    /// <summary>
+    /// Cross-checks the typed Gem/Crystal Outline pilot against the shipped setting strings, GPU indices and
+    /// existing clamps. WPF, GPU and both captured recording routes now have material-specific read-back checks;
+    /// AR remains the explicit flat-quad fallback and the isolated GPU cost stays a separate evidence gate.
+    /// </summary>
+    private static void VerifyEffectContractPilot()
+    {
+        var contracts = EffectContractCatalog.NoteMaterialPilot;
+        Assert(EffectContractCatalog.IsPilotWellFormed && contracts.Count == 3,
+            "The typed note-material pilot should contain the three well-formed, uniquely aliased materials.");
+        Assert(AccessibilityContractResolver.IsCatalogWellFormed,
+            "The global accessibility toggle catalogue should be stable, unique and off by default.");
+
+        foreach (var contract in contracts)
+        {
+            var alias = contract.LegacyAliases.Single();
+            Assert(EffectContractCatalog.FindByLegacyAlias(alias)?.Id == contract.Id
+                    && EffectContractCatalog.FindById(contract.Id)?.LegacyAliases.Contains(alias) == true,
+                $"The stable contract ID {contract.Id} should resolve to its exact persisted style alias {alias}.");
+            Assert(contract.GpuStyleId >= 0 && contract.GpuStyleId < PianoVisualSettings.NoteStyles.Length
+                    && PianoVisualSettings.NoteStyles[contract.GpuStyleId] == alias,
+                $"The contract for {alias} must keep the GPU style ID already assigned by NoteStyles.");
+            var jsonRoundTrip = PianoVisualSettings.FromJson(new PianoVisualSettings { NoteStyle = alias }.ToJson());
+            Assert(jsonRoundTrip.NoteStyle == alias,
+                $"Adding the typed contract must not migrate the existing JSON value {alias}.");
+            Assert(contract.Phase == EffectPhase.NoteMaterial
+                    && contract.Trigger == EffectTrigger.NoteBodyRendered
+                    && contract.Lifecycle == EffectLifecycle.WhileNoteVisible
+                    && contract.Anchor == EffectAnchor.NoteBody
+                    && contract.Clock == EffectClock.None
+                    && contract.SeedPolicy == EffectSeedPolicy.None,
+                $"The {alias} material should be a deterministic, note-body effect with an explicit render lifecycle.");
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Fallback
+                    && contract.Capabilities.ArOverlay.FallbackId == "ar.note.flat-quad",
+                $"The {alias} contract must separate native WPF/GPU/recording capture from the actual flat AR fallback.");
+            Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
+                    && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                    && contract.Accessibility.NonColorCue != EffectShapeCue.None,
+                $"The {alias} material should declare its intrinsic flash/motion behavior and a non-color shape cue.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null && cost.IsWellFormed),
+                $"The {alias} contract must keep WPF/recording/AR costs unmeasured until their own evidence exists.");
+            var expectedGpuP95 = alias == "Gem" ? 0.02688 : alias == "Solid" ? 0.02356 : 0.0268;
+            Assert(contract.Cost.GpuStage.State == EffectCostState.Measured
+                    && contract.Cost.GpuStage.P95Milliseconds == expectedGpuP95
+                    && contract.Cost.GpuStage.EvidenceId is { Length: > 0 } evidence
+                    && evidence.Contains("NOTE-MATERIAL-GPU-BENCHMARK", StringComparison.Ordinal)
+                    && contract.Cost.GpuStage.IsWellFormed,
+                $"The {alias} GPU-stage cost must be the reviewed physical-adapter measurement cited from docs/NOTE-MATERIAL-GPU-BENCHMARK.md, not an invented number.");
+            var defaultLook = AccessibilityContractResolver.Resolve(contract.Accessibility, false, false, false);
+            Assert(defaultLook.Flash == FlashSuppression.NoChange
+                    && defaultLook.Motion == MotionSuppression.NoChange
+                    && !defaultLook.NeedsNonColorCueWork && defaultLook.IsWellFormed,
+                $"The {alias} material must keep its current look while every accessibility toggle is off.");
+            Assert(AccessibilityContractResolver.Resolve(contract.Accessibility, false, true, false).Flash != FlashSuppression.NoChange
+                    || contract.Accessibility.FlashRisk == EffectFlashRisk.None,
+                $"The {alias} flash-safety resolution must act on any intrinsic flash under Reduce Flashes.");
+
+            foreach (var parameter in contract.Parameters)
+            {
+                var crystalRefraction = alias == "CrystalOutline" && parameter.SettingName == "NoteRefraction";
+                var expectedGpuBinding = crystalRefraction ? EffectParameterBindingState.Ignored : EffectParameterBindingState.Applied;
+                Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
+                        && parameter.Bindings.GpuStage == expectedGpuBinding
+                        && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
+                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Ignored,
+                    $"The {alias} input {parameter.SettingName} should describe its actual per-output binding, including captured recording and AR's flat fallback.");
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                if (parameter.Kind == EffectParameterKind.Boolean)
+                {
+                    Assert(property.PropertyType == typeof(bool) && parameter.Minimum is null && parameter.Maximum is null,
+                        $"The {alias} toggle {parameter.SettingName} should be Boolean and have no numeric clamp.");
+                    continue;
+                }
+
+                var hasRange = property.PropertyType == typeof(double) && parameter.Minimum is double && parameter.Maximum is double;
+                Assert(hasRange, $"The {alias} numeric parameter {parameter.SettingName} should have a double setting and a finite clamp range.");
+                if (!hasRange) continue;
+                var below = new PianoVisualSettings();
+                property.SetValue(below, parameter.Minimum!.Value - 1000);
+                below.Clamp();
+                var above = new PianoVisualSettings();
+                property.SetValue(above, parameter.Maximum!.Value + 1000);
+                above.Clamp();
+                Assert((double)property.GetValue(below)! == parameter.Minimum!.Value
+                        && (double)property.GetValue(above)! == parameter.Maximum!.Value,
+                    $"The existing settings clamp for {parameter.SettingName} should match the {alias} contract range {parameter.Minimum}..{parameter.Maximum}.");
+            }
+        }
+
+        Results.Add("PASS effect contract metadata: Solid, Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; WPF/PNG and GPU/GpuRecordingTap captures verify all three, AR names the flat-quad fallback, and isolated recording cost remains unmeasured.");
+    }
+
+    /// <summary>
+    /// Cross-checks the impact-FX contract pilot (wave/flash/burst/morph) against the settings model and the
+    /// safety resolver: IDs unique and well-formed, parameters name real settings with the right kind, WPF/GPU
+    /// Native matches the code both renderers ship, every cost stays Unmeasured, and Reduce Flashes acts on
+    /// the flash by its own risk while leaving the flash-less wave alone and conservatively suppressing the
+    /// un-analysed spark burst.
+    /// </summary>
+    private static void VerifyImpactFxPilot()
+    {
+        var pilot = EffectContractCatalog.ImpactFxPilot;
+        Assert(EffectContractCatalog.IsImpactPilotWellFormed && pilot.Count == 4,
+            "The impact-FX pilot should contain the four well-formed, uniquely identified families.");
+        foreach (var contract in pilot)
+        {
+            Assert(contract.Phase == EffectPhase.Impact
+                    && contract.Trigger == EffectTrigger.NoteOn
+                    && contract.Lifecycle == EffectLifecycle.FixedDuration
+                    && contract.Clock == EffectClock.RenderElapsed,
+                $"{contract.Id} should be a fixed-duration, note-on impact effect on the render clock.");
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
+                $"{contract.Id} is drawn by both stage renderers and has its own captured recording frame; AR deliberately suppresses all stage-anchored impact output.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
+            Assert(contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation,
+                $"{contract.Id} is event-driven decay with no idle animation.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.flash"].Accessibility, false, true, false).Flash != FlashSuppression.NoChange,
+            "Reduce Flashes must act on the impact flash by its declared Local risk.");
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.wave"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "Reduce Flashes must leave the flash-less impact wave alone.");
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.burst"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "The un-analysed spark burst must resolve conservatively to suppression under Reduce Flashes.");
+        Assert(AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Flash == FlashSuppression.NoChange
+                && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
+            "The key morph should keep its current behavior while every accessibility toggle is off.");
+        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, family Recording is verified by isolated captures, parameter bindings remain Unverified, AR is explicitly Unsupported, all costs stay Unmeasured, and flash-safety resolution matches the declared risks.");
+    }
+
+    /// <summary>
+    /// Cross-checks the falling-FX pilot: trail/ghost derive from the note's travel, pulse and shimmer own
+    /// their clock; the shimmer is honestly GPU-only (the WPF stage never reads NoteShimmer) and therefore
+    /// Unsupported there; Reduced Motion freezes exactly the intrinsically animated families; every cost
+    /// stays Unmeasured. Metadata coherence only; no renderer changed.
+    /// </summary>
+    private static void VerifyFallingPilot()
+    {
+        var pilot = EffectContractCatalog.FallingFxPilot;
+        Assert(EffectContractCatalog.IsFallingPilotWellFormed && pilot.Count == 3,
+            "The falling-FX pilot should contain the three well-formed, uniquely identified families.");
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        Assert(byId["falling.trail"].Capabilities.WpfStage.State == EffectBackendState.Native
+                && byId["falling.trail"].Capabilities.GpuStage.State == EffectBackendState.Native
+                && byId["falling.pulse"].Capabilities.WpfStage.State == EffectBackendState.Native
+                && byId["falling.pulse"].Capabilities.GpuStage.State == EffectBackendState.Native,
+            "Trail and pulse are drawn by both stage renderers in shipped code.");
+        Assert(byId["falling.shimmer"].Capabilities.WpfStage.State == EffectBackendState.Unsupported
+                && byId["falling.shimmer"].Capabilities.GpuStage.State == EffectBackendState.Native
+                && byId["falling.shimmer"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Ignored
+                    && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied),
+            "The shimmer must stay honest: GPU-native, and Unsupported/ignored on the WPF stage that never reads NoteShimmer.");
+        Assert(byId["falling.trail"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                && byId["falling.pulse"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
+                && byId["falling.shimmer"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
+            "Trails derive from the note's travel; the pulse and the shimmer animate on their own clock.");
+        Assert(AccessibilityContractResolver.Resolve(byId["falling.pulse"].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation
+                && AccessibilityContractResolver.Resolve(byId["falling.shimmer"].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation
+                && AccessibilityContractResolver.Resolve(byId["falling.trail"].Accessibility, true, false, false).Motion == MotionSuppression.NoChange,
+            "Reduced Motion must freeze exactly the intrinsically animated families and leave the travel-derived trail alone.");
+        Assert(AccessibilityContractResolver.Resolve(byId["falling.shimmer"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress
+                && AccessibilityContractResolver.Resolve(byId["falling.trail"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "The twinkling shimmer's un-analysed flash risk resolves conservatively; the flash-less trail stays untouched.");
+        foreach (var contract in pilot)
+        {
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        Results.Add("PASS falling-FX contract metadata: trail/ghost travel-derived, pulse/shimmer own their clock and freeze under Reduced Motion, the shimmer is honestly GPU-only with WPF Unsupported, the shimmer's flash risk resolves conservatively, and no cost is invented. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
+    /// Cross-checks the hold-FX pilot: the bar mirrors the note's remaining duration while breathing,
+    /// vibration, hue cycling and arc flicker own their clock and freeze under Reduced Motion; the arc's
+    /// un-analysed flicker resolves to suppression under Reduce Flashes; both renderers are native for all
+    /// five and no cost is invented. Metadata coherence only; no renderer changed.
+    /// </summary>
+    private static void VerifyHoldPilot()
+    {
+        var pilot = EffectContractCatalog.HoldFxPilot;
+        Assert(EffectContractCatalog.IsHoldPilotWellFormed && pilot.Count == 5,
+            "The hold-FX pilot should contain the five well-formed, uniquely identified families.");
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        foreach (var contract in pilot)
+        {
+            Assert(contract.Phase == EffectPhase.Hold && contract.Trigger == EffectTrigger.NoteHeld
+                    && contract.Lifecycle == EffectLifecycle.WhileNoteHeld,
+                $"{contract.Id} should live exactly as long as the key stays down.");
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; the AR overlay deliberately leaves out notes and keys, so the hold effect is excluded there.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        Assert(byId["hold.bar"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                && byId["hold.bar"].Clock == EffectClock.SongPosition,
+            "The hold bar mirrors the note's remaining duration; it owns no clock of its own.");
+        foreach (var id in new[] { "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc" })
+        {
+            Assert(byId[id].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation,
+                $"{id} animates on its own clock and must be classified as intrinsic animation.");
+            Assert(AccessibilityContractResolver.Resolve(byId[id].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation,
+                $"Reduced Motion must freeze {id}.");
+        }
+        Assert(AccessibilityContractResolver.Resolve(byId["hold.bar"].Accessibility, true, false, false).Motion == MotionSuppression.NoChange,
+            "Reduced Motion must leave the duration-derived hold bar alone.");
+        Assert(AccessibilityContractResolver.Resolve(byId["hold.arc"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "The flickering arc's un-analysed flash risk resolves conservatively to suppression.");
+        Assert(AccessibilityContractResolver.Resolve(byId["hold.breath"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "Reduce Flashes must leave the flash-less breathing glow alone.");
+        Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
+    /// Cross-checks the ambient/atmosphere pilot: every member owns its clock and freezes under Reduced
+    /// Motion; shooting stars are the second GPU-only member (the WPF stage has no meteor pass) and stay
+    /// Unsupported there; the star twinkle's un-analysed flash risk resolves conservatively while the slow
+    /// layers keep the sky untouched under Reduce Flashes; no cost is invented. Metadata coherence only.
+    /// </summary>
+    private static void VerifyAmbientPilot()
+    {
+        var pilot = EffectContractCatalog.AmbientFxPilot;
+        Assert(EffectContractCatalog.IsAmbientPilotWellFormed && pilot.Count == 8,
+            "The ambient pilot should contain the eight well-formed, uniquely identified families.");
+        var byId = pilot.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        foreach (var contract in pilot)
+        {
+            Assert(contract.Phase == EffectPhase.Ambient && contract.Trigger == EffectTrigger.SceneTick
+                    && contract.Lifecycle == EffectLifecycle.Continuous && contract.Anchor == EffectAnchor.Stage,
+                $"{contract.Id} should be a continuous stage-wide layer.");
+            Assert(contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
+                    && AccessibilityContractResolver.Resolve(contract.Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation,
+                $"Reduced Motion must freeze {contract.Id}: every ambient member owns its clock.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        Assert(byId["atmosphere.shooting-stars"].Capabilities.WpfStage.State == EffectBackendState.Unsupported
+                && byId["atmosphere.shooting-stars"].Capabilities.GpuStage.State == EffectBackendState.Native
+                && byId["atmosphere.shooting-stars"].Parameters.All(parameter => parameter.Bindings.WpfStage == EffectParameterBindingState.Ignored
+                    && parameter.Bindings.GpuStage == EffectParameterBindingState.Applied
+                    && parameter.Bindings.ArOverlay == EffectParameterBindingState.Applied),
+            "Shooting stars are GPU-only: WPF ignores the settings, while the GPU stage and captured AR compositor consume them.");
+        foreach (var id in new[] { "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic", "atmosphere.stars", "atmosphere.petals", "atmosphere.beams" })
+        {
+            Assert(byId[id].Capabilities.WpfStage.State == EffectBackendState.Native
+                    && byId[id].Capabilities.GpuStage.State == EffectBackendState.Native,
+                $"{id} is drawn by both stage renderers in shipped code.");
+        }
+        Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.stars"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "The twinkling star field's un-analysed flash risk resolves conservatively to suppression.");
+        Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.beams"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange
+                && AccessibilityContractResolver.Resolve(byId["ambient.energy"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "Reduce Flashes must leave the slow, flash-less sky layers untouched.");
+        Results.Add("PASS ambient contract metadata: the four ambient layers, stars, petals and beams are native on both renderers, shooting stars stay honestly GPU-only, every member freezes under Reduced Motion, the star twinkle resolves conservatively under Reduce Flashes, and no cost is invented. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
+    /// Cross-checks the last two pilots: sparks/wisps/flames run their own physics and freeze under Reduced
+    /// Motion, the flickering sparks and flames keep their flash risk Unverified (suppression under Reduce
+    /// Flashes) while the soft wisps carry none, and the release effect is a plain event-driven decay.
+    /// Both renderers draw all four; no cost is invented. Metadata coherence only; no renderer changed.
+    /// </summary>
+    private static void VerifyParticlesReleasePilot()
+    {
+        Assert(EffectContractCatalog.IsParticlesPilotWellFormed && EffectContractCatalog.IsReleasePilotWellFormed,
+            "The particles and release pilots should be well-formed with unique IDs.");
+        var families = EffectContractCatalog.ParticlesFxPilot.Concat(EffectContractCatalog.ReleaseFxPilot).ToList();
+        var byId = families.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        foreach (var contract in families)
+        {
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Native
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; AR suppresses all unprojected particle/release effects.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        foreach (var id in new[] { "particles.sparks", "particles.wisps", "particles.flames" })
+        {
+            Assert(byId[id].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
+                    && AccessibilityContractResolver.Resolve(byId[id].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation,
+                $"{id} runs its own physics and must freeze under Reduced Motion.");
+        }
+        Assert(byId["release.fx"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                && byId["release.fx"].Trigger == EffectTrigger.NoteOff && byId["release.fx"].Phase == EffectPhase.Release,
+            "The release effect is an event-driven decay at note-off with no idle animation.");
+        Assert(byId["particles.sparks"].Accessibility.FlashRisk == EffectFlashRisk.Unverified
+                && byId["particles.flames"].Accessibility.FlashRisk == EffectFlashRisk.Unverified
+                && AccessibilityContractResolver.Resolve(byId["particles.flames"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "Flickering sparks and flames keep their flash risk Unverified until a strobe analysis exists.");
+        Assert(byId["particles.wisps"].Accessibility.FlashRisk == EffectFlashRisk.None
+                && AccessibilityContractResolver.Resolve(byId["particles.wisps"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "The soft plasma wisps carry no flash and must stay untouched under Reduce Flashes.");
+        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, flickering sparks/flames resolve conservatively under Reduce Flashes, release is a plain note-off decay, family recording has isolated captures, parameter bindings stay Unverified and cost remains Unmeasured.");
+    }
+
+    /// <summary>
+    /// Verifies the persisted accessibility toggles and the settings-level override policy they drive: old JSON
+    /// loads with every toggle off, toggles off reproduce the saved look byte-for-byte, and toggles on override
+    /// exactly their reviewed channels on a copy without mutating the user's settings. High Contrast is
+    /// metadata-only until renderer shape-cue work exists, which this check pins as an explicit decision.
+    /// </summary>
+    private static void VerifyAccessibilityTogglePolicy()
+    {
+        var legacyJson = string.Join('\n', new PianoVisualSettings { BloomIntensity = 50 }.ToJson()
+            .Split('\n')
+            .Where(line => !line.Contains("ReducedMotion", StringComparison.Ordinal)
+                && !line.Contains("ReduceFlashes", StringComparison.Ordinal)
+                && !line.Contains("HighContrast", StringComparison.Ordinal)));
+        var legacy = PianoVisualSettings.FromJson(legacyJson);
+        Assert(!legacyJson.Contains("ReducedMotion", StringComparison.Ordinal)
+                && !legacy.ReducedMotion && !legacy.ReduceFlashes && !legacy.HighContrast
+                && legacy.BloomIntensity == 50,
+            "Accessibility keys saved by older builds must load with every toggle off and keep the saved look.");
+
+        // User settings always arrive through FromJson (migrated, clamped), e.g. BackgroundAppearanceVersion
+        // has already advanced to 2; the policy is checked against that loaded state.
+        var busy = PianoVisualSettings.FromJson(new PianoVisualSettings
+        {
+            ShowImpactFlash = true, ImpactFlashIntensity = 80,
+            BackgroundMotion = "Aurora", HaloPulse = true, FallingPulse = true, HoldBreath = true,
+            NoteShimmer = true, ShowStars = true, ShootingStars = true, ShowPetals = true, ShowLightBeams = true,
+            HoldVibration = true, HoldColorCycle = true, HoldElectricArc = true,
+            AmbientEnergy = "Nebula", AmbientEnergyAmount = 60,
+            ShowWisps = true, ShowFlame = true,
+        }.ToJson());
+        var identity = busy.WithAccessibilityTogglesApplied();
+        Assert(identity.ToJson() == busy.ToJson() && !ReferenceEquals(identity, busy),
+            "With every toggle off the applied settings must be an untouched copy, preserving the signed-off default look.");
+
+        busy.ReducedMotion = true;
+        var calmed = busy.WithAccessibilityTogglesApplied();
+        Assert(calmed.BackgroundMotion == "None" && !calmed.HaloPulse && !calmed.FallingPulse && !calmed.HoldBreath
+                && !calmed.NoteShimmer && !calmed.ShowStars && !calmed.ShootingStars && !calmed.ShowPetals && !calmed.ShowLightBeams
+                && !calmed.HoldVibration && !calmed.HoldColorCycle && !calmed.HoldElectricArc && calmed.AmbientEnergyAmount == 0
+                && !calmed.ShowEmbers && !calmed.ShowWisps && !calmed.ShowFlame
+                && calmed.ShowImpactFlash && calmed.ImpactFlashIntensity == 80,
+            "Reduced Motion must freeze every catalogued self-animated family — pulses, shimmer, the whole ambient sky, vibration, colour cycle and arc — and leave the flash channel alone.");
+
+        busy.ReducedMotion = false;
+        busy.ReduceFlashes = true;
+        var unflashed = busy.WithAccessibilityTogglesApplied();
+        Assert(!unflashed.ShowImpactFlash && unflashed.ImpactFlashIntensity == 0
+                && !unflashed.ShowEmbers && !unflashed.ShowStars && !unflashed.ShowFlame
+                && unflashed.BackgroundMotion == "Aurora" && unflashed.HaloPulse && unflashed.FallingPulse && unflashed.HoldBreath
+                && unflashed.ShowPetals && unflashed.ShootingStars && unflashed.ShowLightBeams && unflashed.AmbientEnergyAmount == 60
+                && unflashed.ShowWisps,
+            "Reduce Flashes must silence the flash channel, suppress the un-analysed spark burst and star twinkle, and leave every motion-only layer exactly as the user set it.");
+        Assert(unflashed.ImpactWaveIntensity == busy.ImpactWaveIntensity,
+            "Reduce Flashes must leave the flash-less impact wave's intensity exactly as the user set it.");
+
+        busy.ReduceFlashes = false;
+        busy.HighContrast = true;
+        var outlined = busy.WithAccessibilityTogglesApplied();
+        Assert(outlined.NoteEdge == 160 && outlined.NoteEdgeWidth == 80
+                && outlined.ShowImpactFlash && outlined.ImpactFlashIntensity == 80 && outlined.BackgroundMotion == "Aurora",
+            "High Contrast must lift the note outline to the shape-cue floors and leave the flash and motion channels alone.");
+        var alreadyStrong = PianoVisualSettings.FromJson(new PianoVisualSettings { NoteEdge = 185, NoteEdgeWidth = 90, HighContrast = true }.ToJson());
+        var kept = alreadyStrong.WithAccessibilityTogglesApplied();
+        Assert(kept.NoteEdge == 185 && kept.NoteEdgeWidth == 90,
+            "High Contrast must keep an outline that is already stronger than the shape-cue floors.");
+
+        Assert(busy.ShowImpactFlash && busy.ImpactFlashIntensity == 80 && busy.BackgroundMotion == "Aurora"
+                && busy.HaloPulse && busy.FallingPulse && busy.HoldBreath,
+            "Applying the accessibility policy must never mutate the user's own settings object.");
+
+        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion freezes every catalogued self-animated family (pulses, shimmer, ambient sky, stars, petals, meteors, beams, vibration, colour cycle, arc) while Reduce Flashes silences the flash channel and suppresses the un-analysed burst and star twinkle, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
+    }
+
+    /// <summary>
+    /// --bench-adapter pins a hardware run to one GPU by name, so a hybrid laptop can be measured on its
+    /// dGPU as well as its iGPU. The selection rules must be strict: only a unique case-insensitive
+    /// substring selects an adapter; anything else keeps the OS default (no request) or fails the run with
+    /// a message naming the candidates (no match, ambiguous match) — never measure a GPU silently.
+    /// </summary>
+    private static void VerifyAdapterSelection()
+    {
+        string[] hybrid = ["AMD Radeon(TM) Graphics", "NVIDIA GeForce RTX 4050 Laptop GPU"];
+        Assert(GpuAdapterSelection.Select(hybrid, null).Index == -1 && GpuAdapterSelection.Select(hybrid, null).Problem is null
+                && GpuAdapterSelection.Select(hybrid, "   ").Index == -1,
+            "With no adapter request the benchmark must keep the OS default adapter.");
+        Assert(GpuAdapterSelection.Select(hybrid, "rtx 4050").Index == 1 && GpuAdapterSelection.Select(hybrid, "radeon").Index == 0
+                && GpuAdapterSelection.Select(hybrid, "rtx 4050").Problem is null,
+            "A unique case-insensitive substring must select exactly that adapter.");
+        var none = GpuAdapterSelection.Select(hybrid, "Intel Arc");
+        var ambiguous = GpuAdapterSelection.Select(new[] { "NVIDIA GeForce RTX 4050", "NVIDIA GeForce RTX 4090" }, "NVIDIA");
+        Assert(none.Index == -1 && none.Problem is not null && none.Problem.Contains("RTX 4050", StringComparison.Ordinal),
+            "An adapter name matching nothing must fail with a message naming every adapter on the machine.");
+        Assert(ambiguous.Index == -1 && ambiguous.Problem is not null && ambiguous.Problem.Contains("longer name", StringComparison.Ordinal),
+            "An ambiguous adapter name must fail instead of picking a GPU at random.");
+        Results.Add("PASS adapter selection: --bench-adapter resolves only a unique case-insensitive substring, keeps the OS default when not asked, and fails with the machine's adapter list on no match or an ambiguous one.");
     }
 
     /// <summary>
@@ -1464,28 +1966,72 @@ internal static partial class VerificationSuite
     {
         var stage = (PianoStage)window.FindName("Stage"); var mode = (ComboBox)window.FindName("ModeCombo"); var tracks = (ComboBox)window.FindName("TrackCombo");
         var panel = (Border)window.FindName("SettingsPanel"); var overlay = (Grid)window.FindName("LiveChromeOverlay"); var recordButton = (Button)window.FindName("RecordButton");
-        var rowDefinitions = ((Grid)window.Content).RowDefinitions;
+        var headerChrome = (Border)window.FindName("HeaderChrome"); var footerChrome = (Border)window.FindName("FooterChrome");
+        var rootGrid = (Grid)window.Content;
+        var rowDefinitions = rootGrid.RowDefinitions;
         var source = PresentationSource.FromVisual(window)!;
         void PressEscape() => Invoke(window, "Window_KeyDown", window, new KeyEventArgs(Keyboard.PrimaryDevice, source, Environment.TickCount, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
         void MoveMouse() { SetField(window, "_lastPointerPoint", null!); Invoke(window, "Window_MouseMove", window, new MouseEventArgs(Mouse.PrimaryDevice, Environment.TickCount) { RoutedEvent = Mouse.MouseMoveEvent }); }
         void GoIdle() { SetField(window, "_lastPointerActivity", DateTime.UtcNow.AddSeconds(-4)); Invoke(window, "CheckChromeIdle"); }
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Live Play should start immersive with settings hidden and the idle toolbar available.");
+        window.UpdateLayout();
+        var headerRowHeight = rowDefinitions[0].ActualHeight; var footerRowHeight = rowDefinitions[2].ActualHeight;
+        var stageWidth = stage.ActualWidth; var stageHeight = stage.ActualHeight;
+        bool StageFillsClient()
+        {
+            var bounds = stage.TransformToAncestor(rootGrid).TransformBounds(new Rect(0, 0, stage.ActualWidth, stage.ActualHeight));
+            return Math.Abs(bounds.X) < .5 && Math.Abs(bounds.Y) < .5
+                && Math.Abs(bounds.Width - rootGrid.ActualWidth) < .5 && Math.Abs(bounds.Height - rootGrid.ActualHeight) < .5;
+        }
+        bool StageViewportStable()
+        {
+            window.UpdateLayout();
+            return Math.Abs(stage.ActualWidth - stageWidth) < .5 && Math.Abs(stage.ActualHeight - stageHeight) < .5
+                && StageFillsClient()
+                && Math.Abs(rowDefinitions[0].ActualHeight - headerRowHeight) < .5 && Math.Abs(rowDefinitions[2].ActualHeight - footerRowHeight) < .5;
+        }
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && stageWidth > 0 && stageHeight > 0 && StageFillsClient(),
+            "Live Play should start with settings hidden, the idle toolbar available and the stage canvas filling the full window client area.");
         GoIdle();
-        Assert(overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, $"An idle pointer should hide the toolbar, menu and REC so only the stage remains (rows {rowDefinitions[0].Height.Value} and {rowDefinitions[2].Height.Value}, expected 0).");
+        Assert(overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
+                && headerChrome.Opacity == 0 && footerChrome.Opacity == 0 && StageViewportStable(),
+            $"Idle should fade the toolbar and REC without resizing the stage viewport (stage {stage.ActualWidth:0}×{stage.ActualHeight:0}, chrome rows {rowDefinitions[0].ActualHeight:0}/{rowDefinitions[2].ActualHeight:0}).");
         MoveMouse();
-        Assert(overlay.Visibility == Visibility.Visible && rowDefinitions[0].Height.Value > 0 && recordButton.Visibility == Visibility.Visible && panel.Visibility == Visibility.Collapsed, "Mouse movement should bring the toolbar, menu and REC back without opening settings.");
+        Assert(overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Visible && panel.Visibility == Visibility.Collapsed
+                && headerChrome.Opacity == 1 && footerChrome.Opacity == 1 && StageViewportStable(),
+            "Mouse movement should reveal the toolbar and REC without opening settings or changing the stage viewport.");
         GoIdle(); PressEscape();
-        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value > 0, "Escape should open the Stage Design panel directly, even from the idle stage.");
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && StageViewportStable(),
+            "Escape should open the Stage Design panel directly, even from the idle stage, without changing its viewport.");
         GoIdle();
-        Assert(panel.Visibility == Visibility.Collapsed && rowDefinitions[0].Height.Value == 0 && rowDefinitions[2].Height.Value == 0, "An idle pointer should also hide an open settings panel.");
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
+                && headerChrome.Opacity == 1 && footerChrome.Opacity == 1 && StageViewportStable(),
+            "An open advanced settings dock and its chrome should remain visible while the pointer is idle.");
         MoveMouse();
-        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed, "Mouse movement should restore the settings panel that idle hid.");
+        Assert(panel.Visibility == Visibility.Visible && overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed && StageViewportStable(),
+            "Mouse movement while the settings dock is open must not dismiss it or resize the stage.");
         PressEscape();
-        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Collapsed, "Escape should close Stage Design and restore the live toolbar.");
+        Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && recordButton.Visibility == Visibility.Collapsed && StageViewportStable(),
+            "Escape should close Stage Design and restore the live toolbar without changing the stage viewport.");
         MoveMouse(); PressEscape(); PressEscape();
         Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible, "Escape should toggle the settings panel.");
+        Results.Add("PASS hover/idle chrome: the stage viewport stays fixed as the toolbar hides and returns, and an open advanced settings dock remains visible through idle.");
         var visualSettings = (PianoVisualSettings)Field(window, "_visualSettings"); var sliders = (Dictionary<string, Slider>)Field(window, "_visualSliders");
-        Assert(sliders.Count >= 30 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "The detailed scene, note, particle and camera controls should drive the renderer configuration.");
+        var stageVisual = (PianoVisualSettings)Field(stage, "_visual");
+        Assert(sliders.Count >= 30 && stageVisual.ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),
+            "The detailed scene, note, particle and camera controls should drive the renderer configuration, adjusted only by the accessibility policy.");
+        // Live wiring of the global toggles: a Reduced Motion switch flipped in the dock must reach the
+        // stage through the policy, and flipping it back restores the user's own motion setting.
+        visualSettings.BackgroundMotion = "Aurora";
+        visualSettings.ReducedMotion = true;
+        stage.SetVisualSettings(visualSettings);
+        Assert(((PianoVisualSettings)Field(stage, "_visual")).BackgroundMotion == "None",
+            "Turning on Reduced motion should freeze the stage's background motion through the accessibility policy.");
+        visualSettings.ReducedMotion = false;
+        visualSettings.BackgroundMotion = "None";
+        stage.SetVisualSettings(visualSettings);
+        Assert(((PianoVisualSettings)Field(stage, "_visual")).BackgroundMotion == "None"
+                && ((PianoVisualSettings)Field(stage, "_visual")).ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),
+            "Turning Reduced motion back off should restore the user's own motion setting on the stage.");
         var colorInputs = (Dictionary<string, TextBox>)Field(window, "_visualColorInputs"); var colorButtons = (Dictionary<string, Button>)Field(window, "_visualColorButtons");
         Assert(colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorStart)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.NoteColorEnd)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.HaloColor)) && colorInputs.ContainsKey(nameof(PianoVisualSettings.LeftHandColor)) && colorButtons.Count >= 6 && colorButtons.Count == colorInputs.Count,
             "Live design settings should provide an interactive color picker for the note gradient, hands, halo, keys and background colors.");
@@ -1501,6 +2047,7 @@ internal static partial class VerificationSuite
         Run(nameof(VerifyCommunityPresets), () => VerifyCommunityPresets(window));
         Run(nameof(VerifyUserShellThemes), () => VerifyUserShellThemes(window));
         Run(nameof(VerifyPngSequenceRecorder), () => VerifyPngSequenceRecorder(window));
+        Run(nameof(VerifyEffectFamilyWpfRecordingCaptures), () => VerifyEffectFamilyWpfRecordingCaptures(window, stage));
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
@@ -1512,7 +2059,7 @@ internal static partial class VerificationSuite
         var frameCapture = (byte[])window.GetType().GetMethod("CaptureStageBgr", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(window, [64, 48])!;
         Assert(frameCapture.Length == AviVideoRecorder.BgrStride(64) * 48, "The on-screen piano stage should render into correctly-strided video frames.");
         var glowSlider = sliders[nameof(PianoVisualSettings.NoteGlow)]; var originalGlow = glowSlider.Value; glowSlider.Value = 127;
-        Assert(visualSettings.NoteGlow == 127 && ReferenceEquals(Field(stage, "_visual"), visualSettings), "Adjusting note bloom should update the stage renderer immediately.");
+        Assert(visualSettings.NoteGlow == 127 && ((PianoVisualSettings)Field(stage, "_visual")).NoteGlow == 127, "Adjusting note bloom should update the stage renderer immediately.");
         glowSlider.Value = originalGlow; ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         var wasShowingEmbers = visualSettings.ShowEmbers;
         // The claim is about bursts this impact would add, so anything still in the air from a check above is
@@ -1543,9 +2090,19 @@ internal static partial class VerificationSuite
         reverb.IsChecked = false; Assert(!piano.ReverbEnabled, "The reverb control should bypass the live audio effect.");
         reverb.IsChecked = true; Assert(piano.ReverbEnabled, "Reverb should be switchable back on while the piano is running.");
         Assert(!(bool)Field(window, "_playing") && ((IEnumerable<NoteEvent>)Field(window, "_notes")).Count() == 0 && !((Button)window.FindName("PlayButton")).IsEnabled, "Startup should be live-play only with no demo MIDI or automatic transport.");
+        var wasLiveShowEmbers = visualSettings.ShowEmbers;
+        var wasLiveParticleAmount = visualSettings.ParticleAmount;
+        var wasLiveParticleResponse = visualSettings.ParticleResponse;
+        var wasLiveImpactBurst = visualSettings.ImpactBurst;
+        // Concert Gold deliberately uses a low particle budget. Set an explicit test budget so this
+        // input regression verifies that the burst path works, not whichever preset happens to be loaded.
+        stage.ClearTransient();
+        visualSettings.ShowEmbers = true; visualSettings.ParticleAmount = 24;
+        visualSettings.ParticleResponse = 100; visualSettings.ImpactBurst = "Dust";
+        stage.SetVisualSettings(visualSettings);
         Invoke(window, "PressNote", 60, 90);
         Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position")) < .001, "A live piano key must not start or advance MIDI playback.");
-        Assert(stage.LiveTrailCount == 1 && stage.SparkCount >= 12, "A keypress should create a short falling note and a neon impact burst.");
+        Assert(stage.LiveTrailCount == 1 && stage.SparkCount >= 12, "A keypress should create a short falling note and a visible impact burst.");
         Assert(!piano.HasInstrument, "Keyboard input should not synthesize a replacement piano voice in silent mode.");
         Assert((int)Field(window, "_hits") == 0 && (int)Field(window, "_misses") == 0, "Free-play notes should not affect song practice scoring.");
         midi.ProcessNativeInputMessage(MidiDeviceService.MidiInputDataMessage, (UIntPtr)MidiDeviceService.PackNoteMessage(61, 90, true));
@@ -1558,6 +2115,9 @@ internal static partial class VerificationSuite
             {
                 Assert(!(bool)Field(window, "_playing") && Math.Abs((double)Field(window, "_position") - livePosition) < .001, "MIDI Note On should remain live-only and leave the song playhead stopped.");
                 Assert(stage.LiveTrailCount == 2 && stage.SparkCount > 0, "MIDI Note On should create its own animation and sparks.");
+                visualSettings.ShowEmbers = wasLiveShowEmbers; visualSettings.ParticleAmount = wasLiveParticleAmount;
+                visualSettings.ParticleResponse = wasLiveParticleResponse; visualSettings.ImpactBurst = wasLiveImpactBurst;
+                stage.SetVisualSettings(visualSettings);
                 Assert(stage.FirstLiveTrailY > 0 && stage.FirstLiveTrailY < stage.ActualHeight - stage.KeyboardHeight, "A pressed-key note should fall down its own lane while the song playhead stays still.");
                 Assert(((ToggleButton)window.FindName("SoftPedalToggle")).IsChecked == true && ((HashSet<PianoPedal>)Field(window, "_pedalsDown")).Contains(PianoPedal.Soft), "Incoming MIDI CC 67 should update the soft pedal control immediately.");
                 var heldLength = stage.LiveTrailHeightFor(60);
@@ -1623,14 +2183,56 @@ internal static partial class VerificationSuite
     private static void VerifyPresets()
     {
         var names = VisualPresets.BuiltIn.Select(p => p.Name).ToList();
-        Assert(names.Count >= 6 && names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Count && names.Contains(VisualPresets.DefaultPresetName), "Built-in presets should have unique names and include the default look.");
+        Assert(names.Count == 14 && names.Distinct(StringComparer.OrdinalIgnoreCase).Count() == names.Count && names[0] == VisualPresets.DefaultPresetName && names.Contains("Concert Gold"),
+            "The 14 curated looks should have unique stable names, with the selected Concert default listed first.");
         foreach (var preset in VisualPresets.BuiltIn)
         {
             var copy = preset.Settings.Clone(); copy.Clamp();
             Assert(copy.ToJson() == preset.Settings.ToJson(), $"The built-in preset '{preset.Name}' should already be within the allowed ranges.");
+            Assert(preset.Settings.PresetName == preset.Name && !string.IsNullOrWhiteSpace(preset.Description),
+                $"The built-in preset '{preset.Name}' should carry its own stable name and localized description.");
         }
-        Assert(VisualPresets.FindBuiltIn("inferno")!.Settings.NoteStyle == "Fire" && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.ShowWisps && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMode == "ChromaGreen",
-            "The reference looks (burning notes, rainbow wisps, chroma key) should map to the matching renderer options.");
+        var shippedPresets = VisualPresets.BuiltIn.Concat(CommunityPresets.All).ToArray();
+        Assert(shippedPresets.All(p => PianoVisualSettings.ColorModes.Contains(p.Settings.ColorMode)
+                && PianoVisualSettings.Palettes.Contains(p.Settings.Palette)
+                && PianoVisualSettings.NoteStyles.Contains(p.Settings.NoteStyle)
+                && PianoVisualSettings.NoteDirections.Contains(p.Settings.NoteDirection)
+                && PianoVisualSettings.ImpactWaves.Contains(p.Settings.ImpactWave)
+                && PianoVisualSettings.ImpactBursts.Contains(p.Settings.ImpactBurst)
+                && PianoVisualSettings.ImpactMorphs.Contains(p.Settings.ImpactMorph)
+                && PianoVisualSettings.ImpactFlashStyles.Contains(p.Settings.ImpactFlashStyle)
+                && PianoVisualSettings.AmbientEnergies.Contains(p.Settings.AmbientEnergy)
+                && PianoVisualSettings.AmbientNatures.Contains(p.Settings.AmbientNature)
+                && PianoVisualSettings.AmbientLights.Contains(p.Settings.AmbientLight)
+                && PianoVisualSettings.AmbientCosmics.Contains(p.Settings.AmbientCosmic)
+                && PianoVisualSettings.FallingTrails.Contains(p.Settings.FallingTrail)
+                && PianoVisualSettings.ReleaseEffects.Contains(p.Settings.ReleaseEffect)
+                && PianoVisualSettings.KeyboardStyles.Contains(p.Settings.KeyboardStyle)
+                && PianoVisualSettings.ShadingQualities.Contains(p.Settings.ShadingQuality)
+                && PianoVisualSettings.PressedKeyColorModes.Contains(p.Settings.PressedKeyColorMode)
+                && PianoVisualSettings.KeyLabelModes.Contains(p.Settings.KeyLabels)
+                && PianoVisualSettings.BackgroundModes.Contains(p.Settings.BackgroundMode)
+                && ShellThemes.All.Any(theme => theme.Id == p.Settings.ShellTheme)),
+            "Every shipped look should choose values supported by the settings model, not values that only survive by being clamped to a fallback.");
+        var concert = VisualPresets.FindBuiltIn("Concert Gold")!.Settings;
+        var neon = VisualPresets.FindBuiltIn("Neon Violet")!.Settings;
+        var learning = VisualPresets.FindBuiltIn("Two Hands")!.Settings;
+        Assert(VisualPresets.CreateDefaultSettings().ToJson() == concert.ToJson()
+                && concert.NoteStyle == "Solid" && concert.ColorMode == "PerHand" && concert.ShellTheme == ShellThemes.VelvetGoldId
+                && concert.NoteGlow <= 50 && concert.BloomIntensity <= 40 && !concert.ShowImpactFlash,
+            "Concert Gold should be the fresh-install/reset look: two readable hands, restrained glow and no bright impact flash.");
+        Assert(neon.NoteStyle == "Neon" && neon.BackgroundMotion == "Nebula" && neon.BloomIntensity <= 55 && neon.ImpactFlashIntensity <= 25,
+            "Neon Violet should keep its creator identity while staying inside the new glow/flash budget.");
+        Assert(learning.ColorMode == "PerHand" && learning.ShowNoteLabels && learning.KeyLabels == "C"
+                && !learning.ShowEmbers && !learning.ShowImpactRings && !learning.ShowImpactFlash
+                && learning.AmbientEnergy == "None" && learning.AmbientNature == "None" && learning.AmbientLight == "None" && learning.AmbientCosmic == "None",
+            "Two Hands should prioritize legible hand colors and note/key labels without decorative particles.");
+        Assert(VisualPresets.FindBuiltIn("Inferno")!.Settings.NoteStyle == "Fire"
+                && VisualPresets.FindBuiltIn("Aurora Rainbow")!.Settings.ColorMode == "RainbowPitch"
+                && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMode == "ChromaGreen"
+                && !VisualPresets.FindBuiltIn("Green Screen")!.Settings.ShowHalo
+                && VisualPresets.FindBuiltIn("Classic Roll")!.Settings.ColorMode == "PerTrack",
+            "The themed and utility looks should retain their defining renderer behavior after the visual refresh.");
         Assert(VisualPresets.BuiltIn.All(p => PianoVisualSettings.BackgroundMotions.Contains(p.Settings.BackgroundMotion)
                 && PianoVisualSettings.HaloPulseStyles.Contains(p.Settings.HaloPulseStyle))
             && VisualPresets.FindBuiltIn("Neon Violet")!.Settings.BackgroundMotion == "Nebula"
@@ -1642,7 +2244,31 @@ internal static partial class VerificationSuite
             && VisualPresets.FindBuiltIn("Classic Roll")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Classic Roll")!.Settings.HaloPulse
             && VisualPresets.FindBuiltIn("Two Hands")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Two Hands")!.Settings.HaloPulse
             && VisualPresets.FindBuiltIn("Green Screen")!.Settings.BackgroundMotion == "None" && !VisualPresets.FindBuiltIn("Green Screen")!.Settings.HaloPulse,
-            "Every built-in look should carry a validated, theme-matched motion profile, while the chroma preset keeps its background clean.");
+            "Every built-in look should use a valid, theme-matched motion profile, while learning, roll and chroma looks stay still.");
+        var originalSettingsDirectory = PianoVisualSettingsStore.SettingsDirectory;
+        var firstRunDirectory = Path.Combine(Path.GetTempPath(), "keyflow-verify-default-look-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(firstRunDirectory);
+            PianoVisualSettingsStore.UseDirectory(firstRunDirectory);
+            var fresh = PianoVisualSettingsStore.Load();
+            Assert(fresh.PresetName == "Concert Gold" && fresh.ColorMode == "PerHand" && fresh.NoteStyle == "Solid",
+                "A settings folder with no saved file should start on the curated Concert Gold look.");
+            File.WriteAllText(PianoVisualSettingsStore.SettingsPath, "{ malformed settings");
+            var recovered = PianoVisualSettingsStore.Load();
+            Assert(recovered.PresetName == "Concert Gold" && recovered.ColorMode == "PerHand",
+                "An unreadable settings file should recover to the safe curated default rather than a busy model fallback.");
+            var legacyLook = new PianoVisualSettings { PresetName = "Neon Violet", NoteStyle = "Neon", NoteColorStart = "#7B5CFF" };
+            PianoVisualSettingsStore.Save(legacyLook);
+            var restored = PianoVisualSettingsStore.Load();
+            Assert(restored.PresetName == "Neon Violet" && restored.NoteStyle == "Neon" && restored.NoteColorStart == "#7B5CFF",
+                "Changing the shipped default must not rewrite an existing user's saved look.");
+        }
+        finally
+        {
+            PianoVisualSettingsStore.UseDirectory(originalSettingsDirectory);
+            try { if (Directory.Exists(firstRunDirectory)) Directory.Delete(firstRunDirectory, true); } catch { }
+        }
         var target = new PianoVisualSettings { BackgroundImagePath = "C:\\keep.png", NoteGlow = 1 };
         target.CopyFrom(VisualPresets.Inferno());
         Assert(target.NoteStyle == "Fire" && target.BackgroundImagePath == "C:\\keep.png" && !ReferenceEquals(target.TrackColors, VisualPresets.Inferno().TrackColors),
@@ -1654,7 +2280,7 @@ internal static partial class VerificationSuite
             Assert(store.LoadUserPresets().Count == 0, "A missing preset folder should simply yield no user presets.");
             var saved = store.Save("My: Look?", VisualPresets.AuroraRainbow());
             var loaded = store.LoadUserPresets();
-            Assert(saved.Name == "My- Look-" && loaded.Count == 1 && loaded[0].Name == saved.Name && loaded[0].Settings.ShowWisps && loaded[0].Settings.BackgroundImagePath == "" && !loaded[0].BuiltIn,
+            Assert(saved.Name == "My- Look-" && loaded.Count == 1 && loaded[0].Name == saved.Name && loaded[0].Settings.ColorMode == "RainbowPitch" && loaded[0].Settings.BackgroundImagePath == "" && !loaded[0].BuiltIn,
                 "User presets should be sanitized, written as JSON and read back without the background image path.");
             var exportPath = Path.Combine(directory, "out", "export.json"); Directory.CreateDirectory(Path.GetDirectoryName(exportPath)!);
             VisualPresetStore.Export(VisualPresets.IceCrystal(), exportPath);
@@ -1703,10 +2329,75 @@ internal static partial class VerificationSuite
         Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.General),
             "The first section should open on Style and the last one should close on the pages of the application itself.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
+        var settingRows = ((System.Collections.IEnumerable)Field(window, "_settingRows")).Cast<object>().ToArray();
+        var rowDetails = settingRows.Select(row =>
+        {
+            var rowType = row.GetType();
+            return (
+                Property: (string?)rowType.GetField("Property")!.GetValue(row),
+                SearchKeys: (string[])rowType.GetField("SearchKeys")!.GetValue(row)!,
+                Element: (FrameworkElement)rowType.GetField("Element")!.GetValue(row)!);
+        }).ToArray();
+        var rowSettingProperties = rowDetails
+            .Where(row => !string.IsNullOrWhiteSpace(row.Property))
+            .Select(row => row.Property!)
+            .ToHashSet(StringComparer.Ordinal);
+        var staticSettingControls = new (string Property, string ControlName)[]
+        {
+            (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
+            (nameof(PianoVisualSettings.AudioLatencyMs), "AudioLatencyCombo"),
+            (nameof(PianoVisualSettings.AudioMasterGain), "AudioGainSlider"),
+            (nameof(PianoVisualSettings.ReverbStyle), "ReverbStyleCombo"),
+            (nameof(PianoVisualSettings.ReverbImpulseFile), "ReverbImpulseButton"),
+            (nameof(PianoVisualSettings.PracticeAutoTempo), "AutoPracticeTempoCheck"),
+            (nameof(PianoVisualSettings.PracticeMissThreshold), "AutoPracticeMissSlider"),
+        };
+        var workflowSettingControls = new (string Property, string SearchKey)[]
+        {
+            (nameof(PianoVisualSettings.Language), "language interface english vietnamese tiếng việt"),
+            (nameof(PianoVisualSettings.BackgroundImagePath), "CHOOSE IMAGE…"),
+            (nameof(PianoVisualSettings.CameraVideoPath), "CHOOSE VIDEO…"),
+        };
+        var nonControlProperties = new HashSet<string>(StringComparer.Ordinal)
+        {
+            nameof(PianoVisualSettings.BackgroundAppearanceVersion), // JSON compatibility migration
+            nameof(PianoVisualSettings.PresetName),                 // preset workflow metadata
+            nameof(PianoVisualSettings.PresetModified),             // preset workflow metadata
+            nameof(PianoVisualSettings.RenderBackend),              // fixed to GPU; WPF remains an automatic fallback
+        };
+        var publicSettings = typeof(PianoVisualSettings)
+            .GetProperties(BindingFlags.Instance | BindingFlags.Public)
+            .Select(property => property.Name)
+            .ToHashSet(StringComparer.Ordinal);
+        var staticProperties = staticSettingControls.Select(control => control.Property).ToHashSet(StringComparer.Ordinal);
+        var workflowProperties = workflowSettingControls.Select(control => control.Property).ToHashSet(StringComparer.Ordinal);
+        var workflowControlsMissing = workflowSettingControls
+            .Where(control => !rowDetails.Any(row => row.SearchKeys.Contains(control.SearchKey, StringComparer.Ordinal)
+                && row.Element is Panel panel && panel.Children.OfType<Button>().Any()))
+            .Select(control => control.Property)
+            .OrderBy(name => name, StringComparer.Ordinal)
+            .ToArray();
+        var classifiedProperties = rowSettingProperties.Concat(staticProperties).Concat(workflowProperties).Concat(nonControlProperties).ToHashSet(StringComparer.Ordinal);
+        var unclassifiedProperties = publicSettings.Except(classifiedProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var unexpectedClassifications = classifiedProperties.Except(publicSettings).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var classificationCount = rowSettingProperties.Count + staticProperties.Count + workflowProperties.Count + nonControlProperties.Count;
+        var expectedRowProperties = publicSettings.Except(staticProperties).Except(workflowProperties).Except(nonControlProperties).ToHashSet(StringComparer.Ordinal);
+        var missingRows = expectedRowProperties.Except(rowSettingProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        var unexpectedRows = rowSettingProperties.Except(expectedRowProperties).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        Assert(unclassifiedProperties.Length == 0 && unexpectedClassifications.Length == 0
+                && classificationCount == classifiedProperties.Count && workflowControlsMissing.Length == 0
+                && missingRows.Length == 0 && unexpectedRows.Length == 0,
+            $"Every public visual setting should be a generated row, a mapped static XAML control, a mapped workflow control, or explicitly classified metadata; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing workflow controls={string.Join(",", workflowControlsMissing)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+        foreach (var (property, controlName) in staticSettingControls)
+            Assert(publicSettings.Contains(property) && window.FindName(controlName) is FrameworkElement,
+                $"Static setting {property} should have its XAML control {controlName}.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.NoteStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.ColorMode)) && choices.ContainsKey(nameof(PianoVisualSettings.KeyboardStyle)) && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMode))
                 && choices.ContainsKey(nameof(PianoVisualSettings.BackgroundMotion)) && choices.ContainsKey(nameof(PianoVisualSettings.HaloPulseStyle))
                 && toggles.ContainsKey(nameof(PianoVisualSettings.ShowWisps)) && toggles.ContainsKey(nameof(PianoVisualSettings.HaloPulse)),
             "Note style, background motion, hit-line style, keyboard style and their effect switches should be editable from the dock.");
+        Assert(PianoVisualSettings.NoteStyles.SequenceEqual(["Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline"])
+                && choices[nameof(PianoVisualSettings.NoteStyle)].Items.Count == PianoVisualSettings.NoteStyles.Length,
+            "The Notes page picker should expose Gem and Crystal Outline as materials alongside the legacy styles.");
         var initialBackgroundMotion = visualSettings.BackgroundMotion;
         choices[nameof(PianoVisualSettings.BackgroundMotion)].SelectedValue = "Ocean Flow";
         Assert(visualSettings.BackgroundMotion == "Ocean Flow", "Choosing a procedural background should update the live visual settings.");
@@ -1715,7 +2406,24 @@ internal static partial class VerificationSuite
         choices[nameof(PianoVisualSettings.HaloPulseStyle)].SelectedValue = "Twin Comets";
         Assert(visualSettings.HaloPulseStyle == "Twin Comets", "Choosing a hit-line animation should update the live visual settings.");
         choices[nameof(PianoVisualSettings.HaloPulseStyle)].SelectedValue = initialHaloPulseStyle;
-        var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode;
+        var originalStyle = visualSettings.NoteStyle; var originalMode = visualSettings.ColorMode; var originalDepth = visualSettings.Notes3D;
+        var settingsSaveTimer = (DispatcherTimer)Field(window, "_settingsSaveTimer");
+        settingsSaveTimer.Stop();
+        window.PreviewNoteStyle("Gem", "2d");
+        Assert(visualSettings.NoteStyle == "Gem" && !visualSettings.Notes3D && !settingsSaveTimer.IsEnabled,
+            "A command-line material preview should update the live stage in memory without arming settings auto-save.");
+        window.PreviewNoteStyle("Crystal Outline", "3d");
+        Assert(visualSettings.NoteStyle == "CrystalOutline" && visualSettings.Notes3D && !settingsSaveTimer.IsEnabled,
+            "The preview should normalize the display name but keep the stable CrystalOutline ID, without saving it.");
+        window.PreviewNoteStyle(originalStyle, originalDepth ? "3d" : "2d");
+        var beforePresetPreview = visualSettings.ToJson();
+        window.PreviewPreset("ConcertGold");
+        Assert(visualSettings.PresetName == "Concert Gold" && !settingsSaveTimer.IsEnabled,
+            "A command-line preset preview should also stay in memory and never arm the settings auto-save timer.");
+        visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforePresetPreview), keepBackgroundImage: true);
+        Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
+        Invoke(window, "ApplyChromeTheme"); Invoke(window, "RefreshMenuStageLook");
+        Run(nameof(VerifyNoteMaterialRendering), () => VerifyNoteMaterialRendering(stage, visualSettings));
         choices[nameof(PianoVisualSettings.NoteStyle)].SelectedValue = "Fire";
         Assert(visualSettings.NoteStyle == "Fire" && visualSettings.PresetModified, "Choosing a note style should update the renderer settings and flag the preset as modified.");
         choices[nameof(PianoVisualSettings.ColorMode)].SelectedValue = "PerHand";
@@ -1812,13 +2520,14 @@ internal static partial class VerificationSuite
         var beforeName = visualSettings.PresetName; var beforeJson = visualSettings.ToJson();
         presetList.SelectedIndex = VisualPresets.BuiltIn.ToList().FindIndex(p => p.Name == "Classic Roll");
         Invoke(window, "ApplyPreset_Click", window, new RoutedEventArgs());
-        Assert(visualSettings.PresetName == "Classic Roll" && !visualSettings.PresetModified && visualSettings.NoteStyle == "Solid" && !visualSettings.ShowEmbers && ReferenceEquals(Field(stage, "_visual"), visualSettings),
-            "Applying a preset should rewrite the live settings in place so the renderer keeps its reference.");
+        Assert(visualSettings.PresetName == "Classic Roll" && !visualSettings.PresetModified && visualSettings.NoteStyle == "Solid" && !visualSettings.ShowEmbers
+                && ((PianoVisualSettings)Field(stage, "_visual")).ToJson() == visualSettings.WithAccessibilityTogglesApplied().ToJson(),
+            "Applying a preset should rewrite the live settings in place and the stage should draw exactly that look, adjusted only by the accessibility policy.");
         visualSettings.CopyFrom(PianoVisualSettings.FromJson(beforeJson), keepBackgroundImage: false); visualSettings.PresetName = beforeName;
         Invoke(window, "RefreshSettingControls"); stage.SetVisualSettings(visualSettings);
-        Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices));
+        Run(nameof(VerifyShadedStage), () => VerifyShadedStage(stage, choices, visualSettings));
         ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
-        Results.Add("PASS settings dock: thirteen pages grouped into four navigation sections, theme chips and the ambient mote layer, style/color-mode controls, per-hand and per-track colors, impact wave/flash FX, falling/hold/release FX, ambient layers, smart modulators, themes, search filter, preset application and the ray-traced keyboard switch.");
+        Results.Add($"PASS settings dock: thirteen pages grouped into four navigation sections, {rowSettingProperties.Count} generated setting rows, {staticSettingControls.Length} static controls and {workflowSettingControls.Length} workflow controls covering the public model, theme and effect controls, scoped search, preset application and keyboard shading.");
     }
 
     /// <summary>
@@ -2737,12 +3446,220 @@ internal static partial class VerificationSuite
                 $"The stage normally paints a full background: {opaquePixels} of {total} pixels were opaque.");
             Assert(clearPixels > total / 40 && clearPixels < opaquePixels - total / 3,
                 $"A transparent export should drop the background and keep the piano: {opaquePixels} opaque pixels with the background, {clearPixels} without (of {total}).");
+
+            // Record distinct note materials and two Fire tints through the software-stage PNG path, then decode the actual files.
+            Assert(!stage.UsesGpuFrame, "The transparent PNG path must capture the WPF/software stage in this verification session.");
+            var savedNotes = (IReadOnlyList<NoteEvent>)Field(stage, "_notes")!;
+            var savedPosition = (double)Field(stage, "_position")!;
+            var savedPlaying = (bool)Field(stage, "_playing")!;
+            var savedPressed = (IReadOnlySet<int>)Field(stage, "_pressed")!;
+            var materialNotes = new List<NoteEvent>
+            {
+                new() { Pitch = 60, Start = 1.2, Duration = .7 },
+                new() { Pitch = 64, Start = 1.2, Duration = .7 },
+                new() { Pitch = 67, Start = 1.2, Duration = .7 },
+            };
+            byte[] CaptureMaterial(string style, string? perHandTint = null)
+            {
+                var materialLook = flat.Clone();
+                materialLook.NoteStyle = style; materialLook.Notes3D = false; materialLook.ShowNotes = true;
+                if (perHandTint is not null)
+                {
+                    materialLook.ColorMode = "PerHand"; materialLook.HandSplitPitch = 108; materialLook.LeftHandColor = perHandTint;
+                }
+                materialLook.ShowKeys = false; materialLook.ShowHalo = false; materialLook.ShowStars = false;
+                materialLook.ShowNoteLabels = false; materialLook.ShowWatermark = false; materialLook.ShowCounter = false; materialLook.ShowFps = false;
+                materialLook.NoteGlow = 0; materialLook.NoteHeadGlow = 0; materialLook.NoteRefraction = 0;
+                materialLook.NoteTint = 78; materialLook.NoteEdge = 100; materialLook.NoteEdgeWidth = 55;
+                materialLook.FallingTrail = "None"; materialLook.FallingPulse = false; materialLook.NoteShimmer = false; materialLook.NoteLandingGlow = false;
+                materialLook.HoldBar = false; materialLook.HoldBreath = false; materialLook.HoldVibration = false; materialLook.HoldColorCycle = false; materialLook.HoldElectricArc = false;
+                materialLook.ShowEmbers = false; materialLook.ShowWisps = false; materialLook.ShowFlame = false; materialLook.ShowImpactRings = false; materialLook.ShowImpactFlash = false;
+                materialLook.ShowLightBeams = false; materialLook.ShowPetals = false; materialLook.ShootingStars = false;
+                materialLook.AmbientEnergy = "None"; materialLook.AmbientNature = "None"; materialLook.AmbientLight = "None"; materialLook.AmbientCosmic = "None";
+                materialLook.HorizonGlow = 0; materialLook.BloomIntensity = 0; materialLook.Vignette = 0;
+                materialLook.ReducedMotion = false; materialLook.ReduceFlashes = false; materialLook.HighContrast = false;
+                stage.SetVisualSettings(materialLook);
+                stage.SetState(materialNotes, 1, true, new HashSet<int>());
+                stage.UpdateLayout();
+                var captured = (byte[])InvokeReturn(window, "CaptureStageBgra", 640, 360)!;
+                return (byte[])captured.Clone();
+            }
+            var materialDirectory = Path.Combine(directory, "material-captures");
+            using (var materialRecorder = new PngSequenceRecorder(materialDirectory, 640, 360, 24))
+            {
+                foreach (var style in new[] { "Solid", "Gem", "CrystalOutline" })
+                    materialRecorder.WriteFrame(CaptureMaterial(style));
+                materialRecorder.WriteFrame(CaptureMaterial("Fire", "#0878FF"));
+                materialRecorder.WriteFrame(CaptureMaterial("Fire", "#FFAA0C"));
+                Assert(materialRecorder.FrameCount == 5, "The material recorder should capture Solid/Gem/Crystal and two Fire note-color variants as PNG frames.");
+            }
+            static byte[] DecodeMaterialPng(string path)
+            {
+                using var stream = File.OpenRead(path);
+                var bitmap = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+                var pixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+                converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+                return pixels;
+            }
+            var solidRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000001.png"));
+            var gemRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000002.png"));
+            var crystalRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000003.png"));
+            var fireBlueRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000004.png"));
+            var fireAmberRecorded = DecodeMaterialPng(Path.Combine(materialDirectory, "frame-000005.png"));
+            static int DifferentPixels(byte[] left, byte[] right)
+            {
+                var count = 0;
+                for (var i = 0; i < left.Length; i += 4)
+                    if (Math.Abs(left[i] - right[i]) + Math.Abs(left[i + 1] - right[i + 1]) + Math.Abs(left[i + 2] - right[i + 2]) > 24) count++;
+                return count;
+            }
+            var solidGemChanges = DifferentPixels(solidRecorded, gemRecorded);
+            var gemCrystalChanges = DifferentPixels(gemRecorded, crystalRecorded);
+            var fireColorChanges = DifferentPixels(fireBlueRecorded, fireAmberRecorded);
+            Assert(solidRecorded.Length == 640 * 360 * 4 && gemRecorded.Length == solidRecorded.Length && crystalRecorded.Length == solidRecorded.Length
+                    && fireBlueRecorded.Length == solidRecorded.Length && fireAmberRecorded.Length == solidRecorded.Length
+                    && solidGemChanges > 20 && gemCrystalChanges > 20 && fireColorChanges > 50,
+                $"The decoded PNG frames should preserve distinct Solid/Gem/Crystal Outline materials and visibly change Fire with PerHand color ({solidGemChanges}/{gemCrystalChanges}/{fireColorChanges} changed pixels).");
+            stage.SetState(savedNotes, savedPosition, savedPlaying, savedPressed);
             var restored = PianoVisualSettings.FromJson(hadLook);
             ((PianoVisualSettings)Field(window, "_visualSettings")!).CopyFrom(restored);
             stage.SetVisualSettings(restored); Invoke(window, "RefreshSettingControls");
-            Results.Add("PASS PNG sequence: 32-bit frames of the chosen size, repeated frames written once per copy, a manifest with the pattern and the ffmpeg line, bad sizes refused, and a transparent stage that really produces clear pixels.");
+            Results.Add($"PASS PNG sequence: 32-bit frames, repeats, manifest, bad sizes and transparent alpha; WPF/PNG captures preserve Solid, Gem and Crystal Outline and distinguish Fire using contrasting PerHand note colors ({fireColorChanges} pixels).");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
+    }
+
+    /// <summary>
+    /// Captures every WPF-native pilot family as its own paired neutral/effect PNG take and reads the actual
+    /// files back. The two GPU-only families are deliberately not inferred from the WPF renderer; their own
+    /// GPU recording-tap evidence is checked separately.
+    /// </summary>
+    private static void VerifyEffectFamilyWpfRecordingCaptures(MainWindow window, PianoStage stage)
+    {
+        var fixtures = EffectRecordingFixtures.All;
+        var families = EffectContractCatalog.AllFamilies;
+        Assert(fixtures.Count == 24
+                && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
+                && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
+                    .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
+            "WPF recording capture fixtures must cover each of the 24 typed families exactly once before backend filtering.");
+        Assert(!stage.UsesGpuFrame,
+            "The WPF PNG family captures must exercise the software-stage renderer, not a cached GPU preview.");
+
+        var wpfOnlyUnsupported = families.Where(family => family.Capabilities.WpfStage.State != EffectBackendState.Native)
+            .Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal).ToArray();
+        Assert(wpfOnlyUnsupported.SequenceEqual(new[] { "atmosphere.shooting-stars", "falling.shimmer" }),
+            "Only shooting stars and note shimmer are GPU-only; their WPF capture status must remain Unsupported.");
+
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-effect-recording-wpf-" + Guid.NewGuid().ToString("N"));
+        var originalSettings = PianoVisualSettings.FromJson(((PianoVisualSettings)Field(window, "_visualSettings")!).ToJson());
+        var originalNotes = (IReadOnlyList<NoteEvent>)Field(stage, "_notes")!;
+        var originalPosition = (double)Field(stage, "_position")!;
+        var originalPlaying = (bool)Field(stage, "_playing")!;
+        var originalPressed = (IReadOnlySet<int>)Field(stage, "_pressed")!;
+        var originalTransparent = stage.TransparentBackdrop;
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var evidence = new List<string>();
+            foreach (var fixture in fixtures)
+            {
+                var family = families.Single(candidate => candidate.Id == fixture.FamilyId);
+                if (family.Capabilities.WpfStage.State != EffectBackendState.Native) continue;
+
+                byte[] Capture(bool enabled)
+                {
+                    stage.ClearTransient();
+                    // Opaque paired frames keep subtle layers such as the star field measurable; the existing PNG test separately verifies alpha export.
+                    stage.TransparentBackdrop = false;
+                    var look = EffectRecordingFixtures.NeutralLook();
+                    if (enabled) fixture.Enable(look);
+                    stage.SetVisualSettings(look);
+                    stage.ResetAnimation(20261008);
+                    var scene = EffectRecordingFixtures.SceneState(fixture.Scene);
+                    stage.SetState(scene.Notes, scene.Position, scene.Playing, scene.Pressed);
+
+                    if (fixture.Scene == EffectRecordingScene.SongNoteRelease)
+                    {
+                        // Give the render thread a sample before the end, then cross the MIDI note-off.
+                        stage.Advance(.05);
+                        stage.SetState(scene.Notes, .15, true, scene.Pressed);
+                    }
+                    else if (enabled && fixture.Event == EffectRecordingEvent.Impact)
+                    {
+                        stage.Impact(60, 1);
+                    }
+
+                    for (var frame = 0; frame < fixture.WpfAdvanceSteps; frame++) stage.Advance(.05);
+                    stage.UpdateLayout();
+                    var pixels = (byte[])InvokeReturn(window, "CaptureStageBgra", EffectRecordingFixtures.Width, EffectRecordingFixtures.Height)!;
+                    return (byte[])pixels.Clone();
+                }
+
+                static (int Width, int Height, byte[] Pixels) DecodePng(string path)
+                {
+                    using var stream = File.OpenRead(path);
+                    var bitmap = BitmapFrame.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
+                    var converted = new FormatConvertedBitmap(bitmap, PixelFormats.Bgra32, null, 0);
+                    var pixels = new byte[converted.PixelWidth * converted.PixelHeight * 4];
+                    converted.CopyPixels(pixels, converted.PixelWidth * 4, 0);
+                    return (converted.PixelWidth, converted.PixelHeight, pixels);
+                }
+
+                static (int Changed, int AnyDifference, int MaximumDelta) ComparePixels(byte[] first, byte[] second)
+                {
+                    var changed = 0; var anyDifference = 0; var maximumDelta = 0;
+                    for (var i = 0; i < first.Length; i += 4)
+                    {
+                        var delta = Math.Abs(first[i] - second[i]) + Math.Abs(first[i + 1] - second[i + 1])
+                            + Math.Abs(first[i + 2] - second[i + 2]) + Math.Abs(first[i + 3] - second[i + 3]);
+                        if (delta > 0) anyDifference++;
+                        if (delta > 24) changed++;
+                        maximumDelta = Math.Max(maximumDelta, delta);
+                    }
+                    return (changed, anyDifference, maximumDelta);
+                }
+
+                var neutral = Capture(enabled: false);
+                var effect = Capture(enabled: true);
+                var familyDirectory = Path.Combine(directory, fixture.FamilyId.Replace('.', '-'));
+                using (var recorder = new PngSequenceRecorder(familyDirectory, EffectRecordingFixtures.Width, EffectRecordingFixtures.Height, 30))
+                {
+                    recorder.WriteFrame(neutral);
+                    recorder.WriteFrame(effect);
+                    Assert(recorder.FrameCount == 2,
+                        $"{fixture.FamilyId} must write both its matched neutral frame and effect frame through PngSequenceRecorder.");
+                }
+
+                var neutralReadback = DecodePng(Path.Combine(familyDirectory, "frame-000001.png"));
+                var effectReadback = DecodePng(Path.Combine(familyDirectory, "frame-000002.png"));
+                var pixelDiff = ComparePixels(neutralReadback.Pixels, effectReadback.Pixels);
+                var changed = pixelDiff.Changed;
+                var appliedLook = (PianoVisualSettings)Field(stage, "_visual")!;
+                Assert(neutralReadback.Width == EffectRecordingFixtures.Width && neutralReadback.Height == EffectRecordingFixtures.Height
+                        && effectReadback.Width == neutralReadback.Width && effectReadback.Height == neutralReadback.Height
+                        && neutralReadback.Pixels.Length == EffectRecordingFixtures.Width * EffectRecordingFixtures.Height * 4
+                        && effectReadback.Pixels.Length == neutralReadback.Pixels.Length
+                        && changed >= fixture.MinimumChangedPixels,
+                    $"The decoded WPF PNG take for {fixture.FamilyId} should contain its own visible effect (minimum {fixture.MinimumChangedPixels} pixels with channel delta >24; saw {changed}, any={pixelDiff.AnyDifference}, max delta={pixelDiff.MaximumDelta}; applied ShowBackground/ShowStars/StarDensity={appliedLook.ShowBackground}/{appliedLook.ShowStars}/{appliedLook.StarDensity}, ReleaseEffect/Intensity={appliedLook.ReleaseEffect}/{appliedLook.ReleaseIntensity}, ShowImpactRings/ImpactWaveIntensity/RingSize={appliedLook.ShowImpactRings}/{appliedLook.ImpactWaveIntensity}/{appliedLook.RingSize}, rings={stage.RingCount}, transparent={stage.TransparentBackdrop}).");
+                evidence.Add($"{fixture.FamilyId}={changed}");
+            }
+
+            Assert(evidence.Count == 22,
+                $"WPF PNG capture evidence should cover exactly the 22 WPF-native families, not the two GPU-only effects (captured {evidence.Count}).");
+            Results.Add($"PASS WPF Recording family captures: {evidence.Count} individually isolated families were written and read back through real 640×360 PNG sequence files [{string.Join(", ", evidence)}]. Shooting Stars and Note Shimmer remain WPF Unsupported and are covered only by their GPU tap frames; parameter bindings stay Unverified and cost stays Unmeasured.");
+        }
+        finally
+        {
+            stage.ClearTransient();
+            stage.TransparentBackdrop = originalTransparent;
+            stage.SetState(originalNotes, originalPosition, originalPlaying, originalPressed);
+            stage.SetVisualSettings(originalSettings);
+            stage.ResetAnimation();
+            Invoke(window, "RefreshSettingControls");
+            try { Directory.Delete(directory, true); } catch { }
+        }
     }
 
     /// <summary>
@@ -4052,6 +4969,14 @@ internal static partial class VerificationSuite
             && shelf.FirstOrDefault(preset => preset.Name == "Lo-Fi Study")?.Settings.BackgroundMotion == "Aurora"
             && shelf.FirstOrDefault(preset => preset.Name == "Sunset Drive")?.Settings.BackgroundMotion == "Retro Grid",
             "Every community preset should ship a validated motion profile that supports its theme.");
+        var ember = shelf.First(preset => preset.Name == "Ember Rain").Settings;
+        var study = shelf.First(preset => preset.Name == "Lo-Fi Study").Settings;
+        var sunset = shelf.First(preset => preset.Name == "Sunset Drive").Settings;
+        Assert(ember.NoteStyle == "Fire" && ember.AmbientNature == "Rain" && ember.ImpactWave == "Ripple" && !ember.ShowImpactFlash
+                && study.NoteGlow <= 10 && study.ParticleAmount == 0 && !study.ShowImpactFlash
+                && study.AmbientEnergy == "None" && study.AmbientNature == "None" && study.AmbientLight == "None" && study.AmbientCosmic == "None"
+                && sunset.NoteStyle == "Neon" && sunset.BackgroundMotion == "Retro Grid" && sunset.ImpactBurst == "Fireworks" && !sunset.ShowImpactFlash,
+            "The three community looks should opt into deliberate recipes atop a quiet baseline, without inheriting flashy model defaults.");
         Assert(shelf.Select(preset => preset.Name).Distinct(StringComparer.OrdinalIgnoreCase).Count() == shelf.Count
                 && !shelf.Any(preset => VisualPresets.FindBuiltIn(preset.Name) is not null),
             "Shelf names should be unique and should not shadow a built-in preset.");
@@ -4197,6 +5122,129 @@ internal static partial class VerificationSuite
     /// Impact phase FX (effects-redesign v1): the Particles page exposes the wave style choice and
     /// the flash switch; hits spawn waves/flashes that paint real geometry and fade over time.
     /// </summary>
+    /// <summary>Checks both new materials on the real WPF draw path, including their half-size silhouette and independent depth toggle.</summary>
+    private static void VerifyNoteMaterialRendering(PianoStage stage, PianoVisualSettings visualSettings)
+    {
+        var saved = PianoVisualSettings.FromJson(visualSettings.ToJson());
+        try
+        {
+            visualSettings.NoteGlow = 0;
+            visualSettings.NoteHeadGlow = 0;
+            visualSettings.NoteRefraction = 0;
+            visualSettings.NoteEdge = 88;
+            visualSettings.NoteEdgeWidth = 48;
+            visualSettings.NoteTint = 78;
+            visualSettings.FallingTrail = "None";
+            visualSettings.FallingGhost = false;
+            visualSettings.FallingPulse = false;
+            visualSettings.ShowNoteLabels = false;
+            visualSettings.HoldBar = false;
+            stage.SetVisualSettings(visualSettings);
+
+            const int width = 128, height = 192;
+            byte[] Capture(string style, bool depth3D, bool halfSize = false, double refraction = 0)
+            {
+                visualSettings.NoteStyle = style;
+                visualSettings.Notes3D = depth3D;
+                visualSettings.NoteRefraction = refraction;
+                stage.SetVisualSettings(visualSettings);
+                var visual = new DrawingVisual();
+                var bounds = halfSize ? new Rect(53, 55, 22, 76) : new Rect(42, 32, 44, 152);
+                using (var dc = visual.RenderOpen())
+                    Invoke(stage, "DrawConfiguredNote", dc, bounds, Color.FromRgb(64, 176, 250), 1d, false, 60, false, false);
+                var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+                bitmap.Render(visual);
+                var pixels = new byte[width * height * 4];
+                bitmap.CopyPixels(pixels, width * 4, 0);
+                return pixels;
+            }
+
+            (int Count, int MinX, int MinY, int MaxX, int MaxY) Visible(byte[] pixels, int imageWidth, int imageHeight)
+            {
+                var count = 0; var minX = imageWidth; var minY = imageHeight; var maxX = -1; var maxY = -1;
+                for (var y = 0; y < imageHeight; y++)
+                    for (var x = 0; x < imageWidth; x++)
+                    {
+                        if (pixels[(y * imageWidth + x) * 4 + 3] <= 24) continue;
+                        count++;
+                        minX = Math.Min(minX, x); minY = Math.Min(minY, y);
+                        maxX = Math.Max(maxX, x); maxY = Math.Max(maxY, y);
+                    }
+                return (count, minX, minY, maxX, maxY);
+            }
+            byte[] Average2x2(byte[] pixels)
+            {
+                var halfWidth = width / 2; var halfHeight = height / 2;
+                var half = new byte[halfWidth * halfHeight * 4];
+                for (var y = 0; y < halfHeight; y++)
+                    for (var x = 0; x < halfWidth; x++)
+                        for (var channel = 0; channel < 4; channel++)
+                        {
+                            var source = ((y * 2 * width) + x * 2) * 4 + channel;
+                            var sum = pixels[source] + pixels[source + 4] + pixels[source + width * 4] + pixels[source + width * 4 + 4];
+                            half[(y * halfWidth + x) * 4 + channel] = (byte)((sum + 2) / 4);
+                        }
+                return half;
+            }
+            byte MaxCrystalCoreAlpha(byte[] pixels, int imageWidth, int imageHeight, Rect bounds)
+            {
+                var y0 = Math.Clamp((int)Math.Floor(bounds.Top + bounds.Height * .4), 0, imageHeight);
+                var y1 = Math.Clamp((int)Math.Ceiling(bounds.Top + bounds.Height * .6), 0, imageHeight);
+                var ranges = new[]
+                {
+                    (Start: (int)Math.Floor(bounds.Left + bounds.Width * .34), End: (int)Math.Ceiling(bounds.Left + bounds.Width * .44)),
+                    (Start: (int)Math.Floor(bounds.Left + bounds.Width * .56), End: (int)Math.Ceiling(bounds.Left + bounds.Width * .66))
+                };
+                byte max = 0;
+                foreach (var (start, end) in ranges)
+                for (var y = y0; y < y1; y++)
+                for (var x = Math.Clamp(start, 0, imageWidth); x < Math.Clamp(end, 0, imageWidth); x++)
+                    max = Math.Max(max, pixels[(y * imageWidth + x) * 4 + 3]);
+                return max;
+            }
+            int BrightOutlinePixels(byte[] pixels)
+            {
+                var count = 0;
+                for (var i = 0; i < pixels.Length; i += 4)
+                    if (pixels[i + 3] > 24 && pixels[i] + pixels[i + 1] + pixels[i + 2] > 125) count++;
+                return count;
+            }
+
+            var solid = Capture("Solid", false);
+            var gem2D = Capture("Gem", false);
+            var gem3D = Capture("Gem", true);
+            var gemWithRefraction = Capture("Gem", false, refraction: 100);
+            var crystal2D = Capture("CrystalOutline", false);
+            var crystal3D = Capture("CrystalOutline", true);
+            var crystalWithRefraction = Capture("CrystalOutline", false, refraction: 100);
+            var gemSmall = Visible(Capture("Gem", true, halfSize: true), width, height);
+            var crystalSmallPixels = Capture("CrystalOutline", false, halfSize: true);
+            var crystalSmall = Visible(crystalSmallPixels, width, height);
+            var crystalAverageHalf = Average2x2(crystal2D);
+            var crystalHalf = Visible(crystalAverageHalf, width / 2, height / 2);
+            var crystalHalfBright = BrightOutlinePixels(crystalAverageHalf);
+            var crystalCoreAlpha = MaxCrystalCoreAlpha(crystal2D, width, height, new Rect(42, 32, 44, 152));
+            var crystalHalfCoreAlpha = MaxCrystalCoreAlpha(crystalAverageHalf, width / 2, height / 2, new Rect(21, 16, 22, 76));
+            Assert(!gem2D.SequenceEqual(solid) && !crystal2D.SequenceEqual(solid) && !gem2D.SequenceEqual(crystal2D),
+                "Gem and Crystal Outline must paint distinct geometry rather than falling through to Solid on the WPF path.");
+            Assert(!gem2D.SequenceEqual(gem3D) && crystal2D.SequenceEqual(crystal3D),
+                "The 3D toggle must deepen Gem while Crystal Outline remains the deliberately flat material.");
+            Assert(!gem2D.SequenceEqual(gemWithRefraction) && !crystal2D.SequenceEqual(crystalWithRefraction),
+                "The WPF path should apply NoteRefraction to both Gem and Crystal Outline.");
+            Assert(gemSmall.Count > 300 && gemSmall.MaxX - gemSmall.MinX >= 18 && gemSmall.MaxY - gemSmall.MinY >= 68
+                    && crystalSmall.Count > 100 && crystalSmall.MaxX - crystalSmall.MinX >= 18 && crystalSmall.MaxY - crystalSmall.MinY >= 68
+                    && crystalHalf.Count > 40 && crystalHalfBright > 40
+                    && crystalCoreAlpha <= 60 && crystalHalfCoreAlpha <= 60,
+                $"Gem and Crystal Outline must remain legible at 50% while Crystal keeps a transparent core (Gem {gemSmall.Count} px; Crystal {crystalSmall.Count}/{crystalHalf.Count} px; bright 2×2 rim {crystalHalfBright}; core alpha full/half {crystalCoreAlpha}/{crystalHalfCoreAlpha}).");
+            Results.Add("PASS note materials WPF: Gem and Crystal Outline have distinct output; Gem responds to 3D; both consume NoteRefraction; Crystal stays flat, its rim survives a 2×2 downsample, and its center stays transparent.");
+        }
+        finally
+        {
+            visualSettings.CopyFrom(saved, keepBackgroundImage: true);
+            stage.SetVisualSettings(visualSettings);
+        }
+    }
+
     private static void VerifyImpactFx(MainWindow window, PianoStage stage, PianoVisualSettings visualSettings, Dictionary<string, ComboBox> choices)
     {
         var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
@@ -4242,8 +5290,11 @@ internal static partial class VerificationSuite
             "The Notes page should expose the falling trail choice, the pulse switch and the ghost switch.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.ImpactBurst)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactMorph)) && choices.ContainsKey(nameof(PianoVisualSettings.ImpactFlashStyle)),
             "The Particles page should expose the burst style, the note morph and the flash style.");
-        Assert(EffectCatalog.Falling.All.All(e => e.Status == EffectStatus.Available),
-            "The whole falling catalogue should be implemented in v2.");
+        var headTailGradient = EffectCatalog.Falling.All.Single(e => e.Id == "falling.color-gradient");
+        Assert(EffectCatalog.AllEffects.Count == 87 && EffectCatalog.AvailableCount == 86
+            && headTailGradient.Status == EffectStatus.Planned && headTailGradient.Channel == "falling.body.gradient"
+            && EffectCatalog.Falling.All.Where(e => e.Id != headTailGradient.Id).All(e => e.Status == EffectStatus.Available),
+            "The effect inventory should keep its missing head-to-tail gradient Planned rather than equating it with the pitch palette.");
         Assert(EffectCatalog.Impact.All.All(e => e.Status == EffectStatus.Available),
             "The whole impact catalogue should be implemented in v2.");
         var wasTrail = visualSettings.FallingTrail; var wasTrailIntensity = visualSettings.FallingTrailIntensity;
@@ -4369,11 +5420,29 @@ internal static partial class VerificationSuite
             && EffectCatalog.AmbientLight.All.All(e => e.Status == EffectStatus.Available)
             && EffectCatalog.AmbientCosmic.All.All(e => e.Status == EffectStatus.Available),
             "All four ambient catalogues should be implemented in v5.");
-        var wasEnergy = visualSettings.AmbientEnergy; var wasNature = visualSettings.AmbientNature;
-        var wasLight = visualSettings.AmbientLight; var wasCosmic = visualSettings.AmbientCosmic;
+        var wasEnergy = visualSettings.AmbientEnergy; var wasEnergyAmount = visualSettings.AmbientEnergyAmount;
+        var wasNature = visualSettings.AmbientNature; var wasNatureAmount = visualSettings.AmbientNatureAmount;
+        var wasLight = visualSettings.AmbientLight; var wasLightAmount = visualSettings.AmbientLightAmount;
+        var wasCosmic = visualSettings.AmbientCosmic; var wasCosmicAmount = visualSettings.AmbientCosmicAmount;
+        var wasBackgroundMotion = visualSettings.BackgroundMotion;
+        var wasBackgroundMotionAmount = visualSettings.BackgroundMotionAmount;
+        var wasBackgroundMotionSpeed = visualSettings.BackgroundMotionSpeed;
+        var wasBackgroundMotionColor = visualSettings.BackgroundMotionColor;
+        var wasBackgroundMode = visualSettings.BackgroundMode;
+        var wasShowBackground = visualSettings.ShowBackground;
+        var wasBeamIntensity = visualSettings.BeamIntensity;
+        var wasShowLightBeams = visualSettings.ShowLightBeams;
+        var activeKeys = (bool[])Field(stage, "_activeKey");
+        var activeKeyColors = (Color[])Field(stage, "_activeKeyColor");
+        var savedActiveKeys = (bool[])activeKeys.Clone();
+        var savedActiveKeyColors = (Color[])activeKeyColors.Clone();
         var wasWave = visualSettings.ImpactWave;
-        visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientNature = "Snow";
-        visualSettings.AmbientLight = "Prism"; visualSettings.AmbientCosmic = "Galaxy";
+        // The curated default intentionally zeros inactive layer intensities, so enable each selected layer
+        // explicitly instead of relying on model-default amounts left behind by a different preset.
+        visualSettings.AmbientEnergy = "Fireworks"; visualSettings.AmbientEnergyAmount = 60;
+        visualSettings.AmbientNature = "Snow"; visualSettings.AmbientNatureAmount = 60;
+        visualSettings.AmbientLight = "Prism"; visualSettings.AmbientLightAmount = 60;
+        visualSettings.AmbientCosmic = "Galaxy"; visualSettings.AmbientCosmicAmount = 60;
         visualSettings.ImpactWave = "Ripple";
         stage.SetVisualSettings(visualSettings);
         Assert(stage.HasActiveEffects, "Enabled ambient layers should keep the stage animating.");
@@ -4384,6 +5453,84 @@ internal static partial class VerificationSuite
             Assert(visual.Drawing is not null && visual.Drawing.Bounds.Width > 100 && visual.Drawing.Bounds.Height > 100,
                 $"The {pass} layer should paint stage-wide geometry.");
         }
+        // Concert Gold selects Spotlights. Keep a WPF/software regression check because the GPU already
+        // had this mode while the software stage silently rendered nothing for it.
+        visualSettings.AmbientLight = "Spotlights"; visualSettings.AmbientLightAmount = 0;
+        stage.SetVisualSettings(visualSettings);
+        var disabledSpotlights = new DrawingVisual();
+        using (var dc = disabledSpotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
+        Assert(disabledSpotlights.Drawing is null || disabledSpotlights.Drawing.Bounds.IsEmpty,
+            "Spotlights intensity zero should disable its WPF drawing pass.");
+        visualSettings.AmbientLightAmount = 16; // Concert Gold's shipped intensity; guard the low-level look, not an artificial maximum.
+        stage.SetVisualSettings(visualSettings);
+        var spotlights = new DrawingVisual();
+        using (var dc = spotlights.RenderOpen()) { Invoke(stage, "DrawAmbientLight", dc, 1280d, 480d); }
+        Assert(spotlights.Drawing is not null && spotlights.Drawing.Bounds.Width > 500 && spotlights.Drawing.Bounds.Height > 350,
+            "The software stage should draw the three Spotlights shafts and their key-side pools.");
+        var spotlightRaster = new RenderTargetBitmap(1280, 480, 96, 96, PixelFormats.Pbgra32);
+        spotlightRaster.Render(spotlights);
+        var spotlightPixels = new byte[1280 * 480 * 4];
+        spotlightRaster.CopyPixels(spotlightPixels, 1280 * 4, 0);
+        var litPixels = 0;
+        byte spotlightPeakAlpha = 0;
+        for (var i = 3; i < spotlightPixels.Length; i += 4)
+        {
+            if (spotlightPixels[i] > 8) litPixels++;
+            if (spotlightPixels[i] > spotlightPeakAlpha) spotlightPeakAlpha = spotlightPixels[i];
+        }
+        Assert(litPixels > 1000 && spotlightPeakAlpha > 80,
+            $"Concert Gold Spotlights should rasterize visible, warm WPF light at its shipped intensity (pixels={litPixels}, peak alpha={spotlightPeakAlpha}).");
+        var spotlightCoreEnergy = PianoStage.SpotlightEnergyScaleAtOffset(1280, 0);
+        var spotlightShoulderEnergy = PianoStage.SpotlightEnergyScaleAtOffset(1280, 1);
+        Assert(spotlightCoreEnergy > .90 && spotlightShoulderEnergy < .11,
+            $"WPF spotlights should preserve their central energy while keeping the broad penumbra restrained (core {spotlightCoreEnergy:0.000}, one-sigma shoulder {spotlightShoulderEnergy:0.000}).");
+
+        visualSettings.ShowLightBeams = true;
+        visualSettings.BeamIntensity = 45;
+        stage.SetVisualSettings(visualSettings);
+        Array.Clear(activeKeys);
+        Array.Clear(activeKeyColors);
+        activeKeys[60] = true;
+        activeKeyColors[60] = Color.FromRgb(58, 218, 255);
+        var keyBeam = new DrawingVisual();
+        using (var dc = keyBeam.RenderOpen()) { Invoke(stage, "DrawKeyBeams", dc, 1280d, 480d, 12d); }
+        Assert(keyBeam.Drawing is not null && keyBeam.Drawing.Bounds.Height > 300
+            && keyBeam.Drawing.Bounds.Width > 50 && keyBeam.Drawing.Bounds.Width < 100,
+            $"A sounding key should render a tall, localized shaft with a soft halo (bounds={keyBeam.Drawing?.Bounds}).");
+        var keyBeamRaster = new RenderTargetBitmap(1280, 480, 96, 96, PixelFormats.Pbgra32);
+        keyBeamRaster.Render(keyBeam);
+        var keyBeamPixels = new byte[1280 * 480 * 4];
+        keyBeamRaster.CopyPixels(keyBeamPixels, 1280 * 4, 0);
+        var keyBeamLitPixels = 0;
+        byte keyBeamPeakAlpha = 0;
+        for (var i = 3; i < keyBeamPixels.Length; i += 4)
+        {
+            if (keyBeamPixels[i] > 8) keyBeamLitPixels++;
+            if (keyBeamPixels[i] > keyBeamPeakAlpha) keyBeamPeakAlpha = keyBeamPixels[i];
+        }
+        Assert(keyBeamLitPixels > 1000 && keyBeamPeakAlpha > 80,
+            $"WPF key beams should rasterize a bright shaft and bloom halo (pixels={keyBeamLitPixels}, peak alpha={keyBeamPeakAlpha}).");
+
+        visualSettings.BackgroundMode = "Solid";
+        visualSettings.ShowBackground = true;
+        visualSettings.BackgroundMotionAmount = 60;
+        visualSettings.BackgroundMotionSpeed = 38;
+        foreach (var motion in PianoVisualSettings.BackgroundMotions.Skip(1))
+        {
+            visualSettings.BackgroundMotion = motion;
+            stage.SetVisualSettings(visualSettings);
+            var motionVisual = new DrawingVisual();
+            using (var dc = motionVisual.RenderOpen()) { Invoke(stage, "DrawBackgroundMotion", dc, 1280d, 480d); }
+            Assert(motionVisual.Drawing is not null && motionVisual.Drawing.Bounds.Width > 100 && motionVisual.Drawing.Bounds.Height > 60,
+                $"The WPF fallback should render a visible {motion} background-motion layer.");
+        }
+        visualSettings.BackgroundMode = "ChromaGreen";
+        stage.SetVisualSettings(visualSettings);
+        var chromaMotion = new DrawingVisual();
+        using (var dc = chromaMotion.RenderOpen()) { Invoke(stage, "DrawBackgroundMotion", dc, 1280d, 480d); }
+        Assert(chromaMotion.Drawing is null || chromaMotion.Drawing.Bounds.IsEmpty,
+            "Procedural background motion must leave the chroma-key green perfectly clean on the WPF path.");
+
         stage.Impact(60, 1);
         Assert(stage.RingCount > 0, "A ripple impact should spawn a wave.");
         var ripples = new DrawingVisual();
@@ -4391,11 +5538,24 @@ internal static partial class VerificationSuite
         Assert(ripples.Drawing is not null && ripples.Drawing.Bounds.Width > 10, "Water ripples should paint geometry.");
         for (var i = 0; i < 40; i++) stage.Advance(.05);
         Assert(stage.RingCount == 0, "Ripple waves should fade out over time.");
-        visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientNature = wasNature;
-        visualSettings.AmbientLight = wasLight; visualSettings.AmbientCosmic = wasCosmic;
+        visualSettings.AmbientEnergy = wasEnergy; visualSettings.AmbientEnergyAmount = wasEnergyAmount;
+        visualSettings.AmbientNature = wasNature; visualSettings.AmbientNatureAmount = wasNatureAmount;
+        visualSettings.AmbientLight = wasLight; visualSettings.AmbientLightAmount = wasLightAmount;
+        visualSettings.AmbientCosmic = wasCosmic; visualSettings.AmbientCosmicAmount = wasCosmicAmount;
+        visualSettings.BackgroundMotion = wasBackgroundMotion;
+        visualSettings.BackgroundMotionAmount = wasBackgroundMotionAmount;
+        visualSettings.BackgroundMotionSpeed = wasBackgroundMotionSpeed;
+        visualSettings.BackgroundMotionColor = wasBackgroundMotionColor;
+        visualSettings.BackgroundMode = wasBackgroundMode;
+        visualSettings.ShowBackground = wasShowBackground;
+        visualSettings.BeamIntensity = wasBeamIntensity;
+        visualSettings.ShowLightBeams = wasShowLightBeams;
+        Array.Copy(savedActiveKeys, activeKeys, activeKeys.Length);
+        Array.Copy(savedActiveKeyColors, activeKeyColors, activeKeyColors.Length);
         visualSettings.ImpactWave = wasWave;
         stage.SetVisualSettings(visualSettings);
         stage.ClearTransient();
+        Results.Add("PASS WPF lighting: spotlight cores stay bright while broad penumbrae are restrained; six background motions, key-beam bloom, ripple geometry, and clean chroma-key remain intact.");
     }
 
     /// <summary>
@@ -4541,14 +5701,16 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>The dock switch must really change what the stage renders, and the bake must be cached.</summary>
-    private static void VerifyShadedStage(PianoStage stage, Dictionary<string, ComboBox> choices)
+    private static void VerifyShadedStage(PianoStage stage, Dictionary<string, ComboBox> choices, PianoVisualSettings windowSettings)
     {
         var shading = choices[nameof(PianoVisualSettings.ShadingQuality)];
         Assert((string?)shading.SelectedValue == "Balanced", "The default look should start on the Balanced shading engine.");
         // Drive the shaded-keyboard pass directly with an explicit DrawingContext so the bake
         // accounting does not depend on WPF render scheduling or window resize churn.
         var off = new PianoStage();
-        var settings = (PianoVisualSettings)Field(stage, "_visual");
+        // The dock writes to the window's settings object; the stage draws a policy-adjusted copy of it,
+        // so assertions about dock switches must read the window object, not the stage's copy.
+        var settings = windowSettings;
         off.SetVisualSettings(settings);
         Assert(ShadeOnce(off), "The default look should drive the stage with the ray-traced keyboard.");
         Assert(off.IsShadedKeyboardActive && off.ShadedBakeCount >= 1,
@@ -4974,6 +6136,13 @@ internal static partial class VerificationSuite
         var bitmap = new RenderTargetBitmap(width, height, 96 * dpi.DpiScaleX, 96 * dpi.DpiScaleY, PixelFormats.Pbgra32); bitmap.Render(window);
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         using var file = File.Create(path); var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(bitmap)); encoder.Save(file);
+    }
+
+    private static void VerifyPhase1VisualReview(string outputDirectory)
+    {
+        var captures = Phase1VisualReview.Render(outputDirectory);
+        Assert(captures == 48, "Phase 1 visual review must write 48 images across three looks, four checkpoints, two renderers and two sizes.");
+        Results.Add($"PASS Phase 1 visual review: {captures} WPF/GPU-WARP images at 1920×1080 and 960×540, with manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
     }
 
     private static void Finish(App app, string[] args, Exception? failure)

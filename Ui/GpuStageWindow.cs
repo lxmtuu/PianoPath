@@ -28,7 +28,8 @@ internal sealed class GpuStageWindow : Window
         Content = _host;
         _host.SurfaceChanged += (hwnd, width, height) => _loop.SetWindow(hwnd, width, height);
         _status = new DispatcherTimer(TimeSpan.FromMilliseconds(500), DispatcherPriority.Background, (_, _) => RefreshTitle(), Dispatcher);
-        Loaded += (_, _) => { RefreshTitle(); _status.Start(); };
+        Loaded += (_, _) => { RefreshTitle(); _status.Start(); _loop.RefreshDisplayRefreshRate(); };
+        LocationChanged += (_, _) => _loop.RefreshDisplayRefreshRate();
         Closed += (_, _) => { _status.Stop(); _loop.SetWindow(IntPtr.Zero, 0, 0); };
         PreviewKeyDown += OnKey;
         MouseDoubleClick += (_, _) => ToggleFullScreen();
@@ -39,9 +40,11 @@ internal sealed class GpuStageWindow : Window
     private void RefreshTitle()
     {
         var engine = _loop.IsWarp ? Loc.T("software rasterizer (WARP)") : _loop.AdapterName;
+        var quality = MainWindow.AdaptiveQualityLabel(_loop.AdaptiveQualityTier);
+        var qualitySuffix = quality is null ? "" : $" · {quality}";
         Title = _loop.Error is { } error
             ? Loc.F("Keyflow GPU stage · stopped: {0}", error)
-            : Loc.F("Keyflow GPU stage · {0} FPS · {1} · F11 full screen", Math.Round(_loop.Fps), engine);
+            : Loc.F("Keyflow GPU stage · {0} FPS · {1}{2} · F11 full screen", Math.Round(_loop.Fps), engine, qualitySuffix);
     }
 
     private void OnKey(object sender, KeyEventArgs e)

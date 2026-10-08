@@ -78,6 +78,8 @@ public partial class MainWindow
     private static readonly Dictionary<string, string> SearchSynonyms = new(StringComparer.Ordinal)
     {
         [nameof(PianoVisualSettings.NoteFallSpeed)] = "tempo speed velocity scroll fast slow fps",
+        [nameof(PianoVisualSettings.NoteStyle)] = "material surface gemstone crystal prism facets outline flat",
+        [nameof(PianoVisualSettings.Notes3D)] = "depth bevel dimensional flat 2d 3d",
         [nameof(PianoVisualSettings.NoteGlow)] = "brightness halo shine luminance",
         [nameof(PianoVisualSettings.NoteTint)] = "opacity alpha transparency",
         [nameof(PianoVisualSettings.NoteWidth)] = "thickness bar lane size",
@@ -127,6 +129,9 @@ public partial class MainWindow
         [nameof(PianoVisualSettings.ShellTheme)] = "theme shell colour palette skin",
         [nameof(PianoVisualSettings.ChromeMotion)] = "animation transitions easing",
         [nameof(PianoVisualSettings.BackdropDensity)] = "motes dust density backdrop",
+        [nameof(PianoVisualSettings.ReducedMotion)] = "vestibular animation motion still calm freeze",
+        [nameof(PianoVisualSettings.ReduceFlashes)] = "strobe flash epilepsy photosensitive blink",
+        [nameof(PianoVisualSettings.HighContrast)] = "outline shape cue colour color vision contrast edge",
     };
 
     // =====================================================================================================
@@ -207,12 +212,43 @@ public partial class MainWindow
         Note(looks, "Every preset can be edited afterwards; the pages next to this one keep the piano roll, keyboard and camera in sync with the new theme.");
     }
 
-    /// <summary>Applies a built-in preset named on the command line; spaces and case do not matter.</summary>
+    /// <summary>Applies a shipped preset named on the command line; spaces and case do not matter.</summary>
     internal void PreviewPreset(string name)
     {
         static string Key(string value) => value.Replace(" ", "", StringComparison.Ordinal).ToLowerInvariant();
-        var preset = VisualPresets.BuiltIn.FirstOrDefault(candidate => Key(candidate.Name) == Key(name));
-        if (preset is not null) ApplyBuiltInPreset(preset.Name);
+        var preset = VisualPresets.BuiltIn.Concat(CommunityPresets.All)
+            .FirstOrDefault(candidate => Key(candidate.Name) == Key(name));
+        if (preset is null) return;
+        // This is a capture override, not a user action: never arm the settings auto-save timer or
+        // make the user's current profile/presets follow a CI/command-line preview.
+        _visualSettings.CopyFrom(preset.Settings, keepBackgroundImage: true);
+        _visualSettings.PresetName = preset.Name; _visualSettings.PresetModified = false;
+        if (_visualSettings.BackgroundMode == "Image" && string.IsNullOrWhiteSpace(_visualSettings.BackgroundImagePath)) _visualSettings.BackgroundMode = "Solid";
+        RefreshSettingControls();
+        Stage.SetVisualSettings(_visualSettings);
+        ApplyRenderBackend();
+        SyncCameraOverlay();
+        ApplyChromeTheme();
+        SyncPlayInlineControls(refreshThemeChips: false);
+        RefreshHandStatus();
+        LoadPresetList(preset.Name);
+        RefreshMenuStageLook();
+    }
+
+    /// <summary>Temporarily overrides the note material/depth for a reproducible preview without saving to the user's settings.</summary>
+    internal void PreviewNoteStyle(string? styleName, string? depthName)
+    {
+        static string Key(string value) => new string(value.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
+        var style = string.IsNullOrWhiteSpace(styleName) ? null
+            : PianoVisualSettings.NoteStyles.FirstOrDefault(value => Key(value) == Key(styleName));
+        bool? depth = string.IsNullOrWhiteSpace(depthName) ? null : depthName.ToLowerInvariant() switch { "2d" => false, "3d" => true, _ => null };
+        if ((!string.IsNullOrWhiteSpace(styleName) && style is null) || (!string.IsNullOrWhiteSpace(depthName) && depth is null)) return;
+        if (style is null && depth is null) return;
+        if (style is not null) _visualSettings.NoteStyle = style;
+        if (depth is not null) _visualSettings.Notes3D = depth.Value;
+        RefreshSettingControls();
+        Stage.SetVisualSettings(_visualSettings);
+        ApplyRenderBackend();
     }
 
     /// <summary>Applies a built-in preset by name (used by the Theme page quick looks).</summary>
@@ -285,14 +321,15 @@ public partial class MainWindow
         SliderRow(color, "Rainbow speed", nameof(PianoVisualSettings.RainbowSpeed), 0, 100, "How fast the hue cycles.").VisibleWhen = () => _visualSettings.ColorMode == "RainbowTime";
 
         var shape = Card(NoteSettingsHost, "SHAPE & STYLE", "Silhouette of the falling bars.");
-        Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Solid bars, hollow neon tubes, glossy glass or burning fire notes.",
-            ("Solid", "Solid"), ("Neon", "Neon outline"), ("Glass", "Glass"), ("Fire", "Fire / burning"));
+        Choice(shape, "Note style", nameof(PianoVisualSettings.NoteStyle), "Choose the note material without changing pitch, timing or width. Fire / burning follows the active note-color mode; Gem uses faceted luminous planes; Crystal Outline is an angular, translucent contour.",
+            ("Solid", "Solid"), ("Neon", "Neon outline"), ("Glass", "Glass"), ("Fire", "Fire / burning"), ("Gem", "Gem"), ("CrystalOutline", "Crystal Outline"));
+        Note(shape, "Fire / burning bars follow the active note colors in COLOR above. In Gradient mode, set Palette to Custom or edit the start/end swatches; PerHand and PerTrack use their own color controls. Flame color on the Particles page changes separate flames around sounding keys, not note bars.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire";
         SliderRow(shape, "Note width", nameof(PianoVisualSettings.NoteWidth), 30, 100, "Width of a note relative to its key lane.");
         SliderRow(shape, "Corner roundness", nameof(PianoVisualSettings.NoteRoundness), 0, 100, "Rounded corners of every bar.");
         SliderRow(shape, "Minimum length", nameof(PianoVisualSettings.NoteMinLength), 4, 60, "Very short notes are stretched to at least this many pixels.");
         SliderRow(shape, "Gap between notes", nameof(PianoVisualSettings.NoteGap), 0, 12, "Space carved between consecutive notes of the same key.");
         SliderRow(shape, "Fire texture", nameof(PianoVisualSettings.NoteTexture), 0, 100, "Strength of the animated ember holes in the Fire style.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire";
-        Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Inner shadow and highlight on solid and glass notes.");
+        Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Adds a subtle bevel to Solid and Glass, and stronger faceted depth to Gem. Off is the flatter 2D treatment; Crystal Outline stays intentionally flat.");
         Toggle(shape, "Note names on bars", nameof(PianoVisualSettings.ShowNoteLabels), "Print the note name inside each bar when there is room.");
 
         var glow = Card(NoteSettingsHost, "GLOW & EDGES", "Bloom, outline and highlights.");
@@ -412,7 +449,7 @@ public partial class MainWindow
         Toggle(flames, "Enable flames", nameof(PianoVisualSettings.ShowFlame), "Fire bursts while a key sounds.");
         SliderRow(flames, "Flame intensity", nameof(PianoVisualSettings.FlameIntensity), 0, 100, "Brightness and size of the fire.");
         SliderRow(flames, "Flame height", nameof(PianoVisualSettings.FlameHeight), 0, 100, "How tall the flames reach.");
-        Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Classic warm fire or the color of the note.", ("Warm", "Warm fire"), ("Note", "Note color"));
+        Choice(flames, "Flame color", nameof(PianoVisualSettings.FlameColorMode), "Color of the separate flames around sounding keys: classic warm fire or the note color. This does not change the Fire / burning note material.", ("Warm", "Warm fire"), ("Note", "Note color"));
     }
 
     private void BuildKeyboardPage()
@@ -446,7 +483,7 @@ public partial class MainWindow
             "Every pixel of the keyboard is shaded with a real light transport model: a GGX specular lobe, a softbox with true penumbra shadows, contact occlusion in the gaps, colored lights from every sounding key and an ACES filmic tonemapper.");
         // The GPU stage shades the keys in real time and reads the same sliders every frame; the picker
         // shapes the software renderer, which transparent PNG takes and the automatic fallback still draw.
-        Choice(shader, "Shading engine", nameof(PianoVisualSettings.ShadingQuality),
+        Choice(shader, "Software shading quality", nameof(PianoVisualSettings.ShadingQuality),
             "The GPU stage always renders the keys in 3D with real-time lights and shadows every frame, and the sliders below shape it. This picker shapes the software renderer, which transparent PNG takes and the automatic fallback still draw: Off is flat vector keys, Fast, Balanced and Cinematic trade bake time for shadow and occlusion samples.",
             ("Off", "Off · flat keys"), ("Fast", "Fast"), ("Balanced", "Balanced"), ("Cinematic", "Cinematic"));
         SliderRow(shader, "Camera tilt", nameof(PianoVisualSettings.ShaderCameraTilt), 0, 100, "Low camera exaggerates the perspective and lengthens the black key shadows; high camera flattens the bed.");
@@ -815,6 +852,11 @@ public partial class MainWindow
         _gpuStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
         Register(graphics, _gpuStatusLabel, null, "gpu direct3d graphics engine renderer status adapter");
         RefreshGpuStatus();
+
+        var access = Card(GeneralSettingsHost, "ACCESSIBILITY", "Comfort switches for the whole stage. While one is on it overrides the matching effect settings everywhere — every preset, every page — and it is saved with your profile.");
+        Toggle(access, "Reduced motion", nameof(PianoVisualSettings.ReducedMotion), "Freeze the stage's own animation: the background and the whole ambient sky go still, and every pulse, vibration, colour cycle, arc, shimmer, spark, wisp and flame stands down. The notes themselves keep falling exactly as before.");
+        Toggle(access, "Reduce flashes", nameof(PianoVisualSettings.ReduceFlashes), "Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay.");
+        Toggle(access, "High contrast", nameof(PianoVisualSettings.HighContrast), "Give every note a strong bright outline so its shape carries the information, not its colour alone. Looks that already draw a stronger outline keep theirs.");
 
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));

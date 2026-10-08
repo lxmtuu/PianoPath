@@ -123,9 +123,20 @@ public partial class MainWindow
             if (loop.Error is { } error) return Loc.F("Engine: software (WPF) · the GPU engine failed: {0}", error);
             if (!loop.IsReady) return Loc.T("Engine: starting Direct3D 11…");
             var adapter = loop.IsWarp ? Loc.T("software rasterizer (WARP)") : loop.AdapterName;
-            return Loc.F("Engine: Direct3D 11 on {0} · shaders compiled in {1} ms", adapter, Math.Round(loop.ShaderCompileMilliseconds));
+            var quality = AdaptiveQualityLabel(loop.AdaptiveQualityTier);
+            var qualitySuffix = quality is null ? "" : $" · {quality}";
+            return Loc.F("Engine: Direct3D 11 on {0} · shaders compiled in {1} ms{2}", adapter, Math.Round(loop.ShaderCompileMilliseconds), qualitySuffix);
         });
     }
+
+    internal static string? AdaptiveQualityLabel(GpuAdaptiveQualityTier tier) => tier switch
+    {
+        GpuAdaptiveQualityTier.BloomReduced => Loc.T("Auto quality: bloom reduced"),
+        GpuAdaptiveQualityTier.BloomMinimal => Loc.T("Auto quality: bloom minimum"),
+        GpuAdaptiveQualityTier.AmbientReduced => Loc.T("Auto quality: bloom minimum, ambient reduced"),
+        GpuAdaptiveQualityTier.AmbientMinimal => Loc.T("Auto quality: bloom minimum, ambient minimum"),
+        _ => null
+    };
 
     private void OpenGpuStage_Click(object sender, RoutedEventArgs e) => OpenGpuStageWindow();
 

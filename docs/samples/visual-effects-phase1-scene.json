@@ -1,0 +1,134 @@
+{
+  "schemaVersion": 1,
+  "id": "pianopath.phase1.reference-scene",
+  "status": "review-fixture-consumed-by-verification",
+  "purpose": "Một clip piano tất định được bộ verification dùng để render ảnh review qua hai renderer; không phải cấu hình playback hoặc MIDI nạp vào phiên chơi của người dùng.",
+  "render": {
+    "width": 1920,
+    "height": 1080,
+    "dpi": 96,
+    "framesPerSecond": 60,
+    "durationSeconds": 12,
+    "frameCount": 720,
+    "initialTimeSeconds": 4.1,
+    "randomSeed": 424242,
+    "colorSpace": "sRGB",
+    "keyboard": {
+      "keyCount": 88,
+      "firstMidiPitch": 21,
+      "lastMidiPitch": 108,
+      "noteDirection": "Down",
+      "hitLineNormalizedY": 0.78,
+      "lookaheadSeconds": 3.0
+    }
+  },
+  "music": {
+    "meter": [4, 4],
+    "loopBeats": [0, 16],
+    "tempoMap": [
+      { "beat": 0, "bpm": 96 },
+      { "beat": 12, "bpm": 72 }
+    ],
+    "pedalEvents": [
+      { "beat": 8, "down": true },
+      { "beat": 11.75, "down": false }
+    ],
+    "notes": [
+      { "id": "c-l-c3", "pitch": 48, "hand": "left", "startBeat": 0, "durationBeats": 3.5, "velocity": 48 },
+      { "id": "c-l-g3", "pitch": 55, "hand": "left", "startBeat": 0, "durationBeats": 3.5, "velocity": 54 },
+      { "id": "c-r-e4", "pitch": 64, "hand": "right", "startBeat": 0, "durationBeats": 0.75, "velocity": 38 },
+      { "id": "c-r-g4-a", "pitch": 67, "hand": "right", "startBeat": 0.75, "durationBeats": 0.75, "velocity": 65 },
+      { "id": "c-r-c5", "pitch": 72, "hand": "right", "startBeat": 1.5, "durationBeats": 1.5, "velocity": 103 },
+      { "id": "c-r-g4-b", "pitch": 67, "hand": "right", "startBeat": 3, "durationBeats": 0.75, "velocity": 72 },
+
+      { "id": "g-l-g2", "pitch": 43, "hand": "left", "startBeat": 4, "durationBeats": 3.25, "velocity": 58 },
+      { "id": "g-l-d3", "pitch": 50, "hand": "left", "startBeat": 4, "durationBeats": 3.25, "velocity": 50 },
+      { "id": "g-r-g4", "pitch": 67, "hand": "right", "startBeat": 4, "durationBeats": 0.75, "velocity": 56 },
+      { "id": "g-r-b4", "pitch": 71, "hand": "right", "startBeat": 4.75, "durationBeats": 0.75, "velocity": 74 },
+      { "id": "g-r-d5", "pitch": 74, "hand": "right", "startBeat": 5.5, "durationBeats": 0.75, "velocity": 91 },
+      { "id": "g-r-g5", "pitch": 79, "hand": "right", "startBeat": 6.25, "durationBeats": 1.25, "velocity": 110 },
+      { "id": "g-r-d5-tail", "pitch": 74, "hand": "right", "startBeat": 7.5, "durationBeats": 0.5, "velocity": 60 },
+
+      { "id": "am-l-a2", "pitch": 45, "hand": "left", "startBeat": 8, "durationBeats": 3.5, "velocity": 60 },
+      { "id": "am-l-e3", "pitch": 52, "hand": "left", "startBeat": 8, "durationBeats": 3.5, "velocity": 55 },
+      { "id": "am-r-a4", "pitch": 69, "hand": "right", "startBeat": 8, "durationBeats": 0.5, "velocity": 48 },
+      { "id": "am-r-c5-a", "pitch": 72, "hand": "right", "startBeat": 8.5, "durationBeats": 0.5, "velocity": 72 },
+      { "id": "am-r-e5", "pitch": 76, "hand": "right", "startBeat": 9, "durationBeats": 1, "velocity": 110 },
+      { "id": "am-r-b4", "pitch": 71, "hand": "right", "startBeat": 10, "durationBeats": 0.5, "velocity": 44 },
+      { "id": "am-r-c5-b", "pitch": 72, "hand": "right", "startBeat": 10.5, "durationBeats": 0.5, "velocity": 65 },
+      { "id": "am-r-a4-tail", "pitch": 69, "hand": "right", "startBeat": 11, "durationBeats": 0.75, "velocity": 94 },
+
+      { "id": "f-l-f2", "pitch": 41, "hand": "left", "startBeat": 12, "durationBeats": 3.5, "velocity": 62 },
+      { "id": "f-l-c3", "pitch": 48, "hand": "left", "startBeat": 12, "durationBeats": 3.5, "velocity": 55 },
+      { "id": "f-r-a4", "pitch": 69, "hand": "right", "startBeat": 12, "durationBeats": 0.75, "velocity": 55 },
+      { "id": "f-r-c5", "pitch": 72, "hand": "right", "startBeat": 12.75, "durationBeats": 0.75, "velocity": 75 },
+      { "id": "f-r-f5", "pitch": 77, "hand": "right", "startBeat": 13.5, "durationBeats": 1.5, "velocity": 108 },
+      { "id": "f-r-c5-release", "pitch": 72, "hand": "right", "startBeat": 15.25, "durationBeats": 0.5, "velocity": 70 }
+    ]
+  },
+  "reviewFrames": [
+    { "id": "note-readability", "timeSeconds": 0.8, "checks": ["note edge against backplate", "pitch-column registration", "leading edge remains clear"] },
+    { "id": "held-chord-and-impact", "timeSeconds": 4.1, "checks": ["two-hand separation", "velocity hierarchy", "held chord stays legible", "impact remains local"] },
+    { "id": "sustain-pedal", "timeSeconds": 6.1, "checks": ["pedal is down", "sustained bass and melody remain distinct", "pedal glow stays local", "no full-frame flash"] },
+    { "id": "release-and-rest", "timeSeconds": 11.25, "checks": ["release decay", "ambient does not leave visual residue", "rest is visually quiet"] }
+  ],
+  "looks": [
+    {
+      "id": "concert-cinematic",
+      "name": "Concert",
+      "subtitle": "Hòa nhạc · cinematic",
+      "referencePreset": "Concert Gold",
+      "designTargetOnly": true,
+      "material": "Satin note face with a narrow warm rim; polished but opaque enough for long notes.",
+      "palette": {
+        "stageTop": "#080B13",
+        "stageBottom": "#101624",
+        "leftHand": "#63D7DE",
+        "rightHand": "#F3C56E",
+        "accent": "#B29BFF",
+        "impact": "#FFE2A4",
+        "keyGlow": "#F0C476"
+      },
+      "mix": { "trail": 0.38, "impact": 0.34, "ambient": 0.18, "bloom": 0.28 },
+      "visualRules": ["warm key-side pools", "one restrained beam family", "no full-frame flash", "preserve dark negative space"]
+    },
+    {
+      "id": "neon-electronic",
+      "name": "Neon",
+      "subtitle": "Điện tử · live set",
+      "referencePreset": "Neon Violet",
+      "designTargetOnly": true,
+      "material": "High-contrast luminous core with a crisp edge; glow stays outside the note silhouette.",
+      "palette": {
+        "stageTop": "#070A14",
+        "stageBottom": "#0D1422",
+        "leftHand": "#38D8FF",
+        "rightHand": "#FF57C9",
+        "accent": "#9B83FF",
+        "impact": "#D7BCFF",
+        "keyGlow": "#63DFFF"
+      },
+      "mix": { "trail": 0.62, "impact": 0.50, "ambient": 0.24, "bloom": 0.42 },
+      "visualRules": ["cyan/pink hand separation", "short velocity-shaped trail", "impact is key-local", "beat pulse never strobes the whole frame"]
+    },
+    {
+      "id": "clean-learning",
+      "name": "Learning",
+      "subtitle": "Học đàn · clean",
+      "referencePreset": "Two Hands",
+      "designTargetOnly": true,
+      "material": "Matte opaque note body with a high-contrast outline; labels only when they fit without collision.",
+      "palette": {
+        "stageTop": "#0A111A",
+        "stageBottom": "#101A25",
+        "leftHand": "#53BCEB",
+        "rightHand": "#FF829C",
+        "accent": "#D9E4F3",
+        "impact": "#F3C96D",
+        "keyGlow": "#F2F5FA"
+      },
+      "mix": { "trail": 0.08, "impact": 0.16, "ambient": 0, "bloom": 0.08 },
+      "visualRules": ["ambient off by default", "no global flash or moving background", "keyboard and pitch are the first read", "motion-reduced target"]
+    }
+  ]
+}

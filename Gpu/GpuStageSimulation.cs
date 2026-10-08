@@ -12,21 +12,6 @@ internal struct GpuKeyInstance { public Vector4 Box, Emit, Misc, Base; }
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuSpriteInstance { public Vector4 PosSize, Color, Dir; }
 
-/// <summary>A growable array of instances that is refilled every frame without allocating.</summary>
-internal sealed class GpuInstanceList<T> where T : struct
-{
-    private T[] _items;
-    internal GpuInstanceList(int capacity) => _items = new T[capacity];
-    internal int Count { get; private set; }
-    internal void Clear() => Count = 0;
-    internal void Add(in T item)
-    {
-        if (Count == _items.Length) Array.Resize(ref _items, _items.Length * 2);
-        _items[Count++] = item;
-    }
-    internal ReadOnlySpan<T> Span => _items.AsSpan(0, Count);
-}
-
 /// <summary>Scene layout of one output, in stage DIPs (the software stage's coordinate system).</summary>
 internal readonly struct GpuSceneLayout
 {
@@ -91,8 +76,11 @@ internal sealed partial class GpuStageSimulation
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
     private readonly bool[] _active = new bool[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
-    private readonly Random _random = new(20260930);
+    private readonly Random _random;
     private double _time;
+
+    internal GpuStageSimulation() : this(20260930) { }
+    internal GpuStageSimulation(int seed) => _random = new Random(seed);
     private float _simWidth = 1280, _activity, _beatPulse;
     private GpuLook _look = new();
 
@@ -626,6 +614,10 @@ internal sealed partial class GpuStageSimulation
         var scaleX = layout.Width / _simWidth;
         var hitY = layout.HitY;
         var glowGain = .9f + look.ParticleGlow * 1.6f;
+
+        // The AR overlay only draws the calibrated camera and its separately projected notes/keys.
+        // Stage-anchored sprites are not mapped to the keyboard; suppress even transients already in flight.
+        if (look.OverCamera) return;
 
         if (look.ShowLightBeams && look.BeamIntensity > 0)
         {

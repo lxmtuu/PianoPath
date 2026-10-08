@@ -1,13 +1,15 @@
 # Thiết kế lại hệ thống Effects (v1: Impact phase hoàn thiện)
 
-Tài liệu này là bản thiết kế chính thức cho toàn bộ hệ thống hiệu ứng của Keyflow:
-tổng hợp 87 effects theo yêu cầu, sắp xếp theo kiến trúc logic duy nhất, và roadmap
-triển khai từng phase — **làm đến đâu hoàn thiện đến đó** (settings + slider + renderer
-+ preset + kiểm thử), không hiện UI cho effect chưa có logic thật.
+Tài liệu này ghi lại thiết kế và các phase effects-redesign v1–v7: 87 mục được chia theo
+vòng đời nốt, ambient, modulators và theme. Đây là **lịch sử thiết kế/triển khai theo nhóm**,
+không phải bằng chứng rằng mọi option đã được kiểm thử riêng trên mọi backend.
 
-Bảng tổng hợp trong code nằm ở `Stage/Effects/EffectCatalog.cs` (nguồn duy nhất —
-single source of truth); tài liệu này giải thích *vì sao* kiến trúc lại như vậy và
-*làm gì tiếp theo*.
+`Stage/Effects/EffectCatalog.cs` hiện là inventory/metadata cho diagnostics và tài liệu;
+settings/options trong ứng dụng vẫn khai báo riêng ở `PianoVisualSettings` và
+`MainWindow.Settings`, và trạng thái `Available` chưa được dùng để lọc UI lúc chạy.
+Xem audit source-to-runtime tại [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md)
+và lộ trình tái thiết kế tiếp theo tại
+[`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
 ---
 
@@ -89,8 +91,7 @@ dùng chung một kênh với tham số khác nhau:
 
 ## 3. Tổng hợp toàn bộ 87 effects
 
-Trạng thái: ✅ = đã hoàn thiện (settings + renderer + kiểm thử), 🔜 = đã chốt kênh,
-làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
+Trạng thái trong catalog: `Available` ghi nhận mục đã được phân vào một implementation/channel; nó không khẳng định đã có test riêng cho từng option, parity giữa GPU/software, hay hỗ trợ AR. Audit source hiện tại và coverage test nằm trong [`EFFECT-COVERAGE-AUDIT.md`](EFFECT-COVERAGE-AUDIT.md).
 
 ### 3.1 Falling — nốt đang rơi (10)
 
@@ -99,7 +100,7 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Glow Trail | Vệt sáng mờ | falling.trail | ✅ v2 |
 | Motion Blur | Mờ chuyển động | falling.body | ✅ v2 |
 | Sparkle Tail | Đuôi tia sáng | falling.trail | ✅ v2 |
-| Color Gradient | Chuyển sắc đầu–đuôi | falling.body | ✅ có sẵn |
+| Color Gradient | Chuyển sắc đầu–đuôi | falling.body.gradient | 🔜 Planned; head-to-tail renderer/settings chưa có |
 | Pulsing | Nhấp nháy | falling.body | ✅ v2 |
 | Ribbon Twist | Dải lụa xoắn | falling.body | ✅ v2 |
 | Particle Stream | Dòng hạt | falling.trail | ✅ v2 |
@@ -214,7 +215,7 @@ làm theo roadmap. Chi tiết trong `EffectCatalog.cs`.
 | Octave Color | Mỗi quãng 8 một màu | NoteColor | ✅ v6 |
 | Pedal Glow | Phím sáng theo pedal | hold.glow khi sustain | ✅ v6 |
 | Tempo Sync | Nháy theo nhịp BPM | pulse theo beat clock | ✅ v6 |
-| Audio Reactive | Nhảy theo FFT | spectrum → intensity | ✅ v6 |
+| Audio Reactive | Nhảy theo năng lượng/onset | envelope hiện có → intensity; PCM FFT spectrum là phần việc tiếp theo | ✅ v6 (envelope) |
 | Zone Split FX | Bass=lửa, Treble=băng | effect theo vùng phím | ✅ v6 |
 
 ### 3.10 Combo themes (7) — preset graphs
@@ -359,12 +360,13 @@ File JSON/preset cũ có key `ShowSpotlights` vẫn đọc được (parser bỏ
 | ✅ **3 · Hold** | Hold Bar, Breathing Glow, Color Cycle, Vibration, Electric Arc | `HoldGlow` (Choice) + rate; `HoldBar` toggle; `ElectricArc` toggle | Nhịp thở theo `_elapsed`; arc nối phím trong `_activeKey` |
 | ✅ **4 · Release** | Float Up, Dissolve, Smoke Puff, Snap Back, Echo Rings | `ReleaseEffect` (Choice) + Intensity | Hàng đợi release khi `ReleaseLiveNote`/note-end |
 | ✅ **5 · Ambient** | 4 khe layer: Energy / Nature / Light / Cosmic | Mỗi khe: Choice + Amount + Speed (+ Color) | Các lớp độc lập sau background, trước notes |
-| ✅ **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock, FFT |
+| ✅ **6 · Smart UI** | Velocity Color, Octave Color, Pedal Glow, Zone Split, Tempo Sync, Audio Reactive | Toggle + Amount từng modulator | Móc vào `NoteColor`, `Impact(strength)`, beat clock và envelope/onset hiện có; PCM FFT chưa được nối vào visualizer |
 | ✅ **7 · Themes** | 7 combo themes thành preset có sẵn | (không thêm setting — chỉ preset) | `VisualPresets`: Fire/Ice/Galaxy/Sakura/Electric/Ocean/Retro |
 
-Thứ tự này là logic nhất: Impact trước vì engine đã có sẵn một nửa (xong v1); toàn bộ 7 phase đã hoàn thiện (v1–v7), 87/87 effects Available.
-Falling/Hold/Release theo vòng đời nốt; Ambient độc lập nên sau; Smart cần các kênh
-để điều chế nên gần cuối; Themes cuối vì chúng chỉ là preset trên tất cả.
+Đây là lịch sử thứ tự triển khai theo nhóm: Impact → Falling → Hold → Release → Ambient → Smart → Themes.
+Catalog hiện có 87 mục: 86 `Available` và `falling.color-gradient` là `Planned` vì renderer đầu–đuôi chưa có; các nhãn còn lại vẫn chưa chứng minh
+mỗi biến thể được test riêng, đồng nhất GPU/software hoặc có đường AR. Lộ trình kiểm chứng và
+chuẩn hóa tiếp theo nằm trong [`VISUAL-EFFECTS-MASTER-ROADMAP.md`](VISUAL-EFFECTS-MASTER-ROADMAP.md).
 
 ## 7. Quy ước thêm effect mới (checklist)
 
@@ -376,8 +378,8 @@ Falling/Hold/Release theo vòng đời nốt; Ambient độc lập nên sau; Sma
 6. Thêm assert vào `VerificationSuite` (spawn → geometry → decay → restore).
 7. Cập nhật `EffectCatalog` → `Available` + docs (audit + redesign này).
 
-Nguyên tắc bất biến: **mọi cài đặt hiện trên UI đều phải có logic thật** —
-Planned không hiện UI.
+Nguyên tắc thiết kế: **mọi cài đặt đưa lên UI phải có logic thật** — mục Planned chỉ nên lộ ra sau khi có renderer.
+Hiện `EffectStatus` chưa được dùng để lọc UI runtime; đây là việc phải nối đúng trong phase chuẩn hóa metadata (xem `EFFECT-COVERAGE-AUDIT.md` §5).
 
 ## 8. GPU atmosphere, hit line and emitter refinement
 

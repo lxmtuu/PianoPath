@@ -1,51 +1,31 @@
 namespace PianoPath;
 
-/// <summary>
-/// The complete effects catalogue for the Keyflow stage: every effect the app offers (or plans to
-/// offer), grouped the way the renderer and the settings UI think about them.
-/// <para>
-/// Design logic — 4 principles:
-/// <list type="number">
-/// <item><b>One note, 4 life phases.</b> Every note is born (Falling), lands (Impact), is held
-/// (Hold) and dies (Release). A note effect belongs to exactly one phase, so the UI can show one
-/// card per phase instead of 40 loose toggles.</item>
-/// <item><b>Ambient layers are stage-wide.</b> Particle &amp; Energy, Nature, Light &amp; Color and
-/// Cosmic effects do not follow notes; each family is one independent layer slot.</item>
-/// <item><b>Smart effects are modulators, not renderers.</b> Velocity, pitch, octave, zone, pedal,
-/// tempo and audio-reactive mappings only scale the parameters (size, color, intensity) of the
-/// effects above — they never draw anything themselves.</item>
-/// <item><b>Themes are preset graphs.</b> Fire, Ice, Galaxy… are not code; each one is a fixed
-/// combination of (falling, impact, hold, release, ambient, modulators).</item>
-/// </list>
-/// </para>
-/// <para>
-/// Every rendered effect is tuned with the same universal sliders — Intensity, Size, Speed,
-/// Amount — plus a color only when the effect truly needs one. Learn 4 sliders once, use them
-/// everywhere. Effects marked <see cref="EffectStatus.Planned"/> are documented here first and
-/// implemented phase by phase (see docs/EFFECTS-REDESIGN.md); nothing Planned is shown in the UI
-/// until its renderer exists, so every visible setting always drives real logic.
-/// </para>
-/// </summary>
+/// <summary>Status label stored in the effect inventory; the application does not use it to filter runtime UI options.</summary>
 internal enum EffectStatus
 {
-    /// <summary>Fully implemented: settings, renderer, preset support and verification.</summary>
+    /// <summary>The inventory claims an implementation/channel exists; this is not per-option verification evidence.</summary>
     Available,
-    /// <summary>Catalogued with its future channel; not yet rendered or shown in the UI.</summary>
+    /// <summary>The described behavior is a known gap or future implementation.</summary>
     Planned,
 }
 
 /// <summary>
-/// One effect in the catalogue. <see cref="Channel"/> names the renderer channel that implements
-/// it (or will): note channels (falling.*, impact.*, hold.*, release.*), ambient layers
-/// (ambient.*), modulators (mod.*) or preset graphs (theme).
+/// One inventory entry. <see cref="Channel"/> is a mapping/alias label, not a binding to a renderer
+/// or proof that every backend supports the behavior. See <c>docs/EFFECT-COVERAGE-AUDIT.md</c> for
+/// the current source-to-runtime map.
 /// </summary>
 internal sealed record EffectDefinition(string Id, string Name, string NameVi, string Description, EffectStatus Status, string Channel);
 
-/// <summary>Falling-note effects, grouped by note life phase and ambient family.</summary>
+/// <summary>
+/// Inventory of stable effect, modulator and theme IDs. It is not the runtime source of UI options:
+/// settings and choices are currently declared in <c>PianoVisualSettings</c> and the settings UI.
+/// The catalogue does not drive capability dispatch, renderer selection or UI filtering.
+/// </summary>
 internal static class EffectCatalog
 {
     // =============================================================================================
-    // Phase 1 · Falling — while the note travels toward the keys (v2: all IMPLEMENTED)
+    // Falling — while the note travels toward the keys. Color Gradient remains Planned until a
+    // distinct head-to-tail note-body gradient exists; ColorMode="Gradient" is across keyboard pitch.
     // =============================================================================================
     internal static class Falling
     {
@@ -54,7 +34,7 @@ internal static class EffectCatalog
             new("falling.glow-trail", "Glow Trail", "Vệt sáng mờ", "Soft light trail dragging behind the falling note.", EffectStatus.Available, "falling.trail"),
             new("falling.motion-blur", "Motion Blur", "Mờ chuyển động", "Note body smears along its travel direction.", EffectStatus.Available, "falling.trail"),
             new("falling.sparkle-tail", "Sparkle Tail", "Đuôi tia sáng", "Tail emits small twinkling sparkles.", EffectStatus.Available, "falling.trail"),
-            new("falling.color-gradient", "Color Gradient", "Chuyển sắc đầu–đuôi", "Note blends from one color at the head to another at the tail.", EffectStatus.Available, "falling.body"),
+            new("falling.color-gradient", "Color Gradient", "Chuyển sắc đầu–đuôi", "Planned: a note blends from one color at the head to another at the tail. The current ColorMode=Gradient blends colors across keyboard pitch instead.", EffectStatus.Planned, "falling.body.gradient"),
             new("falling.pulsing", "Pulsing", "Nhấp nháy", "Note breathes bright/dim while falling.", EffectStatus.Available, "falling.body"),
             new("falling.ribbon-twist", "Ribbon Twist", "Dải lụa xoắn", "Silk ribbon swaying behind the note along its path.", EffectStatus.Available, "falling.trail"),
             new("falling.particle-stream", "Particle Stream", "Dòng hạt", "Thin stream of particles pours off the falling note.", EffectStatus.Available, "falling.trail"),
@@ -246,6 +226,6 @@ internal static class EffectCatalog
         .. Themes.All,
     ];
 
-    /// <summary>How many effects are fully implemented (used by docs and the verification suite).</summary>
+    /// <summary>How many entries are labelled Available in this inventory; not a runtime coverage metric.</summary>
     internal static int AvailableCount => AllEffects.Count(e => e.Status == EffectStatus.Available);
 }

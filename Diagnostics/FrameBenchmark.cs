@@ -53,6 +53,11 @@ internal static class FrameBenchmark
             ? path
             : Path.Combine(Path.GetTempPath(), "keyflow-bench.json");
         var previous = Read(Value(args, "--bench-baseline="));
+        // --bench-adapter=<name> pins the run to one GPU by a substring of its DXGI description ("RTX 4050",
+        // "Radeon"). Hybrid laptops otherwise measure whichever adapter Windows assigned to the executable,
+        // and a hardware gate that silently measured the wrong GPU would be worse than no gate at all:
+        // a name that matches none or several adapters fails the run instead of falling back.
+        var adapterRequest = Value(args, "--bench-adapter=");
         // --bench-ar adds the AR overlay scene to the run (and is a run of its own, with that one scene, when --bench is not there).
         var withAr = args.Contains("--bench-ar");
         IReadOnlyList<FrameBudget> budgets = withAr
@@ -62,12 +67,17 @@ internal static class FrameBenchmark
         var scenes = new List<FrameBenchReport>();
         var notes = MainWindow.CreateDemoSong();
         var feed = new GpuStageFeed();
-        using (var loop = new GpuRenderLoop(feed))
+        using (var loop = new GpuRenderLoop(feed, adapterRequest: adapterRequest, enableAdaptiveQuality: false))
         {
             if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)) || loop.Error is not null)
             {
                 var why = loop.Error ?? "it reported no device within 60 s";
                 Console.WriteLine($"FAIL perf: the GPU render loop did not start ({why}), so no frame was measured");
+                // This exe is GUI-subsystem: at a terminal the user sees only the exit code, no console
+                // lines. A start-up failure (an --bench-adapter name matching nothing, a device that
+                // refuses to start) therefore also leaves its reason beside the report path.
+                try { File.WriteAllText(Path.ChangeExtension(output, ".startup-error.txt"), $"The GPU render loop did not start: {why}{Environment.NewLine}"); }
+                catch (IOException) { }
                 return ExitNoDevice;
             }
             // The glyph atlas is drawn with WPF's text stack, which needs this (STA) thread; the render thread
@@ -100,7 +110,7 @@ internal static class FrameBenchmark
     internal static FrameBenchReport? Measure(FrameBudget budget, int frames)
     {
         var feed = new GpuStageFeed();
-        using var loop = new GpuRenderLoop(feed, forceWarp: true);
+        using var loop = new GpuRenderLoop(feed, forceWarp: true, enableAdaptiveQuality: false);
         if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)) || loop.Error is not null) return null;
         feed.LabelAtlas = PianoStage.GpuGlyphAtlas;
         var software = FrameBudget.IsSoftwareAdapter(loop.IsWarp, loop.AdapterName);
@@ -115,8 +125,8 @@ internal static class FrameBenchmark
     private static FrameBenchReport RunScene(GpuRenderLoop loop, GpuStageFeed feed, FrameBudget budget, IReadOnlyList<NoteEvent> notes, int frames, bool software)
     {
         var settings = string.IsNullOrWhiteSpace(budget.Preset)
-            ? new PianoVisualSettings()
-            : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? new PianoVisualSettings();
+            ? VisualPresets.CreateDefaultSettings()
+            : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? VisualPresets.CreateDefaultSettings();
         // Note colours are data the stage uploads as a table either way, so the bench uses a fixed ramp
         // instead of reaching into the WPF stage for the user's palette: the frame cost does not depend on it.
         feed.SetLook(GpuLook.From(settings, (pitch, track) => System.Windows.Media.Color.FromRgb((byte)(pitch * 2), (byte)(40 + track * 60), 200), .205, null, overCamera: budget.Camera));

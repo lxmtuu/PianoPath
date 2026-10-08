@@ -399,19 +399,31 @@ float4 PsNote(NoteOut v) : SV_Target
 {
     float2 p = v.Local;
     float2 hb = max(v.Half, 0.5);
-    float radius = min(NoteA.y, min(hb.x, hb.y));
+    // Stable NoteStyle IDs: Solid=0, Neon=1, Glass=2, Fire=3, Gem=4, CrystalOutline=5.
+    float style = NoteA.x;
+    bool facetedMaterial = style > 3.5 && style < 5.5;
+    float radius = facetedMaterial ? 0.0 : min(NoteA.y, min(hb.x, hb.y));
     float d = SdRoundBox(p, hb, radius);                 // < 0 inside
+    if (facetedMaterial)
+    {
+        // Gem and Crystal Outline use actual clipped, octagonal corners rather than a rounded box.
+        float chamfer = style < 4.5 ? 0.28 : 0.48;
+        float2 q = abs(p) / hb;
+        float invLen = rsqrt(1.0 / (hb.x * hb.x) + 1.0 / (hb.y * hb.y));
+        float cornerD = (q.x + q.y - (2.0 - chamfer)) * invLen;
+        d = max(d, cornerD);
+    }
     float inside = saturate(0.5 - d * SceneSize.z);
     float outsideD = max(d, 0.0);
-    float style = NoteA.x;
     float3 col = v.Color.rgb;
     float opacity = v.Color.a;
     float sounding = v.Misc.x;
     float edgeW = max(NoteA.z, 0.75);
     float glowR = max(NoteA.w, 1.0);
 
-    // outer halo shared by every style: exponential falloff, so it reads as light not as a flat ring
-    float halo = exp(-outsideD / (glowR * 0.33)) * saturate(1.0 - outsideD / glowR);
+    // Exponential falloff reads as light rather than a flat ring; faceted materials keep a lower halo so their planes survive at 50%.
+    float materialHalo = style < 4.5 ? 0.78 : style < 5.5 ? 0.30 : 1.0;
+    float halo = exp(-outsideD / (glowR * 0.33)) * saturate(1.0 - outsideD / glowR) * materialHalo;
     float3 emit = col * halo * NoteC.z * (0.55 + 0.75 * sounding) * (1.0 - inside);
     float alpha = 0.0;
 
@@ -458,27 +470,76 @@ float4 PsNote(NoteOut v) : SV_Target
         emit += col * sounding * 0.35 * inside;
         alpha = inside * (0.3 + 0.25 * NoteB.x);
     }
-    else
+    else if (style < 3.5)
     {
-        // Fire / lava: a cream-hot body cut by dark crusted cracks that crawl over it, glowing orange at
-        // the rim and turning red-hot as it nears the keys
-        // coarse enough that a crack stays several pixels wide on a narrow bar (the software stage's texture)
+        // Fire / lava: keep the chosen note hue as the pigment of the ember body and crust; cream hot spots
+        // and a warm rim preserve the fire read without drowning out PerHand/PerTrack/custom note colors.
+        // The moving crack field stays coarse enough to survive on a narrow bar (as in the software stage).
         float2 q = float2(p.x / max(hb.x, 1.0) * 0.7, (v.SceneY + v.Misc.y * 97.0) / (22.0 * SceneB.y));
         q.y -= ScreenTime.z * 0.35;
         float n = Fbm(q * float2(1.6, 1.0));
         float cracks = smoothstep(0.34, 0.5, n) * (0.35 + 0.65 * NoteC.x) + (1.0 - NoteC.x) * 0.65;
         float veins = 1.0 - exp(-pow((n - 0.42) * 14.0, 2.0));
         float heat = saturate(1.0 - (ScreenTime.w - v.SceneY) / max(NoteC.w, 1.0));
-        float3 hot = lerp(float3(1.0, 0.93, 0.72), col, 0.22);
-        float3 crust = float3(0.3, 0.02, 0.008);
+        float3 fireTint = saturate(col);
+        float3 hot = lerp(float3(1.0, 0.93, 0.72), fireTint, 0.68);
+        float3 crust = lerp(float3(0.3, 0.02, 0.008), fireTint * 0.18, 0.68);
         float3 body = lerp(crust, hot, saturate(cracks * veins));
-        body = lerp(body, body * float3(1.0, 0.38, 0.2) + float3(0.25, 0.0, 0.0), heat * 0.75);
+        float3 heatTint = lerp(fireTint, float3(1.0, 0.22, 0.035), 0.42);
+        body = lerp(body, heatTint, heat * 0.32);
+        float3 warmEdge = lerp(float3(1.0, 0.36, 0.06), fireTint, 0.66);
+        float3 warmGlow = lerp(float3(1.0, 0.3, 0.05), fireTint, 0.70);
+        float3 warmCore = lerp(float3(1.0, 0.55, 0.2), fireTint, 0.55);
         float rim = exp(-abs(d + edgeW * 0.3) / (edgeW * 0.45));
-        // kept under the bloom threshold (1.8) so the cream body and its dark cracks read instead of
-        // blooming into one white column; the orange rim and the halo carry the heat
-        emit += (body * (0.62 + 0.36 * NoteB.x) + float3(1.0, 0.36, 0.06) * rim * 0.7 * NoteB.y) * inside;
-        emit += float3(1.0, 0.3, 0.05) * exp(-outsideD / (glowR * 0.25)) * 0.55 * NoteC.z * (1.0 - inside);
-        emit += float3(1.0, 0.55, 0.2) * sounding * 0.25 * inside;
+        // Keep the burn below the bloom threshold (1.8) so both the note tint and the moving ember texture remain legible.
+        emit += (body * (0.62 + 0.36 * NoteB.x) + warmEdge * rim * 0.7 * NoteB.y) * inside;
+        emit += warmGlow * exp(-outsideD / (glowR * 0.25)) * 0.55 * NoteC.z * (1.0 - inside);
+        emit += warmCore * sounding * 0.25 * inside;
+        alpha = inside;
+    }
+    else if (style < 4.5)
+    {
+        // Gem: a mostly opaque crystal bar with dark edge planes, pale bevel facets and a restrained specular seam.
+        float xN = p.x / hb.x;
+        float yN = p.y / hb.y;
+        float depth = saturate(NoteC.y);
+        float sideShade = smoothstep(0.24, 1.0, abs(xN));
+        float3 body = col * lerp(1.12, 0.68, sideShade * lerp(0.82, 1.0, depth));
+        float3 highlight = lerp(col, 1.0, 0.44 + depth * 0.2);
+        float facet = exp(-abs(abs(xN) - 0.55) * 28.0);
+        float spine = exp(-abs(xN) * 34.0);
+        float bevel = saturate(-d / max(2.0, hb.x * 0.5));
+        float rim = exp(-abs(d + edgeW * 0.38) / max(edgeW * 0.55, 0.8));
+        float spec = pow(saturate(1.0 - abs(xN + 0.38 + yN * 0.08) * 2.8), 4.0) * NoteB.w;
+        emit += (body * (0.9 + 0.1 * bevel) + highlight * (facet * 0.12 + spine * (0.1 + depth * 0.15) + spec * 0.25) * NoteB.y
+                 + highlight * rim * 0.24 * NoteB.y) * inside;
+        emit += col * sounding * 0.22 * inside;
+        alpha = inside * (0.92 + 0.08 * NoteB.x);
+    }
+    else if (style < 5.5)
+    {
+        // Crystal Outline: a translucent center with a crisp, luminous angular contour and quiet internal planes.
+        float xN = p.x / hb.x;
+        float yN = p.y / hb.y;
+        // A two-pixel-scale rim (and a softer inner echo) survives a half-size box filter without filling the crystal.
+        float rimWidth = max(edgeW * 0.84, 1.6);
+        float rim = exp(-abs(d + edgeW * 0.45) / rimWidth) * NoteB.y;
+        float innerRim = exp(-abs(d + edgeW * 1.5) / max(edgeW * 0.92, 1.5)) * NoteB.y;
+        float spine = exp(-abs(xN) * 34.0);
+        float facetA = exp(-abs(xN - yN * 0.12 - 0.5) * 24.0);
+        float facetB = exp(-abs(xN + yN * 0.12 + 0.5) * 24.0);
+        float3 edgeColor = lerp(col, 1.0, 0.90);
+        float3 planeColor = lerp(col, 1.0, 0.72);
+        float facet = (spine * 0.18 + facetA * 0.22 + facetB * 0.22) * inside;
+        emit += col * inside * (0.04 + 0.04 * NoteB.x);
+        emit += edgeColor * (rim * 1.45 + innerRim * 0.42);
+        emit += planeColor * facet * 0.68;
+        alpha = max(inside * 0.07, rim * 0.72 + facet * 0.19);
+    }
+    else
+    {
+        // Unknown future IDs fall back to a readable opaque bar rather than disappearing.
+        emit += col * inside;
         alpha = inside;
     }
 

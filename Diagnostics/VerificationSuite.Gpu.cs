@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text.Json;
 using System.Windows.Media;
 
 namespace PianoPath;
@@ -147,6 +148,8 @@ internal static partial class VerificationSuite
         Assert(keyboard > 60, $"The GPU frame should show a lit white-key keyboard along the bottom (average luma {keyboard:0}).");
         Assert(keyboard > sky + 20, $"The keyboard should stand out from the dark stage above it (keys {keyboard:0}, stage {sky:0}).");
         Assert(distinct.Count > 40, $"The GPU frame should be a picture, not a flat fill ({distinct.Count} distinct sampled colours).");
+        VerifyGpuNoteMaterials(width, height);
+        VerifyGpuNotePassQueries(width, height);
         var motionFeed = new GpuStageFeed(); motionFeed.SetStageHeight(height);
         var motionSettings = new PianoVisualSettings
         {
@@ -238,6 +241,416 @@ internal static partial class VerificationSuite
         Results.Add($"PASS gpu stage effects: {ambient.Count} ambient shapes, a {atlas.Width}×{atlas.Height} glyph atlas ({inked} inked px), sky {plainSky:0.0} → {fxSky:0.0} with the galaxy on.");
     }
 
+    /// <summary>Renders each new material through the embedded HLSL on WARP and checks its shader ID and visible pixels.</summary>
+    private static void VerifyGpuNoteMaterials(int width, int height)
+    {
+        var expectedIds = new[] { "Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline" };
+        for (var i = 0; i < expectedIds.Length; i++)
+        {
+            var look = GpuLook.From(new PianoVisualSettings { NoteStyle = expectedIds[i] }, (pitch, track) => Color.FromRgb(64, 176, 250), .205);
+            Assert(look.NoteStyle == i, $"GPU material {expectedIds[i]} must use the stable style ID {i}, preserving every older ID.");
+        }
+
+        var notes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = 2.0, Duration = 2.0 },
+            new() { Pitch = 64, Start = 2.0, Duration = 2.0 },
+            new() { Pitch = 67, Start = 2.0, Duration = 2.0 }
+        };
+        byte[] Render(string style, bool depth3D, bool showNotes = true, double refraction = 0, Color? noteTint = null)
+        {
+            var settings = new PianoVisualSettings
+            {
+                NoteStyle = style, Notes3D = depth3D, NoteWidth = 100, NoteFallSpeed = 550,
+                NoteGlow = 0, NoteHeadGlow = 0, NoteRefraction = refraction, NoteEdge = 88, NoteEdgeWidth = 48,
+                NoteTint = 78, NoteRoundness = 30, FallingTrail = "None", ShowNoteLabels = false,
+                ShowBackground = false, ShowHalo = false, ShowKeys = false, ShowEmbers = false,
+                ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+                ShowLightBeams = false, ShowPetals = false, ShowStars = false, BackgroundMotion = "None",
+                HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+            };
+            settings.ShowNotes = showNotes;
+            var feed = new GpuStageFeed(); feed.SetStageHeight(height);
+            feed.SetLook(GpuLook.From(settings, (pitch, track) => noteTint ?? Color.FromRgb(64, 176, 250), .205));
+            feed.SetDeterministicState(notes, 1.5, true, new HashSet<int>());
+            feed.SetDeterministicBeatPulse(0);
+            return GpuRenderLoop.RenderOnce(feed, width, height, 12, 1 / 60.0, out _, forceWarp: true);
+        }
+
+        var blank = Render("Solid", false, showNotes: false);
+        var solid = Render("Solid", false);
+        var fireBlank = Render("Fire", false, showNotes: false);
+        var fireBlue = Render("Fire", false, noteTint: Color.FromRgb(8, 120, 255));
+        var fireAmber = Render("Fire", false, noteTint: Color.FromRgb(255, 170, 12));
+        var gem2D = Render("Gem", false);
+        var gem3D = Render("Gem", true);
+        var gemWithRefraction = Render("Gem", false, refraction: 100);
+        var crystal2D = Render("CrystalOutline", false);
+        var crystal3D = Render("CrystalOutline", true);
+        var crystalWithRefraction = Render("CrystalOutline", false, refraction: 100);
+        int ChangedPixels(byte[] image, byte[] baseline)
+        {
+            var count = 0;
+            for (var i = 0; i < image.Length; i += 4)
+            {
+                var delta = Math.Abs(image[i] - baseline[i]) + Math.Abs(image[i + 1] - baseline[i + 1]) + Math.Abs(image[i + 2] - baseline[i + 2]);
+                if (delta > 18) count++;
+            }
+            return count;
+        }
+        (double BlueRedBias, int VisiblePixels) FireTintEvidence(byte[] image, byte[] baseline)
+        {
+            // Ignore the bottom 150 stage pixels, where the material intentionally warms as it nears the keys.
+            var topRows = Math.Clamp((int)(height * (1.0 - .205) - 150.0), 1, height);
+            double blue = 0, red = 0;
+            var visible = 0;
+            for (var y = 0; y < topRows; y++)
+                for (var x = 0; x < width; x++)
+                {
+                    var i = (y * width + x) * 4;
+                    var delta = Math.Abs(image[i] - baseline[i]) + Math.Abs(image[i + 1] - baseline[i + 1]) + Math.Abs(image[i + 2] - baseline[i + 2]);
+                    var luma = .0722 * image[i] + .7152 * image[i + 1] + .2126 * image[i + 2];
+                    if (delta <= 18 || luma <= 35) continue;
+                    blue += image[i];
+                    red += image[i + 2];
+                    visible++;
+                }
+            return (visible == 0 ? 0 : (blue - red) / visible, visible);
+        }
+        int BrightChangedPixels(byte[] image, byte[] baseline)
+        {
+            var count = 0;
+            for (var i = 0; i < image.Length; i += 4)
+            {
+                var delta = Math.Abs(image[i] - baseline[i]) + Math.Abs(image[i + 1] - baseline[i + 1]) + Math.Abs(image[i + 2] - baseline[i + 2]);
+                var luma = .0722 * image[i] + .7152 * image[i + 1] + .2126 * image[i + 2];
+                if (delta > 36 && luma > 45) count++;
+            }
+            return count;
+        }
+        byte[] HalfSize(byte[] image)
+        {
+            var halfWidth = width / 2; var halfHeight = height / 2;
+            var half = new byte[halfWidth * halfHeight * 4];
+            for (var y = 0; y < halfHeight; y++)
+                for (var x = 0; x < halfWidth; x++)
+                    for (var channel = 0; channel < 4; channel++)
+                    {
+                        var source = ((y * 2 * width) + x * 2) * 4 + channel;
+                        var sum = image[source] + image[source + 4] + image[source + width * 4] + image[source + width * 4 + 4];
+                        half[(y * halfWidth + x) * 4 + channel] = (byte)((sum + 2) / 4);
+                    }
+            return half;
+        }
+        var gemVisible = ChangedPixels(gem2D, blank);
+        var crystalVisible = ChangedPixels(crystal2D, blank);
+        // The gallery captures a full-size frame and then downsamples each cell. Inspect that same
+        // 2×2 box-filtered result; halving the render target would also change the stage's world-space height.
+        var blankSmall = HalfSize(blank);
+        var gemSmallVisible = ChangedPixels(HalfSize(gem3D), blankSmall);
+        var crystalSmallImage = HalfSize(crystal2D);
+        var crystalSmallVisible = ChangedPixels(crystalSmallImage, blankSmall);
+        var crystalBrightHalf = BrightChangedPixels(crystalSmallImage, blankSmall);
+        Assert(gemVisible > 80 && crystalVisible > 40 && gemSmallVisible > 20 && crystalSmallVisible > 20 && crystalBrightHalf > 30,
+            $"Gem and Crystal Outline must change real GPU pixels on WARP at full and half size, with a bright Crystal contour surviving the 2×2 downsample (full {gemVisible}/{crystalVisible}, half {gemSmallVisible}/{crystalSmallVisible}, bright {crystalBrightHalf}).");
+        Assert(!solid.AsSpan().SequenceEqual(gem2D) && !solid.AsSpan().SequenceEqual(crystal2D) && !gem2D.AsSpan().SequenceEqual(crystal2D),
+            "The GPU shader must render Gem and Crystal Outline as distinct materials, not the Solid fallback.");
+        Assert(!gem2D.AsSpan().SequenceEqual(gem3D) && crystal2D.AsSpan().SequenceEqual(crystal3D),
+            "The GPU depth input must change Gem shading while Crystal Outline remains flat.");
+        Assert(!gem2D.AsSpan().SequenceEqual(gemWithRefraction) && crystal2D.AsSpan().SequenceEqual(crystalWithRefraction),
+            "GPU Gem should consume NoteRefraction while the Crystal Outline shader should leave that input unused.");
+        var fireBlueEvidence = FireTintEvidence(fireBlue, fireBlank);
+        var fireAmberEvidence = FireTintEvidence(fireAmber, fireBlank);
+        var fireColorChanges = ChangedPixels(fireBlue, fireAmber);
+        Assert(fireBlueEvidence.VisiblePixels > 100 && fireAmberEvidence.VisiblePixels > 100 && fireColorChanges > 100
+                && fireBlueEvidence.BlueRedBias > 10 && fireAmberEvidence.BlueRedBias < -10,
+            $"GPU Fire should carry contrasting note colors through its upper body while retaining its ember texture (blue bias {fireBlueEvidence.BlueRedBias:0.0}, amber bias {fireAmberEvidence.BlueRedBias:0.0}, visible {fireBlueEvidence.VisiblePixels}/{fireAmberEvidence.VisiblePixels}, changed {fireColorChanges}).");
+        Results.Add($"PASS Fire note tint GPU/WARP: contrasting blue and amber tints reverse the upper-body blue/red bias ({fireBlueEvidence.BlueRedBias:0.0}/{fireAmberEvidence.BlueRedBias:0.0}) across {fireColorChanges} changed pixels.");
+        Results.Add($"PASS note materials GPU/WARP: appended IDs 0–5 are stable; Gem/Crystal Outline alter {gemVisible}/{crystalVisible} pixels (half-size {gemSmallVisible}/{crystalSmallVisible}); bright Crystal contour at half-size {crystalBrightHalf}; Gem responds to 2D/3D and NoteRefraction while Crystal Outline stays flat and does not consume NoteRefraction.");
+    }
+
+    /// <summary>Checks that D3D11 timestamp queries complete and preserve the report shape on WARP; no cost conclusion is drawn.</summary>
+    private static void VerifyGpuNotePassQueries(int width, int height)
+    {
+        const int requestedSamples = 8;
+        var defaultPlan = NoteMaterialGpuBenchmark.BuildSamplingPlan(FrameBudget.DefaultFrames);
+        var smallPlan = NoteMaterialGpuBenchmark.BuildSamplingPlan(20);
+        var materialIds = new[] { "Solid", "Gem", "CrystalOutline" };
+        Assert(defaultPlan.Count == 3 && defaultPlan.All(round => round.Order.Count == 3 && round.Order.Distinct().Count() == 3)
+            && materialIds.All(id => defaultPlan.Count(round => round.Order[0] == id) == 1
+                && defaultPlan.Count(round => round.Order[1] == id) == 1
+                && defaultPlan.Count(round => round.Order[2] == id) == 1)
+            && defaultPlan.All(round => round.SamplesPerMaterial == 40)
+            && smallPlan.Select(round => round.SamplesPerMaterial).SequenceEqual(new[] { 7, 7, 6 })
+            && smallPlan.Sum(round => round.SamplesPerMaterial) == 20,
+            "Material samples should be split evenly across three cyclic orders so each style occupies every run position once.");
+        using (var planJson = JsonDocument.Parse(new NoteMaterialGpuRun { SamplingPlan = defaultPlan }.ToJson()))
+        {
+            var serializedRounds = planJson.RootElement.GetProperty("samplingProtocol").GetProperty("rounds");
+            Assert(serializedRounds.GetArrayLength() == 3
+                && serializedRounds[0].GetProperty("order")[0].GetString() == "Solid"
+                && serializedRounds[1].GetProperty("order")[0].GetString() == "Gem"
+                && serializedRounds[2].GetProperty("order")[0].GetString() == "CrystalOutline",
+                "The JSON report should preserve all three counterbalanced orders, not just the aggregate samples.");
+        }
+        Results.Add("PASS note-material sampling plan: three cyclic orders balance first/second/third position; JSON preserves the orders; 120 samples split 40 per round and 20 split 7/7/6.");
+
+        var settings = new PianoVisualSettings
+        {
+            ShowNotes = true, NoteStyle = "Gem", NoteWidth = 100, NoteFallSpeed = 550, Notes3D = false,
+            NoteGlow = 0, NoteHeadGlow = 0, NoteRefraction = 100, NoteEdge = 88, NoteEdgeWidth = 48, NoteTint = 78, NoteRoundness = 30,
+            FallingPulse = false, FallingTrail = "None", FallingGhost = false, NoteShimmer = false, NoteLandingGlow = false,
+            HoldBar = false, HoldBreath = false, HoldVibration = false, HoldColorCycle = false, HoldElectricArc = false,
+            ShowEmbers = false, ShowWisps = false, ShowFlame = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowKeys = false, ShowHalo = false, ShowBackground = false, ShowStars = false, ShowLightBeams = false, ShowPetals = false,
+            AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None", BloomIntensity = 0
+        };
+        var feed = new GpuStageFeed { LabelAtlas = PianoStage.GpuGlyphAtlas };
+        feed.SetStageHeight(height);
+        feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(64, 176, 250), .205));
+        feed.ClearTransient();
+        feed.SetDeterministicState([new NoteEvent { Pitch = 60, Start = .6, Duration = 2.0, Track = 0 }], 1.5, true, new HashSet<int>());
+        feed.SetDeterministicBeatPulse(0);
+        var sampleBuffer = new GpuNotePassSampleBuffer();
+        using var loop = new GpuRenderLoop(feed, forceWarp: true, notePassSamples: sampleBuffer);
+        Assert(loop.WaitUntilStarted(TimeSpan.FromSeconds(60)), "WARP should start for the note-pass timestamp-query correctness check.");
+        Assert(loop.Error is null && loop.IsWarp && sampleBuffer.InitializationError is null,
+            $"WARP should initialize the timestamp-query ring ({loop.Error ?? sampleBuffer.InitializationError}, warp={loop.IsWarp}).");
+        loop.SetEmbedded(true, width, height);
+        loop.TargetFps = 0;
+
+        var warmupStart = loop.FramesRendered;
+        var warmupClock = Stopwatch.StartNew();
+        while ((loop.FramesRendered - warmupStart < FrameBudget.DefaultWarmupFrames || warmupClock.Elapsed.TotalSeconds < FrameBudget.WarmupSeconds)
+            && loop.Error is null && warmupClock.Elapsed.TotalSeconds < FrameBudget.SceneTimeoutSeconds)
+            Thread.Sleep(4);
+        var warmupFrames = (int)Math.Clamp(loop.FramesRendered - warmupStart, 0, int.MaxValue);
+        Assert(loop.Error is null && warmupFrames >= FrameBudget.DefaultWarmupFrames && warmupClock.Elapsed.TotalSeconds >= FrameBudget.WarmupSeconds,
+            $"WARP should warm the static fixture before querying it ({warmupFrames} frames, {warmupClock.Elapsed.TotalSeconds:0.00} s, {loop.Error}).");
+
+        var run = sampleBuffer.Start(requestedSamples);
+        var sampleStart = loop.FramesRendered;
+        var queryClock = Stopwatch.StartNew();
+        while (!run.IsComplete && loop.Error is null && queryClock.Elapsed.TotalSeconds < FrameBudget.SceneTimeoutSeconds)
+            Thread.Sleep(4);
+        var samples = run.SnapshotSamples();
+        var renderedFrames = (int)Math.Clamp(loop.FramesRendered - sampleStart, 0, int.MaxValue);
+        loop.SetEmbedded(false, 0, 0);
+        var fixtureValid = samples.Length > 0 && samples.All(sample => sample.DrawInstances == 1) && loop.ParticleCount == 0;
+        Assert(loop.Error is null && run.IsComplete && run.Issued == requestedSamples && run.QueryErrors == 0
+            && fixtureValid && samples.All(sample => double.IsFinite(sample.Milliseconds) && sample.Milliseconds >= 0 && sample.FrequencyHz > 0),
+            $"WARP should drain non-blocking note-pass queries for one draw instance (complete={run.IsComplete}, issued={run.Issued}, valid={samples.Length}, disjoint={run.DisjointCount}, busy={run.BusyFrames}, queryErrors={run.QueryErrors}, error={loop.Error}).");
+
+        var stats = FrameStats.From(samples.Select(sample => sample.Milliseconds).ToArray());
+        var smokeStatus = run.DisjointCount > 0 ? "complete-with-disjoint-exclusions" : "complete";
+        var measurement = new NoteMaterialMeasurement("Gem", "2D", requestedSamples, run.Issued, run.DisjointCount, run.BusyFrames, run.QueryErrors,
+            renderedFrames, warmupFrames, warmupClock.Elapsed.TotalMilliseconds, samples, stats, fixtureValid, run.IsComplete, smokeStatus, "")
+        {
+            Batches =
+            [
+                new NoteMaterialBatchSummary(1, 0, requestedSamples, run.Issued, samples.Length, run.DisjointCount,
+                    run.BusyFrames, run.QueryErrors, run.IsComplete && run.QueryErrors == 0, smokeStatus, "")
+            ]
+        };
+        var smokePlan = new[] { new NoteMaterialSamplingRound(1, requestedSamples, new[] { "Gem" }) };
+        var report = new NoteMaterialGpuRun
+        {
+            TakenUtc = DateTime.UtcNow.ToString("o", System.Globalization.CultureInfo.InvariantCulture),
+            AppVersion = AppInfo.Version,
+            Adapter = loop.AdapterName,
+            Backend = "Direct3D 11 / WARP",
+            Warp = true,
+            SoftwareAdapter = true,
+            ShaderCompileMs = loop.ShaderCompileMilliseconds,
+            Width = width,
+            Height = height,
+            RequestedSamples = requestedSamples,
+            SamplingPlan = smokePlan,
+            Fixture = "WARP correctness/schema smoke: one static MIDI 60 note, 2D, all unrelated visual layers off.",
+            MeasurementScope = "D3D11 timestamp + timestamp-disjoint queries around only the note DrawInstanced call.",
+            Interpretation = "Diagnostic-only WARP result; not hardware performance evidence and not an EffectCostAssessment update.",
+            Materials = [measurement]
+        };
+        using var json = JsonDocument.Parse(report.ToJson());
+        var root = json.RootElement;
+        var materialReport = root.GetProperty("materials")[0];
+        Assert(root.GetProperty("measurement").GetString() == "d3d11-note-pass-timestamp"
+            && root.GetProperty("backend").GetString() == "Direct3D 11 / WARP"
+            && root.GetProperty("adapter").GetString() == loop.AdapterName
+            && root.GetProperty("warp").GetBoolean() && root.GetProperty("softwareAdapter").GetBoolean()
+            && root.GetProperty("width").GetInt32() == width && root.GetProperty("height").GetInt32() == height
+            && root.GetProperty("warmupProtocol").GetProperty("minimumFrames").GetInt32() == FrameBudget.DefaultWarmupFrames
+            && root.GetProperty("warmupProtocol").GetProperty("minimumMilliseconds").GetInt32() == (int)(FrameBudget.WarmupSeconds * 1000)
+            && root.GetProperty("samplingProtocol").GetProperty("strategy").GetString() == "verification-smoke"
+            && root.GetProperty("samplingProtocol").GetProperty("rounds").GetArrayLength() == 1
+            && root.GetProperty("samplingProtocol").GetProperty("rounds")[0].GetProperty("order")[0].GetString() == "Gem"
+            && materialReport.GetProperty("batches").GetArrayLength() == 1
+            && materialReport.GetProperty("batches")[0].GetProperty("sampleOffset").GetInt32() == 0
+            && materialReport.GetProperty("batches")[0].GetProperty("validSamples").GetInt32() == samples.Length
+            && materialReport.GetProperty("validSamples").GetInt32() == samples.Length
+            && materialReport.GetProperty("samplesGpuMs").GetArrayLength() == samples.Length
+            && materialReport.GetProperty("sampleClock").GetArrayLength() == samples.Length
+            && materialReport.GetProperty("drawInstancesMin").GetInt32() == 1
+            && materialReport.GetProperty("drawInstancesMax").GetInt32() == 1,
+            "The material-query JSON schema should retain backend, size, sample count, raw samples, timestamp clocks and the single-instance fixture.");
+
+        // The actual take path, not RenderOnce: read the exact-size frames that GpuRecordingTap publishes.
+        var materialRecordingNotes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = .6, Duration = 2.0 },
+            new() { Pitch = 64, Start = .6, Duration = 2.0 },
+            new() { Pitch = 67, Start = .6, Duration = 2.0 },
+        };
+        feed.SetDeterministicState(materialRecordingNotes, 1.5, true, new HashSet<int>());
+        var recordingTap = new GpuRecordingTap(width, height, 30);
+        feed.Camera = null; feed.Ar = null; feed.Recording = recordingTap;
+        byte[] CaptureRecordedMaterial(string style, bool showNotes)
+        {
+            var recordingSettings = settings.Clone();
+            recordingSettings.NoteStyle = style; recordingSettings.NoteRefraction = 0; recordingSettings.ShowNotes = showNotes;
+            feed.SetLook(GpuLook.From(recordingSettings, (_, _) => Color.FromRgb(64, 176, 250), .205));
+            var targetSerial = recordingTap.Serial + 4;
+            var captureClock = Stopwatch.StartNew();
+            while (recordingTap.Serial < targetSerial && loop.Error is null && captureClock.Elapsed.TotalSeconds < 20) Thread.Sleep(5);
+            Assert(loop.Error is null && recordingTap.Serial >= targetSerial,
+                $"GpuRecordingTap should publish a frame after switching to {style} (showNotes={showNotes}, serial={recordingTap.Serial}, {loop.Error}).");
+            byte[]? copy = null;
+            Assert(recordingTap.TryRead(frame => copy = (byte[])frame.Clone()), "The material take should expose its latest read-back frame.");
+            return copy!;
+        }
+        static int MaterialFrameChanges(byte[] left, byte[] right)
+        {
+            var count = 0;
+            for (var i = 0; i < left.Length; i += 4)
+                if (Math.Abs(left[i] - right[i]) + Math.Abs(left[i + 1] - right[i + 1]) + Math.Abs(left[i + 2] - right[i + 2]) > 24) count++;
+            return count;
+        }
+        var recordingBlank = CaptureRecordedMaterial("Solid", showNotes: false);
+        var recordingSolid = CaptureRecordedMaterial("Solid", showNotes: true);
+        var recordingGem = CaptureRecordedMaterial("Gem", showNotes: true);
+        var recordingCrystal = CaptureRecordedMaterial("CrystalOutline", showNotes: true);
+        VerifyEffectFamilyGpuRecordingCaptures(feed, loop, recordingTap, width, height);
+        feed.Recording = null;
+        var recordedSolidPixels = MaterialFrameChanges(recordingBlank, recordingSolid);
+        var recordedGemPixels = MaterialFrameChanges(recordingBlank, recordingGem);
+        var recordedCrystalPixels = MaterialFrameChanges(recordingBlank, recordingCrystal);
+        var recordedSolidGem = MaterialFrameChanges(recordingSolid, recordingGem);
+        var recordedGemCrystal = MaterialFrameChanges(recordingGem, recordingCrystal);
+        Assert(recordingSolid.Length == width * height * 4 && recordingGem.Length == recordingSolid.Length && recordingCrystal.Length == recordingSolid.Length
+                && recordedSolidPixels > 50 && recordedGemPixels > 50 && recordedCrystalPixels > 50
+                && recordedSolidGem > 20 && recordedGemCrystal > 20,
+            $"Recorded WARP frames should contain visible and distinct Solid/Gem/Crystal Outline notes ({recordedSolidPixels}/{recordedGemPixels}/{recordedCrystalPixels} vs blank; pair changes {recordedSolidGem}/{recordedGemCrystal}).");
+        Results.Add($"PASS note-material GPU recording capture: GpuRecordingTap read back {width}×{height} frames that contain and distinguish Solid, Gem and Crystal Outline ({recordedSolidGem}/{recordedGemCrystal} pair-change pixels).");
+        Results.Add($"PASS note-pass timestamp/WARP correctness: {samples.Length}/{requestedSamples} valid async D3D11 query samples around one note draw; report schema keeps size, backend, samples and timestamp frequency. Diagnostic only; no GPU cost conclusion.");
+    }
+
+    /// <summary>
+    /// Captures each typed non-material family through the real exact-size GPU take path, changing one family at
+    /// a time against a matching neutral frame. This verifies that each pilot family survives the recording
+    /// read-back; it does not exercise every style/parameter binding or measure recording cost.
+    /// </summary>
+    private static void VerifyEffectFamilyGpuRecordingCaptures(GpuStageFeed feed, GpuRenderLoop loop, GpuRecordingTap tap, int width, int height)
+    {
+        var fixtures = EffectRecordingFixtures.All;
+        var families = EffectContractCatalog.AllFamilies;
+        Assert(fixtures.Count == 24
+                && fixtures.Select(fixture => fixture.FamilyId).Distinct(StringComparer.Ordinal).Count() == fixtures.Count
+                && fixtures.Select(fixture => fixture.FamilyId).OrderBy(id => id, StringComparer.Ordinal)
+                    .SequenceEqual(families.Select(family => family.Id).OrderBy(id => id, StringComparer.Ordinal)),
+            "The GPU recording capture fixtures must cover each of the 24 typed families exactly once.");
+        Assert(width == EffectRecordingFixtures.Width && height == EffectRecordingFixtures.Height
+                && tap.Width == width && tap.Height == height,
+            "The per-family recording captures must use the exact-size 640×360 output of the real GPU recording tap.");
+
+        var frameBytes = width * height * 4;
+        var baseline = new byte[frameBytes];
+        var sample = new byte[frameBytes];
+        var evidence = new List<string>(fixtures.Count);
+        var color = Color.FromRgb(64, 176, 250);
+
+        void SetCase(EffectRecordingCaptureFixture fixture, bool enabled)
+        {
+            feed.ClearTransient();
+            feed.SetSustain(false);
+            feed.SetStageHeight(height);
+            var scene = EffectRecordingFixtures.SceneState(fixture.Scene);
+            feed.SetDeterministicState(scene.Notes, scene.Position, scene.Playing, scene.Pressed);
+            feed.SetDeterministicBeatPulse(0);
+            var look = EffectRecordingFixtures.NeutralLook();
+            if (enabled) fixture.Enable(look);
+            feed.SetLook(GpuLook.From(look, (_, _) => color, .205));
+        }
+
+        void ReadNextFrame(string familyId)
+        {
+            var wantedSerial = tap.Serial + 1;
+            var timeout = Stopwatch.StartNew();
+            while (tap.Serial < wantedSerial && loop.Error is null && timeout.Elapsed.TotalSeconds < 20) Thread.Sleep(5);
+            Assert(loop.Error is null && tap.Serial >= wantedSerial,
+                $"GpuRecordingTap did not publish the next {width}×{height} fixture frame for {familyId} ({loop.Error}).");
+        }
+
+        void CopyNewestFrame(byte[] destination, string familyId)
+        {
+            var copied = tap.TryRead(frame => Buffer.BlockCopy(frame, 0, destination, 0, frameBytes));
+            Assert(copied, $"GpuRecordingTap should expose a decoded BGRA frame for {familyId}.");
+        }
+
+        static int ChangedPixels(byte[] first, byte[] second)
+        {
+            var changed = 0;
+            for (var i = 0; i < first.Length; i += 4)
+            {
+                var delta = Math.Abs(first[i] - second[i]) + Math.Abs(first[i + 1] - second[i + 1]) + Math.Abs(first[i + 2] - second[i + 2]);
+                if (delta > 24) changed++;
+            }
+            return changed;
+        }
+
+        foreach (var fixture in fixtures)
+        {
+            // Neutral: use the same notes/held keys for an anchored family, but no family setting or event.
+            SetCase(fixture, enabled: false);
+            var neutralFrames = fixture.Scene == EffectRecordingScene.SongNoteRelease ? 1 : Math.Max(1, fixture.GpuSettleFrames + 1);
+            for (var i = 0; i < neutralFrames; i++) ReadNextFrame(fixture.FamilyId);
+            if (fixture.Scene == EffectRecordingScene.SongNoteRelease)
+                feed.SetDeterministicState(EffectRecordingFixtures.SceneState(fixture.Scene).Notes, .15, true, EffectRecordingFixtures.SceneState(fixture.Scene).Pressed);
+            ReadNextFrame(fixture.FamilyId);
+            CopyNewestFrame(baseline, fixture.FamilyId);
+
+            // Enabled: start from a cleared simulation, let the actual recorder publish its frames, and
+            // inject the hit only after the family settings and neutral state reached the render thread.
+            SetCase(fixture, enabled: true);
+            var settle = fixture.Scene == EffectRecordingScene.SongNoteRelease ? 1 : fixture.GpuSettleFrames;
+            for (var i = 0; i < settle; i++) ReadNextFrame(fixture.FamilyId);
+            if (fixture.Scene == EffectRecordingScene.SongNoteRelease)
+                feed.SetDeterministicState(EffectRecordingFixtures.SceneState(fixture.Scene).Notes, .15, true, EffectRecordingFixtures.SceneState(fixture.Scene).Pressed);
+            else if (fixture.Event == EffectRecordingEvent.Impact)
+                feed.Impact(60, 1);
+
+            var maxChanged = 0;
+            var captureCount = Math.Max(1, fixture.GpuSampleFrames);
+            for (var i = 0; i < captureCount; i++)
+            {
+                ReadNextFrame(fixture.FamilyId);
+                CopyNewestFrame(sample, fixture.FamilyId);
+                maxChanged = Math.Max(maxChanged, ChangedPixels(baseline, sample));
+                if (maxChanged >= fixture.MinimumChangedPixels) break;
+            }
+            Assert(maxChanged >= fixture.MinimumChangedPixels,
+                $"The actual GPU recording frame for {fixture.FamilyId} should differ from its matched neutral capture by at least {fixture.MinimumChangedPixels} pixels (saw {maxChanged}).");
+            evidence.Add($"{fixture.FamilyId}={maxChanged}");
+        }
+
+        Assert(families.All(family => family.Capabilities.Recording.State == EffectBackendState.Native),
+            "Only the families with an individual successful GpuRecordingTap capture may be Native for Recording.");
+        Assert(families.SelectMany(family => family.Parameters).All(parameter => parameter.Bindings.Recording == EffectParameterBindingState.Unverified),
+            "Family-level captured output must not silently verify each input's recording binding.");
+        Assert(families.SelectMany(family => new[] { family.Cost.Recording }).All(cost => cost.State == EffectCostState.Unmeasured),
+            "Pixel captures are not timing measurements; every non-material Recording cost stays Unmeasured.");
+        Results.Add($"PASS GPU Recording family captures: {fixtures.Count} individually isolated families read back through GpuRecordingTap at {width}×{height}; changed-pixel evidence [{string.Join(", ", evidence)}]. Parameter bindings remain Unverified and recording cost remains Unmeasured.");
+    }
+
     /// <summary>
     /// The README previews can only repeat byte for byte if the GPU frame is a pure function of the feed and
     /// the number of simulation steps. The capture relies on three facts about <see cref="GpuRenderLoop.RenderOnce"/>,
@@ -297,7 +710,7 @@ internal static partial class VerificationSuite
             && FrameBudget.Find("default") == FrameBudget.DefaultLook && FrameBudget.Find("Heavy") == FrameBudget.HeavyLook && FrameBudget.Find("cinematic") is null,
             "Every budgeted scene needs its own id, found without regard to case, and a name that is not a scene must not resolve to one.");
         Assert(FrameBudget.DefaultLook.P95LimitMs == 8 && string.IsNullOrWhiteSpace(FrameBudget.DefaultLook.Preset),
-            "The default scene budgets the look a first run gets (p95 < 8 ms), built from fresh settings rather than from a preset.");
+            "The default scene budgets the first-run Concert Gold look (p95 < 8 ms), obtained from the same factory used by the settings store.");
         Assert(FrameBudget.HeavyLook.P95LimitMs == 16 && VisualPresets.FindBuiltIn(FrameBudget.HeavyLook.Preset) is not null,
             "The heavy scene must name a preset the app really ships, or the gate would measure a look nobody can choose.");
         Assert(FrameBudget.All.All(budget => budget.P95LimitMs > 0 && budget.Description.Length > 20),

@@ -20,12 +20,14 @@ checks that do not need a compiler:
     the script claims to support, keeps the placeholders of the English message, and is reachable
     from the ``[Languages]``/``[LangOptions]`` sections that Inno Setup reads (see
     ``tools/inno_messages.py``);
-  * the generated documentation assets: ``docs/samples`` still matches the script that builds it.
+  * the generated documentation assets: ``docs/samples`` still matches the script that builds it;
+  * the Phase 1 visual fixture: timing, tempo-map duration, notes, checkpoints and reference presets agree.
 
 Run it from the repository root (``python tools/check_sources.py``); CI runs it before the Windows
 build so a typo is caught in seconds instead of in a full Windows job. A .NET SDK is not needed.
 """
 import json
+import math
 import re
 import struct
 import sys
@@ -712,7 +714,10 @@ def scan_readme():
     # ``docs/previews`` is rendered by CI and committed back, so a shot the workflow knows about can be
     # one commit behind the README line that introduces it. Every other image has to exist right now.
     workflow = ROOT / ".github" / "workflows" / "build.yml"
-    rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow.read_text(encoding="utf-8"))) if workflow.exists() else set()
+    workflow_text = workflow.read_text(encoding="utf-8") if workflow.exists() else ""
+    rendered = set(re.findall(r"Name\s*=\s*'([^']+\.png)'", workflow_text))
+    # Shared JPEG studies are assembled from per-engine captures and saved outside the language-specific $shots list.
+    rendered.update(re.findall(r"\$sheet\.Save\(\(Join-Path \$PWD 'docs/previews/([^']+\.jpe?g)'", workflow_text))
     pending = []
     # Each edition shows the interface in its own language, so every preview a README points at has to sit
     # in that edition's own set — and the workflow has to render both sets in the first place.
@@ -736,7 +741,12 @@ def scan_readme():
                 continue
             relative = target.replace("\\", "/")
             if relative.startswith("docs/previews/"):
-                if relative.split("/")[2] != own:
+                parts = relative.split("/")
+                # Shared root-level galleries (preset/material studies) are not language-specific; CI renders them separately.
+                if len(parts) == 3 and Path(target).name in rendered:
+                    pending.append(f"{name}:{Path(target).name}")
+                    continue
+                if parts[2] != own:
                     errors.append(f"{name} shows the preview '{target}', which is not the '{own}' set this edition reads")
                     continue
                 if Path(target).name in rendered:
@@ -817,23 +827,67 @@ def scan_cli_and_samples():
     workflow = ROOT / ".github" / "workflows" / "build.yml"
     if not workflow.exists():
         return errors
-    shots = re.search(r"\$shots = @\((.*?)\n\s*\)\n", workflow.read_text(encoding="utf-8"), re.S)
+    workflow_text = workflow.read_text(encoding="utf-8")
+    shots = re.search(r"\$shots = @\((.*?)\n\s*\)\n", workflow_text, re.S)
     if not shots:
         return errors + ["build.yml lost the $shots list that renders the README previews"]
     block = shots.group(1)
-    # The preset gallery renders every built-in look by name (spaces dropped, as --preset accepts them).
-    gallery = re.search(r"\$presets = @\(([^)]*)\)", workflow.read_text(encoding="utf-8"))
+    # The preset gallery renders every shipped look by name (spaces dropped, as --preset accepts them).
+    gallery = re.search(r"\$presets = @\(([^)]*)\)", workflow_text)
     presets_source = ROOT / "Stage" / "VisualPresets.cs"
     if gallery and presets_source.exists():
         text = presets_source.read_text(encoding="utf-8")
         default = re.search(r'DefaultPresetName = "([^"]+)"', text)
         names = re.findall(r'^\s*new\("([^"]+)", "', text, re.M) + ([default.group(1)] if default else [])
-        wanted = {name.replace(" ", "") for name in names}
+        community = {path.stem for path in (ROOT / "presets").glob("*.json")}
+        wanted = {name.replace(" ", "") for name in [*names, *community]}
         listed = set(re.findall(r"'([^']+)'", gallery.group(1)))
         for name in sorted(wanted - listed):
-            errors.append(f"build.yml's preset gallery leaves out the built-in preset {name}")
+            errors.append(f"build.yml's preset gallery leaves out the shipped preset {name}")
         for name in sorted(listed - wanted):
-            errors.append(f"build.yml's preset gallery renders {name}, which is not a built-in preset")
+            errors.append(f"build.yml's preset gallery renders {name}, which is not a shipped preset")
+    # The note-material study is its own render gate: all legacy styles plus the two new materials,
+    # both depth states where supported, and one capture for each stage renderer.
+    note_step = re.search(r"^      - name: Render the note-material gallery at 50%\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    note_gallery = re.search(r"\$styles = @\((.*?)\n\s*\)", note_step.group(1), re.S) if note_step else None
+    required_styles = {
+        "Solid-2D": ("Solid", "2d"), "Solid-3D": ("Solid", "3d"),
+        "Glass-2D": ("Glass", "2d"), "Glass-3D": ("Glass", "3d"),
+        "Neon": ("Neon", "2d"), "Fire": ("Fire", "2d"),
+        "Gem-2D": ("Gem", "2d"), "Gem-3D": ("Gem", "3d"),
+        "Crystal-Outline": ("CrystalOutline", "2d"),
+    }
+    if not note_gallery:
+        errors.append("build.yml lost the $styles list that renders the note-material gallery")
+    else:
+        entries = {
+            match.group(1): (match.group(2), match.group(3))
+            for match in re.finditer(r"@\{\s*Id\s*=\s*'([^']+)'\s*;\s*Style\s*=\s*'([^']+)'\s*;\s*Depth\s*=\s*'([^']+)'\s*\}", note_gallery.group(1))
+        }
+        for name, expected in required_styles.items():
+            if entries.get(name) != expected:
+                errors.append(f"build.yml's note-material gallery needs {name} = {expected[0]}/{expected[1]}")
+        for name in sorted(entries.keys() - required_styles.keys()):
+            errors.append(f"build.yml's note-material gallery renders the unplanned case {name}")
+        engines = re.search(r"\$engines = @\(([^)]*)\)", note_step.group(1)) if note_step else None
+        if not engines or set(re.findall(r"'([^']+)'", engines.group(1))) != {"sw", "gpu"}:
+            errors.append("build.yml's note-material gallery must render both WPF/software and GPU/WARP")
+        if not note_step or not re.search(r"\$cellW\s*=\s*540\s*;\s*\$cellH\s*=\s*350", note_step.group(1)) or "'--compact'" not in note_step.group(1):
+            errors.append("build.yml's note-material gallery must reduce a 1080×700 capture to 540×350 (50%)")
+        if not note_step or "'docs/previews/note-styles.jpg'" not in note_step.group(1):
+            errors.append("build.yml's note-material gallery must write docs/previews/note-styles.jpg")
+        if note_step and any(token not in note_step.group(1) for token in (
+            "foreach ($style in $styles)", "foreach ($engine in $engines)",
+            '"--note-style=$($style.Style)"', '"--note-depth=$($style.Depth)"',
+            "if ($engine -eq 'gpu')", "'--software'",
+        )):
+            errors.append("build.yml must render every note material/depth through both explicit engine overrides")
+    artifact_step = re.search(r"^      - name: Upload README previews\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    if not artifact_step or "docs/previews/note-styles.jpg" not in artifact_step.group(1):
+        errors.append("build.yml's README preview artifact must include docs/previews/note-styles.jpg")
+    drift_step = re.search(r"^      - name: Report preview drift\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    if not drift_step or not re.search(r"steps\.render-note-styles\.outcome\s*==\s*'success'", drift_step.group(1)):
+        errors.append("build.yml must report preview drift only after the note-material gallery succeeds")
     for flag in sorted(set(re.findall(r"(--[a-z][a-z-]*)", block)) - parsed):
         errors.append(f"build.yml passes {flag} to PianoPath.exe, which does not parse it")
     for path in sorted(set(re.findall(r"((?:docs|Assets)/[A-Za-z0-9_./-]+)", block))):
@@ -1057,6 +1111,224 @@ def scan_generated_assets():
                 errors.append(str(truth.relative_to(ROOT)) + " should name the top centre of every key")
         except (json.JSONDecodeError, AttributeError) as error:
             errors.append(f"{truth.relative_to(ROOT)} is not the JSON tools/make_ar_sample.py writes: {error}")
+    return errors
+
+
+def scan_phase1_scene_fixture():
+    """Keep the agreed Phase 1 scene coherent with the Windows verification capture that consumes it."""
+    path = ROOT / "docs" / "samples" / "visual-effects-phase1-scene.json"
+    label = str(path.relative_to(ROOT))
+    if not path.exists():
+        return [f"{label} is missing; it is the reference-scene fixture for the visual-effects review"]
+    try:
+        document = json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as error:
+        return [f"{label} is not valid JSON: {error}"]
+    if not isinstance(document, dict):
+        return [f"{label} must be a JSON object"]
+
+    errors = []
+
+    def number(value):
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            return False
+        try:
+            return math.isfinite(value)
+        except OverflowError:
+            return False
+
+    if document.get("schemaVersion") != 1:
+        errors.append(f"{label} must declare schemaVersion 1")
+    if document.get("status") != "review-fixture-consumed-by-verification":
+        errors.append(f"{label} must identify the Phase 1 scene as a verification-consumed review fixture")
+    consumer = ROOT / "Diagnostics" / "Phase1VisualReview.cs"
+    if not consumer.exists() or "docs/samples/visual-effects-phase1-scene.json" not in consumer.read_text(encoding="utf-8"):
+        errors.append(f"{label} must be read by Diagnostics/Phase1VisualReview.cs")
+    verification = ROOT / "Diagnostics" / "VerificationSuite.cs"
+    if not verification.exists() or "--verify-review-out=" not in verification.read_text(encoding="utf-8"):
+        errors.append(f"{label} must be reachable from the optional --verify-review-out verification switch")
+    workflow = ROOT / ".github" / "workflows" / "build.yml"
+    workflow_text = workflow.read_text(encoding="utf-8") if workflow.exists() else ""
+    verify_step = re.search(r"^      - name: Verification suite\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    if not verify_step or "--verify-review-out=$review" not in verify_step.group(1):
+        errors.append("build.yml must render the Phase 1 scene during the Windows verification suite")
+    artifact_step = re.search(r"^      - name: Publish Phase 1 visual review\n(.*?)(?=^      - name: |\Z)", workflow_text, re.M | re.S)
+    if not artifact_step or "phase1-visual-review" not in artifact_step.group(1) or "actions/upload-artifact@v7" not in artifact_step.group(1):
+        errors.append("build.yml must upload the Phase 1 review images as the phase1-visual-review artifact")
+
+    render = document.get("render")
+    if not isinstance(render, dict):
+        return errors + [f"{label}.render must be an object"]
+    for key, expected in (("width", 1920), ("height", 1080), ("dpi", 96),
+                          ("framesPerSecond", 60), ("durationSeconds", 12), ("frameCount", 720),
+                          ("randomSeed", 424242), ("colorSpace", "sRGB")):
+        if render.get(key) != expected:
+            errors.append(f"{label}.render.{key} must remain {expected!r} for the fixed review capture")
+    fps, duration, frame_count = (render.get("framesPerSecond"), render.get("durationSeconds"), render.get("frameCount"))
+    if number(fps) and number(duration) and number(frame_count) and duration * fps != frame_count:
+        errors.append(f"{label}.render.frameCount must equal durationSeconds × framesPerSecond")
+    if render.get("initialTimeSeconds") != 4.1:
+        errors.append(f"{label}.render.initialTimeSeconds must open on the held-chord checkpoint at 4.1 seconds")
+
+    keyboard = render.get("keyboard")
+    if not isinstance(keyboard, dict):
+        errors.append(f"{label}.render.keyboard must describe the 88-key review stage")
+        keyboard = {}
+    key_values = (keyboard.get("keyCount"), keyboard.get("firstMidiPitch"), keyboard.get("lastMidiPitch"))
+    if key_values != (88, 21, 108) or key_values[2] - key_values[1] + 1 != key_values[0]:
+        errors.append(f"{label}.render.keyboard must cover MIDI 21–108 exactly (88 keys)")
+    hit_line = keyboard.get("hitLineNormalizedY")
+    if not number(hit_line) or not 0 < hit_line < 1:
+        errors.append(f"{label}.render.keyboard.hitLineNormalizedY must be normalized between 0 and 1")
+    if keyboard.get("noteDirection") != "Down":
+        errors.append(f"{label}.render.keyboard.noteDirection must be Down")
+    lookahead = keyboard.get("lookaheadSeconds")
+    if not number(lookahead) or lookahead <= 0:
+        errors.append(f"{label}.render.keyboard.lookaheadSeconds must be positive")
+
+    music = document.get("music")
+    if not isinstance(music, dict):
+        return errors + [f"{label}.music must be an object"]
+    loop = music.get("loopBeats")
+    if not isinstance(loop, list) or len(loop) != 2 or not all(number(value) for value in loop) or loop[1] <= loop[0]:
+        return errors + [f"{label}.music.loopBeats must be an increasing pair of beat positions"]
+    loop_start, loop_end = loop
+    if loop != [0, 16]:
+        errors.append(f"{label}.music.loopBeats must remain the four-bar 0–16 beat fixture")
+    if music.get("meter") != [4, 4]:
+        errors.append(f"{label}.music.meter must remain 4/4")
+    tempo_source = music.get("tempoMap")
+    tempo = []
+    if isinstance(tempo_source, list):
+        for point in tempo_source:
+            if (not isinstance(point, dict) or not number(point.get("beat")) or
+                    not number(point.get("bpm")) or point["bpm"] <= 0):
+                tempo = []
+                break
+            tempo.append((point["beat"], point["bpm"]))
+    if (not tempo or tempo[0][0] != loop_start or
+            any(left[0] >= right[0] for left, right in zip(tempo, tempo[1:])) or
+            any(beat < loop_start or beat >= loop_end for beat, _ in tempo)):
+        errors.append(f"{label}.music.tempoMap must have ordered positive tempos beginning at loopBeats[0]")
+        tempo = []
+    elif tempo != [(0, 96), (12, 72)]:
+        errors.append(f"{label}.music.tempoMap must keep the agreed 96 BPM to 72 BPM change at beat 12")
+
+    notes_source = music.get("notes")
+    notes = []
+    if not isinstance(notes_source, list) or not notes_source:
+        errors.append(f"{label}.music.notes must contain the reference notes")
+    else:
+        seen_ids = set()
+        for note in notes_source:
+            if not isinstance(note, dict):
+                errors.append(f"{label}.music.notes contains a non-object entry")
+                continue
+            note_id = note.get("id")
+            pitch, start, length, velocity = (note.get("pitch"), note.get("startBeat"),
+                                              note.get("durationBeats"), note.get("velocity"))
+            if not isinstance(note_id, str) or not note_id or note_id in seen_ids:
+                errors.append(f"{label}.music.notes IDs must be non-empty and unique (duplicate or missing: {note_id!r})")
+                continue
+            seen_ids.add(note_id)
+            if (not number(pitch) or pitch < 21 or pitch > 108 or
+                    not number(start) or not number(length) or length <= 0 or
+                    not number(velocity) or velocity < 1 or velocity > 127 or
+                    note.get("hand") not in ("left", "right") or
+                    start < loop_start or start + length > loop_end):
+                errors.append(f"{label}.music.notes[{note_id}] has an invalid pitch, hand, beat range, duration or velocity")
+                continue
+            notes.append(note)
+    if {note.get("hand") for note in notes} != {"left", "right"}:
+        errors.append(f"{label}.music.notes must include both left- and right-hand material")
+
+    review_frames = document.get("reviewFrames")
+    expected_frames = (("note-readability", 0.8), ("held-chord-and-impact", 4.1),
+                       ("sustain-pedal", 6.1), ("release-and-rest", 11.25))
+    if not isinstance(review_frames, list) or len(review_frames) != len(expected_frames):
+        errors.append(f"{label}.reviewFrames must keep the four agreed checkpoints at 0.8, 4.1, 6.1 and 11.25 seconds")
+        review_frames = []
+    else:
+        for frame, (expected_id, expected_time) in zip(review_frames, expected_frames):
+            if (not isinstance(frame, dict) or frame.get("id") != expected_id or
+                    frame.get("timeSeconds") != expected_time or not frame.get("checks")):
+                errors.append(f"{label}.reviewFrames must include {expected_id} at {expected_time} seconds with review checks")
+    if tempo and notes:
+        def beat_to_seconds(beat):
+            elapsed = 0.0
+            for index, (start, bpm) in enumerate(tempo):
+                end = tempo[index + 1][0] if index + 1 < len(tempo) else beat
+                if beat <= start:
+                    break
+                segment_end = min(beat, end)
+                elapsed += (segment_end - start) * 60.0 / bpm
+                if beat <= end:
+                    break
+            return elapsed
+
+        loop_seconds = beat_to_seconds(loop_end) - beat_to_seconds(loop_start)
+        tail_seconds = duration - loop_seconds if number(duration) else -1
+        if round(tail_seconds, 3) != 1.167:
+            errors.append(f"{label} must leave the agreed 1.167-second tail after its 16-beat tempo-mapped loop")
+
+        def active_hands_at(time_seconds):
+            return {note["hand"] for note in notes
+                    if beat_to_seconds(note["startBeat"]) <= time_seconds <
+                    beat_to_seconds(note["startBeat"] + note["durationBeats"])}
+
+        if not active_hands_at(0.8):
+            errors.append(f"{label} has no note sounding at the 0.8-second readability checkpoint")
+        if active_hands_at(4.1) != {"left", "right"}:
+            errors.append(f"{label} must show both hands sounding at the 4.1-second held-chord checkpoint")
+        if active_hands_at(6.1) != {"left", "right"}:
+            errors.append(f"{label} must show sustained left- and right-hand notes at the 6.1-second pedal checkpoint")
+        if not beat_to_seconds(8) <= 6.1 < beat_to_seconds(11.75):
+            errors.append(f"{label} must keep the pedal down through the 6.1-second sustain checkpoint")
+        if active_hands_at(11.25):
+            errors.append(f"{label} must be in a true note rest at the 11.25-second release checkpoint")
+        if beat_to_seconds(11.75) >= 11.25:
+            errors.append(f"{label} must release the sustain pedal before the 11.25-second quiet checkpoint")
+
+    pedal_source = music.get("pedalEvents")
+    expected_pedal = ((8, True), (11.75, False))
+    if not isinstance(pedal_source, list) or len(pedal_source) != len(expected_pedal):
+        errors.append(f"{label}.music.pedalEvents must include pedal down at beat 8 and release at beat 11.75")
+    else:
+        for event, (expected_beat, expected_down) in zip(pedal_source, expected_pedal):
+            if (not isinstance(event, dict) or event.get("beat") != expected_beat or
+                    event.get("down") is not expected_down):
+                errors.append(f"{label}.music.pedalEvents must retain the ordered down-at-8 / release-at-11.75 cue")
+
+    looks = document.get("looks")
+    expected_presets = ("Concert Gold", "Neon Violet", "Two Hands")
+    if not isinstance(looks, list) or len(looks) != len(expected_presets):
+        errors.append(f"{label}.looks must define the three reference looks without implying runtime presets")
+        looks = []
+    preset_source = (ROOT / "Stage" / "VisualPresets.cs").read_text(encoding="utf-8")
+    built_in_names = set(re.findall(r'new\("([^"]+)"', preset_source))
+    default_name = re.search(r'DefaultPresetName\s*=\s*"([^"]+)"', preset_source)
+    if default_name:
+        built_in_names.add(default_name.group(1))
+    if not isinstance(looks, list) or tuple(look.get("referencePreset") for look in looks if isinstance(look, dict)) != expected_presets:
+        errors.append(f"{label}.looks must target Concert Gold, Neon Violet and Two Hands in that order")
+    for look in looks:
+        if not isinstance(look, dict):
+            errors.append(f"{label}.looks contains a non-object entry")
+            continue
+        reference = look.get("referencePreset")
+        if not isinstance(reference, str) or reference not in built_in_names:
+            errors.append(f"{label}.looks references {reference!r}, which is not a shipped built-in preset")
+        if look.get("designTargetOnly") is not True:
+            errors.append(f"{label}.looks.{look.get('id', '<unknown>')} must remain explicitly designTargetOnly")
+        palette = look.get("palette")
+        if not isinstance(palette, dict) or not palette or any(
+                not isinstance(color, str) or not re.fullmatch(r"#[0-9A-Fa-f]{6}", color)
+                for color in palette.values()):
+            errors.append(f"{label}.looks.{look.get('id', '<unknown>')}.palette must use #RRGGBB colors")
+        mix = look.get("mix")
+        if not isinstance(mix, dict) or not mix or any(
+                not number(value) or not 0 <= value <= 1 for value in mix.values()):
+            errors.append(f"{label}.looks.{look.get('id', '<unknown>')}.mix values must be normalized from 0 to 1")
     return errors
 
 
@@ -1529,6 +1801,7 @@ def main():
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
+    errors.extend(scan_phase1_scene_fixture())
     errors.extend(scan_preset_shelf())
     localization_errors, keys_used, keys_inventory = scan_localization(cs_files)
     errors.extend(localization_errors)
@@ -1540,6 +1813,7 @@ def main():
     print(f"checked {len(cs_files)} C# files and {len(xaml_files)} XAML files, {len(keys)} resource keys, {len(names)} named elements")
     print("checked the dock navigation catalogue against the XAML tab strip, the icon glyph templates, the theme tokens against App.xaml and every README link")
     print("checked the command-line switches against the README table and the preview workflow, and the generated sample against its script")
+    print("checked the Phase 1 scene fixture's frame timing, tempo-map tail, four review checkpoints (readability, two hands, pedal-on, rest) and three design-only preset targets")
     print("checked the community preset shelf against the settings class and against tools/make_presets.py, the script that writes it")
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
