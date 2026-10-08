@@ -1707,7 +1707,8 @@ internal static partial class VerificationSuite
             $"Lite should draw only the keys, the notes and the player's bars ({lite.Count} elements).");
         var standard = ArElementCatalog.ForTier(ArQualityTier.Standard);
         foreach (var floor in ArElementCatalog.NeverDropped) Assert(standard.Contains(floor), "Standard must draw at least everything Lite draws.");
-        Assert.Contains(ArElement.Particles, ArElementCatalog.ForTier(ArQualityTier.Ultra));
+        Assert(ArElementCatalog.ForTier(ArQualityTier.Ultra).Contains(ArElement.Particles),
+            "Ultra should draw the particles the two lower tiers leave out.");
         var dropOrder = ArElementCatalog.DropOrder;
         foreach (var floor in ArElementCatalog.NeverDropped) foreach (var drop in dropOrder)
                 Assert(floor != drop, $"The drop order must never include the floor element {floor}.");
