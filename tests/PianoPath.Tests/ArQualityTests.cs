@@ -50,4 +50,5 @@ public class ArQualityTests
         var look = new PianoVisualSettings { ArQuality = ArQualityTiers.UltraName };
         target.CopyFrom(look);
         Assert.Equal(ArQualityTiers.LiteName, target.ArQuality);
-    }}
+    }
+}
