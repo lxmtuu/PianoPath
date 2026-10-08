@@ -96,16 +96,16 @@ internal sealed class GpuArLayer
                 quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity, new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
             }
         }
-        // Only Standard and Ultra draw the bars with the stage's velocity tint: Lite keeps them flat, the colour the note colour picker gave them.
-        var barLook = ar.Quality == ArQualityTier.Lite ? look with { VelocityColor = false, VelocityColorAmount = 0 } : look;
-        // the keys under the player's own fingers, drawn over the notes of the song as the stage draws its live trails
+        // the keys under the player's own fingers, drawn over the notes of the song as the stage draws its live trails.
+        // Lite keeps the bar's colour flat (no velocity tint), which is what the overlay has always done.
+        var velocityTint = ar.Quality != ArQualityTier.Lite && look.VelocityColor && look.VelocityColorAmount > 0;
+        var velocityAmount = velocityTint ? look.VelocityColorAmount : 0;
         if (live.Count == 0) return;
         ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
         foreach (var bar in _liveBars)
         {
-            var color = barLook.NoteColor(bar.Pitch, 0);
-            if (barLook.VelocityColor && barLook.VelocityColorAmount > 0)
-                color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), barLook.VelocityColorAmount);
+            var color = look.NoteColor(bar.Pitch, 0);
+            if (velocityTint) color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), velocityAmount);
             quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
             LiveBarCount++;
         }
