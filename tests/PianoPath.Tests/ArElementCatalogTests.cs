@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Xunit;
 
 namespace PianoPath.Tests;
@@ -10,11 +11,15 @@ public class ArElementCatalogTests
 {
     private static void SameSet(IReadOnlySet<ArElement> actual, params ArElement[] expected)
     {
-        var missing = expected.Where(e => !actual.Contains(e)).ToList();
-        var extra = actual.Where(e => !expected.Contains(e)).ToList();
+        var missing = new List<ArElement>();
+        var extra = new List<ArElement>();
+        foreach (var e in expected) if (!actual.Contains(e)) missing.Add(e);
+        foreach (var e in actual) if (Array.IndexOf(expected, e) < 0) extra.Add(e);
         Assert.True(missing.Count == 0 && extra.Count == 0,
-            $"Expected [{string.Join(", ", expected)}]; got [{string.Join(", ", actual)}] (missing {string.Join(", ", missing)}, extra {string.Join(", ", extra)}).");
+            $"Expected [{string.Join(", ", expected)}]; got [{string.Join(", ", Cast(actual))}] (missing {string.Join(", ", missing)}, extra {string.Join(", ", extra)}).");
     }
+
+    private static IEnumerable<ArElement> Cast(IReadOnlySet<ArElement> set) { foreach (var e in set) yield return e; }
 
     [Fact]
     public void Lite_draws_the_keys_the_notes_and_the_bars_of_the_keys_the_player_presses()
