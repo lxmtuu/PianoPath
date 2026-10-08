@@ -536,6 +536,7 @@ internal sealed class PianoVisualSettings
                         case "impact.flash": result.ShowImpactFlash = false; result.ImpactFlashIntensity = 0; break;
                         case "impact.burst": result.ShowEmbers = false; break;
                         case "atmosphere.stars": result.ShowStars = false; break;
+                        case "particles.flames": result.ShowFlame = false; break;
                     }
                 }
                 if (ReducedMotion && resolution.Motion == MotionSuppression.FreezeIntrinsicAnimation)
@@ -556,6 +557,9 @@ internal sealed class PianoVisualSettings
                         case "atmosphere.shooting-stars": result.ShootingStars = false; break;
                         case "atmosphere.petals": result.ShowPetals = false; break;
                         case "atmosphere.beams": result.ShowLightBeams = false; break;
+                        case "particles.sparks": result.ShowEmbers = false; break;
+                        case "particles.wisps": result.ShowWisps = false; break;
+                        case "particles.flames": result.ShowFlame = false; break;
                     }
                 }
             }

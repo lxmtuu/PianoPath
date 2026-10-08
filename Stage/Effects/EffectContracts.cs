@@ -716,6 +716,93 @@ internal static class EffectContractCatalog
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
 
+    /// <summary>
+    /// The sixth contract pilot: the particle systems. Sparks, wisps and flames all run their own physics
+    /// on their own clock (IntrinsicAnimation) and are drawn by both renderers. Sparks and flames flicker
+    /// bright with no strobe analysis yet, so their flash risk stays Unverified and resolves to
+    /// suppression; the soft plasma wisps carry no flash. Costs all Unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<EffectFamilyContract> ParticlesFxPilot { get; } = Array.AsReadOnly(new[]
+    {
+        new EffectFamilyContract(
+            "particles.sparks",
+            EffectPhase.Impact, EffectTrigger.NoteOn, EffectLifecycle.FixedDuration, EffectAnchor.HitPoint,
+            EffectClock.RenderElapsed, EffectSeedPolicy.PerNote,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowEmbers"),
+                Percentage("ParticleAmount", 0, 120),
+                Percentage("ParticleSpeed", 0, 300),
+                Percentage("ParticleSize", .2, 16),
+                Percentage("ParticleGlow", 0, 200),
+                Percentage("ParticleLife", .05, 3),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "particles.wisps",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowWisps"),
+                Percentage("WispAmount", 0, 150),
+                Percentage("WispSpeed", 20, 600),
+                Percentage("WispTurbulence", 0, 100),
+                Percentage("WispGlow", 0, 200),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+        new EffectFamilyContract(
+            "particles.flames",
+            EffectPhase.Hold, EffectTrigger.NoteHeld, EffectLifecycle.WhileNoteHeld, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Boolean("ShowFlame"),
+                Percentage("FlameIntensity", 0, 100),
+                Percentage("FlameHeight", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
+    });
+
+    /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
+    internal static bool IsParticlesPilotWellFormed =>
+        ParticlesFxPilot.Count == 3
+        && ParticlesFxPilot.All(contract => contract.IsWellFormed)
+        && ParticlesFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == ParticlesFxPilot.Count;
+
+    /// <summary>
+    /// The seventh contract pilot: what happens at the key when a note ends. A single family: the release
+    /// effect is an event-driven decay with no idle animation and no flash, drawn by both renderers.
+    /// Cost Unmeasured.
+    /// </summary>
+    internal static IReadOnlyList<EffectFamilyContract> ReleaseFxPilot { get; } = Array.AsReadOnly(new[]
+    {
+        new EffectFamilyContract(
+            "release.fx",
+            EffectPhase.Release, EffectTrigger.NoteOff, EffectLifecycle.FixedDuration, EffectAnchor.Key,
+            EffectClock.RenderElapsed, EffectSeedPolicy.None,
+            Array.AsReadOnly(new[]
+            {
+                Choice("ReleaseEffect"),
+                Percentage("ReleaseIntensity", 0, 100),
+            }),
+            new EffectCapabilityProfile(Native, Native, Unverified, Unverified),
+            new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
+            new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
+    });
+
+    /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
+    internal static bool IsReleasePilotWellFormed =>
+        ReleaseFxPilot.Count == 1
+        && ReleaseFxPilot.All(contract => contract.IsWellFormed)
+        && ReleaseFxPilot.Select(contract => contract.Id).Distinct(StringComparer.Ordinal).Count() == ReleaseFxPilot.Count;
+
     /// <summary>IDs unique, schemas and capability claims well-formed, before consumers opt in.</summary>
     internal static bool IsAmbientPilotWellFormed =>
         AmbientFxPilot.Count == 8
@@ -724,7 +811,7 @@ internal static class EffectContractCatalog
 
     /// <summary>Every typed family across the pilots, for catalog-driven global toggles.</summary>
     internal static IReadOnlyList<EffectFamilyContract> AllFamilies { get; } =
-        Array.AsReadOnly(ImpactFxPilot.Concat(FallingFxPilot).Concat(HoldFxPilot).Concat(AmbientFxPilot).ToArray());
+        Array.AsReadOnly(ImpactFxPilot.Concat(FallingFxPilot).Concat(HoldFxPilot).Concat(AmbientFxPilot).Concat(ParticlesFxPilot).Concat(ReleaseFxPilot).ToArray());
 
     /// <summary>Checks IDs, aliases, parameter schemas and capability/fallback claims before consumers opt in.</summary>
     internal static bool IsPilotWellFormed

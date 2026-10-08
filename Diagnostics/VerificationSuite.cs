@@ -297,6 +297,7 @@ internal static partial class VerificationSuite
         VerifyFallingPilot();
         VerifyHoldPilot();
         VerifyAmbientPilot();
+        VerifyParticlesReleasePilot();
         VerifyAdapterSelection();
         Run(nameof(VerifyPresets), () => VerifyPresets());
         Assert(ColorPickerWindow.FromHsv(0, 1, 1) == Colors.Red && ColorPickerWindow.FromHsv(120, 1, 1) == Colors.Lime && ColorPickerWindow.FromHsv(240, 1, 1) == Colors.Blue, "The color picker should correctly convert the primary HSV hues.");
@@ -630,6 +631,62 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
+    /// Cross-checks the last two pilots: sparks/wisps/flames run their own physics and freeze under Reduced
+    /// Motion, the flickering sparks and flames keep their flash risk Unverified (suppression under Reduce
+    /// Flashes) while the soft wisps carry none, and the release effect is a plain event-driven decay.
+    /// Both renderers draw all four; no cost is invented. Metadata coherence only; no renderer changed.
+    /// </summary>
+    private static void VerifyParticlesReleasePilot()
+    {
+        Assert(EffectContractCatalog.IsParticlesPilotWellFormed && EffectContractCatalog.IsReleasePilotWellFormed,
+            "The particles and release pilots should be well-formed with unique IDs.");
+        var families = EffectContractCatalog.ParticlesFxPilot.Concat(EffectContractCatalog.ReleaseFxPilot).ToList();
+        var byId = families.ToDictionary(contract => contract.Id, StringComparer.Ordinal);
+        foreach (var contract in families)
+        {
+            Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
+                    && contract.Capabilities.GpuStage.State == EffectBackendState.Native
+                    && contract.Capabilities.Recording.State == EffectBackendState.Unverified
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers in shipped code; recording and AR stay Unverified.");
+            Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
+                    .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
+                $"{contract.Id} must not carry an invented cost.");
+            foreach (var parameter in contract.Parameters)
+            {
+                var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
+                Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
+                if (property is null) continue;
+                var kindOk = parameter.Kind switch
+                {
+                    EffectParameterKind.Boolean => property.PropertyType == typeof(bool),
+                    EffectParameterKind.Choice => property.PropertyType == typeof(string),
+                    EffectParameterKind.Percentage => property.PropertyType == typeof(double),
+                    _ => false,
+                };
+                Assert(kindOk, $"{contract.Id} parameter {parameter.SettingName} should declare the setting's real type.");
+            }
+        }
+        foreach (var id in new[] { "particles.sparks", "particles.wisps", "particles.flames" })
+        {
+            Assert(byId[id].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.IntrinsicAnimation
+                    && AccessibilityContractResolver.Resolve(byId[id].Accessibility, true, false, false).Motion == MotionSuppression.FreezeIntrinsicAnimation,
+                $"{id} runs its own physics and must freeze under Reduced Motion.");
+        }
+        Assert(byId["release.fx"].Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
+                && byId["release.fx"].Trigger == EffectTrigger.NoteOff && byId["release.fx"].Phase == EffectPhase.Release,
+            "The release effect is an event-driven decay at note-off with no idle animation.");
+        Assert(byId["particles.sparks"].Accessibility.FlashRisk == EffectFlashRisk.Unverified
+                && byId["particles.flames"].Accessibility.FlashRisk == EffectFlashRisk.Unverified
+                && AccessibilityContractResolver.Resolve(byId["particles.flames"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
+            "Flickering sparks and flames keep their flash risk Unverified until a strobe analysis exists.");
+        Assert(byId["particles.wisps"].Accessibility.FlashRisk == EffectFlashRisk.None
+                && AccessibilityContractResolver.Resolve(byId["particles.wisps"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
+            "The soft plasma wisps carry no flash and must stay untouched under Reduce Flashes.");
+        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, the flickering sparks and flames resolve conservatively under Reduce Flashes while wisps stay untouched, the release effect is a plain note-off decay, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
+    }
+
+    /// <summary>
     /// Verifies the persisted accessibility toggles and the settings-level override policy they drive: old JSON
     /// loads with every toggle off, toggles off reproduce the saved look byte-for-byte, and toggles on override
     /// exactly their reviewed channels on a copy without mutating the user's settings. High Contrast is
@@ -657,6 +714,7 @@ internal static partial class VerificationSuite
             NoteShimmer = true, ShowStars = true, ShootingStars = true, ShowPetals = true, ShowLightBeams = true,
             HoldVibration = true, HoldColorCycle = true, HoldElectricArc = true,
             AmbientEnergy = "Nebula", AmbientEnergyAmount = 60,
+            ShowWisps = true, ShowFlame = true,
         }.ToJson());
         var identity = busy.WithAccessibilityTogglesApplied();
         Assert(identity.ToJson() == busy.ToJson() && !ReferenceEquals(identity, busy),
@@ -667,6 +725,7 @@ internal static partial class VerificationSuite
         Assert(calmed.BackgroundMotion == "None" && !calmed.HaloPulse && !calmed.FallingPulse && !calmed.HoldBreath
                 && !calmed.NoteShimmer && !calmed.ShowStars && !calmed.ShootingStars && !calmed.ShowPetals && !calmed.ShowLightBeams
                 && !calmed.HoldVibration && !calmed.HoldColorCycle && !calmed.HoldElectricArc && calmed.AmbientEnergyAmount == 0
+                && !calmed.ShowEmbers && !calmed.ShowWisps && !calmed.ShowFlame
                 && calmed.ShowImpactFlash && calmed.ImpactFlashIntensity == 80,
             "Reduced Motion must freeze every catalogued self-animated family — pulses, shimmer, the whole ambient sky, vibration, colour cycle and arc — and leave the flash channel alone.");
 
@@ -674,9 +733,10 @@ internal static partial class VerificationSuite
         busy.ReduceFlashes = true;
         var unflashed = busy.WithAccessibilityTogglesApplied();
         Assert(!unflashed.ShowImpactFlash && unflashed.ImpactFlashIntensity == 0
-                && !unflashed.ShowEmbers && !unflashed.ShowStars
+                && !unflashed.ShowEmbers && !unflashed.ShowStars && !unflashed.ShowFlame
                 && unflashed.BackgroundMotion == "Aurora" && unflashed.HaloPulse && unflashed.FallingPulse && unflashed.HoldBreath
-                && unflashed.ShowPetals && unflashed.ShootingStars && unflashed.ShowLightBeams && unflashed.AmbientEnergyAmount == 60,
+                && unflashed.ShowPetals && unflashed.ShootingStars && unflashed.ShowLightBeams && unflashed.AmbientEnergyAmount == 60
+                && unflashed.ShowWisps,
             "Reduce Flashes must silence the flash channel, suppress the un-analysed spark burst and star twinkle, and leave every motion-only layer exactly as the user set it.");
         Assert(unflashed.ImpactWaveIntensity == busy.ImpactWaveIntensity,
             "Reduce Flashes must leave the flash-less impact wave's intensity exactly as the user set it.");
