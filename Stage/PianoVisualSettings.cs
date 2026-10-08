@@ -741,7 +741,7 @@ internal sealed class PianoVisualSettings
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         ArViewProfileId = ArCalibrationProfiles.Normalize(ArViewProfileId).Id;
         ArQuality = ArQualityTiers.Normalize(ArQuality);
-        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay).Normalised();
+        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);
