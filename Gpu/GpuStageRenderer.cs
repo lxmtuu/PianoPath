@@ -29,7 +29,7 @@ internal struct GpuPassConstants { public Vector4 PassA; }
 /// </summary>
 internal sealed class GpuRenderTarget : IDisposable
 {
-    internal const int BloomLevels = 6;
+    internal const int BloomLevels = GpuAdaptiveQualityProfile.FullBloomLevelCount;
     internal int Width { get; private set; }
     internal int Height { get; private set; }
     internal ID3D11Texture2D? Hdr;
@@ -123,6 +123,8 @@ internal sealed class GpuStageRenderer : IDisposable
     private readonly DynamicStructuredBuffer<GpuSpriteInstance> _ambient;
     private readonly GpuInstanceList<GpuSpriteInstance> _ambientList = new(2048);
     private GpuNotePassQueryProfiler? _notePassProfiler;
+    private GpuAdaptiveQualityController? _adaptiveQualityController;
+    private GpuAdaptiveQualityQueryProfiler? _adaptiveQualityProfiler;
     private ID3D11Texture2D? _atlasTexture;
     private ID3D11ShaderResourceView? _atlasView;
     private long _atlasVersion = -1;
@@ -203,6 +205,54 @@ internal sealed class GpuStageRenderer : IDisposable
     {
         if (_notePassProfiler is not null) throw new InvalidOperationException("Note-pass timestamp profiling is already enabled.");
         _notePassProfiler = new GpuNotePassQueryProfiler(Device, Context, samples);
+    }
+
+    /// <summary>Enables runtime whole-stage GPU timing for the render loop's adaptive-quality controller.</summary>
+    internal void EnableAdaptiveQualityProfiling(GpuAdaptiveQualityController quality)
+    {
+        if (_adaptiveQualityProfiler is not null) throw new InvalidOperationException("Adaptive-quality timestamp profiling is already enabled.");
+        var profiler = new GpuAdaptiveQualityQueryProfiler(Device, Context, quality);
+        _adaptiveQualityController = quality;
+        _adaptiveQualityProfiler = profiler;
+    }
+
+    internal bool AdaptiveQualityProfilingAvailable => _adaptiveQualityProfiler is not null;
+
+    /// <summary>Polls completed GPU timings without waiting; disables the optional probe if the driver reports an error.</summary>
+    internal bool CollectAdaptiveQualitySamples()
+    {
+        if (_adaptiveQualityProfiler is null) return true;
+        try
+        {
+            _adaptiveQualityProfiler.CollectReady();
+            return true;
+        }
+        catch (Exception exception)
+        {
+            StopAdaptiveQualityProfiling(exception);
+            return false;
+        }
+    }
+
+    private int BeginAdaptiveQualitySample()
+    {
+        try { return _adaptiveQualityProfiler?.BeginFrame() ?? -1; }
+        catch (Exception exception) { StopAdaptiveQualityProfiling(exception); return -1; }
+    }
+
+    private void EndAdaptiveQualitySample(int slot)
+    {
+        try { _adaptiveQualityProfiler?.EndFrame(slot); }
+        catch (Exception exception) { StopAdaptiveQualityProfiling(exception); }
+    }
+
+    private void StopAdaptiveQualityProfiling(Exception exception)
+    {
+        System.Diagnostics.Trace.WriteLine($"Keyflow: adaptive-quality timestamp profiling stopped: {exception.Message}");
+        _adaptiveQualityProfiler?.Dispose();
+        _adaptiveQualityProfiler = null;
+        _adaptiveQualityController?.ResetToFull();
+        _adaptiveQualityController = null;
     }
 
     internal static string ShaderSource()
@@ -324,14 +374,16 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>Renders one frame of the stage into <paramref name="output"/> (a BGRA8 render target of the target's size).</summary>
     internal void Render(GpuRenderTarget target, ID3D11RenderTargetView output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
-        GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites)
+        GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites,
+        GpuAdaptiveQualityTier qualityTier = GpuAdaptiveQualityTier.Full, bool sampleAdaptiveQuality = false)
     {
         _notePassProfiler?.CollectReady();
+        var quality = GpuAdaptiveQualityProfile.For(qualityTier);
         var look = input.Look;
         simulation.BuildNotes(input, layout, notes);
         simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
         simulation.BuildSprites(look, layout, sprites);
-        simulation.BuildAmbient(look, layout, _ambientList);
+        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
 
         var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth);
         var context = Context;
@@ -348,6 +400,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
+        var qualityQuerySlot = sampleAdaptiveQuality ? BeginAdaptiveQualitySample() : -1;
         context.IASetPrimitiveTopology(PrimitiveTopology.TriangleList);
         context.RSSetState(_raster);
         context.VSSetConstantBuffer(0, _frameBuffer);
@@ -430,7 +483,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // ---- bloom pyramid ----
         context.OMSetDepthStencilState(_depthOff, 0);
         context.VSSetShader(_vsFullscreen);
-        var levels = target.BloomCount;
+        var levels = Math.Min(target.BloomCount, quality.MaxBloomLevels);
         if (look.BloomIntensity > 0 && levels > 0)
         {
             context.OMSetBlendState(_blendOpaque);
@@ -458,6 +511,7 @@ internal sealed class GpuStageRenderer : IDisposable
         context.Draw(3, 0);
         context.PSUnsetShaderResources(0, 2);
         context.PSUnsetShaderResource(7);
+        if (qualityQuerySlot >= 0) EndAdaptiveQualitySample(qualityQuerySlot);
     }
 
     private void Pass(ID3D11RenderTargetView destination, (int Width, int Height) size, ID3D11PixelShader shader, ID3D11ShaderResourceView source, float texelX, float texelY, float z, float w)
@@ -562,6 +616,9 @@ internal sealed class GpuStageRenderer : IDisposable
         _camera?.Dispose();
         _notePassProfiler?.Dispose();
         _notePassProfiler = null;
+        _adaptiveQualityProfiler?.Dispose();
+        _adaptiveQualityProfiler = null;
+        _adaptiveQualityController = null;
         foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
             _blendPremultiplied, _blendAdditive, _blendOpaque, _depthOff, _depthWrite, _depthRead, _raster, _linear, _point, _frameBuffer, _passBuffer })
             disposable?.Dispose();

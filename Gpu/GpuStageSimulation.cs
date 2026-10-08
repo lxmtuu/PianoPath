@@ -12,21 +12,6 @@ internal struct GpuKeyInstance { public Vector4 Box, Emit, Misc, Base; }
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuSpriteInstance { public Vector4 PosSize, Color, Dir; }
 
-/// <summary>A growable array of instances that is refilled every frame without allocating.</summary>
-internal sealed class GpuInstanceList<T> where T : struct
-{
-    private T[] _items;
-    internal GpuInstanceList(int capacity) => _items = new T[capacity];
-    internal int Count { get; private set; }
-    internal void Clear() => Count = 0;
-    internal void Add(in T item)
-    {
-        if (Count == _items.Length) Array.Resize(ref _items, _items.Length * 2);
-        _items[Count++] = item;
-    }
-    internal ReadOnlySpan<T> Span => _items.AsSpan(0, Count);
-}
-
 /// <summary>Scene layout of one output, in stage DIPs (the software stage's coordinate system).</summary>
 internal readonly struct GpuSceneLayout
 {

@@ -67,7 +67,7 @@ internal static class FrameBenchmark
         var scenes = new List<FrameBenchReport>();
         var notes = MainWindow.CreateDemoSong();
         var feed = new GpuStageFeed();
-        using (var loop = new GpuRenderLoop(feed, adapterRequest: adapterRequest))
+        using (var loop = new GpuRenderLoop(feed, adapterRequest: adapterRequest, enableAdaptiveQuality: false))
         {
             if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)) || loop.Error is not null)
             {
@@ -110,7 +110,7 @@ internal static class FrameBenchmark
     internal static FrameBenchReport? Measure(FrameBudget budget, int frames)
     {
         var feed = new GpuStageFeed();
-        using var loop = new GpuRenderLoop(feed, forceWarp: true);
+        using var loop = new GpuRenderLoop(feed, forceWarp: true, enableAdaptiveQuality: false);
         if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)) || loop.Error is not null) return null;
         feed.LabelAtlas = PianoStage.GpuGlyphAtlas;
         var software = FrameBudget.IsSoftwareAdapter(loop.IsWarp, loop.AdapterName);

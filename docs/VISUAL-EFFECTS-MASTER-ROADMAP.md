@@ -595,3 +595,13 @@ Kết luận rút ra:
 3. Cổng phần cứng giờ có đủ dữ liệu cho hai nhóm §11.1 (iGPU phổ biến, dGPU tầm trung) với cả ba
    scene; WARP/fallback đã do CI cover về correctness; camera/AR có số trên cả hai adapter. Còn thiếu:
    nhóm MIDI/audio thật và soak dài trên phần cứng.
+
+### 11.6 Adaptive Quality — implementation slice (2026-10-08)
+
+Đã thêm bộ điều khiển runtime trên các adapter D3D11 phần cứng; đây **không phải** thay default hay hạ chất lượng toàn cục. Telemetry là D3D11 timestamp/disjoint query không chặn (`DONOTFLUSH`) bao quanh các draw scene + bloom + composite của một output chính; `Present`/VSync, readback và sleep nằm ngoài phép đo. Với swap-chain VSync, ngân sách theo mức chậm hơn giữa frame-rate cấu hình và refresh của monitor; WARP/software không bật controller.
+
+- Cửa sổ không chồng lấn 60 mẫu hợp lệ; nếu p95 vượt 90% ngân sách trong 3 cửa sổ liên tiếp, giảm một tier. Thứ tự: bloom 6→4→2 cấp, sau đó ambient density 100→60→30%. Phục hồi một tier khi p95 dưới 75% trong 8 cửa sổ liên tiếp. Khoảng trễ/cooldown được kiểm thử thuần.
+- Chỉ bloom pyramid và instance của ambience nền bị thay đổi. Guide lanes và note trails được giữ; particle bursts, note/key geometry, pitch/timing và keyboard geometry không đổi. Tier chỉ áp cho stage đang hiển thị; GPU recording luôn render Full và khung chỉ phục vụ recording không được lấy mẫu thích ứng. Settings/preset/JSON không bị sửa; trạng thái hiển thị tên tier hiện hành.
+- `--bench`, note-material probe và deterministic/WARP screenshots luôn chạy Full quality để baseline/golden không tự đổi theo tải. Unit tests kiểm tra budget theo VSync, thứ tự tier, outlier, hysteresis, reset và phép compact ambient giữ nguyên note-trail tail.
+
+**Chưa có kết quả hardware sau thay đổi.** `--bench` hiện vẫn đo baseline Full quality; Windows CI/WARP chỉ có thể xác nhận build/correctness, không chứng minh iGPU nhanh hơn hoặc tier nào đạt 8 ms. Kết quả vật lý của Adaptive Quality vẫn **Unmeasured**; cần đo lại iGPU với tier/runtime state và xem lại fixed-scene gallery trước khi kết luận hình ảnh/performance.

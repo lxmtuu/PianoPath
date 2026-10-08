@@ -62,7 +62,7 @@ internal static class NoteMaterialGpuBenchmark
             : Path.Combine(Path.GetTempPath(), "keyflow-note-materials.json");
         var feed = new GpuStageFeed();
         var sampleBuffer = new GpuNotePassSampleBuffer();
-        using var loop = new GpuRenderLoop(feed, notePassSamples: sampleBuffer);
+        using var loop = new GpuRenderLoop(feed, notePassSamples: sampleBuffer, enableAdaptiveQuality: false);
         if (!loop.WaitUntilStarted(TimeSpan.FromSeconds(60)))
         {
             Console.WriteLine("FAIL cost probe: the Direct3D render loop did not start within 60 s; no GPU timestamp sample was collected");

@@ -29,6 +29,8 @@ internal sealed class GpuRenderLoop : IDisposable
 
     private readonly GpuStageFeed _feed;
     private readonly GpuNotePassSampleBuffer? _notePassSamples;
+    private readonly GpuAdaptiveQualityController _adaptiveQuality = new();
+    private readonly bool _enableAdaptiveQuality;
     /// <summary>Set by --bench-adapter: the substring identifying the one adapter to measure on a hybrid machine.</summary>
     private readonly string? _adapterRequest;
     private readonly Thread _thread;
@@ -43,6 +45,8 @@ internal sealed class GpuRenderLoop : IDisposable
     private IntPtr _windowHandle;
     private int _windowWidth, _windowHeight;
     private bool _windowChanged;
+    // monitor refresh is read from the swap-chain HWND, not inferred from a VSync-stalled frame-rate sample
+    private int _windowRefreshHz;
     private volatile int _targetFps = 60;
     private volatile bool _vsync = true;
 
@@ -55,10 +59,11 @@ internal sealed class GpuRenderLoop : IDisposable
     /// </summary>
     internal static bool ForceWarpForSession { get; set; }
 
-    internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false, GpuNotePassSampleBuffer? notePassSamples = null, string? adapterRequest = null)
+    internal GpuRenderLoop(GpuStageFeed feed, bool forceWarp = false, GpuNotePassSampleBuffer? notePassSamples = null, string? adapterRequest = null, bool enableAdaptiveQuality = true)
     {
         _feed = feed;
         _notePassSamples = notePassSamples;
+        _enableAdaptiveQuality = enableAdaptiveQuality;
         ForceWarp = forceWarp || ForceWarpForSession;
         _adapterRequest = adapterRequest;
         _thread = new Thread(Run) { IsBackground = true, Name = "Keyflow GPU stage", Priority = ThreadPriority.AboveNormal };
@@ -76,16 +81,24 @@ internal sealed class GpuRenderLoop : IDisposable
     /// <summary>Smoothed frames per second actually rendered.</summary>
     internal double Fps { get; private set; }
     internal double FrameMilliseconds { get; private set; }
+    /// <summary>The tier currently applied to visible stage outputs; recording and non-hardware runs remain Full.</summary>
+    internal GpuAdaptiveQualityTier AdaptiveQualityTier => Volatile.Read(ref _adaptiveQualityActive) != 0 ? _adaptiveQuality.Tier : GpuAdaptiveQualityTier.Full;
+    internal bool AdaptiveQualityActive => Volatile.Read(ref _adaptiveQualityActive) != 0;
     /// <summary>How many frames the loop has drawn since sampling started (see <see cref="StartFrameSampling"/>).</summary>
     internal int SampledFrames => Volatile.Read(ref _sampleRun) is { } run ? Volatile.Read(ref run.Count) : 0;
     internal int ParticleCount { get; private set; }
     internal long FramesRendered => Interlocked.Read(ref _frames);
     private long _frames;
+    private int _adaptiveQualityActive;
 
     internal event Action? StatusChanged;
 
     /// <summary>Frames per second the loop aims for; 0 means as fast as possible.</summary>
-    internal int TargetFps { get => _targetFps; set => _targetFps = Math.Clamp(value, 0, 1000); }
+    internal int TargetFps
+    {
+        get => _targetFps;
+        set => _targetFps = Math.Clamp(value, 0, 1000);
+    }
     /// <summary>Wait for the display's vertical blank when presenting the stage window.</summary>
     internal bool VSync { get => _vsync; set => _vsync = value; }
 
@@ -209,13 +222,24 @@ internal sealed class GpuRenderLoop : IDisposable
         lock (_outputGate) { _embeddedEnabled = enabled; _embeddedWidth = Math.Clamp(width, 0, 3840); _embeddedHeight = Math.Clamp(height, 0, 2160); }
     }
 
+    /// <summary>Refreshes the swap-chain monitor mode after the stage window is moved to another display.</summary>
+    internal void RefreshDisplayRefreshRate()
+    {
+        IntPtr stageHandle;
+        lock (_outputGate) stageHandle = _windowHandle;
+        Volatile.Write(ref _windowRefreshHz, GpuDisplayRefreshRate.ForWindow(stageHandle));
+    }
+
     internal void SetWindow(IntPtr handle, int width, int height)
     {
+        var monitorChanged = false;
         lock (_outputGate)
         {
-            if (_windowHandle != handle || _windowWidth != width || _windowHeight != height) _windowChanged = true;
+            monitorChanged = _windowHandle != handle;
+            if (monitorChanged || _windowWidth != width || _windowHeight != height) _windowChanged = true;
             _windowHandle = handle; _windowWidth = Math.Max(0, width); _windowHeight = Math.Max(0, height);
         }
+        if (monitorChanged) Volatile.Write(ref _windowRefreshHz, GpuDisplayRefreshRate.ForWindow(handle));
     }
 
     private readonly CameraAgeMeter _cameraAge = new();
@@ -244,6 +268,19 @@ internal sealed class GpuRenderLoop : IDisposable
             {
                 try { renderer.EnableNotePassProfiling(_notePassSamples); }
                 catch (Exception profileError) { _notePassSamples.SetInitializationError(profileError.Message); }
+            }
+            if (_enableAdaptiveQuality && !FrameBudget.IsSoftwareAdapter(renderer.IsWarp, renderer.AdapterName))
+            {
+                try
+                {
+                    renderer.EnableAdaptiveQualityProfiling(_adaptiveQuality);
+                    Volatile.Write(ref _adaptiveQualityActive, 1);
+                }
+                catch (Exception profileError)
+                {
+                    _adaptiveQuality.ResetToFull();
+                    Trace.WriteLine($"Keyflow: adaptive-quality timestamp profiling unavailable: {profileError.Message}");
+                }
             }
             try { using var dxgi = renderer.Device.QueryInterface<IDXGIDevice1>(); dxgi.MaximumFrameLatency = 1; } catch { }
             IsReady = true;
@@ -319,6 +356,18 @@ internal sealed class GpuRenderLoop : IDisposable
                 }
                 if (!hasEmbedded && !hasWindow && tap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
 
+                var qualityBeforePolling = AdaptiveQualityTier;
+                var adaptiveQualityActive = Volatile.Read(ref _adaptiveQualityActive) != 0;
+                if (adaptiveQualityActive)
+                {
+                    var refreshHz = hasWindow ? Volatile.Read(ref _windowRefreshHz) : 0;
+                    var budgetMs = GpuAdaptiveQualityController.BudgetForOutput(_targetFps, _vsync, hasWindow, refreshHz);
+                    _adaptiveQuality.SetFrameBudgetMs(budgetMs);
+                    if (!gpu.CollectAdaptiveQualitySamples()) Volatile.Write(ref _adaptiveQualityActive, 0);
+                }
+                if (qualityBeforePolling != AdaptiveQualityTier) StatusChanged?.Invoke();
+                var qualityTier = AdaptiveQualityTier;
+
                 _feed.Capture(input, GpuStageFeed.Now);
                 gpu.UpdateBackground(_feed.Background);
                 gpu.UpdateCamera(_feed.Camera);
@@ -351,7 +400,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 {
                     windowTarget.Ensure(gpu.Device, window!.Width, window.Height);
                     var layout = new GpuSceneLayout(sceneHeight * window.Width / (float)window.Height, sceneHeight, input.Look.KeyboardFraction);
-                    gpu.Render(windowTarget, window.View, simulation, input, layout, notes, keys, sprites);
+                    gpu.Render(windowTarget, window.View, simulation, input, layout, notes, keys, sprites, qualityTier, sampleAdaptiveQuality: true);
                     window.Present(_vsync);
                 }
                 // while the stage window runs at its own rate, the preview inside the main window is refreshed at 60 Hz
@@ -362,7 +411,7 @@ internal sealed class GpuRenderLoop : IDisposable
                     embeddedTarget.Ensure(gpu.Device, ew, eh);
                     readback.Ensure(gpu.Device, ew, eh);
                     var layout = new GpuSceneLayout(sceneHeight * ew / (float)eh, sceneHeight, input.Look.KeyboardFraction);
-                    gpu.Render(embeddedTarget, readback.CurrentView, simulation, input, layout, notes, keys, sprites);
+                    gpu.Render(embeddedTarget, readback.CurrentView, simulation, input, layout, notes, keys, sprites, qualityTier, sampleAdaptiveQuality: !hasWindow);
                     readback.Submit(gpu.Context);
                     readback.CollectInto(gpu.Context, _feed);
                 }
@@ -374,9 +423,14 @@ internal sealed class GpuRenderLoop : IDisposable
                     recordTarget.Ensure(gpu.Device, tap.Width, tap.Height);
                     recordReadback.Ensure(gpu.Device, tap.Width, tap.Height);
                     var layout = new GpuSceneLayout(sceneHeight * tap.Width / (float)tap.Height, sceneHeight, input.Look.KeyboardFraction);
-                    gpu.Render(recordTarget, recordReadback.CurrentView, simulation, input, layout, notes, keys, sprites);
+                    gpu.Render(recordTarget, recordReadback.CurrentView, simulation, input, layout, notes, keys, sprites, GpuAdaptiveQualityTier.Full, sampleAdaptiveQuality: false);
                     recordReadback.Submit(gpu.Context);
                     recordReadback.Collect(gpu.Context, tap.BackBuffer, tap.Publish);
+                }
+                if (Volatile.Read(ref _adaptiveQualityActive) != 0 && !gpu.AdaptiveQualityProfilingAvailable)
+                {
+                    Volatile.Write(ref _adaptiveQualityActive, 0);
+                    StatusChanged?.Invoke();
                 }
                 ParticleCount = simulation.ParticleCount;
                 Interlocked.Increment(ref _frames);

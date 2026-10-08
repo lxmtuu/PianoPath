@@ -26,15 +26,18 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>Everything drawn after the background and before the notes. Call after <see cref="BuildNotes"/> (it reads the note trails).</summary>
-    internal void BuildAmbient(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> list)
+    internal void BuildAmbient(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> list, float ambientDensity = 1f)
     {
         list.Clear();
         var width = layout.Width;
         var height = layout.HitY;
         if (width < 1 || height < 1) return;
+        var ambientStart = list.Count;
         if (!look.Chroma)
         {
             if (look.BackgroundGuide) AddLanes(list, layout);
+            // Guide lanes stay intact; only the peripheral atmosphere below is eligible for quality reduction.
+            ambientStart = list.Count;
             if (look.ShowPetals && look.PetalAmount > 0) AddPetals(list, look, width, height);
             if (look.ShowBackground && look.ShootingStars && look.ShootingStarsAmount > 0) AddShootingStars(list, look, width, height);
             if (look.AmbientEnergy != "None" && look.AmbientEnergyAmount > .01f) AddAmbientEnergy(list, look, layout);
@@ -42,6 +45,10 @@ internal sealed partial class GpuStageSimulation
             if (look.AmbientLight != "None" && look.AmbientLightAmount > .01f) AddAmbientLight(list, look, width, height);
             if (look.AmbientCosmic != "None" && look.AmbientCosmicAmount > .01f) AddAmbientCosmic(list, look, width, height);
         }
+        var ambientCount = list.Count - ambientStart;
+        if (ambientCount > 0 && ambientDensity < 1f)
+            list.RetainFraction(ambientStart, ambientCount, ambientDensity);
+        // Note trails remain outside the thinned ambient range and keep their normal instance count.
         foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail);
     }
 
