@@ -235,6 +235,12 @@
     "ArLookahead": 3.0,
     "ArKeyLight": 60.0,
     "ArDelay": 0.0,
+    "ArNoteWidthByVelocity": false,
+    "ArNoteWidthSoft": 100.0,
+    "ArNoteWidthHard": 100.0,
+    "ArNoteFadeByVelocity": false,
+    "ArNoteFadeSoft": 100.0,
+    "ArNoteFadeHard": 100.0,
     "ArViewProfileId": "default"
   }
 }

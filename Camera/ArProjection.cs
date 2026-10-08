@@ -97,14 +97,20 @@ internal static class ArProjection
 /// <param name="Reach">How many key depths ahead of the keys a note first shows. It is the same distance for every note, so what is on screen is always the next <c>Reach / FallSpeed</c> seconds.</param>
 /// <param name="MinLength">Shortest a note is drawn, in key depths, so a staccato note is still a note.</param>
 /// <param name="Gap">What is taken off a note's length so two notes of the same key do not touch, in key depths.</param>
-/// <param name="WidthShare">How much of its key's width a note fills, 0..1.</param>
-internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, double MinLength = .06, double Gap = .015, double WidthShare = .86)
+/// <param name="WidthShare">How much of its key's width a note fills at full size, 0..1.</param>
+/// <param name="WidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/> over the simulation's 0..1 activity): flat keeps every note the same width, a graph makes hard strikes wider. Lives in the look, so presets carry it.</param>
+/// <param name="FadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/> over the same input): flat keeps the fade the same for every note, a graph brings hard strikes in faster.</param>
+internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, double MinLength = .06, double Gap = .015, double WidthShare = .86,
+    GraphVariable WidthVelocity = default, GraphVariable FadeVelocity = default)
 {
     internal static readonly ArNoteStyle Default = new();
 
     /// <summary>True when the numbers can be used to draw anything.</summary>
     internal bool IsUsable => double.IsFinite(FallSpeed) && FallSpeed > 0 && double.IsFinite(Reach) && Reach > 0
         && double.IsFinite(MinLength) && MinLength > 0 && double.IsFinite(Gap) && Gap >= 0 && double.IsFinite(WidthShare) && WidthShare is > 0 and <= 1;
+
+    /// <summary>How much of its key's width a note with this velocity fills, 0..1: the flat share, or the graph walked by the velocity.</summary>
+    internal double WidthShareFor(double velocity) => Math.Clamp(WidthVelocity.Sample(velocity) * WidthShare, 0, 1);
 }
 
 /// <summary>A note on its way to the keys.</summary>
@@ -149,7 +155,8 @@ internal static class ArNotes
     /// calibrated keyboard does not have is skipped.
     /// </summary>
     /// <param name="maxNoteDuration">The longest note in the list, to know how far back to look for one still sounding.</param>
-    internal static void Build(ArCalibration calibration, ArView view, IReadOnlyList<NoteEvent> notes, double position, double maxNoteDuration, ArNoteStyle style, List<ArNoteShape> into)
+    /// <param name="simulation">Maps a note's raw velocity through the velocity band before the style's graphs walk it; null maps velocity straight onto 0..1.</param>
+    internal static void Build(ArCalibration calibration, ArView view, IReadOnlyList<NoteEvent> notes, double position, double maxNoteDuration, ArNoteStyle style, List<ArNoteShape> into, PianoSimulation? simulation = null)
     {
         into.Clear();
         if (!style.IsUsable || !double.IsFinite(position) || !view.Valid || notes.Count == 0) return;
@@ -170,10 +177,11 @@ internal static class ArNotes
                 var near = Math.Min(leading, 0.0);
                 var far = Math.Max(leading - length, -style.Reach);
                 if (far >= near - 1e-9) continue;                              // used up
+                var velocity = simulation?.ActivityForVelocity(note.Velocity) ?? Math.Clamp(note.Velocity / 127.0, 0, 1);
                 var (left, right) = layout.Span(note.Pitch);
-                var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShare;
+                var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShareFor(velocity);
                 if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, far, near, out var patch, out _, out _)) continue;
-                var fade = Math.Clamp((style.Reach + leading) / (style.Reach * .25), 0, 1);
+                var fade = Math.Clamp((style.Reach + leading) / (style.Reach * .25), 0, 1) * style.FadeVelocity.Sample(velocity);
                 into.Add(new ArNoteShape(patch, note.Pitch, index, wantBlack, note.Start <= position && note.End > position, fade));
             }
         }
@@ -187,7 +195,8 @@ internal static class ArNotes
     /// <see cref="ReleaseLife"/> seconds later. It is the mark of the player's own hand, so it is drawn whatever the mode
     /// is — a song's notes to come are what Perform leaves out. A key the calibrated keyboard does not have is skipped.
     /// </summary>
-    internal static void BuildLive(ArCalibration calibration, ArView view, IReadOnlyList<ArLivePress> presses, ArNoteStyle style, List<ArLiveBar> into)
+    /// <param name="simulation">Maps a press's strength through the velocity band before the style's graphs walk it; null uses the strength as it is.</param>
+    internal static void BuildLive(ArCalibration calibration, ArView view, IReadOnlyList<ArLivePress> presses, ArNoteStyle style, List<ArLiveBar> into, PianoSimulation? simulation = null)
     {
         into.Clear();
         if (!style.IsUsable || !view.Valid || presses.Count == 0) return;
@@ -209,10 +218,11 @@ internal static class ArNotes
                 }
                 var length = Math.Min(style.Reach, press.HeldSeconds * style.FallSpeed);
                 if (length < style.MinLength) continue;         // a key that went down this instant has not left the key yet; its light says it is down
+                var velocity = simulation?.ActivityForVelocity(press.Strength * 127) ?? Math.Clamp(press.Strength, 0, 1);
                 var (left, right) = layout.Span(press.Pitch);
-                var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShare;
+                var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShareFor(velocity);
                 if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, -length, 0, out var patch, out _, out _)) continue;
-                into.Add(new ArLiveBar(patch, press.Pitch, Math.Clamp(1 - length / style.Reach, .08, 1) * gone, press.Down, press.Strength));
+                into.Add(new ArLiveBar(patch, press.Pitch, Math.Clamp(1 - length / style.Reach, .08, 1) * gone * style.FadeVelocity.Sample(velocity), press.Down, press.Strength));
             }
         }
     }

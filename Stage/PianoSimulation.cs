@@ -96,6 +96,9 @@ internal sealed class PianoSimulation
     /// <summary>How loudly this key sounds right now, 0..1.</summary>
     internal double Activity(int pitch) => pitch < 0 || pitch >= PitchCount ? 0 : _activity[pitch];
 
+    /// <summary>Where a strike of this raw velocity (0..127) lands in the floor/ceiling band, 0..1 — the input every graph of the redesigned overlay walks.</summary>
+    internal double ActivityForVelocity(double velocity) => EnergyFor(velocity);
+
     /// <summary>Whether the player's finger is on this key.</summary>
     internal bool IsPressed(int pitch) => pitch >= 0 && pitch < PitchCount && _pressed[pitch];
 

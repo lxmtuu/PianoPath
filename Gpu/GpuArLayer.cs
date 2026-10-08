@@ -38,6 +38,9 @@ internal sealed class GpuArLayer
     /// <summary>Key glow below this is not drawn.</summary>
     internal const float MinKeyGlow = .02f;
 
+    /// <summary>The velocity band the style's graphs walk until the stage's own simulation feeds the layer: raw MIDI velocity mapped straight onto 0..1.</summary>
+    private static readonly PianoSimulation VelocityBand = new();
+
     /// <summary>How many key quads the last <see cref="Build"/> produced.</summary>
     internal int KeyQuadCount { get; private set; }
 
@@ -79,7 +82,7 @@ internal sealed class GpuArLayer
         var look = input.Look;
         if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
         {
-            ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes);
+            ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes, VelocityBand);
             foreach (var shape in _shapes)
             {
                 var note = input.Notes[shape.NoteIndex];
@@ -91,7 +94,7 @@ internal sealed class GpuArLayer
         }
         // the keys under the player's own fingers, drawn over the notes of the song as the stage draws its live trails
         if (live.Count == 0) return;
-        ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars);
+        ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
         foreach (var bar in _liveBars)
         {
             var color = look.NoteColor(bar.Pitch, 0);

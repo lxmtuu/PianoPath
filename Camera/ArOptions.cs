@@ -25,7 +25,10 @@ internal static class ArModes
 /// <param name="Lookahead">How many seconds before it sounds a note starts to show.</param>
 /// <param name="KeyLight">How strongly a played key is tinted, percent.</param>
 /// <param name="Delay">How late the camera's picture is, milliseconds: what the overlay is held back by so that it shows what the picture shows.</param>
-internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0)
+/// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); flat keeps every note the same width.</param>
+/// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); flat keeps the fade the same for every note.</param>
+internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
+    GraphVariable NoteWidthVelocity = default, GraphVariable NoteFadeVelocity = default)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
@@ -58,6 +61,11 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     /// </summary>
     internal double DelaySeconds => Normalised().Delay / 1000;
 
-    /// <summary>The falling notes' shape: the default one, reaching as far above the keys as the lookahead takes them to fall.</summary>
-    internal ArNoteStyle NoteStyle => ArNoteStyle.Default with { Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed };
+    /// <summary>The falling notes' shape: the default one, reaching as far above the keys as the lookahead takes them to fall, with the width and fade graphs of this choice.</summary>
+    internal ArNoteStyle NoteStyle => ArNoteStyle.Default with
+    {
+        Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed,
+        WidthVelocity = Normalised().NoteWidthVelocity.Normalised(),
+        FadeVelocity = Normalised().NoteFadeVelocity.Normalised()
+    };
 }

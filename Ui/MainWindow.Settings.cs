@@ -599,6 +599,16 @@ public partial class MainWindow
         SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
+        Toggle(ar, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Notes and bars grow wider the harder the key is struck, instead of every strike having the same width.");
+        SliderRow(ar, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a note struck as softly as possible, as a percentage of the full note width.")
+            .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
+        SliderRow(ar, "Width on a hard strike", nameof(PianoVisualSettings.ArNoteWidthHard), 10, 200, "Width of a note struck as hard as possible, as a percentage of the full note width.")
+            .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
+        Toggle(ar, "Note fade follows velocity", nameof(PianoVisualSettings.ArNoteFadeByVelocity), "Notes and bars appear faster the harder the key is struck, instead of every strike fading in the same way.");
+        SliderRow(ar, "Fade on a soft strike", nameof(PianoVisualSettings.ArNoteFadeSoft), 10, 200, "How much of the usual fade-in a softly struck note keeps.")
+            .VisibleWhen = () => _visualSettings.ArNoteFadeByVelocity;
+        SliderRow(ar, "Fade on a hard strike", nameof(PianoVisualSettings.ArNoteFadeHard), 10, 200, "How much of the usual fade-in a hard strike gets; above 100 a hard strike is already fully visible the moment it appears.")
+            .VisibleWhen = () => _visualSettings.ArNoteFadeByVelocity;
         SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound you hear is never delayed, but a recording with the camera in it starts its sound this much later, so the finger and the sound line up in the file. Zero changes nothing.");
         Choice(ar, "View", nameof(PianoVisualSettings.ArViewProfileId), "Which way the camera looks at the keys: about 45° down from behind the player, straight down at 90° overhead, or the default the app has always used. Every view keeps its own marked key area and the overlay draws only with the one chosen here, so turning the camera means choosing the view that matches it and marking the keys for that view — an unmarked view asks to be marked instead of using the corners marked at another angle.",
             ArViewProfileChoices());

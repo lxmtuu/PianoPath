@@ -54,7 +54,7 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -1647,6 +1647,49 @@ internal static partial class VerificationSuite
         Assert(Math.Abs(sim.TotalActivity - (sim.Activity(60) + sim.Activity(64) + sim.Activity(62))) < 1e-9,
             "Total activity should be the sum over the keys.");
         Results.Add("PASS piano simulation (AR-S1): velocity band, register die-off, damper/sustain/sostenuto, notes per second and total activity.");
+    }
+
+    /// <summary>
+    /// AR-S2: the graph parameter (docs/AR-OVERLAY-ROADMAP.md §14.5) and the two velocity graphs of the
+    /// overlay's note style, wired from the settings page through <see cref="ArOptions"/> to the style the
+    /// AR layer draws with. Flat by default, so the drawings are unchanged unless the player asks.
+    /// </summary>
+    private static void VerifyArGraphVariable()
+    {
+        var flat = new GraphVariable(Graph: false, Min: .2, Max: .7);
+        Assert(flat.Sample(0) == .7 && flat.Sample(.5) == .7 && flat.Sample(1) == .7, "A flat parameter should always be its max.");
+        var graph = new GraphVariable(Graph: true, Start: .25, Stop: .75, Min: .2, Max: .8);
+        Assert(graph.Sample(0) == .2 && graph.Sample(1) == .8, "A graph should clamp outside its window.");
+        Assert(Math.Abs(graph.Sample(.5) - .5) < 1e-9, "A straight graph should walk its middle at the input's middle.");
+        var slowIn = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: -1);
+        Assert(slowIn.Sample(.25) < .25 && slowIn.Sample(.75) > .75, "A -1 curve should start slow and end fast.");
+        Assert(new GraphVariable(Graph: true, Start: .5, Stop: .5, Min: .1, Max: .9).Sample(.5) == .9, "An empty window should be a flat max.");
+        Assert(double.IsFinite(new GraphVariable(Graph: true, Start: double.NaN, Stop: double.NaN, Min: double.NaN, Max: double.NaN).Sample(.5)),
+            "A graph of NaNs should still sample a finite number.");
+        // The settings reach the style: flat by default, and the two toggles build their graphs from the sliders.
+        var settings = new PianoVisualSettings();
+        Assert(settings.ArOptionsValue.NoteStyle.WidthVelocity.Sample(.5) == 1 && settings.ArOptionsValue.NoteStyle.FadeVelocity.Sample(.5) == 1,
+            "The default overlay should carry flat graphs: every strike the same width and the same fade.");
+        settings.ArNoteWidthByVelocity = true; settings.ArNoteWidthSoft = 50; settings.ArNoteWidthHard = 150;
+        settings.ArNoteFadeByVelocity = true; settings.ArNoteFadeSoft = 40; settings.ArNoteFadeHard = 100;
+        var style = settings.ArOptionsValue.NoteStyle;
+        Assert(Math.Abs(style.WidthVelocity.Sample(0) - .5) < 1e-9 && Math.Abs(style.WidthVelocity.Sample(1) - 1.5) < 1e-9,
+            "The width graph should walk the soft slider to the hard slider over the strike's velocity.");
+        Assert(Math.Abs(style.FadeVelocity.Sample(0) - .4) < 1e-9 && Math.Abs(style.FadeVelocity.Sample(1) - 1) < 1e-9,
+            "The fade graph should walk the soft slider to the hard slider over the strike's velocity.");
+        Assert(style.WidthShareFor(0) <= style.WidthShare && Math.Abs(style.WidthShareFor(1) - Math.Min(1, style.WidthShare * 1.5)) < 1e-9,
+            "The width a graph picks should stay a share of the key's width, clamped to the key.");
+        settings.Clamp();
+        Assert(settings.ArNoteWidthSoft == 50 && settings.ArNoteFadeHard == 100, "Clamping should keep in-range graph sliders as they are.");
+        settings.ArNoteWidthSoft = 1000; settings.Clamp();
+        Assert(settings.ArNoteWidthSoft == 200, "Clamping should pull an out-of-range width slider back into range.");
+        // A look never carries the graphs: they belong to the overlay on this camera.
+        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50 };
+        var target = new PianoVisualSettings();
+        target.CopyFrom(look);
+        Assert(!target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100,
+            "Applying a look should not change the overlay's velocity graphs.");
+        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade graphs wired from settings to the note style.");
     }
 
     /// <summary>
