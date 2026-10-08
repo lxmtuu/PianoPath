@@ -20,11 +20,11 @@ internal readonly record struct GraphVariable(bool Graph = false, double Start =
     /// <summary>The fixed value: Max, so a flat parameter does not depend on the other fields. Written out in full because <c>default(GraphVariable)</c> is all zeros, not this.</summary>
     internal static readonly GraphVariable Flat = new(Graph: false, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: 0);
 
-    /// <summary>The value for an input in 0..1. Flat returns <see cref="Max"/>; a graph clamps outside its window and walks between its ends with the curve.</summary>
+    /// <summary>The value for an input in 0..1. Flat returns <see cref="Max"/>; a graph clamps outside its window and walks between its ends with the curve. A NaN input reads as zero; an infinite one clamps to the window's near or far end.</summary>
     internal double Sample(double input)
     {
         if (!Graph) return Finite(Max, 0);
-        if (!double.IsFinite(input)) input = 0;
+        if (double.IsNaN(input)) input = 0;
         var start = Finite(Start, 0); var stop = Finite(Stop, 1);
         if (stop <= start) return Finite(Max, 0); // an empty window is a flat Max, never a divide by zero
         var t = Math.Clamp((input - start) / (stop - start), 0, 1);

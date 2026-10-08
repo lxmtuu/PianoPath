@@ -18,7 +18,7 @@ public class GraphVariableTests
         Near(.7, flat.Sample(0));
         Near(.7, flat.Sample(.5));
         Near(.7, flat.Sample(1));
-        Near(.7, GraphVariable.Flat.Sample(.3)); // the default is a flat 1
+        Near(1, GraphVariable.Flat.Sample(.3)); // the default is a flat 1
         Near(1, GraphVariable.Flat.Sample(0));
     }
 
