@@ -981,6 +981,20 @@ internal static partial class VerificationSuite
             "Applying a look must keep the camera the player picked and the video file, and still change how the picture is framed.");
         Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(cameraKept), out var cameraShared, out _) && cameraShared.CameraSourceLink == "" && cameraShared.CameraVideoPath == "" && cameraShared.CameraCorner == "Bottom right",
             "A shared look carries neither the camera's device path nor the video file's path.");
+        // Which view of the camera is being used is this machine's, exactly like the camera it names: a look
+        // neither switches it nor carries it, a stored id the app does not know falls back to the default view,
+        // and the choice survives a save and a load.
+        var viewKept = new PianoVisualSettings { ArViewProfileId = ArCalibrationProfiles.Overhead90.Id };
+        viewKept.CopyFrom(new PianoVisualSettings { ArViewProfileId = ArCalibrationProfiles.Tilt45.Id });
+        Assert(viewKept.ArViewProfileId == ArCalibrationProfiles.Overhead90.Id,
+            "Applying a look must keep the view of the camera the player is standing at.");
+        var viewWild = new PianoVisualSettings { ArViewProfileId = "a view from a newer version" }; viewWild.Clamp();
+        Assert(viewWild.ArViewProfileId == ArCalibrationProfiles.LegacyId,
+            "A stored view the app does not know should fall back to the default view when the settings load.");
+        Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(viewKept), out var viewShared, out _) && viewShared.ArViewProfileId.Length == 0,
+            "A shared look must carry no view of the camera, so pasting one never tells the other machine which angle it stands at.");
+        Assert(PianoVisualSettings.FromJson(viewKept.ToJson()).ArViewProfileId == ArCalibrationProfiles.Overhead90.Id,
+            "The view of the camera should survive a save and a load.");
         var arCode = VisualPresetShare.Encode(arKept);
         Assert(VisualPresetShare.TryDecode(arCode, out var arShared, out _) && arShared.ArMode == "Perform" && arShared.ArLookahead == 2,
             "A look code carries the overlay values like any other setting, and reads them back in range.");
@@ -1011,7 +1025,7 @@ internal static partial class VerificationSuite
         }
         finally { KeyboardLayout.Use(full); }
         Assert(PianoStage.KeyCount == 88 && ReferenceEquals(KeyboardLayout.Active, full), "The full keyboard is back after the check.");
-        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the range and the centre of every key, and switching to 61 keys moves the stage, the GPU lanes and the shaded keyboard together, with a scene keeping the keyboard it was built for.");
+        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the range and the centre of every key, switching to 61 keys moves the stage, the GPU lanes and the shaded keyboard together, with a scene keeping the keyboard it was built for; and the view of the camera the AR overlay is set to is the machine's own, falling back to the default view when it is unknown, kept when a look is applied, and carried by no share code.");
     }
 
     private static void VerifyHandTracking()
