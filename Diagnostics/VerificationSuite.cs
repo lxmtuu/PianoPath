@@ -1720,6 +1720,8 @@ internal static partial class VerificationSuite
             "An unported note style should fall back to Neon rather than claiming a facet look the flat projection cannot draw.");
         Assert(ArLookGuard.StyleForAr("Neon") == "Neon" && ArLookGuard.StyleForAr("Fire") == "Fire",
             "The styles that are ported should be passed through unchanged.");
+        Assert(!ArLookGuard.IsPortedToAr("Unknown") && ArLookGuard.StyleForAr("Unknown") == ArLookGuard.ArFallbackStyle && ArLookGuard.StyleForAr(null) == ArLookGuard.ArFallbackStyle,
+            "A style name the app does not know should fall back too, so a style added to the settings side without an AR variant is left out rather than drawn wrong.");
         var settings = new PianoVisualSettings();
         Assert(settings.ArQuality == ArQualityTiers.StandardName, "Standard should be the default tier — not Lite, so existing users do not lose their key glow after upgrading.");
         var kept = new PianoVisualSettings { ArQuality = ArQualityTiers.LiteName };

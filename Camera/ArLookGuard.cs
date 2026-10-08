@@ -18,8 +18,13 @@ internal static class ArLookGuard
     /// <summary>The style the overlay draws a note with when the look's own style has no AR variant.</summary>
     internal const string ArFallbackStyle = "Neon";
 
-    /// <summary>Whether a note style has an AR variant to honour.</summary>
-    internal static bool IsPortedToAr(string? style) => style is not null && !UnportedNoteStyles.Contains(style);
+    /// <summary>
+    /// Whether a note style has an AR variant to honour. A style the app does not know has none either: the
+    /// overlay draws the flat fallback for anything outside <see cref="NoteStyles"/>, so a style added to the
+    /// settings side without an AR variant of its own is left out instead of being handed to a pass that has
+    /// never heard of it.
+    /// </summary>
+    internal static bool IsPortedToAr(string? style) => style is not null && NoteStyles.Contains(style) && !UnportedNoteStyles.Contains(style);
 
     /// <summary>The style to draw in AR for a look's style: its own when ported, the flat fallback otherwise.</summary>
     internal static string StyleForAr(string? style) => IsPortedToAr(style) ? style! : ArFallbackStyle;
