@@ -33,15 +33,16 @@ public class ArSceneProjectionTests
     private static void Near(double expected, double actual, double tolerance = 1e-6) =>
         Assert.True(Math.Abs(expected - actual) <= tolerance, $"expected {expected}, got {actual}");
 
+    // the picture's fit is internal, and an xUnit test method has to be public, so the case is a flag
     [Theory]
-    [InlineData(false, PictureFit.Fit)]
-    [InlineData(true, PictureFit.Fit)]
-    [InlineData(false, PictureFit.Fill)]
-    [InlineData(true, PictureFit.Fill)]
-    public void The_map_puts_a_rectangle_of_the_scene_where_the_verified_projection_puts_it(bool mirror, PictureFit fit)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public void The_map_puts_a_rectangle_of_the_scene_where_the_verified_projection_puts_it(bool mirror, bool fill)
     {
         var calibration = Calibrate(Sample88);
-        var view = new ArView(1280, 720, 1000, 620, fit, mirror);
+        var view = new ArView(1280, 720, 1000, 620, fill ? PictureFit.Fill : PictureFit.Fit, mirror);
         var frame = Frame();
         Assert.True(ArSceneProjection.TryBuild(calibration, view, frame, out var map));
         foreach (var pitch in new[] { 21, 40, 60, 61, 84, 108 })
