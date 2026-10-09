@@ -1291,9 +1291,13 @@ internal static partial class VerificationSuite
             "The sample calibration must carry a scene→image map for the sprite check.");
         var column = scene.X(64);
         var visibleY = scene.HitY - 60;
-        var culledY = scene.HitY - 1500;
-        Assert(flatMap.WeightAt(column, culledY) < .1,
-            $"The point 1500 DIP above the keys must lie past the horizon (weight {flatMap.WeightAt(column, culledY):0.000}).");
+        // the map's weight rises upward from the keys (1.36 some 1500 DIP above them), so the horizon can lie either way:
+        // it is the first point, scanning out from the keys in both directions, where the weight drops under the picture's minimum
+        var keysY = (double)scene.HitY;
+        var horizonY = Enumerable.Range(0, 4000).SelectMany(d => new[] { keysY + d, keysY - d })
+            .Cast<double?>().FirstOrDefault(y => flatMap.WeightAt(column, y!.Value) < .1);
+        Assert(horizonY is not null, "The scene→image map must reach its horizon within 4000 DIP of the keys, in one direction or the other.");
+        var culledY = horizonY!.Value;
         var visible = new GpuSpriteInstance { PosSize = new System.Numerics.Vector4((float)column, (float)visibleY, 14, 0), Color = new System.Numerics.Vector4(4, 1, 4, 1), Dir = new System.Numerics.Vector4(0, -1, 0, 0) };
         var culled = new GpuSpriteInstance { PosSize = new System.Numerics.Vector4((float)column, (float)culledY, 14, 0), Color = new System.Numerics.Vector4(4, 1, 4, 1), Dir = new System.Numerics.Vector4(0, -1, 0, 0) };
         var projectedFeed = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true);
