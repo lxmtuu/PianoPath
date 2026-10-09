@@ -590,41 +590,58 @@ public partial class MainWindow
         _cameraStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(overlay, _cameraStatus, null, "camera overlay status green screen chroma key");
 
-        // The AR overlay is its own card: it uses the camera picked above but draws on the real keyboard in the picture.
-        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Play on your real keyboard: the camera is the background, song notes follow the marked keys, and pressed keys stay tinted. Optional press trails can extend from held keys. Falling-note trails that have no camera projection are omitted here; ambient petals and stars stay flat on the picture. Needs the Direct3D engine and a camera looking at the keys.");
-        Toggle(ar, "AR overlay", nameof(PianoVisualSettings.ArEnabled), "Use the camera as the background and draw the notes and lit keys over your real keyboard. Mark the four corners of the keys once per camera, view, picture size and keyboard size.");
-        Choice(ar, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's notes falling onto the real keys. Perform leaves the song's notes out and keeps the pressed-key tint; optional press trails are controlled separately below.",
-            (ArModes.Learn, "Learn"), (ArModes.Perform, "Perform"));
-        SliderRow(ar, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "How solid the falling notes and the lit keys are over the camera picture.");
-        SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")
-            .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
-        SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
-        Toggle(ar, "Live press trails", nameof(PianoVisualSettings.ArLivePressTrails), "Show a bar extending from each key while it is held, fading shortly after release. Off by default to keep streams and calls clear. Turning trails off never disables the key tint above.");
-        Toggle(ar, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Notes and bars grow wider the harder the key is struck, instead of every strike having the same width.");
-        SliderRow(ar, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a note struck as softly as possible, as a percentage of the full note width.")
-            .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
-        SliderRow(ar, "Width on a hard strike", nameof(PianoVisualSettings.ArNoteWidthHard), 10, 200, "Width of a note struck as hard as possible, as a percentage of the full note width.")
-            .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
-        Toggle(ar, "Note fade follows velocity", nameof(PianoVisualSettings.ArNoteFadeByVelocity), "Notes and bars appear faster the harder the key is struck, instead of every strike fading in the same way.");
-        SliderRow(ar, "Fade on a soft strike", nameof(PianoVisualSettings.ArNoteFadeSoft), 10, 200, "How much of the usual fade-in a softly struck note keeps.")
-            .VisibleWhen = () => _visualSettings.ArNoteFadeByVelocity;
-        SliderRow(ar, "Fade on a hard strike", nameof(PianoVisualSettings.ArNoteFadeHard), 10, 200, "How much of the usual fade-in a hard strike gets; above 100 a hard strike is already fully visible the moment it appears.")
-            .VisibleWhen = () => _visualSettings.ArNoteFadeByVelocity;
-        SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound you hear is never delayed, but a recording with the camera in it starts its sound this much later, so the finger and the sound line up in the file. Zero changes nothing.");
-        Choice(ar, "View", nameof(PianoVisualSettings.ArViewProfileId), "Which way the camera looks at the keys: about 45° down from behind the player, straight down at 90° overhead, or the default the app has always used. Every view keeps its own marked key area and the overlay draws only with the one chosen here, so turning the camera means choosing the view that matches it and marking the keys for that view — an unmarked view asks to be marked instead of using the corners marked at another angle.",
-            ArViewProfileChoices());
-        Toggle(ar, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Draw song notes through the camera's view of the keys: a note far from the camera is smaller, and a note reaching the horizon is cut off there. Falling-note trail effects are currently omitted over the camera rather than drawn flat out of alignment; petals and shooting stars remain flat ambient layers. Other particles and transients are not yet projected (planned for AR-S5). Off keeps the flat notes. Needs the Direct3D engine.");
-        SliderRow(ar, "Minimum length, share of width", nameof(PianoVisualSettings.ArNoteMinScale), ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, "The shortest a note is drawn, as a share of its own width (Minimum length in the shape card is in pixels and applies to every note). A note struck very briefly is lengthened to this, and the next note on the same key cuts it short, so quick repeats stay separate. Zero keeps every note at its own length. Only with notes in perspective, and not on Lite.")
-            .VisibleWhen = () => _visualSettings.ArNotesInPerspective;
-        Choice(ar, "Quality", nameof(PianoVisualSettings.ArQuality), "How much the overlay draws over the keys. Lite leaves the real keys unchanged; Standard and Ultra can add key tint. Ultra's planned pulses and particles are not wired into the camera overlay yet (AR-S5). Notes and press bars are never dropped.",
-            (ArQualityTiers.LiteName, "Lite"), (ArQualityTiers.StandardName, "Standard"), (ArQualityTiers.UltraName, "Ultra"));
-        ButtonRow(ar, ("OPEN TRANSPARENT AR OUTPUT", OpenArAlphaOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;
-        Note(ar, "The transparent output omits the camera picture and stage background; capture its window in OBS. Ambient petals and shooting stars stay flat in screen space, not perspective-projected. F11 toggles full screen; Esc closes it.")
-            .VisibleWhen = () => _arPlan.ArLayer;
-        ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"), ("MEASURE DELAY", MeasureArDelay_Click, "IconMotion"));
-        Note(ar, "Measure how late the camera's picture is: press about twenty keys on your keyboard while the camera watches your hands, and the camera delay is set to match.");
+        // The AR cards follow the setup flow: enable the camera layer, match and mark the keyboard, then tune playback and output.
+        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Use the selected camera as the full-screen background. The sections below help align your real keys, choose what appears, and tune note motion.");
+        Toggle(ar, "AR overlay", nameof(PianoVisualSettings.ArEnabled), "Turn the camera-backed piano overlay on or off. Choose the camera in the webcam controls above; the camera picture becomes the stage background while AR is active.");
+        Note(ar, "Before calibration, set Keyboard size on the Keyboard page. Then turn on AR, choose the camera above and its view below, and mark all four key-area corners in Calibrate. Keep the camera position and picture size unchanged while marking.");
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
         Register(ar, _arStatus, null, "ar overlay status calibration camera keys");
+
+        var alignment = Card(CameraSettingsHost, "KEYBOARD ALIGNMENT", "Choose the camera view that matches the keys, then calibrate the virtual keyboard against the real one. Each camera, view, picture size and keyboard size has its own saved calibration.");
+        Choice(alignment, "View", nameof(PianoVisualSettings.ArViewProfileId), "Choose the camera angle that matches how it sees the keys. Each view keeps its own calibration; changing the view does not reuse another view's corners.",
+            ArViewProfileChoices());
+        ButtonRow(alignment, ("CALIBRATE", CalibrateAr_Click, null), ("RESET CALIBRATION", ResetArCalibration_Click, null));
+        Note(alignment, "In Calibrate, drag the Move / Rotate / Scale gizmo or use the numeric controls to translate, rotate and uniformly scale the keyboard. Note travel has its own separate controls.");
+
+        var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint. Lookahead applies only in Learn mode.");
+        Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint remains available and press bars are optional below.",
+            (ArModes.Learn, "Learn"), (ArModes.Perform, "Perform"));
+        SliderRow(playback, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before a song note sounds it starts to appear above the keys. Longer shows more of the song; shorter keeps the picture calmer.")
+            .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
+        SliderRow(playback, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "Adjust the strength of AR notes and key lighting over the camera picture.");
+
+        var notes = Card(CameraSettingsHost, "3D NOTE PATH", "Perspective notes follow the saved keyboard pose. Their travel direction is independent: changing it never moves or rotates the keyboard.");
+        Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "On projects song notes as camera-facing 3D quads from the saved keyboard pose. Off keeps the legacy flat note overlay. Note travel is adjusted below; falling-note trails are omitted over the camera to avoid misaligned streaks. Ambient petals and stars stay flat. Needs Direct3D and a valid calibration.");
+        SliderRow(notes, "Note direction tilt", nameof(PianoVisualSettings.ArNoteDirectionTilt), ArOptions.NoteDirectionTiltMin, ArOptions.NoteDirectionTiltMax, "0° sends notes along key depth, perpendicular to the key row, toward the player. 90° points away from the key surface; 180° reverses key depth.")
+            .VisibleWhen = () => _visualSettings.ArNotesProjected;
+        SliderRow(notes, "Note direction azimuth", nameof(PianoVisualSettings.ArNoteDirectionAzimuth), ArOptions.NoteDirectionAzimuthMin, ArOptions.NoteDirectionAzimuthMax, "Azimuth turns note travel around the keyboard's 3D axes. At 90° tilt it can aim across the key row. Use Calibrate's Screen-up or Along key depth buttons for quick directions.")
+            .VisibleWhen = () => _visualSettings.ArNotesProjected;
+        SliderRow(notes, "Minimum note length", nameof(PianoVisualSettings.ArNoteMinScale), ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, "Set the shortest 3D note as a share of its key width. Zero keeps the MIDI duration; larger values extend very short notes, while same-key repeats stay separate. Lite uses flat notes, so this setting applies only to perspective notes.")
+            .VisibleWhen = () => _visualSettings.ArNotesProjected;
+
+        var live = Card(CameraSettingsHost, "LIVE KEY RESPONSE", "Key tint works on its own. Live press bars are optional; velocity settings below change note width and fade, not key tint.");
+        SliderRow(live, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the real key colour unchanged, even when live press bars are off.");
+        Toggle(live, "Live press bars", nameof(PianoVisualSettings.ArLivePressTrails), "Show a bar extending from each key while it is held, fading shortly after release. Off by default for a cleaner stream or call. Turning bars off never disables key tint.");
+        Toggle(live, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Let MIDI velocity change the width of song notes and live press bars.");
+        SliderRow(live, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a very soft strike, as a percentage of the normal note width.")
+            .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
+        SliderRow(live, "Width on a hard strike", nameof(PianoVisualSettings.ArNoteWidthHard), 10, 200, "Width of a very hard strike, as a percentage of the normal note width.")
+            .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
+        Toggle(live, "Note fade follows velocity", nameof(PianoVisualSettings.ArNoteFadeByVelocity), "Let MIDI velocity change how quickly notes and press bars fade in.");
+        SliderRow(live, "Fade on a soft strike", nameof(PianoVisualSettings.ArNoteFadeSoft), 10, 200, "How much of the usual fade-in a softly struck note keeps.")
+            .VisibleWhen = () => _visualSettings.ArNoteFadeByVelocity;
+        SliderRow(live, "Fade on a hard strike", nameof(PianoVisualSettings.ArNoteFadeHard), 10, 200, "How much of the usual fade-in a hard strike gets; above 100 it appears fully as soon as it arrives.")
+            .VisibleWhen = () => _visualSettings.ArNoteFadeByVelocity;
+
+        var output = Card(CameraSettingsHost, "STREAM & TIMING", "Compensate for camera lag, choose rendering quality, or open a transparent AR window for OBS.");
+        SliderRow(output, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "Delay the camera picture and its AR notes together so they line up with your hands. The piano audio itself is not delayed; recordings with the camera align their audio separately. Zero adds no delay.");
+        ButtonRow(output, ("MEASURE DELAY", MeasureArDelay_Click, null));
+        Note(output, "Measure delay: press about twenty keys while your hands are visible in the camera. PianoPath compares the key presses with the picture and suggests a matching delay.");
+        Choice(output, "Quality", nameof(PianoVisualSettings.ArQuality), "Lite uses flat notes and leaves real keys untinted. Standard and Ultra can add key tint. Ultra's planned AR pulses and particles are not wired yet (AR-S5); notes and press bars are never dropped.",
+            (ArQualityTiers.LiteName, "Lite"), (ArQualityTiers.StandardName, "Standard"), (ArQualityTiers.UltraName, "Ultra"));
+        ButtonRow(output, ("OPEN TRANSPARENT AR OUTPUT", OpenArAlphaOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;
+        Note(output, "The transparent output omits the camera picture and stage background for OBS. Ambient petals and shooting stars stay flat in screen space; they are not perspective-projected. F11 toggles full screen; Esc closes the window.")
+            .VisibleWhen = () => _arPlan.ArLayer;
 
         // Hand tracking is its own card: it reads the same camera but paints on the keyboard, and it works with
         // the picture hidden, which is the point of having it separate from the overlay.
@@ -700,7 +717,8 @@ public partial class MainWindow
         var window = new CalibrationWindow(picture!, _visualSettings.KeyboardLayoutChoice, _visualSettings.CameraMirror,
             () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames),
             before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null,
-            before.Profile, before.Calibration?.Corners);
+            before.Profile, before.Calibration,
+            new ArNoteDirection(_visualSettings.ArNoteDirectionTilt, _visualSettings.ArNoteDirectionAzimuth));
         if (show is null && IsLoaded) window.Owner = this;
         bool? accepted;
         _calibrating = true;                     // the camera is left alone while the keys are being marked
@@ -715,7 +733,7 @@ public partial class MainWindow
             ShowMessage(Loc.T("The camera's picture changed size, so nothing was saved. Try again."), "Mark the keys", MessageBoxImage.Information);
             return;
         }
-        switch (session.Save(result.Corners, out _))
+        switch (session.Save(result, out _))
         {
             case ArSaveResult.Saved: Loc.Format(SettingsSaveLabel, "Key area saved for the {0} view of this camera and keyboard size", Loc.T(before.Profile.Name)); break;
             case ArSaveResult.NotWritten:
@@ -723,6 +741,15 @@ public partial class MainWindow
                 ShowMessage(Loc.T("The key area is marked, but it could not be saved to disk, so it will be asked for again next time."), "Mark the keys", MessageBoxImage.Information);
                 break;
             default: ShowMessage(Loc.T("The camera was closed, so nothing was saved."), "Mark the keys", MessageBoxImage.Information); break;
+        }
+        var noteDirection = window.NoteDirection.Normalised();
+        if (noteDirection.TiltDegrees != _visualSettings.ArNoteDirectionTilt || noteDirection.AzimuthDegrees != _visualSettings.ArNoteDirectionAzimuth)
+        {
+            _visualSettings.ArNoteDirectionTilt = noteDirection.TiltDegrees;
+            _visualSettings.ArNoteDirectionAzimuth = noteDirection.AzimuthDegrees;
+            MarkModified(nameof(PianoVisualSettings.ArNoteDirectionTilt));
+            RefreshSettingControls();
+            ApplyVisualSettings("Note direction updated");
         }
         UpdateArFeed();
     }

@@ -245,6 +245,8 @@
     "ArNotesInPerspective": false,
     "ArLivePressTrails": false,
     "ArNoteMinScale": 0.0,
+    "ArNoteDirectionTilt": 0.0,
+    "ArNoteDirectionAzimuth": 0.0,
     "ArViewProfileId": "default"
   }
 }

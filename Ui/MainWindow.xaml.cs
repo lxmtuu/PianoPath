@@ -1265,7 +1265,9 @@ public partial class MainWindow : Window
         _gpuFeed.Camera = new GpuCameraInput(_cameraFrames, PictureFit.Fit, _visualSettings.CameraMirror, 1f);
         var calibration = plan.ArLayer ? _arCalibration?.Current : null;
         _gpuFeed.Ar = calibration is null ? null
-            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes, (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect, ShowLiveTrails: options.LivePressTrails);
+            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes,
+                (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect,
+                ShowLiveTrails: options.LivePressTrails, NoteDirection: options.NoteDirection);
         RefreshHandStatus();
         RefreshArStatus();
     }

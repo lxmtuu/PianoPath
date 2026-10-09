@@ -480,7 +480,7 @@ internal sealed partial class GpuStageSimulation
         _shimmerBars.Clear();
         _landings.Clear();
         var look = input.Look;
-        // onStage is false while the flat AR layer draws the notes itself: the stage must not draw them a second time
+        // Over the camera, the AR layer owns song notes in both flat and projected modes; suppress stage-space notes and trails.
         if (!look.ShowNotes || !onStage) return;
         var noteWidth = layout.Lane * look.NoteWidth;
         var hitY = layout.HitY;

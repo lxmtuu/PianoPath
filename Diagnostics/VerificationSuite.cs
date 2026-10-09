@@ -966,13 +966,15 @@ internal static partial class VerificationSuite
         var arDefault = new PianoVisualSettings();
         Assert(!arDefault.ArEnabled && !arDefault.ArLivePressTrails && arDefault.ArOptionsValue == ArOptions.Default,
             "A fresh install has the overlay and live press trails off, and the settings' defaults are the ones ArOptions names.");
-        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900 }; arWild.Clamp();
-        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax,
-            "Out-of-range overlay values should be pulled into range when settings load.");
-        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120, ArLivePressTrails = true };
-        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0, ArLivePressTrails = false });
-        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120 && arKept.ArLivePressTrails,
-            "Applying a look must keep every overlay setting, including whether press trails are shown.");
+        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900, ArNoteDirectionTilt = 999, ArNoteDirectionAzimuth = -999 }; arWild.Clamp();
+        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax
+                && arWild.ArNoteDirectionTilt == ArOptions.NoteDirectionTiltMax && arWild.ArNoteDirectionAzimuth == ArOptions.NoteDirectionAzimuthMin,
+            "Out-of-range overlay values and the independent 3D note direction should be pulled into range when settings load.");
+        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120, ArLivePressTrails = true, ArNoteDirectionTilt = 37, ArNoteDirectionAzimuth = -74 };
+        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0, ArLivePressTrails = false, ArNoteDirectionTilt = 0, ArNoteDirectionAzimuth = 0 });
+        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120 && arKept.ArLivePressTrails
+                && arKept.ArNoteDirectionTilt == 37 && arKept.ArNoteDirectionAzimuth == -74,
+            "Applying a look must keep every overlay setting, including press-trail toggle and independent 3D note direction.");
         // AR-S4 remainder: the minimum note length is a setting of the look's own, so a look does not overwrite it
         var minKept = new PianoVisualSettings { ArNoteMinScale = 80 };
         minKept.CopyFrom(new PianoVisualSettings { ArNoteMinScale = 0 });
@@ -1516,10 +1518,32 @@ internal static partial class VerificationSuite
             "With the AR switch off the overlay leaves the stage alone.");
         Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
                 && choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)) && choices.ContainsKey(nameof(PianoVisualSettings.ArQuality))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArNotesInPerspective))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArNoteWidthByVelocity))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArNoteFadeByVelocity))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteDirectionTilt))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteDirectionAzimuth))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteMinScale))
                 && toggles.ContainsKey(nameof(PianoVisualSettings.ArLivePressTrails)),
-            "The Camera & FX page should carry the AR switch, the mode/view/quality pickers, the press-trail toggle and the four sliders.");
+            "The AR controls should expose playback, calibration view, perspective, separate note-direction, live-key and timing settings.");
+        var arCards = (Dictionary<string, Border>)Field(window, "_cardsByTitle");
+        var expectedArCards = new[] { "AR OVERLAY", "KEYBOARD ALIGNMENT", "AR PLAYBACK", "3D NOTE PATH", "LIVE KEY RESPONSE", "STREAM & TIMING" };
+        Assert(expectedArCards.All(arCards.ContainsKey), "The Camera & FX page should group AR into setup, alignment, playback, 3D notes, live keys and stream timing cards.");
+        var noteCard = arCards["3D NOTE PATH"];
+        var settingRows = (System.Collections.IEnumerable)Field(window, "_settingRows");
+        var noteRows = settingRows.Cast<object>()
+            .Where(row => ReferenceEquals(row.GetType().GetField("Card", BindingFlags.Instance | BindingFlags.Public)!.GetValue(row), noteCard))
+            .Select(row => (string?)row.GetType().GetField("Property", BindingFlags.Instance | BindingFlags.Public)!.GetValue(row))
+            .ToArray();
+        string?[] expectedNoteRows =
+        [
+            nameof(PianoVisualSettings.ArNotesInPerspective), nameof(PianoVisualSettings.ArNoteDirectionTilt),
+            nameof(PianoVisualSettings.ArNoteDirectionAzimuth), nameof(PianoVisualSettings.ArNoteMinScale),
+        ];
+        Assert(noteRows.SequenceEqual(expectedNoteRows),
+            "The independent note-direction controls should immediately follow perspective, with minimum length after both.");
         var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
         Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;

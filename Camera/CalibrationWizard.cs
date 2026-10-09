@@ -11,6 +11,8 @@ internal enum WizardStep
     Fix,
 }
 
+internal enum CalibrationTool { Corners, Move, Rotate, Scale, NoteDirection }
+
 /// <summary>
 /// How the keyboard looks in the picture the person sees. A camera above the keys, behind the player, sees the low notes on the left
 /// and the far edge of the keys (where the black keys start) at the top. A camera on the far side of the keyboard, looking at the player,
@@ -89,14 +91,23 @@ internal sealed class CalibrationWizard
     private int _dragging = -1;
     private (double X, double Y) _grabOffset;
 
-    internal CalibrationWizard(int imageWidth, int imageHeight, KeyboardLayout layout)
+    internal CalibrationWizard(int imageWidth, int imageHeight, KeyboardLayout layout, double cameraFovDegrees = ArCameraPose.DefaultFovDegrees)
     {
-        _editor = new CalibrationEditor(imageWidth, imageHeight);
         Layout = layout;
+        CameraFovDegrees = ArCameraPose.NormalizeFov(cameraFovDegrees);
+        _editor = new CalibrationEditor(imageWidth, imageHeight, layout);
         _view = new ArView(imageWidth, imageHeight, 0, 0, PictureFit.Fit, false);
     }
 
     internal KeyboardLayout Layout { get; }
+    internal double CameraFovDegrees { get; private set; }
+    internal ArPoseTransform PoseTransform => _editor.PoseTransform;
+    internal double PitchDegrees => PoseTransform.PitchDegrees;
+    internal double YawDegrees => PoseTransform.YawDegrees;
+    internal double RollDegrees => PoseTransform.RollDegrees;
+    internal ArCalibration? CurrentCalibration => CanFinish
+        ? _editor.Finish(Layout, CameraFovDegrees, PoseTransform, out _)
+        : null;
     internal int ImageWidth => _editor.ImageWidth;
     internal int ImageHeight => _editor.ImageHeight;
 
@@ -131,18 +142,49 @@ internal sealed class CalibrationWizard
     /// <summary>Says how the keyboard looks on the screen. The corners stay where they are; what changes is how they are put in order and judged.</summary>
     internal void SetOrientation(KeyboardOrientation orientation)
     {
+        if (_orientation != orientation) ResetPoseTransform();
         _orientation = orientation;
         ApplyOrientation();
     }
 
     /// <summary>Loads a saved set of corners into the adjustment step, preserving its keyboard-coordinate order.</summary>
-    internal bool LoadCorners(IReadOnlyList<(double X, double Y)> corners) => _editor.LoadCorners(corners);
+    internal bool LoadCorners(IReadOnlyList<(double X, double Y)> corners)
+    {
+        ResetPoseTransform();
+        return _editor.LoadCorners(corners);
+    }
 
-    /// <summary>Rotates the whole marked key grid in the picture plane; positive angles turn clockwise on screen.</summary>
-    internal bool RotateGrid(double degrees) => _editor.Rotate(degrees);
+    /// <summary>Restores the saved final pose, FOV, complete transform and its untransformed baseline.</summary>
+    internal bool LoadCalibration(ArCalibration calibration)
+    {
+        if (calibration.ImageWidth != ImageWidth || calibration.ImageHeight != ImageHeight || calibration.Layout.KeyCount != Layout.KeyCount)
+            return false;
+        var fov = ArCameraPose.NormalizeFov(calibration.CameraFovDegrees);
+        if (!_editor.LoadCalibration(calibration.Corners, calibration.PoseBaseCorners, calibration.Transform, fov)) return false;
+        CameraFovDegrees = fov;
+        return true;
+    }
+
+    /// <summary>Sets a complete absolute object transform, so input order never accumulates screen-space drift.</summary>
+    internal bool SetObjectTransform(ArPoseTransform transform, double fovDegrees)
+    {
+        var fov = ArCameraPose.NormalizeFov(fovDegrees);
+        if (!transform.IsValid || !_editor.SetPoseTransform(transform, fov)) return false;
+        CameraFovDegrees = fov;
+        return true;
+    }
+
+    /// <summary>Sets absolute local-object pitch, yaw and roll, preserving its independent position and scale.</summary>
+    internal bool Set3DPose(double pitchDegrees, double yawDegrees, double rollDegrees, double fovDegrees) =>
+        SetObjectTransform(PoseTransform with { PitchDegrees = pitchDegrees, YawDegrees = yawDegrees, RollDegrees = rollDegrees }, fovDegrees);
+
+    /// <summary>Rotates the complete keyboard object about its surface normal (the Z/roll axis).</summary>
+    internal bool RotateGrid(double degrees) => Set3DPose(PitchDegrees, YawDegrees, degrees, CameraFovDegrees);
 
     /// <summary>The orientation is as seen on the screen and the editor works on the picture as delivered, which the screen shows turned round left to right when mirrored.</summary>
     private void ApplyOrientation() => _editor.SetFlips(_orientation.LowOnRight() != _view.Mirror, _orientation.FarAtBottom());
+
+    private void ResetPoseTransform() => _editor.ResetPoseTransform(CameraFovDegrees);
 
     // ---- what to say ------------------------------------------------------------------------------------
 
@@ -185,7 +227,10 @@ internal sealed class CalibrationWizard
     {
         if (_dragging < 0 || !_view.Valid || !double.IsFinite(x) || !double.IsFinite(y)) return false;
         var (ix, iy) = _view.ToImage(x, y);
-        return _editor.Move(_dragging, ix + _grabOffset.X, iy + _grabOffset.Y);
+        var before = _editor.Points[_dragging];
+        var moved = _editor.Move(_dragging, ix + _grabOffset.X, iy + _grabOffset.Y);
+        if (moved && _editor.Points[_dragging] != before) ResetPoseTransform();
+        return moved;
     }
 
     /// <summary>The button was released.</summary>
@@ -201,7 +246,10 @@ internal sealed class CalibrationWizard
     {
         if (_editor.Selected < 0 || _dragging >= 0) return false;
         var step = large ? NudgeStepLarge : NudgeStep;
-        return _editor.Nudge(_editor.Selected, (_view.Mirror ? -right : right) * step, down * step);
+        var before = _editor.Points[_editor.Selected];
+        var moved = _editor.Nudge(_editor.Selected, (_view.Mirror ? -right : right) * step, down * step);
+        if (moved && _editor.Points[_editor.Selected] != before) ResetPoseTransform();
+        return moved;
     }
 
     /// <summary>Selects the next (or previous) placed corner, as Tab does. True when there is a corner to select.</summary>
@@ -214,10 +262,15 @@ internal sealed class CalibrationWizard
     }
 
     /// <summary>Takes the last corner back (Backspace). False when there is none or one is being dragged.</summary>
-    internal bool Undo() => _dragging < 0 && _editor.Undo();
+    internal bool Undo()
+    {
+        if (_dragging >= 0 || !_editor.Undo()) return false;
+        ResetPoseTransform();
+        return true;
+    }
 
     /// <summary>Starts again.</summary>
-    internal void Clear() { _dragging = -1; _editor.Clear(); }
+    internal void Clear() { _dragging = -1; _editor.Clear(); ResetPoseTransform(); }
 
     // ---- what to draw -----------------------------------------------------------------------------------
 
@@ -255,5 +308,6 @@ internal sealed class CalibrationWizard
     /// Finishes: the calibration for the keyboard, with the corners put in order when they only needed that; null — with the
     /// reason — when they are not good enough.
     /// </summary>
-    internal ArCalibration? Finish(out CalibrationProblem problem) => _editor.Finish(Layout, out problem);
+    internal ArCalibration? Finish(out CalibrationProblem problem) =>
+        _editor.Finish(Layout, CameraFovDegrees, PoseTransform, out problem);
 }

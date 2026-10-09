@@ -27,17 +27,19 @@ internal struct GpuArQuad
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
 /// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
-/// <param name="ProjectedNotes">AR-S4b/AR-S4: the stage's own note pass draws song notes and live bars through the scene→image map (Gpu/StageShaders.hlsl <c>VsNote</c>) instead of this layer keeping flat note and bar quads. Stage particles/transients are not yet enabled over the camera (AR-S5). Off by default: a frame that does not ask for the map draws exactly what it drew before AR-S4b.</param>
-/// <param name="MinAspect">AR-S4: the minimum note length as a fraction of the note's width (Camera/ArNoteMinimum.cs), applied to the notes the projected pass draws; 0 keeps every note at its own length.</param>
-/// <param name="MinScalePx">The smallest magnification the projected note pass draws with, output pixels per scene DIP (the shader's <c>ArMatrixFlags.z</c>): a note that would collapse under a pixel is drawn at this floor instead. 0 draws every note at the map's own magnification.</param>
+/// <param name="ProjectedNotes">Build notes and optional live bars from the calibrated keyboard-local 3D pose and project camera-facing quads through the 3D camera model. Falling-note trail FX are omitted rather than laid flat; ambient sprites stay screen-space.</param>
+/// <param name="MinAspect">The minimum note length as a fraction of its projected key width; 0 keeps each note's natural length.</param>
 /// <param name="ShowLiveTrails">Draw bars for keys the player presses, in flat or projected mode; key tint is separate.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinScalePx = 0, float MinAspect = 0, bool ShowLiveTrails = false);
+/// <param name="NoteDirection">Independent keyboard-local 3D direction of the notes and live bars.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default);
 
 /// <summary>Turns the song's notes at this moment into quads for the AR pass.</summary>
 internal sealed class GpuArLayer
 {
     private readonly List<ArNoteShape> _shapes = [];
     private readonly List<ArLiveBar> _liveBars = [];
+    private readonly List<Ar3DNoteShape> _projectedShapes = [];
+    private readonly List<Ar3DLiveBar> _projectedLiveBars = [];
     private readonly List<ArPatch> _keyPatches = [];
 
     /// <summary>Key glow below this is not drawn.</summary>
@@ -50,15 +52,16 @@ internal sealed class GpuArLayer
     internal int KeyQuadCount { get; private set; }
 
     /// <summary>How many shapes the last <see cref="Build"/> produced (the notes before they were packed).</summary>
-    internal int ShapeCount => _shapes.Count;
+    internal int ShapeCount => _shapes.Count + _projectedShapes.Count;
 
     /// <summary>
     /// Refills <paramref name="quads"/>: first the lit keys, then the notes. A key is lit by the colour and glow the stage
     /// simulation holds for it (<paramref name="keyColors"/>, indexed by pitch: linear rgb and glow 0..1), so the AR keys
     /// rise and fade exactly as the stage's own, for a held key of the song or of the player alike. Notes are drawn while the
     /// song plays, in the colours of the look; a note that has been played or missed takes the stage's played and missed
-    /// colours. When <paramref name="projectedNotes"/> is set (AR-S4b) the note pass is already drawing the notes and the
-    /// bars through the scene→image map, so this layer keeps only the lit keys and holds no flat copy of its own.
+    /// colours. When <paramref name="projectedNotes"/> is set, this layer builds camera-projected 3D note and live-bar quads;
+    /// the stage note pass is suppressed to prevent duplicates. Falling-note trail FX are omitted rather than laid flat.
+    /// The separate ambient sprite pass remains in screen space and is not sent through the keyboard projection.
     /// </summary>
     /// <summary>How many bars the last <see cref="Build"/> produced, over and above the keys and the notes of the song.</summary>
     internal int LiveBarCount { get; private set; }
@@ -66,7 +69,7 @@ internal sealed class GpuArLayer
     internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors, IReadOnlyList<ArLivePress> live, GpuInstanceList<GpuArQuad> quads, bool projectedNotes)
     {
         quads.Clear();
-        _shapes.Clear();
+        _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear();
         KeyQuadCount = 0;
         LiveBarCount = 0;
         if (ar.Opacity <= 0) return;
@@ -86,34 +89,68 @@ internal sealed class GpuArLayer
             }
         }
         var look = input.Look;
-        if (ar.ShowNotes && input.Playing && input.Notes.Count > 0 && !projectedNotes)
+        if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
         {
-            ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes, VelocityBand);
-            // The AR layer draws flat emissive quads while the note pass does not draw through the map. An unported
-            // note style (Gem, Crystal Outline, named by ArLookGuard) keeps its track colour and the flat fallback
-            // material until the styles are ported onto the projected note pass (AR-S4 remainder); today the colours
-            // are the same either way, so the guard is an assertion target.
-            foreach (var shape in _shapes)
+            var position = input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f);
+            if (projectedNotes)
             {
-                var note = input.Notes[shape.NoteIndex];
-                var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
-                    : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
-                    : look.NoteColor(note.Pitch, note.Track);
-                quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity, new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
+                // The projected AR branch builds notes in keyboard-local 3D and sends their camera-projected billboards
+                // through this GPU quad pass. The note's direction is independent of the camera pose; stage particles,
+                // petals and stars never enter this branch and remain flat on the camera.
+                Ar3DNoteProjection.Build(ar.Calibration, view, input.Notes, position, input.MaxNoteDuration, ar.Notes,
+                    ar.NoteDirection, ar.MinAspect, _projectedShapes, VelocityBand);
+                foreach (var shape in _projectedShapes)
+                {
+                    if ((uint)shape.NoteIndex >= (uint)input.Notes.Count) continue;
+                    var note = input.Notes[shape.NoteIndex];
+                    var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
+                        : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
+                        : look.NoteColor(note.Pitch, note.Track);
+                    quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity,
+                        new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
+                }
+            }
+            else
+            {
+                ArNotes.Build(ar.Calibration, view, input.Notes, position, input.MaxNoteDuration, ar.Notes, _shapes, VelocityBand);
+                foreach (var shape in _shapes)
+                {
+                    if ((uint)shape.NoteIndex >= (uint)input.Notes.Count) continue;
+                    var note = input.Notes[shape.NoteIndex];
+                    var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
+                        : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
+                        : look.NoteColor(note.Pitch, note.Track);
+                    quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity,
+                        new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
+                }
             }
         }
-        // The keys under the player's own fingers keep their tint above; their growing bars are an independent option.
-        // In perspective mode the note pass owns those bars, so the flat overlay must not add a second copy.
-        if (!ar.ShowLiveTrails || projectedNotes || live.Count == 0) return;
+        // The keys under the player's own fingers keep their tint above; growing bars are a separate option.
+        // When perspective is enabled they use the same 3D direction and camera pose as song notes, never a flat camera-space trail.
+        if (!ar.ShowLiveTrails || live.Count == 0) return;
         var velocityTint = ar.Quality != ArQualityTier.Lite && look.VelocityColor && look.VelocityColorAmount > 0;
         var velocityAmount = velocityTint ? look.VelocityColorAmount : 0;
-        ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
-        foreach (var bar in _liveBars)
+        if (projectedNotes)
         {
-            var color = look.NoteColor(bar.Pitch, 0);
-            if (velocityTint) color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), velocityAmount);
-            quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
-            LiveBarCount++;
+            Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.Notes, ar.NoteDirection, _projectedLiveBars, VelocityBand);
+            foreach (var bar in _projectedLiveBars)
+            {
+                var color = look.NoteColor(bar.Pitch, 0);
+                if (velocityTint) color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), velocityAmount);
+                quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
+                LiveBarCount++;
+            }
+        }
+        else
+        {
+            ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
+            foreach (var bar in _liveBars)
+            {
+                var color = look.NoteColor(bar.Pitch, 0);
+                if (velocityTint) color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), velocityAmount);
+                quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
+                LiveBarCount++;
+            }
         }
     }
 

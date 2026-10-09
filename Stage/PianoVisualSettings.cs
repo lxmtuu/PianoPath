@@ -443,6 +443,10 @@ internal sealed class PianoVisualSettings
     public bool ArLivePressTrails { get; set; } = false;
     /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
     public double ArNoteMinScale { get; set; } = 0;
+    /// <summary>Independent 3D pitch of AR note travel: 0° follows the default back-to-keys axis, 90° turns toward the player-side normal, and 180° reverses it.</summary>
+    public double ArNoteDirectionTilt { get; set; } = 0;
+    /// <summary>Independent 3D azimuth of AR note travel: -180°..180° sweeps the tilted direction around all keyboard axes.</summary>
+    public double ArNoteDirectionAzimuth { get; set; } = 0;
     /// <summary>
     /// Which view of the camera the marked key area is for: the camera stands at one angle to the keys (45°, 90° overhead,
     /// see <see cref="ArCalibrationProfiles"/>), and corners marked at one angle draw the notes in the wrong place at another.
@@ -507,7 +511,9 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale, ArLivePressTrails).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
+        ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
+        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth).Normalised();
 
     /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
     internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
@@ -628,7 +634,8 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
                 or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
-                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails)) continue;
+                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails)
+                or nameof(ArNoteDirectionTilt) or nameof(ArNoteDirectionAzimuth)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked.
             if (property.Name == nameof(ArViewProfileId)) continue;
@@ -751,8 +758,11 @@ internal sealed class PianoVisualSettings
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         ArViewProfileId = ArCalibrationProfiles.Normalize(ArViewProfileId).Id;
         ArQuality = ArQualityTiers.Normalize(ArQuality);
-        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality)).Normalised();
+        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
+            ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
+            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
+        ArNoteDirectionTilt = ar.NoteDirectionTilt; ArNoteDirectionAzimuth = ar.NoteDirectionAzimuth;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);
         ArNoteMinScale = ArOptions.Fit(ArNoteMinScale, ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, ArOptions.NoteMinScaleDefault);

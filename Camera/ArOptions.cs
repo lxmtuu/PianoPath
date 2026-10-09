@@ -28,18 +28,23 @@ internal static class ArModes
 /// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
 /// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
 /// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
-/// <param name="NotesInPerspective">The notes are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Stage particles and transients are not yet projected over the camera; that is planned for AR-S5. Off keeps the flat notes.</param>
+/// <param name="NotesInPerspective">Build notes from the calibrated 3D keyboard pose and project their camera-facing quads into the picture; stage-space falling-note trails stay suppressed. Ambient petals, stars and transients remain flat. Off keeps the legacy flat note overlay.</param>
 /// <param name="NoteMinScale">Minimum note length, percent of the note's width (AR-S4, Keysight "minimum note scaling"); zero keeps every note at its own length.</param>
 /// <param name="LivePressTrails">Draw the player's growing press bars over the camera; independent of the lit-key tint.</param>
+/// <param name="NoteDirectionTilt">The independent 3D tilt of note travel away from the default back-to-keys axis.</param>
+/// <param name="NoteDirectionAzimuth">The independent 3D azimuth around that axis.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
-    bool NotesInPerspective = false, double NoteMinScale = 0, bool LivePressTrails = false)
+    bool NotesInPerspective = false, double NoteMinScale = 0, bool LivePressTrails = false,
+    double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
     internal const double KeyLightMin = 0, KeyLightMax = 100, KeyLightDefault = 60;
     internal const double DelayMin = 0, DelayMax = 300, DelayDefault = 0;
     internal const double NoteMinScaleMin = 0, NoteMinScaleMax = 200, NoteMinScaleDefault = 0;
+    internal const double NoteDirectionTiltMin = 0, NoteDirectionTiltMax = 180, NoteDirectionTiltDefault = 0;
+    internal const double NoteDirectionAzimuthMin = -180, NoteDirectionAzimuthMax = 180, NoteDirectionAzimuthDefault = 0;
 
     internal static readonly ArOptions Default = new(false, ArModes.Learn, OpacityDefault, LookaheadDefault, KeyLightDefault);
 
@@ -51,17 +56,22 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
         Lookahead = Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
         KeyLight = Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault),
         Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault),
-        NoteMinScale = Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault)
+        NoteMinScale = Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault),
+        NoteDirectionTilt = Fit(NoteDirectionTilt, NoteDirectionTiltMin, NoteDirectionTiltMax, NoteDirectionTiltDefault),
+        NoteDirectionAzimuth = Fit(NoteDirectionAzimuth, NoteDirectionAzimuthMin, NoteDirectionAzimuthMax, NoteDirectionAzimuthDefault)
     };
 
     /// <summary>
-    /// The notes are drawn in perspective by the stage's own note pass: the switch is on and the quality tier is not Lite.
-    /// Lite is the flat overlay it has always been, so it keeps the flat notes whatever the switch says.
+    /// The AR layer builds notes from the calibrated 3D pose when the switch is on and the quality tier is not Lite.
+    /// Lite keeps the legacy flat overlay whatever the switch says.
     /// </summary>
     internal bool NotesProjected => NotesInPerspective && Quality != ArQualityTier.Lite;
 
     /// <summary>The minimum note length as a fraction of the note's width, 0..2 (see <see cref="ArNoteMinimum"/>).</summary>
     internal float NoteMinAspect => (float)(Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault) / 100);
+
+    /// <summary>The normalized 3D direction independently chosen for AR note travel.</summary>
+    internal ArNoteDirection NoteDirection => new(NoteDirectionTilt, NoteDirectionAzimuth).Normalised();
 
     internal static double Fit(double value, double minimum, double maximum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;

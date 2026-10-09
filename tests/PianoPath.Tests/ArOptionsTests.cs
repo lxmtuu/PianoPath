@@ -111,6 +111,37 @@ public class ArOptionsTests
     }
 
     [Fact]
+    public void Perspective_notes_require_the_user_toggle_and_a_non_lite_quality_and_live_bars_start_off()
+    {
+        Assert.False(ArOptions.Default.NotesProjected);
+        Assert.False(ArOptions.Default.LivePressTrails);
+        var standard = ArOptions.Default with { NotesInPerspective = true, Quality = ArQualityTier.Standard };
+        Assert.True(standard.NotesProjected);
+        Assert.False(standard.LivePressTrails);
+        Assert.False((standard with { Quality = ArQualityTier.Lite }).NotesProjected);
+        Assert.True((standard with { LivePressTrails = true }).LivePressTrails);
+    }
+
+    [Fact]
+    public void Note_direction_is_a_separate_3d_setting_normalized_on_every_path()
+    {
+        var options = new ArOptions(true, ArModes.Learn, 100, 3, 60,
+            NoteDirectionTilt: 125, NoteDirectionAzimuth: -70).Normalised();
+        Assert.Equal(125, options.NoteDirection.TiltDegrees);
+        Assert.Equal(-70, options.NoteDirection.AzimuthDegrees);
+        Assert.NotEqual(ArNoteDirection.Default.Vector, options.NoteDirection.Vector);
+
+        var clamped = new ArOptions(true, ArModes.Learn, 100, 3, 60,
+            NoteDirectionTilt: 999, NoteDirectionAzimuth: -999).Normalised();
+        Assert.Equal(ArOptions.NoteDirectionTiltMax, clamped.NoteDirection.TiltDegrees);
+        Assert.Equal(ArOptions.NoteDirectionAzimuthMin, clamped.NoteDirection.AzimuthDegrees);
+        var wild = new ArOptions(true, ArModes.Learn, 100, 3, 60,
+            NoteDirectionTilt: double.NaN, NoteDirectionAzimuth: double.PositiveInfinity).Normalised();
+        Assert.Equal(ArNoteDirection.Default, wild.NoteDirection);
+        Assert.Equal(wild, wild.Normalised());
+    }
+
+    [Fact]
     public void The_camera_delay_defaults_to_none_and_stays_inside_zero_to_three_hundred_milliseconds()
     {
         Assert.Equal(0, ArOptions.Default.Delay);

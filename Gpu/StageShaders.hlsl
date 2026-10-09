@@ -44,10 +44,10 @@ cbuffer Frame : register(b0)
     float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
     float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
     float4 ArFlags;      // x = 1 when mirrored, y = 1 when the camera is active, z = picture opacity, w = 1 for transparent AR effects output
-    float4 ArMatrix0;    // AR-S4b scene->image map (Camera/ArSceneProjection.cs): xyz = row 0 (a, b, c)
-    float4 ArMatrix1;    // xyz = row 1 (d, e, f)
-    float4 ArMatrix2;    // xyz = row 2 (g, h, i); g*x + h*y + i is the weight, 1 at the keyboard's back-left corner
-    float4 ArMatrixFlags; // x = AR flags (bit 0: the note and sprite passes draw through the map), y = sqrt|det M|, z = min scale px, w = 0
+    float4 ArMatrix0;    // legacy scene->image map rows; active AR notes use ArCameraPose + GpuArLayer quads instead
+    float4 ArMatrix1;
+    float4 ArMatrix2;
+    float4 ArMatrixFlags; // legacy shader-branch flags; the active renderer keeps all four lanes zero
 };
 
 cbuffer PassConstants : register(b1)
@@ -114,9 +114,8 @@ float4 ToClip(float2 screenPx, float depth)
     return float4(ndc, depth, 1.0);
 }
 
-// AR-S4b: the scene->image map at a scene point (Camera/ArSceneProjection.cs): output pixels and the
-// homogeneous weight that place came from. The weight is the clip w, so rasterising interpolates the
-// quad in perspective - the way VsArQuad has always interpolated its flat quads.
+// Legacy shader helper for the dormant scene->image map branch. The normal renderer leaves ArMatrixFlags zero;
+// active 3D notes are projected on the CPU and drawn by VsArQuad from the camera-facing patches in GpuArLayer.
 float3 ArMapAt(float2 scene)
 {
     float3 at = float3(scene, 1.0);
@@ -404,17 +403,12 @@ NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     NoteOut o;
     if (ArMatrixFlags.x > 0.5)
     {
-        // AR-S4b: the note rect through the scene->image map, which is what the flat AR quads stood in for.
-        // Each vertex takes one corner of the rect and the map's weight there becomes the clip w, so the quad
-        // is interpolated in perspective exactly as VsArQuad's is. Local and Half are multiplied by the map's
-        // magnification at the note's centre - one scale for the whole note, so the SDF body is exactly the
-        // projected rect - and the division by SceneSize.z cancels the pixels-per-unit PsNote multiplies every
-        // distance by: the SDF below then measures real output pixels. Min scale px is the floor on that
-        // magnification, so a note far from the camera cannot collapse under a pixel. While the flag is down
-        // none of this runs and the pass is the one from before AR-S4b, pixel for pixel.
+        // Dormant legacy scene->image branch. The active AR renderer deliberately keeps ArMatrixFlags zero and
+        // emits calibrated 3D notes through GpuArLayer/Ar3DNoteProjection instead; do not use this branch as the
+        // runtime note path or as a condition for whether projected notes exist.
         float3 at = ArMapAt(centre + local);
         float3 mid = ArMapAt(centre);
-        float w = max(at.z, 1e-3);                   // on and beyond the horizon nothing can be drawn; the slice that truncates notes there is still to come
+        float w = max(at.z, 1e-3);                   // legacy branch expects CPU-side horizon clipping; the active AR quad path clips at the 3D near plane
         float wm = max(mid.z, 1e-3);
         float scale = max(ArMatrixFlags.y / (wm * sqrt(wm)), ArMatrixFlags.z) / SceneSize.z;
         float2 ndc = at.xy / w / ScreenTime.xy * float2(2.0, -2.0) + float2(-1.0, 1.0);
@@ -884,11 +878,10 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     // flares and the hit line sit in front of the keys; particles fly behind them
     if ((kind > 3.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5)) depth = 0.01;
     SpriteOut o;
-    if (ArMatrixFlags.x > 0.5)
+    if (ArMatrixFlags.x > 1.5)
     {
-        // AR-S4 remainder: the sprite pass draws through the scene->image map, the way VsNote draws a note, so
-        // particles, flares, beams and shapes land on the camera picture in perspective. Their sizes are scene
-        // DIPs, which the map scales at the point each vertex lands, so nothing here needs a magnification.
+        // Reserved for an explicit future sprite-projection option. Ambient particles, petals, meteors and
+        // transients stay flat on the camera by default even while the AR notes use perspective.
         // A sprite is culled whole when any of its four corners reaches the horizon. The weight is affine, so its
         // least value over the quad is at a corner; the corners depend only on the instance, so all six of its
         // vertices agree on whether it is drawn at all.
