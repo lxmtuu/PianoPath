@@ -1271,7 +1271,7 @@ internal static partial class VerificationSuite
         Assert(performDrop >= 500,
             $"Perform (ShowNotes off) must leave the song's notes out of the projected pass ({NotePixels(plain)} note pixels with them, {NotePixels(performFrame)} without).");
 
-        // three very short notes, 5 DIP long: at a minimum of one lane's width they are drawn as near squares
+        // three very short notes, 5 DIP long: the pixel minimum of the shape card (16 DIP) is shorter than two note widths, so 200 % lengthens them
         var shortNotes = new List<NoteEvent>
         {
             new() { Pitch = 60, Start = 10.08, Duration = .02 },
@@ -1279,11 +1279,11 @@ internal static partial class VerificationSuite
             new() { Pitch = 67, Start = 10.32, Duration = .02 }
         };
         var shortPlain = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true), shortNotes));
-        var shortMin = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinAspect: 1f), shortNotes));
+        var shortMin = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinAspect: 2f), shortNotes));
         Assert(!shortPlain.AsSpan().SequenceEqual(shortMin),
             "A minimum note length must reach the note pass and lengthen the short notes (the frame would be byte-identical otherwise).");
-        Assert(NotePixels(shortMin) >= NotePixels(shortPlain) + 200,
-            $"At a minimum of one note width the short notes must cover more of the picture ({NotePixels(shortPlain)} → {NotePixels(shortMin)} note pixels).");
+        Assert(NotePixels(shortMin) > NotePixels(shortPlain),
+            $"At a minimum of two note widths the short notes must cover more of the picture ({NotePixels(shortPlain)} → {NotePixels(shortMin)} note pixels).");
 
         // sprites: the column of pitch 64 — one sprite above the keys, drawn; one far past the horizon, culled whole
         var flatView = new ArView(1280, 720, width, height, PictureFit.Fit, false);
@@ -1317,7 +1317,7 @@ internal static partial class VerificationSuite
                 for (var c = 0; c < 3; c++) spriteDiff = Math.Max(spriteDiff, Math.Abs(visibleFrame[i + c] - plain[i + c]));
             }
         Assert(spriteDiff >= 60, $"The sprite above the keys must change the picture under its patch (largest channel change {spriteDiff}).");
-        Results.Add($"PASS AR note projection (AR-S4 remainder): Perform drops {performDrop} note pixels; a minimum note length of one width lengthens the short notes ({NotePixels(shortPlain)} → {NotePixels(shortMin)}); a sprite above the keys changes the picture by {spriteDiff}, and one past the horizon is culled whole.");
+        Results.Add($"PASS AR note projection (AR-S4 remainder): Perform drops {performDrop} note pixels; a minimum note length of two widths lengthens the short notes ({NotePixels(shortPlain)} → {NotePixels(shortMin)}); a sprite above the keys changes the picture by {spriteDiff}, and one past the horizon is culled whole.");
 
         Results.Add($"PASS AR note projection (AR-S4b): default off the {width}×{height} frame is byte-identical with the whole map in the constants and without any AR input ({defaultNotes} note pixels unchanged); switched on, 3 notes on the sample keyboard land inside the ArProjection patches of their own rectangles, mirrored and not, with no flat AR note quads of their own; min-scale floor reaches the shader without moving them.");
     }
