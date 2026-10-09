@@ -140,4 +140,20 @@ internal static class ArSceneProjection
         yFront = frame.HitY + front * frame.KeyboardHeight;
         return true;
     }
+
+    /// <summary>
+    /// The part of a scene rectangle the projected note pass draws (AR-S4 remainder): the same cut
+    /// <see cref="ArProjection"/> makes for the flat AR quads at the horizon, found by the same
+    /// <see cref="TryProjectRect"/>, so a note in perspective is cut exactly where the overlay cuts it. Returns false
+    /// when none of the rectangle is on the picture; <paramref name="top"/> and <paramref name="bottom"/> are the
+    /// scene y the rectangle is drawn between afterwards.
+    /// </summary>
+    internal static bool TruncateToPicture(ArCalibration? calibration, ArView view, ArSceneFrame frame,
+        double x0, double x1, ref double top, ref double bottom)
+    {
+        if (!TryProjectRect(calibration, view, frame, x0, x1, top, bottom, out _, out var yBack, out var yFront)) return false;
+        top = yBack;
+        bottom = yFront;
+        return true;
+    }
 }

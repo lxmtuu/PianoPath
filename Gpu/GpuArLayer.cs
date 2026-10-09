@@ -27,7 +27,7 @@ internal struct GpuArQuad
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
 /// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
-/// <param name="ProjectedNotes">AR-S4b: the stage's own note pass draws the notes through the scene→image map (Gpu/StageShaders.hlsl <c>VsNote</c>) instead of this layer keeping flat note and live-bar quads of its own. Off by default: a frame that does not ask for the map draws exactly what it drew before AR-S4b.</param>
+/// <param name="ProjectedNotes">AR-S4b/AR-S4: the stage's own note pass draws the notes (and the sprite pass the particles) through the scene→image map (Gpu/StageShaders.hlsl <c>VsNote</c>, <c>VsSprite</c>) instead of this layer keeping flat note and live-bar quads of its own. Off by default: a frame that does not ask for the map draws exactly what it drew before AR-S4b.</param>
 /// <param name="MinScalePx">The smallest magnification the projected note pass draws with, output pixels per scene DIP (the shader's <c>ArMatrixFlags.z</c>): a note that would collapse under a pixel is drawn at this floor instead. 0 draws every note at the map's own magnification.</param>
 internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinScalePx = 0);
 

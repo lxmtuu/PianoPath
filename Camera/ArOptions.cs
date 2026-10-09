@@ -28,8 +28,10 @@ internal static class ArModes
 /// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
 /// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
 /// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
+/// <param name="NotesInPerspective">The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
-    GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard)
+    GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
+    bool NotesInPerspective = false)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;

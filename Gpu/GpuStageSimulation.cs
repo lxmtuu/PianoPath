@@ -447,7 +447,11 @@ internal sealed partial class GpuStageSimulation
     // ------------------------------------------------------------------------------------------------
 
     /// <summary>Song notes and live trails as SDF capsules.</summary>
-    internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes)
+    /// <summary>
+    /// Fills <paramref name="notes"/> for the frame: the song's notes (unless <paramref name="songNotes"/> is off, which
+    /// the AR overlay asks for in Perform mode) and the live trails of the keys the player holds, which are always drawn.
+    /// </summary>
+    internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes, bool songNotes = true)
     {
         notes.Clear();
         _noteTrails.Clear();
@@ -459,7 +463,7 @@ internal sealed partial class GpuStageSimulation
         var noteWidth = layout.Lane * look.NoteWidth;
         var hitY = layout.HitY;
         const float landingWindow = .55f;
-        if (input.Playing && input.Notes.Count > 0)
+        if (songNotes && input.Playing && input.Notes.Count > 0)
         {
             var speed = look.SongFallSpeed;
             var latestStart = input.Position + hitY / speed + 1;

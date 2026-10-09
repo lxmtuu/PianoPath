@@ -437,6 +437,8 @@ internal sealed class PianoVisualSettings
     public double ArNoteFadeSoft { get; set; } = 100;
     /// <summary>Fade-in of a note struck at the velocity ceiling, percent of the usual fade.</summary>
     public double ArNoteFadeHard { get; set; } = 100;
+    /// <summary>The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</summary>
+    public bool ArNotesInPerspective { get; set; } = false;
     /// <summary>
     /// Which view of the camera the marked key area is for: the camera stands at one angle to the keys (45°, 90° overhead,
     /// see <see cref="ArCalibrationProfiles"/>), and corners marked at one angle draw the notes in the wrong place at another.
@@ -501,7 +503,7 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality)).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective).Normalised();
 
     /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
     internal KeyboardLayout KeyboardLayoutChoice =>
@@ -618,7 +620,8 @@ internal sealed class PianoVisualSettings
             // The overlay is set up for this camera and this instrument, so a look neither turns it on nor tunes it.
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
-                or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)) continue;
+                or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
+                or nameof(ArNotesInPerspective)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked.
             if (property.Name == nameof(ArViewProfileId)) continue;
