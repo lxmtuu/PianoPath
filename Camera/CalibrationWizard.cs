@@ -103,6 +103,12 @@ internal sealed class CalibrationWizard
     /// <summary>The corners placed so far, in picture pixels.</summary>
     internal IReadOnlyList<(double X, double Y)> Points => _editor.Points;
 
+    /// <summary>True when all four corners have been placed.</summary>
+    internal bool IsComplete => _editor.IsComplete;
+
+    /// <summary>The ordered corners the overlay could use, or null while they are invalid.</summary>
+    internal IReadOnlyList<(double X, double Y)>? UsableCorners => _editor.UsableCorners;
+
     /// <summary>The corner being moved or last touched, or -1.</summary>
     internal int Selected => _editor.Selected;
 
