@@ -1115,12 +1115,14 @@ internal static partial class VerificationSuite
         var notes = new List<NoteEvent>
         {
             new() { Pitch = 60, Start = 10.08, Duration = .18 },   // white key, hanging just above the keys
-            new() { Pitch = 61, Start = 10.2, Duration = .2 },     // black key
+            new() { Pitch = 64, Start = 10.2, Duration = .2 },     // two white keys over: bodies may not touch
             new() { Pitch = 67, Start = 10.32, Duration = .22 }    // white key, highest of the three
         };
         // The starts sit the notes in the air the projection really magnifies (SongFallSpeed puts a note
         // 0.6 s out at v ~ -1.7 and 1.35 s out past the top of the frame): each body must lie wholly on the
-        // output, or its patch samples cannot be asked to show anything.
+        // output, or its patch samples cannot be asked to show anything. The pitches stay two white keys
+        // apart because the bodies are a lane wide and a black key sits only ~10 px from its white
+        // neighbours - touching bodies would put a neighbour under the outside samples of the patch.
         // the very layout the render loop builds from this feed, so the rectangles below are the drawn ones
         var scene = new GpuSceneLayout(width, height, .205f);
         var frame = new ArSceneFrame(scene.Width, scene.HitY, scene.KeyboardHeight);
