@@ -403,7 +403,8 @@ internal sealed class GpuStageRenderer : IDisposable
         var arProjectedNotes = projectedInput is not null;
 
         // Perform leaves the song's notes out, as the flat overlay does; the live trails of the keys the player holds stay.
-        simulation.BuildNotes(input, layout, notes, songNotes: projectedInput?.ShowNotes ?? true);
+        simulation.BuildNotes(input, layout, notes, songNotes: projectedInput?.ShowNotes ?? true,
+            onStage: !look.OverCamera || projectedInput is not null);
         if (projectedInput is { } cut)
             TruncateNotesToPicture(notes, cut.Calibration, mapView, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight));
         simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
@@ -456,12 +457,17 @@ internal sealed class GpuStageRenderer : IDisposable
         if (_atlasView is not null) context.PSSetShaderResource(6, _atlasView);
         if (_ambientList.Count > 0)
         {
+            // The ambient layers are the stage's atmosphere and stay where they are when the notes are in perspective:
+            // the sprite branch is switched off for this pass alone, and the frame constants go back up before the notes.
+            var flatAmbient = arProjectedNotes;
+            if (flatAmbient) { var flat = constants; flat.ArMatrixFlags = Vector4.Zero; context.UpdateSubresource(in flat, _frameBuffer); }
             context.OMSetBlendState(_blendPremultiplied);
             context.VSSetShader(_vsSprite);
             context.PSSetShader(_psSprite);
             context.VSSetShaderResource(4, _ambient.View);
             context.PSSetShaderResource(5, _keyColors.View);
             context.DrawInstanced(6, (uint)_ambientList.Count, 0, 0);
+            if (flatAmbient) context.UpdateSubresource(in constants, _frameBuffer);
         }
 
         if (notes.Count > 0)
@@ -616,8 +622,6 @@ internal sealed class GpuStageRenderer : IDisposable
         };
     }
 
-    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
-    /// <summary>Where the camera picture lands on this output; false when no camera picture is drawn.</summary>
     /// <summary>
     /// AR-S4 remainder: cuts each note the projected pass draws to the part of it on the picture, using the cut the flat
     /// AR quads make at the horizon (<see cref="ArSceneProjection.TruncateToPicture"/>). A note with nothing on the picture
@@ -638,6 +642,7 @@ internal sealed class GpuStageRenderer : IDisposable
         notes.Keep(kept);
     }
 
+    /// <summary>Where the camera picture lands on this output; false when no camera picture is drawn.</summary>
     private bool TryCameraView(GpuRenderTarget target, GpuLook look, out ArView view)
     {
         view = default;
@@ -647,6 +652,7 @@ internal sealed class GpuStageRenderer : IDisposable
         return view.Valid;
     }
 
+    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
     private Vector4 ComputeArPicture(GpuRenderTarget target, GpuLook look, out Vector4 flags)
     {
         flags = Vector4.Zero;

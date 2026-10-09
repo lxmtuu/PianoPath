@@ -1185,6 +1185,15 @@ internal static partial class VerificationSuite
         var defaultNotes = NotePixels(withoutAr);
         Assert(defaultNotes > 500, $"The default frame must still show its notes over the picture before any of this proves anything ({defaultNotes} note pixels).");
 
+        // ---- the switch reaches the stage's look: over the camera the stage keeps its notes only when they are drawn in perspective
+        settings.ArNotesInPerspective = false;
+        var overCameraFlat = GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
+        settings.ArNotesInPerspective = true;
+        var overCameraPerspective = GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
+        settings.ArNotesInPerspective = false;
+        Assert(!overCameraFlat.ShowNotes, "Over the camera with the switch off the stage must leave its notes out (the flat AR layer draws them).");
+        Assert(overCameraPerspective.ShowNotes, "Over the camera with the switch on the stage must keep its notes: the note pass draws them in perspective.");
+
         // ---- on: every note lands inside the patch ArProjection.TryProject reports for its own rectangle ----
         foreach (var mirror in new[] { false, true })
         {
