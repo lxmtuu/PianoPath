@@ -591,14 +591,15 @@ public partial class MainWindow
         Register(overlay, _cameraStatus, null, "camera overlay status green screen chroma key");
 
         // The AR overlay is its own card: it uses the camera picked above but draws on the real keyboard in the picture.
-        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Play on your real keyboard: the camera is the background, the notes fall onto the real keys, and the keys you press light up with a bar rising from each one. It needs the Direct3D engine and a camera looking at the keys (the one picked above).");
+        var ar = Card(CameraSettingsHost, "AR OVERLAY", "Play on your real keyboard: the camera is the background, song notes follow the marked keys, and pressed keys stay tinted. Optional press trails can extend from held keys. Falling-note trails that have no camera projection are omitted here; ambient petals and stars stay flat on the picture. Needs the Direct3D engine and a camera looking at the keys.");
         Toggle(ar, "AR overlay", nameof(PianoVisualSettings.ArEnabled), "Use the camera as the background and draw the notes and lit keys over your real keyboard. Mark the four corners of the keys once per camera, view, picture size and keyboard size.");
-        Choice(ar, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the notes of the song falling onto the real keys. Perform leaves the song's notes out and shows the keys you press, with a bar rising from each one as you play.",
+        Choice(ar, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's notes falling onto the real keys. Perform leaves the song's notes out and keeps the pressed-key tint; optional press trails are controlled separately below.",
             (ArModes.Learn, "Learn"), (ArModes.Perform, "Perform"));
         SliderRow(ar, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "How solid the falling notes and the lit keys are over the camera picture.");
         SliderRow(ar, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before it sounds a note starts to show above the keys. Longer shows more of the song; shorter keeps the picture calm.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(ar, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the keys as they are.");
+        Toggle(ar, "Live press trails", nameof(PianoVisualSettings.ArLivePressTrails), "Show a bar extending from each key while it is held, fading shortly after release. Off by default to keep streams and calls clear. Turning trails off never disables the key tint above.");
         Toggle(ar, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Notes and bars grow wider the harder the key is struck, instead of every strike having the same width.");
         SliderRow(ar, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a note struck as softly as possible, as a percentage of the full note width.")
             .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
@@ -612,11 +613,14 @@ public partial class MainWindow
         SliderRow(ar, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "How late the camera's picture is, in milliseconds. A key you press lights up this much later, and the notes arrive this much later, so they match the finger in the picture. The sound you hear is never delayed, but a recording with the camera in it starts its sound this much later, so the finger and the sound line up in the file. Zero changes nothing.");
         Choice(ar, "View", nameof(PianoVisualSettings.ArViewProfileId), "Which way the camera looks at the keys: about 45° down from behind the player, straight down at 90° overhead, or the default the app has always used. Every view keeps its own marked key area and the overlay draws only with the one chosen here, so turning the camera means choosing the view that matches it and marking the keys for that view — an unmarked view asks to be marked instead of using the corners marked at another angle.",
             ArViewProfileChoices());
-        Toggle(ar, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Draw the notes and the stage's particles through the camera's view of the keys: a note far from the camera is smaller, and a note reaching the horizon is cut off there. Off keeps the flat notes the overlay has always drawn. Needs the Direct3D engine.");
+        Toggle(ar, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Draw song notes through the camera's view of the keys: a note far from the camera is smaller, and a note reaching the horizon is cut off there. Falling-note trail effects are currently omitted over the camera rather than drawn flat out of alignment; petals and shooting stars remain flat ambient layers. Other particles and transients are not yet projected (planned for AR-S5). Off keeps the flat notes. Needs the Direct3D engine.");
         SliderRow(ar, "Minimum length, share of width", nameof(PianoVisualSettings.ArNoteMinScale), ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, "The shortest a note is drawn, as a share of its own width (Minimum length in the shape card is in pixels and applies to every note). A note struck very briefly is lengthened to this, and the next note on the same key cuts it short, so quick repeats stay separate. Zero keeps every note at its own length. Only with notes in perspective, and not on Lite.")
             .VisibleWhen = () => _visualSettings.ArNotesInPerspective;
-        Choice(ar, "Quality", nameof(PianoVisualSettings.ArQuality), "How much the overlay draws over the keys. Lite is the flat keys, notes and press bars the overlay has always drawn; Standard adds the key and impact glows; Ultra adds pulses, particles and the other flashy effects. Notes and keys are never dropped, whichever tier you pick.",
+        Choice(ar, "Quality", nameof(PianoVisualSettings.ArQuality), "How much the overlay draws over the keys. Lite leaves the real keys unchanged; Standard and Ultra can add key tint. Ultra's planned pulses and particles are not wired into the camera overlay yet (AR-S5). Notes and press bars are never dropped.",
             (ArQualityTiers.LiteName, "Lite"), (ArQualityTiers.StandardName, "Standard"), (ArQualityTiers.UltraName, "Ultra"));
+        ButtonRow(ar, ("OPEN TRANSPARENT AR OUTPUT", OpenArAlphaOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;
+        Note(ar, "The transparent output omits the camera picture and stage background; capture its window in OBS. Ambient petals and shooting stars stay flat in screen space, not perspective-projected. F11 toggles full screen; Esc closes it.")
+            .VisibleWhen = () => _arPlan.ArLayer;
         ButtonRow(ar, ("CALIBRATE", CalibrateAr_Click, "IconKeyboard"), ("RESET CALIBRATION", ResetArCalibration_Click, "IconReset"), ("MEASURE DELAY", MeasureArDelay_Click, "IconMotion"));
         Note(ar, "Measure how late the camera's picture is: press about twenty keys on your keyboard while the camera watches your hands, and the camera delay is set to match.");
         _arStatus = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 6, 0, 0), TextWrapping = TextWrapping.Wrap };
@@ -696,7 +700,7 @@ public partial class MainWindow
         var window = new CalibrationWindow(picture!, _visualSettings.KeyboardLayoutChoice, _visualSettings.CameraMirror,
             () => CalibrationPicture.Capture(frames, _visualSettings.CameraMirror && !_arRawFrames),
             before.Calibration is { } known ? KeyboardOrientations.Of(known.Corners, known.ImageWidth, _visualSettings.CameraMirror) : null,
-            before.Profile);
+            before.Profile, before.Calibration?.Corners);
         if (show is null && IsLoaded) window.Owner = this;
         bool? accepted;
         _calibrating = true;                     // the camera is left alone while the keys are being marked
@@ -1997,7 +2001,7 @@ public partial class MainWindow
                 : Loc.T("Salamander Grand is not loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
         // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
-        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null) && !(sequence && _visualSettings.RecordingTransparent);
+        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null || _gpuArAlphaOutputWindow is not null) && !(sequence && _visualSettings.RecordingTransparent);
         var engine = gpuTake
             ? Loc.T("Frames are rendered by the GPU stage at exactly this size.")
             : sequence && _visualSettings.RecordingTransparent && _gpuLoop is not null

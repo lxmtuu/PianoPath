@@ -237,6 +237,10 @@ internal sealed class CalibrationWindow : Window
     private readonly TextBlock _hint, _note;
     private readonly Button _done, _undo, _startOver;
     private readonly ComboBox _orientation;
+    private readonly Slider _rotationSlider;
+    private readonly TextBlock _rotationText;
+    private double _rotationApplied;
+    private bool _syncRotationSlider;
 
     private sealed record OrientationChoice(KeyboardOrientation Value, string Caption);
     private readonly Func<CalibrationPicture?>? _retake;
@@ -248,7 +252,9 @@ internal sealed class CalibrationWindow : Window
     /// <param name="retake">Gives a newer picture of the camera, or null when it has none.</param>
     /// <param name="orientation">How the keyboard looks in the picture to start with; when not given, as upright in the picture the camera delivers.</param>
     /// <param name="profile">The view of the camera the keys are being marked for, named in the title and the line above the buttons so nobody marks the keys for the angle the camera is not at.</param>
-    internal CalibrationWindow(CalibrationPicture picture, KeyboardLayout layout, bool mirror, Func<CalibrationPicture?>? retake = null, KeyboardOrientation? orientation = null, ArCalibrationProfile? profile = null)
+    /// <param name="initialCorners">A saved key area for this camera and view, when editing it rather than starting over.</param>
+    internal CalibrationWindow(CalibrationPicture picture, KeyboardLayout layout, bool mirror, Func<CalibrationPicture?>? retake = null, KeyboardOrientation? orientation = null, ArCalibrationProfile? profile = null,
+        IReadOnlyList<(double X, double Y)>? initialCorners = null)
     {
         _retake = retake;
         Title = profile is null ? Loc.T("Mark the keys") : Loc.F("Mark the keys for the {0} view", Loc.T(profile.Name));
@@ -262,6 +268,7 @@ internal sealed class CalibrationWindow : Window
         wizard.SetViewport(0, 0, mirror);                        // the picture is shown turned round or not from the start, whatever the orientation means for it
         var start = orientation ?? KeyboardOrientations.Default(mirror);
         wizard.SetOrientation(start);
+        if (initialCorners is { Count: 4 }) wizard.LoadCorners(initialCorners);
         _surface = new CalibrationSurface(picture, wizard, mirror);
         _hint = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, MinHeight = 38, Margin = new Thickness(16, 12, 16, 8), Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)) };
         _note = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(255, 190, 120)), Margin = new Thickness(0, 2, 0, 0) };
@@ -274,7 +281,7 @@ internal sealed class CalibrationWindow : Window
         left.Children.Add(info); left.Children.Add(_note);
 
         var newPicture = MakeButton(Loc.T("New picture"), false); newPicture.Click += (_, _) => Retake();
-        _startOver = MakeButton(Loc.T("Start over"), false); _startOver.Click += (_, _) => { _surface.Wizard.Clear(); _surface.Refresh(); };
+        _startOver = MakeButton(Loc.T("Start over"), false); _startOver.Click += (_, _) => { _surface.Wizard.Clear(); ResetRotation(); _surface.Refresh(); };
         _undo = MakeButton(Loc.T("Undo"), false); _undo.Click += (_, _) => { _surface.Wizard.Undo(); _surface.Refresh(); };
         var cancel = MakeButton(Loc.T("Cancel"), false); cancel.IsCancel = true;
         _done = MakeButton(Loc.T("Done"), true); _done.IsDefault = true; _done.Click += (_, _) => Accept();
@@ -297,9 +304,23 @@ internal sealed class CalibrationWindow : Window
         orientationRow.Children.Add(new TextBlock { Text = Loc.T(CalibrationHints.OrientationTitle), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) });
         orientationRow.Children.Add(_orientation);
 
+        var rotationRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 8), VerticalAlignment = VerticalAlignment.Center };
+        rotationRow.Children.Add(new TextBlock { Text = Loc.T(CalibrationHints.RotationTitle), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) });
+        _rotationSlider = new Slider
+        {
+            Minimum = -180, Maximum = 180, Value = 0, Width = 380, Height = 28, IsMoveToPointEnabled = true,
+            TickFrequency = 15, TickPlacement = System.Windows.Controls.Primitives.TickPlacement.BottomRight,
+            IsSnapToTickEnabled = false, IsEnabled = wizard.IsComplete, ToolTip = Loc.T(CalibrationHints.RotationTip)
+        };
+        _rotationSlider.ValueChanged += RotationSlider_ValueChanged;
+        _rotationText = new TextBlock { Text = "0.0°", Width = 58, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)) };
+        rotationRow.Children.Add(_rotationSlider);
+        rotationRow.Children.Add(_rotationText);
+
         var root = new DockPanel();
         DockPanel.SetDock(_hint, Dock.Top); root.Children.Add(_hint);
         DockPanel.SetDock(orientationRow, Dock.Top); root.Children.Add(orientationRow);
+        DockPanel.SetDock(rotationRow, Dock.Top); root.Children.Add(rotationRow);
         DockPanel.SetDock(bar, Dock.Bottom); root.Children.Add(bar);
         root.Children.Add(new Border { Margin = new Thickness(16, 0, 16, 0), BorderBrush = new SolidColorBrush(Color.FromRgb(79, 65, 97)), BorderThickness = new Thickness(1), Child = _surface });
         Content = root;
@@ -316,6 +337,9 @@ internal sealed class CalibrationWindow : Window
     /// <summary>The choice of how the keyboard looks in the picture.</summary>
     internal ComboBox OrientationBox => _orientation;
 
+    /// <summary>The control that turns all four corners together.</summary>
+    internal Slider RotationSlider => _rotationSlider;
+
     /// <summary>The calibration the person marked; null until Done is pressed.</summary>
     internal ArCalibration? Result { get; private set; }
 
@@ -325,14 +349,44 @@ internal sealed class CalibrationWindow : Window
     /// <summary>The line above the picture as it reads now.</summary>
     internal string HintText => _hint.Text;
 
+    private void RotationSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_syncRotationSlider) return;
+        var target = e.NewValue;
+        if (!Wizard.RotateGrid(target - _rotationApplied))
+        {
+            _syncRotationSlider = true;
+            _rotationSlider.Value = _rotationApplied;
+            _syncRotationSlider = false;
+            _note.Text = Loc.T(CalibrationHints.RotationOutOfBounds);
+            return;
+        }
+        _rotationApplied = target;
+        _rotationText.Text = target.ToString("+0.0;-0.0;0.0", CultureInfo.CurrentCulture) + "°";
+        _note.Text = "";
+        _surface.Refresh();
+    }
+
+    private void ResetRotation()
+    {
+        _rotationApplied = 0;
+        _syncRotationSlider = true;
+        _rotationSlider.Value = 0;
+        _syncRotationSlider = false;
+        _rotationText.Text = "0.0°";
+        _note.Text = "";
+    }
+
     private void RefreshText()
     {
+        if (Wizard.Points.Count == 0 && Math.Abs(_rotationApplied) > 1e-12) ResetRotation();
         var text = Loc.T(CalibrationHints.ForStep(Wizard));
         if (_hint.Text != text) _hint.Text = text;
         _hint.Foreground = Wizard.Step == WizardStep.Fix ? FixText : NormalText;
         _done.IsEnabled = Wizard.CanFinish;
         _undo.IsEnabled = Wizard.Points.Count > 0 && !Wizard.IsDragging;
         _startOver.IsEnabled = Wizard.Points.Count > 0;
+        _rotationSlider.IsEnabled = Wizard.IsComplete;
         if (_note.Text.Length > 0 && Wizard.IsDragging) _note.Text = "";
     }
 

@@ -330,11 +330,11 @@ internal static partial class VerificationSuite
         // still lights up, and a bar leaves it along the keyboard's own direction — the direction the song's notes
         // come from — stretching as the key is held. Perform mode keeps the bar: it leaves out the notes of the song
         // to come, not the mark of what the player just played.
-        GpuStageFeed ArFeed(int[] pitches, bool press)
+        GpuStageFeed ArFeed(int[] pitches, bool press, bool showTrails = true, float keyLight = .6f)
         {
             var feed = MakeFeed(flatInput);
             feed.SetState([], 0, false, new HashSet<int>(pitches));
-            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false);   // Perform: the song's notes are left out
+            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false, ShowLiveTrails: showTrails);   // Perform: song notes are left out; press trails are independent
             if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
             return feed;
         }
@@ -354,6 +354,13 @@ internal static partial class VerificationSuite
         var withBars = Draw(ArFeed([60, 61], press: true), 30);
         Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Quads == 5,
             $"Two keys pressed should light their three key rectangles and draw one bar each ({withBars.Quads} quads: {withBars.Keys} key, {withBars.Bars} bar).");
+        var trailsOff = Draw(ArFeed([60, 61], press: true, showTrails: false), 30);
+        var trailsOffNoTint = Draw(ArFeed([60, 61], press: false, showTrails: false, keyLight: 0), 30);
+        Assert(trailsOff.Bars == 0 && trailsOff.Keys == 3 && trailsOff.Quads == 3,
+            $"Turning live press trails off must remove only their bars, leaving the same three lit key patches ({trailsOff.Quads} quads: {trailsOff.Keys} keys, {trailsOff.Bars} bars).");
+        var tintedKey = KeyPoint(layout.CenterX(60), .85);
+        Assert(Probe(trailsOff.Pixels, trailsOffNoTint.Pixels, tintedKey) > 25,
+            "The key tint must still be visible when press trails are disabled.");
         int Bar((double X, double Y) at) => Probe(withBars.Pixels, withoutBars.Pixels, at);
         var behindC4 = KeyPoint(layout.CenterX(60), -.05); var behindCs4 = KeyPoint(layout.CenterX(61), -.05);
         Assert(Bar(behindC4) > 25 && Bar(behindCs4) > 25,
@@ -385,7 +392,7 @@ internal static partial class VerificationSuite
         });
         Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Quads == 5,
             $"A key just let go keeps its bar for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} key, {fadingAfterRelease.Bars} bar five frames after the release).");
-        Results.Add("PASS ar live keys: the keys the player presses draw their own bars behind them, white or black, stretching along the keyboard as they are held and stopping at the look-ahead, gone a moment after the key is let go while the lit key stays; nothing is drawn over the key, behind a key that was not pressed, or beyond the reach — and Perform mode keeps them.");
+        Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
         Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
@@ -905,6 +912,14 @@ internal static partial class VerificationSuite
                     "Choosing another orientation should read the same four corners another way and move none of them.");
                 w.OrientationBox.SelectedValue = upright;
                 Assert(w.Wizard.Orientation == upright && w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust, "Choosing the first orientation again should bring the first reading back.");
+                var unrotatedPreview = w.Wizard.PreviewKeys().First(key => key.Pitch == 60).Corners;
+                w.RotationSlider.Value = 12;
+                var rotatedPreview = w.Wizard.PreviewKeys().First(key => key.Pitch == 60).Corners;
+                Assert(w.RotationSlider.IsEnabled && rotatedPreview.Zip(unrotatedPreview).Any(pair => Math.Abs(pair.First.X - pair.Second.X) > 1 || Math.Abs(pair.First.Y - pair.Second.Y) > 1)
+                        && w.DoneButton.IsEnabled && w.Wizard.Points.Count == 4,
+                    "The rotation control should turn the whole keyboard grid while keeping all four corners usable and Done enabled.");
+                w.RotationSlider.Value = 0;
+                Assert(SameCorners(w.Wizard.UsableCorners, truth), "Returning the rotation control to zero should restore the same ordered corners.");
                 w.Accept();
                 return w.Result is not null;
             });
@@ -913,6 +928,25 @@ internal static partial class VerificationSuite
                 $"Four clicks and Done should calibrate this camera with the corners that were marked on the picture as delivered (mirror {mirror}).");
             Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
                 "The calibration should be stored for this camera, view, picture size and keyboard size.");
+            Open(w =>
+            {
+                Arrange(w);
+                Assert(SameCorners(w.Wizard.Points, truth) && SameCorners(w.Wizard.UsableCorners, truth) && w.RotationSlider.IsEnabled,
+                    "Opening the already marked camera and view should load the saved, ordered corners for adjustment.");
+                var savedOrientation = w.Wizard.Orientation;
+                var alternateOrientation = savedOrientation == KeyboardOrientation.LowRightFarBottom ? KeyboardOrientation.Upright : KeyboardOrientation.LowRightFarBottom;
+                w.OrientationBox.SelectedValue = alternateOrientation;
+                Assert(!SameCorners(w.Wizard.UsableCorners, truth), "Changing orientation on a loaded, ordered calibration should relabel its corners rather than silently ignoring the choice.");
+                w.OrientationBox.SelectedValue = savedOrientation;
+                Assert(SameCorners(w.Wizard.UsableCorners, truth), "Restoring the saved orientation should restore the ordered corner mapping.");
+                w.RotationSlider.Value = -6;
+                Assert(!SameCorners(w.Wizard.Points, truth), "A loaded calibration should rotate as one ordered key grid.");
+                w.RotationSlider.Value = 0;
+                w.Accept();
+                return w.Result is not null;
+            });
+            Assert(SameCorners(window.ArCalibration.Current?.Corners, truth),
+                "Saving the restored zero-angle adjustment should keep the saved calibration's corner order and positions.");
         }
 
         // ---- corners that cannot be used keep Done shut ----
@@ -1135,11 +1169,11 @@ internal static partial class VerificationSuite
         Array.Fill(grey, (byte)90, 0, 1280 * 720 * 4);
         for (var i = 3; i < grey.Length; i += 4) grey[i] = 255;
         ring.Publish(slot, 1280, 720, Stopwatch.GetTimestamp());
-        GpuStageFeed MakeFeed(bool mirror, GpuArInput? ar, IReadOnlyList<NoteEvent>? song = null)
+        GpuStageFeed MakeFeed(bool mirror, GpuArInput? ar, IReadOnlyList<NoteEvent>? song = null, bool overCamera = false)
         {
             var feed = new GpuStageFeed();
             feed.SetStageHeight(height);
-            feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205));
+            feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: overCamera));
             feed.SetDeterministicState(song ?? notes, 10, true, new HashSet<int>());
             feed.SetDeterministicBeatPulse(0);
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, mirror, 1f);
@@ -1175,7 +1209,23 @@ internal static partial class VerificationSuite
         }
 
         using var renderer = GpuStageRenderer.Create(forceWarp: true);
-        byte[] Render(GpuStageFeed feed) => GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
+        byte[] Render(GpuStageFeed feed, bool alphaOutput = false) => GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _, null, 20260930, alphaOutput);
+        GpuStageFeed ProjectedPressFeed(bool showTrails, float keyLight = .6f)
+        {
+            var liveSettings = settings.Clone();
+            liveSettings.ArNotesInPerspective = true;
+            var feed = new GpuStageFeed();
+            feed.SetStageHeight(height);
+            feed.SetLook(GpuLook.From(liveSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
+            feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int> { 60 });
+            feed.SetDeterministicBeatPulse(0);
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
+            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showTrails);
+            feed.LiveNote(60, true, .9f);
+            return feed;
+        }
+        byte[] RenderProjectedPress(bool showTrails, float keyLight = .6f) =>
+            GpuRenderLoop.RenderFrames(renderer, ProjectedPressFeed(showTrails, keyLight), width, height, 30, 1 / 60.0, false, out _, null, 20260930);
 
         // ---- default off: the map in the constants must not move one pixel ------------------------------
         var withoutAr = Render(MakeFeed(false, null));
@@ -1184,6 +1234,24 @@ internal static partial class VerificationSuite
             "AR-S4b default off: with the whole scene→image map in the frame constants (the AR layer at zero opacity, the note branch's flag down) the frame must be byte-identical to one with no AR input at all — not one pixel may change.");
         var defaultNotes = NotePixels(withoutAr);
         Assert(defaultNotes > 500, $"The default frame must still show its notes over the picture before any of this proves anything ({defaultNotes} note pixels).");
+
+        // The player's live press bar follows the same independent switch in the projected note pass; the key tint stays on.
+        var projectedPressOn = RenderProjectedPress(showTrails: true);
+        var projectedPressOff = RenderProjectedPress(showTrails: false);
+        var projectedPressNoTint = RenderProjectedPress(showTrails: false, keyLight: 0);
+        var changedPressPixels = 0;
+        for (var i = 0; i < projectedPressOn.Length; i += 4)
+            if (Math.Max(Math.Abs(projectedPressOn[i] - projectedPressOff[i]), Math.Max(Math.Abs(projectedPressOn[i + 1] - projectedPressOff[i + 1]), Math.Abs(projectedPressOn[i + 2] - projectedPressOff[i + 2]))) > 8)
+                changedPressPixels++;
+        Assert(changedPressPixels > 100 && renderer.ArLiveBarCount == 0,
+            $"In projected mode, enabling live press trails should add visible projected pixels without duplicating flat AR bars ({changedPressPixels} changed pixels, {renderer.ArLiveBarCount} flat bars).");
+        var keyPicture = calibration.ToPicture(scene.Keys.CenterX(60), .85);
+        var keyOutput = new ArView(1280, 720, width, height, PictureFit.Fit, false).ToOutput(keyPicture.X, keyPicture.Y);
+        var keyIndex = ((int)Math.Floor(keyOutput.Y) * width + (int)Math.Floor(keyOutput.X)) * 4;
+        var retainedKeyTint = Math.Max(Math.Abs(projectedPressOff[keyIndex] - projectedPressNoTint[keyIndex]),
+            Math.Max(Math.Abs(projectedPressOff[keyIndex + 1] - projectedPressNoTint[keyIndex + 1]), Math.Abs(projectedPressOff[keyIndex + 2] - projectedPressNoTint[keyIndex + 2])));
+        Assert(retainedKeyTint > 20,
+            $"Turning projected press trails off must leave the independently controlled key tint on ({retainedKeyTint} channel levels at the held key).");
 
         // ---- the switch reaches the stage's look: over the camera the stage keeps its notes only when they are drawn in perspective
         settings.ArNotesInPerspective = false;
@@ -1321,8 +1389,114 @@ internal static partial class VerificationSuite
                 for (var c = 0; c < 3; c++) spriteDiff = Math.Max(spriteDiff, Math.Abs(visibleFrame[i + c] - plain[i + c]));
             }
         Assert(spriteDiff >= 60, $"The sprite above the keys must change the picture under its patch (largest channel change {spriteDiff}).");
-        Results.Add($"PASS AR note projection (AR-S4 remainder): Perform drops {performDrop} note pixels; a minimum note length of two widths lengthens the short notes ({NotePixels(shortPlain)} → {NotePixels(shortMin)}); a sprite above the keys changes the picture by {spriteDiff}, and one past the horizon is culled whole.");
 
+        // Trace the Neon Violet-style Glow trail separately from the intentionally flat ambient pass: a trail is generated
+        // in scene coordinates, but while the camera is active it must not be painted there without its own projection.
+        var savedTrailStyle = settings.FallingTrail;
+        var savedPerspective = settings.ArNotesInPerspective;
+        settings.ArNotesInPerspective = true;
+        settings.FallingTrail = "Glow";
+        var flatTrailCandidate = MakeFeed(false, projectedFeed, overCamera: true);
+        var trailInput = new GpuFrameInput();
+        flatTrailCandidate.Capture(trailInput, GpuStageFeed.Now);
+        var trailSimulation = new GpuStageSimulation(20260930);
+        trailSimulation.Step(1 / 60.0, trailInput, flatTrailCandidate, scene.Width);
+        var trailNoteInstances = new GpuInstanceList<GpuNoteInstance>(32);
+        trailSimulation.BuildNotes(trailInput, scene, trailNoteInstances, liveTrails: false);
+        var trailAmbient = new GpuInstanceList<GpuSpriteInstance>(128);
+        trailSimulation.BuildAmbient(trailInput.Look, scene, trailAmbient);
+        Assert(trailSimulation.NoteTrailCount > 0 && trailAmbient.Count == 0,
+            $"The fixture should create scene-space note trails and then omit them from the flat camera ambient pass ({trailSimulation.NoteTrailCount} source trails, {trailAmbient.Count} ambient sprites).");
+        settings.FallingTrail = "None";
+        var noTrailCandidate = MakeFeed(false, projectedFeed, overCamera: true);
+        settings.FallingTrail = savedTrailStyle;
+        settings.ArNotesInPerspective = savedPerspective;
+        var trailCandidateFrame = Render(flatTrailCandidate);
+        var noTrailCandidateFrame = Render(noTrailCandidate);
+        Assert(trailCandidateFrame.AsSpan().SequenceEqual(noTrailCandidateFrame),
+            "A Glow note trail in scene coordinates must not appear as a flat, misaligned streak over the camera until the effect itself is projected.");
+
+        // ---- AR-S6.1: a real transparent, premultiplied BGRA frame contains effects only, never the camera ----
+        var alphaFeed = MakeFeed(false, projectedFeed);
+        var alphaPixels = Render(alphaFeed, alphaOutput: true);
+        var alphaMailbox = new GpuAlphaOutputTap(width, height, 60);
+        alphaPixels.AsSpan().CopyTo(alphaMailbox.BackBuffer(width, height));
+        alphaMailbox.Publish();
+        var tappedAlphaPixels = new byte[alphaPixels.Length];
+        Assert(alphaMailbox.TryRead(framePixels => Buffer.BlockCopy(framePixels, 0, tappedAlphaPixels, 0, tappedAlphaPixels.Length))
+                && alphaPixels.AsSpan().SequenceEqual(tappedAlphaPixels),
+            "The premultiplied WARP frame must survive the same double-buffered mailbox the OBS window consumes.");
+        const int backgroundX = 16, backgroundY = 16;
+        var backgroundIndex = (backgroundY * width + backgroundX) * 4;
+        Assert(Math.Abs(plain[backgroundIndex] - 90) <= 4 && Math.Abs(plain[backgroundIndex + 1] - 90) <= 4 && Math.Abs(plain[backgroundIndex + 2] - 90) <= 4,
+            "The ordinary AR composite should still show the grey camera outside the notes.");
+        Assert(alphaPixels[backgroundIndex] == 0 && alphaPixels[backgroundIndex + 1] == 0 && alphaPixels[backgroundIndex + 2] == 0 && alphaPixels[backgroundIndex + 3] == 0,
+            "The transparent output must omit the camera and leave an untouched pixel fully transparent.");
+        var alphaPixelCount = 0;
+        var premultiplied = true;
+        for (var i = 0; i < alphaPixels.Length; i += 4)
+        {
+            if (alphaPixels[i + 3] > 0) alphaPixelCount++;
+            if (alphaPixels[i] > alphaPixels[i + 3] + 1 || alphaPixels[i + 1] > alphaPixels[i + 3] + 1 || alphaPixels[i + 2] > alphaPixels[i + 3] + 1) premultiplied = false;
+        }
+        Assert(alphaPixelCount > 500, $"The transparent AR frame must contain the projected note bodies and their light ({alphaPixelCount} non-transparent pixels).");
+        Assert(premultiplied, "Every transparent-output BGRA pixel must be premultiplied for WPF/DWM compositing.");
+        var alphaInput = new GpuFrameInput();
+        alphaFeed.Capture(alphaInput, GpuStageFeed.Now);
+        var alphaSimulation = new GpuStageSimulation(20260930);
+        alphaSimulation.Step(1 / 60.0, alphaInput, alphaFeed, scene.Width);
+        var alphaNotes = new GpuInstanceList<GpuNoteInstance>(32);
+        alphaSimulation.BuildNotes(alphaInput, scene, alphaNotes);
+        Assert(alphaNotes.Count > 0, "The alpha-output fixture should contain projected notes.");
+        var alphaRect = alphaNotes.Span[0].Rect;
+        Assert(ArSceneProjection.TryProjectRect(calibration, flatView, frame,
+                alphaRect.X, alphaRect.X + alphaRect.Z, alphaRect.Y, alphaRect.Y + alphaRect.W, out var alphaPatch, out _, out _),
+            "The first note should have a projected body to sample in the transparent output.");
+        var alphaCentre = Blend(alphaPatch, .5, .5);
+        var alphaCentreX = (int)Math.Clamp(Math.Floor(alphaCentre.X), 0, width - 1);
+        var alphaCentreY = (int)Math.Clamp(Math.Floor(alphaCentre.Y), 0, height - 1);
+        var alphaCentreIndex = (alphaCentreY * width + alphaCentreX) * 4;
+        Assert(alphaPixels[alphaCentreIndex + 3] >= 240,
+            $"The projected note body should carry visible alpha at its patch centre ({alphaCentreX},{alphaCentreY}: {alphaPixels[alphaCentreIndex + 3]}).");
+
+        // A perspective-enabled AR frame must keep ambient petals flat on the camera/output plane.
+        settings.ShowNotes = false;
+        settings.ShowPetals = false;
+        settings.PetalAmount = 28;
+        settings.ArNotesInPerspective = false;
+        var ambientInput = new GpuArInput(calibration, ArNoteStyle.Default, 0f, KeyLight: 0, ShowNotes: false, ProjectedNotes: false);
+        var noAmbient = Render(MakeFeed(false, ambientInput, overCamera: true), alphaOutput: true);
+        settings.ShowPetals = true;
+        var ambientFlat = Render(MakeFeed(false, ambientInput, overCamera: true), alphaOutput: true);
+        var ambientPixelCount = 0;
+        for (var i = 3; i < ambientFlat.Length; i += 4) if (ambientFlat[i] > 0) ambientPixelCount++;
+        Assert(renderer.AmbientCount > 0 && ambientPixelCount > 0 && !noAmbient.AsSpan().SequenceEqual(ambientFlat),
+            "The flat-camera assertion needs an actual ambient layer with visible pixels, not an empty pass.");
+        settings.ArNotesInPerspective = true;
+        var ambientProjected = Render(MakeFeed(false, ambientInput with { ProjectedNotes = true }, overCamera: true), alphaOutput: true);
+        Assert(ambientFlat.AsSpan().SequenceEqual(ambientProjected),
+            "Turning on note perspective must not project ambient petals: their transparent AR output remains pixel-identical and flat.");
+
+        // Shooting stars share the ambient pass but render as additive light (alpha zero in the scene), so
+        // give the deterministic simulation enough time to put several meteors on screen and exercise alpha coverage too.
+        settings.ShowPetals = false;
+        settings.ShowBackground = true;
+        settings.ShootingStars = true;
+        settings.ShootingStarsAmount = 100;
+        var starsInput = ambientInput with { ProjectedNotes = false };
+        byte[] RenderAmbientStars(GpuArInput arInput) => GpuRenderLoop.RenderFrames(renderer, MakeFeed(false, arInput, overCamera: true), width, height,
+            60, 1 / 60.0, false, out _, null, 20260930, alphaOutput: true);
+        var starsFlat = RenderAmbientStars(starsInput);
+        var starPixelCount = 0;
+        for (var i = 3; i < starsFlat.Length; i += 4) if (starsFlat[i] > 0) starPixelCount++;
+        Assert(renderer.AmbientCount > 0 && starPixelCount > 0,
+            "The shooting-star fixture must contain meteor pixels with alpha, not only invisible additive RGB.");
+        var starsProjected = RenderAmbientStars(starsInput with { ProjectedNotes = true });
+        Assert(starsFlat.AsSpan().SequenceEqual(starsProjected),
+            "Turning on note perspective must not project shooting stars: their transparent AR output remains pixel-identical and flat.");
+
+        Results.Add($"PASS AR note projection (AR-S4 remainder): Perform drops {performDrop} note pixels; a minimum note length of two widths lengthens the short notes ({NotePixels(shortPlain)} → {NotePixels(shortMin)}); a sprite above the keys changes the picture by {spriteDiff}, and one past the horizon is culled whole.");
         Results.Add($"PASS AR note projection (AR-S4b): default off the {width}×{height} frame is byte-identical with the whole map in the constants and without any AR input ({defaultNotes} note pixels unchanged); switched on, 3 notes on the sample keyboard land inside the ArProjection patches of their own rectangles, mirrored and not, with no flat AR note quads of their own; min-scale floor reaches the shader without moving them.");
+        Results.Add($"PASS AR alpha-effects output (AR-S6.1): WARP readback has {alphaPixelCount} premultiplied note/effect pixels, opaque note bodies, and a fully transparent camera-free background; {ambientPixelCount} flat petal pixels and {starPixelCount} flat shooting-star pixels are unchanged when note perspective is enabled.");
     }
 }

@@ -48,8 +48,10 @@ internal sealed partial class GpuStageSimulation
         var ambientCount = list.Count - ambientStart;
         if (ambientCount > 0 && ambientDensity < 1f)
             list.RetainFraction(ambientStart, ambientCount, ambientDensity);
-        // Note trails remain outside the thinned ambient range and keep their normal instance count.
-        foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail);
+        // Unlike petals and stars, a note trail is aligned to scene-space note coordinates. Until that effect has its own
+        // scene-to-image projection, drawing it in this flat pass over a camera would put the glow in the wrong place.
+        if (!look.OverCamera)
+            foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail);
     }
 
     private static void AddLanes(GpuInstanceList<GpuSpriteInstance> list, GpuSceneLayout layout)

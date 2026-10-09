@@ -27,10 +27,11 @@ internal struct GpuArQuad
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
 /// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
-/// <param name="ProjectedNotes">AR-S4b/AR-S4: the stage's own note pass draws the notes (and the sprite pass the particles) through the scene→image map (Gpu/StageShaders.hlsl <c>VsNote</c>, <c>VsSprite</c>) instead of this layer keeping flat note and live-bar quads of its own. Off by default: a frame that does not ask for the map draws exactly what it drew before AR-S4b.</param>
+/// <param name="ProjectedNotes">AR-S4b/AR-S4: the stage's own note pass draws song notes and live bars through the scene→image map (Gpu/StageShaders.hlsl <c>VsNote</c>) instead of this layer keeping flat note and bar quads. Stage particles/transients are not yet enabled over the camera (AR-S5). Off by default: a frame that does not ask for the map draws exactly what it drew before AR-S4b.</param>
 /// <param name="MinAspect">AR-S4: the minimum note length as a fraction of the note's width (Camera/ArNoteMinimum.cs), applied to the notes the projected pass draws; 0 keeps every note at its own length.</param>
 /// <param name="MinScalePx">The smallest magnification the projected note pass draws with, output pixels per scene DIP (the shader's <c>ArMatrixFlags.z</c>): a note that would collapse under a pixel is drawn at this floor instead. 0 draws every note at the map's own magnification.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinScalePx = 0, float MinAspect = 0);
+/// <param name="ShowLiveTrails">Draw bars for keys the player presses, in flat or projected mode; key tint is separate.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinScalePx = 0, float MinAspect = 0, bool ShowLiveTrails = false);
 
 /// <summary>Turns the song's notes at this moment into quads for the AR pass.</summary>
 internal sealed class GpuArLayer
@@ -101,12 +102,11 @@ internal sealed class GpuArLayer
                 quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity, new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
             }
         }
-        // the keys under the player's own fingers, drawn over the notes of the song as the stage draws its live trails.
-        // Lite keeps the bar's colour flat (no velocity tint), which is what the overlay has always done.
-        if (projectedNotes) return;                 // the bars are the note pass's job now, like the notes
+        // The keys under the player's own fingers keep their tint above; their growing bars are an independent option.
+        // In perspective mode the note pass owns those bars, so the flat overlay must not add a second copy.
+        if (!ar.ShowLiveTrails || projectedNotes || live.Count == 0) return;
         var velocityTint = ar.Quality != ArQualityTier.Lite && look.VelocityColor && look.VelocityColorAmount > 0;
         var velocityAmount = velocityTint ? look.VelocityColorAmount : 0;
-        if (live.Count == 0) return;
         ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
         foreach (var bar in _liveBars)
         {

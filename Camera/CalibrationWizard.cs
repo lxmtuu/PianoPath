@@ -129,6 +129,12 @@ internal sealed class CalibrationWizard
         ApplyOrientation();
     }
 
+    /// <summary>Loads a saved set of corners into the adjustment step, preserving its keyboard-coordinate order.</summary>
+    internal bool LoadCorners(IReadOnlyList<(double X, double Y)> corners) => _editor.LoadCorners(corners);
+
+    /// <summary>Rotates the whole marked key grid in the picture plane; positive angles turn clockwise on screen.</summary>
+    internal bool RotateGrid(double degrees) => _editor.Rotate(degrees);
+
     /// <summary>The orientation is as seen on the screen and the editor works on the picture as delivered, which the screen shows turned round left to right when mirrored.</summary>
     private void ApplyOrientation() => _editor.SetFlips(_orientation.LowOnRight() != _view.Mirror, _orientation.FarAtBottom());
 

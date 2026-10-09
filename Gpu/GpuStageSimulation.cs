@@ -88,6 +88,7 @@ internal sealed partial class GpuStageSimulation
     internal double Time => _time;
     internal int ParticleCount => _count;
     internal int LiveTrailCount => _trails.Count;
+    internal int NoteTrailCount => _noteTrails.Count;
 
     /// <summary>
     /// The keys the player is pressing, or has just let go of, one entry per live trail, written where the trails are
@@ -466,12 +467,12 @@ internal sealed partial class GpuStageSimulation
         return _nextOfPitch;
     }
 
-    /// <summary>Song notes and live trails as SDF capsules.</summary>
     /// <summary>
     /// Fills <paramref name="notes"/> for the frame: the song's notes (unless <paramref name="songNotes"/> is off, which
-    /// the AR overlay asks for in Perform mode) and the live trails of the keys the player holds, which are always drawn.
+    /// the AR overlay asks for in Perform mode) and, when <paramref name="liveTrails"/> is on, the live trails of the keys the player holds.
     /// </summary>
-    internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes, bool songNotes = true, bool onStage = true, float minAspect = 0)
+    /// <param name="liveTrails">Whether player press bars are included; key tint is controlled separately.</param>
+    internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes, bool songNotes = true, bool onStage = true, float minAspect = 0, bool liveTrails = true)
     {
         notes.Clear();
         _noteTrails.Clear();
@@ -538,7 +539,7 @@ internal sealed partial class GpuStageSimulation
             }
             catch (ArgumentOutOfRangeException) { }
         }
-        foreach (var trail in _trails)
+        if (liveTrails) foreach (var trail in _trails)
         {
             var x = layout.X(trail.Pitch) - noteWidth / 2;
             var color = look.NoteColor(trail.Pitch, 0);

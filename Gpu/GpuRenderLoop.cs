@@ -18,9 +18,9 @@ namespace PianoPath;
 /// dispatcher would put every GPU stall directly in front of the next MIDI note. Here the dispatcher
 /// only posts state into <see cref="GpuStageFeed"/> (a short lock) and the loop pulls it once per frame,
 /// so a heavy frame costs frame rate, never input latency.</para>
-/// <para><b>Outputs.</b> The loop can feed two outputs from one simulation step: the stage window's swap
-/// chain (flip-discard, tearing-capable for VSync off) and the embedded preview inside the main window,
-/// which is read back through a ring of staging textures one frame late so the CPU never waits for the
+/// <para><b>Outputs.</b> The loop feeds the stage window's swap chain and embedded preview from one simulation
+/// step, renders exact-size recording frames, and can also publish a separate premultiplied-alpha AR-effects
+/// frame for the transparent OBS window. CPU-facing frames use staging rings so the UI never waits for the
 /// GPU to finish the frame it just submitted.</para>
 /// </remarks>
 internal sealed class GpuRenderLoop : IDisposable
@@ -258,8 +258,12 @@ internal sealed class GpuRenderLoop : IDisposable
         var readback = new ReadbackRing();
         var recordTarget = new GpuRenderTarget();
         var recordReadback = new ReadbackRing();
+        var alphaTarget = new GpuRenderTarget();
+        var alphaReadback = new ReadbackRing();
         GpuRecordingTap? recording = null;
+        GpuAlphaOutputTap? alphaOutput = null;
         var nextRecordFrame = 0.0;
+        var nextAlphaFrame = 0.0;
         try
         {
             renderer = GpuStageRenderer.Create(ForceWarp, _adapterRequest);
@@ -354,7 +358,13 @@ internal sealed class GpuRenderLoop : IDisposable
                     if (tap is not null && gpu.CameraTexture is { } showing) tap.CameraAge.Skip(showing.Sequence);          // a picture already on show is not part of this take's delays
                     recordReadback.Dispose(); recordTarget.Dispose();
                 }
-                if (!hasEmbedded && !hasWindow && tap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
+                var alphaTap = _feed.ArAlphaOutput;
+                if (!ReferenceEquals(alphaTap, alphaOutput))
+                {
+                    alphaOutput = alphaTap; nextAlphaFrame = clock.Elapsed.TotalSeconds;
+                    alphaReadback.Dispose(); alphaTarget.Dispose();
+                }
+                if (!hasEmbedded && !hasWindow && tap is null && alphaTap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
 
                 var qualityBeforePolling = AdaptiveQualityTier;
                 var adaptiveQualityActive = Volatile.Read(ref _adaptiveQualityActive) != 0;
@@ -384,7 +394,8 @@ internal sealed class GpuRenderLoop : IDisposable
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
-                var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh : tap!.Width / (float)tap.Height;
+                var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh
+                    : tap is not null ? tap.Width / (float)tap.Height : alphaTap!.Width / (float)alphaTap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
                 simulation.Step(dt, input, _feed, sceneHeight * primaryAspect);
                 // the AR layer lights the keys as they were lit a camera-delay ago, which is what the camera's picture shows
@@ -427,6 +438,19 @@ internal sealed class GpuRenderLoop : IDisposable
                     recordReadback.Submit(gpu.Context);
                     recordReadback.Collect(gpu.Context, tap.BackBuffer, tap.Publish);
                 }
+                // ---- transparent AR effects: camera/background are omitted and the WPF window reads premultiplied BGRA ----
+                if (alphaTap is not null && now >= nextAlphaFrame)
+                {
+                    var interval = 1.0 / alphaTap.FrameRate;
+                    nextAlphaFrame = Math.Max(nextAlphaFrame + interval, now - interval);
+                    alphaTarget.Ensure(gpu.Device, alphaTap.Width, alphaTap.Height);
+                    alphaReadback.Ensure(gpu.Device, alphaTap.Width, alphaTap.Height);
+                    var layout = new GpuSceneLayout(sceneHeight * alphaTap.Width / (float)alphaTap.Height, sceneHeight, input.Look.KeyboardFraction);
+                    gpu.Render(alphaTarget, alphaReadback.CurrentView, simulation, input, layout, notes, keys, sprites, qualityTier,
+                        sampleAdaptiveQuality: !hasWindow && !hasEmbedded, alphaOutput: true);
+                    alphaReadback.Submit(gpu.Context);
+                    alphaReadback.Collect(gpu.Context, alphaTap.BackBuffer, alphaTap.Publish);
+                }
                 if (Volatile.Read(ref _adaptiveQualityActive) != 0 && !gpu.AdaptiveQualityProfilingAvailable)
                 {
                     Volatile.Write(ref _adaptiveQualityActive, 0);
@@ -453,6 +477,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 if (hasWindow && _vsync && target == 0) continue;
                 if (!hasWindow && target == 0) target = 240; // the embedded preview is shown at the WPF composition rate anyway
                 if (tap is not null && target > 0 && target < tap.FrameRate) target = tap.FrameRate; // a take never drops below its own rate
+                if (alphaTap is not null && target > 0 && target < alphaTap.FrameRate) target = alphaTap.FrameRate;
                 if (target > 0) SleepUntil(clock, frameStart + 1.0 / target);
             }
         }
@@ -468,6 +493,8 @@ internal sealed class GpuRenderLoop : IDisposable
             readback.Dispose();
             recordReadback.Dispose();
             recordTarget.Dispose();
+            alphaReadback.Dispose();
+            alphaTarget.Dispose();
             window?.Dispose();
             embeddedTarget.Dispose();
             windowTarget.Dispose();
@@ -521,7 +548,7 @@ internal sealed class GpuRenderLoop : IDisposable
         => RenderFrames(renderer, feed, width, height, warmupFrames, frameSeconds, renderWarmup, out timings, null, 20260930);
 
     /// <summary>Renders with a deterministic per-frame feed callback and an explicit simulation seed.</summary>
-    internal static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings, Action<int>? beforeFrame, int randomSeed)
+    internal static byte[] RenderFrames(GpuStageRenderer renderer, GpuStageFeed feed, int width, int height, int warmupFrames, double frameSeconds, bool renderWarmup, out string timings, Action<int>? beforeFrame, int randomSeed, bool alphaOutput = false)
     {
         var timer = Stopwatch.StartNew();
         var simulation = new GpuStageSimulation(randomSeed);
@@ -552,7 +579,7 @@ internal sealed class GpuRenderLoop : IDisposable
             renderer.UpdateCamera(feed.Camera);
             renderer.UpdateAr(feed.Ar);
             renderer.UpdateAtlas(feed.LabelAtlas);
-            renderer.Render(target, view, simulation, input, layout, notes, keys, sprites);
+            renderer.Render(target, view, simulation, input, layout, notes, keys, sprites, alphaOutput: alphaOutput);
             drawn += timer.Elapsed.TotalMilliseconds - started;
         }
         var readStarted = timer.Elapsed.TotalMilliseconds;

@@ -246,6 +246,7 @@ internal sealed class ArCalibration
 internal sealed class CalibrationEditor
 {
     private readonly List<(double X, double Y)> _points = [];
+    private bool _preservePointOrder;
 
     internal CalibrationEditor(int imageWidth, int imageHeight)
     {
@@ -272,7 +273,9 @@ internal sealed class CalibrationEditor
     /// placed; after that the verdict of <see cref="CalibrationQuad.Check"/>, so a drag that makes the outline fold
     /// shows it at once, while the person is still dragging.
     /// </summary>
-    internal CalibrationProblem Problem => CalibrationQuad.Check(Seen(_points), ImageWidth, ImageHeight);
+    internal CalibrationProblem Problem => _preservePointOrder
+        ? CalibrationQuad.CheckAnyWinding(_points, ImageWidth, ImageHeight)
+        : CalibrationQuad.Check(Seen(_points), ImageWidth, ImageHeight);
 
     /// <summary>True when the keyboard shows left to right turned round in the picture as delivered (low notes on the right).</summary>
     internal bool FlipX { get; private set; }
@@ -284,7 +287,22 @@ internal sealed class CalibrationEditor
     /// Says how the keyboard sits in the picture as delivered: the points are judged and put in order as if the picture were turned
     /// round that way, which for a keyboard that is upside down in the picture is the way it looks right.
     /// </summary>
-    internal void SetFlips(bool flipX, bool flipY) { FlipX = flipX; FlipY = flipY; }
+    internal void SetFlips(bool flipX, bool flipY)
+    {
+        if (_preservePointOrder && _points.Count == 4 && (FlipX != flipX || FlipY != flipY))
+        {
+            var current = _points.ToArray();
+            int source = 0;
+            for (var i = 0; i < 4; i++)
+            {
+                source = i;
+                if (FlipX != flipX) source = source switch { 0 => 1, 1 => 0, 2 => 3, _ => 2 };
+                if (FlipY != flipY) source = source switch { 0 => 3, 1 => 2, 2 => 1, _ => 0 };
+                _points[i] = current[source];
+            }
+        }
+        FlipX = flipX; FlipY = flipY;
+    }
 
     /// <summary>The points as they would be if the keyboard sat upright in the picture.</summary>
     private (double X, double Y)[] Seen(IReadOnlyList<(double X, double Y)> points) => CalibrationQuad.Reflect(points, ImageWidth, ImageHeight, FlipX, FlipY);
@@ -300,6 +318,8 @@ internal sealed class CalibrationEditor
     private (double X, double Y)[]? Usable()
     {
         var points = _points.ToArray();
+        if (_preservePointOrder)
+            return CalibrationQuad.CheckAnyWinding(points, ImageWidth, ImageHeight) == CalibrationProblem.None ? points : null;
         var upright = Seen(points);
         if (CalibrationQuad.Order(upright) is { } ordered && CalibrationQuad.Check(ordered, ImageWidth, ImageHeight) == CalibrationProblem.None)
             return CalibrationQuad.Reflect(ordered, ImageWidth, ImageHeight, FlipX, FlipY);
@@ -327,6 +347,51 @@ internal sealed class CalibrationEditor
         if (index < 0 || index >= _points.Count || !double.IsFinite(x) || !double.IsFinite(y)) return false;
         _points[index] = Hold(x, y);
         Selected = index;
+        return true;
+    }
+
+    /// <summary>Loads a saved, already ordered key area so it can be fine-tuned instead of marked from scratch.</summary>
+    internal bool LoadCorners(IReadOnlyList<(double X, double Y)> corners)
+    {
+        if (CalibrationQuad.CheckAnyWinding(corners, ImageWidth, ImageHeight) != CalibrationProblem.None) return false;
+        _points.Clear();
+        _points.AddRange(corners);
+        Selected = _points.Count - 1;
+        _preservePointOrder = true;
+        return true;
+    }
+
+    /// <summary>Rotates all four corners together around their centre; their keyboard-corner order is kept.</summary>
+    internal bool Rotate(double degrees)
+    {
+        if (_points.Count != 4 || !double.IsFinite(degrees)) return false;
+        if (Math.Abs(degrees) < 1e-12) return true;
+        var source = _preservePointOrder ? _points.ToArray() : Usable();
+        if (source is null) return false;
+        var centreX = source.Average(point => point.X);
+        var centreY = source.Average(point => point.Y);
+        var radians = degrees * Math.PI / 180;
+        var cosine = Math.Cos(radians);
+        var sine = Math.Sin(radians);
+        var minimumX = -CalibrationQuad.OutsideShare * ImageWidth;
+        var maximumX = (1 + CalibrationQuad.OutsideShare) * ImageWidth;
+        var minimumY = -CalibrationQuad.OutsideShare * ImageHeight;
+        var maximumY = (1 + CalibrationQuad.OutsideShare) * ImageHeight;
+        var rotated = new (double X, double Y)[4];
+        for (var i = 0; i < source.Length; i++)
+        {
+            var point = source[i];
+            var dx = point.X - centreX;
+            var dy = point.Y - centreY;
+            var x = centreX + dx * cosine - dy * sine;
+            var y = centreY + dx * sine + dy * cosine;
+            if (x < minimumX - 1e-6 || x > maximumX + 1e-6 || y < minimumY - 1e-6 || y > maximumY + 1e-6) return false;
+            rotated[i] = (Math.Clamp(x, minimumX, maximumX), Math.Clamp(y, minimumY, maximumY));
+        }
+        if (CalibrationQuad.CheckAnyWinding(rotated, ImageWidth, ImageHeight) != CalibrationProblem.None) return false;
+        _points.Clear();
+        _points.AddRange(rotated);
+        _preservePointOrder = true;
         return true;
     }
 
@@ -359,7 +424,7 @@ internal sealed class CalibrationEditor
     }
 
     /// <summary>Starts again.</summary>
-    internal void Clear() { _points.Clear(); Selected = -1; }
+    internal void Clear() { _points.Clear(); Selected = -1; _preservePointOrder = false; }
 
     /// <summary>
     /// Finishes: puts the points in order if they only need that, and builds the calibration for

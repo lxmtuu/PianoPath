@@ -82,6 +82,10 @@ internal sealed class GpuStageFeed
     /// <summary>The active GPU recording request (null when REC is off or records the software stage).</summary>
     internal GpuRecordingTap? Recording { get => Volatile.Read(ref _recording); set => Volatile.Write(ref _recording, value); }
 
+    private GpuAlphaOutputTap? _arAlphaOutput;
+    /// <summary>The optional transparent AR-effects output (null when its borderless output window is closed).</summary>
+    internal GpuAlphaOutputTap? ArAlphaOutput { get => Volatile.Read(ref _arAlphaOutput); set => Volatile.Write(ref _arAlphaOutput, value); }
+
     private GpuBackgroundImage? _labelAtlas;
     /// <summary>The glyph atlas (note names, Matrix Rain glyphs); built once on the UI thread, uploaded once by the render thread.</summary>
     internal GpuBackgroundImage? LabelAtlas { get => Volatile.Read(ref _labelAtlas); set => Volatile.Write(ref _labelAtlas, value); }

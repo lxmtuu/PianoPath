@@ -15,7 +15,11 @@ internal static class CalibrationHints
         "Step 4 of 4: click the front-left corner: the lowest key, at the near edge, closest to you.",
     ];
 
-    private const string AdjustStep = "The grid shows where the keys would be. Drag a corner, or pick one with Tab and nudge it with the arrow keys (Shift for bigger steps), until the grid sits on your keys. Then press Done.";
+    private const string AdjustStep = "The grid shows where the keys would be. Drag a corner, or use Rotate key grid to turn all four together, then drag corners for fine tuning. Tab and the arrow keys also nudge a selected corner (Shift for bigger steps). Then press Done.";
+
+    internal const string RotationTitle = "Rotate key grid";
+    internal const string RotationTip = "After the four corners are placed, rotate the whole keyboard grid around its centre. Positive values turn clockwise. The note path follows this calibration, so notes still meet the correct keys.";
+    internal const string RotationOutOfBounds = "That rotation would move a corner too far outside the picture.";
 
     /// <summary>The line above the picture for the step the wizard is at.</summary>
     internal static string ForStep(CalibrationWizard wizard) => wizard.Step switch
@@ -60,7 +64,7 @@ internal static class CalibrationHints
     /// <summary>Every sentence the window can show, for the check that they all exist in the string table.</summary>
     internal static IEnumerable<string> All() =>
     [
-        .. CornerSteps, AdjustStep, OrientationTitle, OrientationTip,
+        .. CornerSteps, AdjustStep, OrientationTitle, OrientationTip, RotationTitle, RotationTip, RotationOutOfBounds,
         .. Enum.GetValues<CalibrationProblem>().Where(p => p != CalibrationProblem.None).Select(ForProblem),
         .. Enum.GetValues<KeyboardOrientation>().Select(ForOrientation),
     ];

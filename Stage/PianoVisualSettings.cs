@@ -423,7 +423,7 @@ internal sealed class PianoVisualSettings
     public double ArKeyLight { get; set; } = 60;
     /// <summary>How late the camera's picture is, milliseconds; the overlay is held back by this much so it shows what the picture shows. Never delays the sound.</summary>
     public double ArDelay { get; set; } = 0;
-    /// <summary>The quality tier of the AR overlay: Lite is the flat quads the overlay has always drawn, Standard adds the key and impact glows, Ultra adds particles, pulses and the rest.</summary>
+    /// <summary>The quality tier of the AR overlay. Lite leaves the real keys unchanged; Standard and Ultra add the key tint. Ultra's planned AR pulses and particles are not wired over the camera yet (AR-S5).</summary>
     public string ArQuality { get; set; } = ArQualityTiers.DefaultQuality;
     /// <summary>Notes and bars grow wider the harder the key is struck, instead of every strike having the same width.</summary>
     public bool ArNoteWidthByVelocity { get; set; } = false;
@@ -437,8 +437,10 @@ internal sealed class PianoVisualSettings
     public double ArNoteFadeSoft { get; set; } = 100;
     /// <summary>Fade-in of a note struck at the velocity ceiling, percent of the usual fade.</summary>
     public double ArNoteFadeHard { get; set; } = 100;
-    /// <summary>The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</summary>
+    /// <summary>The song's notes are mapped through the camera's view of the keys (AR-S4); note trails are withheld until they can be projected correctly, while ambient petals and stars remain flat. Off keeps the flat notes.</summary>
     public bool ArNotesInPerspective { get; set; } = false;
+    /// <summary>Draw the player's growing press bars over the camera; the key tint remains independent. Off by default to avoid bright press trails in a stream or call.</summary>
+    public bool ArLivePressTrails { get; set; } = false;
     /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
     public double ArNoteMinScale { get; set; } = 0;
     /// <summary>
@@ -505,7 +507,7 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale, ArLivePressTrails).Normalised();
 
     /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
     internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
@@ -626,7 +628,7 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
                 or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
-                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale)) continue;
+                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked.
             if (property.Name == nameof(ArViewProfileId)) continue;

@@ -1,19 +1,16 @@
 namespace PianoPath;
 
 /// <summary>
-/// A recording request handed to the GPU render thread: while one is set on
-/// <see cref="GpuStageFeed.Recording"/>, the loop renders an extra off-screen frame at exactly the
-/// recording size and rate (not a scaled copy of the preview), reads it back through its own staging
-/// ring and publishes it here. The REC session on the UI thread copies the newest frame whenever the
-/// recording clock asks for one, so a busy UI never slows the renderer and a slow disk never stalls it.
+/// A fixed-size GPU frame mailbox. The render thread writes into the back buffer and swaps it only after the
+/// readback is complete; a UI consumer copies the newest published frame without ever stalling the GPU thread.
 /// </summary>
-internal sealed class GpuRecordingTap
+internal class GpuFrameTap
 {
     private readonly object _gate = new();
     private byte[] _front, _back;
     private long _serial;
 
-    internal GpuRecordingTap(int width, int height, int frameRate)
+    protected GpuFrameTap(int width, int height, int frameRate)
     {
         Width = Math.Clamp(width, 16, 7680);
         Height = Math.Clamp(height, 16, 4320);
@@ -26,14 +23,11 @@ internal sealed class GpuRecordingTap
     internal int Height { get; }
     internal int FrameRate { get; }
 
-    /// <summary>How long the camera's pictures waited in the app before they were first drawn into this take.</summary>
-    internal CameraAgeMeter CameraAge { get; } = new();
-
     /// <summary>Number of frames published so far; 0 until the first one is read back.</summary>
     internal long Serial => Interlocked.Read(ref _serial);
 
     /// <summary>Render thread: the buffer the next frame is read back into (BGRA, tightly packed).</summary>
-    internal byte[] BackBuffer(int width, int height) => width == Width && height == Height ? _back : throw new InvalidOperationException("The GPU recording frame has the wrong size.");
+    internal byte[] BackBuffer(int width, int height) => width == Width && height == Height ? _back : throw new InvalidOperationException("The GPU frame has the wrong size.");
 
     /// <summary>Render thread: publishes the back buffer as the newest frame.</summary>
     internal void Publish()
@@ -55,4 +49,19 @@ internal sealed class GpuRecordingTap
             return true;
         }
     }
+}
+
+/// <summary>A GPU-rendered take at the exact size and rate requested by the recorder.</summary>
+internal sealed class GpuRecordingTap(int width, int height, int frameRate) : GpuFrameTap(width, height, frameRate)
+{
+    /// <summary>How long the camera's pictures waited in the app before they were first drawn into this take.</summary>
+    internal CameraAgeMeter CameraAge { get; } = new();
+}
+
+/// <summary>
+/// A premultiplied BGRA AR-effects frame for the borderless transparent output window (e.g. OBS window capture).
+/// Unlike recording frames, this mailbox contains no camera image or opaque stage background.
+/// </summary>
+internal sealed class GpuAlphaOutputTap(int width, int height, int frameRate) : GpuFrameTap(width, height, frameRate)
+{
 }

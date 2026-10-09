@@ -17,6 +17,7 @@ public partial class MainWindow
     private readonly GpuStageFeed _gpuFeed = new();
     private GpuRenderLoop? _gpuLoop;
     private GpuStageWindow? _gpuWindow;
+    private GpuArAlphaOutputWindow? _gpuArAlphaOutputWindow;
     private bool _softwareSessionOverride, _gpuFailureShown, _gpuHooked;
     private TextBlock? _gpuStatusLabel;
 
@@ -48,8 +49,8 @@ public partial class MainWindow
             Stage.GpuStats = () => (_gpuLoop?.Fps ?? 0, _gpuLoop?.ParticleCount ?? 0);
         }
         var embedded = WantsEmbeddedGpu;
-        var needed = embedded || _gpuWindow is not null;
-        if (needed && _gpuLoop is { Error: not null }) { StopGpuLoop(); needed = _gpuWindow is not null; embedded = false; }
+        var needed = embedded || _gpuWindow is not null || _gpuArAlphaOutputWindow is not null;
+        if (needed && _gpuLoop is { Error: not null }) { StopGpuLoop(); needed = _gpuWindow is not null || _gpuArAlphaOutputWindow is not null; embedded = false; }
         if (!needed)
         {
             Stage.AttachGpu(null, false);
@@ -101,6 +102,7 @@ public partial class MainWindow
         if (_closing) return;
         if (_gpuLoop is { Error: { } error })
         {
+            _gpuArAlphaOutputWindow?.Close();
             Stage.AttachGpu(null, false);
             SyncCameraOverlay();                   // the overlay cannot be drawn without the engine
             if (!_gpuFailureShown)
@@ -156,8 +158,39 @@ public partial class MainWindow
         _gpuWindow.Show();
     }
 
+    private void OpenArAlphaOutput_Click(object sender, RoutedEventArgs e) => OpenArAlphaOutputWindow();
+
+    /// <summary>Opens a camera-free, transparent AR-effects window for OBS/window capture.</summary>
+    internal void OpenArAlphaOutputWindow()
+    {
+        if (_gpuArAlphaOutputWindow is { } existing) { existing.Activate(); return; }
+        if (!_arPlan.ArLayer) return;
+        if (_gpuLoop is { Error: not null }) StopGpuLoop();
+        if (_gpuLoop is null)
+        {
+            _gpuLoop = new GpuRenderLoop(_gpuFeed);
+            _gpuLoop.StatusChanged += () => Dispatcher.BeginInvoke(new Action(OnGpuStatusChanged));
+        }
+        var tap = new GpuAlphaOutputTap(1280, 720, 60);
+        _gpuFeed.ArAlphaOutput = tap;
+        var output = new GpuArAlphaOutputWindow(tap);
+        _gpuArAlphaOutputWindow = output;
+        output.Closed += (_, _) =>
+        {
+            if (!ReferenceEquals(_gpuArAlphaOutputWindow, output)) return;
+            _gpuArAlphaOutputWindow = null;
+            if (ReferenceEquals(_gpuFeed.ArAlphaOutput, tap)) _gpuFeed.ArAlphaOutput = null;
+            ApplyRenderBackend();
+        };
+        ApplyRenderBackend();
+        output.Show();
+    }
+
     private void ShutdownGpuStage()
     {
+        _gpuFeed.ArAlphaOutput = null;
+        _gpuArAlphaOutputWindow?.Close();
+        _gpuArAlphaOutputWindow = null;
         _gpuWindow?.Close();
         _gpuWindow = null;
         Stage.AttachGpu(null, false);

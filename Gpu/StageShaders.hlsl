@@ -43,7 +43,7 @@ cbuffer Frame : register(b0)
     float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
     float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
     float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
-    float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity
+    float4 ArFlags;      // x = 1 when mirrored, y = 1 when the camera is active, z = picture opacity, w = 1 for transparent AR effects output
     float4 ArMatrix0;    // AR-S4b scene->image map (Camera/ArSceneProjection.cs): xyz = row 0 (a, b, c)
     float4 ArMatrix1;    // xyz = row 1 (d, e, f)
     float4 ArMatrix2;    // xyz = row 2 (g, h, i); g*x + h*y + i is the weight, 1 at the keyboard's back-left corner
@@ -1255,7 +1255,19 @@ float4 PsComposite(FullscreenOut i) : SV_Target
 {
     float4 scene = SourceTex.SampleLevel(PointClamp, i.Uv, 0);
     float3 bloom = SecondTex.SampleLevel(LinearClamp, i.Uv, 0).rgb * Post2.y;
-    float3 c = (scene.rgb + bloom) * Post.x;
+    float3 linearColor = scene.rgb + bloom;
+    float alphaOutputCoverage = 0.0;
+    if (ArFlags.w > 0.5)
+    {
+        // The HDR scene is accumulated premultiplied. Unassociate before nonlinear tone mapping, then
+        // premultiply again in display space for WPF/DWM's Pbgra32 contract.
+        if (ArFlags.y < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+        float energy = max(Luma(max(linearColor, 0.0)), 0.0);
+        float lightCoverage = 1.0 - exp(-energy * 0.42);
+        alphaOutputCoverage = saturate(max(scene.a, lightCoverage));
+        linearColor /= max(alphaOutputCoverage, 1e-4);
+    }
+    float3 c = linearColor * Post.x;
     if (Post.y > 0.5) c = AcesFitted(c * 1.25);
     else c = c / (1.0 + max(Luma(c) - 1.0, 0.0));
     float l = Luma(c);
@@ -1269,6 +1281,12 @@ float4 PsComposite(FullscreenOut i) : SV_Target
     float3 display = LinearToSrgb(c);
     float noise = Hash21(i.Position.xy + frac(ScreenTime.z) * 61.0) - 0.5;
     display += noise * Post2.w;
+    if (ArFlags.w > 0.5)
+    {
+        // Stream/OBS output: never mix in the camera, stage background or chroma fill. Additive light/bloom
+        // contributes soft coverage; RGB is premultiplied only after tone mapping the unassociated color.
+        return float4(saturate(display) * alphaOutputCoverage, alphaOutputCoverage);
+    }
     if (ArFlags.y > 0.5)
     {
         // the camera picture sits under the light: what the stage draws solid hides it, light adds to it

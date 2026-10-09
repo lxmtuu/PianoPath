@@ -964,15 +964,15 @@ internal static partial class VerificationSuite
         // The overlay's own settings: defaults agree with ArOptions, wild values are pulled into range, and a look being
         // applied (a preset, a community look, a pasted code) neither switches the overlay on nor retunes it.
         var arDefault = new PianoVisualSettings();
-        Assert(!arDefault.ArEnabled && arDefault.ArOptionsValue == ArOptions.Default,
-            "A fresh install has the overlay off, and the settings' defaults are the ones ArOptions names.");
+        Assert(!arDefault.ArEnabled && !arDefault.ArLivePressTrails && arDefault.ArOptionsValue == ArOptions.Default,
+            "A fresh install has the overlay and live press trails off, and the settings' defaults are the ones ArOptions names.");
         var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900 }; arWild.Clamp();
         Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax,
             "Out-of-range overlay values should be pulled into range when settings load.");
-        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120 };
-        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0 });
-        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120,
-            "Applying a look must keep every overlay setting.");
+        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120, ArLivePressTrails = true };
+        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0, ArLivePressTrails = false });
+        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120 && arKept.ArLivePressTrails,
+            "Applying a look must keep every overlay setting, including whether press trails are shown.");
         // AR-S4 remainder: the minimum note length is a setting of the look's own, so a look does not overwrite it
         var minKept = new PianoVisualSettings { ArNoteMinScale = 80 };
         minKept.CopyFrom(new PianoVisualSettings { ArNoteMinScale = 0 });
@@ -1517,11 +1517,13 @@ internal static partial class VerificationSuite
         Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
                 && choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)) && choices.ContainsKey(nameof(PianoVisualSettings.ArQuality))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
-                && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay)),
-            "The Camera & FX page should carry the AR switch, the mode/view/quality pickers and the four sliders.");
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArLivePressTrails)),
+            "The Camera & FX page should carry the AR switch, the mode/view/quality pickers, the press-trail toggle and the four sliders.");
         var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
         Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;
+        var liveTrailsWas = visualSettings.ArLivePressTrails;
         toggles[nameof(PianoVisualSettings.ArEnabled)].IsChecked = true;
         Assert(visualSettings.ArEnabled, "Switching the overlay on in the dock should reach the settings.");
         Assert(engineRuns ? arText().StartsWith(Loc.T("Waiting for the camera."), StringComparison.Ordinal)
@@ -1549,6 +1551,12 @@ internal static partial class VerificationSuite
             var valueBoxes = (Dictionary<string, TextBox>)Field(window, "_visualValueBoxes");
             Assert(valueBoxes[nameof(PianoVisualSettings.ArLookahead)].Text == $"{2.5:0.0} s" && Math.Abs(gpuFeed.Ar!.Notes.Reach / gpuFeed.Ar.Notes.FallSpeed - 2.5) < 1e-9,
                 "The lookahead slider should show seconds and set how far above the keys notes come into view.");
+            toggles[nameof(PianoVisualSettings.ArLivePressTrails)].IsChecked = true;
+            Assert(visualSettings.ArLivePressTrails && gpuFeed.Ar!.ShowLiveTrails,
+                "The live-trail toggle should reach the selected AR drawing path.");
+            toggles[nameof(PianoVisualSettings.ArLivePressTrails)].IsChecked = false;
+            Assert(!gpuFeed.Ar!.ShowLiveTrails && Math.Abs(gpuFeed.Ar.KeyLight - .6f) < 1e-3,
+                "Turning live trails off must keep the separately configured key tint enabled.");
             choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Perform;
             Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes, "The mode picker should reach the layer the engine draws.");
             choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Learn;
@@ -1567,7 +1575,7 @@ internal static partial class VerificationSuite
         Invoke(window, "ResetArCalibration_Click", window, new RoutedEventArgs());
         Assert(window.ArCalibration.State is ArCalibrationState.NotCalibrated or ArCalibrationState.NoSource && window.ArCalibration.Current is null,
             "RESET CALIBRATION should forget the calibration in force.");
-        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60;
+        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60; visualSettings.ArLivePressTrails = liveTrailsWas;
         Invoke(window, "RefreshSettingControls");
         Invoke(window, "ApplyArSource", null!, 0, 0);
         Invoke(window, "SyncCameraOverlay");
