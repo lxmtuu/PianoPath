@@ -335,7 +335,8 @@ internal static partial class VerificationSuite
         {
             var feed = MakeFeed(flatInput);
             feed.SetState([], 0, false, new HashSet<int>(pitches));
-            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false, ShowLiveTrails: showTrails);   // Perform: song notes are left out; press trails are independent
+            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false,
+                Quality: ArQualityTier.Lite, ShowLiveTrails: showTrails);   // Isolate key tint/bars from projected impact FX; Perform leaves out song notes, while trails remain independent.
             if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
             return feed;
         }
