@@ -57,7 +57,7 @@ public class Ar3DNoteProjectionTests
     [InlineData(24, -18, 12, false)]
     [InlineData(-37, 61, -28, true)]
     [InlineData(35, 48, 32, true)]
-    public void Screen_up_direction_is_solved_in_the_actual_transformed_keyboard_plane(double pitch, double yaw, double roll, bool mirror)
+    public void Screen_up_direction_is_solved_as_full_3d_for_an_arbitrary_transformed_keyboard_pose(double pitch, double yaw, double roll, bool mirror)
     {
         var transform = new ArPoseTransform(.08, -.04, .02, pitch, yaw, roll, 1.12);
         Assert.True(ArCameraPose.TryTransformCorners(KeyboardLayout.Standard88, Corners, 1280, 720, 70, transform, out var finalCorners));

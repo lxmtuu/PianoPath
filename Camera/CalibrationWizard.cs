@@ -142,7 +142,6 @@ internal sealed class CalibrationWizard
     /// <summary>Says how the keyboard looks on the screen. The corners stay where they are; what changes is how they are put in order and judged.</summary>
     internal void SetOrientation(KeyboardOrientation orientation)
     {
-        if (_orientation != orientation) ResetPoseTransform();
         _orientation = orientation;
         ApplyOrientation();
     }

@@ -188,8 +188,9 @@ internal readonly struct ArCameraPose
     }
 
     /// <summary>
-    /// Finds a direction in the keyboard plane whose local camera projection follows a requested output-pixel direction.
-    /// This powers the calibration preview's "drag to aim" control without changing the keyboard object's pose.
+    /// Finds a full 3D keyboard-local direction whose local camera projection follows a requested output-pixel direction.
+    /// Solve in the camera's image plane, then express that direction in keyboard coordinates; this remains well-conditioned
+    /// when the keyboard plane is viewed nearly edge-on and does not change the keyboard object's pose.
     /// </summary>
     internal bool TryDirectionForScreenDelta(ArVec3 keyboardPoint, (double X, double Y) screenDelta, ArView view, out ArVec3 direction)
     {
@@ -197,13 +198,15 @@ internal readonly struct ArCameraPose
         if (!double.IsFinite(screenDelta.X) || !double.IsFinite(screenDelta.Y) || screenDelta.X * screenDelta.X + screenDelta.Y * screenDelta.Y < 1e-12)
             return false;
         var cameraPoint = ToCamera(keyboardPoint);
-        if (!TryProjectDelta(cameraPoint, DirectionToCamera(new ArVec3(1, 0, 0)), view, out var across)
-            || !TryProjectDelta(cameraPoint, DirectionToCamera(new ArVec3(0, 1, 0)), view, out var depth)) return false;
-        var determinant = across.X * depth.Y - depth.X * across.Y;
+        if (!TryProjectDelta(cameraPoint, new ArVec3(1, 0, 0), view, out var cameraX)
+            || !TryProjectDelta(cameraPoint, new ArVec3(0, 1, 0), view, out var cameraY)) return false;
+        var determinant = cameraX.X * cameraY.Y - cameraY.X * cameraX.Y;
         if (!double.IsFinite(determinant) || Math.Abs(determinant) < 1e-8) return false;
-        var x = (screenDelta.X * depth.Y - depth.X * screenDelta.Y) / determinant;
-        var y = (across.X * screenDelta.Y - screenDelta.X * across.Y) / determinant;
-        direction = new ArVec3(x, y, 0).Normalized;
+        var x = (screenDelta.X * cameraY.Y - cameraY.X * screenDelta.Y) / determinant;
+        var y = (cameraX.X * screenDelta.Y - screenDelta.X * cameraX.Y) / determinant;
+        var cameraDirection = new ArVec3(x, y, 0);
+        direction = new ArVec3(ArVec3.Dot(cameraDirection, Right), ArVec3.Dot(cameraDirection, Down),
+            ArVec3.Dot(cameraDirection, Normal)).Normalized;
         return direction.Length > .9 && direction.IsFinite;
     }
 
