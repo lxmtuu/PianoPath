@@ -549,24 +549,27 @@ internal sealed class GpuStageRenderer : IDisposable
         // ---- composite outputs ----
         context.OMSetBlendState(_blendOpaque);
         context.RSSetViewport(new Viewport(target.Width, target.Height));
-        context.PSSetShaderResource(0, target.HdrSrv!);
-        context.PSSetShaderResource(1, target.BloomSrv[0]!);
-        if (cameraActive) context.PSSetShaderResource(7, _camera!.View!);
         if (output is not null)
-            CompositeTo(output, _psComposite);
+            CompositeTo(output, _psComposite, cameraActive);
         if (alphaGeometryOutput is not null)
             CompositeTo(alphaGeometryOutput, _psCompositeGeometry);
         if (alphaGlowOutput is not null)
             CompositeTo(alphaGlowOutput, _psCompositeGlow);
-        context.PSUnsetShaderResources(0, 2);
-        context.PSUnsetShaderResource(7);
         if (qualityQuerySlot >= 0) EndAdaptiveQualitySample(qualityQuerySlot);
 
-        void CompositeTo(ID3D11RenderTargetView destination, ID3D11PixelShader shader)
+        void CompositeTo(ID3D11RenderTargetView destination, ID3D11PixelShader shader, bool sampleCamera = false)
         {
+            // Unbind the scene HDR target before sampling it. Binding its SRV first is a D3D11 read/write
+            // hazard: the runtime silently nulls that SRV while the same texture is still bound as an RTV,
+            // producing a black composite (caught by the WARP Gem/Crystal pixel checks).
             context.OMSetRenderTargets(destination);
             context.PSSetShader(shader);
+            context.PSSetShaderResource(0, target.HdrSrv!);
+            context.PSSetShaderResource(1, target.BloomSrv[0]!);
+            if (sampleCamera) context.PSSetShaderResource(7, _camera!.View!);
             context.Draw(3, 0);
+            context.PSUnsetShaderResources(0, 2);
+            if (sampleCamera) context.PSUnsetShaderResource(7);
         }
     }
 
