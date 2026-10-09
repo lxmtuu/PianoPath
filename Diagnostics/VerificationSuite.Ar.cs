@@ -1114,10 +1114,13 @@ internal static partial class VerificationSuite
         };
         var notes = new List<NoteEvent>
         {
-            new() { Pitch = 60, Start = 10.6, Duration = .4 },    // white key, on its way
-            new() { Pitch = 61, Start = 10.9, Duration = .5 },    // black key
-            new() { Pitch = 67, Start = 11.35, Duration = .6 }
+            new() { Pitch = 60, Start = 10.08, Duration = .18 },   // white key, hanging just above the keys
+            new() { Pitch = 61, Start = 10.2, Duration = .2 },     // black key
+            new() { Pitch = 67, Start = 10.32, Duration = .22 }    // white key, highest of the three
         };
+        // The starts sit the notes in the air the projection really magnifies (SongFallSpeed puts a note
+        // 0.6 s out at v ~ -1.7 and 1.35 s out past the top of the frame): each body must lie wholly on the
+        // output, or its patch samples cannot be asked to show anything.
         // the very layout the render loop builds from this feed, so the rectangles below are the drawn ones
         var scene = new GpuSceneLayout(width, height, .205f);
         var frame = new ArSceneFrame(scene.Width, scene.HitY, scene.KeyboardHeight);
@@ -1209,16 +1212,16 @@ internal static partial class VerificationSuite
                     if (Look(drawn, width, height, Blend(patch, s, t)) is not { } pixel) continue;
                     inside++;
                     Assert(pixel.Spread > 30 && pixel.Off > 40,
-                        $"A note drawn through the map must fill the patch ArProjection.TryProject reports for its rectangle: at ({s:0.00},{t:0.00}) of the patch the frame should hold the note colour (spread {pixel.Spread}, off grey {pixel.Off}, mirrored {mirror}).");
+                        $"A note drawn through the map must fill the patch ArProjection.TryProject reports for its rectangle [{x0:0},{y0:0}]–[{x1:0},{y1:0}]: at ({s:0.00},{t:0.00}) of the patch the frame should hold the note colour (spread {pixel.Spread}, off grey {pixel.Off}, mirrored {mirror}).");
                 }
-                Assert(inside >= 4, $"At least four sample points of the patch should be on the output ({inside}, mirrored {mirror}).");
+                Assert(inside >= 4, $"At least four sample points of the patch of [{x0:0},{y0:0}]–[{x1:0},{y1:0}] should be on the output ({inside}, mirrored {mirror}).");
                 var outside = 0;
                 foreach (var (s, t) in new[] { (-.35, .5), (1.35, .5), (.5, -.35), (-.35, .9), (1.35, .9) })
                 {
                     if (Look(drawn, width, height, Blend(patch, s, t)) is not { } pixel) continue;
                     outside++;
                     Assert(pixel.Off <= 4 && pixel.Spread <= 4,
-                        $"Just outside the patch ({s:0.00},{t:0.00}) the camera's grey must show — the note may not spill past the projection of its own rectangle (off by {pixel.Off}, mirrored {mirror}).");
+                        $"Just outside the patch of [{x0:0},{y0:0}]–[{x1:0},{y1:0}] ({s:0.00},{t:0.00}) the camera's grey must show — the note may not spill past the projection of its own rectangle (off by {pixel.Off}, mirrored {mirror}).");
                 }
                 Assert(outside >= 1, $"At least one outside sample should be on the output ({outside}, mirrored {mirror}).");
             }
