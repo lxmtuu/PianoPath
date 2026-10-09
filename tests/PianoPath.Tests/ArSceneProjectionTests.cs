@@ -171,4 +171,45 @@ public class ArSceneProjectionTests
         Assert.False(ArSceneProjection.TryProjectRect(calibration, view, frame, 400, 300, 0, 100, out _, out _, out _));
         Assert.False(ArSceneProjection.TryProjectRect(null, view, frame, 300, 400, 0, 100, out _, out _, out _));
     }
+
+    [Fact]
+    public void A_note_cut_to_the_picture_keeps_exactly_the_part_the_flat_quad_covers()
+    {
+        var calibration = Calibrate(SampleFromBeyondTheKeys);
+        var view = new ArView(1280, 720, 1280, 720, PictureFit.Fit, false);
+        var frame = Frame();
+        Assert.True(ArSceneProjection.TryBuild(calibration, view, frame, out var map));
+        var (x0, x1) = (.3 * frame.Width, .7 * frame.Width);
+        var truncated = 0;
+        for (var reach = 0.0; reach <= 4; reach += .25)
+        {
+            double top = frame.HitY - reach * frame.KeyboardHeight, bottom = frame.HitY;
+            var drawn = ArSceneProjection.TruncateToPicture(calibration, view, frame, x0, x1, ref top, ref bottom);
+            var expected = ArProjection.TryProject(calibration, view, .3, .7, -reach, 0, out _, out var back, out var front);
+            Assert.Equal(expected, drawn);
+            if (!drawn) continue;
+            // the kept part is the flat quad's cut, scene y for scene y
+            Near(frame.HitY + back * frame.KeyboardHeight, top, 1e-9);
+            Near(frame.HitY + front * frame.KeyboardHeight, bottom, 1e-9);
+            // and every corner of it is on the picture: the weight there is one the projection can divide by
+            foreach (var y in new[] { top, bottom })
+                foreach (var x in new[] { x0, x1 })
+                    Assert.True(map.WeightAt(x, y) >= ArProjection.MinW - 1e-9, $"a corner at y={y} has weight {map.WeightAt(x, y)}");
+            if (back > -reach + 1e-9) truncated++;
+        }
+        Assert.True(truncated > 0, "the slanted keyboard should cut at least one of those notes, or the test proves nothing");
+    }
+
+    [Fact]
+    public void A_note_wholly_on_the_picture_is_not_changed()
+    {
+        var calibration = Calibrate(Sample88);
+        var view = new ArView(1280, 720, 1280, 720, PictureFit.Fit, false);
+        var frame = Frame();
+        double top = frame.HitY - 40, bottom = frame.HitY + frame.KeyboardHeight * .5;
+        Assert.True(ArSceneProjection.TruncateToPicture(calibration, view, frame, 300, 500, ref top, ref bottom));
+        Near(frame.HitY - 40, top, 1e-9);
+        Near(frame.HitY + frame.KeyboardHeight * .5, bottom, 1e-9);
+        Assert.False(ArSceneProjection.TruncateToPicture(null, view, frame, 300, 500, ref top, ref bottom));
+    }
 }

@@ -446,8 +446,32 @@ internal sealed partial class GpuStageSimulation
     // instance building (per output)
     // ------------------------------------------------------------------------------------------------
 
+    private int[] _nextOfPitch = new int[64];
+
+    /// <summary>
+    /// For each song note, the index of the next note of the same pitch in <paramref name="list"/> (sorted by start), or -1.
+    /// AR-S4: the minimum note length uses it so that a following note on the same key cuts the growth of the one before.
+    /// </summary>
+    private int[] NextOfSamePitch(IReadOnlyList<NoteEvent> list)
+    {
+        if (_nextOfPitch.Length < list.Count) _nextOfPitch = new int[Math.Max(list.Count, _nextOfPitch.Length * 2)];
+        Span<int> last = stackalloc int[128];
+        last.Fill(-1);
+        for (var i = list.Count - 1; i >= 0; i--)
+        {
+            var pitch = Math.Clamp(list[i].Pitch, 0, 127);
+            _nextOfPitch[i] = last[pitch];
+            last[pitch] = i;
+        }
+        return _nextOfPitch;
+    }
+
     /// <summary>Song notes and live trails as SDF capsules.</summary>
-    internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes)
+    /// <summary>
+    /// Fills <paramref name="notes"/> for the frame: the song's notes (unless <paramref name="songNotes"/> is off, which
+    /// the AR overlay asks for in Perform mode) and the live trails of the keys the player holds, which are always drawn.
+    /// </summary>
+    internal void BuildNotes(GpuFrameInput input, GpuSceneLayout layout, GpuInstanceList<GpuNoteInstance> notes, bool songNotes = true, bool onStage = true, float minAspect = 0)
     {
         notes.Clear();
         _noteTrails.Clear();
@@ -455,17 +479,20 @@ internal sealed partial class GpuStageSimulation
         _shimmerBars.Clear();
         _landings.Clear();
         var look = input.Look;
-        if (!look.ShowNotes) return;
+        // onStage is false while the flat AR layer draws the notes itself: the stage must not draw them a second time
+        if (!look.ShowNotes || !onStage) return;
         var noteWidth = layout.Lane * look.NoteWidth;
         var hitY = layout.HitY;
         const float landingWindow = .55f;
-        if (input.Playing && input.Notes.Count > 0)
+        if (songNotes && input.Playing && input.Notes.Count > 0)
         {
             var speed = look.SongFallSpeed;
             var latestStart = input.Position + hitY / speed + 1;
             try
             {
                 var list = input.Notes;
+                // AR-S4: minimum note length. The next note of the same pitch is found once per frame, so a note can be cut short by it.
+                var nextSame = minAspect > 0 ? NextOfSamePitch(list) : null;
                 for (var i = NoteTimeline.FirstIndexAtOrAfter(list, input.Position - 1 - input.MaxNoteDuration); i < list.Count; i++)
                 {
                     var note = list[i];
@@ -490,6 +517,16 @@ internal sealed partial class GpuStageSimulation
                         top = bottom - height;
                         if (top > hitY || bottom < 0) continue;
                         bottom = Math.Min(bottom, hitY + 2); direction = 1;
+                    }
+                    if (nextSame is not null)
+                    {
+                        var j = nextSame[i];
+                        // the next note's head: where it sits on the same side as this note's head
+                        var limit = j < 0 ? double.NaN : look.Rising
+                            ? hitY + (list[j].Start - input.Position) * speed
+                            : hitY - (list[j].Start - input.Position) * speed;
+                        var extended = ArNoteMinimum.Extend(top, bottom, noteWidth, minAspect, !look.Rising, limit);
+                        top = (float)extended.Top; bottom = (float)extended.Bottom;
                     }
                     if (bottom - top < 1) continue;
                     AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction);

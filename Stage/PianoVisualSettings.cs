@@ -437,6 +437,10 @@ internal sealed class PianoVisualSettings
     public double ArNoteFadeSoft { get; set; } = 100;
     /// <summary>Fade-in of a note struck at the velocity ceiling, percent of the usual fade.</summary>
     public double ArNoteFadeHard { get; set; } = 100;
+    /// <summary>The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</summary>
+    public bool ArNotesInPerspective { get; set; } = false;
+    /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
+    public double ArNoteMinScale { get; set; } = 0;
     /// <summary>
     /// Which view of the camera the marked key area is for: the camera stands at one angle to the keys (45°, 90° overhead,
     /// see <see cref="ArCalibrationProfiles"/>), and corners marked at one angle draw the notes in the wrong place at another.
@@ -501,7 +505,10 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality)).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale).Normalised();
+
+    /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
+    internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
 
     /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
     internal KeyboardLayout KeyboardLayoutChoice =>
@@ -618,7 +625,8 @@ internal sealed class PianoVisualSettings
             // The overlay is set up for this camera and this instrument, so a look neither turns it on nor tunes it.
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
-                or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)) continue;
+                or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
+                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked.
             if (property.Name == nameof(ArViewProfileId)) continue;
@@ -745,6 +753,7 @@ internal sealed class PianoVisualSettings
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);
+        ArNoteMinScale = ArOptions.Fit(ArNoteMinScale, ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, ArOptions.NoteMinScaleDefault);
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);
         CameraKeyTolerance = Math.Clamp(CameraKeyTolerance, 0, 100);

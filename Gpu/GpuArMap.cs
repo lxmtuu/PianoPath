@@ -16,7 +16,7 @@ namespace PianoPath;
 /// in perspective.</remarks>
 internal readonly struct GpuArMap
 {
-    /// <summary><c>ArMatrixFlags.x</c>: the note pass draws through the map — the only flag the shader reads today.</summary>
+    /// <summary><c>ArMatrixFlags.x</c>: the note pass and the sprite pass draw through the map (the "Notes in perspective" switch). Notes are cut to the picture on the CPU (<c>GpuStageRenderer</c>); sprites are culled in <c>VsSprite</c> when they reach the horizon.</summary>
     internal const float NotesThroughMap = 1f;
 
     internal GpuArMap(ArSceneMatrix map, bool notes, float minScalePx)

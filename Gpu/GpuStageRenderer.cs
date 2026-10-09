@@ -340,6 +340,9 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>Sets what the AR layer draws (null for none). Call next to <see cref="UpdateCamera"/>, from the render thread.</summary>
     internal void UpdateAr(GpuArInput? input) => _arInput = input;
 
+    /// <summary>Sprites appended after the stage's own, for <c>VerifyArNoteProjection</c> only; never set by the app.</summary>
+    internal GpuSpriteInstance[]? ExtraSprites { get; set; }
+
     private Vector4[]? _arKeyColors;
 
     /// <summary>
@@ -384,25 +387,34 @@ internal sealed class GpuStageRenderer : IDisposable
         _notePassProfiler?.CollectReady();
         var quality = GpuAdaptiveQualityProfile.For(qualityTier);
         var look = input.Look;
-        simulation.BuildNotes(input, layout, notes);
-        simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
-        simulation.BuildSprites(look, layout, sprites);
-        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
-
-        // AR-S4b: the scene→image map the note pass can draw through, built from the same calibration, view and
-        // scene layout the flat AR quads use (Camera/ArSceneProjection.cs). The map rides in the frame constants
-        // whenever it can be built; only GpuArInput.ProjectedNotes opens the shader's note branch, so a frame
-        // that does not ask for it draws exactly what it drew before the map existed — VerifyArNoteProjection
-        // reads both frames back on WARP and compares them byte for byte.
+        // AR-S4b/AR-S4 remainder: the scene→image map the note and sprite passes can draw through, built from the same
+        // calibration, view and scene layout the flat AR quads use (Camera/ArSceneProjection.cs). The map rides in the
+        // frame constants whenever it can be built; only GpuArInput.ProjectedNotes opens the shader's branches, so a frame
+        // that does not ask for it draws exactly what it drew before the map existed — VerifyArNoteProjection reads both
+        // frames back on WARP and compares them byte for byte. The notes are built after the map so that the ones this
+        // pass draws can be cut to the picture the way the flat quads are.
         var arMap = GpuArMap.None;
-        var arProjectedNotes = false;
-        if (_arInput is { } arMapInput && TryCameraView(target, look, out var mapView)
+        GpuArInput? projectedInput = null;
+        ArView mapView = default;
+        if (_arInput is { } arMapInput && TryCameraView(target, look, out var view)
             && _camera!.Width == arMapInput.Calibration.ImageWidth && _camera.Height == arMapInput.Calibration.ImageHeight
-            && ArSceneProjection.TryBuild(arMapInput.Calibration, mapView, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight), out var sceneMap))
+            && ArSceneProjection.TryBuild(arMapInput.Calibration, view, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight), out var sceneMap))
         {
             arMap = new GpuArMap(sceneMap, arMapInput.ProjectedNotes, arMapInput.MinScalePx);
-            arProjectedNotes = arMapInput.ProjectedNotes;
+            if (arMapInput.ProjectedNotes) { projectedInput = arMapInput; mapView = view; }
         }
+        var arProjectedNotes = projectedInput is not null;
+
+        // Perform leaves the song's notes out, as the flat overlay does; the live trails of the keys the player holds stay.
+        simulation.BuildNotes(input, layout, notes, songNotes: projectedInput?.ShowNotes ?? true,
+            onStage: !look.OverCamera || projectedInput is not null, minAspect: projectedInput?.MinAspect ?? 0);
+        if (projectedInput is { } cut)
+            TruncateNotesToPicture(notes, cut.Calibration, mapView, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight));
+        simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
+        simulation.BuildSprites(look, layout, sprites);
+        // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
+        if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
+        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
 
         var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, arMap);
         var context = Context;
@@ -450,12 +462,17 @@ internal sealed class GpuStageRenderer : IDisposable
         if (_atlasView is not null) context.PSSetShaderResource(6, _atlasView);
         if (_ambientList.Count > 0)
         {
+            // The ambient layers are the stage's atmosphere and stay where they are when the notes are in perspective:
+            // the sprite branch is switched off for this pass alone, and the frame constants go back up before the notes.
+            var flatAmbient = arProjectedNotes;
+            if (flatAmbient) { var flat = constants; flat.ArMatrixFlags = Vector4.Zero; context.UpdateSubresource(in flat, _frameBuffer); }
             context.OMSetBlendState(_blendPremultiplied);
             context.VSSetShader(_vsSprite);
             context.PSSetShader(_psSprite);
             context.VSSetShaderResource(4, _ambient.View);
             context.PSSetShaderResource(5, _keyColors.View);
             context.DrawInstanced(6, (uint)_ambientList.Count, 0, 0);
+            if (flatAmbient) context.UpdateSubresource(in constants, _frameBuffer);
         }
 
         if (notes.Count > 0)
@@ -610,7 +627,26 @@ internal sealed class GpuStageRenderer : IDisposable
         };
     }
 
-    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
+    /// <summary>
+    /// AR-S4 remainder: cuts each note the projected pass draws to the part of it on the picture, using the cut the flat
+    /// AR quads make at the horizon (<see cref="ArSceneProjection.TruncateToPicture"/>). A note with nothing on the picture
+    /// is dropped, so the pass never spends a quad on it and the shader never sees a weight at or below the horizon.
+    /// </summary>
+    private static void TruncateNotesToPicture(GpuInstanceList<GpuNoteInstance> notes, ArCalibration calibration, ArView view, ArSceneFrame frame)
+    {
+        var span = notes.Writable;
+        var kept = 0;
+        for (var i = 0; i < span.Length; i++)
+        {
+            var note = span[i];
+            double top = note.Rect.Y, bottom = note.Rect.Y + note.Rect.W;
+            if (!ArSceneProjection.TruncateToPicture(calibration, view, frame, note.Rect.X, note.Rect.X + note.Rect.Z, ref top, ref bottom)) continue;
+            note.Rect = new Vector4(note.Rect.X, (float)top, note.Rect.Z, (float)(bottom - top));
+            span[kept++] = note;
+        }
+        notes.Keep(kept);
+    }
+
     /// <summary>Where the camera picture lands on this output; false when no camera picture is drawn.</summary>
     private bool TryCameraView(GpuRenderTarget target, GpuLook look, out ArView view)
     {
@@ -621,6 +657,7 @@ internal sealed class GpuStageRenderer : IDisposable
         return view.Valid;
     }
 
+    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
     private Vector4 ComputeArPicture(GpuRenderTarget target, GpuLook look, out Vector4 flags)
     {
         flags = Vector4.Zero;

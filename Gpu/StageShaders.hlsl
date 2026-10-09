@@ -47,7 +47,7 @@ cbuffer Frame : register(b0)
     float4 ArMatrix0;    // AR-S4b scene->image map (Camera/ArSceneProjection.cs): xyz = row 0 (a, b, c)
     float4 ArMatrix1;    // xyz = row 1 (d, e, f)
     float4 ArMatrix2;    // xyz = row 2 (g, h, i); g*x + h*y + i is the weight, 1 at the keyboard's back-left corner
-    float4 ArMatrixFlags; // x = AR flags (bit 0: the note pass draws through the map), y = sqrt|det M|, z = min scale px, w = 0
+    float4 ArMatrixFlags; // x = AR flags (bit 0: the note and sprite passes draw through the map), y = sqrt|det M|, z = min scale px, w = 0
 };
 
 cbuffer PassConstants : register(b1)
@@ -122,6 +122,9 @@ float3 ArMapAt(float2 scene)
     float3 at = float3(scene, 1.0);
     return float3(dot(ArMatrix0.xyz, at), dot(ArMatrix1.xyz, at), dot(ArMatrix2.xyz, at));
 }
+
+// The weight below which the scene->image map has no picture (ArProjection.MinW on the C# side, the same units).
+static const float ArHorizonW = 0.1;
 
 float Hash21(float2 p)
 {
@@ -881,7 +884,34 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     // flares and the hit line sit in front of the keys; particles fly behind them
     if ((kind > 3.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5)) depth = 0.01;
     SpriteOut o;
-    o.Position = ToClip(SceneToScreen(scene), depth);
+    if (ArMatrixFlags.x > 0.5)
+    {
+        // AR-S4 remainder: the sprite pass draws through the scene->image map, the way VsNote draws a note, so
+        // particles, flares, beams and shapes land on the camera picture in perspective. Their sizes are scene
+        // DIPs, which the map scales at the point each vertex lands, so nothing here needs a magnification.
+        // A sprite is culled whole when any of its four corners reaches the horizon. The weight is affine, so its
+        // least value over the quad is at a corner; the corners depend only on the instance, so all six of its
+        // vertices agree on whether it is drawn at all.
+        float2 quadCentre = s.PosSize.xy + offset;
+        float2 reachX = axis * extent.x, reachY = normal * extent.y;
+        float weightMin = min(min(ArMapAt(quadCentre + reachX + reachY).z, ArMapAt(quadCentre + reachX - reachY).z),
+                              min(ArMapAt(quadCentre - reachX + reachY).z, ArMapAt(quadCentre - reachX - reachY).z));
+        if (weightMin < ArHorizonW)
+        {
+            o.Position = float4(2.0, 2.0, 0.0, 1.0);             // outside the clip volume: nothing is rasterised
+        }
+        else
+        {
+            float3 at = ArMapAt(scene);
+            float w = at.z;
+            float2 ndc = at.xy / w / ScreenTime.xy * float2(2.0, -2.0) + float2(-1.0, 1.0);
+            o.Position = float4(ndc * w, depth * w, w);
+        }
+    }
+    else
+    {
+        o.Position = ToClip(SceneToScreen(scene), depth);
+    }
     o.Local = corner;
     o.Color = s.Color;
     o.Params = kind > 6.5 ? float4(kind, s.Dir.w, s.Dir.z, scene.x) : float4(kind, s.Dir.w, extent.x / max(extent.y, 1e-3), scene.x);

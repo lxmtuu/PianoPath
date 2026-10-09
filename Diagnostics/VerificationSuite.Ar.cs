@@ -1135,12 +1135,12 @@ internal static partial class VerificationSuite
         Array.Fill(grey, (byte)90, 0, 1280 * 720 * 4);
         for (var i = 3; i < grey.Length; i += 4) grey[i] = 255;
         ring.Publish(slot, 1280, 720, Stopwatch.GetTimestamp());
-        GpuStageFeed MakeFeed(bool mirror, GpuArInput? ar)
+        GpuStageFeed MakeFeed(bool mirror, GpuArInput? ar, IReadOnlyList<NoteEvent>? song = null)
         {
             var feed = new GpuStageFeed();
             feed.SetStageHeight(height);
             feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205));
-            feed.SetDeterministicState(notes, 10, true, new HashSet<int>());
+            feed.SetDeterministicState(song ?? notes, 10, true, new HashSet<int>());
             feed.SetDeterministicBeatPulse(0);
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, mirror, 1f);
             feed.Ar = ar;
@@ -1184,6 +1184,15 @@ internal static partial class VerificationSuite
             "AR-S4b default off: with the whole scene→image map in the frame constants (the AR layer at zero opacity, the note branch's flag down) the frame must be byte-identical to one with no AR input at all — not one pixel may change.");
         var defaultNotes = NotePixels(withoutAr);
         Assert(defaultNotes > 500, $"The default frame must still show its notes over the picture before any of this proves anything ({defaultNotes} note pixels).");
+
+        // ---- the switch reaches the stage's look: over the camera the stage keeps its notes only when they are drawn in perspective
+        settings.ArNotesInPerspective = false;
+        var overCameraFlat = GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
+        settings.ArNotesInPerspective = true;
+        var overCameraPerspective = GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
+        settings.ArNotesInPerspective = false;
+        Assert(!overCameraFlat.ShowNotes, "Over the camera with the switch off the stage must leave its notes out (the flat AR layer draws them).");
+        Assert(overCameraPerspective.ShowNotes, "Over the camera with the switch on the stage must keep its notes: the note pass draws them in perspective.");
 
         // ---- on: every note lands inside the patch ArProjection.TryProject reports for its own rectangle ----
         foreach (var mirror in new[] { false, true })
@@ -1254,6 +1263,65 @@ internal static partial class VerificationSuite
                 Assert(outside.Off <= 4 && outside.Spread <= 4,
                     $"Under the min-scale floor the note may not spill past its patch either (off by {outside.Off}).");
         }
+
+        // ---- AR-S4 remainder: Perform leaves the song's notes out; the minimum note length lengthens short notes;
+        // a sprite is drawn through the map where the picture holds it and culled whole past the horizon ----------
+        var performFrame = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: false, ProjectedNotes: true)));
+        var performDrop = NotePixels(plain) - NotePixels(performFrame);
+        Assert(performDrop >= 500,
+            $"Perform (ShowNotes off) must leave the song's notes out of the projected pass ({NotePixels(plain)} note pixels with them, {NotePixels(performFrame)} without).");
+
+        // three very short notes, 5 DIP long: the pixel minimum of the shape card (16 DIP) is shorter than two note widths, so 200 % lengthens them
+        var shortNotes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = 10.08, Duration = .02 },
+            new() { Pitch = 64, Start = 10.2, Duration = .02 },
+            new() { Pitch = 67, Start = 10.32, Duration = .02 }
+        };
+        var shortPlain = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true), shortNotes));
+        var shortMin = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinAspect: 2f), shortNotes));
+        Assert(!shortPlain.AsSpan().SequenceEqual(shortMin),
+            "A minimum note length must reach the note pass and lengthen the short notes (the frame would be byte-identical otherwise).");
+        Assert(NotePixels(shortMin) > NotePixels(shortPlain),
+            $"At a minimum of two note widths the short notes must cover more of the picture ({NotePixels(shortPlain)} → {NotePixels(shortMin)} note pixels).");
+
+        // sprites: the column of pitch 64 — one sprite above the keys, drawn; one far past the horizon, culled whole
+        var flatView = new ArView(1280, 720, width, height, PictureFit.Fit, false);
+        Assert(ArSceneProjection.TryBuild(calibration, flatView, frame, out var flatMap),
+            "The sample calibration must carry a scene→image map for the sprite check.");
+        var column = scene.X(64);
+        var visibleY = scene.HitY - 60;
+        // the map's weight rises upward from the keys (1.36 some 1500 DIP above them), so the horizon can lie either way:
+        // it is the first point, scanning out from the keys in both directions, where the weight drops under the picture's minimum
+        var keysY = (double)scene.HitY;
+        var horizonY = Enumerable.Range(0, 4000).SelectMany(d => new[] { keysY + d, keysY - d })
+            .Cast<double?>().FirstOrDefault(y => flatMap.WeightAt(column, y!.Value) < .1);
+        Assert(horizonY is not null, "The scene→image map must reach its horizon within 4000 DIP of the keys, in one direction or the other.");
+        var culledY = horizonY!.Value;
+        var visible = new GpuSpriteInstance { PosSize = new System.Numerics.Vector4((float)column, (float)visibleY, 14, 0), Color = new System.Numerics.Vector4(4, 1, 4, 1), Dir = new System.Numerics.Vector4(0, -1, 0, 0) };
+        var culled = new GpuSpriteInstance { PosSize = new System.Numerics.Vector4((float)column, (float)culledY, 14, 0), Color = new System.Numerics.Vector4(4, 1, 4, 1), Dir = new System.Numerics.Vector4(0, -1, 0, 0) };
+        var projectedFeed = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true);
+        renderer.ExtraSprites = new[] { culled };
+        var culledFrame = Render(MakeFeed(false, projectedFeed));
+        renderer.ExtraSprites = new[] { visible };
+        var visibleFrame = Render(MakeFeed(false, projectedFeed));
+        renderer.ExtraSprites = null;
+        Assert(plain.AsSpan().SequenceEqual(culledFrame),
+            "A sprite whose quad reaches past the horizon must be culled whole: the frame must be byte-identical to the one without it.");
+        Assert(!plain.AsSpan().SequenceEqual(visibleFrame), "A sprite above the keys must be drawn through the map.");
+        Assert(ArSceneProjection.TryProjectRect(calibration, flatView, frame, column - 14, column + 14, visibleY - 14, visibleY + 14, out var spritePatch, out _, out _),
+            "The sprite's rectangle must project to a patch.");
+        var spriteDiff = 0;
+        for (var a = .2; a <= .81; a += .1)
+            for (var b = .2; b <= .81; b += .1)
+            {
+                var at = Blend(spritePatch, a, b);
+                if (!(at.X >= 0 && at.Y >= 0 && at.X < width && at.Y < height)) continue;
+                var i = ((int)Math.Floor(at.Y) * width + (int)Math.Floor(at.X)) * 4;
+                for (var c = 0; c < 3; c++) spriteDiff = Math.Max(spriteDiff, Math.Abs(visibleFrame[i + c] - plain[i + c]));
+            }
+        Assert(spriteDiff >= 60, $"The sprite above the keys must change the picture under its patch (largest channel change {spriteDiff}).");
+        Results.Add($"PASS AR note projection (AR-S4 remainder): Perform drops {performDrop} note pixels; a minimum note length of two widths lengthens the short notes ({NotePixels(shortPlain)} → {NotePixels(shortMin)}); a sprite above the keys changes the picture by {spriteDiff}, and one past the horizon is culled whole.");
 
         Results.Add($"PASS AR note projection (AR-S4b): default off the {width}×{height} frame is byte-identical with the whole map in the constants and without any AR input ({defaultNotes} note pixels unchanged); switched on, 3 notes on the sample keyboard land inside the ArProjection patches of their own rectangles, mirrored and not, with no flat AR note quads of their own; min-scale floor reaches the shader without moving them.");
     }

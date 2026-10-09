@@ -38,4 +38,10 @@ internal sealed class GpuInstanceList<T> where T : struct
     }
 
     internal ReadOnlySpan<T> Span => _items.AsSpan(0, Count);
+
+    /// <summary>The same instances, writable: for a pass that rewrites them in place (AR-S4 cuts notes to the picture) before they are uploaded.</summary>
+    internal Span<T> Writable => _items.AsSpan(0, Count);
+
+    /// <summary>Keeps the first <paramref name="count"/> instances and drops the rest; the in-place counterpart of <see cref="Writable"/>.</summary>
+    internal void Keep(int count) => Count = Math.Clamp(count, 0, Count);
 }
