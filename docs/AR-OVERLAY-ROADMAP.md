@@ -5,9 +5,15 @@ quay đàn thật làm nền, nốt rơi và hiệu ứng được vẽ **đúng
 với MIDI khi chơi trực tiếp (live play), và quay/phát lại được. Nó bổ sung cho `docs/ROADMAP.md` (lộ trình chung);
 trạng thái hiện tại nằm ở `README.md`.
 
-> **Trạng thái (2026‑10‑06):** AR‑0, AR‑1, AR‑3.1–3.4 đã làm xong về mã và qua CI Windows (PR #53). **Chưa phần nào được thử
-> trên webcam hay đàn thật**; lần thử thật đầu tiên (chỉ phần đọc camera) đã lộ ra hai lỗi và một khoảng trống, xem §11.
-> AR‑2, 2b, 4, 5, 6 chưa bắt đầu. §12 đối chiếu hai ảnh mẫu của chủ repo với cài đặt hiện có; §13 là bảng đối chiếu tiến độ.
+> **Trạng thái (2026‑10‑09):** AR‑0, AR‑1, AR‑3.1–3.4 đã làm xong về mã và qua CI Windows (PR #53). Đã vào `main` thêm:
+> **khung nhìn** của camera (mặc định / 45° / 90° từ trên xuống, `ar-calibration.json` bản 2 — tệp bản 1 đọc lên thành khung
+> nhìn mặc định), **vệt cho phím người chơi tự bấm**, và ba lát cắt **AR‑S1…S3** của bản thiết kế lại ở §14 (`PianoSimulation`,
+> `GraphVariable`, `ArElementCatalog` + ba bậc chất lượng + `ArLookGuard`). **AR‑S4a** — ma trận *cảnh→ảnh*
+> (`Camera/ArSceneProjection.cs`) — đã vào; **AR‑S4b** (đưa ma trận đó vào `VsNote`/`VsSprite`) là việc kế tiếp, và cho tới
+> lúc đó lớp phủ vẫn vẽ quad phẳng: `NoteStyle` và các hiệu ứng sân khấu **chưa** có tác dụng trong AR.
+> **Chưa phần nào được thử trên webcam hay đàn thật**; lần thử thật đầu tiên (chỉ phần đọc camera) đã lộ ra hai lỗi và một
+> khoảng trống, xem §11. AR‑2, 2b, 4, 5, 6 chưa bắt đầu. §12 đối chiếu hai ảnh mẫu của chủ repo với cài đặt hiện có;
+> §13 là bảng đối chiếu tiến độ; §14 là bản thiết kế lại và thứ tự thi công AR‑S0…S9.
 > Môi trường làm việc **không có .NET SDK, không có webcam, không có GPU thật** nên mọi thay đổi C# được xác nhận bằng CI
 > Windows (`build`: `--verify` và ngân sách khung hình trên WARP; `test`: xUnit trên Linux). Các con số "hiện có" ở §1 được
 > đối chiếu với mã ở commit `2133a19` (trước khi bắt đầu).
@@ -351,7 +357,7 @@ Chủ repo đưa hai ảnh cần đạt: **(A)** nhìn thẳng từ trên xuốn
 | AR‑6.4 cửa sổ OBS, 6.5 webcam ảo, 6.6 sidecar | ❌ | | | stream/call là ưu tiên của chủ repo |
 | Tài liệu người dùng (README, CHANGELOG song ngữ) | ✅ mục **Unreleased** | | | README chưa có mục tả AR, chỉ có cờ `--bench-ar`; viết khi AR ra bản |
 
-**Còn nợ kỹ thuật đã biết:** `ArDelay` toàn cục (đề xuất AR‑3.5); mở camera chặn luồng giao diện tới 20 s; `StartCameraOverlay` đồng bộ; AR không áp `NoteStyle` và các hiệu ứng (§12).
+**Còn nợ kỹ thuật đã biết:** `ArDelay` toàn cục (đề xuất AR‑3.5, cần chủ repo duyệt theo §14.11); mở camera chặn luồng giao diện tới 20 s; `StartCameraOverlay` đồng bộ; AR không áp `NoteStyle` và các hiệu ứng (§12) — ma trận *cảnh→ảnh* đã có (**AR‑S4a**, `Camera/ArSceneProjection.cs`, kiểm bằng `ArSceneProjectionTests` + `VerifyArSceneProjection`), còn thiếu nhánh AR trong `VsNote`/`VsSprite` và shape/min‑scale/truncate của nốt (**AR‑S4b**).
 
 **Từ 2026‑10‑09:** thiết kế lại toàn bộ hệ thống AR — xem §14. Mục AR‑6.2 trong bảng trên ("vệt phẳng cho phím tự bấm") là **AR‑S0** của bản mới; phần style nốt/hiệu ứng chuyển thành AR‑S4/AR‑S5.
 
