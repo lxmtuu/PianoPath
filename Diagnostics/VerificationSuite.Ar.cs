@@ -858,11 +858,11 @@ internal static partial class VerificationSuite
             point = new Point(projected.X, projected.Y);
             return true;
         }
-        static bool ScreenAxis(ArCameraPose pose, ArCameraPose axisPose, ArVec3 centre, ArVec3 axis, ArView view, out Vector derivative)
+        static bool ScreenAxis(ArCameraPose pose, ArCameraPose axisPose, ArVec3 centre, ArVec3 axis, ArView view, out System.Windows.Vector derivative)
         {
             derivative = default;
             if (!pose.TryProjectDelta(pose.ToCamera(centre), axisPose.DirectionToCamera(axis), view, out var projected)) return false;
-            derivative = new Vector(projected.X, projected.Y);
+            derivative = new System.Windows.Vector(projected.X, projected.Y);
             return derivative.Length > 1e-6 && double.IsFinite(derivative.X) && double.IsFinite(derivative.Y);
         }
 
@@ -1045,10 +1045,10 @@ internal static partial class VerificationSuite
                     "The preview arrow and direction sliders should agree on a 3D keyboard-plane direction projecting straight up.");
                 Assert(ScreenPoint(directionPose, directionCentre, w.Wizard.View, out var arrowOrigin),
                     "The note-direction arrow should have a projectable centre for free aiming.");
-                var up = new Vector(screenDirection.X / screenLength, screenDirection.Y / screenLength);
+                var up = new System.Windows.Vector(screenDirection.X / screenLength, screenDirection.Y / screenLength);
                 var dragStart = arrowOrigin + up * 56;
                 const double aimDragRadians = 35 * Math.PI / 180;
-                var aimed = new Vector(up.X * Math.Cos(aimDragRadians) - up.Y * Math.Sin(aimDragRadians),
+                var aimed = new System.Windows.Vector(up.X * Math.Cos(aimDragRadians) - up.Y * Math.Sin(aimDragRadians),
                     up.X * Math.Sin(aimDragRadians) + up.Y * Math.Cos(aimDragRadians));
                 var dragTarget = arrowOrigin + aimed * 56;
                 Assert(w.Surface.HandlePress(dragStart), "Pressing the note-direction arrow should begin free 3D aiming.");
