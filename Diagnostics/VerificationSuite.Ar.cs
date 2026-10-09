@@ -1045,6 +1045,9 @@ internal static partial class VerificationSuite
             Arrange(w);
             Assert(w.Title == Loc.F("Mark the keys for the {0} view", Loc.T(ArCalibrationProfiles.Normalize(view).Name)),
                 $"The window that opens for the {view} view should say so (found “{w.Title}”).");
+            // Reopen now loads the saved corners; start over before this case marks a deliberately different set.
+            w.Wizard.Clear();
+            w.Surface.Refresh();
             Click(w, moved);
             visualSettings.ArViewProfileId = otherView.Id;
             Invoke(window, "ApplyArSource", "verification camera", W, H);
