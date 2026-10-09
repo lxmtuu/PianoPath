@@ -293,7 +293,7 @@ public class CalibrationWizardTests
         try
         {
             var session = new ArCalibrationSession(new ArCalibrationStore(dir));
-            session.Use("cam", W, H, KeyboardLayout.Standard88);
+            session.Use("cam", W, H, KeyboardLayout.Standard88, ArCalibrationProfiles.LegacyId);
             Assert.Equal(ArSaveResult.Saved, session.Save(calibration.Corners, out _));
             Assert.Equal(ArCalibrationState.Ready, session.State);
         }

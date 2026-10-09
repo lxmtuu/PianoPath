@@ -24,6 +24,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SETTINGS = ROOT / "Stage" / "PianoVisualSettings.cs"
+# A settings default may name a constant of another file: which view of the camera the AR overlay uses is
+# ArCalibrationProfiles.LegacyId, declared beside the catalogue it comes from.
+PROFILE_CATALOGUE = ROOT / "Camera" / "ArCalibrationProfile.cs"
+AR_CATALOGUE = ROOT / "Camera" / "ArElementCatalog.cs"
 SHELL_THEMES = ROOT / "Theme" / "ShellTheme.cs"
 TARGET = ROOT / "presets"
 
@@ -154,13 +158,13 @@ COMMUNITY_BASE: dict[str, object] = {
 
 
 def read_consts() -> dict[str, str]:
-    """Every ``internal const string`` in the theme and settings classes, as ``Class.Name`` → value.
+    """Every ``internal const string`` in the theme, settings and profile-catalogue classes, as ``Class.Name`` → value.
 
     A const may name another const (``DefaultId = ConcertGrandId``), so those are resolved too. This is what
     lets a property default such as ``RecordingFormatIds.Avi`` be read exactly like the compiled value.
     """
     raw: dict[str, str] = {}
-    for path in (SHELL_THEMES, SETTINGS):
+    for path in (SHELL_THEMES, SETTINGS, PROFILE_CATALOGUE, AR_CATALOGUE):
         text = path.read_text(encoding="utf-8")
         for owner, body in re.findall(r"internal static class (\w+)\s*\{(.*?)\n\}", text, re.S):
             for name, value in re.findall(r"internal const string (\w+) = ([^;]+);", body):

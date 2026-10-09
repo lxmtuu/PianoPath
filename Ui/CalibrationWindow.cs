@@ -247,10 +247,11 @@ internal sealed class CalibrationWindow : Window
     /// <param name="mirror">The stage shows the picture turned round, so the window does too.</param>
     /// <param name="retake">Gives a newer picture of the camera, or null when it has none.</param>
     /// <param name="orientation">How the keyboard looks in the picture to start with; when not given, as upright in the picture the camera delivers.</param>
-    internal CalibrationWindow(CalibrationPicture picture, KeyboardLayout layout, bool mirror, Func<CalibrationPicture?>? retake = null, KeyboardOrientation? orientation = null)
+    /// <param name="profile">The view of the camera the keys are being marked for, named in the title and the line above the buttons so nobody marks the keys for the angle the camera is not at.</param>
+    internal CalibrationWindow(CalibrationPicture picture, KeyboardLayout layout, bool mirror, Func<CalibrationPicture?>? retake = null, KeyboardOrientation? orientation = null, ArCalibrationProfile? profile = null)
     {
         _retake = retake;
-        Title = Loc.T("Mark the keys");
+        Title = profile is null ? Loc.T("Mark the keys") : Loc.F("Mark the keys for the {0} view", Loc.T(profile.Name));
         Width = Math.Min(1120, Math.Max(640, SystemParameters.WorkArea.Width - 60));
         Height = Math.Min(780, Math.Max(480, SystemParameters.WorkArea.Height - 60));
         MinWidth = 640; MinHeight = 460;
@@ -266,7 +267,9 @@ internal sealed class CalibrationWindow : Window
         _note = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(255, 190, 120)), Margin = new Thickness(0, 2, 0, 0) };
 
         var info = new TextBlock { FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) };
-        info.Text = Loc.F("{0}-key keyboard · picture {1} × {2}", layout.KeyCount, picture.Width, picture.Height);
+        info.Text = profile is null
+            ? Loc.F("{0}-key keyboard · picture {1} × {2}", layout.KeyCount, picture.Width, picture.Height)
+            : Loc.F("{0}-key keyboard · picture {1} × {2} · {3} view", layout.KeyCount, picture.Width, picture.Height, Loc.T(profile.Name));
         var left = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
         left.Children.Add(info); left.Children.Add(_note);
 

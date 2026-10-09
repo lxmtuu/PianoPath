@@ -1228,7 +1228,8 @@ public partial class MainWindow : Window
     private int _arStatusTicks;
     /// <summary>Set from the plan: the camera thread reads frames unmirrored because the engine turns them round when it draws.</summary>
     private volatile bool _arRawFrames;
-    private static readonly ArCalibrationSnapshot NoArSource = new(ArCalibrationState.NoSource, null, "", 0, 0, 0, 0);
+    /// <summary>What the AR card reads before the session has ever been told about a camera: nothing open, the default view.</summary>
+    private static readonly ArCalibrationSnapshot NoArSource = new(ArCalibrationState.NoSource, null, ArCalibrationProfiles.Legacy, "", 0, 0, 0, 0);
 
     /// <summary>What the overlay is doing now, as <see cref="ArPlan"/> decided it.</summary>
     internal ArPlan ArPlanNow => _arPlan;
@@ -1262,7 +1263,7 @@ public partial class MainWindow : Window
         _gpuFeed.Camera = new GpuCameraInput(_cameraFrames, PictureFit.Fit, _visualSettings.CameraMirror, 1f);
         var calibration = plan.ArLayer ? _arCalibration?.Current : null;
         _gpuFeed.Ar = calibration is null ? null
-            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes, (float)options.DelaySeconds);
+            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes, (float)options.DelaySeconds, options.Quality);
         RefreshHandStatus();
         RefreshArStatus();
     }
@@ -1274,15 +1275,15 @@ public partial class MainWindow : Window
     internal ArCalibrationSession ArCalibration => _arCalibration ??= new ArCalibrationSession(new ArCalibrationStore(PianoVisualSettingsStore.SettingsDirectory));
 
     /// <summary>
-    /// Tells the calibration which source is open (null for none) and brings it up to date with the keyboard size in the
-    /// settings. It is safe to call whenever anything changes; nothing happens unless the source, its picture size or the
-    /// keyboard size is different from last time.
+    /// Tells the calibration which source is open (null for none) and brings it up to date with the keyboard size and the
+    /// view of the camera the settings name. It is safe to call whenever anything changes; nothing happens unless the
+    /// source, its picture size, the keyboard size or the view is different from last time.
     /// </summary>
     private void ApplyArSource(string? source, int width, int height)
     {
         _arSource = source ?? ""; _arWidth = width; _arHeight = height;
         if (_arSource.Length == 0) _arCalibration?.Clear();       // nothing open and nothing made yet: no reason to read the file
-        else ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice);
+        else ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice, _visualSettings.ArViewProfileId);
     }
 
     /// <summary>
@@ -1756,6 +1757,8 @@ public partial class MainWindow : Window
         var changed = down ? _pedalsDown.Add(pedal) : _pedalsDown.Remove(pedal);
         if (!changed) return;
         Stage.SetSustainPedal(_pedalsDown.Contains(PianoPedal.Sustain));
+        Stage.Simulation.SetSostenuto(_pedalsDown.Contains(PianoPedal.Sostenuto));
+        Stage.Simulation.SetSoft(_pedalsDown.Contains(PianoPedal.Soft));
         var controller = MidiDeviceService.ControllerFor(pedal);
         if (!_liveAudioSent) _audio.ControlChange(controller, down ? 127 : 0);
         _updatingPedals = true;

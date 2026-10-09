@@ -25,7 +25,11 @@ internal static class ArModes
 /// <param name="Lookahead">How many seconds before it sounds a note starts to show.</param>
 /// <param name="KeyLight">How strongly a played key is tinted, percent.</param>
 /// <param name="Delay">How late the camera's picture is, milliseconds: what the overlay is held back by so that it shows what the picture shows.</param>
-internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0)
+/// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
+/// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
+/// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
+internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
+    GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
@@ -35,9 +39,14 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     internal static readonly ArOptions Default = new(false, ArModes.Learn, OpacityDefault, LookaheadDefault, KeyLightDefault);
 
     /// <summary>The same choices pulled into range: a number that is not a number takes its default, an unknown mode becomes Learn.</summary>
-    internal ArOptions Normalised() => new(Enabled, ArModes.Normalize(Mode),
-        Fit(Opacity, OpacityMin, OpacityMax, OpacityDefault), Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
-        Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault), Fit(Delay, DelayMin, DelayMax, DelayDefault));
+    internal ArOptions Normalised() => this with
+    {
+        Mode = ArModes.Normalize(Mode),
+        Opacity = Fit(Opacity, OpacityMin, OpacityMax, OpacityDefault),
+        Lookahead = Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
+        KeyLight = Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault),
+        Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault)
+    };
 
     internal static double Fit(double value, double minimum, double maximum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
@@ -58,6 +67,11 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     /// </summary>
     internal double DelaySeconds => Normalised().Delay / 1000;
 
-    /// <summary>The falling notes' shape: the default one, reaching as far above the keys as the lookahead takes them to fall.</summary>
-    internal ArNoteStyle NoteStyle => ArNoteStyle.Default with { Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed };
+    /// <summary>The falling notes' shape: the default one, reaching as far above the keys as the lookahead takes them to fall, with the width and fade graphs of this choice.</summary>
+    internal ArNoteStyle NoteStyle => ArNoteStyle.Default with
+    {
+        Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed,
+        WidthVelocity = (Normalised().NoteWidthVelocity ?? GraphVariable.Flat).Normalised(),
+        FadeVelocity = (Normalised().NoteFadeVelocity ?? GraphVariable.Flat).Normalised()
+    };
 }

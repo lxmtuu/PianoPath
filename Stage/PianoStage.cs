@@ -94,6 +94,7 @@ internal sealed partial class PianoStage : FrameworkElement
     private double _releaseScanPos;
     private double _beatPulse, _energyLevel;
     private bool _sustainPedal;
+    private readonly PianoSimulation _simulation = new();
     private bool _playing, _anyHeat;
     private bool _mouseDown;
     private int _mousePitch = -1;
@@ -243,15 +244,20 @@ internal sealed partial class PianoStage : FrameworkElement
     public void AddLiveNote(int pitch, double strength = 1)
     {
         _liveTrails.Add(new LiveTrail { Pitch = pitch, Age = 0, HeldSeconds = 0, KeyDown = true, Strength = strength });
+        _simulation.NoteOn(pitch, strength * 127);
         GpuForward?.LiveNote(pitch, true, strength);
         InvalidateVisual();
     }
 
-    /// <summary>Sustain pedal state from the host; drives Pedal Glow.</summary>
+    /// <summary>The shared piano simulation (AR-S1): activity, pedals and notes per second.</summary>
+    internal PianoSimulation Simulation => _simulation;
+
+    /// <summary>Sustain pedal state from the host; drives Pedal Glow and the simulation's damper.</summary>
     public void SetSustainPedal(bool down)
     {
         if (_sustainPedal == down) return;
         _sustainPedal = down;
+        _simulation.SetSustain(down ? 1 : 0);
         _gpu?.SetSustain(down);
         InvalidateVisual();
     }
@@ -266,6 +272,7 @@ internal sealed partial class PianoStage : FrameworkElement
 
     public void ReleaseLiveNote(int pitch)
     {
+        _simulation.NoteOff(pitch);
         GpuForward?.LiveNote(pitch, false, 0);
         var trail = _liveTrails.LastOrDefault(note => note.Pitch == pitch && note.KeyDown);
         if (trail is null) return;
@@ -278,6 +285,7 @@ internal sealed partial class PianoStage : FrameworkElement
     public void ClearTransient()
     {
         _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
+        _simulation.Reset();
         _gpu?.ClearTransient();
         InvalidateVisual();
     }
@@ -590,6 +598,7 @@ internal sealed partial class PianoStage : FrameworkElement
     public void Advance(double seconds)
     {
         var dt = Math.Clamp(seconds, 0, .05) * _visual.PhysicsTimeFactor / 100; _elapsed += dt;
+        _simulation.Advance(dt);
         _beatPulse *= Math.Exp(-6 * dt); _energyLevel *= Math.Exp(-2.2 * dt); // smart-modulator envelopes decay
         if (seconds > 0) _fps += (1 / seconds - _fps) * .08;
         var hitY = ActualHeight - KeyboardHeight;

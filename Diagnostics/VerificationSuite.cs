@@ -54,7 +54,7 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -981,6 +981,20 @@ internal static partial class VerificationSuite
             "Applying a look must keep the camera the player picked and the video file, and still change how the picture is framed.");
         Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(cameraKept), out var cameraShared, out _) && cameraShared.CameraSourceLink == "" && cameraShared.CameraVideoPath == "" && cameraShared.CameraCorner == "Bottom right",
             "A shared look carries neither the camera's device path nor the video file's path.");
+        // Which view of the camera is being used is this machine's, exactly like the camera it names: a look
+        // neither switches it nor carries it, a stored id the app does not know falls back to the default view,
+        // and the choice survives a save and a load.
+        var viewKept = new PianoVisualSettings { ArViewProfileId = ArCalibrationProfiles.Overhead90.Id };
+        viewKept.CopyFrom(new PianoVisualSettings { ArViewProfileId = ArCalibrationProfiles.Tilt45.Id });
+        Assert(viewKept.ArViewProfileId == ArCalibrationProfiles.Overhead90.Id,
+            "Applying a look must keep the view of the camera the player is standing at.");
+        var viewWild = new PianoVisualSettings { ArViewProfileId = "a view from a newer version" }; viewWild.Clamp();
+        Assert(viewWild.ArViewProfileId == ArCalibrationProfiles.LegacyId,
+            "A stored view the app does not know should fall back to the default view when the settings load.");
+        Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(viewKept), out var viewShared, out _) && viewShared.ArViewProfileId.Length == 0,
+            "A shared look must carry no view of the camera, so pasting one never tells the other machine which angle it stands at.");
+        Assert(PianoVisualSettings.FromJson(viewKept.ToJson()).ArViewProfileId == ArCalibrationProfiles.Overhead90.Id,
+            "The view of the camera should survive a save and a load.");
         var arCode = VisualPresetShare.Encode(arKept);
         Assert(VisualPresetShare.TryDecode(arCode, out var arShared, out _) && arShared.ArMode == "Perform" && arShared.ArLookahead == 2,
             "A look code carries the overlay values like any other setting, and reads them back in range.");
@@ -1011,7 +1025,7 @@ internal static partial class VerificationSuite
         }
         finally { KeyboardLayout.Use(full); }
         Assert(PianoStage.KeyCount == 88 && ReferenceEquals(KeyboardLayout.Active, full), "The full keyboard is back after the check.");
-        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the range and the centre of every key, and switching to 61 keys moves the stage, the GPU lanes and the shaded keyboard together, with a scene keeping the keyboard it was built for.");
+        Results.Add("PASS keyboard layout: the full layout agrees with the stage and the shaded keyboard on the range and the centre of every key, switching to 61 keys moves the stage, the GPU lanes and the shaded keyboard together, with a scene keeping the keyboard it was built for; and the view of the camera the AR overlay is set to is the machine's own, falling back to the default view when it is unknown, kept when a look is applied, and carried by no share code.");
     }
 
     private static void VerifyHandTracking()
@@ -1386,6 +1400,20 @@ internal static partial class VerificationSuite
             "The overlay's size, opacity and key tolerance belong on sliders, so they can be found by sliding.");
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.CameraSourceLink)) && choices.ContainsKey(nameof(PianoVisualSettings.CameraCorner)),
             "The overlay should offer a camera picker and the four-corner picker.");
+        // The AR card offers the view of the camera, so the keys marked at one angle are never the ones used at another.
+        Assert(choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)),
+            "The AR card should offer a picker for the view of the camera whose key area is in force.");
+        var viewWas = visualSettings.ArViewProfileId;
+        var viewPicker = choices[nameof(PianoVisualSettings.ArViewProfileId)];
+        Assert(viewPicker.Items.Count == ArCalibrationProfiles.All.Length,
+            $"The view picker should offer every view the app knows (found {viewPicker.Items.Count}).");
+        viewPicker.SelectedValue = ArCalibrationProfiles.Overhead90.Id;
+        Assert(visualSettings.ArViewProfileId == ArCalibrationProfiles.Overhead90.Id,
+            "Picking a view should store the identifier the calibration file is keyed by, not the caption.");
+        visualSettings.ArViewProfileId = "a view this app does not know"; visualSettings.Clamp();
+        Assert(visualSettings.ArViewProfileId == ArCalibrationProfiles.LegacyId,
+            "A stored view the app does not know must fall back to the default view rather than to nothing.");
+        visualSettings.ArViewProfileId = viewWas;
         var corner = choices[nameof(PianoVisualSettings.CameraCorner)];
         Assert(corner.Items.Count == CameraOverlay.Corners.Length, $"The corner picker should offer every corner (found {corner.Items.Count}).");
         corner.SelectedValue = "Top left";
@@ -1473,9 +1501,10 @@ internal static partial class VerificationSuite
         Assert(window.ArPlanNow.Status == ArStatus.Off && gpuFeed.Camera is null && gpuFeed.Ar is null && !stage.ArOverlayActive,
             "With the AR switch off the overlay leaves the stage alone.");
         Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
+                && choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)) && choices.ContainsKey(nameof(PianoVisualSettings.ArQuality))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay)),
-            "The Camera & FX page should carry the AR switch, the mode picker and the four sliders.");
+            "The Camera & FX page should carry the AR switch, the mode/view/quality pickers and the four sliders.");
         var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
         Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;
@@ -1566,6 +1595,143 @@ internal static partial class VerificationSuite
             Assert(!engine.StringResonanceEnabled, "The string-resonance toggle should reach the audio engine.");
         }
         Results.Add("PASS piano effects: sympathetic string resonance rings under the pedal, damps on release and bypasses bit-identically when disabled.");
+    }
+
+    /// <summary>
+    /// AR-S1: the shared piano simulation (docs/AR-OVERLAY-ROADMAP.md §14). Reads the numbers straight
+    /// out of the model - activity from the velocity band, the register-dependent die-off, the damper
+    /// versus the three pedals, notes per second and the total - the values the AR elements will build on.
+    /// </summary>
+    private static void VerifyPianoSimulation()
+    {
+        var sim = new PianoSimulation { VelocityFloor = 20, VelocityCeiling = 100 };
+        sim.NoteOn(60, 10);
+        Assert(sim.Activity(60) == 0, "A strike below the velocity floor should carry no activity.");
+        sim.NoteOn(60, 60);
+        Assert(Math.Abs(sim.Activity(60) - .5) < 1e-9, "A strike halfway up the velocity band should carry half the activity.");
+        sim.NoteOn(60, 127);
+        Assert(sim.Activity(60) == 1, "A strike past the ceiling should clamp to full activity.");
+        Assert(Math.Abs(PianoSimulation.NaturalDieOffSeconds(21) - 2.2) < 1e-9 && Math.Abs(PianoSimulation.NaturalDieOffSeconds(108) - .45) < 1e-9,
+            "The die-off should run from 2.2 s at A0 to 0.45 s at C8.");
+        sim = new PianoSimulation();
+        sim.NoteOn(21, 127); sim.NoteOn(108, 127); sim.Advance(1);
+        Assert(sim.Activity(21) > sim.Activity(108) + .3, "A bass string should ring far longer than a treble string.");
+        double Released(double sustain, double seconds)
+        {
+            var probe = new PianoSimulation();
+            probe.SetSustain(sustain);
+            probe.NoteOn(60, 127);
+            probe.NoteOff(60);
+            probe.Advance(seconds);
+            return probe.Activity(60);
+        }
+        var damped = Released(0, .2); var half = Released(.5, .2); var sustained = Released(1, .2);
+        Assert(damped < .05 && sustained > .7 && half > damped && half < sustained,
+            $"The damper should choke a released note while the sustain pedal leaves it ringing, half-pedalling in between ({damped:0.000}/{half:0.000}/{sustained:0.000}).");
+        sim = new PianoSimulation();
+        sim.NoteOn(60, 127); sim.NoteOn(62, 127);
+        sim.SetSostenuto(true);
+        sim.NoteOff(60); sim.NoteOff(62);
+        sim.NoteOn(64, 127); sim.NoteOff(64);
+        sim.Advance(.3);
+        Assert(sim.Activity(60) > .6 && sim.Activity(62) > .6 && sim.Activity(64) < .05,
+            "Sostenuto should hold the keys that were down and leave later keys to the damper.");
+        sim.SetSostenuto(false);
+        sim.Advance(.3);
+        Assert(sim.Activity(60) < .05 && sim.Activity(62) < .05, "Lifting sostenuto should drop the caught dampers.");
+        sim = new PianoSimulation();
+        sim.NoteOn(60, 100); sim.Advance(.4); sim.NoteOn(62, 100); sim.Advance(.5); sim.NoteOn(64, 100); sim.Advance(.05);
+        Assert(sim.NotesPerSecond == 3, "Three note-ons inside the last second should read as three notes per second.");
+        sim.Advance(.6);
+        Assert(sim.NotesPerSecond == 1, "Note-ons should slide out of the one-second window as time passes.");
+        sim.NoteOn(60, 127); sim.NoteOn(64, 127);
+        Assert(Math.Abs(sim.TotalActivity - (sim.Activity(60) + sim.Activity(64) + sim.Activity(62))) < 1e-9,
+            "Total activity should be the sum over the keys.");
+        Results.Add("PASS piano simulation (AR-S1): velocity band, register die-off, damper/sustain/sostenuto, notes per second and total activity.");
+    }
+
+    /// <summary>
+    /// AR-S2: the graph parameter (docs/AR-OVERLAY-ROADMAP.md §14.5) and the two velocity graphs of the
+    /// overlay's note style, wired from the settings page through <see cref="ArOptions"/> to the style the
+    /// AR layer draws with. Flat by default, so the drawings are unchanged unless the player asks.
+    /// </summary>
+    private static void VerifyArGraphVariable()
+    {
+        var flat = new GraphVariable(Graph: false, Min: .2, Max: .7);
+        Assert(flat.Sample(0) == .7 && flat.Sample(.5) == .7 && flat.Sample(1) == .7, "A flat parameter should always be its max.");
+        var graph = new GraphVariable(Graph: true, Start: .25, Stop: .75, Min: .2, Max: .8);
+        Assert(graph.Sample(0) == .2 && graph.Sample(1) == .8, "A graph should clamp outside its window.");
+        Assert(Math.Abs(graph.Sample(.5) - .5) < 1e-9, "A straight graph should walk its middle at the input's middle.");
+        var slowIn = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: 0, Max: 1, Curve: -1);
+        Assert(slowIn.Sample(.25) < .25 && slowIn.Sample(.75) - slowIn.Sample(.5) > slowIn.Sample(.5) - slowIn.Sample(0),
+            "A -1 curve should start slow and end fast: under the line early, more ground in its second half.");
+        Assert(new GraphVariable(Graph: true, Start: .5, Stop: .5, Min: .1, Max: .9).Sample(.5) == .9, "An empty window should be a flat max.");
+        Assert(double.IsFinite(new GraphVariable(Graph: true, Start: double.NaN, Stop: double.NaN, Min: double.NaN, Max: double.NaN).Sample(.5)),
+            "A graph of NaNs should still sample a finite number.");
+        // The settings reach the style: flat by default, and the two toggles build their graphs from the sliders.
+        var settings = new PianoVisualSettings();
+        Assert(settings.ArOptionsValue.NoteStyle.WidthGraph.Sample(.5) == 1 && settings.ArOptionsValue.NoteStyle.FadeGraph.Sample(.5) == 1,
+            "The default overlay should carry flat graphs: every strike the same width and the same fade.");
+        settings.ArNoteWidthByVelocity = true; settings.ArNoteWidthSoft = 50; settings.ArNoteWidthHard = 150;
+        settings.ArNoteFadeByVelocity = true; settings.ArNoteFadeSoft = 40; settings.ArNoteFadeHard = 100;
+        var style = settings.ArOptionsValue.NoteStyle;
+        Assert(Math.Abs(style.WidthGraph.Sample(0) - .5) < 1e-9 && Math.Abs(style.WidthGraph.Sample(1) - 1.5) < 1e-9,
+            "The width graph should walk the soft slider to the hard slider over the strike's velocity.");
+        Assert(Math.Abs(style.FadeGraph.Sample(0) - .4) < 1e-9 && Math.Abs(style.FadeGraph.Sample(1) - 1) < 1e-9,
+            "The fade graph should walk the soft slider to the hard slider over the strike's velocity.");
+        Assert(style.WidthShareFor(0) <= style.WidthShare && Math.Abs(style.WidthShareFor(1) - Math.Min(1, style.WidthShare * 1.5)) < 1e-9,
+            "The width a graph picks should stay a share of the key's width, clamped to the key.");
+        settings.Clamp();
+        Assert(settings.ArNoteWidthSoft == 50 && settings.ArNoteFadeHard == 100, "Clamping should keep in-range graph sliders as they are.");
+        settings.ArNoteWidthSoft = 1000; settings.Clamp();
+        Assert(settings.ArNoteWidthSoft == 200, "Clamping should pull an out-of-range width slider back into range.");
+        // A look never carries the graphs: they belong to the overlay on this camera.
+        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50 };
+        var target = new PianoVisualSettings();
+        target.CopyFrom(look);
+        Assert(!target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100,
+            "Applying a look should not change the overlay's velocity graphs.");
+        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade graphs wired from settings to the note style.");
+    }
+
+    /// <summary>
+    /// AR-S3: the element catalogue, the three quality tiers and the look guard (docs/AR-OVERLAY-ROADMAP.md
+    /// §14.3, §14.8). Lite draws the keys, the notes and the player's bars — what the overlay has always
+    /// drawn. A note style the overlay cannot render keeps its flat fallback, and a look never changes the
+    /// tier the overlay is drawn at.
+    /// </summary>
+    private static void VerifyArQualityTiers()
+    {
+        var lite = ArElementCatalog.ForTier(ArQualityTier.Lite);
+        Assert(lite.Contains(ArElement.PianoKeys) && lite.Contains(ArElement.NoteObjects) && lite.Contains(ArElement.Keypresses) && lite.Count == 3,
+            $"Lite should draw only the keys, the notes and the player's bars ({lite.Count} elements).");
+        var standard = ArElementCatalog.ForTier(ArQualityTier.Standard);
+        foreach (var floor in ArElementCatalog.NeverDropped) Assert(standard.Contains(floor), "Standard must draw at least everything Lite draws.");
+        Assert(ArElementCatalog.ForTier(ArQualityTier.Ultra).Contains(ArElement.Particles),
+            "Ultra should draw the particles the two lower tiers leave out.");
+        var dropOrder = ArElementCatalog.DropOrder;
+        foreach (var floor in ArElementCatalog.NeverDropped) foreach (var drop in dropOrder)
+                Assert(floor != drop, $"The drop order must never include the floor element {floor}.");
+        var lastDropIndex = dropOrder.Length - 1;
+        Assert(ArElement.Particles == dropOrder[0] && ArElement.ImpactLights == dropOrder[lastDropIndex],
+            "Particles should be the first thing an over-budget frame drops, key glow the last.");
+        Assert(!ArLookGuard.IsPortedToAr("Gem") && !ArLookGuard.IsPortedToAr("CrystalOutline"),
+            "Gem and Crystal Outline still have no AR variant.");
+        Assert(ArLookGuard.StyleForAr("Gem") == ArLookGuard.ArFallbackStyle,
+            "An unported note style should fall back to Neon rather than claiming a facet look the flat projection cannot draw.");
+        Assert(ArLookGuard.StyleForAr("Neon") == "Neon" && ArLookGuard.StyleForAr("Fire") == "Fire",
+            "The styles that are ported should be passed through unchanged.");
+        Assert(!ArLookGuard.IsPortedToAr("Unknown") && ArLookGuard.StyleForAr("Unknown") == ArLookGuard.ArFallbackStyle && ArLookGuard.StyleForAr(null) == ArLookGuard.ArFallbackStyle,
+            "A style name the app does not know should fall back too, so a style added to the settings side without an AR variant is left out rather than drawn wrong.");
+        var settings = new PianoVisualSettings();
+        Assert(settings.ArQuality == ArQualityTiers.StandardName, "Standard should be the default tier — not Lite, so existing users do not lose their key glow after upgrading.");
+        var kept = new PianoVisualSettings { ArQuality = ArQualityTiers.LiteName };
+        kept.CopyFrom(new PianoVisualSettings { ArQuality = ArQualityTiers.UltraName });
+        Assert(kept.ArQuality == ArQualityTiers.LiteName, "Applying a look should not change the AR quality tier.");
+        settings.ArQuality = "rubbish"; settings.Clamp();
+        Assert(settings.ArQuality == ArQualityTiers.StandardName, "An unknown tier should clamp back to Standard rather than drawing nothing.");
+        Assert(ArQualityTiers.Normalize("rubbish") == ArQualityTiers.StandardName, "The tier normaliser should also read an unknown name as Standard.");
+        Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, Gem/Crystal fallback, tier belongs to the machine.");
     }
 
     /// <summary>

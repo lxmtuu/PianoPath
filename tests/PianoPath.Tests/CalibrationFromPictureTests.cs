@@ -144,10 +144,10 @@ public sealed class CalibrationFromPictureTests : IDisposable
 
         // 3) saved for this camera, found again by a fresh run, and still on the keys
         var session = new ArCalibrationSession(new ArCalibrationStore(_dir));
-        session.Use("usb#cam", W, H, layout);
+        session.Use("usb#cam", W, H, layout, ArCalibrationProfiles.LegacyId);
         Assert.Equal(ArSaveResult.Saved, session.Save(calibration.Corners, out _));
         var next = new ArCalibrationSession(new ArCalibrationStore(_dir));
-        next.Use("USB#CAM", W, H, layout);
+        next.Use("USB#CAM", W, H, layout, ArCalibrationProfiles.LegacyId);
         Assert.Equal(ArCalibrationState.Ready, next.State);
         var reloaded = next.Current!;
         for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch; pitch++)
@@ -159,7 +159,7 @@ public sealed class CalibrationFromPictureTests : IDisposable
             Assert.True(KeyboardLayout.IsBlack(pitch) ? brightness < 90 : brightness > 120, $"key {pitch} reads {brightness} in the picture");
         }
         // another keyboard size, or another picture size, is not this calibration
-        next.Use("usb#cam", W, H, KeyboardLayout.ForKeyCount(keys == 88 ? 61 : 88));
+        next.Use("usb#cam", W, H, KeyboardLayout.ForKeyCount(keys == 88 ? 61 : 88), ArCalibrationProfiles.LegacyId);
         Assert.NotEqual(ArCalibrationState.Ready, next.State);
     }
 

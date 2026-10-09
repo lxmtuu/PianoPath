@@ -275,7 +275,7 @@ internal static partial class VerificationSuite
         Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 0, "A paused song draws no notes, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
         Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
-        Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: false)));
+        Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false)));
         Assert(renderer.ArQuadCount == renderer.ArKeyQuadCount && renderer.ArKeyQuadCount >= 1,
             "Perform mode draws no notes to come but still lights the key of the note that sounds.");
         // ---- AR-1.4: held keys lit where they are in the picture ---------------------------------------------
@@ -324,6 +324,68 @@ internal static partial class VerificationSuite
             Assert(Change(at) <= 2, $"Only held keys light up: {what} changed by {Change(at)}.");
         RenderWarm(MakeKeyFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, 0f)));
         Assert(renderer.ArQuadCount == 0, "A key light strength of zero draws no key.");
+
+        // ---- the keys under the player's own hands: a bar leaves the key ---------------------------------------
+        // No song at all: nothing plays and no notes are loaded, which is what playing freely looks like. The key
+        // still lights up, and a bar leaves it along the keyboard's own direction — the direction the song's notes
+        // come from — stretching as the key is held. Perform mode keeps the bar: it leaves out the notes of the song
+        // to come, not the mark of what the player just played.
+        GpuStageFeed ArFeed(int[] pitches, bool press)
+        {
+            var feed = MakeFeed(flatInput);
+            feed.SetState([], 0, false, new HashSet<int>(pitches));
+            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false);   // Perform: the song's notes are left out
+            if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
+            return feed;
+        }
+        (byte[] Pixels, int Bars, int Keys, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
+        {
+            var pixels = GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, beforeFrame, 20260930);
+            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArQuadCount);
+        }
+        int Probe(byte[] withBar, byte[] withoutBar, (double X, double Y) at)
+        {
+            var x = (int)Math.Floor(at.X); var y = (int)Math.Floor(at.Y);
+            Assert(x >= 0 && y >= 0 && x < width && y < height, $"The bar probe ({at.X:0.0},{at.Y:0.0}) must be on the output.");
+            var i = (y * width + x) * 4;
+            return Math.Max(Math.Abs(withBar[i] - withoutBar[i]), Math.Max(Math.Abs(withBar[i + 1] - withoutBar[i + 1]), Math.Abs(withBar[i + 2] - withoutBar[i + 2])));
+        }
+        var withoutBars = Draw(ArFeed([60, 61], press: false), 30);        // the same keys held, with no press behind them
+        var withBars = Draw(ArFeed([60, 61], press: true), 30);
+        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Quads == 5,
+            $"Two keys pressed should light their three key rectangles and draw one bar each ({withBars.Quads} quads: {withBars.Keys} key, {withBars.Bars} bar).");
+        int Bar((double X, double Y) at) => Probe(withBars.Pixels, withoutBars.Pixels, at);
+        var behindC4 = KeyPoint(layout.CenterX(60), -.05); var behindCs4 = KeyPoint(layout.CenterX(61), -.05);
+        Assert(Bar(behindC4) > 25 && Bar(behindCs4) > 25,
+            $"A bar should be drawn just behind each key that was pressed (white {Bar(behindC4)}, black {Bar(behindCs4)}).");
+        Assert(Bar(KeyPoint(layout.CenterX(62), -.05)) <= 2, "The bar belongs to the key that was pressed and to no other key.");
+        Assert(Bar(KeyPoint(layout.CenterX(60), .5)) <= 2, "The bar must not be drawn over the key itself: the lit key is the mark there.");
+        var farProbe = KeyPoint(layout.CenterX(60), -1.2);
+        Assert(Bar(farProbe) <= 2, $"A key held half a second has a short bar, well short of the look-ahead ({Bar(farProbe)} at -1.2).");
+        // held twice as long: the bar has stretched past where it reached at half a second, in the keyboard's own direction
+        var stretchedBars = Draw(ArFeed([60, 61], press: true), 60);
+        var withoutBarsLong = Draw(ArFeed([60, 61], press: false), 60);
+        Assert(stretchedBars.Bars == 2 && Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe) > 25,
+            $"The bar stretches as the key is held: past where half a second reached ({Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe)} at -1.2).");
+        // let go: the bar ends a moment later, while the key stays lit — the light is what the key is, the bar is what the hand did
+        var letGoFeed = ArFeed([60, 61], press: true);
+        var afterRelease = Draw(letGoFeed, 80, frame =>
+        {
+            if (frame != 20) return;
+            letGoFeed.LiveNote(60, false, 0); letGoFeed.LiveNote(61, false, 0);
+        });
+        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Quads == 3,
+            $"Letting go ends the bars while the keys stay lit ({afterRelease.Quads} quads: {afterRelease.Keys} key, {afterRelease.Bars} bar).");
+        // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
+        var fadingFeed = ArFeed([60, 61], press: true);
+        var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
+        {
+            if (frame != 20) return;
+            fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
+        });
+        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Quads == 5,
+            $"A key just let go keeps its bar for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} key, {fadingAfterRelease.Bars} bar five frames after the release).");
+        Results.Add("PASS ar live keys: the keys the player presses draw their own bars behind them, white or black, stretching along the keyboard as they are held and stopping at the look-ahead, gone a moment after the key is let go while the lit key stays; nothing is drawn over the key, behind a key that was not pressed, or beyond the reach — and Perform mode keeps them.");
 
         Render(MakeArFeed(flatInput, null));
         Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
@@ -663,7 +725,7 @@ internal static partial class VerificationSuite
             feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
             feed.SetState(song, 10, true, new HashSet<int>());
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
-            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, delay);
+            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: true, DelaySeconds: delay);
             PublishGrey();
             return GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
         }
@@ -691,13 +753,13 @@ internal static partial class VerificationSuite
             int Grey() { var v = 0; tap.TryRead(frame => { var i = ((int)ky * width + (int)kx) * 4; v = Math.Max(frame[i], Math.Max(frame[i + 1], frame[i + 2])) - Math.Min(frame[i], Math.Min(frame[i + 1], frame[i + 2])); }); return v; }
             // first with no delay and the key up until the last glow of an earlier press has died away, so the history starts dark
             feedKeys.SetState([], 0, false, new HashSet<int>());
-            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, 0f);
+            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: true, DelaySeconds: 0f);
             PublishGrey();
             feedKeys.Recording = tap;
             var wait = Stopwatch.StartNew();
             while ((tap.Serial < 8 || Grey() > 3) && loop.Error is null && wait.Elapsed.TotalSeconds < 30) Thread.Sleep(10);
             Assert(loop.Error is null && tap.Serial >= 8 && Grey() <= 3, $"Before the key is pressed its place in the picture is the camera's grey ({loop.Error}).");
-            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, true, delay);
+            feedKeys.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, .6f, ShowNotes: true, DelaySeconds: delay);
             Thread.Sleep((int)(delay * 1000) + 250);                               // the delayed history now holds only dark
             Assert(Grey() <= 3, "Switching the delay on must not light anything by itself.");
             var pressed = Stopwatch.StartNew();
@@ -730,9 +792,13 @@ internal static partial class VerificationSuite
         const int W = 1280, H = 720;
         var ring = (CameraFrameRing)Field(window, "_cameraFrames");
         var mirrorWas = visualSettings.CameraMirror;
+        var viewWas = visualSettings.ArViewProfileId;
+        var view = ArCalibrationProfiles.Normalize(viewWas).Id;
+        var otherView = ArCalibrationProfiles.All.First(profile => profile.Id != view);
         var keyCount = visualSettings.KeyboardLayoutChoice.KeyCount;
         (double X, double Y)[] truth = [(70, 292), (1214, 268), (1236, 421), (52, 449)];
         (double X, double Y)[] flat = [(100, 300), (400, 300), (700, 300), (1000, 300)];
+        (double X, double Y)[] moved = [(94, 274), (1238, 250), (1260, 403), (76, 431)];      // a key area of its own, to tell a save that landed from one that did not
 
         // the left half of the picture is red, the right half green: a picture turned round shows at once
         var halves = new byte[W * H * 4];
@@ -845,7 +911,8 @@ internal static partial class VerificationSuite
             Assert(opened == before + 1, "A camera with a picture of the right size should open the window once.");
             Assert(window.ArCalibration.State == ArCalibrationState.Ready && SameCorners(window.ArCalibration.Current?.Corners, truth),
                 $"Four clicks and Done should calibrate this camera with the corners that were marked on the picture as delivered (mirror {mirror}).");
-            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", W, H, keyCount), truth), "The calibration should be stored for this camera, picture size and keyboard size.");
+            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
+                "The calibration should be stored for this camera, view, picture size and keyboard size.");
         }
 
         // ---- corners that cannot be used keep Done shut ----
@@ -894,18 +961,130 @@ internal static partial class VerificationSuite
             return w.Result is not null;
         });
         Assert(window.ArCalibration.Snapshot.Source == "another camera" && window.ArCalibration.Current is null
-                && window.ArCalibration.Store.Get("verification camera", W, H, keyCount) is null && window.ArCalibration.Store.Get("another camera", W, H, keyCount) is null,
+                && window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount) is null && window.ArCalibration.Store.Get("another camera", view, W, H, keyCount) is null,
             "Corners marked for one camera must not be saved for another that replaced it while the window was open.");
 
-        // ---- leave everything as it was ----
+        // ---- a view of the camera whose keys were never marked ----
+        Invoke(window, "InjectCameraFrame", halves, W, H);
+        visualSettings.ArViewProfileId = view;
         Invoke(window, "ApplyArSource", "verification camera", W, H);
-        window.ArCalibration.Reset();
+        Open(w => { Arrange(w); Click(w, truth); w.Accept(); return w.Result is not null; });
+        Assert(window.ArCalibration.State == ArCalibrationState.Ready && window.ArCalibration.Snapshot.Profile.Id == view
+                && SameCorners(window.ArCalibration.Current?.Corners, truth),
+            "The view the camera stands at should be the one marked, and should be in force.");
+        // Turning the camera to another angle: the other view asks to be marked, and no note may be drawn with corners
+        // that were marked for the first angle.
+        visualSettings.ArViewProfileId = otherView.Id;
+        Invoke(window, "ApplyArSource", "verification camera", W, H);
+        Assert(window.ArCalibration.State == ArCalibrationState.NotCalibrated && window.ArCalibration.Current is null
+                && window.ArCalibration.Snapshot.Profile.Id == otherView.Id,
+            $"Choosing the {otherView.Id} view of a camera marked at {view} must ask for its keys to be marked, not draw with the corners of the other angle.");
+        var arWasOn = visualSettings.ArEnabled;
+        visualSettings.ArEnabled = true;             // so the card speaks about the calibration rather than about the switch
+        Invoke(window, "UpdateArFeed");
+        Assert(window.ArPlanNow.Status != ArStatus.Active,
+            $"Turning the camera to the {otherView.Id} view must not keep drawing with the corners marked at {view}.");
+        if (window.ArPlanNow.Status == ArStatus.NeedsCalibration)     // with the engine running: the card names the view whose keys are to be marked
+            Assert(Field(window, "_arStatus") is System.Windows.Controls.TextBlock line && line.Text.Contains(Loc.T(otherView.Name), StringComparison.Ordinal),
+                $"The AR card should name the view whose keys have to be marked ({otherView.Name}).");
+        visualSettings.ArEnabled = arWasOn;
+        Invoke(window, "UpdateArFeed");
+        Open(w =>
+        {
+            Arrange(w);
+            Assert(w.Title == Loc.F("Mark the keys for the {0} view", Loc.T(otherView.Name)),
+                $"The window should say which view of the camera is being marked (found “{w.Title}”).");
+            Click(w, truth);
+            w.Accept();
+            return w.Result is not null;
+        });
+        Assert(window.ArCalibration.State == ArCalibrationState.Ready && window.ArCalibration.Snapshot.Profile.Id == otherView.Id
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", otherView.Id, W, H, keyCount), truth)
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
+            "Each view keeps its own key area: marking the second one must leave the first exactly as it was.");
+        // The view changing behind the open window is not a save either: those corners were marked for the angle the camera
+        // was at when the window opened, and both views must be left exactly as they were.
+        visualSettings.ArViewProfileId = view;
+        Invoke(window, "ApplyArSource", "verification camera", W, H);          // the camera is back at the first view, with the window shut
+        Open(w =>
+        {
+            Arrange(w);
+            Assert(w.Title == Loc.F("Mark the keys for the {0} view", Loc.T(ArCalibrationProfiles.Normalize(view).Name)),
+                $"The window that opens for the {view} view should say so (found “{w.Title}”).");
+            Click(w, moved);
+            visualSettings.ArViewProfileId = otherView.Id;
+            Invoke(window, "ApplyArSource", "verification camera", W, H);
+            w.Accept();
+            return w.Result is not null;
+        });
+        Assert(window.ArCalibration.Snapshot.Profile.Id == otherView.Id
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", otherView.Id, W, H, keyCount), truth)
+                && SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
+            "A view chosen while the window is open must not be given the corners marked for the view the window was opened on.");
+
+        // ---- leave everything as it was ----
+        foreach (var profile in new[] { view, otherView.Id })
+        {
+            visualSettings.ArViewProfileId = profile;
+            Invoke(window, "ApplyArSource", "verification camera", W, H);
+            window.ArCalibration.Reset();
+        }
+        visualSettings.ArViewProfileId = viewWas;
         Invoke(window, "ApplyArSource", "another camera", W, H);
         window.ArCalibration.Reset();
         Invoke(window, "ApplyArSource", null!, 0, 0);
         ring.Clear();
         visualSettings.CameraMirror = mirrorWas;
         Invoke(window, "UpdateArFeed");
-        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled or when the camera changed behind it.");
+        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled, when the camera changed behind it, or when the view of the camera did; each view keeps its own key area and an unmarked view asks to be marked.");
+    }
+
+    /// <summary>
+    /// AR-S4: the scene→image map the stage's own note and sprite passes are to be drawn through
+    /// (docs/AR-OVERLAY-ROADMAP.md §12, §14.10). The unit tests hold the map to <c>ArProjection</c>; this holds it to
+    /// the scene layout the renderer really builds — <c>GpuSceneLayout</c> lives on the far side of the WPF line and
+    /// cannot be linked into the test project, so the one thing that could silently break the map (a scene whose key
+    /// positions are not the keyboard's normalised ones, or a hit line that is not the back edge of the keys) is
+    /// checked here, on the layout the GPU stage is handed.
+    /// </summary>
+    private static void VerifyArSceneProjection()
+    {
+        var corners = new (double X, double Y)[] { (70, 292), (1214, 268), (1236, 421), (52, 449) };
+        foreach (var (width, height, fraction) in new[] { (1280f, 720f, .28f), (1920f, 1080f, .24f), (900f, 900f, .32f) })
+        {
+            var scene = new GpuSceneLayout(width, height, fraction);
+            var frame = new ArSceneFrame(scene.Width, scene.HitY, scene.KeyboardHeight);
+            Assert(frame.IsUsable && Math.Abs(scene.HitY + scene.KeyboardHeight - scene.Height) < 1e-3,
+                "The scene layout's hit line and keyboard depth should add up to the height of the scene.");
+            var calibration = ArCalibration.Create(scene.Keys, corners, 1280, 720, out var problem)
+                ?? throw new InvalidOperationException($"the sample corners were refused: {problem}");
+            foreach (var mirror in new[] { false, true })
+            {
+                var view = new ArView(1280, 720, width, height, PictureFit.Fit, mirror);
+                Assert(ArSceneProjection.TryBuild(calibration, view, frame, out var map),
+                    "A calibration, a view and a scene layout should always carry a map.");
+                Assert(Math.Abs(map.WeightAt(0, scene.HitY) - 1) < 1e-12,
+                    "The weight should be 1 on the back-left corner of the keys, which is what ArProjection.MinW assumes.");
+                foreach (var pitch in new[] { scene.Keys.FirstPitch, 60, 61, scene.Keys.FirstPitch + scene.Keys.KeyCount - 1 })
+                {
+                    if (!scene.Keys.Contains(pitch)) continue;
+                    Assert(Math.Abs(scene.X(pitch) - scene.Keys.CenterX(pitch) * scene.Width) < 1e-3,
+                        "The scene's key positions should be the keyboard's normalised ones scaled by the scene width, or x/Width is not u.");
+                    double left, right, depth;
+                    if (KeyboardLayout.IsBlack(pitch)) { (left, right) = scene.Keys.Span(pitch); depth = ArCalibration.BlackLengthShare; }
+                    else { var centre = scene.Keys.CenterX(pitch); left = centre - scene.Keys.WhiteWidth / 2; right = centre + scene.Keys.WhiteWidth / 2; depth = 1; }
+                    Assert(ArProjection.TryProject(calibration, view, left, right, 0, depth, out var expected, out _, out _),
+                        "The sample keyboard should project every one of its keys.");
+                    var (x0, y0) = frame.Scene(left, 0); var (x1, y1) = frame.Scene(right, depth);
+                    var got = new[] { map.Project(x0, y0), map.Project(x1, y0), map.Project(x1, y1), map.Project(x0, y1) };
+                    for (var i = 0; i < 4; i++)
+                        Assert(Math.Abs(expected[i].X - got[i].X) < 1e-6 && Math.Abs(expected[i].Y - got[i].Y) < 1e-6 && Math.Abs(expected[i].W - got[i].W) < 1e-9,
+                            $"The scene map should put key {pitch} exactly where the projection the overlay already uses puts it.");
+                    var scale = map.ScaleAt(scene.X(pitch), scene.HitY);
+                    Assert(scale > 0 && double.IsFinite(scale), "The magnification should be a real number wherever a key can be drawn.");
+                }
+            }
+        }
+        Results.Add("PASS AR scene projection (AR-S4): the scene-to-image map agrees with ArProjection on the scene layout the renderer builds, at three output sizes, mirrored and not.");
     }
 }

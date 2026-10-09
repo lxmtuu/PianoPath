@@ -171,8 +171,9 @@ public class CalibrationPictureTests
 
     // ---- when the window may open and when its result may be kept -----------------------------------------
 
-    private static ArCalibrationSnapshot Snapshot(ArCalibrationState state, string source = "cam-a", int width = 1280, int height = 720, int keys = 88) =>
-        new(state, null, state == ArCalibrationState.NoSource ? "" : source, state == ArCalibrationState.NoSource ? 0 : width, state == ArCalibrationState.NoSource ? 0 : height, state == ArCalibrationState.NoSource ? 0 : keys, 1);
+    private static ArCalibrationSnapshot Snapshot(ArCalibrationState state, string source = "cam-a", int width = 1280, int height = 720, int keys = 88,
+        ArCalibrationProfile? profile = null) =>
+        new(state, null, profile ?? ArCalibrationProfiles.Legacy, state == ArCalibrationState.NoSource ? "" : source, state == ArCalibrationState.NoSource ? 0 : width, state == ArCalibrationState.NoSource ? 0 : height, state == ArCalibrationState.NoSource ? 0 : keys, 1);
 
     private static CalibrationPicture Picture(int width, int height) => new(new byte[width * height * 4], width, height);
 
@@ -188,7 +189,7 @@ public class CalibrationPictureTests
     }
 
     [Fact]
-    public void A_result_is_kept_only_when_the_camera_picture_size_and_keyboard_are_still_the_same()
+    public void A_result_is_kept_only_when_the_camera_view_picture_size_and_keyboard_are_still_the_same()
     {
         var before = Snapshot(ArCalibrationState.NotCalibrated);
         Assert.True(CalibrationLaunchRules.SameSource(before, Snapshot(ArCalibrationState.Ready)));                     // saving and resetting change the calibration only
@@ -198,6 +199,8 @@ public class CalibrationPictureTests
         Assert.False(CalibrationLaunchRules.SameSource(before, Snapshot(ArCalibrationState.NotCalibrated, width: 1920, height: 1080)));
         Assert.False(CalibrationLaunchRules.SameSource(before, Snapshot(ArCalibrationState.NotCalibrated, height: 719)));
         Assert.False(CalibrationLaunchRules.SameSource(before, Snapshot(ArCalibrationState.NotCalibrated, keys: 61)));
+        // Another view of the same camera is not the same source: the corners were marked for the angle the camera was at.
+        Assert.False(CalibrationLaunchRules.SameSource(before, Snapshot(ArCalibrationState.NotCalibrated, profile: ArCalibrationProfiles.Overhead90)));
     }
 
     // ---- the words ----------------------------------------------------------------------------------------

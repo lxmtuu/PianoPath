@@ -28,12 +28,16 @@
          Diagnostics/FrameBenchmark.cs - the half of the perf gate that runs the Direct3D render loop; its
                                        arithmetic, budgets and report live in Diagnostics/FrameBudget.cs,
                                        which is linked below and needs nothing but the base class library
-         Stage/ (except KeyboardLayout.cs, which is pure), Theme/, Library/, Profile/, Practice/
+         Stage/ (except KeyboardLayout.cs, PianoSimulation.cs and GraphVariable.cs, which are pure), Theme/, Library/, Profile/, Practice/
                                      - all bottom out in ShellThemes, whose record is declared in terms
                                        of System.Windows.Media.Color, or in PianoVisualSettingsStore
        Adding a file to this list is the whole act of widening the coverage; if it drags WPF in, the
        build says so immediately on the Linux job. -->
   <ItemGroup>
+    <Compile Include="..\..\Stage\PianoSimulation.cs" Link="Product\Stage\PianoSimulation.cs" />
+    <Compile Include="..\..\Stage\GraphVariable.cs" Link="Product\Stage\GraphVariable.cs" />
+    <Compile Include="..\..\Camera\ArElementCatalog.cs" Link="Product\Camera\ArElementCatalog.cs" />
+    <Compile Include="..\..\Camera\ArLookGuard.cs" Link="Product\Camera\ArLookGuard.cs" />
     <Compile Include="..\..\Localization\Loc.cs" Link="Product\Localization\Loc.cs" />
     <Compile Include="..\..\Localization\Strings.English.cs" Link="Product\Localization\Strings.English.cs" />
     <Compile Include="..\..\Localization\Strings.Vietnamese.cs" Link="Product\Localization\Strings.Vietnamese.cs" />
@@ -62,8 +66,10 @@
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
     <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
     <Compile Include="..\..\Camera\ArCalibration.cs" Link="Product\Camera\ArCalibration.cs" />
+    <Compile Include="..\..\Camera\ArCalibrationProfile.cs" Link="Product\Camera\ArCalibrationProfile.cs" />
     <Compile Include="..\..\Camera\ArView.cs" Link="Product\Camera\ArView.cs" />
     <Compile Include="..\..\Camera\ArProjection.cs" Link="Product\Camera\ArProjection.cs" />
+    <Compile Include="..\..\Camera\ArSceneProjection.cs" Link="Product\Camera\ArSceneProjection.cs" />
     <Compile Include="..\..\Camera\ArKeys.cs" Link="Product\Camera\ArKeys.cs" />
     <Compile Include="..\..\Camera\ArOptions.cs" Link="Product\Camera\ArOptions.cs" />
     <Compile Include="..\..\Camera\ArPlan.cs" Link="Product\Camera\ArPlan.cs" />
