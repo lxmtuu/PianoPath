@@ -393,8 +393,8 @@ internal static partial class VerificationSuite
             if (frame != 20) return;
             fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
-        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 2 && fadingAfterRelease.Quads == 7,
-            $"A key just let go keeps its bar beside the independent strike light for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} keys, {fadingAfterRelease.Bars} bars, {fadingAfterRelease.Impacts} impacts five frames after release).");
+        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 0 && fadingAfterRelease.Quads == 5,
+            $"A key just let go keeps its bar for a moment, before the held trail reaches its impact ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} keys, {fadingAfterRelease.Bars} bars five frames after release).");
         Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
