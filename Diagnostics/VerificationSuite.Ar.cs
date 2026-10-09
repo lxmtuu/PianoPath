@@ -1087,4 +1087,169 @@ internal static partial class VerificationSuite
         }
         Results.Add("PASS AR scene projection (AR-S4): the scene-to-image map agrees with ArProjection on the scene layout the renderer builds, at three output sizes, mirrored and not.");
     }
+
+    /// <summary>
+    /// AR-S4b, the scene→image map on the GPU (docs/AR-OVERLAY-ROADMAP.md §14.10): the stage's own note pass draws
+    /// through it over the camera picture, instead of the AR layer keeping flat note quads of its own. Read back on
+    /// WARP and checked twice over. Switched off — the default — the frame must not change by a single pixel even
+    /// with the whole map sitting in the frame constants beside the ones the stage already reads. Switched on, every
+    /// note must land inside the patch <see cref="ArProjection.TryProject"/> reports for its own rectangle, with the
+    /// sample keyboard and with the picture mirrored, and the min-scale floor the flags float4 carries must reach
+    /// the shader without moving the note.
+    /// </summary>
+    private static void VerifyArNoteProjection()
+    {
+        const int width = 1280, height = 720;
+        // Solid notes with halo, bloom and every side effect off: what a frame can hold is the note body and the
+        // camera's grey, so the patch either holds note pixels or it does not and there is no glow to argue about.
+        var settings = new PianoVisualSettings
+        {
+            ShowNotes = true, NoteStyle = "Solid", NoteWidth = 100, NoteGlow = 0, NoteHeadGlow = 0, NoteRoundness = 0,
+            FallingPulse = false, FallingTrail = "None", FallingGhost = false, NoteShimmer = false, NoteLandingGlow = false,
+            HoldBar = false, HoldBreath = false, HoldVibration = false, HoldColorCycle = false, HoldElectricArc = false,
+            ShowEmbers = false, ShowWisps = false, ShowFlame = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowKeys = false, ShowHalo = false, ShowBackground = false, ShowStars = false, ShowLightBeams = false, ShowPetals = false,
+            AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
+            BloomIntensity = 0, HorizonGlow = 0, Vignette = 0, ShootingStars = false
+        };
+        var notes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = 10.6, Duration = .4 },    // white key, on its way
+            new() { Pitch = 61, Start = 10.9, Duration = .5 },    // black key
+            new() { Pitch = 67, Start = 11.35, Duration = .6 }
+        };
+        // the very layout the render loop builds from this feed, so the rectangles below are the drawn ones
+        var scene = new GpuSceneLayout(width, height, .205f);
+        var frame = new ArSceneFrame(scene.Width, scene.HitY, scene.KeyboardHeight);
+        var corners = new (double X, double Y)[] { (70, 292), (1214, 268), (1236, 421), (52, 449) };
+        var calibration = ArCalibration.Create(scene.Keys, corners, 1280, 720, out var problem)
+            ?? throw new InvalidOperationException($"the sample corners were refused: {problem}");
+        // a grey camera picture: the note is the only colour a frame can hold
+        var ring = new CameraFrameRing();
+        var grey = ring.BeginWrite(1280 * 720 * 4, out var slot);
+        Array.Fill(grey, (byte)90, 0, 1280 * 720 * 4);
+        for (var i = 3; i < grey.Length; i += 4) grey[i] = 255;
+        ring.Publish(slot, 1280, 720, Stopwatch.GetTimestamp());
+        GpuStageFeed MakeFeed(bool mirror, GpuArInput? ar)
+        {
+            var feed = new GpuStageFeed();
+            feed.SetStageHeight(height);
+            feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205));
+            feed.SetDeterministicState(notes, 10, true, new HashSet<int>());
+            feed.SetDeterministicBeatPulse(0);
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, mirror, 1f);
+            feed.Ar = ar;
+            return feed;
+        }
+        // where (s, t) of a patch lands on the output, blended in perspective the way the rasteriser blends the quad
+        static (double X, double Y) Blend(ArPatch patch, double s, double t)
+        {
+            double weight = 0, x = 0, y = 0;
+            for (var i = 0; i < 4; i++)
+            {
+                var lambda = i switch { 0 => (1 - s) * (1 - t), 1 => s * (1 - t), 2 => s * t, _ => (1 - s) * t };
+                weight += lambda * patch[i].W; x += lambda * patch[i].W * patch[i].X; y += lambda * patch[i].W * patch[i].Y;
+            }
+            return (x / weight, y / weight);
+        }
+        // what a pixel says: colour spread and distance from the camera's grey, or null for a point off the output
+        static (int Spread, int Off)? Look(byte[] pixels, int w, int h, (double X, double Y) at)
+        {
+            if (!(at.X >= 0 && at.Y >= 0 && at.X < w && at.Y < h)) return null;
+            var i = ((int)Math.Floor(at.Y) * w + (int)Math.Floor(at.X)) * 4;
+            int blue = pixels[i], green = pixels[i + 1], red = pixels[i + 2];
+            return (Math.Max(red, Math.Max(green, blue)) - Math.Min(red, Math.Min(green, blue)),
+                Math.Max(Math.Abs(red - 90), Math.Max(Math.Abs(green - 90), Math.Abs(blue - 90))));
+        }
+        static int NotePixels(byte[] pixels)
+        {
+            var count = 0;
+            for (var i = 0; i < pixels.Length; i += 4)
+                if (Math.Max(Math.Abs(pixels[i] - 90), Math.Max(Math.Abs(pixels[i + 1] - 90), Math.Abs(pixels[i + 2] - 90))) > 40) count++;
+            return count;
+        }
+
+        using var renderer = GpuStageRenderer.Create(forceWarp: true);
+        byte[] Render(GpuStageFeed feed) => GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
+
+        // ---- default off: the map in the constants must not move one pixel ------------------------------
+        var withoutAr = Render(MakeFeed(false, null));
+        var mapInConstants = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 0f)));
+        Assert(withoutAr.AsSpan().SequenceEqual(mapInConstants),
+            "AR-S4b default off: with the whole scene→image map in the frame constants (the AR layer at zero opacity, the note branch's flag down) the frame must be byte-identical to one with no AR input at all — not one pixel may change.");
+        var defaultNotes = NotePixels(withoutAr);
+        Assert(defaultNotes > 500, $"The default frame must still show its notes over the picture before any of this proves anything ({defaultNotes} note pixels).");
+
+        // ---- on: every note lands inside the patch ArProjection.TryProject reports for its own rectangle ----
+        foreach (var mirror in new[] { false, true })
+        {
+            var feed = MakeFeed(mirror, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true));
+            // the rectangles the note pass is handed, rebuilt on the CPU from the same deterministic input the frame is drawn from
+            var replica = new GpuStageSimulation(20260930);
+            var input = new GpuFrameInput();
+            feed.Capture(input, GpuStageFeed.Now);
+            replica.Step(1 / 60.0, input, feed, scene.Width);
+            var rects = new GpuInstanceList<GpuNoteInstance>(32);
+            replica.BuildNotes(input, scene, rects);
+            Assert(rects.Count == notes.Count, $"Every note of the fixture should reach the note pass ({rects.Count} of {notes.Count}).");
+            var drawn = Render(feed);
+            Assert(renderer.ArQuadCount == 0,
+                "With the note pass drawing through the map, the AR layer keeps no flat note or bar quad of its own.");
+            Assert(NotePixels(drawn) > 500, $"The projected notes must be drawn ({NotePixels(drawn)} note pixels, mirrored {mirror}).");
+            var view = new ArView(1280, 720, width, height, PictureFit.Fit, mirror);
+            foreach (var rect in rects.Span)
+            {
+                var x0 = rect.Rect.X; var x1 = rect.Rect.X + rect.Rect.Z;
+                var y0 = rect.Rect.Y; var y1 = rect.Rect.Y + rect.Rect.W;
+                Assert(ArSceneProjection.TryProjectRect(calibration, view, frame, x0, x1, y0, y1, out var patch, out _, out _),
+                    $"The note rectangle [{x0:0},{y0:0}]–[{x1:0},{y1:0}] must project to a patch.");
+                var inside = 0;
+                foreach (var (s, t) in new[] { (.5, .5), (.35, .5), (.65, .5), (.5, .3), (.5, .7), (.5, .2), (.5, .8) })
+                {
+                    if (Look(drawn, width, height, Blend(patch, s, t)) is not { } pixel) continue;
+                    inside++;
+                    Assert(pixel.Spread > 30 && pixel.Off > 40,
+                        $"A note drawn through the map must fill the patch ArProjection.TryProject reports for its rectangle: at ({s:0.00},{t:0.00}) of the patch the frame should hold the note colour (spread {pixel.Spread}, off grey {pixel.Off}, mirrored {mirror}).");
+                }
+                Assert(inside >= 4, $"At least four sample points of the patch should be on the output ({inside}, mirrored {mirror}).");
+                var outside = 0;
+                foreach (var (s, t) in new[] { (-.35, .5), (1.35, .5), (.5, -.35), (-.35, .9), (1.35, .9) })
+                {
+                    if (Look(drawn, width, height, Blend(patch, s, t)) is not { } pixel) continue;
+                    outside++;
+                    Assert(pixel.Off <= 4 && pixel.Spread <= 4,
+                        $"Just outside the patch ({s:0.00},{t:0.00}) the camera's grey must show — the note may not spill past the projection of its own rectangle (off by {pixel.Off}, mirrored {mirror}).");
+                }
+                Assert(outside >= 1, $"At least one outside sample should be on the output ({outside}, mirrored {mirror}).");
+            }
+        }
+
+        // ---- the min-scale floor the flags float4 carries: it reaches the shader and moves nothing ------
+        var plain = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true)));
+        var floored = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinScalePx: 24)));
+        Assert(!plain.AsSpan().SequenceEqual(floored),
+            "A non-zero min-scale floor must reach the note pass and change how the SDF measures (a floor the shader ignored would leave the frame byte-identical).");
+        // the body may not move under the floor: the same patches must still hold the note, inside and out
+        var viewPlain = new ArView(1280, 720, width, height, PictureFit.Fit, false);
+        var replicaFloored = new GpuStageSimulation(20260930);
+        var inputFloored = new GpuFrameInput();
+        var feedFloored = MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinScalePx: 24));
+        feedFloored.Capture(inputFloored, GpuStageFeed.Now);
+        replicaFloored.Step(1 / 60.0, inputFloored, feedFloored, scene.Width);
+        var rectsFloored = new GpuInstanceList<GpuNoteInstance>(32);
+        replicaFloored.BuildNotes(inputFloored, scene, rectsFloored);
+        foreach (var rect in rectsFloored.Span)
+        {
+            Assert(ArSceneProjection.TryProjectRect(calibration, viewPlain, frame, rect.Rect.X, rect.Rect.X + rect.Rect.Z, rect.Rect.Y, rect.Rect.Y + rect.Rect.W, out var patch, out _, out _),
+                "The floored frame draws the same rectangles, which must project to the same patches.");
+            if (Look(floored, width, height, Blend(patch, .5, .5)) is { } pixel)
+                Assert(pixel.Spread > 30 && pixel.Off > 40,
+                    $"The min-scale floor may change how the SDF measures but not where the note is: its patch centre must still hold the note colour (spread {pixel.Spread}, off grey {pixel.Off}).");
+            if (Look(floored, width, height, Blend(patch, 1.35, .5)) is { } outside)
+                Assert(outside.Off <= 4 && outside.Spread <= 4,
+                    $"Under the min-scale floor the note may not spill past its patch either (off by {outside.Off}).");
+        }
+
+        Results.Add($"PASS AR note projection (AR-S4b): default off the {width}×{height} frame is byte-identical with the whole map in the constants and without any AR input ({defaultNotes} note pixels unchanged); switched on, 3 notes on the sample keyboard land inside the ArProjection patches of their own rectangles, mirrored and not, with no flat AR note quads of their own; min-scale floor reaches the shader without moving them.");
+    }
 }
