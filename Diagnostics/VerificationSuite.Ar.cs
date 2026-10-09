@@ -1038,4 +1038,53 @@ internal static partial class VerificationSuite
         Invoke(window, "UpdateArFeed");
         Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled, when the camera changed behind it, or when the view of the camera did; each view keeps its own key area and an unmarked view asks to be marked.");
     }
+
+    /// <summary>
+    /// AR-S4: the scene→image map the stage's own note and sprite passes are to be drawn through
+    /// (docs/AR-OVERLAY-ROADMAP.md §12, §14.10). The unit tests hold the map to <c>ArProjection</c>; this holds it to
+    /// the scene layout the renderer really builds — <c>GpuSceneLayout</c> lives on the far side of the WPF line and
+    /// cannot be linked into the test project, so the one thing that could silently break the map (a scene whose key
+    /// positions are not the keyboard's normalised ones, or a hit line that is not the back edge of the keys) is
+    /// checked here, on the layout the GPU stage is handed.
+    /// </summary>
+    private static void VerifyArSceneProjection()
+    {
+        var corners = new (double X, double Y)[] { (70, 292), (1214, 268), (1236, 421), (52, 449) };
+        foreach (var (width, height, fraction) in new[] { (1280f, 720f, .28f), (1920f, 1080f, .24f), (900f, 900f, .32f) })
+        {
+            var scene = new GpuSceneLayout(width, height, fraction);
+            var frame = new ArSceneFrame(scene.Width, scene.HitY, scene.KeyboardHeight);
+            Assert(frame.IsUsable && Math.Abs(scene.HitY + scene.KeyboardHeight - scene.Height) < 1e-3,
+                "The scene layout's hit line and keyboard depth should add up to the height of the scene.");
+            var calibration = ArCalibration.Create(scene.Keys, corners, 1280, 720, out var problem)
+                ?? throw new InvalidOperationException($"the sample corners were refused: {problem}");
+            foreach (var mirror in new[] { false, true })
+            {
+                var view = new ArView(1280, 720, width, height, PictureFit.Fit, mirror);
+                Assert(ArSceneProjection.TryBuild(calibration, view, frame, out var map),
+                    "A calibration, a view and a scene layout should always carry a map.");
+                Assert(Math.Abs(map.WeightAt(0, scene.HitY) - 1) < 1e-12,
+                    "The weight should be 1 on the back-left corner of the keys, which is what ArProjection.MinW assumes.");
+                foreach (var pitch in new[] { scene.Keys.FirstPitch, 60, 61, scene.Keys.FirstPitch + scene.Keys.KeyCount - 1 })
+                {
+                    if (!scene.Keys.Contains(pitch)) continue;
+                    Assert(Math.Abs(scene.X(pitch) - scene.Keys.CenterX(pitch) * scene.Width) < 1e-3,
+                        "The scene's key positions should be the keyboard's normalised ones scaled by the scene width, or x/Width is not u.");
+                    double left, right, depth;
+                    if (KeyboardLayout.IsBlack(pitch)) { (left, right) = scene.Keys.Span(pitch); depth = ArCalibration.BlackLengthShare; }
+                    else { var centre = scene.Keys.CenterX(pitch); left = centre - scene.Keys.WhiteWidth / 2; right = centre + scene.Keys.WhiteWidth / 2; depth = 1; }
+                    Assert(ArProjection.TryProject(calibration, view, left, right, 0, depth, out var expected, out _, out _),
+                        "The sample keyboard should project every one of its keys.");
+                    var (x0, y0) = frame.Scene(left, 0); var (x1, y1) = frame.Scene(right, depth);
+                    var got = new[] { map.Project(x0, y0), map.Project(x1, y0), map.Project(x1, y1), map.Project(x0, y1) };
+                    for (var i = 0; i < 4; i++)
+                        Assert(Math.Abs(expected[i].X - got[i].X) < 1e-6 && Math.Abs(expected[i].Y - got[i].Y) < 1e-6 && Math.Abs(expected[i].W - got[i].W) < 1e-9,
+                            $"The scene map should put key {pitch} exactly where the projection the overlay already uses puts it.");
+                    var scale = map.ScaleAt(scene.X(pitch), scene.HitY);
+                    Assert(scale > 0 && double.IsFinite(scale), "The magnification should be a real number wherever a key can be drawn.");
+                }
+            }
+        }
+        Results.Add("PASS AR scene projection (AR-S4): the scene-to-image map agrees with ArProjection on the scene layout the renderer builds, at three output sizes, mirrored and not.");
+    }
 }
