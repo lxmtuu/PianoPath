@@ -62,7 +62,7 @@ internal sealed class CalibrationSurface : FrameworkElement
 
     internal bool SetNoteDirectionToScreenUp()
     {
-        if (!TryGetPoseContext(out _, out _, out var pose, out var centre) || pose is null
+        if (!TryGetPoseContext(out _, out _, out var pose, out var centre)
             || !pose.TryDirectionForScreenDelta(centre, (0, -1), Wizard.View, out var direction)) return false;
         SetNoteDirection(ArNoteDirection.FromVector(direction), notify: true);
         return true;
@@ -247,10 +247,10 @@ internal sealed class CalibrationSurface : FrameworkElement
     private static readonly Brush AxisZ = Freeze(new SolidColorBrush(Color.FromRgb(91, 164, 255)));
     private static readonly Brush NoteArrowBrush = Freeze(new SolidColorBrush(Color.FromRgb(255, 218, 77)));
 
-    private bool TryGetPoseContext(out ArCalibration calibration, out ArCameraPose? basePose,
-        out ArCameraPose? currentPose, out ArVec3 centre)
+    private bool TryGetPoseContext(out ArCalibration calibration, out ArCameraPose basePose,
+        out ArCameraPose currentPose, out ArVec3 centre)
     {
-        calibration = null!; basePose = null; currentPose = null; centre = default;
+        calibration = null!; basePose = default; currentPose = default; centre = default;
         if (Wizard.CurrentCalibration is not { } current || current.CameraPose is not { } pose) return false;
         var baseCalibration = ArCalibration.Create(Wizard.Layout, current.PoseBaseCorners, Wizard.ImageWidth, Wizard.ImageHeight,
             out _, current.CameraFovDegrees);
@@ -280,7 +280,7 @@ internal sealed class CalibrationSurface : FrameworkElement
 
     private void DrawNoteDirection(DrawingContext dc)
     {
-        if (!TryGetPoseContext(out _, out _, out var pose, out var centre) || pose is null) return;
+        if (!TryGetPoseContext(out _, out _, out var pose, out var centre)) return;
         if (!TryPoint(pose, centre, Wizard.View, out var origin)) return;
         var cameraPoint = pose.ToCamera(centre);
         var cameraDirection = pose.DirectionToCamera(_noteDirection.Vector);
@@ -301,7 +301,7 @@ internal sealed class CalibrationSurface : FrameworkElement
     {
         if (_tool is CalibrationTool.Corners or CalibrationTool.NoteDirection) return;
         if (!TryGetPoseContext(out _, out var basePose, out var currentPose, out var centre)
-            || basePose is null || currentPose is null || !TryPoint(currentPose, centre, Wizard.View, out var origin)) return;
+            || !TryPoint(currentPose, centre, Wizard.View, out var origin)) return;
         switch (_tool)
         {
             case CalibrationTool.Move:
@@ -379,7 +379,7 @@ internal sealed class CalibrationSurface : FrameworkElement
     private bool TryBeginToolDrag(Point position)
     {
         if (!TryGetPoseContext(out var calibration, out var basePose, out var currentPose, out var centre)
-            || basePose is null || currentPose is null || !TryPoint(currentPose, centre, Wizard.View, out var origin)) return false;
+            || !TryPoint(currentPose, centre, Wizard.View, out var origin)) return false;
         if (NearCorner(position)) return false;
         if (_tool == CalibrationTool.NoteDirection)
         {
@@ -498,7 +498,7 @@ internal sealed class CalibrationSurface : FrameworkElement
 
     private bool UpdateNoteDirection(Point position)
     {
-        if (!TryGetPoseContext(out _, out _, out var pose, out var centre) || pose is null) return false;
+        if (!TryGetPoseContext(out _, out _, out var pose, out var centre)) return false;
         var delta = position - _dragOrigin;
         if (delta.Length < 5 || !pose.TryDirectionForScreenDelta(centre, (delta.X, delta.Y), Wizard.View, out var direction)) return false;
         _noteDirection = ArNoteDirection.FromVector(direction);

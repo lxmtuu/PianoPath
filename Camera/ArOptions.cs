@@ -71,7 +71,7 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     internal float NoteMinAspect => (float)(Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault) / 100);
 
     /// <summary>The normalized 3D direction independently chosen for AR note travel.</summary>
-    internal ArNoteDirection NoteDirection => new(NoteDirectionTilt, NoteDirectionAzimuth).Normalised();
+    internal ArNoteDirection NoteDirection => new ArNoteDirection(NoteDirectionTilt, NoteDirectionAzimuth).Normalised();
 
     internal static double Fit(double value, double minimum, double maximum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;

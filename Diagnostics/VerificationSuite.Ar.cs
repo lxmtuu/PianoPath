@@ -1392,7 +1392,8 @@ internal static partial class VerificationSuite
         var expected = new List<Ar3DNoteShape>();
         Ar3DNoteProjection.Build(calibration, view, notes, 10, .22, defaultInput.Notes,
             defaultInput.NoteDirection, defaultInput.MinAspect, expected);
-        Assert.Equal(notes.Count, expected.Count);
+        Assert(expected.Count == notes.Count,
+            $"The 3D note projection should build one patch per input note ({expected.Count} patches for {notes.Count} notes).");
         var projected = Render(MakeFeed(defaultInput));
         var projectedPixels = ColouredPixels(projected);
         Assert(renderer.ArQuadCount == expected.Count && renderer.ArLiveBarCount == 0,
