@@ -336,14 +336,14 @@ internal static partial class VerificationSuite
             var feed = MakeFeed(flatInput);
             feed.SetState([], 0, false, new HashSet<int>(pitches));
             feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false,
-                Quality: ArQualityTier.Lite, ShowLiveTrails: showTrails);   // Isolate key tint/bars from projected impact FX; Perform leaves out song notes, while trails remain independent.
+                ShowLiveTrails: showTrails);   // Perform leaves out song notes; impact lights and optional press trails stay independent.
             if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
             return feed;
         }
-        (byte[] Pixels, int Bars, int Keys, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
+        (byte[] Pixels, int Bars, int Keys, int Impacts, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
         {
             var pixels = GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, beforeFrame, 20260930);
-            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArQuadCount);
+            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArQuadCount);
         }
         int Probe(byte[] withBar, byte[] withoutBar, (double X, double Y) at)
         {
@@ -352,16 +352,17 @@ internal static partial class VerificationSuite
             var i = (y * width + x) * 4;
             return Math.Max(Math.Abs(withBar[i] - withoutBar[i]), Math.Max(Math.Abs(withBar[i + 1] - withoutBar[i + 1]), Math.Abs(withBar[i + 2] - withoutBar[i + 2])));
         }
-        var withoutBars = Draw(ArFeed([60, 61], press: false), 30);        // the same keys held, with no press behind them
+        // Both renders receive the same MIDI strikes and key-light setting. Turning trails off is the control so
+        // transient impact lights remain identical and only the two independently optional bars differ.
+        var withoutBars = Draw(ArFeed([60, 61], press: true, showTrails: false), 30);
         var withBars = Draw(ArFeed([60, 61], press: true), 30);
-        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Quads == 5,
-            $"Two keys pressed should light their three key rectangles and draw one bar each ({withBars.Quads} quads: {withBars.Keys} key, {withBars.Bars} bar).");
-        var trailsOff = Draw(ArFeed([60, 61], press: true, showTrails: false), 30);
-        var trailsOffNoTint = Draw(ArFeed([60, 61], press: false, showTrails: false, keyLight: 0), 30);
-        Assert(trailsOff.Bars == 0 && trailsOff.Keys == 3 && trailsOff.Quads == 3,
-            $"Turning live press trails off must remove only their bars, leaving the same three lit key patches ({trailsOff.Quads} quads: {trailsOff.Keys} keys, {trailsOff.Bars} bars).");
+        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Impacts == 2 && withBars.Quads == 7,
+            $"Two keys pressed should light three key rectangles, draw two bars and retain two strike lights ({withBars.Quads} quads: {withBars.Keys} keys, {withBars.Bars} bars, {withBars.Impacts} impacts).");
+        Assert(withoutBars.Bars == 0 && withoutBars.Keys == 3 && withoutBars.Impacts == 2 && withoutBars.Quads == 5,
+            $"Turning live press trails off must remove only the bars, leaving key tint and independent strike lights ({withoutBars.Quads} quads: {withoutBars.Keys} keys, {withoutBars.Impacts} impacts).");
+        var trailsOffNoTint = Draw(ArFeed([60, 61], press: true, showTrails: false, keyLight: 0), 30);
         var tintedKey = KeyPoint(layout.CenterX(60), .85);
-        Assert(Probe(trailsOff.Pixels, trailsOffNoTint.Pixels, tintedKey) > 25,
+        Assert(Probe(withoutBars.Pixels, trailsOffNoTint.Pixels, tintedKey) > 25,
             "The key tint must still be visible when press trails are disabled.");
         int Bar((double X, double Y) at) => Probe(withBars.Pixels, withoutBars.Pixels, at);
         var behindC4 = KeyPoint(layout.CenterX(60), -.05); var behindCs4 = KeyPoint(layout.CenterX(61), -.05);
@@ -373,7 +374,7 @@ internal static partial class VerificationSuite
         Assert(Bar(farProbe) <= 2, $"A key held half a second has a short bar, well short of the look-ahead ({Bar(farProbe)} at -1.2).");
         // held twice as long: the bar has stretched past where it reached at half a second, in the keyboard's own direction
         var stretchedBars = Draw(ArFeed([60, 61], press: true), 60);
-        var withoutBarsLong = Draw(ArFeed([60, 61], press: false), 60);
+        var withoutBarsLong = Draw(ArFeed([60, 61], press: true, showTrails: false), 60);
         Assert(stretchedBars.Bars == 2 && Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe) > 25,
             $"The bar stretches as the key is held: past where half a second reached ({Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe)} at -1.2).");
         // let go: the bar ends a moment later, while the key stays lit — the light is what the key is, the bar is what the hand did
@@ -383,8 +384,8 @@ internal static partial class VerificationSuite
             if (frame != 20) return;
             letGoFeed.LiveNote(60, false, 0); letGoFeed.LiveNote(61, false, 0);
         });
-        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Quads == 3,
-            $"Letting go ends the bars while the keys stay lit ({afterRelease.Quads} quads: {afterRelease.Keys} key, {afterRelease.Bars} bar).");
+        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.Quads == 3,
+            $"Letting go ends the bars and the short strike lights while the keys stay lit ({afterRelease.Quads} quads: {afterRelease.Keys} keys).");
         // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
         var fadingFeed = ArFeed([60, 61], press: true);
         var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
@@ -392,8 +393,8 @@ internal static partial class VerificationSuite
             if (frame != 20) return;
             fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
-        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Quads == 5,
-            $"A key just let go keeps its bar for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} key, {fadingAfterRelease.Bars} bar five frames after the release).");
+        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 2 && fadingAfterRelease.Quads == 7,
+            $"A key just let go keeps its bar beside the independent strike light for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} keys, {fadingAfterRelease.Bars} bars, {fadingAfterRelease.Impacts} impacts five frames after release).");
         Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
