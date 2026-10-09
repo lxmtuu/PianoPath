@@ -364,11 +364,40 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
-    if (i.Misc.z > 0.5)
+    if (i.Misc.z > 0.5 && i.Misc.z < 1.5)
     {
         // a lit key: its colour laid over the key in the picture, so a white key takes the tint and a dark one lights up
         float ka = i.Color.a;
         return float4(i.Color.rgb * 1.1 * ka, ka);
+    }
+    if (i.Misc.z > 1.5 && i.Misc.z < 2.5)
+    {
+        // A 3D-projected rising spark: a hot centre and a small soft skirt, born at a struck key.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float r = length(p);
+        float core = exp(-r * r * 9.0);
+        float skirt = exp(-r * r * 2.2) * saturate((1.0 - r) * 2.5);
+        float coverage = saturate(core + skirt * 0.52) * i.Color.a;
+        float3 light = i.Color.rgb * (core * 1.35 + skirt * 0.55) * i.Color.a;
+        return float4(light, coverage);
+    }
+    if (i.Misc.z > 2.5 && i.Misc.z < 3.5)
+    {
+        // Impact light across the real key row, soft along depth and bright at the strike.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float beam = exp(-p.x * p.x * 3.2 - p.y * p.y * 1.45);
+        float hot = exp(-dot(p, p) * 4.5);
+        float coverage = beam * i.Color.a * 0.8;
+        return float4(i.Color.rgb * (beam * 0.72 + hot * 0.9) * i.Color.a, coverage);
+    }
+    if (i.Misc.z > 3.5)
+    {
+        // A ripple ring that expands over the calibrated key plane.
+        float r = length(i.Uv * 2.0 - 1.0);
+        float width = max(i.Misc.y, 0.01);
+        float band = exp(-pow((r - i.Misc.x) / width, 2.0));
+        float alpha = band * i.Color.a;
+        return float4(i.Color.rgb * alpha, alpha);
     }
     float side = min(i.Uv.x, 1.0 - i.Uv.x);
     float rim = 1.0 - smoothstep(0.0, 0.16, side);
@@ -1244,6 +1273,24 @@ float3 LinearToSrgb(float3 c)
     return lerp(high, low, step(c, 0.0031308));
 }
 
+float3 GradeCompositeColor(float3 linearColor, FullscreenOut i)
+{
+    float3 c = linearColor * Post.x;
+    if (Post.y > 0.5) c = AcesFitted(c * 1.25);
+    else c = c / (1.0 + max(Luma(c) - 1.0, 0.0));
+    float l = Luma(c);
+    c = lerp(l.xxx, c, Post.z);
+    c = saturate((c - 0.5) * Post.w + 0.5);
+    if (Background.w < 0.5)
+    {
+        float2 q = (i.Uv - 0.5) * float2(1.15, 1.0);
+        c *= 1.0 - Post2.x * smoothstep(0.35, 1.05, length(q) * 1.4);
+    }
+    float3 display = LinearToSrgb(c);
+    float noise = Hash21(i.Position.xy + frac(ScreenTime.z) * 61.0) - 0.5;
+    return display + noise * Post2.w;
+}
+
 float4 PsComposite(FullscreenOut i) : SV_Target
 {
     float4 scene = SourceTex.SampleLevel(PointClamp, i.Uv, 0);
@@ -1260,20 +1307,7 @@ float4 PsComposite(FullscreenOut i) : SV_Target
         alphaOutputCoverage = saturate(max(scene.a, lightCoverage));
         linearColor /= max(alphaOutputCoverage, 1e-4);
     }
-    float3 c = linearColor * Post.x;
-    if (Post.y > 0.5) c = AcesFitted(c * 1.25);
-    else c = c / (1.0 + max(Luma(c) - 1.0, 0.0));
-    float l = Luma(c);
-    c = lerp(l.xxx, c, Post.z);
-    c = saturate((c - 0.5) * Post.w + 0.5);
-    if (Background.w < 0.5)
-    {
-        float2 q = (i.Uv - 0.5) * float2(1.15, 1.0);
-        c *= 1.0 - Post2.x * smoothstep(0.35, 1.05, length(q) * 1.4);
-    }
-    float3 display = LinearToSrgb(c);
-    float noise = Hash21(i.Position.xy + frac(ScreenTime.z) * 61.0) - 0.5;
-    display += noise * Post2.w;
+    float3 display = GradeCompositeColor(linearColor, i);
     if (ArFlags.w > 0.5)
     {
         // Stream/OBS output: never mix in the camera, stage background or chroma fill. Additive light/bloom
@@ -1296,4 +1330,31 @@ float4 PsComposite(FullscreenOut i) : SV_Target
         display = lerp(float3(0.0, 1.0, 0.0), display, coverage);
     }
     return float4(display, 1.0);
+}
+
+// Geometry is the tone-mapped direct scene (including emissive cores) without the bloom pyramid. Glow
+// contains only the soft bloom contribution: low-energy additive pixels stay visible in Geometry instead of
+// disappearing when bloom is disabled, while the broad halo can be blended independently in OBS.
+float4 PsCompositeGeometry(FullscreenOut i) : SV_Target
+{
+    if (ArFlags.w < 0.5 || ArFlags.y < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+    float4 scene = SourceTex.SampleLevel(PointClamp, i.Uv, 0);
+    float directEnergy = max(Luma(max(scene.rgb, 0.0)), 0.0);
+    float directLightCoverage = 1.0 - exp(-directEnergy * 0.42);
+    float coverage = saturate(max(scene.a, directLightCoverage));
+    if (coverage <= 1e-4) return float4(0.0, 0.0, 0.0, 0.0);
+    float3 linearColor = scene.rgb / max(coverage, 1e-4);
+    float3 display = GradeCompositeColor(linearColor, i);
+    return float4(saturate(display) * coverage, coverage);
+}
+
+float4 PsCompositeGlow(FullscreenOut i) : SV_Target
+{
+    if (ArFlags.w < 0.5 || ArFlags.y < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+    float3 linearColor = max(SecondTex.SampleLevel(LinearClamp, i.Uv, 0).rgb * Post2.y, 0.0);
+    float energy = max(Luma(linearColor), 0.0);
+    float coverage = saturate(1.0 - exp(-energy * 0.42));
+    if (coverage <= 1e-4) return float4(0.0, 0.0, 0.0, 0.0);
+    float3 display = GradeCompositeColor(linearColor / max(coverage, 1e-4), i);
+    return float4(saturate(display) * coverage, coverage);
 }

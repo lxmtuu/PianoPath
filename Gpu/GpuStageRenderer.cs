@@ -105,7 +105,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal double ShaderCompileMilliseconds { get; private set; }
 
     private ID3D11VertexShader _vsFullscreen = null!, _vsNote = null!, _vsKey = null!, _vsSprite = null!, _vsArQuad = null!;
-    private ID3D11PixelShader _psArQuad = null!, _psBackground = null!, _psNote = null!, _psKey = null!, _psSprite = null!, _psPrefilter = null!, _psDown = null!, _psUp = null!, _psComposite = null!;
+    private ID3D11PixelShader _psArQuad = null!, _psBackground = null!, _psNote = null!, _psKey = null!, _psSprite = null!, _psPrefilter = null!, _psDown = null!, _psUp = null!, _psComposite = null!, _psCompositeGeometry = null!, _psCompositeGlow = null!;
     private ID3D11BlendState _blendPremultiplied = null!, _blendAdditive = null!, _blendOpaque = null!;
     private ID3D11DepthStencilState _depthOff = null!, _depthWrite = null!, _depthRead = null!;
     private ID3D11RasterizerState _raster = null!;
@@ -287,6 +287,8 @@ internal sealed class GpuStageRenderer : IDisposable
         _psDown = Device.CreatePixelShader(Compile("PsBloomDown", "ps_5_0").Span);
         _psUp = Device.CreatePixelShader(Compile("PsBloomUp", "ps_5_0").Span);
         _psComposite = Device.CreatePixelShader(Compile("PsComposite", "ps_5_0").Span);
+        _psCompositeGeometry = Device.CreatePixelShader(Compile("PsCompositeGeometry", "ps_5_0").Span);
+        _psCompositeGlow = Device.CreatePixelShader(Compile("PsCompositeGlow", "ps_5_0").Span);
         ShaderCompileMilliseconds = watch.Elapsed.TotalMilliseconds;
     }
 
@@ -365,6 +367,9 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>How many of those were bars of keys the player is pressing; verification reads it.</summary>
     internal int ArLiveBarCount => _arLayer.LiveBarCount;
+    internal int ArImpactLightCount => _arLayer.ImpactLightCount;
+    internal int ArPulseCount => _arLayer.PulseCount;
+    internal int ArParticleFxCount => _arLayer.ParticleFxCount;
 
     /// <summary>The camera texture (null when there is no layer or no frame yet); verification reads its counters.</summary>
     internal GpuCameraTexture? CameraTexture => _camera;
@@ -387,9 +392,12 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>Renders one frame of the stage into <paramref name="output"/> (a BGRA8 render target of the target's size).</summary>
     /// <param name="alphaOutput">Writes premultiplied alpha-effects pixels without a camera or stage background.</param>
-    internal void Render(GpuRenderTarget target, ID3D11RenderTargetView output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
+    /// <param name="alphaGeometryOutput">Optional base-geometry output for the split geometry/glow stream mode.</param>
+    /// <param name="alphaGlowOutput">Optional bloom-only output for the split geometry/glow stream mode.</param>
+    internal void Render(GpuRenderTarget target, ID3D11RenderTargetView? output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
         GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites,
-        GpuAdaptiveQualityTier qualityTier = GpuAdaptiveQualityTier.Full, bool sampleAdaptiveQuality = false, bool alphaOutput = false)
+        GpuAdaptiveQualityTier qualityTier = GpuAdaptiveQualityTier.Full, bool sampleAdaptiveQuality = false, bool alphaOutput = false,
+        ID3D11RenderTargetView? alphaGeometryOutput = null, ID3D11RenderTargetView? alphaGlowOutput = null)
     {
         _notePassProfiler?.CollectReady();
         var quality = GpuAdaptiveQualityProfile.For(qualityTier);
@@ -431,7 +439,8 @@ internal sealed class GpuStageRenderer : IDisposable
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation.LivePresses, _arList, arProjectedNotes);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation.LivePresses,
+                simulation.ArImpacts, _arList, arProjectedNotes);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
@@ -537,18 +546,28 @@ internal sealed class GpuStageRenderer : IDisposable
             context.ClearRenderTargetView(target.BloomRtv[0]!, new Color4(0, 0, 0, 0));
         }
 
-        // ---- composite to the output ----
+        // ---- composite outputs ----
         context.OMSetBlendState(_blendOpaque);
-        context.OMSetRenderTargets(output);
         context.RSSetViewport(new Viewport(target.Width, target.Height));
-        context.PSSetShader(_psComposite);
         context.PSSetShaderResource(0, target.HdrSrv!);
         context.PSSetShaderResource(1, target.BloomSrv[0]!);
         if (cameraActive) context.PSSetShaderResource(7, _camera!.View!);
-        context.Draw(3, 0);
+        if (output is not null)
+            CompositeTo(output, _psComposite);
+        if (alphaGeometryOutput is not null)
+            CompositeTo(alphaGeometryOutput, _psCompositeGeometry);
+        if (alphaGlowOutput is not null)
+            CompositeTo(alphaGlowOutput, _psCompositeGlow);
         context.PSUnsetShaderResources(0, 2);
         context.PSUnsetShaderResource(7);
         if (qualityQuerySlot >= 0) EndAdaptiveQualitySample(qualityQuerySlot);
+
+        void CompositeTo(ID3D11RenderTargetView destination, ID3D11PixelShader shader)
+        {
+            context.OMSetRenderTargets(destination);
+            context.PSSetShader(shader);
+            context.Draw(3, 0);
+        }
     }
 
     private void Pass(ID3D11RenderTargetView destination, (int Width, int Height) size, ID3D11PixelShader shader, ID3D11ShaderResourceView source, float texelX, float texelY, float z, float w)
@@ -662,7 +681,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _adaptiveQualityProfiler?.Dispose();
         _adaptiveQualityProfiler = null;
         _adaptiveQualityController = null;
-        foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
+        foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite, _psCompositeGeometry, _psCompositeGlow,
             _blendPremultiplied, _blendAdditive, _blendOpaque, _depthOff, _depthWrite, _depthRead, _raster, _linear, _point, _frameBuffer, _passBuffer })
             disposable?.Dispose();
         Context.Dispose();

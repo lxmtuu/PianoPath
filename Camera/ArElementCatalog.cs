@@ -94,9 +94,9 @@ internal static class ArElementCatalog
     internal static string PassOf(ArElement element) => element switch
     {
         ArElement.PianoKeys or ArElement.Dampers or ArElement.OctaveLines => "VsArQuad",
-        ArElement.NoteObjects or ArElement.Keypresses or ArElement.ImpactLights => "VsArQuad (VsNote from AR-S4)",
-        ArElement.NoteLights or ArElement.Pulses => "VsSprite (AR-S5)",
-        ArElement.Particles => "particle pass through the projection (AR-S5)",
+        ArElement.NoteObjects or ArElement.Keypresses or ArElement.ImpactLights or ArElement.Pulses => "VsArQuad (camera-projected 3D geometry)",
+        ArElement.NoteLights => "VsSprite (AR-S5)",
+        ArElement.Particles => "VsArQuad (camera-projected particle billboards)",
         ArElement.LightBars => "VsArQuad (AR-S8)",
         _ => "own pass, after everything, no homography (AR-S8)"
     };

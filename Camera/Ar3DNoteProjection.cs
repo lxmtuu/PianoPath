@@ -220,6 +220,26 @@ internal static class Ar3DNoteProjection
         return patch.Area > .01 && double.IsFinite(patch.Area) && Math.Abs(centre.X) < ArProjection.MaxCoordinate && Math.Abs(centre.Y) < ArProjection.MaxCoordinate;
     }
 
+    /// <summary>
+    /// Projects a keyboard-local camera-facing billboard from all four 3D corners. Unlike screen-space sprites, its
+    /// centre and size follow the saved pose/FOV and arbitrary camera orientation; callers choose the billboard axes.
+    /// </summary>
+    internal static bool TryProjectBillboard(ArCameraPose pose, ArView view, ArVec3 centre, ArVec3 axisX, ArVec3 axisY,
+        double halfX, double halfY, out ArPatch patch)
+    {
+        patch = default;
+        if (!view.Valid || !centre.IsFinite || !axisX.IsFinite || !axisY.IsFinite
+            || !(halfX > 0) || !(halfY > 0) || !double.IsFinite(halfX) || !double.IsFinite(halfY)) return false;
+        axisX = axisX.Normalized; axisY = axisY.Normalized;
+        if (axisX.Length < .9 || axisY.Length < .9) return false;
+        if (!pose.TryProject(centre - axisX * halfX - axisY * halfY, view, out var backLeft)
+            || !pose.TryProject(centre + axisX * halfX - axisY * halfY, view, out var backRight)
+            || !pose.TryProject(centre + axisX * halfX + axisY * halfY, view, out var frontRight)
+            || !pose.TryProject(centre - axisX * halfX + axisY * halfY, view, out var frontLeft)) return false;
+        patch = new ArPatch(backLeft, backRight, frontRight, frontLeft);
+        return patch.Area > .01 && double.IsFinite(patch.Area);
+    }
+
     private static int[] NextOfSamePitch(IReadOnlyList<NoteEvent> notes)
     {
         var next = new int[notes.Count];

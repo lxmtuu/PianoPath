@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using System.Windows.Threading;
 
 namespace PianoPath;
 
@@ -18,7 +19,13 @@ public partial class MainWindow
     private GpuRenderLoop? _gpuLoop;
     private GpuStageWindow? _gpuWindow;
     private GpuArAlphaOutputWindow? _gpuArAlphaOutputWindow;
+    private GpuArAlphaOutputWindow? _gpuArGeometryOutputWindow, _gpuArGlowOutputWindow;
+    private GpuAlphaLayerPairTap? _gpuArAlphaLayersTap;
+    private DispatcherTimer? _gpuArAlphaLayersRefreshTimer;
     private bool _softwareSessionOverride, _gpuFailureShown, _gpuHooked;
+
+    private bool HasGpuArOutputWindow => _gpuArAlphaOutputWindow is not null
+        || _gpuArGeometryOutputWindow is not null || _gpuArGlowOutputWindow is not null;
     private TextBlock? _gpuStatusLabel;
 
     /// <summary><c>--gpu</c>: the GPU stage is the main stage anyway; the switch stays for older launch scripts and CI.</summary>
@@ -49,8 +56,8 @@ public partial class MainWindow
             Stage.GpuStats = () => (_gpuLoop?.Fps ?? 0, _gpuLoop?.ParticleCount ?? 0);
         }
         var embedded = WantsEmbeddedGpu;
-        var needed = embedded || _gpuWindow is not null || _gpuArAlphaOutputWindow is not null;
-        if (needed && _gpuLoop is { Error: not null }) { StopGpuLoop(); needed = _gpuWindow is not null || _gpuArAlphaOutputWindow is not null; embedded = false; }
+        var needed = embedded || _gpuWindow is not null || HasGpuArOutputWindow;
+        if (needed && _gpuLoop is { Error: not null }) { StopGpuLoop(); needed = _gpuWindow is not null || HasGpuArOutputWindow; embedded = false; }
         if (!needed)
         {
             Stage.AttachGpu(null, false);
@@ -102,8 +109,18 @@ public partial class MainWindow
         if (_closing) return;
         if (_gpuLoop is { Error: { } error })
         {
-            _gpuArAlphaOutputWindow?.Close();
+            var combinedOutput = _gpuArAlphaOutputWindow;
+            var geometryOutput = _gpuArGeometryOutputWindow;
+            var glowOutput = _gpuArGlowOutputWindow;
+            StopGpuArAlphaLayersRefreshTimer();
+            _gpuArAlphaOutputWindow = null;
+            _gpuArGeometryOutputWindow = _gpuArGlowOutputWindow = null;
+            _gpuArAlphaLayersTap = null;
+            _gpuFeed.ArAlphaOutput = null;
+            _gpuFeed.ArAlphaLayersOutput = null;
+            combinedOutput?.Close(); geometryOutput?.Close(); glowOutput?.Close();
             Stage.AttachGpu(null, false);
+            ApplyRenderBackend();                 // remove the failed render loop unless another GPU output still needs it
             SyncCameraOverlay();                   // the overlay cannot be drawn without the engine
             if (!_gpuFailureShown)
             {
@@ -186,11 +203,120 @@ public partial class MainWindow
         output.Show();
     }
 
+    private void OpenArGeometryGlowOutput_Click(object sender, RoutedEventArgs e) => OpenArGeometryGlowOutputWindows();
+
+    /// <summary>Opens transparent geometry and bloom-only glow windows backed by one atomically published frame pair.</summary>
+    internal void OpenArGeometryGlowOutputWindows()
+    {
+        if (!_arPlan.ArLayer) return;
+        if (_gpuArGeometryOutputWindow is { IsVisible: true } geometryExisting
+            && _gpuArGlowOutputWindow is { IsVisible: true } glowExisting)
+        {
+            geometryExisting.Activate(); glowExisting.Activate();
+            StartGpuArAlphaLayersRefreshTimer();
+            return;
+        }
+        if (_gpuLoop is { Error: not null }) StopGpuLoop();
+        if (_gpuLoop is null)
+        {
+            _gpuLoop = new GpuRenderLoop(_gpuFeed);
+            _gpuLoop.StatusChanged += () => Dispatcher.BeginInvoke(new Action(OnGpuStatusChanged));
+        }
+
+        var pair = _gpuArAlphaLayersTap;
+        if (pair is null || !ReferenceEquals(_gpuFeed.ArAlphaLayersOutput, pair))
+        {
+            pair = new GpuAlphaLayerPairTap(1280, 720, 60);
+            _gpuArAlphaLayersTap = pair;
+            _gpuFeed.ArAlphaLayersOutput = pair;
+        }
+        if (_gpuArGeometryOutputWindow is null)
+        {
+            var output = new GpuArAlphaOutputWindow(pair.Geometry);
+            _gpuArGeometryOutputWindow = output;
+            output.Closed += (_, _) =>
+            {
+                if (!ReferenceEquals(_gpuArGeometryOutputWindow, output)) return;
+                _gpuArGeometryOutputWindow = null;
+                if (_gpuArGlowOutputWindow is null && ReferenceEquals(_gpuArAlphaLayersTap, pair))
+                {
+                    StopGpuArAlphaLayersRefreshTimer();
+                    _gpuArAlphaLayersTap = null;
+                    if (ReferenceEquals(_gpuFeed.ArAlphaLayersOutput, pair)) _gpuFeed.ArAlphaLayersOutput = null;
+                }
+                ApplyRenderBackend();
+            };
+        }
+        if (_gpuArGlowOutputWindow is null)
+        {
+            var output = new GpuArAlphaOutputWindow(pair.Glow);
+            _gpuArGlowOutputWindow = output;
+            output.Closed += (_, _) =>
+            {
+                if (!ReferenceEquals(_gpuArGlowOutputWindow, output)) return;
+                _gpuArGlowOutputWindow = null;
+                if (_gpuArGeometryOutputWindow is null && ReferenceEquals(_gpuArAlphaLayersTap, pair))
+                {
+                    StopGpuArAlphaLayersRefreshTimer();
+                    _gpuArAlphaLayersTap = null;
+                    if (ReferenceEquals(_gpuFeed.ArAlphaLayersOutput, pair)) _gpuFeed.ArAlphaLayersOutput = null;
+                }
+                ApplyRenderBackend();
+            };
+        }
+        ApplyRenderBackend();
+        if (_gpuArGeometryOutputWindow is { } geometry)
+        {
+            if (geometry.IsVisible) geometry.Activate(); else geometry.Show();
+        }
+        if (_gpuArGlowOutputWindow is { } glow)
+        {
+            if (glow.IsVisible) glow.Activate(); else glow.Show();
+        }
+        StartGpuArAlphaLayersRefreshTimer();
+    }
+
+    private void StartGpuArAlphaLayersRefreshTimer()
+    {
+        if (_gpuArAlphaLayersRefreshTimer is not null) return;
+        _gpuArAlphaLayersRefreshTimer = new DispatcherTimer(DispatcherPriority.Render)
+        {
+            Interval = TimeSpan.FromMilliseconds(16)
+        };
+        _gpuArAlphaLayersRefreshTimer.Tick += (_, _) =>
+        {
+            var pair = _gpuArAlphaLayersTap;
+            if (pair is null) return;
+            var geometry = _gpuArGeometryOutputWindow;
+            var glow = _gpuArGlowOutputWindow;
+            if (geometry is null && glow is null) return;
+            Action<byte[]>? copyGeometry = geometry is null ? null : geometry.CopyFrameData;
+            Action<byte[]>? copyGlow = glow is null ? null : glow.CopyFrameData;
+            if (!pair.TryReadPair(copyGeometry, copyGlow, out var serial)) return;
+            geometry?.PresentCopiedFrame(serial);
+            glow?.PresentCopiedFrame(serial);
+        };
+        _gpuArAlphaLayersRefreshTimer.Start();
+    }
+
+    private void StopGpuArAlphaLayersRefreshTimer()
+    {
+        _gpuArAlphaLayersRefreshTimer?.Stop();
+        _gpuArAlphaLayersRefreshTimer = null;
+    }
+
     private void ShutdownGpuStage()
     {
+        StopGpuArAlphaLayersRefreshTimer();
         _gpuFeed.ArAlphaOutput = null;
+        _gpuFeed.ArAlphaLayersOutput = null;
+        _gpuArAlphaLayersTap = null;
         _gpuArAlphaOutputWindow?.Close();
         _gpuArAlphaOutputWindow = null;
+        _gpuArGeometryOutputWindow?.Close();
+        _gpuArGeometryOutputWindow = null;
+        _gpuArGlowOutputWindow?.Close();
+        _gpuArGlowOutputWindow = null;
         _gpuWindow?.Close();
         _gpuWindow = null;
         Stage.AttachGpu(null, false);

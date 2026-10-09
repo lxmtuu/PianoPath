@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -33,9 +34,10 @@ internal sealed class CalibrationSurface : FrameworkElement
     private char _dragAxis;
     private Point _dragOrigin, _dragStart;
     private Vector _dragScreenAxis;
-    private double _dragPixelsPerUnit, _dragStartAngle;
+    private double _dragPixelsPerUnit, _dragPreviousRingAngle;
     private ArPoseTransform _dragStartTransform;
 
+    private readonly record struct RotationRing(ArVec3 Centre, ArVec3 First, ArVec3 Second, double Radius);
     private enum DragKind { None, Move, Rotate, Scale, NoteDirection }
 
     internal CalibrationSurface(CalibrationPicture picture, CalibrationWizard wizard, bool mirror, ArNoteDirection noteDirection = default)
@@ -66,6 +68,15 @@ internal sealed class CalibrationSurface : FrameworkElement
             || !pose.TryDirectionForScreenDelta(centre, (0, -1), Wizard.View, out var direction)) return false;
         SetNoteDirection(ArNoteDirection.FromVector(direction), notify: true);
         return true;
+    }
+
+    /// <summary>Test seam for the same projected rotation ring used for drawing and hit testing.</summary>
+    internal bool TryRotationRingPoint(char axis, double degrees, out Point point)
+    {
+        point = default;
+        if (!TryGetPoseContext(out _, out var basePose, out _, out _)
+            || !TryBuildRotationRing(basePose, Wizard.PoseTransform, axis, out var ring)) return false;
+        return TryRotationRingPoint(basePose, ring, degrees * Math.PI / 180, Wizard.View, out point);
     }
 
     /// <summary>The picture on show, as the camera delivered it.</summary>
@@ -310,9 +321,10 @@ internal sealed class CalibrationSurface : FrameworkElement
                 DrawMoveAxis(dc, origin, currentPose, basePose, centre, new ArVec3(0, 0, 1), AxisZ, "Z");
                 break;
             case CalibrationTool.Rotate:
-                DrawRotationRing(dc, currentPose, centre, new ArVec3(0, 1, 0), new ArVec3(0, 0, 1), AxisX);
-                DrawRotationRing(dc, currentPose, centre, new ArVec3(1, 0, 0), new ArVec3(0, 0, 1), AxisY);
-                DrawRotationRing(dc, currentPose, centre, new ArVec3(1, 0, 0), new ArVec3(0, 1, 0), AxisZ);
+                var transform = Wizard.PoseTransform;
+                DrawRotationRing(dc, basePose, transform, 'X', AxisX);
+                DrawRotationRing(dc, basePose, transform, 'Y', AxisY);
+                DrawRotationRing(dc, basePose, transform, 'Z', AxisZ);
                 break;
             case CalibrationTool.Scale:
                 if (TryAxis(currentPose, currentPose, centre, new ArVec3(1, 1, 0).Normalized, Wizard.View, out var scaleAxis))
@@ -338,26 +350,79 @@ internal sealed class CalibrationSurface : FrameworkElement
         DrawText(dc, label, end + new Vector(8, -16), 12, Brushes.White);
     }
 
-    private void DrawRotationRing(DrawingContext dc, ArCameraPose pose, ArVec3 centre,
-        ArVec3 first, ArVec3 second, Brush brush)
+    private void DrawRotationRing(DrawingContext dc, ArCameraPose basePose, ArPoseTransform transform, char axis, Brush brush)
     {
-        var points = RingPoints(pose, centre, first, second, .38, Wizard.View);
-        if (points.Count < 3) return;
+        if (!TryBuildRotationRing(basePose, transform, axis, out var ring)) return;
+        const int segments = 128;
         var pen = new Pen(brush, 2.2);
-        for (var i = 1; i < points.Count; i++) dc.DrawLine(pen, points[i - 1], points[i]);
-        if (points.Count > 2) dc.DrawLine(pen, points[^1], points[0]);
+        Point? previous = null, firstPoint = null, lastPoint = null;
+        for (var i = 0; i <= segments; i++)
+        {
+            var angle = Math.Tau * i / segments;
+            if (!TryRotationRingPoint(basePose, ring, angle, Wizard.View, out var point))
+            {
+                previous = null;
+                continue;
+            }
+            firstPoint ??= point;
+            if (previous is { } from) dc.DrawLine(pen, from, point);
+            previous = point; lastPoint = point;
+        }
+        if (firstPoint is { } start && lastPoint is { } end && (start - end).Length < 8) dc.DrawLine(pen, end, start);
     }
 
-    private static List<Point> RingPoints(ArCameraPose pose, ArVec3 centre, ArVec3 first, ArVec3 second, double radius, ArView view)
+    private static bool TryBuildRotationRing(ArCameraPose basePose, ArPoseTransform transform, char axis, out RotationRing ring)
     {
-        var points = new List<Point>(48);
-        for (var i = 0; i < 48; i++)
+        ring = default;
+        var normal = transform.RotationAxis(axis);
+        if (!normal.IsFinite || normal.Length < .9) return false;
+        var reference = Math.Abs(normal.Z) < .85 ? new ArVec3(0, 0, 1) : new ArVec3(0, 1, 0);
+        var first = ArVec3.Cross(reference, normal).Normalized;
+        var second = ArVec3.Cross(normal, first).Normalized;
+        if (first.Length < .9 || second.Length < .9) return false;
+        var centre = new ArVec3(basePose.KeyboardWidthDepthRatio * .5, .5, 0) + transform.Position;
+        ring = new RotationRing(centre, first, second, .38 * transform.UniformScale);
+        return true;
+    }
+
+    private static bool TryRotationRingPoint(ArCameraPose pose, RotationRing ring, double angle, ArView view, out Point point)
+    {
+        var local = ring.Centre + (ring.First * Math.Cos(angle) + ring.Second * Math.Sin(angle)) * ring.Radius;
+        return TryPoint(pose, local, view, out point);
+    }
+
+    /// <summary>Finds the closest point on the projected (perspective ellipse) ring and its 3D angular parameter.</summary>
+    private static bool TryClosestRotationRingAngle(Point target, ArCameraPose pose, RotationRing ring, ArView view,
+        out double angle, out double distance)
+    {
+        const int segments = 192;
+        angle = 0; distance = double.PositiveInfinity;
+        var found = false;
+        for (var i = 0; i < segments; i++)
         {
-            var angle = 2 * Math.PI * i / 48;
-            var local = centre + (first * Math.Cos(angle) + second * Math.Sin(angle)) * radius;
-            if (TryPoint(pose, local, view, out var point)) points.Add(point);
+            var a0 = Math.Tau * i / segments; var a1 = Math.Tau * (i + 1) / segments;
+            if (!TryRotationRingPoint(pose, ring, a0, view, out var p0)
+                || !TryRotationRingPoint(pose, ring, a1, view, out var p1)) continue;
+            var segment = p1 - p0;
+            var lengthSquared = segment.LengthSquared;
+            if (lengthSquared < 1e-8) continue;
+            var fraction = Math.Clamp(Vector.Multiply(target - p0, segment) / lengthSquared, 0, 1);
+            var closest = p0 + segment * fraction;
+            var candidateDistance = (target - closest).Length;
+            if (candidateDistance >= distance) continue;
+            distance = candidateDistance;
+            angle = a0 + (a1 - a0) * fraction;
+            found = true;
         }
-        return points;
+        angle = WrapRadians(angle);
+        return found;
+    }
+
+    private static double WrapRadians(double angle)
+    {
+        while (angle > Math.PI) angle -= Math.Tau;
+        while (angle < -Math.PI) angle += Math.Tau;
+        return angle;
     }
 
     private static void DrawArrow(DrawingContext dc, Point from, Point to, Brush brush, double thickness)
@@ -424,22 +489,17 @@ internal sealed class CalibrationSurface : FrameworkElement
         }
         if (_tool == CalibrationTool.Rotate)
         {
-            var rings = new[]
+            var bestDistance = 14.0;
+            var bestAngle = 0.0;
+            foreach (var axis in new[] { 'X', 'Y', 'Z' })
             {
-                ('X', new ArVec3(0, 1, 0), new ArVec3(0, 0, 1)),
-                ('Y', new ArVec3(1, 0, 0), new ArVec3(0, 0, 1)),
-                ('Z', new ArVec3(1, 0, 0), new ArVec3(0, 1, 0)),
-            };
-            var bestDistance = 9.0;
-            foreach (var (axis, first, second) in rings)
-            {
-                var ring = RingPoints(currentPose, centre, first, second, .38, Wizard.View);
-                var distance = PolylineDistance(position, ring, closed: true);
-                if (distance >= bestDistance) continue;
-                bestDistance = distance; _dragAxis = axis;
+                if (!TryBuildRotationRing(basePose, Wizard.PoseTransform, axis, out var ring)
+                    || !TryClosestRotationRingAngle(position, basePose, ring, Wizard.View, out var angle, out var distance)
+                    || distance >= bestDistance) continue;
+                bestDistance = distance; bestAngle = angle; _dragAxis = axis;
             }
-            if (bestDistance >= 9) return false;
-            _dragStartAngle = Math.Atan2(position.Y - origin.Y, position.X - origin.X) * 180 / Math.PI;
+            if (bestDistance >= 14) return false;
+            _dragPreviousRingAngle = bestAngle;
             BeginDrag(DragKind.Rotate, position, origin);
             return true;
         }
@@ -475,18 +535,28 @@ internal sealed class CalibrationSurface : FrameworkElement
 
     private bool UpdateRotation(Point position)
     {
-        var angle = Math.Atan2(position.Y - _dragOrigin.Y, position.X - _dragOrigin.X) * 180 / Math.PI;
-        var delta = angle - _dragStartAngle;
-        while (delta > 180) delta -= 360;
-        while (delta < -180) delta += 360;
-        double Rotate(double start) { var value = start + delta; while (value > 180) value -= 360; while (value < -180) value += 360; return value; }
-        var transform = _dragAxis switch
+        if (!TryGetPoseContext(out _, out var basePose, out _, out _)
+            || !TryBuildRotationRing(basePose, Wizard.PoseTransform, _dragAxis, out var ring)
+            || !TryClosestRotationRingAngle(position, basePose, ring, Wizard.View, out var angle, out var distance)
+            || distance > 42) return false;
+        var deltaDegrees = WrapRadians(angle - _dragPreviousRingAngle) * 180 / Math.PI;
+        if (Math.Abs(deltaDegrees) < .001) return false;
+        var transform = Wizard.PoseTransform;
+        double WrapDegrees(double value)
         {
-            'X' => _dragStartTransform with { PitchDegrees = Rotate(_dragStartTransform.PitchDegrees) },
-            'Y' => _dragStartTransform with { YawDegrees = Rotate(_dragStartTransform.YawDegrees) },
-            _ => _dragStartTransform with { RollDegrees = Rotate(_dragStartTransform.RollDegrees) },
+            while (value > 180) value -= 360;
+            while (value < -180) value += 360;
+            return value;
+        }
+        transform = _dragAxis switch
+        {
+            'X' => transform with { PitchDegrees = WrapDegrees(transform.PitchDegrees + deltaDegrees) },
+            'Y' => transform with { YawDegrees = WrapDegrees(transform.YawDegrees + deltaDegrees) },
+            _ => transform with { RollDegrees = WrapDegrees(transform.RollDegrees + deltaDegrees) },
         };
-        return Wizard.SetObjectTransform(transform, Wizard.CameraFovDegrees);
+        if (!Wizard.SetObjectTransform(transform, Wizard.CameraFovDegrees)) return false;
+        _dragPreviousRingAngle = angle;
+        return true;
     }
 
     private bool UpdateScale(Point position)
@@ -528,24 +598,6 @@ internal sealed class CalibrationSurface : FrameworkElement
 
     private static double Distance(Point a, Point b) => (a - b).Length;
 
-    private static double PolylineDistance(Point point, IReadOnlyList<Point> vertices, bool closed)
-    {
-        if (vertices.Count < 2) return double.MaxValue;
-        var best = double.MaxValue;
-        for (var i = 1; i < vertices.Count; i++) best = Math.Min(best, SegmentDistance(point, vertices[i - 1], vertices[i]));
-        if (closed) best = Math.Min(best, SegmentDistance(point, vertices[^1], vertices[0]));
-        return best;
-    }
-
-    private static double SegmentDistance(Point point, Point start, Point end)
-    {
-        var delta = end - start;
-        var lengthSquared = delta.LengthSquared;
-        if (lengthSquared <= 1e-9) return Distance(point, start);
-        var t = Math.Clamp(Vector.Multiply(point - start, delta) / lengthSquared, 0, 1);
-        return Distance(point, start + delta * t);
-    }
-
     /// <summary>A zoomed view of the picture around the corner being moved, in the top corner that is farthest from it.</summary>
     private void DrawMagnifier(DrawingContext dc)
     {
@@ -585,6 +637,10 @@ internal sealed class CalibrationWindow : Window
     private readonly CalibrationSurface _surface;
     private readonly TextBlock _hint, _note;
     private readonly Button _done, _undo, _startOver, _screenUp, _keyDepth;
+    private readonly Button _resetOrientation, _resetFov, _resetPitch, _resetYaw, _resetRoll;
+    private readonly Button _resetPositionX, _resetPositionY, _resetPositionZ, _resetScale, _resetTool;
+    private readonly Button _resetNoteTilt, _resetNoteAzimuth;
+    private readonly List<Button> _poseResetButtons = [];
     private readonly ComboBox _orientation, _toolBox;
     private readonly Slider _pitchSlider, _yawSlider, _rollSlider, _fovSlider;
     private readonly Slider _positionXSlider, _positionYSlider, _positionZSlider, _scaleSlider, _noteTiltSlider, _noteAzimuthSlider;
@@ -652,9 +708,12 @@ internal sealed class CalibrationWindow : Window
             if (_orientation.SelectedValue is KeyboardOrientation chosen) { Wizard.SetOrientation(chosen); _surface.Refresh(); }
         };
         _orientation.DropDownClosed += (_, _) => _surface.Focus();          // the arrow keys and Tab are for the corners again as soon as the choice is made
+        _resetOrientation = MakeResetButton(Loc.T(CalibrationHints.OrientationTitle), Loc.T(CalibrationHints.ForOrientation(start)),
+            () => _orientation.SelectedValue = start);
         var orientationRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 8) };
         orientationRow.Children.Add(new TextBlock { Text = Loc.T(CalibrationHints.OrientationTitle), FontSize = 12, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0), Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) });
         orientationRow.Children.Add(_orientation);
+        _resetOrientation.Margin = new Thickness(4, 0, 0, 0); orientationRow.Children.Add(_resetOrientation);
 
         var fovRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 4), VerticalAlignment = VerticalAlignment.Center };
         fovRow.Children.Add(PoseLabel(Loc.T(CalibrationHints.CameraFovTitle), 88, Loc.T(CalibrationHints.CameraFovTip)));
@@ -662,6 +721,9 @@ internal sealed class CalibrationWindow : Window
             Loc.T(CalibrationHints.CameraFovTip));
         _fovText = PoseValue(wizard.CameraFovDegrees.ToString("0.0", CultureInfo.CurrentCulture) + "°", 56);
         fovRow.Children.Add(_fovSlider); fovRow.Children.Add(_fovText);
+        _resetFov = MakeResetButton(Loc.T(CalibrationHints.CameraFovTitle), DegreesValue(ArCameraPose.DefaultFovDegrees),
+            () => _fovSlider.Value = ArCameraPose.DefaultFovDegrees, poseDependent: true);
+        _resetFov.Margin = new Thickness(4, 0, 0, 0); fovRow.Children.Add(_resetFov);
 
         var poseRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 8), VerticalAlignment = VerticalAlignment.Center };
         poseRow.Children.Add(PoseLabel(Loc.T(CalibrationHints.RotationTitle), 116, Loc.T(CalibrationHints.RotationTip)));
@@ -669,9 +731,12 @@ internal sealed class CalibrationWindow : Window
         _yawSlider = PoseSlider(-180, 180, wizard.YawDegrees, 196, 15, Loc.T(CalibrationHints.RotationTip));
         _rollSlider = PoseSlider(-180, 180, wizard.RollDegrees, 196, 15, Loc.T(CalibrationHints.RotationTip));
         _pitchText = PoseValue("0.0°", 48); _yawText = PoseValue("0.0°", 48); _rollText = PoseValue("0.0°", 48);
-        AddPoseControl(poseRow, Loc.T(CalibrationHints.PitchTitle), _pitchSlider, _pitchText);
-        AddPoseControl(poseRow, Loc.T(CalibrationHints.YawTitle), _yawSlider, _yawText);
-        AddPoseControl(poseRow, Loc.T(CalibrationHints.RollTitle), _rollSlider, _rollText);
+        _resetPitch = AddPoseControl(poseRow, Loc.T(CalibrationHints.PitchTitle), _pitchSlider, _pitchText, DegreesValue(0),
+            () => _pitchSlider.Value = 0, poseDependent: true);
+        _resetYaw = AddPoseControl(poseRow, Loc.T(CalibrationHints.YawTitle), _yawSlider, _yawText, DegreesValue(0),
+            () => _yawSlider.Value = 0, poseDependent: true);
+        _resetRoll = AddPoseControl(poseRow, Loc.T(CalibrationHints.RollTitle), _rollSlider, _rollText, DegreesValue(0),
+            () => _rollSlider.Value = 0, poseDependent: true);
         _pitchSlider.ValueChanged += PoseControl_ValueChanged;
         _yawSlider.ValueChanged += PoseControl_ValueChanged;
         _rollSlider.ValueChanged += PoseControl_ValueChanged;
@@ -685,10 +750,14 @@ internal sealed class CalibrationWindow : Window
         _positionZSlider = PoseSlider(-ArPoseTransform.PositionLimit, ArPoseTransform.PositionLimit, currentTransform.PositionZ, 108, .25, Loc.T(CalibrationHints.TransformTip));
         _scaleSlider = PoseSlider(ArPoseTransform.MinScale, ArPoseTransform.MaxScale, currentTransform.UniformScale, 132, .25, Loc.T(CalibrationHints.TransformTip));
         _positionXText = PoseValue("0.00", 42); _positionYText = PoseValue("0.00", 42); _positionZText = PoseValue("0.00", 42); _scaleText = PoseValue("1.00×", 48);
-        AddPoseControl(transformRow, "X", _positionXSlider, _positionXText);
-        AddPoseControl(transformRow, "Y", _positionYSlider, _positionYText);
-        AddPoseControl(transformRow, "Z", _positionZSlider, _positionZText);
-        AddPoseControl(transformRow, Loc.T(CalibrationHints.ScaleTitle), _scaleSlider, _scaleText);
+        _resetPositionX = AddPoseControl(transformRow, "X", _positionXSlider, _positionXText, ScalarValue(0),
+            () => _positionXSlider.Value = 0, poseDependent: true, tooltip: Loc.T(CalibrationHints.TransformTip));
+        _resetPositionY = AddPoseControl(transformRow, "Y", _positionYSlider, _positionYText, ScalarValue(0),
+            () => _positionYSlider.Value = 0, poseDependent: true, tooltip: Loc.T(CalibrationHints.TransformTip));
+        _resetPositionZ = AddPoseControl(transformRow, "Z", _positionZSlider, _positionZText, ScalarValue(0),
+            () => _positionZSlider.Value = 0, poseDependent: true, tooltip: Loc.T(CalibrationHints.TransformTip));
+        _resetScale = AddPoseControl(transformRow, Loc.T(CalibrationHints.ScaleTitle), _scaleSlider, _scaleText, ScalarValue(1) + "×",
+            () => _scaleSlider.Value = 1, poseDependent: true, tooltip: Loc.T(CalibrationHints.TransformTip));
         foreach (var slider in new[] { _positionXSlider, _positionYSlider, _positionZSlider, _scaleSlider }) slider.ValueChanged += ObjectControl_ValueChanged;
 
         var toolRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(16, 0, 16, 4), VerticalAlignment = VerticalAlignment.Center };
@@ -699,6 +768,9 @@ internal sealed class CalibrationWindow : Window
         _toolBox.SelectionChanged += (_, _) => { if (_toolBox.SelectedValue is CalibrationTool tool) _surface.SetTool(tool); };
         _toolBox.DropDownClosed += (_, _) => _surface.Focus();
         toolRow.Children.Add(_toolBox);
+        _resetTool = MakeResetButton(Loc.T(CalibrationHints.ToolTitle), Loc.T(CalibrationHints.ForTool(CalibrationTool.Corners)),
+            () => _toolBox.SelectedValue = CalibrationTool.Corners, poseDependent: true);
+        _resetTool.Margin = new Thickness(4, 0, 0, 0); toolRow.Children.Add(_resetTool);
         _screenUp = MakeButton(Loc.T(CalibrationHints.ScreenUpTitle), false);
         _screenUp.ToolTip = Loc.T(CalibrationHints.ScreenUpTip);
         _screenUp.Click += (_, _) =>
@@ -719,8 +791,10 @@ internal sealed class CalibrationWindow : Window
         _noteTiltSlider = PoseSlider(ArNoteDirection.TiltMin, ArNoteDirection.TiltMax, initialDirection.TiltDegrees, 154, 10, Loc.T(CalibrationHints.NoteDirectionTip));
         _noteAzimuthSlider = PoseSlider(ArNoteDirection.AzimuthMin, ArNoteDirection.AzimuthMax, initialDirection.AzimuthDegrees, 154, 10, Loc.T(CalibrationHints.NoteDirectionTip));
         _noteTiltText = PoseValue(SignedDegrees(initialDirection.TiltDegrees), 48); _noteAzimuthText = PoseValue(SignedDegrees(initialDirection.AzimuthDegrees), 48);
-        AddPoseControl(noteRow, Loc.T(CalibrationHints.TiltTitle), _noteTiltSlider, _noteTiltText);
-        AddPoseControl(noteRow, Loc.T(CalibrationHints.AzimuthTitle), _noteAzimuthSlider, _noteAzimuthText);
+        _resetNoteTilt = AddPoseControl(noteRow, Loc.T(CalibrationHints.TiltTitle), _noteTiltSlider, _noteTiltText, DegreesValue(ArNoteDirection.Default.TiltDegrees),
+            () => _noteTiltSlider.Value = ArNoteDirection.Default.TiltDegrees, tooltip: Loc.T(CalibrationHints.NoteDirectionTip));
+        _resetNoteAzimuth = AddPoseControl(noteRow, Loc.T(CalibrationHints.AzimuthTitle), _noteAzimuthSlider, _noteAzimuthText, DegreesValue(ArNoteDirection.Default.AzimuthDegrees),
+            () => _noteAzimuthSlider.Value = ArNoteDirection.Default.AzimuthDegrees, tooltip: Loc.T(CalibrationHints.NoteDirectionTip));
         _noteTiltSlider.ValueChanged += NoteDirectionControl_ValueChanged;
         _noteAzimuthSlider.ValueChanged += NoteDirectionControl_ValueChanged;
 
@@ -755,6 +829,18 @@ internal sealed class CalibrationWindow : Window
     internal Slider YawSlider => _yawSlider;
     internal Slider RollSlider => _rollSlider;
     internal Slider CameraFovSlider => _fovSlider;
+    internal Button ResetOrientationButton => _resetOrientation;
+    internal Button ResetFovButton => _resetFov;
+    internal Button ResetPitchButton => _resetPitch;
+    internal Button ResetYawButton => _resetYaw;
+    internal Button ResetRollButton => _resetRoll;
+    internal Button ResetPositionXButton => _resetPositionX;
+    internal Button ResetPositionYButton => _resetPositionY;
+    internal Button ResetPositionZButton => _resetPositionZ;
+    internal Button ResetScaleButton => _resetScale;
+    internal Button ResetToolButton => _resetTool;
+    internal Button ResetNoteTiltButton => _resetNoteTilt;
+    internal Button ResetNoteAzimuthButton => _resetNoteAzimuth;
     internal Slider PositionXSlider => _positionXSlider;
     internal Slider PositionYSlider => _positionYSlider;
     internal Slider PositionZSlider => _positionZSlider;
@@ -851,6 +937,8 @@ internal sealed class CalibrationWindow : Window
     }
 
     private static string SignedDegrees(double value) => value.ToString("+0.0;-0.0;0.0", CultureInfo.CurrentCulture) + "°";
+    private static string DegreesValue(double value) => value.ToString("0.0", CultureInfo.CurrentCulture) + "°";
+    private static string ScalarValue(double value) => value.ToString("0.00", CultureInfo.CurrentCulture);
 
     private void RefreshText()
     {
@@ -865,7 +953,10 @@ internal sealed class CalibrationWindow : Window
         _pitchSlider.IsEnabled = _yawSlider.IsEnabled = _rollSlider.IsEnabled = _fovSlider.IsEnabled = poseEnabled;
         _positionXSlider.IsEnabled = _positionYSlider.IsEnabled = _positionZSlider.IsEnabled = _scaleSlider.IsEnabled = poseEnabled;
         _toolBox.IsEnabled = _screenUp.IsEnabled = _keyDepth.IsEnabled = poseEnabled;
+        foreach (var resetButton in _poseResetButtons) resetButton.IsEnabled = poseEnabled;
+        _resetTool.IsEnabled = poseEnabled;
         _noteTiltSlider.IsEnabled = _noteAzimuthSlider.IsEnabled = true;
+        _resetNoteTilt.IsEnabled = _resetNoteAzimuth.IsEnabled = true;
         if (_note.Text.Length > 0 && Wizard.IsDragging) _note.Text = "";
     }
 
@@ -921,13 +1012,40 @@ internal sealed class CalibrationWindow : Window
         Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)), FontSize = 11
     };
 
-    private static void AddPoseControl(StackPanel row, string title, Slider slider, TextBlock value)
+    private Button AddPoseControl(StackPanel row, string title, Slider slider, TextBlock value, string defaultValue,
+        Action reset, bool poseDependent = false, string? tooltip = null)
     {
         var group = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) };
-        group.Children.Add(PoseLabel(title, 42, Loc.T(CalibrationHints.RotationTip)));
+        group.Children.Add(PoseLabel(title, 42, tooltip ?? Loc.T(CalibrationHints.RotationTip)));
         group.Children.Add(slider);
         group.Children.Add(value);
+        var resetButton = MakeResetButton(title, defaultValue, reset, poseDependent);
+        resetButton.Margin = new Thickness(4, 0, 0, 0);
+        group.Children.Add(resetButton);
         row.Children.Add(group);
+        return resetButton;
+    }
+
+    private Button MakeResetButton(string label, string defaultValue, Action reset, bool poseDependent = false)
+    {
+        var button = new Button { Tag = label, Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(4, 0, 0, 0) };
+        var muted = new SolidColorBrush(Color.FromRgb(0xA5, 0xAC, 0xB9));
+        button.Content = new System.Windows.Shapes.Path
+        {
+            Data = (Geometry)FindResource("IconReset"), Fill = muted, Stroke = muted, StrokeThickness = 1.4,
+            StrokeLineJoin = PenLineJoin.Round, Width = 11, Height = 11, Stretch = Stretch.Uniform,
+            HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center,
+        };
+        Loc.Format(button, "Reset to {0}", FrameworkElement.ToolTipProperty, defaultValue);
+        Loc.Format(button, "Reset to {0}", AutomationProperties.NameProperty, defaultValue);
+        button.Click += (_, _) =>
+        {
+            _note.Text = "";
+            reset();
+            _surface.Focus();
+        };
+        if (poseDependent) _poseResetButtons.Add(button);
+        return button;
     }
 
     private static Button MakeButton(string text, bool primary) => new()

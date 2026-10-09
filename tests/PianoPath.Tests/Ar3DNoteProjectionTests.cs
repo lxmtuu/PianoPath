@@ -144,6 +144,31 @@ public class Ar3DNoteProjectionTests
     }
 
     [Fact]
+    public void Elevated_billboards_follow_the_saved_3d_pose_and_project_all_four_corners()
+    {
+        var baseline = Corners.Select(point => (640 + (point.X - 640) * .62, 360 + (point.Y - 360) * .62)).ToArray();
+        var transform = new ArPoseTransform(.045, -.025, .015, 29, -23, 17, 1.08);
+        Assert.True(ArCameraPose.TryTransformCorners(KeyboardLayout.Standard88, baseline, 1280, 720, 70, transform, out var movedCorners));
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, movedCorners, 1280, 720, out var problem,
+            70, transform, baseline) ?? throw new InvalidOperationException($"transformed corners were refused: {problem}");
+        var pose = calibration.CameraPose!.Value;
+        var view = new ArView(1280, 720, 1280, 720, PictureFit.Fit, true);
+        var key = new ArVec3(pose.KeyboardWidthDepthRatio * .5, .12, 0);
+        Assert.True(pose.TryProject(key, view, out var onPlane));
+        Assert.True(pose.TryProject(key + new ArVec3(0, 0, -.42), view, out var raised));
+        Assert.True(Math.Abs(onPlane.X - raised.X) + Math.Abs(onPlane.Y - raised.Y) > .1,
+            "A spark raised along the keyboard normal must use the actual transformed pose, not the flat key homography.");
+        Assert.True(Ar3DNoteProjection.TryProjectBillboard(pose, view, key + new ArVec3(0, 0, -.3),
+            new ArVec3(1, 0, 0), new ArVec3(0, 0, 1), .018, .03, out var particle));
+        AssertFinite(particle);
+        Assert.True(Ar3DNoteProjection.TryProjectBillboard(pose, view, key,
+            new ArVec3(1, 0, 0), new ArVec3(0, 1, 0), .08, .12, out var pulse));
+        AssertFinite(pulse);
+        Assert.True(particle.Area > .01 && pulse.Area > particle.Area,
+            "The particle billboard and the wider key-plane pulse should retain distinct camera-projected extents.");
+    }
+
+    [Fact]
     public void Fov_changes_the_off_plane_3d_projection_but_keeps_the_clicked_keyboard_plane_fixed()
     {
         var narrowFov = MakeCalibration(35).CameraPose!.Value;

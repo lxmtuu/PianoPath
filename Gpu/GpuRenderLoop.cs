@@ -19,9 +19,9 @@ namespace PianoPath;
 /// only posts state into <see cref="GpuStageFeed"/> (a short lock) and the loop pulls it once per frame,
 /// so a heavy frame costs frame rate, never input latency.</para>
 /// <para><b>Outputs.</b> The loop feeds the stage window's swap chain and embedded preview from one simulation
-/// step, renders exact-size recording frames, and can also publish a separate premultiplied-alpha AR-effects
-/// frame for the transparent OBS window. CPU-facing frames use staging rings so the UI never waits for the
-/// GPU to finish the frame it just submitted.</para>
+/// step, renders exact-size recording frames, and can also publish transparent AR effects. The split Geometry/Glow
+/// outputs share one paired staging ring and mailbox serial, so both channels advance from the same rendered frame.
+/// CPU-facing frames use staging rings so the UI never waits for the GPU to finish the frame it just submitted.</para>
 /// </remarks>
 internal sealed class GpuRenderLoop : IDisposable
 {
@@ -260,8 +260,10 @@ internal sealed class GpuRenderLoop : IDisposable
         var recordReadback = new ReadbackRing();
         var alphaTarget = new GpuRenderTarget();
         var alphaReadback = new ReadbackRing();
+        var alphaLayersReadback = new AlphaLayerReadbackRing();
         GpuRecordingTap? recording = null;
         GpuAlphaOutputTap? alphaOutput = null;
+        GpuAlphaLayerPairTap? alphaLayersOutput = null;
         var nextRecordFrame = 0.0;
         var nextAlphaFrame = 0.0;
         try
@@ -359,12 +361,15 @@ internal sealed class GpuRenderLoop : IDisposable
                     recordReadback.Dispose(); recordTarget.Dispose();
                 }
                 var alphaTap = _feed.ArAlphaOutput;
-                if (!ReferenceEquals(alphaTap, alphaOutput))
+                var alphaLayersTap = _feed.ArAlphaLayersOutput;
+                if (!ReferenceEquals(alphaTap, alphaOutput) || !ReferenceEquals(alphaLayersTap, alphaLayersOutput))
                 {
-                    alphaOutput = alphaTap; nextAlphaFrame = clock.Elapsed.TotalSeconds;
-                    alphaReadback.Dispose(); alphaTarget.Dispose();
+                    alphaOutput = alphaTap; alphaLayersOutput = alphaLayersTap;
+                    nextAlphaFrame = clock.Elapsed.TotalSeconds;
+                    alphaReadback.Dispose(); alphaLayersReadback.Dispose(); alphaTarget.Dispose();
                 }
-                if (!hasEmbedded && !hasWindow && tap is null && alphaTap is null) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
+                var hasAlphaOutput = alphaTap is not null || alphaLayersTap is not null;
+                if (!hasEmbedded && !hasWindow && tap is null && !hasAlphaOutput) { Thread.Sleep(15); last = clock.Elapsed.TotalSeconds; continue; }
 
                 var qualityBeforePolling = AdaptiveQualityTier;
                 var adaptiveQualityActive = Volatile.Read(ref _adaptiveQualityActive) != 0;
@@ -395,7 +400,9 @@ internal sealed class GpuRenderLoop : IDisposable
                 var dt = now - last; last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
                 var primaryAspect = hasWindow ? ww / (float)wh : hasEmbedded ? ew / (float)eh
-                    : tap is not null ? tap.Width / (float)tap.Height : alphaTap!.Width / (float)alphaTap.Height;
+                    : tap is not null ? tap.Width / (float)tap.Height
+                    : alphaTap is not null ? alphaTap.Width / (float)alphaTap.Height
+                    : alphaLayersTap!.Width / (float)alphaLayersTap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
                 simulation.Step(dt, input, _feed, sceneHeight * primaryAspect);
                 // the AR layer lights the keys as they were lit a camera-delay ago, which is what the camera's picture shows
@@ -438,18 +445,33 @@ internal sealed class GpuRenderLoop : IDisposable
                     recordReadback.Submit(gpu.Context);
                     recordReadback.Collect(gpu.Context, tap.BackBuffer, tap.Publish);
                 }
-                // ---- transparent AR effects: camera/background are omitted and the WPF window reads premultiplied BGRA ----
-                if (alphaTap is not null && now >= nextAlphaFrame)
+                // ---- transparent AR outputs: camera/background are omitted; the geometry/glow pair shares one readback clock ----
+                if (hasAlphaOutput && now >= nextAlphaFrame)
                 {
-                    var interval = 1.0 / alphaTap.FrameRate;
+                    var outputRate = Math.Max(alphaTap?.FrameRate ?? 1, alphaLayersTap?.FrameRate ?? 1);
+                    var interval = 1.0 / outputRate;
                     nextAlphaFrame = Math.Max(nextAlphaFrame + interval, now - interval);
-                    alphaTarget.Ensure(gpu.Device, alphaTap.Width, alphaTap.Height);
-                    alphaReadback.Ensure(gpu.Device, alphaTap.Width, alphaTap.Height);
-                    var layout = new GpuSceneLayout(sceneHeight * alphaTap.Width / (float)alphaTap.Height, sceneHeight, input.Look.KeyboardFraction);
-                    gpu.Render(alphaTarget, alphaReadback.CurrentView, simulation, input, layout, notes, keys, sprites, qualityTier,
-                        sampleAdaptiveQuality: !hasWindow && !hasEmbedded, alphaOutput: true);
-                    alphaReadback.Submit(gpu.Context);
-                    alphaReadback.Collect(gpu.Context, alphaTap.BackBuffer, alphaTap.Publish);
+                    var alphaWidth = alphaTap?.Width ?? alphaLayersTap!.Width;
+                    var alphaHeight = alphaTap?.Height ?? alphaLayersTap!.Height;
+                    alphaTarget.Ensure(gpu.Device, alphaWidth, alphaHeight);
+                    if (alphaTap is not null) alphaReadback.Ensure(gpu.Device, alphaTap.Width, alphaTap.Height);
+                    if (alphaLayersTap is not null) alphaLayersReadback.Ensure(gpu.Device, alphaLayersTap.Width, alphaLayersTap.Height);
+                    var layout = new GpuSceneLayout(sceneHeight * alphaWidth / (float)alphaHeight, sceneHeight, input.Look.KeyboardFraction);
+                    gpu.Render(alphaTarget, alphaTap is null ? null : alphaReadback.CurrentView,
+                        simulation, input, layout, notes, keys, sprites, qualityTier,
+                        sampleAdaptiveQuality: !hasWindow && !hasEmbedded, alphaOutput: true,
+                        alphaGeometryOutput: alphaLayersTap is null ? null : alphaLayersReadback.CurrentGeometryView,
+                        alphaGlowOutput: alphaLayersTap is null ? null : alphaLayersReadback.CurrentGlowView);
+                    if (alphaTap is not null)
+                    {
+                        alphaReadback.Submit(gpu.Context);
+                        alphaReadback.Collect(gpu.Context, alphaTap.BackBuffer, alphaTap.Publish);
+                    }
+                    if (alphaLayersTap is not null)
+                    {
+                        alphaLayersReadback.Submit(gpu.Context);
+                        alphaLayersReadback.Collect(gpu.Context, alphaLayersTap);
+                    }
                 }
                 if (Volatile.Read(ref _adaptiveQualityActive) != 0 && !gpu.AdaptiveQualityProfilingAvailable)
                 {
@@ -477,7 +499,8 @@ internal sealed class GpuRenderLoop : IDisposable
                 if (hasWindow && _vsync && target == 0) continue;
                 if (!hasWindow && target == 0) target = 240; // the embedded preview is shown at the WPF composition rate anyway
                 if (tap is not null && target > 0 && target < tap.FrameRate) target = tap.FrameRate; // a take never drops below its own rate
-                if (alphaTap is not null && target > 0 && target < alphaTap.FrameRate) target = alphaTap.FrameRate;
+                var alphaRate = Math.Max(alphaTap?.FrameRate ?? 1, alphaLayersTap?.FrameRate ?? 1);
+                if (hasAlphaOutput && target > 0 && target < alphaRate) target = alphaRate;
                 if (target > 0) SleepUntil(clock, frameStart + 1.0 / target);
             }
         }
@@ -494,6 +517,7 @@ internal sealed class GpuRenderLoop : IDisposable
             recordReadback.Dispose();
             recordTarget.Dispose();
             alphaReadback.Dispose();
+            alphaLayersReadback.Dispose();
             alphaTarget.Dispose();
             window?.Dispose();
             embeddedTarget.Dispose();
@@ -597,6 +621,54 @@ internal sealed class GpuRenderLoop : IDisposable
     }
 
     /// <summary>
+    /// Renders one alpha-effects scene into its separated premultiplied geometry and bloom-only glow buffers.
+    /// Used by the WARP verifier so the two channels are checked independently, not inferred from a shader string.
+    /// </summary>
+    internal static (byte[] Geometry, byte[] Glow) RenderAlphaLayersOnce(GpuStageRenderer renderer, GpuStageFeed feed,
+        int width, int height, double frameSeconds = 1 / 60.0, int randomSeed = 20260930)
+    {
+        var simulation = new GpuStageSimulation(randomSeed);
+        var input = new GpuFrameInput();
+        var notes = new GpuInstanceList<GpuNoteInstance>(256);
+        var keys = new GpuInstanceList<GpuKeyInstance>(128);
+        var sprites = new GpuInstanceList<GpuSpriteInstance>(1024);
+        using var target = new GpuRenderTarget();
+        target.Ensure(renderer.Device, width, height);
+        using var geometryTexture = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.RenderTarget);
+        using var geometryView = renderer.Device.CreateRenderTargetView(geometryTexture);
+        using var glowTexture = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.RenderTarget);
+        using var glowView = renderer.Device.CreateRenderTargetView(glowTexture);
+        using var geometryStaging = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.None, usage: ResourceUsage.Staging, cpuAccessFlags: CpuAccessFlags.Read);
+        using var glowStaging = renderer.Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height, mipLevels: 1, bindFlags: BindFlags.None, usage: ResourceUsage.Staging, cpuAccessFlags: CpuAccessFlags.Read);
+        feed.Capture(input, GpuStageFeed.Now);
+        var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
+        var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
+        simulation.Step(frameSeconds, input, feed, layout.Width);
+        renderer.UpdateBackground(feed.Background);
+        renderer.UpdateCamera(feed.Camera);
+        renderer.UpdateAr(feed.Ar);
+        renderer.UpdateAtlas(feed.LabelAtlas);
+        renderer.Render(target, null, simulation, input, layout, notes, keys, sprites, alphaOutput: true,
+            alphaGeometryOutput: geometryView, alphaGlowOutput: glowView);
+        renderer.Context.CopyResource(geometryStaging, geometryTexture);
+        renderer.Context.CopyResource(glowStaging, glowTexture);
+        return (ReadPixels(geometryStaging), ReadPixels(glowStaging));
+
+        byte[] ReadPixels(ID3D11Texture2D staging)
+        {
+            var pixels = new byte[width * height * 4];
+            var mapped = renderer.Context.Map(staging, 0, MapMode.Read, MapFlags.None);
+            try
+            {
+                for (var y = 0; y < height; y++)
+                    Marshal.Copy(mapped.DataPointer + (nint)(y * mapped.RowPitch), pixels, y * width * 4, width * 4);
+            }
+            finally { renderer.Context.Unmap(staging, 0); }
+            return pixels;
+        }
+    }
+
+    /// <summary>
     /// Where the time of the last frame went, in milliseconds. The capture report carries it: a preview that
     /// costs twenty seconds more than it should is found by looking, not by guessing, and four guesses about
     /// this code were wrong before the numbers showed that one frame on a brand-new software device costs
@@ -673,6 +745,110 @@ internal sealed class GpuRenderLoop : IDisposable
             {
                 _views[i]?.Dispose(); _outputs[i]?.Dispose(); _staging[i]?.Dispose();
                 _views[i] = null; _outputs[i] = null; _staging[i] = null; _pending[i] = false;
+            }
+            _width = _height = 0;
+        }
+    }
+
+    /// <summary>
+    /// Geometry and Glow staging resources share slots and one pending bit, so a failed/busy map can never advance
+    /// only one channel. The pair tap publishes both buffers with one common serial after both maps succeed.
+    /// </summary>
+    private sealed class AlphaLayerReadbackRing : IDisposable
+    {
+        private readonly ID3D11Texture2D?[] _geometryOutputs = new ID3D11Texture2D?[StagingRing];
+        private readonly ID3D11RenderTargetView?[] _geometryViews = new ID3D11RenderTargetView?[StagingRing];
+        private readonly ID3D11Texture2D?[] _geometryStaging = new ID3D11Texture2D?[StagingRing];
+        private readonly ID3D11Texture2D?[] _glowOutputs = new ID3D11Texture2D?[StagingRing];
+        private readonly ID3D11RenderTargetView?[] _glowViews = new ID3D11RenderTargetView?[StagingRing];
+        private readonly ID3D11Texture2D?[] _glowStaging = new ID3D11Texture2D?[StagingRing];
+        private readonly bool[] _pending = new bool[StagingRing];
+        private int _index, _width, _height;
+
+        internal ID3D11RenderTargetView CurrentGeometryView => _geometryViews[_index]!;
+        internal ID3D11RenderTargetView CurrentGlowView => _glowViews[_index]!;
+
+        internal void Ensure(ID3D11Device device, int width, int height)
+        {
+            if (width == _width && height == _height && _geometryOutputs[0] is not null) return;
+            Dispose();
+            _width = width; _height = height;
+            for (var i = 0; i < StagingRing; i++)
+            {
+                _geometryOutputs[i] = device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height,
+                    mipLevels: 1, bindFlags: BindFlags.RenderTarget);
+                _geometryViews[i] = device.CreateRenderTargetView(_geometryOutputs[i]!);
+                _geometryStaging[i] = device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height,
+                    mipLevels: 1, bindFlags: BindFlags.None, usage: ResourceUsage.Staging, cpuAccessFlags: CpuAccessFlags.Read);
+                _glowOutputs[i] = device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height,
+                    mipLevels: 1, bindFlags: BindFlags.RenderTarget);
+                _glowViews[i] = device.CreateRenderTargetView(_glowOutputs[i]!);
+                _glowStaging[i] = device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)width, (uint)height,
+                    mipLevels: 1, bindFlags: BindFlags.None, usage: ResourceUsage.Staging, cpuAccessFlags: CpuAccessFlags.Read);
+                _pending[i] = false;
+            }
+            _index = 0;
+        }
+
+        internal void Submit(ID3D11DeviceContext context)
+        {
+            context.CopyResource(_geometryStaging[_index]!, _geometryOutputs[_index]!);
+            context.CopyResource(_glowStaging[_index]!, _glowOutputs[_index]!);
+            _pending[_index] = true;
+            _index = (_index + 1) % StagingRing;
+        }
+
+        internal bool Collect(ID3D11DeviceContext context, GpuAlphaLayerPairTap tap)
+        {
+            var slot = -1;
+            for (var k = 0; k < StagingRing; k++)
+            {
+                var candidate = (_index + k) % StagingRing;
+                if (_pending[candidate] && candidate != (_index + StagingRing - 1) % StagingRing)
+                {
+                    slot = candidate;
+                    break;
+                }
+            }
+            if (slot < 0) return false;
+
+            MappedSubresource geometryMap = default, glowMap = default;
+            var geometryMapped = false; var glowMapped = false;
+            try
+            {
+                try { geometryMap = context.Map(_geometryStaging[slot]!, 0, MapMode.Read, MapFlags.None); geometryMapped = true; }
+                catch (SharpGenException) { return false; }
+                try { glowMap = context.Map(_glowStaging[slot]!, 0, MapMode.Read, MapFlags.None); glowMapped = true; }
+                catch (SharpGenException) { return false; }
+
+                var geometry = tap.GeometryBackBuffer(_width, _height);
+                var glow = tap.GlowBackBuffer(_width, _height);
+                var rowBytes = _width * 4;
+                for (var y = 0; y < _height; y++)
+                {
+                    Marshal.Copy(geometryMap.DataPointer + (nint)(y * geometryMap.RowPitch), geometry, y * rowBytes, rowBytes);
+                    Marshal.Copy(glowMap.DataPointer + (nint)(y * glowMap.RowPitch), glow, y * rowBytes, rowBytes);
+                }
+            }
+            finally
+            {
+                if (glowMapped) context.Unmap(_glowStaging[slot]!, 0);
+                if (geometryMapped) context.Unmap(_geometryStaging[slot]!, 0);
+            }
+
+            _pending[slot] = false;
+            tap.Publish();
+            return true;
+        }
+
+        public void Dispose()
+        {
+            for (var i = 0; i < StagingRing; i++)
+            {
+                _geometryViews[i]?.Dispose(); _geometryOutputs[i]?.Dispose(); _geometryStaging[i]?.Dispose();
+                _glowViews[i]?.Dispose(); _glowOutputs[i]?.Dispose(); _glowStaging[i]?.Dispose();
+                _geometryViews[i] = null; _geometryOutputs[i] = null; _geometryStaging[i] = null;
+                _glowViews[i] = null; _glowOutputs[i] = null; _glowStaging[i] = null; _pending[i] = false;
             }
             _width = _height = 0;
         }

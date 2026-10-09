@@ -66,6 +66,30 @@ public class CalibrationWizardTests
     }
 
     [Fact]
+    public void Rotation_gizmo_axes_match_the_selected_euler_component_under_compound_3d_orientation()
+    {
+        var transform = new ArPoseTransform(.12, -.08, .04, 23, -17, 31, 1.15);
+        var vector = new ArVec3(.83, -.41, .72);
+        var rotated = transform.RotateVector(vector);
+        const double deltaDegrees = .001;
+        var deltaRadians = deltaDegrees * Math.PI / 180;
+
+        foreach (var axis in new[] { 'X', 'Y', 'Z' })
+        {
+            var changed = axis switch
+            {
+                'X' => (transform with { PitchDegrees = transform.PitchDegrees + deltaDegrees }).RotateVector(vector),
+                'Y' => (transform with { YawDegrees = transform.YawDegrees + deltaDegrees }).RotateVector(vector),
+                _ => (transform with { RollDegrees = transform.RollDegrees + deltaDegrees }).RotateVector(vector),
+            };
+            var derivative = (changed - rotated) / deltaRadians;
+            var expected = ArVec3.Cross(transform.RotationAxis(axis), rotated);
+            Assert.True((derivative - expected).Length < 2e-5,
+                $"The {axis} ring must rotate about the fixed-frame Euler axis for a compound pose.");
+        }
+    }
+
+    [Fact]
     public void Reloading_a_calibration_restores_the_full_transform_fov_and_original_pose_baseline()
     {
         var wizard = Make(false);

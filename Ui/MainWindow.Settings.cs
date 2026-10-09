@@ -637,10 +637,11 @@ public partial class MainWindow
         SliderRow(output, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "Delay the camera picture and its AR notes together so they line up with your hands. The piano audio itself is not delayed; recordings with the camera align their audio separately. Zero adds no delay.");
         ButtonRow(output, ("MEASURE DELAY", MeasureArDelay_Click, null));
         Note(output, "Measure delay: press about twenty keys while your hands are visible in the camera. PianoPath compares the key presses with the picture and suggests a matching delay.");
-        Choice(output, "Quality", nameof(PianoVisualSettings.ArQuality), "Lite uses flat notes and leaves real keys untinted. Standard and Ultra can add key tint. Ultra's planned AR pulses and particles are not wired yet (AR-S5); notes and press bars are never dropped.",
+        Choice(output, "Quality", nameof(PianoVisualSettings.ArQuality), "Lite omits AR lights. Standard adds key tint and projected impact lights; Ultra adds key-plane pulses and rising sparks. AR transients are experimental; notes and press bars remain available at every tier.",
             (ArQualityTiers.LiteName, "Lite"), (ArQualityTiers.StandardName, "Standard"), (ArQualityTiers.UltraName, "Ultra"));
         ButtonRow(output, ("OPEN TRANSPARENT AR OUTPUT", OpenArAlphaOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;
-        Note(output, "The transparent output omits the camera picture and stage background for OBS. Ambient petals and shooting stars stay flat in screen space; they are not perspective-projected. F11 toggles full screen; Esc closes the window.")
+        ButtonRow(output, ("OPEN GEOMETRY + GLOW OUTPUTS", OpenArGeometryGlowOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;
+        Note(output, "The transparent output omits the camera picture and stage background for OBS. Geometry + Glow opens synchronized windows: capture Geometry normally and set Glow to Add/Screen in OBS. Ambient petals and shooting stars stay flat in screen space; they are not perspective-projected. F11 toggles full screen; Esc closes each window.")
             .VisibleWhen = () => _arPlan.ArLayer;
 
         // Hand tracking is its own card: it reads the same camera but paints on the keyboard, and it works with
@@ -2028,7 +2029,7 @@ public partial class MainWindow
                 : Loc.T("Salamander Grand is not loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
         // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
-        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null || _gpuArAlphaOutputWindow is not null) && !(sequence && _visualSettings.RecordingTransparent);
+        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null || HasGpuArOutputWindow) && !(sequence && _visualSettings.RecordingTransparent);
         var engine = gpuTake
             ? Loc.T("Frames are rendered by the GPU stage at exactly this size.")
             : sequence && _visualSettings.RecordingTransparent && _gpuLoop is not null

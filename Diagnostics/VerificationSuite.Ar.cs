@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -834,6 +835,8 @@ internal static partial class VerificationSuite
         {
             w.Surface.Measure(new Size(1000, 600)); w.Surface.Arrange(new Rect(0, 0, 1000, 600)); w.Surface.UpdateLayout();
         }
+        static void ClickButton(System.Windows.Controls.Button button) =>
+            button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         static byte[] Shot(CalibrationWindow w)
         {
             // the surface is not in a shown window, so its own drawing is asked for directly, as the stage's overlay is
@@ -928,8 +931,9 @@ internal static partial class VerificationSuite
                 w.OrientationBox.SelectedValue = turned;
                 Assert(w.Wizard.Orientation == turned && w.Wizard.Points.Count == 4 && w.Wizard.PreviewKeys().Count == keyCount,
                     "Choosing another orientation should read the same four corners another way and move none of them.");
-                w.OrientationBox.SelectedValue = upright;
-                Assert(w.Wizard.Orientation == upright && w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust, "Choosing the first orientation again should bring the first reading back.");
+                w.ResetOrientationButton.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert(w.Wizard.Orientation == upright && w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust,
+                    "The circular reset control should restore the orientation that was active when calibration opened.");
                 Assert(w.ToolBox.Items.Count == 5 && w.PositionXSlider.IsEnabled && w.UniformScaleSlider.IsEnabled,
                     "A usable calibration should enable the five gizmo modes and the object translation/uniform-scale controls.");
                 var directionBeforeObjectTransform = w.NoteDirection;
@@ -965,23 +969,40 @@ internal static partial class VerificationSuite
                 Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
 
                 w.ToolBox.SelectedValue = CalibrationTool.Rotate;
-                var rotateCalibration = w.Wizard.CurrentCalibration!;
-                var rotatePose = rotateCalibration.CameraPose!.Value;
-                var rotateCentre = new ArVec3(rotatePose.KeyboardWidthDepthRatio * .5, .5, 0);
-                Assert(ScreenPoint(rotatePose, rotateCentre, w.Wizard.View, out var rotateOrigin),
-                    "The Rotate gizmo centre should project through the keyboard centre.");
-                Assert(ScreenPoint(rotatePose, rotateCentre + new ArVec3(0, .38, 0), w.Wizard.View, out var ringStart),
-                    "The Rotate gizmo ring should be projectable from the keyboard centre.");
-                var ringVector = ringStart - rotateOrigin;
-                const double ringDragRadians = 10 * Math.PI / 180;
-                var rotatedRingVector = new Vector(ringVector.X * Math.Cos(ringDragRadians) - ringVector.Y * Math.Sin(ringDragRadians),
-                    ringVector.X * Math.Sin(ringDragRadians) + ringVector.Y * Math.Cos(ringDragRadians));
-                Assert(w.Surface.HandlePress(ringStart), "Pressing a Rotate gizmo ring should start a 3D rotation drag.");
-                w.Surface.HandleMove(rotateOrigin + rotatedRingVector);
-                w.Surface.HandleRelease();
-                Assert(Math.Abs(w.Wizard.PoseTransform.PitchDegrees) + Math.Abs(w.Wizard.PoseTransform.YawDegrees)
-                        + Math.Abs(w.Wizard.PoseTransform.RollDegrees) > 1,
-                    "Dragging a rotation ring should change the saved 3D Euler pose, not just rotate the camera image.");
+                var compoundPose = new ArPoseTransform(.02, -.01, .01, 8, -5, 3, 1);
+                Assert(w.Wizard.SetObjectTransform(compoundPose, w.Wizard.CameraFovDegrees),
+                    "The Rotate gizmo should accept a compound arbitrary 3D keyboard orientation.");
+                Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
+                foreach (var axis in new[] { 'X', 'Y', 'Z' })
+                {
+                    var hasRingStart = w.Surface.TryRotationRingPoint(axis, 37, out var ringStart);
+                    var hasRingTarget = w.Surface.TryRotationRingPoint(axis, 49, out var ringTarget);
+                    Assert(hasRingStart && hasRingTarget, $"The {axis} rotation ring should project through the arbitrary 3D pose.");
+                    var before = w.Wizard.PoseTransform;
+                    Assert(w.Surface.HandlePress(ringStart), $"Pressing the projected {axis} ring should start its 3D rotation drag.");
+                    w.Surface.HandleMove(ringTarget);
+                    w.Surface.HandleRelease();
+                    var after = w.Wizard.PoseTransform;
+                    double Component(char selected) => selected switch
+                    {
+                        'X' => after.PitchDegrees - before.PitchDegrees,
+                        'Y' => after.YawDegrees - before.YawDegrees,
+                        _ => after.RollDegrees - before.RollDegrees,
+                    };
+                    Assert(Math.Abs(Component(axis) - 12) < .3,
+                        $"Dragging the {axis} ring should change its matching Euler component by the 12-degree projected arc.");
+                    Assert(axis != 'X' || (Math.Abs(after.YawDegrees - before.YawDegrees) < .001 && Math.Abs(after.RollDegrees - before.RollDegrees) < .001),
+                        "The X rotation ring should not modify Y or Z rotation.");
+                    Assert(axis != 'Y' || (Math.Abs(after.PitchDegrees - before.PitchDegrees) < .001 && Math.Abs(after.RollDegrees - before.RollDegrees) < .001),
+                        "The Y rotation ring should not modify X or Z rotation.");
+                    Assert(axis != 'Z' || (Math.Abs(after.PitchDegrees - before.PitchDegrees) < .001 && Math.Abs(after.YawDegrees - before.YawDegrees) < .001),
+                        "The Z rotation ring should not modify X or Y rotation.");
+                    Assert(w.Surface.TryRotationRingPoint(axis, 37, out var ringAfter)
+                            && (ringAfter - ringStart).Length < .001,
+                        $"The {axis} ring should stay anchored while its own angle changes, rather than drifting around the screen centre.");
+                }
+                Assert(w.NoteDirection == directionBeforeObjectTransform && Math.Abs(w.Wizard.CameraFovDegrees - fovBeforeObjectTransform) < .001,
+                    "Arbitrary ring rotation should preserve independent note direction and camera FOV.");
                 Assert(w.Wizard.SetObjectTransform(ArPoseTransform.Identity, w.Wizard.CameraFovDegrees),
                     "After testing this gizmo mode, the object transform should return to its original baseline.");
                 Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
@@ -1041,6 +1062,30 @@ internal static partial class VerificationSuite
                         && Math.Abs(aimedScreenDirection.Y / aimedLength - aimed.Y) < 1e-3
                         && Math.Abs(w.NoteTiltSlider.Value - w.NoteDirection.TiltDegrees) < .001,
                     "Dragging the preview arrow should choose an arbitrary screen heading and keep its numeric 3D controls synchronized.");
+
+                ClickButton(w.ResetToolButton);
+                Assert(Equals(w.ToolBox.SelectedValue, CalibrationTool.Corners), "The tool reset should return to corner editing.");
+                w.PitchSlider.Value = 12; w.YawSlider.Value = -11; w.RollSlider.Value = 8;
+                ClickButton(w.ResetYawButton);
+                Assert(Math.Abs(w.Wizard.PitchDegrees - 12) < .001 && Math.Abs(w.Wizard.YawDegrees) < .001 && Math.Abs(w.Wizard.RollDegrees - 8) < .001,
+                    "Resetting one Euler control should restore only that control to its default.");
+                ClickButton(w.ResetPitchButton); ClickButton(w.ResetRollButton);
+                Assert(w.Wizard.PoseTransform.Rotation == default, "The three per-axis rotation resets should restore the identity orientation.");
+                w.CameraFovSlider.Value = 89; ClickButton(w.ResetFovButton);
+                Assert(Math.Abs(w.Wizard.CameraFovDegrees - ArCameraPose.DefaultFovDegrees) < .001,
+                    "The FOV reset should restore its standard 70-degree default.");
+                w.PositionXSlider.Value = .2; w.PositionYSlider.Value = -.15; w.PositionZSlider.Value = .1; w.UniformScaleSlider.Value = 1.25;
+                ClickButton(w.ResetPositionXButton);
+                Assert(Math.Abs(w.Wizard.PoseTransform.PositionX) < .001 && Math.Abs(w.Wizard.PoseTransform.PositionY + .15) < .001,
+                    "Resetting one translation should leave the other object controls untouched.");
+                ClickButton(w.ResetPositionYButton); ClickButton(w.ResetPositionZButton); ClickButton(w.ResetScaleButton);
+                Assert(w.Wizard.PoseTransform == ArPoseTransform.Identity, "The per-axis translation and scale resets should restore an identity object transform.");
+                w.NoteTiltSlider.Value = 48; w.NoteAzimuthSlider.Value = -72;
+                ClickButton(w.ResetNoteTiltButton);
+                Assert(Math.Abs(w.NoteDirection.TiltDegrees) < .001 && Math.Abs(w.NoteDirection.AzimuthDegrees + 72) < .001,
+                    "Resetting note tilt should preserve independently adjustable note azimuth.");
+                ClickButton(w.ResetNoteAzimuthButton);
+                Assert(w.NoteDirection == ArNoteDirection.Default, "The note-direction reset controls should restore each default component independently.");
                 savedNoteDirection = w.NoteDirection;
                 w.ToolBox.SelectedValue = CalibrationTool.Corners;
                 var unrotatedPreview = w.Wizard.PreviewKeys().First(key => key.Pitch == 60).Corners;
@@ -1474,12 +1519,18 @@ internal static partial class VerificationSuite
             $"A 200% minimum length must visibly lengthen short projected notes ({naturalPixels} → {minimumPixels} pixels).");
 
         // Live press bars are independently switched from key tint and use the same 3D direction as song notes.
-        GpuStageFeed PressFeed(bool showBars, float keyLight)
+        GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false)
         {
-            var feed = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight,
+            var pressed = new HashSet<int> { 60 };
+            var feed = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
                     ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars),
-                song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int> { 60 });
+                song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
+            // Give each WARP case an empty simulation history so an earlier effect cannot leak into the no-impact control.
+            feed.ClearTransient();
+            feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
+            feed.SetDeterministicBeatPulse(0);
             feed.LiveNote(60, true, .9f);
+            if (addImpact) feed.Impact(60, .9);
             return feed;
         }
         var barsOn = RenderFrames(PressFeed(showBars: true, keyLight: .6f), 30);
@@ -1492,6 +1543,35 @@ internal static partial class VerificationSuite
             $"The live-bar option should add camera-projected bars only when on ({liveBarCount} built, {barPixels} changed pixels; off built {renderer.ArLiveBarCount}).");
         Assert(tintPixels > 20,
             $"Turning bars off must not turn the independent held-key tint off ({tintPixels} pixels still respond to key-light strength).");
+
+        // S5: MIDI impacts stay visible with live bars disabled, use a projected key-plane light at Standard,
+        // and add the independently tiered ripple and rising 3D sparks at Ultra.
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true), 12);
+        var standardImpactLights = renderer.ArImpactLightCount;
+        var standardPulses = renderer.ArPulseCount;
+        var standardParticles = renderer.ArParticleFxCount;
+        var ultraImpactFrame = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true), 12);
+        var ultraImpactLights = renderer.ArImpactLightCount;
+        var ultraPulses = renderer.ArPulseCount;
+        var ultraParticles = renderer.ArParticleFxCount;
+        var noImpactUltra = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra), 12);
+        var effectPixels = ChangedPixels(ultraImpactFrame, noImpactUltra, threshold: 4);
+        Assert(standardImpactLights > 0 && standardPulses == 0 && standardParticles == 0
+                && ultraImpactLights > 0 && ultraPulses > 0 && ultraParticles > 0 && effectPixels > 100
+                && renderer.ArLiveBarCount == 0,
+            $"Projected S5 impacts must remain independent of live bars and respect quality tiers (Standard light {standardImpactLights}, Ultra light/pulse/particles {ultraImpactLights}/{ultraPulses}/{ultraParticles}, {effectPixels} changed pixels).");
+        var movedImpactFeed = MakeFeed(new GpuArInput(transformedCalibration, ArNoteStyle.Default, 1f, KeyLight: .6f,
+                Quality: ArQualityTier.Ultra, ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: false),
+            song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int> { 60 });
+        movedImpactFeed.ClearTransient();
+        movedImpactFeed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int> { 60 });
+        movedImpactFeed.SetDeterministicBeatPulse(0);
+        movedImpactFeed.LiveNote(60, true, .9);
+        movedImpactFeed.Impact(60, .9);
+        var movedImpactFrame = RenderFrames(movedImpactFeed, 12);
+        var poseEffectPixels = ChangedPixels(ultraImpactFrame, movedImpactFrame, threshold: 4);
+        Assert(poseEffectPixels > 100,
+            $"Rotating/translating the calibrated piano must move its impact lights and rising particles with it ({poseEffectPixels} changed pixels).");
 
         // Falling-note trail FX are stage-space geometry; over a camera they must be omitted, not left as misaligned flat streaks.
         settings.FallingTrail = "None";
@@ -1533,6 +1613,45 @@ internal static partial class VerificationSuite
         Assert(transparent[noteCentreIndex + 3] >= 240,
             "A projected note body should retain opaque alpha in the camera-free output.");
 
+        // S6.2: the geometry layer keeps the solid projected note/direct hot core, while a deliberately bright
+        // additive sprite produces a softer bloom contribution in the independent glow layer. Both are read back once.
+        settings.BloomIntensity = 65;
+        const int glowX = 1100, glowY = 80;
+        renderer.ExtraSprites =
+        [
+            new GpuSpriteInstance
+            {
+                PosSize = new Vector4(glowX, glowY, 96, 9),
+                Color = new Vector4(6, 4, 3, .9f),
+                Dir = new Vector4(0, -1, 1, .2f)
+            }
+        ];
+        var activeExpected = new List<Ar3DNoteShape>();
+        Ar3DNoteProjection.Build(calibration, view, notes, 10.14, .22, defaultInput.Notes,
+            defaultInput.NoteDirection, defaultInput.MinAspect, activeExpected);
+        var activeCentre = Centre(activeExpected[0].Patch);
+        var activeCentreIndex = ((int)Math.Floor(activeCentre.Y) * width + (int)Math.Floor(activeCentre.X)) * 4;
+        var (geometryLayer, glowLayer) = GpuRenderLoop.RenderAlphaLayersOnce(renderer, MakeFeed(defaultInput, position: 10.14), width, height);
+        renderer.ExtraSprites = null;
+        settings.BloomIntensity = 0;
+        var glowProbe = (glowY * width + glowX) * 4;
+        var geometryPixels = 0; var glowPixels = 0; var splitPremultiplied = true;
+        for (var i = 0; i < geometryLayer.Length; i += 4)
+        {
+            if (geometryLayer[i + 3] > 0) geometryPixels++;
+            if (glowLayer[i + 3] > 0) glowPixels++;
+            if (geometryLayer[i] > geometryLayer[i + 3] + 1 || geometryLayer[i + 1] > geometryLayer[i + 3] + 1
+                || geometryLayer[i + 2] > geometryLayer[i + 3] + 1 || glowLayer[i] > glowLayer[i + 3] + 1
+                || glowLayer[i + 1] > glowLayer[i + 3] + 1 || glowLayer[i + 2] > glowLayer[i + 3] + 1)
+                splitPremultiplied = false;
+        }
+        var splitLayerDifference = ChangedPixels(geometryLayer, glowLayer, threshold: 4);
+        Assert(geometryPixels > 500 && glowPixels > 0 && splitLayerDifference > 100 && splitPremultiplied
+                && geometryLayer[activeCentreIndex + 3] >= 240 && geometryLayer[glowProbe + 3] > 0
+                && glowLayer[glowProbe + 3] > 0
+                && geometryLayer[backgroundAt + 3] == 0 && glowLayer[backgroundAt + 3] == 0,
+            $"S6.2 should return distinct synchronized premultiplied geometry/glow images: opaque note/direct hot core in Geometry, bloom in Glow, empty transparent corners ({geometryPixels}/{glowPixels} pixels, {splitLayerDifference} different; premultiplied {splitPremultiplied}).");
+
         // Ambient petals and meteors are deliberately rendered in screen-space: changing only note perspective must
         // leave their WARP pixels byte-for-byte identical.
         settings.ShowNotes = false;
@@ -1570,6 +1689,7 @@ internal static partial class VerificationSuite
 
         Results.Add($"PASS AR 3D note render (AR-S4): WARP drew {projectedPixels} projected note pixels into {expected.Count} AR-owned quads with no stage notes/trails; the flat-map failure did not hide them, mirroring and independent 3D direction worked, Perform omitted notes, and minimum length grew short notes.");
         Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; flat falling-note trails added no pixels over the camera.");
-        Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
+        Results.Add($"PASS AR-S5 live effects: Standard projected {standardImpactLights} impact lights; Ultra projected {ultraImpactLights} lights, {ultraPulses} pulses and {ultraParticles} rising particles; {effectPixels} pixels changed with bars disabled and arbitrary pose motion changed {poseEffectPixels} pixels.");
+        Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }
 }

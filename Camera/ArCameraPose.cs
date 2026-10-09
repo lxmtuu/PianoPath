@@ -33,6 +33,35 @@ internal readonly record struct ArPoseTransform(double PositionX = 0, double Pos
     internal bool IsIdentity => Math.Abs(PositionX) < 1e-10 && Math.Abs(PositionY) < 1e-10 && Math.Abs(PositionZ) < 1e-10
         && Math.Abs(PitchDegrees) < 1e-10 && Math.Abs(YawDegrees) < 1e-10 && Math.Abs(RollDegrees) < 1e-10
         && Math.Abs(UniformScale - 1) < 1e-10;
+
+    /// <summary>Applies the same X-then-Y-then-Z Euler order used by the saved pose to a direction.</summary>
+    internal ArVec3 RotateVector(ArVec3 vector) => RotateEuler(vector, PitchDegrees, YawDegrees, RollDegrees);
+
+    /// <summary>Maps a point through the saved scale/rotation/translation around the keyboard centre.</summary>
+    internal ArVec3 TransformPoint(ArVec3 point, ArVec3 centre) =>
+        centre + Position + RotateVector((point - centre) * UniformScale);
+
+    /// <summary>
+    /// The fixed-frame axis moved by one positive degree of an individual Euler control. These are the axes the
+    /// calibration gizmo rings must use; drawing rings in the already-rotated plane makes a dragged handle drift.
+    /// </summary>
+    internal ArVec3 RotationAxis(char component) => component switch
+    {
+        // Rz * Ry * Rx: varying pitch moves around Rz*Ry*X; varying yaw around Rz*Y; roll stays around Z.
+        'X' => RotateEuler(new ArVec3(1, 0, 0), 0, YawDegrees, RollDegrees).Normalized,
+        'Y' => RotateEuler(new ArVec3(0, 1, 0), 0, 0, RollDegrees).Normalized,
+        _ => new ArVec3(0, 0, 1),
+    };
+
+    private static ArVec3 RotateEuler(ArVec3 p, double pitchDegrees, double yawDegrees, double rollDegrees)
+    {
+        var pitch = pitchDegrees * Math.PI / 180; var cp = Math.Cos(pitch); var sp = Math.Sin(pitch);
+        p = new ArVec3(p.X, cp * p.Y - sp * p.Z, sp * p.Y + cp * p.Z);
+        var yaw = yawDegrees * Math.PI / 180; var cy = Math.Cos(yaw); var sy = Math.Sin(yaw);
+        p = new ArVec3(cy * p.X + sy * p.Z, p.Y, -sy * p.X + cy * p.Z);
+        var roll = rollDegrees * Math.PI / 180; var cr = Math.Cos(roll); var sr = Math.Sin(roll);
+        return new ArVec3(cr * p.X - sr * p.Y, sr * p.X + cr * p.Y, p.Z);
+    }
 }
 
 internal readonly record struct ArVec3(double X, double Y, double Z)
@@ -228,14 +257,12 @@ internal readonly struct ArCameraPose
         if (homography is null || !TryCreate(homography.Value, corners, layout, imageWidth, imageHeight, fovDegrees, out var pose)) return false;
         var ratio = pose.KeyboardWidthDepthRatio;
         var centre = new ArVec3(ratio * .5, .5, 0);
-        var angles = (Pitch: transform.PitchDegrees * Math.PI / 180, Yaw: transform.YawDegrees * Math.PI / 180,
-            Roll: transform.RollDegrees * Math.PI / 180);
         var uv = new[] { (0.0, 0.0), (1.0, 0.0), (1.0, 1.0), (0.0, 1.0) };
         transformed = new (double X, double Y)[4];
         for (var i = 0; i < uv.Length; i++)
         {
             var local = new ArVec3(uv[i].Item1 * ratio, uv[i].Item2, 0);
-            local = centre + transform.Position + Rotate((local - centre) * transform.UniformScale, angles.Pitch, angles.Yaw, angles.Roll);
+            local = transform.TransformPoint(local, centre);
             var camera = pose.ToCamera(local);
             if (!(camera.Z > NearPlane) || !pose.TryProject(camera, out transformed[i])) { transformed = []; return false; }
         }
@@ -249,16 +276,6 @@ internal readonly struct ArCameraPose
         out (double X, double Y)[] rotated) =>
         TryTransformCorners(layout, corners, imageWidth, imageHeight, fovDegrees,
             new ArPoseTransform(0, 0, 0, pitchDegrees, yawDegrees, rollDegrees, 1), out rotated);
-
-    private static ArVec3 Rotate(ArVec3 p, double pitch, double yaw, double roll)
-    {
-        var cp = Math.Cos(pitch); var sp = Math.Sin(pitch);
-        p = new ArVec3(p.X, cp * p.Y - sp * p.Z, sp * p.Y + cp * p.Z);
-        var cy = Math.Cos(yaw); var sy = Math.Sin(yaw);
-        p = new ArVec3(cy * p.X + sy * p.Z, p.Y, -sy * p.X + cy * p.Z);
-        var cr = Math.Cos(roll); var sr = Math.Sin(roll);
-        return new ArVec3(cr * p.X - sr * p.Y, sr * p.X + cr * p.Y, p.Z);
-    }
 
     private static bool TryProjectRaw(ArVec3 cameraPoint, double fx, double fy, double cx, double cy, out (double X, double Y) imagePoint)
     {

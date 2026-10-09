@@ -12,6 +12,9 @@ internal struct GpuKeyInstance { public Vector4 Box, Emit, Misc, Base; }
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuSpriteInstance { public Vector4 PosSize, Color, Dir; }
 
+/// <summary>A recent MIDI/note impact retained briefly so the camera-calibrated AR pass can build its own 3D transient.</summary>
+internal readonly record struct GpuArImpact(int Pitch, double Age, float Strength);
+
 /// <summary>Scene layout of one output, in stage DIPs (the software stage's coordinate system).</summary>
 internal readonly struct GpuSceneLayout
 {
@@ -73,6 +76,7 @@ internal sealed partial class GpuStageSimulation
     private readonly List<Flash> _flashes = [];
     private readonly List<LiveTrail> _trails = [];
     private readonly List<ArLivePress> _livePresses = [];
+    private readonly List<GpuArImpact> _arImpacts = [];
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128];
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
     private readonly bool[] _active = new bool[128];
@@ -96,6 +100,8 @@ internal sealed partial class GpuStageSimulation
     /// list, this is what the keys under the fingers draw.
     /// </summary>
     internal IReadOnlyList<ArLivePress> LivePresses => _livePresses;
+    /// <summary>Recent strikes for the camera-projected impact-light/pulse/particle pass; independent of stage-space effects.</summary>
+    internal IReadOnlyList<GpuArImpact> ArImpacts => _arImpacts;
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
     private float _pedalBoost = 1;
@@ -134,7 +140,7 @@ internal sealed partial class GpuStageSimulation
 
     internal void Clear()
     {
-        _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear();
+        _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear(); _arImpacts.Clear();
         Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_active);
     }
 
@@ -144,6 +150,12 @@ internal sealed partial class GpuStageSimulation
         var look = _look = input.Look;
         if (feed.TakeClearRequest()) Clear();
         var frameDt = (float)Math.Clamp(seconds, 0, .05);
+        for (var i = _arImpacts.Count - 1; i >= 0; i--)
+        {
+            var aged = _arImpacts[i] with { Age = _arImpacts[i].Age + frameDt };
+            if (aged.Age > .85) _arImpacts.RemoveAt(i);
+            else _arImpacts[i] = aged;
+        }
         var particleDt = frameDt * look.PhysicsTimeFactor;
         // The physics slow-motion control belongs to particles; the stage clock, notes and ambient layers
         // must keep their real tempo so changing it cannot slow the whole composition.
@@ -383,6 +395,8 @@ internal sealed partial class GpuStageSimulation
     {
         var look = _look;
         var clamped = Math.Clamp(pitch, FirstPitch, FirstPitch + KeyCount - 1);
+        if (_arImpacts.Count >= 48) _arImpacts.RemoveAt(0);
+        _arImpacts.Add(new GpuArImpact(clamped, 0, Math.Clamp(strength, 0, 1)));
         var x = layout.X(clamped);
         var y = layout.HitY - 1;
         var color = _active[clamped] ? _keyColor[clamped] : look.NoteColor(clamped, 0);
