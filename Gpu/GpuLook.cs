@@ -261,7 +261,7 @@ internal sealed class GpuLook
             OverCamera = overCamera,
             // Over the camera the stage's notes go, except when they are drawn in perspective (AR-S4): then the note pass is the
             // one that draws them on the picture, and the look has to keep them.
-            ShowNotes = s.ShowNotes && (!overCamera || s.ArNotesInPerspective),
+            ShowNotes = s.ShowNotes && (!overCamera || s.ArNotesProjected),
             NoteStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.NoteStyles, s.NoteStyle)),
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),

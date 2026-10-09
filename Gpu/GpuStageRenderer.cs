@@ -340,6 +340,9 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>Sets what the AR layer draws (null for none). Call next to <see cref="UpdateCamera"/>, from the render thread.</summary>
     internal void UpdateAr(GpuArInput? input) => _arInput = input;
 
+    /// <summary>Sprites appended after the stage's own, for <c>VerifyArNoteProjection</c> only; never set by the app.</summary>
+    internal GpuSpriteInstance[]? ExtraSprites { get; set; }
+
     private Vector4[]? _arKeyColors;
 
     /// <summary>
@@ -404,11 +407,13 @@ internal sealed class GpuStageRenderer : IDisposable
 
         // Perform leaves the song's notes out, as the flat overlay does; the live trails of the keys the player holds stay.
         simulation.BuildNotes(input, layout, notes, songNotes: projectedInput?.ShowNotes ?? true,
-            onStage: !look.OverCamera || projectedInput is not null);
+            onStage: !look.OverCamera || projectedInput is not null, minAspect: projectedInput?.MinAspect ?? 0);
         if (projectedInput is { } cut)
             TruncateNotesToPicture(notes, cut.Calibration, mapView, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight));
         simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
         simulation.BuildSprites(look, layout, sprites);
+        // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
+        if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
         simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
 
         var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, arMap);

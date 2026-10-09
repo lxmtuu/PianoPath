@@ -29,14 +29,16 @@ internal static class ArModes
 /// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
 /// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
 /// <param name="NotesInPerspective">The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</param>
+/// <param name="NoteMinScale">Minimum note length, percent of the note's width (AR-S4, Keysight "minimum note scaling"); zero keeps every note at its own length.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
-    bool NotesInPerspective = false)
+    bool NotesInPerspective = false, double NoteMinScale = 0)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
     internal const double KeyLightMin = 0, KeyLightMax = 100, KeyLightDefault = 60;
     internal const double DelayMin = 0, DelayMax = 300, DelayDefault = 0;
+    internal const double NoteMinScaleMin = 0, NoteMinScaleMax = 200, NoteMinScaleDefault = 0;
 
     internal static readonly ArOptions Default = new(false, ArModes.Learn, OpacityDefault, LookaheadDefault, KeyLightDefault);
 
@@ -47,8 +49,18 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
         Opacity = Fit(Opacity, OpacityMin, OpacityMax, OpacityDefault),
         Lookahead = Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
         KeyLight = Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault),
-        Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault)
+        Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault),
+        NoteMinScale = Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault)
     };
+
+    /// <summary>
+    /// The notes are drawn in perspective by the stage's own note pass: the switch is on and the quality tier is not Lite.
+    /// Lite is the flat overlay it has always been, so it keeps the flat notes whatever the switch says.
+    /// </summary>
+    internal bool NotesProjected => NotesInPerspective && Quality != ArQualityTier.Lite;
+
+    /// <summary>The minimum note length as a fraction of the note's width, 0..2 (see <see cref="ArNoteMinimum"/>).</summary>
+    internal float NoteMinAspect => (float)(Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault) / 100);
 
     internal static double Fit(double value, double minimum, double maximum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;

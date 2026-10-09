@@ -966,13 +966,27 @@ internal static partial class VerificationSuite
         var arDefault = new PianoVisualSettings();
         Assert(!arDefault.ArEnabled && arDefault.ArOptionsValue == ArOptions.Default,
             "A fresh install has the overlay off, and the settings' defaults are the ones ArOptions names.");
-        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000 }; arWild.Clamp();
-        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax,
+        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900 }; arWild.Clamp();
+        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax,
             "Out-of-range overlay values should be pulled into range when settings load.");
         var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120 };
         arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0 });
         Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120,
             "Applying a look must keep every overlay setting.");
+        // AR-S4 remainder: the minimum note length is a setting of the look's own, so a look does not overwrite it
+        var minKept = new PianoVisualSettings { ArNoteMinScale = 80 };
+        minKept.CopyFrom(new PianoVisualSettings { ArNoteMinScale = 0 });
+        Assert(minKept.ArNoteMinScale == 80 && new PianoVisualSettings { ArNoteMinScale = 50 }.ArOptionsValue.NoteMinAspect == .5f,
+            "The minimum note length is kept when a look is applied, and reaches the overlay as a fraction of the note's width.");
+        // AR-S4 remainder: the notes are drawn in perspective on Standard and Ultra; Lite keeps the flat notes it always had
+        foreach (var (quality, projected) in new[] { (ArQualityTiers.LiteName, false), (ArQualityTiers.StandardName, true), (ArQualityTiers.UltraName, true) })
+        {
+            var tierSettings = new PianoVisualSettings { ArNotesInPerspective = true, ArQuality = quality };
+            Assert(tierSettings.ArNotesProjected == projected && tierSettings.ArOptionsValue.NotesProjected == projected,
+                $"With the notes in perspective the {quality} tier must {(projected ? "draw" : "not draw")} the notes through the camera's view.");
+        }
+        Assert(!new PianoVisualSettings { ArNotesInPerspective = false, ArQuality = ArQualityTiers.UltraName }.ArOptionsValue.NotesProjected,
+            "With the notes in perspective switched off no tier draws them through the camera's view.");
         Assert(MainWindow.FormatSetting(nameof(PianoVisualSettings.ArDelay), 120) == "120 ms" && MainWindow.TryParseSettingValue(nameof(PianoVisualSettings.ArDelay), "85 ms", out var typedDelay) && typedDelay == 85,
             "The camera delay is shown and typed in milliseconds, not as a percentage.");
         var cameraKept = new PianoVisualSettings { CameraSourceLink = @"\\?\usb#vid_046d&pid_0825#1#{x}\global", CameraVideoPath = @"C:\clips\hands.mp4", CameraCorner = "Top left" };

@@ -243,6 +243,7 @@
     "ArNoteFadeSoft": 100.0,
     "ArNoteFadeHard": 100.0,
     "ArNotesInPerspective": false,
+    "ArNoteMinScale": 0.0,
     "ArViewProfileId": "default"
   }
 }
