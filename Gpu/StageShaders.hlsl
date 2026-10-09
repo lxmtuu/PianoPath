@@ -44,6 +44,10 @@ cbuffer Frame : register(b0)
     float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
     float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
     float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity
+    float4 ArMatrix0;    // AR-S4b scene->image map (Camera/ArSceneProjection.cs): xyz = row 0 (a, b, c)
+    float4 ArMatrix1;    // xyz = row 1 (d, e, f)
+    float4 ArMatrix2;    // xyz = row 2 (g, h, i); g*x + h*y + i is the weight, 1 at the keyboard's back-left corner
+    float4 ArMatrixFlags; // x = AR flags (bit 0: the note pass draws through the map), y = sqrt|det M|, z = min scale px, w = 0
 };
 
 cbuffer PassConstants : register(b1)
@@ -108,6 +112,15 @@ float4 ToClip(float2 screenPx, float depth)
 {
     float2 ndc = screenPx / ScreenTime.xy * float2(2.0, -2.0) + float2(-1.0, 1.0);
     return float4(ndc, depth, 1.0);
+}
+
+// AR-S4b: the scene->image map at a scene point (Camera/ArSceneProjection.cs): output pixels and the
+// homogeneous weight that place came from. The weight is the clip w, so rasterising interpolates the
+// quad in perspective - the way VsArQuad has always interpolated its flat quads.
+float3 ArMapAt(float2 scene)
+{
+    float3 at = float3(scene, 1.0);
+    return float3(dot(ArMatrix0.xyz, at), dot(ArMatrix1.xyz, at), dot(ArMatrix2.xyz, at));
 }
 
 float Hash21(float2 p)
@@ -386,9 +399,32 @@ NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 corner = QuadCorner(vid);
     float2 local = corner * (halfSize + margin);
     NoteOut o;
-    o.Position = ToClip(SceneToScreen(centre + local), 0.5);
-    o.Local = local;
-    o.Half = halfSize;
+    if (ArMatrixFlags.x > 0.5)
+    {
+        // AR-S4b: the note rect through the scene->image map, which is what the flat AR quads stood in for.
+        // Each vertex takes one corner of the rect and the map's weight there becomes the clip w, so the quad
+        // is interpolated in perspective exactly as VsArQuad's is. Local and Half are multiplied by the map's
+        // magnification at the note's centre - one scale for the whole note, so the SDF body is exactly the
+        // projected rect - and the division by SceneSize.z cancels the pixels-per-unit PsNote multiplies every
+        // distance by: the SDF below then measures real output pixels. Min scale px is the floor on that
+        // magnification, so a note far from the camera cannot collapse under a pixel. While the flag is down
+        // none of this runs and the pass is the one from before AR-S4b, pixel for pixel.
+        float3 at = ArMapAt(centre + local);
+        float3 mid = ArMapAt(centre);
+        float w = max(at.z, 1e-3);                   // on and beyond the horizon nothing can be drawn; the slice that truncates notes there is still to come
+        float wm = max(mid.z, 1e-3);
+        float scale = max(ArMatrixFlags.y / (wm * sqrt(wm)), ArMatrixFlags.z) / SceneSize.z;
+        float2 ndc = at.xy / w / ScreenTime.xy * float2(2.0, -2.0) + float2(-1.0, 1.0);
+        o.Position = float4(ndc * w, 0.5 * w, w);
+        o.Local = local * scale;
+        o.Half = halfSize * scale;
+    }
+    else
+    {
+        o.Position = ToClip(SceneToScreen(centre + local), 0.5);
+        o.Local = local;
+        o.Half = halfSize;
+    }
     o.Color = n.Color;
     o.Misc = n.Misc;
     o.SceneY = centre.y + local.y;

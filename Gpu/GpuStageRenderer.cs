@@ -18,6 +18,7 @@ internal struct GpuFrameConstants
 {
     public Vector4 ScreenTime, SceneSize, Camera, Background, Aura, Horizon, SceneA, SceneB;
     public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx, KeyRange, ArPicture, ArFlags;
+    public Vector4 ArMatrix0, ArMatrix1, ArMatrix2, ArMatrixFlags;
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -388,7 +389,22 @@ internal sealed class GpuStageRenderer : IDisposable
         simulation.BuildSprites(look, layout, sprites);
         simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
 
-        var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth);
+        // AR-S4b: the scene→image map the note pass can draw through, built from the same calibration, view and
+        // scene layout the flat AR quads use (Camera/ArSceneProjection.cs). The map rides in the frame constants
+        // whenever it can be built; only GpuArInput.ProjectedNotes opens the shader's note branch, so a frame
+        // that does not ask for it draws exactly what it drew before the map existed — VerifyArNoteProjection
+        // reads both frames back on WARP and compares them byte for byte.
+        var arMap = GpuArMap.None;
+        var arProjectedNotes = false;
+        if (_arInput is { } arMapInput && TryCameraView(target, look, out var mapView)
+            && _camera!.Width == arMapInput.Calibration.ImageWidth && _camera.Height == arMapInput.Calibration.ImageHeight
+            && ArSceneProjection.TryBuild(arMapInput.Calibration, mapView, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight), out var sceneMap))
+        {
+            arMap = new GpuArMap(sceneMap, arMapInput.ProjectedNotes, arMapInput.MinScalePx);
+            arProjectedNotes = arMapInput.ProjectedNotes;
+        }
+
+        var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, arMap);
         var context = Context;
         context.UpdateSubresource(in constants, _frameBuffer);
         _notes.Upload(context, notes.Span);
@@ -399,7 +415,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation.LivePresses, _arList);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation.LivePresses, _arList, arProjectedNotes);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
@@ -542,7 +558,7 @@ internal sealed class GpuStageRenderer : IDisposable
     };
 
     private GpuFrameConstants BuildConstants(GpuRenderTarget target, GpuFrameInput input, GpuSceneLayout layout, GpuStageSimulation simulation,
-        float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth)
+        float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth, GpuArMap arMap)
     {
         var look = input.Look;
         var pixelsPerUnit = target.Height / Math.Max(1f, layout.Height);
@@ -586,7 +602,11 @@ internal sealed class GpuStageRenderer : IDisposable
                 look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity),
             KeyRange = new Vector4(layout.Keys.FirstPitch, Math.Max(1, layout.Keys.KeyCount - 1), 0, 0),
             ArPicture = ComputeArPicture(target, look, out var arFlags),
-            ArFlags = arFlags
+            ArFlags = arFlags,
+            ArMatrix0 = arMap.Row0,
+            ArMatrix1 = arMap.Row1,
+            ArMatrix2 = arMap.Row2,
+            ArMatrixFlags = arMap.Flags
         };
     }
 

@@ -27,7 +27,9 @@ internal struct GpuArQuad
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
 /// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard);
+/// <param name="ProjectedNotes">AR-S4b: the stage's own note pass draws the notes through the scene→image map (Gpu/StageShaders.hlsl <c>VsNote</c>) instead of this layer keeping flat note and live-bar quads of its own. Off by default: a frame that does not ask for the map draws exactly what it drew before AR-S4b.</param>
+/// <param name="MinScalePx">The smallest magnification the projected note pass draws with, output pixels per scene DIP (the shader's <c>ArMatrixFlags.z</c>): a note that would collapse under a pixel is drawn at this floor instead. 0 draws every note at the map's own magnification.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinScalePx = 0);
 
 /// <summary>Turns the song's notes at this moment into quads for the AR pass.</summary>
 internal sealed class GpuArLayer
@@ -53,12 +55,13 @@ internal sealed class GpuArLayer
     /// simulation holds for it (<paramref name="keyColors"/>, indexed by pitch: linear rgb and glow 0..1), so the AR keys
     /// rise and fade exactly as the stage's own, for a held key of the song or of the player alike. Notes are drawn while the
     /// song plays, in the colours of the look; a note that has been played or missed takes the stage's played and missed
-    /// colours.
+    /// colours. When <paramref name="projectedNotes"/> is set (AR-S4b) the note pass is already drawing the notes and the
+    /// bars through the scene→image map, so this layer keeps only the lit keys and holds no flat copy of its own.
     /// </summary>
     /// <summary>How many bars the last <see cref="Build"/> produced, over and above the keys and the notes of the song.</summary>
     internal int LiveBarCount { get; private set; }
 
-    internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors, IReadOnlyList<ArLivePress> live, GpuInstanceList<GpuArQuad> quads)
+    internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors, IReadOnlyList<ArLivePress> live, GpuInstanceList<GpuArQuad> quads, bool projectedNotes)
     {
         quads.Clear();
         _shapes.Clear();
@@ -81,12 +84,13 @@ internal sealed class GpuArLayer
             }
         }
         var look = input.Look;
-        if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
+        if (ar.ShowNotes && input.Playing && input.Notes.Count > 0 && !projectedNotes)
         {
             ArNotes.Build(ar.Calibration, view, input.Notes, input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f), input.MaxNoteDuration, ar.Notes, _shapes, VelocityBand);
-            // The AR layer always draws flat emissive quads. An unported note style (Gem, Crystal Outline, named by
-            // ArLookGuard) keeps its track colour and the flat fallback material until AR-S4 ports the style onto the
-            // projected note pass; today the colours are the same either way, so the guard is an assertion target.
+            // The AR layer draws flat emissive quads while the note pass does not draw through the map. An unported
+            // note style (Gem, Crystal Outline, named by ArLookGuard) keeps its track colour and the flat fallback
+            // material until the styles are ported onto the projected note pass (AR-S4 remainder); today the colours
+            // are the same either way, so the guard is an assertion target.
             foreach (var shape in _shapes)
             {
                 var note = input.Notes[shape.NoteIndex];
@@ -98,6 +102,7 @@ internal sealed class GpuArLayer
         }
         // the keys under the player's own fingers, drawn over the notes of the song as the stage draws its live trails.
         // Lite keeps the bar's colour flat (no velocity tint), which is what the overlay has always done.
+        if (projectedNotes) return;                 // the bars are the note pass's job now, like the notes
         var velocityTint = ar.Quality != ArQualityTier.Lite && look.VelocityColor && look.VelocityColorAmount > 0;
         var velocityAmount = velocityTint ? look.VelocityColorAmount : 0;
         if (live.Count == 0) return;

@@ -59,6 +59,7 @@
     <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
     <Compile Include="..\..\Gpu\GpuAdaptiveQuality.cs" Link="Product\Gpu\GpuAdaptiveQuality.cs" />
+    <Compile Include="..\..\Gpu\GpuArMap.cs" Link="Product\Gpu\GpuArMap.cs" />
     <Compile Include="..\..\Gpu\GpuInstanceList.cs" Link="Product\Gpu\GpuInstanceList.cs" />
     <Compile Include="..\..\Stage\Effects\EffectContracts.cs" Link="Product\Stage\Effects\EffectContracts.cs" />
     <Compile Include="..\..\Stage\Effects\AccessibilityContracts.cs" Link="Product\Stage\Effects\AccessibilityContracts.cs" />
