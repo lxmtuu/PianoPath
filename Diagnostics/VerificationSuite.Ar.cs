@@ -417,16 +417,17 @@ internal static partial class VerificationSuite
         var withoutBarsLong = Draw(ArFeed([60, 61], press: true, showTrails: false), 60);
         Assert(stretchedBars.Bars == 2 && Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe) > 25,
             $"The bar stretches as the key is held: past where half a second reached ({Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe)} at -1.2).");
-        // let go: the bar ends a moment later, while the key stays lit — the light is what the key is, the bar is what the hand did
+        // Note Off freezes the live bar's hold length, but it continues travelling through its fixed AR reach;
+        // key tint remains the key's state, and strike lights have their own shorter lifetime.
         var letGoFeed = ArFeed([60, 61], press: true);
         var afterRelease = Draw(letGoFeed, 80, frame =>
         {
             if (frame != 20) return;
             letGoFeed.LiveNote(60, false, 0); letGoFeed.LiveNote(61, false, 0);
         });
-        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.NoteLights > 0
-                && afterRelease.Quads >= afterRelease.Keys + afterRelease.NoteLights,
-            $"Letting go ends the bars and strike lights while key tint and neighboring spill stay; unrelated projected transients may continue ({afterRelease.Quads} quads: {afterRelease.Keys} keys, {afterRelease.NoteLights} spill).");
+        Assert(afterRelease.Bars == 2 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.NoteLights > 0
+                && afterRelease.Quads == afterRelease.Keys + afterRelease.Bars + afterRelease.NoteLights,
+            $"After Note Off the live bars keep travelling while strike lights fade and key tint plus spill remain ({afterRelease.Quads} quads: {afterRelease.Keys} keys, {afterRelease.Bars} bars, {afterRelease.NoteLights} spill).");
         // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
         var fadingFeed = ArFeed([60, 61], press: true);
         var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
