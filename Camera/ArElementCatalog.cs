@@ -59,7 +59,7 @@ internal enum ArElement
     NoteLights,
     /// <summary>A ring at the point of impact.</summary>
     Pulses,
-    /// <summary>Small planes rising from a strike.</summary>
+    /// <summary>Camera-projected Live Stage particles, impact/release flashes, hold arcs and keyed light beams.</summary>
     Particles
 }
 
@@ -95,8 +95,8 @@ internal static class ArElementCatalog
     {
         ArElement.PianoKeys or ArElement.Dampers or ArElement.OctaveLines => "VsArQuad",
         ArElement.NoteObjects or ArElement.Keypresses or ArElement.ImpactLights or ArElement.Pulses => "VsArQuad (camera-projected 3D geometry)",
-        ArElement.NoteLights => "VsSprite (AR-S5)",
-        ArElement.Particles => "VsArQuad (camera-projected particle billboards)",
+        ArElement.NoteLights => "VsArQuad (projected 3D key-light spill)",
+        ArElement.Particles => "VsArQuad (camera-projected Live Stage particles and transient geometry)",
         ArElement.LightBars => "VsArQuad (AR-S8)",
         _ => "own pass, after everything, no homography (AR-S8)"
     };

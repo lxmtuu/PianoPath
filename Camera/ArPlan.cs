@@ -28,7 +28,7 @@ internal enum ArStatus
 /// <param name="RawFrames">The camera is read as it comes, not mirrored, and the engine takes the frames: the calibration is kept for the picture as delivered, and the engine turns it round when it draws.</param>
 /// <param name="CameraLayer">The engine shows the camera as the background.</param>
 /// <param name="ArLayer">The engine draws the notes and keys over the camera, on the calibrated key area.</param>
-/// <param name="HideStageLayers">The stage's own notes, keys and effects are left out: the real keys are in the picture and the stage's would sit on top of them in the wrong place.</param>
+/// <param name="HideStageLayers">Uncalibrated stage-space notes, key bodies and sprites are not drawn over the camera; pitch-tagged Live Stage effects can still be projected by the calibrated AR layer.</param>
 internal readonly record struct ArPlan(ArStatus Status, bool NeedsCamera, bool RawFrames, bool CameraLayer, bool ArLayer, bool HideStageLayers)
 {
     internal static readonly ArPlan Off = new(ArStatus.Off, false, false, false, false, false);

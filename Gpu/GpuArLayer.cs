@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>x/y carry note fade/sounding or effect progress/width; z selects note 0, key tint 1, rising spark 2, impact light 3 or pulse 4.</summary>
+    /// <summary>x/y/w carry note or effect parameters; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6 or beam 7.</summary>
     public Vector4 Misc;
 }
 
@@ -27,14 +27,14 @@ internal struct GpuArQuad
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
 /// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
-/// <param name="ProjectedNotes">Build notes and optional live bars from the calibrated keyboard-local 3D pose and project camera-facing quads through the 3D camera model. Falling-note trail FX are omitted rather than laid flat; ambient sprites stay screen-space.</param>
+/// <param name="ProjectedNotes">Build song notes from the calibrated keyboard-local 3D pose. Key-anchored live effects use the calibrated pose independently; ambient sprites stay screen-space.</param>
 /// <param name="MinAspect">The minimum note length as a fraction of its projected key width; 0 keeps each note's natural length.</param>
 /// <param name="ShowLiveTrails">Draw bars for keys the player presses, in flat or projected mode; key tint is separate.</param>
 /// <param name="NoteDirection">Independent keyboard-local 3D direction of the notes and live bars.</param>
 internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default);
 
-/// <summary>Turns the song's notes at this moment into quads for the AR pass.</summary>
-internal sealed class GpuArLayer
+/// <summary>Builds calibrated quads for the camera layer: projected notes, real-key tint and pitch-tagged Live Stage effects.</summary>
+internal sealed partial class GpuArLayer
 {
     private readonly List<ArNoteShape> _shapes = [];
     private readonly List<ArLiveBar> _liveBars = [];
@@ -48,39 +48,36 @@ internal sealed class GpuArLayer
     /// <summary>The velocity band the style's graphs walk until the stage's own simulation feeds the layer: raw MIDI velocity mapped straight onto 0..1.</summary>
     private static readonly PianoSimulation VelocityBand = new();
 
-    /// <summary>How many key quads the last <see cref="Build"/> produced.</summary>
     internal int KeyQuadCount { get; private set; }
-
-    /// <summary>How many shapes the last <see cref="Build"/> produced (the notes before they were packed).</summary>
     internal int ShapeCount => _shapes.Count + _projectedShapes.Count;
-
-    /// <summary>
-    /// Refills <paramref name="quads"/>: first the lit keys, then the notes. A key is lit by the colour and glow the stage
-    /// simulation holds for it (<paramref name="keyColors"/>, indexed by pitch: linear rgb and glow 0..1), so the AR keys
-    /// rise and fade exactly as the stage's own, for a held key of the song or of the player alike. Notes are drawn while the
-    /// song plays, in the colours of the look; a note that has been played or missed takes the stage's played and missed
-    /// colours. When <paramref name="projectedNotes"/> is set, this layer builds camera-projected 3D note and live-bar quads;
-    /// the stage note pass is suppressed to prevent duplicates. Falling-note trail FX are omitted rather than laid flat.
-    /// The separate ambient sprite pass remains in screen space and is not sent through the keyboard projection.
-    /// </summary>
-    /// <summary>How many bars the last <see cref="Build"/> produced, over and above the keys and the notes of the song.</summary>
     internal int LiveBarCount { get; private set; }
     internal int ImpactLightCount { get; private set; }
+    internal int NoteLightCount { get; private set; }
     internal int PulseCount { get; private set; }
     internal int ParticleFxCount { get; private set; }
+    internal int FlashCount { get; private set; }
+    internal int HoldArcCount { get; private set; }
+    internal int BeamCount { get; private set; }
+    internal int ReleaseEffectCount { get; private set; }
 
+    /// <summary>
+    /// Refills the projected AR quads. Key tint remains independent of the optional live bars. Actual stage-simulation
+    /// particles, rings and flashes retain their MIDI pitch and are projected through the saved 3D pose; stage-space
+    /// sprites are never placed flat over the camera. Ambient sprites are owned by the separate screen-space pass.
+    /// </summary>
     internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors,
-        IReadOnlyList<ArLivePress> live, IReadOnlyList<GpuArImpact> impacts, GpuInstanceList<GpuArQuad> quads, bool projectedNotes)
+        GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads, bool projectedNotes)
     {
         quads.Clear();
         _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear();
-        KeyQuadCount = 0;
-        LiveBarCount = 0;
-        ImpactLightCount = PulseCount = ParticleFxCount = 0;
+        KeyQuadCount = LiveBarCount = 0;
+        ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
         if (ar.Opacity <= 0) return;
+
         var opacity = Math.Clamp(ar.Opacity, 0f, 1f);
-        var keyLight = ar.Quality == ArQualityTier.Lite ? 0f : Math.Clamp(ar.KeyLight, 0f, 1f); // Lite leaves the camera's keys alone
+        var keyLight = ar.Quality == ArQualityTier.Lite ? 0f : Math.Clamp(ar.KeyLight, 0f, 1f);
         var layout = ar.Calibration.Layout;
+        var look = input.Look;
         for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch && pitch < keyColors.Count; pitch++)
         {
             var key = keyColors[pitch];
@@ -93,15 +90,17 @@ internal sealed class GpuArLayer
                 KeyQuadCount++;
             }
         }
-        var look = input.Look;
+
+        if (ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0)
+            BuildProjectedNoteLights(ar, view, keyColors, quads, opacity * keyLight, look, layout, keyPose);
+
         if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
         {
             var position = input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f);
             if (projectedNotes)
             {
-                // The projected AR branch builds notes in keyboard-local 3D and sends their camera-projected billboards
-                // through this GPU quad pass. The note's direction is independent of the camera pose; stage particles,
-                // petals and stars never enter this branch and remain flat on the camera.
+                // The selected note direction is independent of the piano pose. These are the only song-note quads
+                // projected by this layer; stage-space note bodies and falling trails remain suppressed over camera.
                 Ar3DNoteProjection.Build(ar.Calibration, view, input.Notes, position, input.MaxNoteDuration, ar.Notes,
                     ar.NoteDirection, ar.MinAspect, _projectedShapes, VelocityBand);
                 foreach (var shape in _projectedShapes)
@@ -130,24 +129,25 @@ internal sealed class GpuArLayer
                 }
             }
         }
-        // S5 transients are rebuilt from the MIDI impact clock and projected from keyboard-local 3D. They do not
-        // reuse the stage's screen-space particles, and they remain independent of the optional live press bars.
-        if (ar.Calibration.CameraPose is { } pose && ar.Quality != ArQualityTier.Lite)
-            BuildImpactEffects(ar, view, impacts, quads, opacity, look, layout, pose);
 
-        // The keys under the player's own fingers keep their tint above; growing bars are a separate option.
-        // When perspective is enabled they use the same 3D direction and camera pose as song notes, never a flat camera-space trail.
+        // S5 maps the simulation's hit/hold/release channels only when a full camera pose is available. Even if
+        // song-note perspective is switched off, live effects stay attached to the calibrated piano in 3D.
+        if (ar.Calibration.CameraPose is { } pose && ar.Quality != ArQualityTier.Lite)
+            BuildStageEffects(ar, view, simulation, quads, opacity, look, layout, pose);
+
+        var live = simulation.LivePresses;
         if (!ar.ShowLiveTrails || live.Count == 0) return;
-        var velocityTint = ar.Quality != ArQualityTier.Lite && look.VelocityColor && look.VelocityColorAmount > 0;
-        var velocityAmount = velocityTint ? look.VelocityColorAmount : 0;
-        if (projectedNotes)
+        var liveProjected = ar.Calibration.CameraPose is not null && ar.Quality != ArQualityTier.Lite;
+        if (liveProjected)
         {
             Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.Notes, ar.NoteDirection, _projectedLiveBars, VelocityBand);
             foreach (var bar in _projectedLiveBars)
             {
+                var patch = bar.Patch;
+                if (bar.Held && look.HoldVibration)
+                    patch = VibrateLiveBar(ar.Calibration, view, bar.Pitch, patch, look, simulation.Time, simulation.SimulationWidth);
                 var color = look.NoteColor(bar.Pitch, 0);
-                if (velocityTint) color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), velocityAmount);
-                quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
+                AddLiveBar(quads, patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time, ar.Quality != ArQualityTier.Lite);
                 LiveBarCount++;
             }
         }
@@ -157,93 +157,27 @@ internal sealed class GpuArLayer
             foreach (var bar in _liveBars)
             {
                 var color = look.NoteColor(bar.Pitch, 0);
-                if (velocityTint) color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(bar.Strength), velocityAmount);
-                quads.Add(Pack(bar.Patch, color, opacity, new Vector4((float)bar.Fade, bar.Held ? 1 : 0, 0, 0)));
+                AddLiveBar(quads, bar.Patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time, ar.Quality != ArQualityTier.Lite);
                 LiveBarCount++;
             }
         }
     }
 
-    private void BuildImpactEffects(GpuArInput ar, ArView view, IReadOnlyList<GpuArImpact> impacts,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+    private static void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
+        float strength, Vector3 color, float opacity, GpuLook look, double time, bool allowVelocityTint)
     {
-        if (impacts.Count == 0) return;
-        var impactLights = ArElementCatalog.CanDraw(ar.Quality, ArElement.ImpactLights);
-        var pulses = ArElementCatalog.CanDraw(ar.Quality, ArElement.Pulses);
-        var particles = ArElementCatalog.CanDraw(ar.Quality, ArElement.Particles);
-        var across = new ArVec3(1, 0, 0);
-        var depth = new ArVec3(0, 1, 0);
-        var normal = new ArVec3(0, 0, 1);
-
-        foreach (var impact in impacts)
+        var holdBreath = held && look.HoldBreath
+            ? .72 + .28 * Math.Sin(time * (1 + look.HoldBreathRate * 5)) : 1;
+        if (held && look.HoldColorCycle)
         {
-            if (!layout.Contains(impact.Pitch) || !double.IsFinite(impact.Age) || impact.Age < 0) continue;
-            var strength = Math.Clamp(impact.Strength, 0, 1);
-            if (strength <= .01f) continue;
-            var (left, right) = layout.Span(impact.Pitch);
-            var halfKey = (right - left) * pose.KeyboardWidthDepthRatio * .5;
-            var keyX = layout.CenterX(impact.Pitch) * pose.KeyboardWidthDepthRatio;
-            var colour = look.NoteColor(impact.Pitch, 0);
-            if (look.VelocityColor && look.VelocityColorAmount > 0)
-                colour = Vector3.Lerp(colour, GpuStageSimulation.VelocityTint(strength), look.VelocityColorAmount);
-            var keyCentre = new ArVec3(keyX, .12, 0);
-
-            // Standard: a short, soft cue on the struck key. The fill lies on the calibrated key plane,
-            // not in the camera's 2D coordinates, and decays even while a long key remains held.
-            if (impactLights && impact.Age < .62)
-            {
-                var fade = (float)Math.Pow(Math.Clamp(1 - impact.Age / .62, 0, 1), 1.25);
-                var alpha = opacity * strength * fade;
-                if (alpha > .004f && Ar3DNoteProjection.TryProjectBillboard(pose, view, keyCentre, across, depth,
-                        halfKey * 1.05, .105, out var lightPatch))
-                {
-                    quads.Add(Pack(lightPatch, colour * 1.8f, alpha, new Vector4(0, 0, 3, 0)));
-                    ImpactLightCount++;
-                }
-            }
-
-            // Ultra: an expanding ellipse on the key plane, with its own finite lifetime.
-            if (pulses && impact.Age < .72)
-            {
-                var phase = (float)Math.Clamp(impact.Age / .72, 0, 1);
-                var fade = (float)Math.Pow(1 - phase, 1.2);
-                var halfX = halfKey * (.65 + phase * 2.0);
-                var halfY = .035 + phase * .19;
-                if (fade > .004f && Ar3DNoteProjection.TryProjectBillboard(pose, view, keyCentre, across, depth,
-                        halfX, halfY, out var pulsePatch))
-                {
-                    quads.Add(Pack(pulsePatch, colour * 1.65f, opacity * strength * fade * .8f,
-                        new Vector4(.78f, .075f, 4, 0)));
-                    PulseCount++;
-                }
-            }
-
-            // Ultra: a small deterministic burst of camera-projected sparks. Each particle rises toward the
-            // player-side surface normal (-Z); lateral drift is in keyboard-local X/Y and respects arbitrary pose.
-            if (particles)
-            {
-                for (var i = 0; i < 12; i++)
-                {
-                    var particleAge = impact.Age - i * .032;
-                    if (particleAge < 0 || particleAge >= .62) continue;
-                    var progress = Math.Clamp(particleAge / .62, 0, 1);
-                    var phase = impact.Pitch * 1.61803398875 + i * 2.39996322973;
-                    var drift = .012 + progress * .045;
-                    var xOffset = Math.Sin(phase + progress * 3.1) * drift;
-                    var yOffset = Math.Cos(phase * .73 + progress * 2.2) * (.008 + progress * .024);
-                    var height = .08 + progress * (.42 + strength * .12);
-                    var centre = new ArVec3(keyX + xOffset, .12 + yOffset, -height);
-                    var radius = .009 + .007 * (1 - progress);
-                    var fade = (float)(Math.Pow(1 - progress, 1.25) * strength * opacity);
-                    if (fade <= .004f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, centre, across, normal,
-                            radius, radius * 1.65, out var particlePatch)) continue;
-                    var particleColour = Vector3.Lerp(colour, Vector3.One, .68f * (1 - (float)progress));
-                    quads.Add(Pack(particlePatch, particleColour * 2.2f, fade,
-                        new Vector4((float)progress, 0, 2, 0)));
-                    ParticleFxCount++;
-                }
-            }
+            var cycling = GpuStageSimulation.ColorFromHue(GpuStageSimulation.Hue188(pitch) + time * look.HoldColorCycleSpeed * 3);
+            color = Vector3.Lerp(color, cycling, .8f);
         }
+        if (allowVelocityTint && look.VelocityColor && look.VelocityColorAmount > 0)
+            color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(strength), look.VelocityColorAmount);
+        var holdBar = held && look.HoldBar ? look.HoldBarIntensity : 0;
+        quads.Add(Pack(patch, color, opacity,
+            new Vector4((float)(fade * holdBreath), held ? 1 : 0, 0, holdBar)));
     }
 
     private static GpuArQuad Pack(ArPatch patch, Vector3 color, float alpha, Vector4 misc) => new()

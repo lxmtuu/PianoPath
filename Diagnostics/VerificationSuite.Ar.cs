@@ -9,9 +9,10 @@ namespace PianoPath;
 internal static partial class VerificationSuite
 {
     /// <summary>
-    /// Pins AR support to the actual composite contract: six ambient layers are verified over the camera;
-    /// stage-anchored note/key effects are suppressed, and note materials keep their explicit flat-quad fallback.
-    /// Pixel-level evidence for the visible and suppressed groups is exercised by VerifyArOverlayCapturedFrames.
+    /// Pins AR support to its evidence grade: six screen-space ambient families are verified, 14 S5 families
+    /// have calibrated 3D projection code but remain Unverified pending WARP, four unprojected families stay
+    /// Unsupported, and note materials keep their explicit flat-quad fallback.
+    /// VerifyArOverlayCapturedFrames covers verified ambient/suppression; VerifyArNoteProjection has separate unrun S5 pixel assertions.
     /// </summary>
     private static void VerifyArOverlayExclusions()
     {
@@ -20,18 +21,37 @@ internal static partial class VerificationSuite
             "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic",
             "atmosphere.shooting-stars", "atmosphere.petals",
         };
+        var unverifiedInAr = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "impact.wave", "impact.flash", "impact.burst", "impact.morph",
+            "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
+            "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
+        };
         var families = EffectContractCatalog.AllFamilies;
         Assert(families.Count == 24, "AR classification should cover all 24 typed effect families.");
+        Assert(families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native) == 6
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 14
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 4,
+            "AR evidence must distinguish six verified screen-space families, 14 unverified S5 projections and four unsupported unprojected families.");
         Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
-            "Only the four ambient layers, shooting stars and petals are verified as native over the camera.");
+            "Only the four ambient layers, shooting stars and petals are verified Native over the camera.");
+        Assert(unverifiedInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified).Select(family => family.Id)),
+            "S5 projection code must stay Unverified until its WARP assertions run.");
         foreach (var family in families)
         {
-            var expected = nativeInAr.Contains(family.Id) ? EffectBackendState.Native : EffectBackendState.Unsupported;
+            var expected = nativeInAr.Contains(family.Id) ? EffectBackendState.Native
+                : unverifiedInAr.Contains(family.Id) ? EffectBackendState.Unverified
+                : EffectBackendState.Unsupported;
             Assert(family.Capabilities.ArOverlay.State == expected,
-                $"{family.Id} must match the captured AR compositor evidence ({expected}).");
-            var expectedBinding = expected == EffectBackendState.Native ? EffectParameterBindingState.Applied : EffectParameterBindingState.Ignored;
+                $"{family.Id} must match its current AR evidence grade ({expected}).");
+            var expectedBinding = expected switch
+            {
+                EffectBackendState.Native => EffectParameterBindingState.Applied,
+                EffectBackendState.Unverified => EffectParameterBindingState.Unverified,
+                _ => EffectParameterBindingState.Ignored,
+            };
             Assert(family.Parameters.All(parameter => parameter.Bindings.ArOverlay == expectedBinding),
-                $"{family.Id} parameter bindings should match its AR output support state.");
+                $"{family.Id} parameter bindings should match its AR evidence state ({expectedBinding}).");
             Assert(family.Capabilities.Recording.State == EffectBackendState.Native,
                 $"{family.Id} may be Native for Recording only because its own family capture fixture reads back a real GPU take frame.");
             Assert(family.Parameters.All(parameter => parameter.Bindings.Recording == EffectParameterBindingState.Unverified),
@@ -46,7 +66,7 @@ internal static partial class VerificationSuite
                     && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
                 $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
         }
-        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback; all 24 family-level Recording claims have isolated capture fixtures, while parameter bindings remain Unverified.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native, 14 calibrated S5 projection families remain Unverified, four unsupported unprojected families stay Unsupported, note materials retain the ar.note.flat-quad fallback; all 24 family-level Recording claims have isolated capture fixtures, while unverified parameter bindings remain conservative.");
     }
 
     /// <summary>
@@ -439,7 +459,7 @@ internal static partial class VerificationSuite
             AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
             HorizonGlow = 0, BloomIntensity = 0, Vignette = 0,
         };
-        GpuStageFeed MakeFeed(PianoVisualSettings settings, bool overCamera, bool sounding = true)
+        GpuStageFeed MakeFeed(PianoVisualSettings settings, bool overCamera, bool sounding = true, bool withCamera = true)
         {
             var feed = new GpuStageFeed();
             feed.SetStageHeight(height);
@@ -447,7 +467,7 @@ internal static partial class VerificationSuite
             IReadOnlyList<NoteEvent> stateNotes = sounding ? notes : Array.Empty<NoteEvent>();
             IReadOnlySet<int> pressed = sounding ? held : new HashSet<int>();
             feed.SetDeterministicState(stateNotes, sounding ? 1 : 0, sounding, pressed);
-            feed.Camera = camera;
+            if (withCamera) feed.Camera = camera;
             return feed;
         }
         byte[] Capture(GpuStageFeed feed, Action<int>? beforeFrame = null) =>
@@ -498,30 +518,39 @@ internal static partial class VerificationSuite
         busy.ShowLightBeams = true; busy.BeamIntensity = 100;
         var overCameraLook = GpuLook.From(busy, (pitch, track) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
         Assert(overCameraLook.OverCamera && !overCameraLook.ShowNotes && !overCameraLook.ShowKeys
-                && !overCameraLook.ShowEmbers && !overCameraLook.ShowWisps && !overCameraLook.ShowFlame
-                && !overCameraLook.ShowImpactRings && !overCameraLook.ShowImpactFlash && !overCameraLook.ShowLightBeams
-                && !overCameraLook.HoldElectricArc && overCameraLook.ImpactWave == "None" && overCameraLook.ImpactMorph == "None"
-                && overCameraLook.ReleaseEffect == "Fade" && overCameraLook.ReleaseIntensity == 0,
-            "The AR look must disable note/key effects before simulation and mark the camera composition for transient suppression.");
-        GpuStageFeed BusyFeed()
+                && overCameraLook.ShowEmbers && overCameraLook.ShowWisps && overCameraLook.ShowFlame
+                && overCameraLook.ShowImpactRings && overCameraLook.ShowImpactFlash && overCameraLook.ShowLightBeams
+                && overCameraLook.HoldElectricArc && overCameraLook.ShowHalo && overCameraLook.ImpactWave == "Shockwave" && overCameraLook.ImpactMorph == "Shatter"
+                && overCameraLook.ReleaseEffect == "Dissolve" && overCameraLook.ReleaseIntensity > 0,
+            "The camera-mode look must suppress stage-space note/key drawing but preserve Live Stage effect settings for the calibrated 3D AR pass.");
+        GpuStageFeed BusyFeed(bool withCamera = true)
         {
-            var feed = MakeFeed(busy, overCamera: false);
+            var feed = MakeFeed(busy, overCamera: false, withCamera: withCamera);
             feed.Impact(60, 1);
             feed.LiveNote(60, true, 1);
             feed.LiveNote(60, false, 1);
             return feed;
         }
-        var stageImage = Capture(BusyFeed());
+        var stageImage = Capture(BusyFeed(withCamera: false));
         Assert(ChangedPixels(background, stageImage, threshold: 8) > 30,
             "The busy fixture must visibly contain stage notes, keys and transients before its camera overlay is enabled.");
-        var transitioning = BusyFeed();
+        var transitioning = BusyFeed(withCamera: false);
         var hidden = Capture(transitioning, frame =>
         {
-            if (frame == 1) transitioning.SetLook(overCameraLook);
+            if (frame != 1) return;
+            var resumedImage = cameraRing.BeginWrite(width * height * 4, out var resumedSlot);
+            for (var i = 0; i < resumedImage.Length; i += 4)
+            {
+                resumedImage[i] = resumedImage[i + 1] = resumedImage[i + 2] = 90;
+                resumedImage[i + 3] = 255;
+            }
+            cameraRing.Publish(resumedSlot, width, height, Stopwatch.GetTimestamp());
+            transitioning.Camera = camera;
+            transitioning.SetLook(overCameraLook);
         });
         Assert(background.AsSpan().SequenceEqual(hidden),
             "The AR camera composite must hide active stage notes, keys and transients that were already in flight when the overlay turned on.");
-        Results.Add("PASS AR over-camera captured frames: WARP readback shows all six camera-composited ambient families, omits backdrop stars and key beams, and hides notes/keys plus in-flight impact, particle, hold and release effects when AR turns on.");
+        Results.Add("PASS AR over-camera captured frames: WARP readback shows all six screen-space ambient families, omits backdrop stars and uncalibrated key beams, preserves Live Stage effect settings for the AR projection, and suppresses their stage-space pixels when camera mode turns on.");
     }
 
     /// <summary>
@@ -1521,20 +1550,86 @@ internal static partial class VerificationSuite
             $"A 200% minimum length must visibly lengthen short projected notes ({naturalPixels} → {minimumPixels} pixels).");
 
         // Live press bars are independently switched from key tint and use the same 3D direction as song notes.
-        GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false)
+        // The effect fixture deliberately enables several Live Stage families so S5 verifies the actual simulation output.
+        var liveFxLook = settings.Clone();
+        liveFxLook.ShowEmbers = true; liveFxLook.ParticleAmount = 90; liveFxLook.ParticleResponse = 100; liveFxLook.ParticleVelocity = 300;
+        liveFxLook.ShowWisps = true; liveFxLook.WispAmount = 55; liveFxLook.ShowFlame = true; liveFxLook.FlameIntensity = 85;
+        liveFxLook.ImpactBurst = "Confetti"; liveFxLook.ShowImpactRings = true; liveFxLook.ImpactWave = "Ripple";
+        liveFxLook.ImpactWaveIntensity = 100; liveFxLook.RingSize = 62; liveFxLook.ShowImpactFlash = true;
+        liveFxLook.ImpactFlashIntensity = 100; liveFxLook.ImpactFlashStyle = "Lightning";
+        liveFxLook.ImpactMorph = "Shatter"; liveFxLook.ImpactMorphIntensity = 100;
+        liveFxLook.ReleaseEffect = "Dissolve"; liveFxLook.ReleaseIntensity = 100;
+        liveFxLook.HoldElectricArc = true; liveFxLook.HoldArcIntensity = 100;
+        liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
+        GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
+            PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null)
         {
-            var pressed = new HashSet<int> { 60 };
-            var feed = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
+            var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
+            var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
                     ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars),
                 song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
+            if (visualSettings is not null)
+                feed.SetLook(GpuLook.From(visualSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
             // Give each WARP case an empty simulation history so an earlier effect cannot leak into the no-impact control.
             feed.ClearTransient();
             feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
             feed.SetDeterministicBeatPulse(0);
-            feed.LiveNote(60, true, .9f);
+            foreach (var pitch in pressed) feed.LiveNote(pitch, true, .9f);
             if (addImpact) feed.Impact(60, .9);
             return feed;
         }
+        GpuStageFeed UncalibratedFeed(PianoVisualSettings visual, bool triggerEffects)
+        {
+            var pressed = triggerEffects ? new HashSet<int> { 60 } : new HashSet<int>();
+            var feed = MakeFeed(null, song: Array.Empty<NoteEvent>(), position: 0, playing: false,
+                pressed: pressed, overCamera: false);
+            feed.SetLook(GpuLook.From(visual, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: false));
+            feed.ClearTransient();
+            feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
+            feed.SetDeterministicBeatPulse(0);
+            if (triggerEffects)
+            {
+                feed.LiveNote(60, true, .9f);
+                feed.Impact(60, .9);
+            }
+            return feed;
+        }
+        var quietUncalibratedLook = settings.Clone();
+        var busyUncalibratedLook = liveFxLook.Clone();
+        busyUncalibratedLook.ShowKeys = true;
+        busyUncalibratedLook.ShowBackground = true; busyUncalibratedLook.BackgroundGuide = true;
+        var uncalibratedIdleFrame = RenderFrames(UncalibratedFeed(quietUncalibratedLook, triggerEffects: false), 4);
+        var uncalibratedMidiFrame = RenderFrames(UncalibratedFeed(busyUncalibratedLook, triggerEffects: true), 4);
+        Assert(uncalibratedIdleFrame.AsSpan().SequenceEqual(uncalibratedMidiFrame)
+                && renderer.StageKeyCount == 0 && renderer.StageSpriteCount == 0
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+            "Before calibration, the camera must show physical keys only: no static virtual keyboard, Live Stage sprites, guide lanes, notes or falling trails may leak into the uncalibrated camera overlay.");
+
+        // BuildAmbient also guards its scene-only lane/trail geometry itself; it must not rely on BuildNotes
+        // having cleared the trail list earlier in this particular renderer order.
+        var sceneTrailSettings = settings.Clone();
+        sceneTrailSettings.ShowBackground = true; sceneTrailSettings.BackgroundGuide = true;
+        sceneTrailSettings.FallingTrail = "Glow"; sceneTrailSettings.FallingTrailIntensity = 100;
+        var sceneTrailLook = GpuLook.From(sceneTrailSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: false);
+        var sceneTrailFeed = new GpuStageFeed();
+        sceneTrailFeed.SetStageHeight(height);
+        sceneTrailFeed.SetLook(sceneTrailLook);
+        sceneTrailFeed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int> { 60 });
+        sceneTrailFeed.LiveNote(60, true, .9f);
+        var sceneTrailInput = new GpuFrameInput();
+        sceneTrailFeed.Capture(sceneTrailInput, GpuStageFeed.Now);
+        var sceneTrailSimulation = new GpuStageSimulation(20261010);
+        sceneTrailSimulation.Step(1 / 60.0, sceneTrailInput, sceneTrailFeed, width);
+        var sceneTrailLayout = new GpuSceneLayout(width, (float)sceneTrailInput.StageHeightDip, sceneTrailLook.KeyboardFraction);
+        sceneTrailSimulation.BuildNotes(sceneTrailInput, sceneTrailLayout, new GpuInstanceList<GpuNoteInstance>(16),
+            songNotes: false, onStage: true, liveTrails: true);
+        var sceneSpritesOverCamera = new GpuInstanceList<GpuSpriteInstance>(32);
+        var sceneSpritesOnStage = new GpuInstanceList<GpuSpriteInstance>(32);
+        sceneTrailSimulation.BuildAmbient(sceneTrailLook, sceneTrailLayout, sceneSpritesOverCamera, cameraOverlayActive: true);
+        sceneTrailSimulation.BuildAmbient(sceneTrailLook, sceneTrailLayout, sceneSpritesOnStage, cameraOverlayActive: false);
+        Assert(sceneTrailSimulation.NoteTrailCount > 0 && sceneSpritesOverCamera.Count == 0 && sceneSpritesOnStage.Count > 0,
+            "BuildAmbient must suppress scene-space guide lanes and falling trails over a camera even when the flat look itself is not marked OverCamera.");
+
         var barsOn = RenderFrames(PressFeed(showBars: true, keyLight: .6f), 30);
         var liveBarCount = renderer.ArLiveBarCount;
         var barsOff = RenderFrames(PressFeed(showBars: false, keyLight: .6f), 30);
@@ -1546,34 +1641,86 @@ internal static partial class VerificationSuite
         Assert(tintPixels > 20,
             $"Turning bars off must not turn the independent held-key tint off ({tintPixels} pixels still respond to key-light strength).");
 
-        // S5: MIDI impacts stay visible with live bars disabled, use a projected key-plane light at Standard,
-        // and add the independently tiered ripple and rising 3D sparks at Ultra.
-        RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true), 12);
+        // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
+        var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
+        RenderFrames(standardFxFeed, 4);
         var standardImpactLights = renderer.ArImpactLightCount;
+        var standardNoteLights = renderer.ArNoteLightCount;
         var standardPulses = renderer.ArPulseCount;
         var standardParticles = renderer.ArParticleFxCount;
-        var ultraImpactFrame = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true), 12);
+        var ultraFxFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
+        var ultraImpactFrame = RenderFrames(ultraFxFeed, 4);
         var ultraImpactLights = renderer.ArImpactLightCount;
+        var ultraNoteLights = renderer.ArNoteLightCount;
         var ultraPulses = renderer.ArPulseCount;
         var ultraParticles = renderer.ArParticleFxCount;
-        var noImpactUltra = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra), 12);
+        var ultraFlashes = renderer.ArFlashCount;
+        var ultraHoldArcs = renderer.ArHoldArcCount;
+        var ultraBeams = renderer.ArBeamCount;
+        var noImpactUltra = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 }), 4);
         var effectPixels = ChangedPixels(ultraImpactFrame, noImpactUltra, threshold: 4);
-        Assert(standardImpactLights > 0 && standardPulses == 0 && standardParticles == 0
-                && ultraImpactLights > 0 && ultraPulses > 0 && ultraParticles > 0 && effectPixels > 100
+        Assert(standardImpactLights > 0 && standardNoteLights > 0 && standardPulses == 0 && standardParticles == 0
+                && ultraImpactLights > 0 && ultraNoteLights > 0 && ultraPulses > 0 && ultraParticles > 0
+                && ultraFlashes > 0 && ultraHoldArcs > 0 && ultraBeams > 0 && effectPixels > 100
                 && renderer.ArLiveBarCount == 0,
-            $"Projected S5 impacts must remain independent of live bars and respect quality tiers (Standard light {standardImpactLights}, Ultra light/pulse/particles {ultraImpactLights}/{ultraPulses}/{ultraParticles}, {effectPixels} changed pixels).");
-        var movedImpactFeed = MakeFeed(new GpuArInput(transformedCalibration, ArNoteStyle.Default, 1f, KeyLight: .6f,
-                Quality: ArQualityTier.Ultra, ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: false),
+            $"S5 must retain the configured Live Stage hit/hold channels in calibrated 3D while respecting AR quality and the separate bar toggle (Standard lights {standardImpactLights}/{standardNoteLights}, Ultra {ultraImpactLights}/{ultraNoteLights}/{ultraPulses}/{ultraParticles}/{ultraFlashes}/{ultraHoldArcs}/{ultraBeams}, {effectPixels} impact pixels).");
+
+        (byte[] Pixels, int Pulses, int Flashes) RenderFxVariant(PianoVisualSettings fxSettings)
+        {
+            var pixels = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true,
+                visualSettings: fxSettings, activePitches: new[] { 60, 64 }), 4);
+            return (pixels, renderer.ArPulseCount, renderer.ArFlashCount);
+        }
+        var plasmaLook = liveFxLook.Clone(); plasmaLook.ImpactFlashStyle = "Plasma";
+        var plasmaVariant = RenderFxVariant(plasmaLook);
+        var morphLook = liveFxLook.Clone(); morphLook.ImpactFlashStyle = "Flash"; morphLook.ImpactMorph = "Morph";
+        var morphVariant = RenderFxVariant(morphLook);
+        var shockwaveLook = liveFxLook.Clone(); shockwaveLook.ImpactWave = "Shockwave"; shockwaveLook.ImpactMorph = "None";
+        var shockwaveVariant = RenderFxVariant(shockwaveLook);
+        var absorbLook = liveFxLook.Clone(); absorbLook.ImpactWave = "None"; absorbLook.ImpactMorph = "Absorb";
+        var absorbVariant = RenderFxVariant(absorbLook);
+        var plasmaPixels = ChangedPixels(ultraImpactFrame, plasmaVariant.Pixels, threshold: 4);
+        var morphPixels = ChangedPixels(ultraImpactFrame, morphVariant.Pixels, threshold: 4);
+        var shockwavePixels = ChangedPixels(ultraImpactFrame, shockwaveVariant.Pixels, threshold: 4);
+        var absorbPixels = ChangedPixels(ultraImpactFrame, absorbVariant.Pixels, threshold: 4);
+        Assert(plasmaVariant.Flashes > 0 && morphVariant.Flashes > 0 && shockwaveVariant.Pulses > 0 && absorbVariant.Pulses > 0
+                && plasmaPixels > 30 && morphPixels > 30 && shockwavePixels > 30 && absorbPixels > 30,
+            $"The projected style branches must retain Plasma/Morph flashes and Shockwave/Absorb rings ({plasmaVariant.Flashes}/{morphVariant.Flashes} flashes, {shockwaveVariant.Pulses}/{absorbVariant.Pulses} pulses; pixel deltas {plasmaPixels}/{morphPixels}/{shockwavePixels}/{absorbPixels}).");
+
+        // Live bars use the saved 3D pose even when the optional song-note perspective toggle is off.
+        var flatNotesLiveBars = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: .6f,
+                Quality: ArQualityTier.Standard, ShowNotes: false, ProjectedNotes: false, ShowLiveTrails: true),
             song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int> { 60 });
-        movedImpactFeed.ClearTransient();
-        movedImpactFeed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int> { 60 });
-        movedImpactFeed.SetDeterministicBeatPulse(0);
-        movedImpactFeed.LiveNote(60, true, .9);
-        movedImpactFeed.Impact(60, .9);
-        var movedImpactFrame = RenderFrames(movedImpactFeed, 12);
+        flatNotesLiveBars.LiveNote(60, true, .9f);
+        RenderFrames(flatNotesLiveBars, 8);
+        Assert(renderer.ArLiveBarCount > 0 && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
+            "The live press bar remains 3D and stage-space notes/trails stay suppressed when Notes in perspective is toggled off.");
+
+        // A release is a separate effect phase and must be anchored to the source pitch, not flattened over camera.
+        var releaseFeed = PressFeed(false, .6f, ArQualityTier.Ultra, visualSettings: liveFxLook, activePitches: new[] { 60 });
+        var releaseFrame = GpuRenderLoop.RenderFrames(renderer, releaseFeed, width, height, 8, 1 / 60.0, false, out _, frame =>
+        {
+            if (frame != 4) return;
+            releaseFeed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int>());
+            releaseFeed.LiveNote(60, false, 0);
+        }, 20260930);
+        var releaseEffects = renderer.ArReleaseEffectCount;
+        Assert(releaseEffects > 0 && renderer.ArParticleFxCount > 0 && ColouredPixels(releaseFrame) > 100,
+            $"The configured Dissolve release should emit a visible 3D release effect at its calibrated key ({releaseEffects} active releases, {renderer.ArParticleFxCount} particles).");
+
+        // Effects follow the keyboard transform and piano axes, independently of the note's editable travel direction.
+        var movedImpactFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            selectedCalibration: transformedCalibration, activePitches: new[] { 60, 64 });
+        var movedImpactFrame = RenderFrames(movedImpactFeed, 4);
         var poseEffectPixels = ChangedPixels(ultraImpactFrame, movedImpactFrame, threshold: 4);
         Assert(poseEffectPixels > 100,
-            $"Rotating/translating the calibrated piano must move its impact lights and rising particles with it ({poseEffectPixels} changed pixels).");
+            $"Rotating/translating the calibrated piano must move the complete impact/hold effect group with it ({poseEffectPixels} changed pixels).");
+        var directionOnlyFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
+        directionOnlyFeed.Ar = directionOnlyFeed.Ar! with { NoteDirection = new ArNoteDirection(74, 39) };
+        var directionOnlyFrame = RenderFrames(directionOnlyFeed, 4);
+        Assert(ultraImpactFrame.AsSpan().SequenceEqual(directionOnlyFrame),
+            "Changing note travel direction alone must not rotate key-anchored Live Stage effects away from the calibrated piano.");
 
         // Falling-note trail FX are stage-space geometry; over a camera they must be omitted, not left as misaligned flat streaks.
         settings.FallingTrail = "None";
@@ -1690,8 +1837,9 @@ internal static partial class VerificationSuite
             "Enabling 3D note projection must leave shooting stars screen-space and byte-identical.");
 
         Results.Add($"PASS AR 3D note render (AR-S4): WARP drew {projectedPixels} projected note pixels into {expected.Count} AR-owned quads with no stage notes/trails; the flat-map failure did not hide them, mirroring and independent 3D direction worked, Perform omitted notes, and minimum length grew short notes.");
+        Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
         Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; flat falling-note trails added no pixels over the camera.");
-        Results.Add($"PASS AR-S5 live effects: Standard projected {standardImpactLights} impact lights; Ultra projected {ultraImpactLights} lights, {ultraPulses} pulses and {ultraParticles} rising particles; {effectPixels} pixels changed with bars disabled and arbitrary pose motion changed {poseEffectPixels} pixels.");
+        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
         Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }
 }

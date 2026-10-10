@@ -68,7 +68,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // x = fade-in 0..1, y = 1 while the note sounds, z = 1 for a lit key
+    float4 Misc;         // x/y/w = material parameters, z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam
 };
 
 struct KeyInstance
@@ -364,45 +364,179 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
-    if (i.Misc.z > 0.5 && i.Misc.z < 1.5)
+    float kind = i.Misc.z;
+    if (kind > 0.5 && kind < 1.5)
     {
-        // a lit key: its colour laid over the key in the picture, so a white key takes the tint and a dark one lights up
+        // A lit physical key: its colour replaces part of the camera pixel, rather than adding a virtual key body.
         float ka = i.Color.a;
         return float4(i.Color.rgb * 1.1 * ka, ka);
     }
-    if (i.Misc.z > 1.5 && i.Misc.z < 2.5)
+    if (kind > 1.5 && kind < 2.5)
     {
-        // A 3D-projected rising spark: a hot centre and a small soft skirt, born at a struck key.
+        // Live Stage particle material. The CPU projects the real simulated particle and selects its family;
+        // this shader supplies each family's soft ember, streak, droplet, shard, flame, dust or wisp silhouette.
         float2 p = i.Uv * 2.0 - 1.0;
-        float r = length(p);
-        float core = exp(-r * r * 9.0);
-        float skirt = exp(-r * r * 2.2) * saturate((1.0 - r) * 2.5);
-        float coverage = saturate(core + skirt * 0.52) * i.Color.a;
-        float3 light = i.Color.rgb * (core * 1.35 + skirt * 0.55) * i.Color.a;
-        return float4(light, coverage);
+        float progress = saturate(i.Misc.x);
+        float shape = floor(i.Misc.y + 0.5);
+        float phase = i.Misc.w;
+        float coverage = 0.0;
+        float gain = 0.0;
+        if (shape < 0.5) // ember / dot
+        {
+            float r2 = dot(p, p);
+            coverage = exp(-r2 * 5.5) + exp(-r2 * 1.8) * 0.24;
+            gain = exp(-r2 * 7.0) * 1.5 + exp(-r2 * 2.0) * 0.45;
+        }
+        else if (shape < 1.5) // velocity-aligned streak
+        {
+            float edge = exp(-p.y * p.y * 18.0);
+            float tip = saturate(1.15 - abs(p.x) * 0.92);
+            coverage = edge * tip;
+            gain = edge * (0.55 + 1.2 * tip);
+        }
+        else if (shape < 2.5) // tumbling confetti
+        {
+            float angle = phase + progress * 7.0;
+            float cs = cos(angle), sn = sin(angle);
+            float2 q = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+            float diamond = abs(q.x) * 0.78 + abs(q.y) * 0.78;
+            coverage = 1.0 - smoothstep(0.78, 1.0, diamond);
+            gain = coverage * 1.05;
+        }
+        else if (shape < 3.5) // slow, soft dust
+        {
+            float r2 = dot(p, p);
+            coverage = exp(-r2 * 2.7) * 0.7;
+            gain = exp(-r2 * 2.2) * 0.7;
+        }
+        else if (shape < 4.5) // rising flame, tapered toward its tip
+        {
+            float h = i.Uv.y;
+            float width = lerp(0.74, 0.08, h);
+            float centre = 0.5 + sin(h * 8.0 + phase) * 0.07 * h;
+            float across = abs(i.Uv.x - centre);
+            float body = 1.0 - smoothstep(width * 0.58, width, across);
+            float base = smoothstep(0.0, 0.16, h);
+            coverage = body * base * (1.0 - progress * 0.28);
+            gain = coverage * (1.35 + 0.55 * (1.0 - h));
+        }
+        else if (shape < 5.5) // liquid bead with a specular dot
+        {
+            float r2 = dot(p, p);
+            float bead = 1.0 - smoothstep(0.62, 1.0, r2);
+            float highlight = exp(-dot(p - float2(-0.27, -0.31), p - float2(-0.27, -0.31)) * 55.0);
+            coverage = bead;
+            gain = bead * 1.05 + highlight * 0.9;
+        }
+        else if (shape < 6.5) // narrow glass shard, point leading
+        {
+            float along = saturate((p.x + 1.0) * 0.5);
+            float halfWidth = lerp(0.08, 0.58, along) * (1.0 - 0.32 * along);
+            float shard = 1.0 - smoothstep(halfWidth * 0.72, halfWidth, abs(p.y));
+            coverage = shard * saturate(1.18 - abs(p.x) * 0.82);
+            gain = coverage * 1.65;
+        }
+        else // wisps: an undulating, tapered thread
+        {
+            float wave = sin(p.x * 7.0 + phase + progress * 6.0) * 0.32;
+            float width = lerp(0.08, 0.28, saturate(1.0 - abs(p.x)));
+            float thread = exp(-pow((p.y - wave) / width, 2.0) * 2.4);
+            coverage = thread * saturate(1.0 - abs(p.x) * 0.6);
+            gain = coverage * (0.75 + 0.6 * sin(progress * 6.283 + phase));
+        }
+        float a = saturate(coverage) * i.Color.a;
+        return float4(i.Color.rgb * gain * i.Color.a, a);
     }
-    if (i.Misc.z > 2.5 && i.Misc.z < 3.5)
+    if (kind > 2.5 && kind < 3.5)
     {
-        // Impact light across the real key row, soft along depth and bright at the strike.
+        // 3D-projected key/impact light and spill on the calibrated real key plane.
         float2 p = i.Uv * 2.0 - 1.0;
         float beam = exp(-p.x * p.x * 3.2 - p.y * p.y * 1.45);
         float hot = exp(-dot(p, p) * 4.5);
         float coverage = beam * i.Color.a * 0.8;
         return float4(i.Color.rgb * (beam * 0.72 + hot * 0.9) * i.Color.a, coverage);
     }
-    if (i.Misc.z > 3.5)
+    if (kind > 3.5 && kind < 4.5)
     {
-        // A ripple ring that expands over the calibrated key plane.
+        // The ring itself is simulated by Live Stage; these are its actual style, radius and decay, not a generic hit pulse.
         float r = length(i.Uv * 2.0 - 1.0);
-        float width = max(i.Misc.y, 0.01);
+        float width = max(i.Misc.y, 0.006);
         float band = exp(-pow((r - i.Misc.x) / width, 2.0));
-        float alpha = band * i.Color.a;
-        return float4(i.Color.rgb * alpha, alpha);
+        float style = floor(i.Misc.w + 0.5);
+        float core = exp(-dot(i.Uv * 2.0 - 1.0, i.Uv * 2.0 - 1.0) * 4.0);
+        float body = band;
+        float gain = 1.0;
+        if (style > 0.5 && style < 1.5) { body = saturate(band * 1.45 + core * 0.20); gain = 1.35 + core * 0.6; }
+        else if (style > 1.5 && style < 2.5) { body = band * 0.85; gain = 1.15; }
+        else if (style > 2.5) { body = band; gain = 1.3; }
+        float alpha = saturate(body) * i.Color.a;
+        return float4(i.Color.rgb * gain * alpha, alpha);
     }
+    if (kind > 4.5 && kind < 5.5)
+    {
+        // 3D ribbon segments for the configured electric hold arcs and lightning flash.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float across = exp(-p.y * p.y * (10.0 + i.Misc.y * 18.0));
+        float taper = saturate(1.1 - abs(p.x) * 0.85);
+        float core = exp(-p.y * p.y * 48.0) * taper;
+        float alpha = saturate((across * 0.38 + core * 0.8) * i.Color.a);
+        return float4(i.Color.rgb * (across * 0.75 + core * 1.5) * i.Color.a, alpha);
+    }
+    if (kind > 5.5 && kind < 6.5)
+    {
+        // Live Stage flash channel: soft flare, plasma caustics or the impact-morph star.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float r = length(p);
+        float style = floor(i.Misc.y + 0.5);
+        float progress = saturate(i.Misc.x);
+        float coverage, gain;
+        if (style > 2.5)
+        {
+            float angle = atan2(p.y, p.x);
+            float radius = lerp(0.34, 0.98, 0.5 + 0.5 * cos(angle * 5.0));
+            float star = 1.0 - smoothstep(radius - 0.07, radius + 0.07, r);
+            float glow = exp(-r * 2.8) * (1.0 - progress * 0.5);
+            coverage = saturate(star + glow * 0.38);
+            gain = star * 1.8 + glow * 0.85;
+        }
+        else if (style > 1.5)
+        {
+            float swirl = sin(r * 24.0 - progress * 13.0 + atan2(p.y, p.x) * 3.0);
+            float shell = exp(-r * r * 2.2);
+            float caustic = exp(-swirl * swirl * 5.0) * shell;
+            coverage = saturate(shell * 0.35 + caustic * 0.72);
+            gain = shell * 0.85 + caustic * 1.75;
+        }
+        else
+        {
+            float core = exp(-r * r * 8.0);
+            float skirt = exp(-r * r * 2.0) * saturate((1.0 - r) * 2.2);
+            coverage = saturate(core + skirt * 0.55);
+            gain = core * 1.55 + skirt * 0.75;
+        }
+        float alpha = coverage * i.Color.a;
+        return float4(i.Color.rgb * gain * i.Color.a, alpha);
+    }
+    if (kind > 6.5 && kind < 7.5)
+    {
+        // A keyed light beam in the piano's local surface-normal direction, not an uncalibrated screen-space sprite.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float width = exp(-p.x * p.x * 5.5);
+        float taper = saturate(1.0 - abs(p.x) * 0.6);
+        float along = pow(saturate(1.0 - i.Uv.y), 0.72);
+        float glow = width * taper * along;
+        float core = exp(-p.x * p.x * 24.0) * along;
+        float a = saturate((glow * 0.45 + core * 0.42) * i.Color.a);
+        return float4(i.Color.rgb * (glow * 0.9 + core * 0.85) * i.Color.a, a);
+    }
+
+    // Song notes and live press bars. The optional central hold stripe is independent of key tint.
     float side = min(i.Uv.x, 1.0 - i.Uv.x);
     float rim = 1.0 - smoothstep(0.0, 0.16, side);
     float lead = smoothstep(0.55, 1.0, i.Uv.y);
+    float stripe = exp(-pow((i.Uv.x - 0.5) / 0.11, 2.0));
     float3 c = i.Color.rgb * (1.0 + 0.45 * rim + 0.35 * lead + 0.5 * i.Misc.y);
+    c += i.Color.rgb * stripe * i.Misc.w * 1.55;
     float a = i.Color.a * i.Misc.x;
     return float4(c * a, a);
 }

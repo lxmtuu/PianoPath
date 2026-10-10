@@ -12,8 +12,20 @@ internal struct GpuKeyInstance { public Vector4 Box, Emit, Misc, Base; }
 [StructLayout(LayoutKind.Sequential)]
 internal struct GpuSpriteInstance { public Vector4 PosSize, Color, Dir; }
 
-/// <summary>A recent MIDI/note impact retained briefly so the camera-calibrated AR pass can build its own 3D transient.</summary>
-internal readonly record struct GpuArImpact(int Pitch, double Age, float Strength);
+/// <summary>A recent MIDI/note impact retained briefly so the camera-calibrated AR pass can build its 3D transient.</summary>
+internal readonly record struct GpuArImpact(int Pitch, double Age, float Strength, Vector3 Color);
+
+/// <summary>A live stage particle with its source pitch, so the AR pass can lift the same simulated effect into the calibrated piano pose.</summary>
+internal readonly record struct GpuArParticle(int Pitch, float X, float Y, float Vx, float Vy, float Age, float Life, float Size,
+    float Phase, float Glow, Vector3 Color, byte Shape, bool Wisp, byte Origin);
+
+/// <summary>A live stage impact/release wave, retaining its pitch and visual channel for camera-space projection.</summary>
+internal readonly record struct GpuArRing(int Pitch, float X, float Y, float Age, float Life, float Strength, byte Kind,
+    Vector3 Color, byte Channel, byte Origin);
+
+/// <summary>A live stage impact/morph flash, retaining its pitch and style for camera-space projection.</summary>
+internal readonly record struct GpuArFlash(int Pitch, float X, float Y, float Age, float Life, float Size, float Strength,
+    byte Style, Vector3 Color, float Intensity, byte Channel, byte Origin);
 
 /// <summary>Scene layout of one output, in stage DIPs (the software stage's coordinate system).</summary>
 internal readonly struct GpuSceneLayout
@@ -55,15 +67,17 @@ internal sealed partial class GpuStageSimulation
     private struct Particle
     {
         public float X, Y, Vx, Vy, Age, Life, Size, Phase, Grav, DragK, Mass, Glow;
+        public int Pitch;
+        public byte Origin;
         public Vector3 Color;
         public Shape Shape;
         public bool Wisp;
     }
 
-    /// <summary>Impact / release wave: Kind 0 = ring, 1 = shockwave, 2 = ripple, 3 = implosion (Absorb, Snap Back).</summary>
-    private struct Ring { public float X, Y, Age, Life, Strength; public byte Kind; public Vector3 Color; }
-    /// <summary>Impact flash: Style 0 = flare, 1 = lightning, 2 = plasma, 3 = star (the Morph impact).</summary>
-    private struct Flash { public float X, Y, Age, Life, Size, Strength; public byte Style; public Vector3 Color; public float Intensity; }
+    /// <summary>Impact/release waves; Channel 0 = impact wave, 1 = impact morph, 2 = release effect.</summary>
+    private struct Ring { public float X, Y, Age, Life, Strength; public int Pitch; public byte Kind, Channel, Origin; public Vector3 Color; }
+    /// <summary>Impact/morph flash; Channel 0 = flash setting, 1 = impact morph.</summary>
+    private struct Flash { public float X, Y, Age, Life, Size, Strength; public int Pitch; public byte Style, Channel, Origin; public Vector3 Color; public float Intensity; }
 
     private sealed class LiveTrail
     {
@@ -100,8 +114,28 @@ internal sealed partial class GpuStageSimulation
     /// list, this is what the keys under the fingers draw.
     /// </summary>
     internal IReadOnlyList<ArLivePress> LivePresses => _livePresses;
-    /// <summary>Recent strikes for the camera-projected impact-light/pulse/particle pass; independent of stage-space effects.</summary>
+    /// <summary>Recent strikes for the camera-projected impact-light pass.</summary>
     internal IReadOnlyList<GpuArImpact> ArImpacts => _arImpacts;
+    /// <summary>The same simulated particles, waves and flashes used by the stage, with the source pitch preserved for 3D AR projection.</summary>
+    internal int ArParticleCount => _count;
+    internal int ArRingCount => _rings.Count;
+    internal int ArFlashCount => _flashes.Count;
+    internal GpuArParticle ArParticleAt(int index)
+    {
+        ref var p = ref _particles[index];
+        return new GpuArParticle(p.Pitch, p.X, p.Y, p.Vx, p.Vy, p.Age, p.Life, p.Size, p.Phase, p.Glow, p.Color, (byte)p.Shape, p.Wisp, p.Origin);
+    }
+    internal GpuArRing ArRingAt(int index)
+    {
+        var r = _rings[index];
+        return new GpuArRing(r.Pitch, r.X, r.Y, r.Age, r.Life, r.Strength, r.Kind, r.Color, r.Channel, r.Origin);
+    }
+    internal GpuArFlash ArFlashAt(int index)
+    {
+        var f = _flashes[index];
+        return new GpuArFlash(f.Pitch, f.X, f.Y, f.Age, f.Life, f.Size, f.Strength, f.Style, f.Color, f.Intensity, f.Channel, f.Origin);
+    }
+    internal bool IsActive(int pitch) => pitch is >= 0 and < 128 && _active[pitch];
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
     private float _pedalBoost = 1;
@@ -113,6 +147,8 @@ internal sealed partial class GpuStageSimulation
     /// <summary>Pedal glow and audio reactive together, for everything the software stage lights with both.</summary>
     internal float GlowBoost => _pedalBoost * EnergyBoost;
     internal float SimulationWidth => _simWidth;
+    internal float SimulationHitY { get; private set; }
+    internal float SimulationKeyboardHeight { get; private set; }
     /// <summary>Linear note colour and activity (0..1) per pitch, uploaded for the hit line.</summary>
     internal readonly Vector4[] KeyColors = new Vector4[128];
 
@@ -163,6 +199,8 @@ internal sealed partial class GpuStageSimulation
         _beatPulse = look.TempoSync ? input.BeatPulse : 0;
         _simWidth = Math.Max(1, sceneWidth);
         var layout = new GpuSceneLayout(_simWidth, (float)input.StageHeightDip, look.KeyboardFraction);
+        SimulationHitY = layout.HitY;
+        SimulationKeyboardHeight = layout.KeyboardHeight;
 
         // ---- which keys sound, and in which colour ----
         Array.Clear(_active);
@@ -288,7 +326,7 @@ internal sealed partial class GpuStageSimulation
                         Life = Math.Max(.05f, look.ParticleLife * lifeVariation * lifeScale),
                         Size = Math.Max(.2f, look.ParticleSize * sizeVariation * sizeScale), Mass = .7f, Grav = grav, DragK = drag,
                         Phase = Rand() * MathF.Tau, Glow = glow, Color = particleColor, Shape = shape
-                    });
+                    }, pitch, origin: 2);
                 }
             }
             if (_active[pitch] && look.ShowWisps && look.WispAmount > 0)
@@ -307,7 +345,7 @@ internal sealed partial class GpuStageSimulation
                         Life = life * (.7f + Rand() * .6f), Phase = strand * MathF.PI + (float)(_time * 1.7) + (Rand() - .5f) * .5f,
                         Size = .6f + Rand() * 1.2f, Glow = look.WispGlow,
                         Color = Rand() < .2f ? Vector3.Lerp(color, Vector3.One, .6f) : color, Shape = Shape.Dot
-                    });
+                    }, pitch, origin: 2);
                 }
             }
             if (look.ShowFlame && _heat[pitch] > .01f)
@@ -323,7 +361,7 @@ internal sealed partial class GpuStageSimulation
                         Life = .22f + look.FlameHeight * .45f * (.6f + Rand() * .6f),
                         Size = layout.Lane * (.35f + Rand() * .3f), Phase = Rand() * MathF.Tau, Glow = look.FlameIntensity,
                         Color = look.FlameNoteColor ? color : new Vector3(1f, .55f, .15f), Shape = Shape.Flame
-                    });
+                    }, pitch, origin: 2);
                 }
             }
         }
@@ -384,10 +422,13 @@ internal sealed partial class GpuStageSimulation
         foreach (var trail in _trails) _livePresses.Add(new ArLivePress(trail.Pitch, trail.Age, trail.Held, trail.KeyDown, trail.Strength));
     }
 
-    private void Spawn(in Particle particle)
+    private void Spawn(in Particle particle, int pitch, byte origin = 0)
     {
         if (_count >= MaxParticles) return;
-        _particles[_count++] = particle;
+        var tagged = particle;
+        tagged.Pitch = pitch;
+        tagged.Origin = origin;
+        _particles[_count++] = tagged;
     }
 
     /// <summary>A note reached the keys: wave, flash, morph and burst, styled like the software stage.</summary>
@@ -395,26 +436,26 @@ internal sealed partial class GpuStageSimulation
     {
         var look = _look;
         var clamped = Math.Clamp(pitch, FirstPitch, FirstPitch + KeyCount - 1);
-        if (_arImpacts.Count >= 48) _arImpacts.RemoveAt(0);
-        _arImpacts.Add(new GpuArImpact(clamped, 0, Math.Clamp(strength, 0, 1)));
         var x = layout.X(clamped);
         var y = layout.HitY - 1;
         var color = _active[clamped] ? _keyColor[clamped] : look.NoteColor(clamped, 0);
         if (look.VelocityColor && look.VelocityColorAmount > 0) color = Vector3.Lerp(color, VelocityTint(strength), look.VelocityColorAmount);
+        if (_arImpacts.Count >= 48) _arImpacts.RemoveAt(0);
+        _arImpacts.Add(new GpuArImpact(clamped, 0, Math.Clamp(strength, 0, 1), color));
         _glow[clamped] = Math.Max(_glow[clamped], Math.Min(1, .6f + strength * .4f));
         _energy = Math.Min(1.5f, _energy + .22f * strength); // audio reactive envelope attack
         // wave channel
         if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0 && _rings.Count < 96)
-            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }) });
+            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Pitch = clamped, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }), Channel = 0, Origin = 0 });
         // flash channel: the anamorphic flare, a lightning strike or a plasma ball
         if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0 && _flashes.Count < 48)
         {
             if (look.ImpactFlashStyle == 0)
-                _flashes.Add(new Flash { X = x, Y = y, Life = .28f, Size = layout.Lane * (1.6f + strength * 1.6f) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * (.5f + strength), Strength = strength });
+                _flashes.Add(new Flash { X = x, Y = y, Life = .28f, Size = layout.Lane * (1.6f + strength * 1.6f) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * (.5f + strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
             else
-                _flashes.Add(new Flash { X = x, Y = y, Life = .18f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity });
+                _flashes.Add(new Flash { X = x, Y = y, Life = .18f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
         }
-        SpawnImpactMorph(x, y, color, strength);
+        SpawnImpactMorph(clamped, x, y, color, strength);
         if (!look.ShowEmbers || look.ParticleAmount < 1) return;
         var style = look.ImpactBurst == "Zone" ? (clamped < look.ZoneSplitPitch ? "Embers" : "Splash") : look.ImpactBurst;
         var amount = Math.Clamp((int)(look.ParticleAmount * strength * look.ParticleResponse / 55f * 2.2f), 0, 300);
@@ -453,7 +494,7 @@ internal sealed partial class GpuStageSimulation
                 Life = life, Mass = needle ? .6f : 1.5f, Phase = Rand() * MathF.Tau,
                 Size = Math.Max(.2f, look.ParticleSize * sizeVariation * sizeScale),
                 Color = c, Shape = shape, Grav = grav, DragK = drag, Glow = 1
-            });
+            }, clamped, origin: 0);
         }
     }
 
@@ -621,8 +662,8 @@ internal sealed partial class GpuStageSimulation
         return color;
     }
 
-    /// <summary>The 88 keys (plus the felt strip) as 3D boxes.</summary>
-    internal void BuildKeys(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuKeyInstance> keys, out float frontHeight, out float blackLength, out float blackHeight, out float whiteWidth, out float blackWidth)
+    /// <summary>The 88 keys (plus the felt strip) as 3D boxes; a full-screen camera always suppresses these uncalibrated stage bodies.</summary>
+    internal void BuildKeys(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuKeyInstance> keys, bool cameraOverlayActive, out float frontHeight, out float blackLength, out float blackHeight, out float whiteWidth, out float blackWidth)
     {
         keys.Clear();
         whiteWidth = layout.Width / layout.Keys.WhiteCount;
@@ -631,7 +672,7 @@ internal sealed partial class GpuStageSimulation
         var topLength = layout.KeyboardHeight - frontHeight;
         blackLength = layout.KeyboardHeight * (.61f + look.KeyOverhang * .18f);
         blackHeight = frontHeight * .8f + 2;
-        if (!look.ShowKeys) return;
+        if (!look.ShowKeys || cameraOverlayActive) return;
         var whiteIndex = 0;
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
@@ -672,16 +713,16 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>Particles, rings, flashes, beams, held-key glows and the hit line.</summary>
-    internal void BuildSprites(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> sprites)
+    internal void BuildSprites(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> sprites, bool cameraOverlayActive = false)
     {
         sprites.Clear();
         var scaleX = layout.Width / _simWidth;
         var hitY = layout.HitY;
         var glowGain = .9f + look.ParticleGlow * 1.6f;
 
-        // The AR overlay only draws the calibrated camera and its separately projected notes/keys.
-        // Stage-anchored sprites are not mapped to the keyboard; suppress even transients already in flight.
-        if (look.OverCamera) return;
+        // Suppress stage-space draw when any camera is the background, even before calibration marks OverCamera.
+        // These sprites are not calibrated to the physical piano; pitch-tagged state remains available to GpuArLayer.
+        if (look.OverCamera || cameraOverlayActive) return;
 
         if (look.ShowLightBeams && look.BeamIntensity > 0)
         {

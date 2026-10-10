@@ -353,10 +353,14 @@ internal sealed class GpuStageRenderer : IDisposable
     /// </summary>
     internal void SetArKeyColors(Vector4[]? colors) => _arKeyColors = colors;
 
-    /// <summary>How many instances the stage-space note pass built in the last frame; AR regression checks ensure it is zero over camera.</summary>
+    /// <summary>How many instances the stage-space note pass built in the last frame; camera regressions ensure it is zero over camera.</summary>
     internal int StageNoteCount { get; private set; }
     /// <summary>How many stage-space falling-note trails were built in the last frame.</summary>
     internal int StageNoteTrailCount { get; private set; }
+    /// <summary>How many virtual key bodies the stage pass built; camera output must never use uncalibrated stage keys.</summary>
+    internal int StageKeyCount { get; private set; }
+    /// <summary>How many stage-space transient sprites were built before drawing the last frame.</summary>
+    internal int StageSpriteCount { get; private set; }
 
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
@@ -368,8 +372,13 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>How many of those were bars of keys the player is pressing; verification reads it.</summary>
     internal int ArLiveBarCount => _arLayer.LiveBarCount;
     internal int ArImpactLightCount => _arLayer.ImpactLightCount;
+    internal int ArNoteLightCount => _arLayer.NoteLightCount;
     internal int ArPulseCount => _arLayer.PulseCount;
     internal int ArParticleFxCount => _arLayer.ParticleFxCount;
+    internal int ArFlashCount => _arLayer.FlashCount;
+    internal int ArHoldArcCount => _arLayer.HoldArcCount;
+    internal int ArBeamCount => _arLayer.BeamCount;
+    internal int ArReleaseEffectCount => _arLayer.ReleaseEffectCount;
 
     /// <summary>The camera texture (null when there is no layer or no frame yet); verification reads its counters.</summary>
     internal GpuCameraTexture? CameraTexture => _camera;
@@ -415,18 +424,22 @@ internal sealed class GpuStageRenderer : IDisposable
             projectedInput = arInput;
         var arProjectedNotes = projectedInput is not null;
 
-        // A full-screen camera background never receives scene-space falling notes or trails, calibrated or not.
-        // Once calibration is ready, GpuArLayer owns song notes; its separate live-bar toggle owns player bars.
+        // A full-screen camera background never receives scene-space notes or trails, calibrated or not.
+        // Virtual key bodies and uncalibrated stage sprites are gated below by cameraActive as well; only the calibrated
+        // GpuArLayer may add key tint, live bars or projected Live Stage effects over the camera.
         simulation.BuildNotes(input, layout, notes, songNotes: projectedInput?.ShowNotes ?? true,
             onStage: !cameraActive && !look.OverCamera && !arProjectedNotes, minAspect: projectedInput?.MinAspect ?? 0,
             liveTrails: !cameraActive && !look.OverCamera && !arProjectedNotes);
         StageNoteCount = notes.Count;
         StageNoteTrailCount = simulation.NoteTrailCount;
-        simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
-        simulation.BuildSprites(look, layout, sprites);
+        simulation.BuildKeys(look, layout, keys, cameraActive,
+            out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
+        StageKeyCount = keys.Count;
+        simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
         if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
-        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
+        StageSpriteCount = sprites.Count;
+        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity, cameraOverlayActive: cameraActive);
 
         var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, GpuArMap.None, alphaOutput);
         var context = Context;
@@ -439,8 +452,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation.LivePresses,
-                simulation.ArImpacts, _arList, arProjectedNotes);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();

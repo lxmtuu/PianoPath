@@ -427,8 +427,8 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers and has its own captured recording frame; AR deliberately suppresses all stage-anchored impact output.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers and has its own captured recording frame; AR preserves these channels for calibrated projection; support remains Unverified pending WARP.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
@@ -436,6 +436,8 @@ internal static partial class VerificationSuite
                 $"{contract.Id} is event-driven decay with no idle animation.");
             foreach (var parameter in contract.Parameters)
             {
+                Assert(parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
+                    $"{contract.Id}.{parameter.SettingName} AR binding must remain Unverified until the S5 WARP checks run.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -459,7 +461,7 @@ internal static partial class VerificationSuite
         Assert(AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Flash == FlashSuppression.NoChange
                 && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
             "The key morph should keep its current behavior while every accessibility toggle is off.");
-        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, family Recording is verified by isolated captures, parameter bindings remain Unverified, AR is explicitly Unsupported, all costs stay Unmeasured, and flash-safety resolution matches the declared risks.");
+        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, family Recording is verified by isolated captures, parameter bindings remain Unverified, AR remains Unverified until calibrated-projection WARP assertions pass, all costs stay Unmeasured, and flash-safety resolution matches the declared risks.");
     }
 
     /// <summary>
@@ -521,8 +523,8 @@ internal static partial class VerificationSuite
     /// <summary>
     /// Cross-checks the hold-FX pilot: the bar mirrors the note's remaining duration while breathing,
     /// vibration, hue cycling and arc flicker own their clock and freeze under Reduced Motion; the arc's
-    /// un-analysed flicker resolves to suppression under Reduce Flashes; both renderers are native for all
-    /// five and no cost is invented. Metadata coherence only; no renderer changed.
+    /// un-analysed flicker resolves to suppression under Reduce Flashes; both stage renderers are Native for all
+    /// five, while the new calibrated AR route stays Unverified until WARP runs. This method checks metadata only.
     /// </summary>
     private static void VerifyHoldPilot()
     {
@@ -538,13 +540,15 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; the AR overlay deliberately leaves out notes and keys, so the hold effect is excluded there.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; S5 routes held-key channels through calibrated projection; AR support remains Unverified pending WARP.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
             foreach (var parameter in contract.Parameters)
             {
+                Assert(parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
+                    $"{contract.Id}.{parameter.SettingName} AR binding must remain Unverified until the S5 WARP checks run.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -574,14 +578,15 @@ internal static partial class VerificationSuite
             "The flickering arc's un-analysed flash risk resolves conservatively to suppression.");
         Assert(AccessibilityContractResolver.Resolve(byId["hold.breath"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "Reduce Flashes must leave the flash-less breathing glow alone.");
-        Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both stage renderers native, S5 AR projection Unverified pending WARP, no cost invented; pixel behavior is checked separately.");
     }
 
     /// <summary>
     /// Cross-checks the ambient/atmosphere pilot: every member owns its clock and freezes under Reduced
     /// Motion; shooting stars are the second GPU-only member (the WPF stage has no meteor pass) and stay
-    /// Unsupported there; the star twinkle's un-analysed flash risk resolves conservatively while the slow
-    /// layers keep the sky untouched under Reduce Flashes; no cost is invented. Metadata coherence only.
+    /// Unsupported there; keyed-beam AR projection is S5 code but remains Unverified, and the star twinkle's
+    /// un-analysed flash risk resolves conservatively while slow layers keep the sky untouched under Reduce Flashes.
+    /// This method checks metadata only; pixel behavior belongs to separate WARP fixtures.
     /// </summary>
     private static void VerifyAmbientPilot()
     {
@@ -627,19 +632,22 @@ internal static partial class VerificationSuite
                     && byId[id].Capabilities.GpuStage.State == EffectBackendState.Native,
                 $"{id} is drawn by both stage renderers in shipped code.");
         }
+        Assert(byId["atmosphere.beams"].Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                && byId["atmosphere.beams"].Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+            "The newly projected, key-anchored beam family must remain Unverified until its WARP fixture executes.");
         Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.stars"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
             "The twinkling star field's un-analysed flash risk resolves conservatively to suppression.");
         Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.beams"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange
                 && AccessibilityContractResolver.Resolve(byId["ambient.energy"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "Reduce Flashes must leave the slow, flash-less sky layers untouched.");
-        Results.Add("PASS ambient contract metadata: the four ambient layers, stars, petals and beams are native on both renderers, shooting stars stay honestly GPU-only, every member freezes under Reduced Motion, the star twinkle resolves conservatively under Reduce Flashes, and no cost is invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS ambient contract metadata: ambient layers, stars, petals and beams are native on both stage renderers, shooting stars stay honestly GPU-only, keyed-beam AR projection remains Unverified pending WARP, every member freezes under Reduced Motion, star flash risk resolves conservatively, and no cost is invented; this check is metadata-only.");
     }
 
     /// <summary>
     /// Cross-checks the last two pilots: sparks/wisps/flames run their own physics and freeze under Reduced
     /// Motion, the flickering sparks and flames keep their flash risk Unverified (suppression under Reduce
     /// Flashes) while the soft wisps carry none, and the release effect is a plain event-driven decay.
-    /// Both renderers draw all four; no cost is invented. Metadata coherence only; no renderer changed.
+    /// Both stage renderers draw all four; S5 AR projection remains Unverified pending WARP. This method checks metadata only.
     /// </summary>
     private static void VerifyParticlesReleasePilot()
     {
@@ -652,11 +660,13 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; AR suppresses all unprojected particle/release effects.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; S5 projects particle/release channels through the saved pose; AR support remains Unverified pending WARP.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
+            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+                $"{contract.Id} AR parameter bindings remain Unverified until the S5 WARP checks run.");
             foreach (var parameter in contract.Parameters)
             {
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
@@ -688,7 +698,7 @@ internal static partial class VerificationSuite
         Assert(byId["particles.wisps"].Accessibility.FlashRisk == EffectFlashRisk.None
                 && AccessibilityContractResolver.Resolve(byId["particles.wisps"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "The soft plasma wisps carry no flash and must stay untouched under Reduce Flashes.");
-        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, flickering sparks/flames resolve conservatively under Reduce Flashes, release is a plain note-off decay, family recording has isolated captures, parameter bindings stay Unverified and cost remains Unmeasured.");
+        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, flickering sparks/flames resolve conservatively under Reduce Flashes, release is a plain note-off decay, family recording has isolated captures, S5 AR projection/bindings remain Unverified pending WARP, and cost remains Unmeasured.");
     }
 
     /// <summary>
