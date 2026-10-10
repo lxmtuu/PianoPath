@@ -9,10 +9,10 @@ namespace PianoPath;
 internal static partial class VerificationSuite
 {
     /// <summary>
-    /// Pins AR support to its evidence grade: six screen-space ambient families are verified, 14 S5 families
-    /// have calibrated 3D projection code but remain Unverified pending WARP, four unprojected families stay
-    /// Unsupported, and note materials keep their explicit flat-quad fallback.
-    /// VerifyArOverlayCapturedFrames covers verified ambient/suppression; VerifyArNoteProjection has separate unrun S5 pixel assertions.
+    /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 14 S5 families
+    /// remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix is incomplete),
+    /// four unprojected families stay Unsupported, and note materials keep their explicit flat-quad fallback.
+    /// VerifyArOverlayCapturedFrames checks ambient/suppression; VerifyArNoteProjection exercises sampled S5 paths.
     /// </summary>
     private static void VerifyArOverlayExclusions()
     {
@@ -36,7 +36,7 @@ internal static partial class VerificationSuite
         Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
             "Only the four ambient layers, shooting stars and petals are verified Native over the camera.");
         Assert(unverifiedInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified).Select(family => family.Id)),
-            "S5 projection code must stay Unverified until its WARP assertions run.");
+            "Sampled S5 WARP checks do not justify Native family support or Applied bindings for every option/value.");
         foreach (var family in families)
         {
             var expected = nativeInAr.Contains(family.Id) ? EffectBackendState.Native
@@ -66,7 +66,7 @@ internal static partial class VerificationSuite
                     && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
                 $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
         }
-        Results.Add("PASS AR contract classification: six screen-space ambient families are Native, 14 calibrated S5 projection families remain Unverified, four unsupported unprojected families stay Unsupported, note materials retain the ar.note.flat-quad fallback; all 24 family-level Recording claims have isolated capture fixtures, while unverified parameter bindings remain conservative.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 14 calibrated S5 projection families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete; four unprojected families stay Unsupported, note materials retain the ar.note.flat-quad fallback, and unverified parameter bindings remain conservative.");
     }
 
     /// <summary>
@@ -1646,6 +1646,48 @@ internal static partial class VerificationSuite
         Assert(tintPixels > 20,
             $"Turning bars off must not turn the independent held-key tint off ({tintPixels} pixels still respond to key-light strength).");
 
+        // These four Live Stage hold modifiers belong to the optional live-bar channel and must survive 3D projection.
+        (byte[] Pixels, int Bars) RenderHoldModifier(PianoVisualSettings holdSettings)
+        {
+            var pixels = RenderFrames(PressFeed(showBars: true, keyLight: .6f, quality: ArQualityTier.Standard,
+                visualSettings: holdSettings, activePitches: new[] { 60 }), 12);
+            return (pixels, renderer.ArLiveBarCount);
+        }
+        var holdBaseline = RenderHoldModifier(settings);
+        var holdBarZeroLook = settings.Clone(); holdBarZeroLook.HoldBar = true; holdBarZeroLook.HoldBarIntensity = 0;
+        var holdBarFullLook = settings.Clone(); holdBarFullLook.HoldBar = true; holdBarFullLook.HoldBarIntensity = 100;
+        var holdBarZero = RenderHoldModifier(holdBarZeroLook);
+        var holdBarFull = RenderHoldModifier(holdBarFullLook);
+        var holdBreathSlowLook = settings.Clone(); holdBreathSlowLook.HoldBreath = true; holdBreathSlowLook.HoldBreathRate = 0;
+        var holdBreathFastLook = settings.Clone(); holdBreathFastLook.HoldBreath = true; holdBreathFastLook.HoldBreathRate = 100;
+        var holdBreathSlow = RenderHoldModifier(holdBreathSlowLook);
+        var holdBreathFast = RenderHoldModifier(holdBreathFastLook);
+        var holdVibrationOffLook = settings.Clone(); holdVibrationOffLook.HoldVibration = true; holdVibrationOffLook.HoldVibrationAmount = 0;
+        var holdVibrationFullLook = settings.Clone(); holdVibrationFullLook.HoldVibration = true; holdVibrationFullLook.HoldVibrationAmount = 100;
+        var holdVibrationOff = RenderHoldModifier(holdVibrationOffLook);
+        var holdVibrationFull = RenderHoldModifier(holdVibrationFullLook);
+        var holdColorCycleOffLook = settings.Clone(); holdColorCycleOffLook.HoldColorCycle = true; holdColorCycleOffLook.HoldColorCycleSpeed = 0;
+        var holdColorCycleFullLook = settings.Clone(); holdColorCycleFullLook.HoldColorCycle = true; holdColorCycleFullLook.HoldColorCycleSpeed = 100;
+        var holdColorCycleOff = RenderHoldModifier(holdColorCycleOffLook);
+        var holdColorCycleFull = RenderHoldModifier(holdColorCycleFullLook);
+        var holdBarTogglePixels = ChangedPixels(holdBaseline.Pixels, holdBarFull.Pixels, threshold: 4);
+        var holdBarIntensityPixels = ChangedPixels(holdBarZero.Pixels, holdBarFull.Pixels, threshold: 4);
+        var holdBreathTogglePixels = ChangedPixels(holdBaseline.Pixels, holdBreathSlow.Pixels, threshold: 4);
+        var holdBreathRatePixels = ChangedPixels(holdBreathSlow.Pixels, holdBreathFast.Pixels, threshold: 4);
+        var holdVibrationTogglePixels = ChangedPixels(holdBaseline.Pixels, holdVibrationFull.Pixels, threshold: 4);
+        var holdVibrationAmountPixels = ChangedPixels(holdVibrationOff.Pixels, holdVibrationFull.Pixels, threshold: 4);
+        var holdColorCycleTogglePixels = ChangedPixels(holdBaseline.Pixels, holdColorCycleFull.Pixels, threshold: 4);
+        var holdColorCycleSpeedPixels = ChangedPixels(holdColorCycleOff.Pixels, holdColorCycleFull.Pixels, threshold: 4);
+        Assert(holdBaseline.Bars == 1 && holdBarZero.Bars == 1 && holdBarFull.Bars == 1
+                && holdBreathSlow.Bars == 1 && holdBreathFast.Bars == 1
+                && holdVibrationOff.Bars == 1 && holdVibrationFull.Bars == 1
+                && holdColorCycleOff.Bars == 1 && holdColorCycleFull.Bars == 1
+                && holdBarTogglePixels > 20 && holdBarIntensityPixels > 20
+                && holdBreathTogglePixels > 20 && holdBreathRatePixels > 20
+                && holdVibrationTogglePixels > 20 && holdVibrationAmountPixels > 20
+                && holdColorCycleTogglePixels > 20 && holdColorCycleSpeedPixels > 20,
+            $"Projected Live Stage bars must retain all four hold toggles and their representative parameter changes (bar {holdBarTogglePixels}/{holdBarIntensityPixels}, breath {holdBreathTogglePixels}/{holdBreathRatePixels}, vibration {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, color-cycle {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} changed pixels; bars {holdBaseline.Bars}/{holdBarZero.Bars}/{holdBarFull.Bars}/{holdBreathSlow.Bars}/{holdBreathFast.Bars}/{holdVibrationOff.Bars}/{holdVibrationFull.Bars}/{holdColorCycleOff.Bars}/{holdColorCycleFull.Bars}).");
+
         // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
         var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
         RenderFrames(standardFxFeed, 4);
@@ -1844,7 +1886,7 @@ internal static partial class VerificationSuite
         Results.Add($"PASS AR 3D note render (AR-S4): WARP drew {projectedPixels} projected note pixels into {expected.Count} AR-owned quads with no stage notes/trails; the flat-map failure did not hide them, mirroring and independent 3D direction worked, Perform omitted notes, and minimum length grew short notes.");
         Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
         Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; flat falling-note trails added no pixels over the camera.");
-        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
+        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
         Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }
 }

@@ -278,8 +278,8 @@ internal static class EffectContractCatalog
     private static readonly EffectParameterBindingProfile ArAmbientParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
-    // S5's calibrated 3D projection now consumes these settings in source; keep the per-setting AR
-    // binding Unverified until the new WARP pixel assertions execute on Windows.
+    // S5's calibrated 3D projection consumes these settings, and selected output variants are now read back
+    // by WARP. Keep per-setting bindings Unverified until every declared value/range and lifecycle branch has coverage.
     private static readonly EffectParameterBindingProfile ArProjectedParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
@@ -425,9 +425,10 @@ internal static class EffectContractCatalog
     /// The second contract pilot: the four impact families that fire when a note lands. Both renderers draw
     /// all four (grep-verified in <c>PianoStage.cs</c> and the GPU simulation), hence Native there. Each
     /// family now also has its own GPU recording-tap read-back fixture (and WPF PNG write/read fixture), while
-    /// parameter bindings remain Unverified. S5 now preserves these pitch-tagged channels for calibrated 3D
-    /// projection instead of drawing their stage-space sprites over camera; the AR family and parameter
-    /// capabilities remain Unverified until its new WARP pixel assertions run. Costs
+    /// parameter bindings remain Unverified. S5 preserves these pitch-tagged channels for calibrated 3D
+    /// projection instead of drawing their stage-space sprites over camera; selected Standard/Ultra variants now
+    /// have WARP pixel/counter coverage, but family and parameter capabilities remain Unverified until the full
+    /// choice/value/lifecycle matrix is exercised. Costs
     /// are all Unmeasured — no isolated probe has measured any of them, and this catalog must not invent
     /// numbers. Flash classification is kept conservative: the flash is a localised bright pulse (Local), the
     /// spark burst flickers without a strobe-area analysis (Unverified, so safety resolution suppresses it),
@@ -558,8 +559,10 @@ internal static class EffectContractCatalog
     /// from the song and stays NoIndependentAnimation. The electric arc flickers bright and has no strobe
     /// analysis yet: flash risk Unverified, safety resolution suppresses. The hue cycle is color-only and
     /// declares no shape cue. S5 projects the retained hold channels from the pitch-tagged simulation through
-    /// the calibrated pose without drawing stage-space key/sprite pixels; all five AR family and parameter
-    /// bindings remain Unverified until WARP validation. Costs all Unmeasured.
+    /// the calibrated pose without drawing stage-space key/sprite pixels. VerifyArNoteProjection now isolates
+    /// HoldBar, HoldBreath, HoldVibration and HoldColorCycle on projected live bars; the family/parameter states
+    /// remain Unverified because those sampled settings do not cover every value or the full hold-arc/style matrix.
+    /// Costs all Unmeasured.
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> HoldFxPilot { get; } = Array.AsReadOnly(new[]
     {
@@ -638,8 +641,9 @@ internal static class EffectContractCatalog
     /// its own clock (IntrinsicAnimation) and freezes under Reduced Motion. The star twinkle has no strobe
     /// analysis yet (Unverified, resolves to suppression); the slow layers carry no flash. Over a camera,
     /// backdrop stars remain Unsupported, while key-anchored beams have a new S5 3D projection and stay
-    /// Unverified pending WARP; the four ambient slots, shooting stars and petals are Native only as screen-space
-    /// camera composites. Their six WARP captured frames are checked by
+    /// Unverified after sampled WARP checks (the full beam setting/quality matrix is not covered); the four
+    /// ambient slots, shooting stars and petals are Native only as screen-space camera composites. Their six WARP
+    /// captured frames are checked by
     /// <c>VerifyArOverlayCapturedFrames</c>; this is not homography-projected or world-space AR. Costs all
     /// Unmeasured.
     /// </summary>
@@ -752,8 +756,9 @@ internal static class EffectContractCatalog
     /// on their own clock (IntrinsicAnimation) and are drawn by both renderers. Sparks and flames flicker
     /// bright with no strobe analysis yet, so their flash risk stays Unverified and resolves to
     /// suppression; the soft plasma wisps carry no flash. S5 retains pitch-tagged bursts/emitters and projects
-    /// them through the calibrated pose; all three AR family and parameter bindings remain Unverified until
-    /// WARP validation. Costs all Unmeasured.
+    /// them through the calibrated pose; selected particle/release cases now pass WARP pixel/counter checks, but
+    /// all three AR family and parameter states remain Unverified pending broader shape/setting/lifecycle coverage.
+    /// Costs all Unmeasured.
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> ParticlesFxPilot { get; } = Array.AsReadOnly(new[]
     {
@@ -812,8 +817,9 @@ internal static class EffectContractCatalog
     /// <summary>
     /// The seventh contract pilot: what happens at the key when a note ends. A single family: the release
     /// effect is an event-driven decay with no idle animation and no flash, drawn by both stage renderers.
-    /// S5 retains release events for calibrated 3D projection rather than drawing a stage-space sprite; its AR
-    /// family and parameter bindings remain Unverified until WARP validation. Cost Unmeasured.
+    /// S5 retains release events for calibrated 3D projection rather than drawing a stage-space sprite; Dissolve
+    /// is now read back on WARP, but the family and parameter bindings remain Unverified until release styles,
+    /// intensities and lifecycle variants are covered more broadly. Cost Unmeasured.
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> ReleaseFxPilot { get; } = Array.AsReadOnly(new[]
     {
