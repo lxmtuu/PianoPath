@@ -19,6 +19,8 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 
 ## Unreleased
 
+## 2.0.0 — 2026-10-10
+
 ### Giao diện & đồ hoạ
 
 - **Lớp phủ AR (đang phát triển, chưa thử trên webcam thật)**: dùng camera làm nền toàn màn hình, đánh dấu 4 góc dải phím và chọn khung nhìn phù hợp. Calibration nay lưu FOV và pose đàn 3D pitch/yaw/roll; trong Calibrate có gizmo kiểu Unity Move/Rotate/Scale cùng thanh trượt số cho translation và scale đồng đều. Định dạng version 5 lưu đầy đủ pose/FOV/baseline; version 1–4 vẫn đọc với translation 0 và scale 1 (v3/v4 giữ FOV, v1/v2 dùng 70°; v4 giữ góc xoay, v1–v3 dùng 0°). Bật **Notes in perspective** để nốt thành quad camera-facing theo pose; hướng chạy nốt có mũi tên riêng trên preview, nút căn screen-up/theo chiều sâu phím và hai núm **Note direction tilt / azimuth** độc lập với transform bàn phím, đặt ngay sau toggle và trước **Minimum length, share of width**. **Live press bars** là toggle độc lập, mặc định tắt, không tắt key tint; vệt nốt phẳng của sân khấu bị suppress trên camera cả khi chưa calibrate. Ambient như cánh hoa và sao băng tiếp tục vẽ phẳng screen-space, không bị chiếu phối cảnh. Learn / Perform, nhìn trước, opacity và key tint vẫn có; Quality chọn Lite / Standard / Ultra. AR camera-facing quads gọi chung `ShadeNoteMaterial` cho các style đã biết; WARP regression mới sample sáu style trên calibrated quads và Gem/Crystal trên flat AR path, đang chờ Windows CI xác nhận. Không tuyên bố full setting/value parity; camera thật vẫn **Unverified** cho tới khi thử webcam. Camera delay (0–300 ms) bù độ trễ; `--bench-ar` đo phần việc của app. Sandbox thiếu .NET SDK nên chưa build/test tại chỗ; ambient vẫn phẳng trên camera, ghi lựa chọn ambient vào mô tả PR khi thử hardware.
@@ -44,6 +46,11 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 - Bỏ ký tự Unicode trong nhãn nút (⬇, ⟳, ●, ↺, ×) — chúng không theo màu theme và render không nhất quán; tải đàn, làm mới thiết bị, ghi hình, xoá vòng lặp và reset từng slider dùng bộ icon riêng của app.
 - Nhãn nút phụ thống nhất về chữ thường có hoa đầu; mọi nút chỉ có icon giữ tooltip — đồng thời là tên đọc cho trình đọc màn hình.
 - Công tắc lớp trong Quick Adjust co theo độ dài nhãn thay vì giữ mỗi mục rộng 150 px, đưa nút gạt sát chữ hơn.
+
+### Đóng gói & phát hành
+
+- **Ký mã cho mọi gói tải về**: ba bản `PianoPath.exe` (`win-x64`, `win-x64-fd`, `win-arm64`) và bộ cài `Keyflow-Setup-*.exe` được ký Authenticode qua **SignPath** ngay trong `release.yml`, *trước* khi đóng ZIP và tính `SHA256SUMS.txt`, nên chữ ký nằm trong chính tệp người dùng tải về. Windows SmartScreen không còn hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu. Lượt phát hành **bắt buộc** có cấu hình ký mã: thiếu secret/variable SignPath là run dừng ngay kèm hướng dẫn, không bao giờ phát hành gói chưa ký, và `Get-AuthenticodeSignature` kiểm lại từng chữ ký trước khi đóng gói. Thiết lập một lần nằm ở `docs/CODE-SIGNING.md` (SignPath Foundation — miễn phí cho dự án open source).
+- Ba gói ZIP giờ được đóng **sau** khi ký mã (trước đây là ngay sau publish); tên tệp và `SHA256SUMS.txt` giữ nguyên dạng cũ.
 
 ## 1.0.0 — 2026-10-03
 

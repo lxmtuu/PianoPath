@@ -20,6 +20,8 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ## Unreleased
 
+## 2.0.0 — 2026-10-10
+
 ### Interface & graphics
 
 - **AR overlay (in development, not yet tried on a real webcam)**: use the camera as a full-screen background, mark the four key-strip corners and choose the matching camera view. Calibration saves FOV and a full 3D keyboard pose; Calibrate now has a Unity-style Move/Rotate/Scale gizmo plus numeric translation and uniform-scale sliders. Version 5 stores the complete transform, FOV and baseline; versions 1–4 still load with zero translation and unit scale (v3/v4 keep saved FOV, v1/v2 use 70°; v4 keeps rotation, v1–v3 use 0°). Enable **Notes in perspective** to render camera-facing note quads from that pose; note travel has its own preview arrow, Screen-up/key-depth aiming buttons and independent **Note direction tilt / azimuth** controls, without changing the keyboard transform. The settings controls stay directly after the toggle and before **Minimum length, share of width**. **Live press bars** are an independent, off-by-default toggle and do not disable key tint; flat stage-space falling trails are suppressed over the camera even before calibration. Ambient layers such as petals and shooting stars remain flat screen-space and are not perspective-projected. Learn / Perform, look-ahead, opacity and key tint remain available; Quality selects Lite / Standard / Ultra. AR camera-facing quads route known styles through the shared `ShadeNoteMaterial`; new WARP checks sample all six styles on calibrated quads and Gem/Crystal on the flat AR path, pending Windows CI. Full setting/value parity is not claimed, and real-camera validation remains **Unverified** until a webcam trial. Camera delay (0–300 ms) compensates for capture latency; `--bench-ar` measures the app's own share of the work. The sandbox has no .NET SDK for local build/tests; ambient stays flat on the camera, and the ambient choice should be recorded in the PR description for hardware testing.
@@ -45,6 +47,11 @@ section and are not repeated here; the internal development roadmap is not part 
 - Unicode glyphs (⬇, ⟳, ●, ↺, ×) are gone from button labels — they never followed the theme and rendered inconsistently; the piano download, device refresh, recording, loop clear and per-slider resets now use the app’s own icon set.
 - Secondary action labels are unified to sentence case; every icon-only button keeps its tooltip, which is also the accessible name screen readers announce.
 - Quick Adjust stage switches now size to their captions instead of reserving 150-pixel items, keeping each switch close to its label.
+
+### Packaging & release
+
+- **Every downloadable package is code-signed**: the three `PianoPath.exe` builds (`win-x64`, `win-x64-fd`, `win-arm64`) and the `Keyflow-Setup-*.exe` installer are Authenticode-signed through **SignPath** inside `release.yml`, *before* the ZIPs are packed and `SHA256SUMS.txt` is computed, so the signature travels inside the very files users download. Windows SmartScreen no longer shows *"Windows protected your PC"* on install or first run. A release run **requires** a signing configuration: without the SignPath secret/variables it stops with instructions instead of ever publishing an unsigned package, and `Get-AuthenticodeSignature` re-checks every signature before packing. The one-time setup lives in `docs/CODE-SIGNING.md` (SignPath Foundation — free for open source projects).
+- The three ZIP packages are now packed **after** signing (they used to be packed right after publish); file names and `SHA256SUMS.txt` keep their old shape.
 
 ## 1.0.0 — 2026-10-03
 
