@@ -45,6 +45,16 @@ public class Ar3DNoteProjectionTests
         ((patch.BackLeft.X + patch.BackRight.X + patch.FrontRight.X + patch.FrontLeft.X) * .25,
          (patch.BackLeft.Y + patch.BackRight.Y + patch.FrontRight.Y + patch.FrontLeft.Y) * .25);
 
+    private static double Distance(double x, double y) => Math.Sqrt(x * x + y * y);
+
+    private static List<Ar3DLiveBar> BuildLive(IReadOnlyList<ArLivePress> presses,
+        ArNoteDirection direction = default, ArNoteStyle? style = null)
+    {
+        var into = new List<Ar3DLiveBar>();
+        Ar3DNoteProjection.BuildLive(Calibration, View, presses, style ?? Style, direction, into);
+        return into;
+    }
+
     private static List<Ar3DLiveMidiNote> BuildRisingMidi(IReadOnlyList<ArLiveMidiNote> notes,
         ArNoteDirection direction = default, ArNoteStyle? style = null)
     {
@@ -179,7 +189,7 @@ public class Ar3DNoteProjectionTests
 
         var heldCentre = Centre(heldShape.Patch);
         var releasedCentre = Centre(releasedShape.Patch);
-        Assert.True(Math.Hypot(releasedCentre.X - heldCentre.X, releasedCentre.Y - heldCentre.Y) > 5,
+        Assert.True(Distance(releasedCentre.X - heldCentre.X, releasedCentre.Y - heldCentre.Y) > 5,
             "Note Off freezes the note body but must not freeze its 3D travel centre.");
 
         var repeatedSamePitch = BuildRisingMidi([
@@ -269,7 +279,7 @@ public class Ar3DNoteProjectionTests
         Assert.True(released.Fade < held.Fade);
         var heldCentre = Centre(held.Patch);
         var releasedCentre = Centre(released.Patch);
-        var movedPixels = Math.Hypot(releasedCentre.X - heldCentre.X, releasedCentre.Y - heldCentre.Y);
+        var movedPixels = Distance(releasedCentre.X - heldCentre.X, releasedCentre.Y - heldCentre.Y);
         Assert.True(movedPixels > 5, $"The bar must keep travelling after note-off, not only fade in place ({movedPixels:0.0}px moved).");
 
         // Verify the centre against the selected keyboard-local travel vector transformed by the calibrated camera pose.
@@ -281,8 +291,8 @@ public class Ar3DNoteProjectionTests
         Assert.True(pose.TryProject(pose.ToCamera(target) - travelCamera * releasedDistance, out var releasedImage));
         var expectedHeld = View.ToOutput(heldImage.X, heldImage.Y);
         var expectedReleased = View.ToOutput(releasedImage.X, releasedImage.Y);
-        Assert.InRange(Math.Hypot(heldCentre.X - expectedHeld.X, heldCentre.Y - expectedHeld.Y), 0, 1.0);
-        Assert.InRange(Math.Hypot(releasedCentre.X - expectedReleased.X, releasedCentre.Y - expectedReleased.Y), 0, 1.0);
+        Assert.InRange(Distance(heldCentre.X - expectedHeld.X, heldCentre.Y - expectedHeld.Y), 0, 1.0);
+        Assert.InRange(Distance(releasedCentre.X - expectedReleased.X, releasedCentre.Y - expectedReleased.Y), 0, 1.0);
 
         var afterReach = heldSeconds + Style.Reach / Style.FallSpeed;
         Assert.Empty(BuildLive([new ArLivePress(60, afterReach, heldSeconds, false, .9f)]));

@@ -274,15 +274,17 @@ internal sealed partial class GpuArLayer
         if (!ghostPass) AddNoteShimmer(quads, patch, pitch, linear, alpha, look);
     }
 
+    private static double Distance(double x, double y) => Math.Sqrt(x * x + y * y);
+
     /// <summary>Projects the GPU stage's moving note sheen along an AR note's own calibrated quad.</summary>
     private static void AddNoteShimmer(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch,
         Vector3 linearColor, float alpha, GpuLook look)
     {
         if (!look.NoteShimmer || look.NoteShimmerAmount <= .01f || alpha <= .01f) return;
-        var width = (Math.Hypot(patch.BackRight.X - patch.BackLeft.X, patch.BackRight.Y - patch.BackLeft.Y)
-                     + Math.Hypot(patch.FrontRight.X - patch.FrontLeft.X, patch.FrontRight.Y - patch.FrontLeft.Y)) * .5;
-        var length = (Math.Hypot(patch.FrontLeft.X - patch.BackLeft.X, patch.FrontLeft.Y - patch.BackLeft.Y)
-                      + Math.Hypot(patch.FrontRight.X - patch.BackRight.X, patch.FrontRight.Y - patch.BackRight.Y)) * .5;
+        var width = (Distance(patch.BackRight.X - patch.BackLeft.X, patch.BackRight.Y - patch.BackLeft.Y)
+                     + Distance(patch.FrontRight.X - patch.FrontLeft.X, patch.FrontRight.Y - patch.FrontLeft.Y)) * .5;
+        var length = (Distance(patch.FrontLeft.X - patch.BackLeft.X, patch.FrontLeft.Y - patch.BackLeft.Y)
+                      + Distance(patch.FrontRight.X - patch.BackRight.X, patch.FrontRight.Y - patch.BackRight.Y)) * .5;
         if (width < 5 || length < 6) return;
         var phase = pitch * 1.6180339f + .37f;
         quads.Add(Pack(patch, linearColor, alpha,
