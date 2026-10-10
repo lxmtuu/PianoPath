@@ -355,10 +355,10 @@ Salamander Grand Piano V3 không nằm trong gói. Khi muốn có tiếng đàn,
 tin ghi công CC BY 3.0 được lưu cạnh bộ mẫu trong thư mục cài piano của người dùng.
 
 - **Kiểm tệp tải về**: mỗi release kèm `SHA256SUMS.txt`; đối chiếu bằng
-  `Get-FileHash .\\Keyflow-{version}-win-x64.zip -Algorithm SHA256`. Các gói **chưa ký số** nên đây là
-  cách duy nhất để chắc tệp nhận được đúng là tệp quy trình trên build ra.
-- **SmartScreen**: vì chưa ký số, lần chạy đầu Windows hiện *"Windows protected your PC"* — chọn
-  **More info → Run anyway**.
+  `Get-FileHash .\\Keyflow-{version}-win-x64.zip -Algorithm SHA256`. Các gói **đã được ký mã**; bảng hash vẫn là
+  cách nhanh để chắc tệp nhận được đúng là tệp quy trình build ra.
+- **SmartScreen**: các gói đã được **ký Authenticode qua SignPath** ngay trong lượt phát hành, nên Windows
+  không hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu.
 - **Giữ giấy phép**: `LICENSE.txt` (MIT) phải đi cùng bản sao. Thông báo CC BY 3.0 của Salamander nằm
   trong thư mục dữ liệu piano sau khi người dùng tải bộ mẫu.
 - **Nhật ký thay đổi**: [CHANGELOG.md](CHANGELOG.md) (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
@@ -396,10 +396,10 @@ be cancelled/resumed, and the CC BY 3.0 attribution is saved beside the samples 
 installation folder.
 
 - **Checking a download**: each release carries `SHA256SUMS.txt`; compare with
-  `Get-FileHash .\\Keyflow-{version}-win-x64.zip -Algorithm SHA256`. The packages are **not code-signed**,
-  so this is the only way to be sure the file that arrived is the file the pipeline built.
-- **SmartScreen**: because nothing is signed, the first launch shows *"Windows protected your PC"* —
-  choose **More info → Run anyway**.
+  `Get-FileHash .\\Keyflow-{version}-win-x64.zip -Algorithm SHA256`. The packages are **code-signed**;
+  the hash table remains the quick way to be sure the file that arrived is the file the pipeline built.
+- **SmartScreen**: the packages are **Authenticode-signed through SignPath** by the release pipeline, so
+  Windows does not show *"Windows protected your PC"* on install or first run.
 - **Keep the licence**: `LICENSE.txt` (MIT) travels with the application. Salamander's CC BY 3.0 notice
   is in the piano data folder after the user downloads the sample library.
 - **What changed**: [CHANGELOG.en.md](CHANGELOG.en.md) (Vietnamese edition: [CHANGELOG.md](CHANGELOG.md))
