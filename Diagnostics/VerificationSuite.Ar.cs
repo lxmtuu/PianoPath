@@ -406,8 +406,9 @@ internal static partial class VerificationSuite
             if (frame != 20) return;
             letGoFeed.LiveNote(60, false, 0); letGoFeed.LiveNote(61, false, 0);
         });
-        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.Quads == 3,
-            $"Letting go ends the bars and the short strike lights while the keys stay lit ({afterRelease.Quads} quads: {afterRelease.Keys} keys).");
+        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.NoteLights > 0
+                && afterRelease.Quads == afterRelease.Keys + afterRelease.NoteLights,
+            $"Letting go ends the bars and strike lights while key tint and its neighboring spill stay ({afterRelease.Quads} quads: {afterRelease.Keys} keys, {afterRelease.NoteLights} spill).");
         // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
         var fadingFeed = ArFeed([60, 61], press: true);
         var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
@@ -415,8 +416,10 @@ internal static partial class VerificationSuite
             if (frame != 20) return;
             fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
-        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 0 && fadingAfterRelease.Quads == 5,
-            $"A key just let go keeps its bar for a moment, before the held trail reaches its impact ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} keys, {fadingAfterRelease.Bars} bars five frames after release).");
+        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 0
+                && fadingAfterRelease.NoteLights > 0
+                && fadingAfterRelease.Quads == fadingAfterRelease.Keys + fadingAfterRelease.Bars + fadingAfterRelease.NoteLights,
+            $"A key just let go keeps its bar for a moment, before the held trail reaches its impact ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} keys, {fadingAfterRelease.Bars} bars, {fadingAfterRelease.NoteLights} spill five frames after release).");
         Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
@@ -428,7 +431,7 @@ internal static partial class VerificationSuite
         Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
         VerifyArOverlayCapturedFrames(renderer);
-        Results.Add($"PASS ar keys: three held keys are five rectangles, each tinted where it is in the picture and nothing around it, black keys beside a held white key left alone; read back against the same frame without the layer.");
+        Results.Add($"PASS ar keys: three held keys produce five tinted rectangles and separate neighboring-key spill at standard quality; distant keys and the air above the keyboard stay clear, read back against the same frame without the layer.");
         Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal selections keep the flat-quad fallback; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
     }
