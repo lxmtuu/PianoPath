@@ -272,7 +272,13 @@ jobs:
           git commit --quiet -m "Keyflow $tag - release documents"
 
           $commit = "$(git rev-parse HEAD)".Trim()
+          # git writes its progress and the "To <url>" line to stderr. With 2>&1 that is an ErrorRecord, and under
+          # $ErrorActionPreference = 'Stop' the first one ends the step even when the push succeeded (it did, on
+          # v2.0.0: the branch was on origin and the step still failed). Continue only around the native call.
+          $savedPreference = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
           $pushLog = git push --force origin "HEAD:refs/heads/$branch" 2>&1
+          $ErrorActionPreference = $savedPreference
           if ($LASTEXITCODE -ne 0) {
             $pushLog | ForEach-Object { $_ }
             # build.yml meets the same wall when it commits previews back to a branch, and answers it the
@@ -409,7 +415,11 @@ jobs:
               '::warning title=Public release::no package was found to attach to the release on ' + $repository
             } else {
               $paths = @($files | ForEach-Object { $_.FullName })
+              # A missing release is the normal case here; its stderr must not end the step (see the push above).
+              $savedPreference = $ErrorActionPreference
+              $ErrorActionPreference = 'Continue'
               & gh release view $tag --repo $repository 2>&1 | Out-Null
+              $ErrorActionPreference = $savedPreference
               if ($LASTEXITCODE -eq 0) {
                 & gh release upload $tag @paths --repo $repository --clobber | Out-Host
               } else {
