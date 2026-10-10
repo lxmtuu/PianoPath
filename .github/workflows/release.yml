@@ -1,11 +1,11 @@
 name: release
 
 # Builds the distributable packages: three portable zips, the .exe installer and a SHA-256 list of all of
-# them. Every .exe is Authenticode-signed through SignPath before the zips are packed (docs/CODE-SIGNING.md),
-# and a run without a signing configuration stops instead of publishing unsigned packages — the point of
-# 2.0.0 is that nobody meets "Windows protected your PC" again. Runs when a version tag such as v2.0.0 is
-# pushed (the packages are attached to a GitHub Release) or manually from the Actions tab (they are available
-# as workflow artifacts, and no release is created).
+# them. The packages are NOT Authenticode-signed: SignPath declined the open-source application (see
+# docs/CODE-SIGNING.md), so downloaders see the SmartScreen "Windows protected your PC" dialog and the
+# release notes say how to continue. Runs when a version tag such as v2.0.0 is pushed (the packages are
+# attached to a GitHub Release) or manually from the Actions tab (they are available as workflow artifacts,
+# and no release is created).
 #
 # build.yml already publishes the framework-dependent kind on every push. This workflow builds all portable
 # packages, an installer compiled from the folder a user downloads, and runs --verify against the published
@@ -23,20 +23,9 @@ env:
   PUBLIC_REPOSITORY: ${{ vars.PUBLIC_RELEASES_REPOSITORY || 'lxmtuu/KeyFlow' }}
   # Treat the ref as data in PowerShell; never splice this value into a run script.
   RELEASE_TAG: ${{ github.ref_name }}
-  # Code signing through SignPath (docs/CODE-SIGNING.md). The API token is a secret; the identifiers are
-  # repository variables whose defaults match the names that document tells a maintainer to create, so the
-  # one-time setup is the token, the organization id and a project. A release never publishes unsigned
-  # packages: the validation step below stops the run while any of this is missing.
-  SIGNPATH_API_TOKEN: ${{ secrets.SIGNPATH_API_TOKEN }}
-  SIGNPATH_ORGANIZATION_ID: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
-  SIGNPATH_PROJECT_SLUG: ${{ vars.SIGNPATH_PROJECT_SLUG || 'keyflow' }}
-  SIGNPATH_SIGNING_POLICY_SLUG: ${{ vars.SIGNPATH_SIGNING_POLICY_SLUG || 'release-signing' }}
-  SIGNPATH_ARTIFACT_CONFIGURATION_SLUG: ${{ vars.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG || 'default' }}
 
 permissions:
-  # actions:read lets the SignPath action download the unsigned artifact this workflow just uploaded;
-  # contents:write is the release itself. See docs/CODE-SIGNING.md.
-  actions: read
+  # contents:write is the release itself: the GitHub Release and its packages are created with the workflow token.
   contents: write
 
 # A release run is expensive (three publishes). Two runs of the same tag are one accident
@@ -72,22 +61,6 @@ jobs:
           if (-not $version -or $tag -cne "v$version") {
             throw "Release tag '$tag' must match the project version v$version."
           }
-
-      # Signing is not a nicety here: an unsigned package is exactly the "Windows protected your PC" dialog
-      # 2.0.0 exists to remove. This step is cheap and runs before the expensive work, so a repository that
-      # has not finished the SignPath setup of docs/CODE-SIGNING.md fails in one sentence with the list of
-      # what to add — instead of building three publishes to discover the same thing at the signing step.
-      - name: Validate signing configuration
-        shell: pwsh
-        run: |
-          $missing = @()
-          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_API_TOKEN)) { $missing += 'secret SIGNPATH_API_TOKEN' }
-          if ([string]::IsNullOrWhiteSpace($env:SIGNPATH_ORGANIZATION_ID)) { $missing += 'variable SIGNPATH_ORGANIZATION_ID' }
-          if ($missing.Count -gt 0) {
-            $list = $missing -join ', '
-            throw "Signing is not configured — missing $list. Follow docs/CODE-SIGNING.md (SignPath is free for open source projects), add the listed secret/variables to this repository, then re-run this workflow. Unsigned packages are never published."
-          }
-          "SignPath: project '$env:SIGNPATH_PROJECT_SLUG', policy '$env:SIGNPATH_SIGNING_POLICY_SLUG', artifact configuration '$env:SIGNPATH_ARTIFACT_CONFIGURATION_SLUG'."
 
       - name: Test the tagged source
         run: dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release
@@ -143,68 +116,8 @@ jobs:
           if (-not $version) { throw 'PianoPath.csproj has no <Version> to name the installer with' }
           pwsh tools/build_installer.ps1 -Version $version -OutputDir installer\Output
 
-      # Everything a user downloads carries an Authenticode signature, and the signature has to be inside the
-      # files *before* the zips are packed — a signature applied afterwards would travel to nobody. The four
-      # executables (the three publishes and the installer) go to SignPath as one flat artifact; the staged
-      # names only exist so the artifact configuration can tell them apart, and each file returns to its real
-      # place afterwards, where Get-AuthenticodeSignature re-checks it before anything is packed.
-      - name: Stage the executables for signing
-        shell: pwsh
-        run: |
-          $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
-          $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
-          if (-not $version) { throw 'PianoPath.csproj has no <Version>' }
-          New-Item -ItemType Directory -Path signing-input | Out-Null
-          Copy-Item publish/win-x64/PianoPath.exe signing-input/PianoPath-win-x64.exe
-          Copy-Item publish/win-x64-fd/PianoPath.exe signing-input/PianoPath-win-x64-fd.exe
-          Copy-Item publish/win-arm64/PianoPath.exe signing-input/PianoPath-win-arm64.exe
-          Copy-Item "installer/Output/Keyflow-Setup-$version.exe" signing-input/
-          Get-ChildItem signing-input | Select-Object Name, Length | Format-Table | Out-String | Write-Host
-
-      - name: Upload unsigned executables
-        id: unsigned
-        uses: actions/upload-artifact@v7
-        with:
-          name: unsigned-executables
-          path: signing-input/
-          if-no-files-found: error
-
-      - name: Sign the executables with SignPath
-        uses: signpath/github-action-submit-signing-request@v3
-        with:
-          api-token: ${{ env.SIGNPATH_API_TOKEN }}
-          organization-id: ${{ env.SIGNPATH_ORGANIZATION_ID }}
-          project-slug: ${{ env.SIGNPATH_PROJECT_SLUG }}
-          signing-policy-slug: ${{ env.SIGNPATH_SIGNING_POLICY_SLUG }}
-          artifact-configuration-slug: ${{ env.SIGNPATH_ARTIFACT_CONFIGURATION_SLUG }}
-          github-artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
-          wait-for-completion: true
-          output-artifact-directory: signing-output
-
-      - name: Put the signed executables back and check their signatures
-        shell: pwsh
-        run: |
-          $node = Select-Xml -Path PianoPath.csproj -XPath '/Project/PropertyGroup/Version' | Select-Object -First 1
-          $version = if ($node) { $node.Node.InnerText.Trim() } else { '' }
-          $back = @(
-            @{ Name = 'PianoPath-win-x64.exe';       Target = 'publish/win-x64/PianoPath.exe' },
-            @{ Name = 'PianoPath-win-x64-fd.exe';    Target = 'publish/win-x64-fd/PianoPath.exe' },
-            @{ Name = 'PianoPath-win-arm64.exe';     Target = 'publish/win-arm64/PianoPath.exe' },
-            @{ Name = "Keyflow-Setup-$version.exe";  Target = "installer/Output/Keyflow-Setup-$version.exe" }
-          )
-          foreach ($file in $back) {
-            $signed = Get-ChildItem signing-output -Recurse -File | Where-Object { $_.Name -eq $file.Name } | Select-Object -First 1
-            if (-not $signed) { throw "SignPath did not return $($file.Name)" }
-            Copy-Item $signed.FullName $file.Target -Force
-            $signature = Get-AuthenticodeSignature $file.Target
-            if ($signature.Status -ne 'Valid') {
-              throw "$($file.Target) does not carry a valid signature (Status: $($signature.Status)). An unsigned package shows 'Windows protected your PC' and must not be released."
-            }
-            "signed: $($file.Target) — $($signature.SignerCertificate.Subject)"
-          }
-
-      # Packed after signing so the signature travels inside the files a downloader unzips. The names are the
-      # ones publish.ps1 -Zip produces and the download table promises: Keyflow-<version>-<runtime>[-fd].zip.
+      # Packed after the publishes and the installer. The names are the ones publish.ps1 -Zip produces and the
+      # download table promises: Keyflow-<version>-<runtime>[-fd].zip.
       - name: Pack the ZIP packages
         shell: pwsh
         run: |
@@ -216,7 +129,7 @@ jobs:
           Compress-Archive -Path publish/win-arm64/* -DestinationPath "publish/Keyflow-$version-win-arm64.zip" -CompressionLevel Optimal
           Get-ChildItem publish -Filter '*.zip' | Select-Object Name, Length | Format-Table | Out-String | Write-Host
 
-      # The packages are signed; the hashes are what a downloader checks a transfer against: they are the
+      # The packages are unsigned; the hashes are what a downloader checks a transfer against: they are the
       # proof that the file which arrived is the file this run attached. Written in the format `sha256sum -c`
       # reads (lowercase hash, two spaces, file name), into publish/ because that folder is git-ignored
       # and already holds the packages — the checkout stays clean either way.
@@ -292,8 +205,8 @@ jobs:
             Keep the `LICENSE.txt` (MIT) with the application. Salamander Grand Piano V3 is downloaded only
             when requested (about 748 MB); its CC BY 3.0 attribution is written beside the sample files.
 
-            Every `.exe` is **code-signed** through SignPath, so Windows does not show
-            "Windows protected your PC" when installing or on first run.
+            The `.exe` files are **not code-signed** yet, so Windows SmartScreen may show "Windows protected your
+            PC" on first run: choose **More info → Run anyway**. Check the download with `SHA256SUMS.txt` first.
 
             What changed: [CHANGELOG.en.md](${{ steps.notes.outputs.changelog_en }}) ·
             [CHANGELOG.md — tiếng Việt](${{ steps.notes.outputs.changelog_vi }})
@@ -507,7 +420,7 @@ jobs:
                   '',
                   'Keep the `LICENSE.txt` (MIT) with the application. Salamander Grand Piano V3 is downloaded only when requested (about 748 MB); its CC BY 3.0 attribution is written beside the sample files.',
                   '',
-                  'Every `.exe` is **code-signed** through SignPath, so Windows does not show "Windows protected your PC" when installing or on first run. `SHA256SUMS.txt` covers every file above: `Get-FileHash .\Keyflow-' + $version + '-win-x64.zip -Algorithm SHA256`.',
+                  'The `.exe` files are **not code-signed**, so Windows SmartScreen may show "Windows protected your PC" on first run: choose **More info → Run anyway**. `SHA256SUMS.txt` covers every file above: `Get-FileHash .\Keyflow-' + $version + '-win-x64.zip -Algorithm SHA256`.',
                   '',
                   "What changed: https://github.com/$repository/blob/$branch/CHANGELOG.en.md · https://github.com/$repository/blob/$branch/CHANGELOG.md"
                 ) -join "`n"

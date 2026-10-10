@@ -50,7 +50,7 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ### Packaging & release
 
-- **Every downloadable package is code-signed**: the three `PianoPath.exe` builds (`win-x64`, `win-x64-fd`, `win-arm64`) and the `Keyflow-Setup-*.exe` installer are Authenticode-signed through **SignPath** inside `release.yml`, *before* the ZIPs are packed and `SHA256SUMS.txt` is computed, so the signature travels inside the very files users download. Windows SmartScreen no longer shows *"Windows protected your PC"* on install or first run. A release run **requires** a signing configuration: without the SignPath secret/variables it stops with instructions instead of ever publishing an unsigned package, and `Get-AuthenticodeSignature` re-checks every signature before packing. The one-time setup lives in `docs/CODE-SIGNING.md` (SignPath Foundation — free for open source projects).
+- **Packages are not code-signed yet**: SignPath Foundation declined the open-source application, so 2.0.0 ships the three `PianoPath.exe` builds and the `Keyflow-Setup-*.exe` installer **unsigned**. Windows SmartScreen may show *"Windows protected your PC"* on install or first run: choose *More info → Run anyway*, then check the files against `SHA256SUMS.txt`. `release.yml` has no signing step any more; the plan for signing later is in `docs/CODE-SIGNING.md`.
 - The three ZIP packages are now packed **after** signing (they used to be packed right after publish); file names and `SHA256SUMS.txt` keep their old shape.
 
 ## 1.0.0 — 2026-10-03

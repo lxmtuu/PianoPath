@@ -71,10 +71,9 @@ Salamander Grand Piano V3 không nằm trong gói. Khi muốn có tiếng đàn,
 tin ghi công CC BY 3.0 được lưu cạnh bộ mẫu trong thư mục cài piano của người dùng.
 
 - **Kiểm tệp tải về**: mỗi release kèm `SHA256SUMS.txt`; đối chiếu bằng
-  `Get-FileHash .\Keyflow-2.0.0-win-x64.zip -Algorithm SHA256`. Các gói **đã được ký mã**; bảng hash vẫn là
+  `Get-FileHash .\Keyflow-2.0.0-win-x64.zip -Algorithm SHA256`. Các gói **chưa được ký mã số**; bảng hash vẫn là
   cách nhanh để chắc tệp nhận được đúng là tệp quy trình build ra.
-- **SmartScreen**: các gói đã được **ký Authenticode qua SignPath** ngay trong lượt phát hành, nên Windows
-  không hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu.
+- **SmartScreen**: các gói **chưa được ký Authenticode**, nên Windows có thể hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu; bấm **More info → Run anyway**.
 - **Giữ giấy phép**: `LICENSE.txt` (MIT) phải đi cùng bản sao. Thông báo CC BY 3.0 của Salamander nằm
   trong thư mục dữ liệu piano sau khi người dùng tải bộ mẫu.
 - **Nhật ký thay đổi**: [CHANGELOG.md](CHANGELOG.md) (bản tiếng Anh: [CHANGELOG.en.md](CHANGELOG.en.md))
