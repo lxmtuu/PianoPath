@@ -289,7 +289,7 @@ internal sealed partial class GpuArLayer
                 halfX = size * (.7 + fade * .5);
                 halfY = halfX * stretch;
                 color *= 1.2f;
-                alpha *= Math.Pow(fade, .8);
+                alpha *= (float)Math.Pow(fade, .8);
                 break;
             }
             case ParticleShard:

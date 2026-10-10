@@ -133,7 +133,7 @@ internal sealed partial class GpuArLayer
         // S5 maps the simulation's hit/hold/release channels only when a full camera pose is available. Even if
         // song-note perspective is switched off, live effects stay attached to the calibrated piano in 3D.
         if (ar.Calibration.CameraPose is { } pose && ar.Quality != ArQualityTier.Lite)
-            BuildStageEffects(ar, view, simulation, quads, opacity, look, layout, pose);
+            BuildStageEffects(ar, view, simulation, keyColors, quads, opacity, look, layout, pose);
 
         var live = simulation.LivePresses;
         if (!ar.ShowLiveTrails || live.Count == 0) return;
