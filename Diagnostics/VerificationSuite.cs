@@ -272,6 +272,8 @@ internal static partial class VerificationSuite
             $"A verification run must keep its fixtures out of the user's settings folder (using {PianoVisualSettingsStore.SettingsDirectory}).");
         var defaults = new PianoVisualSettings();
         Assert(!defaults.BackgroundGradient && !defaults.BackgroundGuide && !defaults.ShowStars && defaults.BackgroundImagePath == "", "A fresh visual profile should open on a black stage with no image or decorative background layers.");
+        Assert(defaults.PianoSoundEnabled && PianoVisualSettings.FromJson("{}").PianoSoundEnabled,
+            "Piano sound should stay enabled on first launch and when loading an older settings file without this property.");
         var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
         Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 2 && migrated.BackgroundImagePath == "C:\\piano.png" && migrated.BackgroundMode == "Image",
             "Legacy settings should switch to the black stage while preserving an optional selected image path and enabling image mode for it.");
@@ -281,6 +283,12 @@ internal static partial class VerificationSuite
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
+        var mutedSound = PianoVisualSettings.FromJson(new PianoVisualSettings { PianoSoundEnabled = false }.ToJson());
+        var localSound = new PianoVisualSettings { PianoSoundEnabled = false };
+        localSound.CopyFrom(new PianoVisualSettings { PianoSoundEnabled = true });
+        var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false }), out var sharedLook, out _);
+        Assert(!mutedSound.PianoSoundEnabled && !localSound.PianoSoundEnabled && sharedSound && sharedLook.PianoSoundEnabled,
+            "The mute preference should persist locally, stay machine-local when applying a look, and never travel in a shared preset.");
         var legacyStyleIds = new[] { "Solid", "Neon", "Glass", "Fire" };
         Assert(PianoVisualSettings.NoteStyles.Take(legacyStyleIds.Length).SequenceEqual(legacyStyleIds)
                 && PianoVisualSettings.NoteStyles.SequenceEqual([.. legacyStyleIds, "Gem", "CrystalOutline"]),
@@ -2121,6 +2129,14 @@ internal static partial class VerificationSuite
         var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400, AudioMasterGain = 8 };
         settings.Clamp();
         Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50 && settings.AudioMasterGain == 2, "The settings clamp should normalize the backend, latency target and output gain.");
+        using (var engine = new PianoAudioEngine())
+        {
+            Assert(engine.PlaybackEnabled, "The piano playback output should default on.");
+            engine.PlaybackEnabled = false;
+            Assert(!engine.PlaybackEnabled, "The piano playback-mute state should turn off.");
+            engine.PlaybackEnabled = true;
+            Assert(engine.PlaybackEnabled, "The piano playback-mute state should turn back on.");
+        }
         _ = AsioDriverRegistry.Names; // most machines have no HKLM\SOFTWARE\ASIO key; reading it must not throw
         Assert(AsioDriverRegistry.ClassIdOf("keyflow-not-a-driver") is null, "A driver name that is not installed should answer null, not throw.");
 
@@ -2142,7 +2158,7 @@ internal static partial class VerificationSuite
         var reverbDelta = 0.0;
         for (var i = 0; i < pcmReverb.Length; i++) reverbDelta = Math.Max(reverbDelta, Math.Abs(pcmReverb[i] - Math.Round((double)floatReverb[i] * short.MaxValue)));
         Assert(reverbDelta <= 1, $"The float and 16-bit reverb paths should agree to the LSB (max delta {reverbDelta}).");
-        Results.Add("PASS audio output: stable backend ids, clamped settings, safe ASIO registry reads, an audible bounded SFZ float path, and float/PCM parity for reverb.");
+        Results.Add("PASS audio output: stable backend ids, clamped settings, a toggleable playback-mute state, safe ASIO registry reads, an audible bounded SFZ float path, and float/PCM parity for reverb.");
     }
 
     private static void VerifyMidiDevicesAndKeyboardMap()
@@ -2582,6 +2598,7 @@ internal static partial class VerificationSuite
             (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
             (nameof(PianoVisualSettings.AudioLatencyMs), "AudioLatencyCombo"),
             (nameof(PianoVisualSettings.AudioMasterGain), "AudioGainSlider"),
+            (nameof(PianoVisualSettings.PianoSoundEnabled), "PianoSoundToggle"),
             (nameof(PianoVisualSettings.ReverbStyle), "ReverbStyleCombo"),
             (nameof(PianoVisualSettings.ReverbImpulseFile), "ReverbImpulseButton"),
             (nameof(PianoVisualSettings.PracticeAutoTempo), "AutoPracticeTempoCheck"),
@@ -5982,7 +5999,8 @@ internal static partial class VerificationSuite
         var quickControlsHost = Element<StackPanel>(window, "QuickAdjustControlsHost");
         var quickLayerHost = Element<WrapPanel>(window, "QuickAdjustLayerHost");
         var quickHandColorsCard = Element<FrameworkElement>(window, "QuickAdjustHandColorsCard");
-        // No null test for the eight elements above: Element<T> has already failed the run, naming the
+        var audioSoundToggle = Element<CheckBox>(window, "PianoSoundToggle");
+        // No null test for the nine elements above: Element<T> has already failed the run, naming the
         // missing element, if one was not there — and re-testing them here is what used to make the
         // compiler treat every later `menu.Visibility` in this method as a possible null dereference.
         Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
@@ -6000,10 +6018,32 @@ internal static partial class VerificationSuite
                 && quickControlsHost.Children.Count > 0 && quickLayerHost.Children.OfType<CheckBox>().Count() == 6
                 && KeyboardNavigation.GetTabNavigation((FrameworkElement)window.FindName("QuickAdjustCard")!) == KeyboardNavigationMode.Cycle,
             "The startup menu should open a focused quick-adjust surface with common style and stage-layer controls.");
+        var layerSwitches = quickLayerHost.Children.OfType<CheckBox>().ToArray();
+        var quickSoundToggle = (CheckBox)Field(window, "_quickPianoSoundToggle");
+        quickAdjust.UpdateLayout();
+        Assert(layerSwitches.All(toggle => toggle.HorizontalAlignment == HorizontalAlignment.Left && toggle.MinWidth < 150 && toggle.ActualWidth < 150)
+                && quickSoundToggle.HorizontalAlignment == HorizontalAlignment.Left
+                && quickSoundToggle.Parent is WrapPanel && quickSoundToggle.ActualWidth < 150,
+            "Quick Adjust switches should use compact, intrinsic sizing so each switch stays close to its caption rather than sitting at the far edge of a 150-pixel item.");
+
         var originalQuickStyle = visualSettings.NoteStyle;
         var originalQuickMode = visualSettings.ColorMode;
         var originalQuickBackground = visualSettings.ShowBackground;
         var originalQuickPresetModified = visualSettings.PresetModified;
+        var originalQuickSound = visualSettings.PianoSoundEnabled;
+        var audioEngine = (PianoAudioEngine)Field(window, "_audio");
+        Assert(audioSoundToggle.IsChecked == originalQuickSound && quickSoundToggle.IsChecked == originalQuickSound
+                && audioEngine.PlaybackEnabled == originalQuickSound,
+            "The Audio page, shared Quick Adjust switch and live audio engine should start synchronized.");
+        quickSoundToggle.IsChecked = !originalQuickSound;
+        Assert(visualSettings.PianoSoundEnabled != originalQuickSound && audioSoundToggle.IsChecked == !originalQuickSound
+                && audioEngine.PlaybackEnabled == !originalQuickSound && visualSettings.PresetModified == originalQuickPresetModified,
+            "Turning piano sound off or on in Quick Adjust should immediately mute/unmute the app output without changing the active look.");
+        audioSoundToggle.IsChecked = originalQuickSound;
+        Assert(visualSettings.PianoSoundEnabled == originalQuickSound && quickSoundToggle.IsChecked == originalQuickSound
+                && audioEngine.PlaybackEnabled == originalQuickSound,
+            "Changing piano sound from Audio should update the Quick Adjust switch and the output state.");
+        ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         var quickStyleChoice = quickChoices[nameof(PianoVisualSettings.NoteStyle)];
         var styleSourceChoice = visualChoices[nameof(PianoVisualSettings.NoteStyle)];
         Assert(quickStyleChoice.Items.Count > 1 && Equals(quickStyleChoice.SelectedValue, styleSourceChoice.SelectedValue),

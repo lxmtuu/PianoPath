@@ -97,6 +97,8 @@ internal sealed class PianoVisualSettings
     public double AudioLatencyMs { get; set; } = 5;
     /// <summary>Master piano output gain, 0.5–2.0; applied before the output limiter and the recording tap.</summary>
     public double AudioMasterGain { get; set; } = 1.25;
+    /// <summary>Whether this app's piano reaches the selected playback device; MIDI output and recorded audio remain independent.</summary>
+    public bool PianoSoundEnabled { get; set; } = true;
     /// <summary>Reverb character: <c>hall</c> (classic algorithmic), <c>concert</c> or <c>soundboard</c>
     /// (built-in convolution responses) or <c>custom</c> (the impulse file below). Unknown values fall
     /// back to <c>hall</c>.</summary>
@@ -645,9 +647,9 @@ internal sealed class PianoVisualSettings
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
             if (property.Name is nameof(CameraSourceLink) or nameof(CameraVideoPath)) continue;
-            // And the audio output: the backend and its buffer belong to this machine's sound hardware,
-            // so applying a community look can never switch the player off their ASIO interface.
-            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
+            // Audio output and the piano sound switch belong to this machine, not to a visual look;
+            // applying a community preset can never change the player's device or mute their instrument.
+            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain) or nameof(PianoSoundEnabled)) continue;
             // The reverb room and its impulse file follow the machine too: the file path would not exist
             // on another computer, and a look should not silently change how the piano sounds.
             if (property.Name is nameof(ReverbStyle) or nameof(ReverbImpulseFile)) continue;
@@ -668,6 +670,7 @@ internal sealed class PianoVisualSettings
         CameraSourceLink = "";
         CameraVideoPath = "";
         ArViewProfileId = "";               // which view the camera stands at is this machine's; Clamp turns the empty id into the default view
+        PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
     }
 
     internal void Clamp()

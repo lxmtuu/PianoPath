@@ -1556,6 +1556,7 @@ public partial class MainWindow
                 if (AutoPracticeMissLabel is not null) AutoPracticeMissLabel.Text = ((int)Math.Round(AutoPracticeMissSlider.Value)).ToString();
             }
             SyncAllPlayDialogControls();
+            SyncPianoSoundControls();
         }
         finally { _loadingVisualSettings = false; }
         RefreshDependentRows(); RebuildTrackList(); UpdateRecordingInfo(); UpdatePresetLabels();

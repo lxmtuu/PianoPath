@@ -47,6 +47,7 @@
     "AudioOutputMode": "auto",
     "AudioLatencyMs": 5.0,
     "AudioMasterGain": 1.25,
+    "PianoSoundEnabled": true,
     "ReverbStyle": "hall",
     "ReverbImpulseFile": "",
     "ShellTheme": "velvet-gold",

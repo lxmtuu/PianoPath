@@ -34,6 +34,7 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 - Thay toàn bộ nhạc cụ SF2 đóng gói và engine SF2 bằng **Salamander Grand Piano V3 duy nhất**, phát qua SFZ; bỏ chức năng nhập SF2 và chọn nhạc cụ ngoài.
 - Salamander không còn nằm trong Git, ZIP hoặc installer: người dùng chủ động tải một lần khoảng **748 MB** từ trang Audio. Downloader ghim commit, xác minh Git blob SHA-1 từng mẫu FLAC, hỗ trợ huỷ/tiếp tục và ghi mapping/attribution sau khi xác minh xong.
 - Menu khởi động tách **Piano & Audio Setup** và **MIDI Devices** để vào đúng trang cài đặt nhanh hơn; trang Audio có trạng thái rõ ràng, tiến độ tải, nạp/kiểm tra lại đàn và lựa chọn đầu ra.
+- Thêm công tắc **Tiếng đàn** ở Quick Adjust và Audio. Tắt tiếng chỉ ngắt đầu ra âm thanh của ứng dụng; hình ảnh, MIDI ra và âm thanh ghi vào bản thu vẫn giữ nguyên. Tuỳ chọn được lưu trên máy và preset không ghi đè.
 - Cập nhật README, hướng dẫn phát hành, kiểm tra nguồn và trang phát hành công khai theo mô hình tải đàn riêng; bỏ hướng dẫn Git LFS, thư mục `Assets/` và kích thước SF2 cũ.
 
 ### Giao diện & hộp thoại
@@ -42,6 +43,7 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 - Nút **SETTINGS** trên header thành nút bánh răng icon; nhãn “Change” của chip LOOK thành icon gọn; năm liên kết của menu khởi động (đàn & âm thanh, MIDI, phím tắt, giới thiệu, thoát) có icon tương ứng.
 - Bỏ ký tự Unicode trong nhãn nút (⬇, ⟳, ●, ↺, ×) — chúng không theo màu theme và render không nhất quán; tải đàn, làm mới thiết bị, ghi hình, xoá vòng lặp và reset từng slider dùng bộ icon riêng của app.
 - Nhãn nút phụ thống nhất về chữ thường có hoa đầu; mọi nút chỉ có icon giữ tooltip — đồng thời là tên đọc cho trình đọc màn hình.
+- Công tắc lớp trong Quick Adjust co theo độ dài nhãn thay vì giữ mỗi mục rộng 150 px, đưa nút gạt sát chữ hơn.
 
 ## 1.0.0 — 2026-10-03
 

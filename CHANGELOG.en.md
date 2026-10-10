@@ -35,6 +35,7 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - Replaced the bundled SF2 piano and SF2 engine with **Salamander Grand Piano V3 as the sole instrument**, rendered through SFZ; removed SF2 import and external instrument selection.
 - Salamander is no longer stored in Git or bundled in ZIPs/installers. Users explicitly download the one-time library (about **748 MB**) from Audio settings. The downloader pins a commit, verifies every FLAC against its Git blob SHA-1, supports cancel/resume, and writes the SFZ mapping and attribution only after all samples verify.
 - Split the startup menu into **Piano & Audio Setup** and **MIDI Devices** shortcuts; Audio settings now show clearer status, download progress, piano load/repair actions and output selection.
+- Added a **Piano sound** switch to Quick Adjust and Audio settings. Muting stops only this app's audio output; visuals, outgoing MIDI and audio recorded into a take remain unchanged. The preference is saved locally and presets do not override it.
 - Updated the READMEs, release instructions, source checks and generated public release page for the separate piano download; removed obsolete Git LFS, `Assets/` and old SF2-size guidance.
 
 ### Interface & dialogs
@@ -43,6 +44,7 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 - The header’s **SETTINGS** label becomes a gear icon button and the LOOK chip’s “Change” label becomes a compact icon; the startup menu’s five links (Piano & Audio, MIDI, shortcuts, about, exit) gain matching icons.
 - Unicode glyphs (⬇, ⟳, ●, ↺, ×) are gone from button labels — they never followed the theme and rendered inconsistently; the piano download, device refresh, recording, loop clear and per-slider resets now use the app’s own icon set.
 - Secondary action labels are unified to sentence case; every icon-only button keeps its tooltip, which is also the accessible name screen readers announce.
+- Quick Adjust stage switches now size to their captions instead of reserving 150-pixel items, keeping each switch close to its label.
 
 ## 1.0.0 — 2026-10-03
 

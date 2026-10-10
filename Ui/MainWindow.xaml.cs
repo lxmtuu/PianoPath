@@ -84,6 +84,8 @@ public partial class MainWindow : Window
         // immediately rebuilding.
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
         _audio.MasterGain = _visualSettings.AudioMasterGain;
+        _audio.PlaybackEnabled = _visualSettings.PianoSoundEnabled;
+        SyncPianoSoundControls();
         _audio.OutputChanged += AudioEngine_OutputChanged;
         SourceInitialized += (_, _) => { _audio.SetAsioSystemHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle); HookCameraChanges(); };
         // Same for the reverb room, which also shapes the very first pipeline.

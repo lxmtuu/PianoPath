@@ -8,7 +8,7 @@ không phát hiện cài đặt nào "chết" (có trong UI nhưng không có co
 cột "Logic tiêu thụ" chỉ đúng file:line nơi giá trị thực sự ảnh hưởng hành vi.
 
 Phương pháp:
-1. Đối chiếu toàn bộ **223 thuộc tính public** hiện có của `PianoVisualSettings` với các hàng được đăng ký lúc chạy, control tĩnh trong XAML, control của workflow hành động và các trường metadata/migration được loại trừ có lý do. Dùng reflection guard trong `VerifySettingsDock` để property mới không thể bị bỏ quên.
+1. Đối chiếu toàn bộ **224 thuộc tính public** hiện có của `PianoVisualSettings` với các hàng được đăng ký lúc chạy, control tĩnh trong XAML, control của workflow hành động và các trường metadata/migration được loại trừ có lý do. Dùng reflection guard trong `VerifySettingsDock` để property mới không thể bị bỏ quên.
 2. Kiểm tra từng control tĩnh trong XAML (tab Audio/MIDI/Practice/Recording, header, footer,
    Play dialog, main menu) xem handler của nó có thực sự thay đổi trạng thái/logic không; grep consumer trong `PianoStage.cs`, `Shading/*`, `MainWindow*.cs`, `PianoAudioEngine.cs`, `SfzSynthesizer.cs`, `SalamanderPiano.cs`, `AviVideoRecorder.cs`…
 3. Chạy `python tools/check_sources.py` (cân bằng cú pháp C#, XML XAML hợp lệ, mọi
@@ -130,6 +130,7 @@ Phương pháp:
 | Bảng điều khiển ASIO | `AsioPanelButton` → `AsioPanel_Click` → `PianoAudioEngine.ShowAsioControlPanel`; chỉ bật khi pipeline thực sự đang phát qua ASIO và panel chạy trên luồng sở hữu driver |
 | Độ trễ mục tiêu | `AudioLatencyCombo_SelectionChanged` → `AudioLatencySteps` (20/10/5/3 ms) → `ConfigureOutput`; backend được mở lại bất đồng bộ trên luồng điều khiển, không giữ WPF input thread |
 | Master piano level | `AudioGainSlider_ValueChanged` → `AudioMasterGain` + `PianoAudioEngine.MasterGain`; gain áp sau synth với soft limiter để nâng mức đàn mà giữ an toàn peak |
+| Tắt/mở tiếng đàn | `PianoSoundEnabled` được lưu trên máy; `PianoSoundToggle` và Quick Adjust cập nhật `PianoAudioEngine.PlaybackEnabled`. Mute chỉ xóa block đưa ra thiết bị sau recording tap, nên âm thanh thu vẫn còn; MIDI ra và hình ảnh không đổi. `CopyFrom` và `ClearMachineLocal` giữ tuỳ chọn khỏi preset/chia sẻ. Test: `VerifyAudioOutput`, `VerifyEmbersShell` |
 | Trạng thái đầu ra | `UpdateAudioOutputHint` báo đầu ra/buffer đang hoạt động, fallback nếu lựa chọn không mở được hoặc nguyên nhân im lặng; không hiện tên ASIO như đường ra nếu ASIO không thực sự active |
 | MIDI input / output / Refresh | `MainWindow.xaml.cs` + `MidiDeviceService.cs` (WinMM in/out, Note On/Off, pedal CC vào app) |
 | Track solo + mute/đổi màu | `MainWindow.xaml.cs` (`ApplyTrackFilter`) + `MainWindow.Settings.cs` (`RebuildTrackList`/`TrackMute_Changed`) |
@@ -261,14 +262,14 @@ Play dialog + menu/footer đều có handler hoặc consumer. Tĩnh đã kiểm;
 
 ### Độ phủ cài đặt
 
-Đối chiếu hiện tại có **223 thuộc tính public** trong `PianoVisualSettings`: **209** thuộc tính có hàng cài đặt động; **7** giá trị nối với control tĩnh trong XAML Audio/Practice; **3** giá trị được điều khiển qua workflow nút — `Language` qua các chip ngôn ngữ, `BackgroundImagePath` qua nút chọn/xóa ảnh, `CameraVideoPath` qua nút chọn video/dùng camera; **4** giá trị không phải hàng điều khiển — `BackgroundAppearanceVersion` là migration, `PresetName`/`PresetModified` là metadata luồng preset, `RenderBackend` là id máy giữ ở GPU với WPF fallback tự động. Không có thuộc tính model người dùng nào bị bỏ quên khỏi UI. Ba workflow properties không gắn vào `SettingRow.Property` để lệnh đặt lại trang không vô tình reset ngôn ngữ hoặc đường dẫn media về giá trị preset.
+Đối chiếu hiện tại có **224 thuộc tính public** trong `PianoVisualSettings`: **209** thuộc tính có hàng cài đặt động; **8** giá trị nối với control tĩnh trong XAML Audio/Practice; **3** giá trị được điều khiển qua workflow nút — `Language` qua các chip ngôn ngữ, `BackgroundImagePath` qua nút chọn/xóa ảnh, `CameraVideoPath` qua nút chọn video/dùng camera; **4** giá trị không phải hàng điều khiển — `BackgroundAppearanceVersion` là migration, `PresetName`/`PresetModified` là metadata luồng preset, `RenderBackend` là id máy giữ ở GPU với WPF fallback tự động. Không có thuộc tính model người dùng nào bị bỏ quên khỏi UI. Ba workflow properties không gắn vào `SettingRow.Property` để lệnh đặt lại trang không vô tình reset ngôn ngữ hoặc đường dẫn media về giá trị preset.
 
-`VerifySettingsDock` đối chiếu bằng reflection toàn bộ property model với hàng động, 7 control XAML, 3 hàng workflow có nút và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS; guard mới cũng PASS trong Windows build/verification CI [37776545276](https://github.com/lxmtuu/PianoPath/actions/runs/37776545276).
+`VerifySettingsDock` đối chiếu bằng reflection toàn bộ property model với hàng động, 8 control XAML, 3 hàng workflow có nút và bốn ngoại lệ có giải thích; thêm property public mà không phân loại/đưa ra control sẽ làm verification thất bại. `tools/check_sources.py` PASS; guard mới cũng PASS trong Windows build/verification CI [37776545276](https://github.com/lxmtuu/PianoPath/actions/runs/37776545276).
 
 Hai giới hạn được giữ rõ, không biến thành tuyên bố lỗi renderer:
 
 - Ô tìm kiếm chỉ lọc các hàng chi tiết đã đăng ký; **Audio, MIDI, Practice và History không được lọc** vì các control đó dựng tĩnh trong XAML. Tooltip đã được sửa để nói đúng phạm vi; chức năng tìm kiếm tĩnh chưa được mở rộng.
-- `ReverbToggle` và `ResonanceToggle` là công tắc live trong phiên, mặc định bật, nhưng trạng thái không nằm trong `PianoVisualSettings` nên không được lưu cùng profile. Chưa thêm property JSON: cần quyết định riêng về việc lưu trạng thái audio và bảo đảm preset không được thay đổi nó.
+- `ReverbToggle` và `ResonanceToggle` vẫn là công tắc live trong phiên. Riêng tiếng đàn có `PianoSoundEnabled`, mặc định bật, được lưu trên máy và được giữ nguyên khi áp dụng preset/chia sẻ; trạng thái này không đánh dấu look đã sửa. Tắt tiếng chỉ mute đầu ra thiết bị sau điểm lấy mẫu ghi âm, không chặn MIDI ra.
 
 `falling.color-gradient` vẫn là một **hành vi chưa triển khai** (gradient dọc thân note), không phải một property hiện có bị thiếu control. Giữ `Planned`; không gộp nhầm với Gradient theo pitch.
 
