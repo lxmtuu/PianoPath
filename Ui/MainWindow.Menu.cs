@@ -10,7 +10,7 @@ namespace PianoPath;
 /// Concert shell: the startup menu (Play / Design / Quick Adjust / Settings / About / Exit, with a live
 /// theme picker and stage-look read-out), a shared contextual quick-adjust surface, and the pre-flight
 /// Play dialog with per-hand style cards and quick layer switches. Navigation has explicit return
-/// surfaces, and every quick control writes through the same live settings path as the Design dock.
+/// surfaces; stage controls share the Design dock's live path, while piano playback is synchronized with Audio settings.
 /// </summary>
 public partial class MainWindow
 {
@@ -23,6 +23,7 @@ public partial class MainWindow
     private readonly Dictionary<string, ComboBox> _quickAdjustChoices = [];
     private readonly Dictionary<string, Border> _quickHandColorDots = [];
     private FrameworkElement? _quickHandSplitRow;
+    private CheckBox? _quickPianoSoundToggle;
     private bool _quickAdjustControlsBuilt;
 
     private sealed record HandColorPreset(string Name, string Hex);
@@ -531,6 +532,23 @@ public partial class MainWindow
         if (_quickAdjustControlsBuilt) return;
         _quickAdjustControlsBuilt = true;
 
+        var audioCard = QuickAdjustGroup("Audio", out var audioBody);
+        _quickPianoSoundToggle = new CheckBox
+        {
+            IsChecked = _visualSettings.PianoSoundEnabled,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 4, 0, 4),
+        };
+        Loc.Set(_quickPianoSoundToggle, "Piano sound", ContentControl.ContentProperty);
+        Loc.Set(_quickPianoSoundToggle, "Mute the piano heard through this app. Visual keys, MIDI output and audio recorded to a take are unaffected.", FrameworkElement.ToolTipProperty);
+        Loc.Set(_quickPianoSoundToggle, "Piano sound", AutomationProperties.NameProperty);
+        _quickPianoSoundToggle.Checked += PianoSoundToggle_Changed;
+        _quickPianoSoundToggle.Unchecked += PianoSoundToggle_Changed;
+        var audioRow = new WrapPanel();
+        audioRow.Children.Add(_quickPianoSoundToggle);
+        audioBody.Children.Add(audioRow);
+        QuickAdjustControlsHost.Children.Add(audioCard);
+
         var notesCard = QuickAdjustGroup("Notes", out var notesBody);
         foreach (var spec in new[]
         {
@@ -561,13 +579,35 @@ public partial class MainWindow
         })
         {
             var toggle = BuildInlineToggle(spec);
-            toggle.MinWidth = 150;
             QuickAdjustLayerHost.Children.Add(toggle);
         }
 
         QuickAdjustHandColorsHost.Children.Add(BuildQuickHandColorButton(rightHand: false));
         QuickAdjustHandColorsHost.Children.Add(BuildQuickHandColorButton(rightHand: true));
         SyncQuickAdjustState();
+    }
+
+    /// <summary>Keeps the Audio page and the shared Quick Adjust switch on the same saved playback preference.</summary>
+    private void SyncPianoSoundControls()
+    {
+        var wasLoading = _loadingVisualSettings;
+        _loadingVisualSettings = true;
+        try
+        {
+            if (PianoSoundToggle is not null) PianoSoundToggle.IsChecked = _visualSettings.PianoSoundEnabled;
+            if (_quickPianoSoundToggle is not null) _quickPianoSoundToggle.IsChecked = _visualSettings.PianoSoundEnabled;
+        }
+        finally { _loadingVisualSettings = wasLoading; }
+    }
+
+    private void PianoSoundToggle_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_loadingVisualSettings || sender is not CheckBox check) return;
+        var enabled = check.IsChecked == true;
+        _visualSettings.PianoSoundEnabled = enabled;
+        _audio.PlaybackEnabled = enabled;
+        SyncPianoSoundControls();
+        if (_uiReady) { _settingsSaveTimer.Stop(); _settingsSaveTimer.Start(); }
     }
 
     private Button BuildQuickHandColorButton(bool rightHand)
@@ -844,7 +884,13 @@ public partial class MainWindow
     /// <summary>Inline switches join the shared toggle list, so <see cref="VisualToggle_Changed"/> keeps them and the dock in step.</summary>
     private CheckBox BuildInlineToggle(InlineControl spec)
     {
-        var check = new CheckBox { Tag = spec.Property, IsChecked = (bool)Prop(spec.Property).GetValue(_visualSettings)!, Margin = new Thickness(0, 4, 0, 4) };
+        var check = new CheckBox
+        {
+            Tag = spec.Property,
+            IsChecked = (bool)Prop(spec.Property).GetValue(_visualSettings)!,
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 4, 10, 4),
+        };
         Loc.Set(check, spec.Label, ContentControl.ContentProperty);
         check.Checked += VisualToggle_Changed; check.Unchecked += VisualToggle_Changed;
         _visualToggleList.Add(check);

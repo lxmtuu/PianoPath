@@ -4,42 +4,38 @@ using Xunit;
 namespace PianoPath.Tests;
 
 /// <summary>
-/// AR-S3: the AR look guard (docs/AR-OVERLAY-ROADMAP.md §14.12). A note style with no AR variant — currently
-/// Gem and Crystal Outline — keeps its flat fallback instead of claiming the facet look the flat-quad
-/// projection cannot give it. Pure: what is ported is a fact about the code.
+/// AR-S3: known material IDs are passed through to the shared AR note shader. This is a code-path fact, not
+/// a full parity claim; AR parameter coverage remains Unverified in the typed contract.
 /// </summary>
 public class ArLookGuardTests
 {
     [Fact]
-    public void A_ported_style_is_passed_through_unchanged()
+    public void Every_shipped_material_style_is_passed_through_to_the_shared_shader()
     {
-        Assert.True(ArLookGuard.IsPortedToAr("Neon"));
-        Assert.True(ArLookGuard.IsPortedToAr("Solid"));
-        Assert.Equal("Neon", ArLookGuard.StyleForAr("Neon"));
-        Assert.Equal("Fire", ArLookGuard.StyleForAr("Fire"));
+        Assert.Equal(ArLookGuard.NoteStyles, ArLookGuard.PortedNoteStyles);
+        foreach (var style in ArLookGuard.NoteStyles)
+        {
+            Assert.True(ArLookGuard.IsPortedToAr(style));
+            Assert.Equal(style, ArLookGuard.StyleForAr(style));
+        }
     }
 
     [Fact]
-    public void Gem_and_CrystalOutline_keep_the_flat_neon_fallback()
+    public void Unknown_or_unported_styles_keep_the_neon_fallback()
     {
-        Assert.False(ArLookGuard.IsPortedToAr("Gem"));
-        Assert.False(ArLookGuard.IsPortedToAr("CrystalOutline"));
-        Assert.Equal(ArLookGuard.ArFallbackStyle, ArLookGuard.StyleForAr("Gem"));
-        Assert.Equal(ArLookGuard.ArFallbackStyle, ArLookGuard.StyleForAr("CrystalOutline"));
-        Assert.Equal("Neon", ArLookGuard.StyleForAr(null));
-        Assert.Equal("Neon", ArLookGuard.StyleForAr("Unknown"));
+        Assert.False(ArLookGuard.IsPortedToAr(null));
+        Assert.False(ArLookGuard.IsPortedToAr("FutureMaterial"));
+        Assert.Equal(ArLookGuard.ArFallbackStyle, ArLookGuard.StyleForAr(null));
+        Assert.Equal("Neon", ArLookGuard.StyleForAr("FutureMaterial"));
     }
 
     [Fact]
-    public void Style_index_round_trips_to_the_fallback_for_unported_styles()
+    public void Style_index_preserves_each_material_and_fails_closed_out_of_range()
     {
+        for (var index = 0; index < ArLookGuard.NoteStyles.Length; index++)
+            Assert.Equal(index, ArLookGuard.StyleIndexForAr(index));
         var neonIndex = Array.IndexOf(ArLookGuard.NoteStyles, "Neon");
-        var gemIndex = Array.IndexOf(ArLookGuard.NoteStyles, "Gem");
-        var crystalIndex = Array.IndexOf(ArLookGuard.NoteStyles, "CrystalOutline");
-        Assert.Equal(neonIndex, ArLookGuard.StyleIndexForAr(gemIndex));
-        Assert.Equal(neonIndex, ArLookGuard.StyleIndexForAr(crystalIndex));
-        var solidIndex = Array.IndexOf(ArLookGuard.NoteStyles, "Solid");
-        Assert.Equal(solidIndex, ArLookGuard.StyleIndexForAr(solidIndex));
+        Assert.Equal(neonIndex, ArLookGuard.StyleIndexForAr(-1));
         Assert.Equal(neonIndex, ArLookGuard.StyleIndexForAr(999));
     }
 }

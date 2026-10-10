@@ -65,17 +65,27 @@ public sealed class ArCalibrationSessionTests : IDisposable
     {
         var session = NewSession();
         session.Use(Cam, 1280, 720, Full, Default);
-        Assert.Equal(ArSaveResult.Saved, session.Save(Corners(88), out var problem));
+        var baseline = Corners(88);
+        var transform = new ArPoseTransform(.12, -.08, .04, 4, -3, 2, 1.15);
+        Assert.True(ArCameraPose.TryTransformCorners(Full, baseline, 1280, 720, 88.5, transform, out var finalCorners));
+        var marked = ArCalibration.Create(Full, finalCorners, 1280, 720, out _, 88.5, transform, baseline)!;
+        Assert.Equal(ArSaveResult.Saved, session.Save(marked, out var problem));
         Assert.Equal(CalibrationProblem.None, problem);
         Assert.Equal(ArCalibrationState.Ready, session.State);
-        Assert.Equal(Corners(88), session.Current!.Corners);
+        Assert.Equal(finalCorners, session.Current!.Corners);
+        Assert.Equal(baseline, session.Current.PoseBaseCorners);
+        Assert.Equal(transform, session.Current.Transform);
+        Assert.Equal(88.5, session.Current.CameraFovDegrees);
         Assert.Same(Full, session.Current.Layout);
 
         var next = NewSession();                                                  // a new run of the app
         Assert.Equal(ArCalibrationState.NoSource, next.State);
         next.Use(Cam, 1280, 720, Full, Default);
         Assert.Equal(ArCalibrationState.Ready, next.State);
-        Assert.Equal(Corners(88), next.Current!.Corners);
+        Assert.Equal(finalCorners, next.Current!.Corners);
+        Assert.Equal(baseline, next.Current.PoseBaseCorners);
+        Assert.Equal(transform, next.Current.Transform);
+        Assert.Equal(88.5, next.Current.CameraFovDegrees);
     }
 
     [Fact]

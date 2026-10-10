@@ -1,9 +1,8 @@
 namespace PianoPath;
 
 /// <summary>
-/// The stage geometry the scene→image map is built from (AR-S4, docs/AR-OVERLAY-ROADMAP.md §12): how wide the scene
-/// is, where the hit line is, and how deep the keyboard is drawn. Those three numbers are everything the scene's own
-/// coordinates say about the keyboard, so the map never has to know what shape a key is.
+/// Legacy scene geometry for the retired scene→image AR shader map. It remains useful for projection regression tests,
+/// but the active note path uses the calibrated 3D camera pose and camera-facing quads instead.
 /// </summary>
 /// <param name="Width">Scene DIPs across the whole keyboard. The stage puts a key's centre at
 /// <c>KeyboardLayout.CenterX(pitch) * Width</c>, so x runs 0..Width exactly as <c>u</c> runs 0..1.</param>
@@ -27,19 +26,15 @@ internal readonly record struct ArSceneFrame(double Width, double HitY, double K
 }
 
 /// <summary>
-/// One 3×3 projective map from stage scene coordinates (DIPs, origin top left, y down — the space
-/// <c>GpuSceneLayout</c> lays notes and sprites out in) to output pixels, carrying the homogeneous weight a
-/// perspective interpolation needs.
+/// Legacy 3×3 scene→image helper for tests of the retired stage-space shader branch. It is deliberately not an input
+/// to active AR note construction or visibility decisions.
 /// </summary>
 /// <remarks>
-/// <para>This is the map AR-S4 hands the shader: <c>VsNote</c> and <c>VsSprite</c> put a scene point through it and
-/// use the weight as the clip <c>w</c>, so the stage's own notes, glows and particles land on the camera picture in
-/// perspective instead of needing a second copy of every effect written for the overlay.</para>
-/// <para>It is the calibration's homography with the scene's affine map in front of it and the view's affine map
-/// behind it — three 3×3 matrices, so one 3×3 matrix, worked out here in doubles where it can be tested without a
-/// GPU and compared against <see cref="ArProjection"/>, which the synthetic keyboard picture already pins.</para>
-/// <para>The weight is 1 at the back-left corner of the keyboard, because the calibration's homography is normalised
-/// that way and neither affine map touches it. <see cref="ArProjection.MinW"/> therefore means the same thing here.</para>
+/// <para>It composes the calibration's homography, a scene affine transform and the output view transform. Tests retain
+/// the old mathematical contract against <see cref="ArProjection"/>; current notes use <see cref="Ar3DNoteProjection"/>
+/// and <see cref="ArCameraPose"/>.</para>
+/// <para>The weight is 1 at the back-left corner of the keyboard. This class remains double-precision and independent
+/// of the GPU so the dormant cbuffer layout can still be checked without a device.</para>
 /// </remarks>
 internal readonly struct ArSceneMatrix
 {
@@ -65,10 +60,7 @@ internal readonly struct ArSceneMatrix
     /// <summary>False for the empty map and for one that flattens the scene onto a line or a point.</summary>
     internal bool IsValid => double.IsFinite(Determinant) && Math.Abs(Determinant) > 1e-18;
 
-    /// <summary>
-    /// The homogeneous weight at a scene point: 1 on the back-left corner of the keyboard, falling towards the
-    /// horizon of the map. Zero or negative on and beyond it, where nothing can be drawn.
-    /// </summary>
+    /// <summary>The legacy map's homogeneous weight at a scene point: 1 at the back-left corner and zero at its horizon.</summary>
     internal double WeightAt(double x, double y) => _g * x + _h * y + _i;
 
     /// <summary>Where a scene point lands on the output, with its weight. NaN coordinates on or beyond the horizon.</summary>
@@ -79,12 +71,9 @@ internal readonly struct ArSceneMatrix
         return ((_a * x + _b * y + _c) / w, (_d * x + _e * y + _f) / w, w);
     }
 
-    /// <summary>
-    /// Output pixels per scene DIP at a scene point: the magnification the map has there, so a note far from the
-    /// camera can be measured in the pixels it actually covers. Zero on or beyond the horizon.
-    /// </summary>
-    /// <remarks>For a projective map the Jacobian's determinant is <c>det(M) / w³</c>, so the linear scale is
-    /// <c>√|det(M)| / w^1.5</c> — the number the shader divides a note's scene size by to know its size on screen.</remarks>
+    /// <summary>Legacy-map output pixels per scene DIP at a point; zero at or beyond that map's horizon.</summary>
+    /// <remarks>For this projective map the Jacobian's determinant is <c>det(M) / w³</c>, so the old shader scale is
+    /// <c>√|det(M)| / w^1.5</c>. The active 3D AR-note renderer does not consume this value.</remarks>
     internal double ScaleAt(double x, double y)
     {
         var w = WeightAt(x, y);
@@ -93,7 +82,7 @@ internal readonly struct ArSceneMatrix
     }
 }
 
-/// <summary>Builds the scene→image map, and puts a scene rectangle through the projection the overlay already trusts.</summary>
+/// <summary>Builds and tests the legacy scene→image map retained for regression coverage; the active note renderer does not call it.</summary>
 internal static class ArSceneProjection
 {
     /// <summary>
@@ -122,10 +111,9 @@ internal static class ArSceneProjection
     }
 
     /// <summary>
-    /// The patch a scene rectangle covers on the output, cut at the horizon exactly where
-    /// <see cref="ArProjection.TryProject"/> cuts it: this asks that one, in the keyboard coordinates the scene
-    /// rectangle means, so the two paths cannot drift apart. <paramref name="yBack"/> and <paramref name="yFront"/>
-    /// are the scene y the rectangle is really drawn between, inside the one asked for.
+    /// The patch the legacy scene rectangle would cover, using the same keyboard-plane horizon clip as
+    /// <see cref="ArProjection.TryProject"/>. This helper is for regression tests only; current AR notes use 3D near-plane clipping.
+    /// <paramref name="yBack"/> and <paramref name="yFront"/> are the retained scene y limits.
     /// </summary>
     internal static bool TryProjectRect(ArCalibration? calibration, ArView view, ArSceneFrame frame,
         double x0, double x1, double y0, double y1, out ArPatch patch, out double yBack, out double yFront)
@@ -142,11 +130,8 @@ internal static class ArSceneProjection
     }
 
     /// <summary>
-    /// The part of a scene rectangle the projected note pass draws (AR-S4 remainder): the same cut
-    /// <see cref="ArProjection"/> makes for the flat AR quads at the horizon, found by the same
-    /// <see cref="TryProjectRect"/>, so a note in perspective is cut exactly where the overlay cuts it. Returns false
-    /// when none of the rectangle is on the picture; <paramref name="top"/> and <paramref name="bottom"/> are the
-    /// scene y the rectangle is drawn between afterwards.
+    /// Legacy horizon clipping for a scene rectangle. The active 3D AR-note builder performs its own camera near-plane
+    /// clipping and does not call this helper. Returns false when the old scene rectangle has no visible patch.
     /// </summary>
     internal static bool TruncateToPicture(ArCalibration? calibration, ArView view, ArSceneFrame frame,
         double x0, double x1, ref double top, ref double bottom)

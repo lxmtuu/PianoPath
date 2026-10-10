@@ -63,6 +63,17 @@ public class ArOptionsTests
     }
 
     [Fact]
+    public void Rising_live_midi_notes_are_enabled_by_default_but_only_draw_in_perform_mode()
+    {
+        Assert.True(ArOptions.Default.RisingMidiNotes);
+        Assert.False(ArOptions.Default.ShowsRisingMidiNotes);
+        var perform = new ArOptions(true, ArModes.Perform, 100, 3, 60);
+        Assert.True(perform.ShowsRisingMidiNotes);
+        Assert.False((perform with { RisingMidiNotes = false }).ShowsRisingMidiNotes);
+        Assert.False((perform with { Mode = ArModes.Learn }).ShowsRisingMidiNotes);
+    }
+
+    [Fact]
     public void Percent_becomes_a_fraction()
     {
         var o = new ArOptions(true, ArModes.Learn, 40, 3, 25);
@@ -108,6 +119,37 @@ public class ArOptionsTests
             return into.Count;
         }
         Assert.True(Visible(1) < Visible(2) && Visible(2) < Visible(4));
+    }
+
+    [Fact]
+    public void Perspective_notes_require_the_user_toggle_and_a_non_lite_quality_and_live_bars_start_off()
+    {
+        Assert.False(ArOptions.Default.NotesProjected);
+        Assert.False(ArOptions.Default.LivePressTrails);
+        var standard = ArOptions.Default with { NotesInPerspective = true, Quality = ArQualityTier.Standard };
+        Assert.True(standard.NotesProjected);
+        Assert.False(standard.LivePressTrails);
+        Assert.False((standard with { Quality = ArQualityTier.Lite }).NotesProjected);
+        Assert.True((standard with { LivePressTrails = true }).LivePressTrails);
+    }
+
+    [Fact]
+    public void Note_direction_is_a_separate_3d_setting_normalized_on_every_path()
+    {
+        var options = new ArOptions(true, ArModes.Learn, 100, 3, 60,
+            NoteDirectionTilt: 125, NoteDirectionAzimuth: -70).Normalised();
+        Assert.Equal(125, options.NoteDirection.TiltDegrees);
+        Assert.Equal(-70, options.NoteDirection.AzimuthDegrees);
+        Assert.NotEqual(ArNoteDirection.Default.Vector, options.NoteDirection.Vector);
+
+        var clamped = new ArOptions(true, ArModes.Learn, 100, 3, 60,
+            NoteDirectionTilt: 999, NoteDirectionAzimuth: -999).Normalised();
+        Assert.Equal(ArOptions.NoteDirectionTiltMax, clamped.NoteDirection.TiltDegrees);
+        Assert.Equal(ArOptions.NoteDirectionAzimuthMin, clamped.NoteDirection.AzimuthDegrees);
+        var wild = new ArOptions(true, ArModes.Learn, 100, 3, 60,
+            NoteDirectionTilt: double.NaN, NoteDirectionAzimuth: double.PositiveInfinity).Normalised();
+        Assert.Equal(ArNoteDirection.Default, wild.NoteDirection);
+        Assert.Equal(wild, wild.Normalised());
     }
 
     [Fact]

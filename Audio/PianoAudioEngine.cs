@@ -30,6 +30,7 @@ internal sealed class PianoAudioEngine : IDisposable
     private string? _reverbImpulsePath;
     private WavData? _customImpulse;
     private int _resonanceEnabled = 1;
+    private int _playbackEnabled = 1;
     private AudioOutputChoice _outputChoice = AudioOutputChoice.Auto;
     private double _latencyMilliseconds = 5;
     private IntPtr _asioSystemHandle;
@@ -75,6 +76,13 @@ internal sealed class PianoAudioEngine : IDisposable
     {
         get => Volatile.Read(ref _masterGain);
         set => Volatile.Write(ref _masterGain, (float)Math.Clamp(value, .5, 2));
+    }
+
+    /// <summary>Mute only the app's playback device; the recording tap and outgoing MIDI remain untouched.</summary>
+    public bool PlaybackEnabled
+    {
+        get => Volatile.Read(ref _playbackEnabled) != 0;
+        set => Volatile.Write(ref _playbackEnabled, value ? 1 : 0);
     }
 
     /// <summary>The HWND supplied to ASIO init; set when the WPF window receives SourceInitialized.</summary>
@@ -455,7 +463,7 @@ internal sealed class PianoAudioEngine : IDisposable
         {
             try
             {
-                Sink = AudioSinkFactory.TryCreate(choice, latencyMilliseconds, Render, asioSystemHandle, out var failure);
+                Sink = AudioSinkFactory.TryCreate(choice, latencyMilliseconds, RenderDevice, asioSystemHandle, out var failure);
                 if (Sink is null) OutputError = failure; else FallbackNotice = failure;
             }
             catch (Exception ex)
@@ -467,8 +475,11 @@ internal sealed class PianoAudioEngine : IDisposable
         public void SetReverbEnabled(bool enabled) => _reverb.Enabled = enabled;
         public void SetResonanceEnabled(bool enabled) => _resonance.Enabled = enabled;
 
-        /// <summary>One block for the device and, when attached, the recorder — called on the sink's thread.</summary>
-        private void Render(float[] interleaved, int frames)
+        /// <summary>Device callback: the recorder taps the mixed signal before the optional output mute.</summary>
+        private void RenderDevice(float[] interleaved, int frames) => RenderSamples(interleaved, frames, deviceOutput: true);
+
+        /// <summary>One synth block; tap-only clocks stay audible to the recording even when device playback is muted.</summary>
+        private void RenderSamples(float[] interleaved, int frames, bool deviceOutput)
         {
             if (!ReferenceEquals(Volatile.Read(ref _owner._pipeline), this))
             {
@@ -483,10 +494,17 @@ internal sealed class PianoAudioEngine : IDisposable
             var gain = Volatile.Read(ref _owner._masterGain);
             for (var i = 0; i < frames * 2; i++) interleaved[i] = LimitOutput(interleaved[i] * gain);
 
-            if (!_owner._tapDispatcher.HasTap || frames * 2 > _tapPcm.Length) return;
-            for (var i = 0; i < frames * 2; i++)
-                _tapPcm[i] = (short)Math.Clamp((int)Math.Round(interleaved[i] * short.MaxValue), short.MinValue, short.MaxValue);
-            _owner._tapDispatcher.Enqueue(_tapPcm, frames * 2);
+            // Capture before muting the device, so turning off the speakers never silently removes
+            // the piano from an active recording. A machine without an output device still records normally.
+            if (_owner._tapDispatcher.HasTap && frames * 2 <= _tapPcm.Length)
+            {
+                for (var i = 0; i < frames * 2; i++)
+                    _tapPcm[i] = (short)Math.Clamp((int)Math.Round(interleaved[i] * short.MaxValue), short.MinValue, short.MaxValue);
+                _owner._tapDispatcher.Enqueue(_tapPcm, frames * 2);
+            }
+
+            if (deviceOutput && !_owner.PlaybackEnabled)
+                Array.Clear(interleaved, 0, frames * 2);
         }
 
         /// <summary>Leaves ordinary samples linear; only the top few percent are smoothly limited.</summary>
@@ -503,7 +521,7 @@ internal sealed class PianoAudioEngine : IDisposable
         internal bool RenderTapBlock()
         {
             if (!_owner.HasTap || !ReferenceEquals(Volatile.Read(ref _owner._pipeline), this)) return false;
-            Render(_tapSamples, TapBlockFrames);
+            RenderSamples(_tapSamples, TapBlockFrames, deviceOutput: false);
             return true;
         }
 

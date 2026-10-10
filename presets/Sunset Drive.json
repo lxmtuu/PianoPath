@@ -47,6 +47,7 @@
     "AudioOutputMode": "auto",
     "AudioLatencyMs": 5.0,
     "AudioMasterGain": 1.25,
+    "PianoSoundEnabled": true,
     "ReverbStyle": "hall",
     "ReverbImpulseFile": "",
     "ShellTheme": "velvet-gold",
@@ -243,7 +244,11 @@
     "ArNoteFadeSoft": 100.0,
     "ArNoteFadeHard": 100.0,
     "ArNotesInPerspective": false,
+    "ArLivePressTrails": false,
+    "ArRisingMidiNotes": true,
     "ArNoteMinScale": 0.0,
+    "ArNoteDirectionTilt": 0.0,
+    "ArNoteDirectionAzimuth": 0.0,
     "ArViewProfileId": "default"
   }
 }

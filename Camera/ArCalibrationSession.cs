@@ -113,17 +113,33 @@ internal sealed class ArCalibrationSession
         }
     }
 
-    /// <summary>Takes four corners clicked on the picture as the calibration for what is open — the view included — and saves them.</summary>
-    internal ArSaveResult Save(IReadOnlyList<(double X, double Y)> corners, out CalibrationProblem problem)
+    /// <summary>Takes four corners clicked on the picture as the calibration for what is open — the view included — with a default FOV and identity transform.</summary>
+    internal ArSaveResult Save(IReadOnlyList<(double X, double Y)> corners, out CalibrationProblem problem) =>
+        Save(corners, ArCameraPose.DefaultFovDegrees, ArPoseTransform.Identity, corners, out problem);
+
+    /// <summary>Takes four corners and the camera FOV chosen in the calibration window, with an identity transform.</summary>
+    internal ArSaveResult Save(IReadOnlyList<(double X, double Y)> corners, double cameraFovDegrees, out CalibrationProblem problem) =>
+        Save(corners, cameraFovDegrees, ArPoseTransform.Identity, corners, out problem);
+
+    /// <summary>Saves the complete calibration, including its full object transform, original baseline and FOV.</summary>
+    internal ArSaveResult Save(ArCalibration calibration, out CalibrationProblem problem) =>
+        Save(calibration.Corners, calibration.CameraFovDegrees, calibration.Transform, calibration.PoseBaseCorners, out problem);
+
+    private ArSaveResult Save(IReadOnlyList<(double X, double Y)> corners, double cameraFovDegrees, ArPoseTransform transform,
+        IReadOnlyList<(double X, double Y)> poseBaseCorners, out CalibrationProblem problem)
     {
         lock (_gate)
         {
             problem = CalibrationProblem.None;
             var old = _snapshot;
             if (old.State == ArCalibrationState.NoSource || _layout is null) return ArSaveResult.NoSource;
-            var calibration = ArCalibration.Create(_layout, corners, old.ImageWidth, old.ImageHeight, out problem);
+            var fov = ArCameraPose.NormalizeFov(cameraFovDegrees);
+            var calibration = ArCalibration.Create(_layout, corners, old.ImageWidth, old.ImageHeight, out problem,
+                fov, transform, poseBaseCorners);
             if (calibration is null) return ArSaveResult.BadCorners;
-            var written = _store.Set(old.Source, old.Profile.Id, old.ImageWidth, old.ImageHeight, old.KeyCount, corners);
+            var written = _store.Set(old.Source, old.Profile.Id, old.ImageWidth, old.ImageHeight, old.KeyCount,
+                corners, fov, transform.PitchDegrees, transform.YawDegrees, transform.RollDegrees, poseBaseCorners,
+                transform.PositionX, transform.PositionY, transform.PositionZ, transform.UniformScale);
             _snapshot = new ArCalibrationSnapshot(ArCalibrationState.Ready, calibration, old.Profile, old.Source, old.ImageWidth, old.ImageHeight, old.KeyCount, old.Version + 1);
             return written ? ArSaveResult.Saved : ArSaveResult.NotWritten;
         }
@@ -144,8 +160,9 @@ internal sealed class ArCalibrationSession
 
     private void Publish(string source, int width, int height, KeyboardLayout layout, ArCalibrationProfile profile)
     {
-        var corners = _store.Get(source, profile.Id, width, height, layout.KeyCount);
-        var calibration = corners is null ? null : ArCalibration.Create(layout, corners, width, height, out _);
+        var saved = _store.GetCalibration(source, profile.Id, width, height, layout.KeyCount);
+        var calibration = saved is null ? null : ArCalibration.Create(layout, saved.Corners, width, height, out _,
+            saved.CameraFovDegrees, saved.Transform, saved.PoseBaseCorners);
         var state = calibration is not null ? ArCalibrationState.Ready
             : _store.HasOtherSize(source, profile.Id, width, height, layout.KeyCount) ? ArCalibrationState.Outdated
             : ArCalibrationState.NotCalibrated;

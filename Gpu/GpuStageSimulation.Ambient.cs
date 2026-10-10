@@ -26,16 +26,18 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>Everything drawn after the background and before the notes. Call after <see cref="BuildNotes"/> (it reads the note trails).</summary>
-    internal void BuildAmbient(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> list, float ambientDensity = 1f)
+    internal void BuildAmbient(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> list, float ambientDensity = 1f, bool cameraOverlayActive = false)
     {
         list.Clear();
         var width = layout.Width;
         var height = layout.HitY;
         if (width < 1 || height < 1) return;
+        var sceneOverlayOverCamera = look.OverCamera || cameraOverlayActive;
         var ambientStart = list.Count;
         if (!look.Chroma)
         {
-            if (look.BackgroundGuide) AddLanes(list, layout);
+            // Guide lanes and note trails belong to the flat stage scene, unlike the atmospheric screen-space layers below.
+            if (look.BackgroundGuide && !sceneOverlayOverCamera) AddLanes(list, layout);
             // Guide lanes stay intact; only the peripheral atmosphere below is eligible for quality reduction.
             ambientStart = list.Count;
             if (look.ShowPetals && look.PetalAmount > 0) AddPetals(list, look, width, height);
@@ -48,8 +50,10 @@ internal sealed partial class GpuStageSimulation
         var ambientCount = list.Count - ambientStart;
         if (ambientCount > 0 && ambientDensity < 1f)
             list.RetainFraction(ambientStart, ambientCount, ambientDensity);
-        // Note trails remain outside the thinned ambient range and keep their normal instance count.
-        foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail);
+        // Unlike petals and stars, a note trail is aligned to scene-space note coordinates. Until that effect has its own
+        // scene-to-image projection, drawing it in this flat pass over a camera would put the glow in the wrong place.
+        if (!sceneOverlayOverCamera)
+            foreach (var trail in _noteTrails) AddNoteTrail(list, look, trail);
     }
 
     private static void AddLanes(GpuInstanceList<GpuSpriteInstance> list, GpuSceneLayout layout)

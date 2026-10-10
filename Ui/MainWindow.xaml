@@ -182,6 +182,9 @@
                                     </WrapPanel>
                                     <TextBlock Text="OUTPUT &amp; LATENCY" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Text="Auto uses the Windows default. Choose any active Windows output (including Voicemeeter VAIO/AUX/VAIO3) or an ASIO driver. The latency target requests the smallest supported buffer; the live status shows what the driver granted." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
+                                    <WrapPanel Margin="0,2,0,8">
+                                        <CheckBox x:Name="PianoSoundToggle" Content="Piano sound" AutomationProperties.Name="Piano sound" ToolTip="Mute the piano heard through this app. Visual keys, MIDI output and audio recorded to a take are unaffected." local:Loc.Localize="True" Checked="PianoSoundToggle_Changed" Unchecked="PianoSoundToggle_Changed" HorizontalAlignment="Left"/>
+                                    </WrapPanel>
                                     <TextBlock Text="Audio output" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,2,0,4"/>
                                     <ComboBox x:Name="AudioOutputCombo" AutomationProperties.Name="Audio output" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="AudioOutputCombo_SelectionChanged"/>
                                     <TextBlock Text="Target latency" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>

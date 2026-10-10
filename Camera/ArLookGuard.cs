@@ -1,41 +1,42 @@
 namespace PianoPath;
 
 /// <summary>
-/// The guard between a look and the AR overlay (AR-S3, the KeySight rule that a style the AR cannot draw
-/// is left out rather than drawn wrong — roadmap §14.12). The overlay projects flat quads: it has no PBR,
-/// no facets, no refraction, so a note style that needs them keeps its flat fallback instead of claiming
-/// a shape the projection cannot give it. Pure: which styles are ported is a fact about the code, and the
-/// guard says it without a GPU or a camera.
+/// Keeps the AR note-style lookup fail-closed for unknown/future settings. All six shipped style IDs are
+/// passed to the shared GPU note-material shader, which shades camera-facing AR patches. This records a
+/// shader route, not full material/parameter parity: the typed AR material capability stays Unverified
+/// until its own style/value matrix is covered (see docs/AR-OVERLAY-ROADMAP.md).
 /// </summary>
 internal static class ArLookGuard
 {
-    /// <summary>The note styles the app ships (mirrors <c>PianoVisualSettings.NoteStyles</c>, kept here so this file needs no WPF-leaning types).</summary>
+    /// <summary>The note styles shipped by <c>PianoVisualSettings</c>, in their stable GPU-index order.</summary>
     internal static readonly string[] NoteStyles = new[] { "Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline" };
 
-    /// <summary>The note styles with no AR variant: the overlay draws them flat.</summary>
-    internal static readonly string[] UnportedNoteStyles = new[] { "Gem", "CrystalOutline" };
+    /// <summary>Style IDs with an implemented branch in the shared shader used by the AR quad pass.</summary>
+    internal static readonly string[] PortedNoteStyles = new[] { "Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline" };
 
-    /// <summary>The style the overlay draws a note with when the look's own style has no AR variant.</summary>
+    /// <summary>The safe appearance used for unknown or not-yet-ported style IDs.</summary>
     internal const string ArFallbackStyle = "Neon";
 
-    /// <summary>
-    /// Whether a note style has an AR variant to honour. A style the app does not know has none either: the
-    /// overlay draws the flat fallback for anything outside <see cref="NoteStyles"/>, so a style added to the
-    /// settings side without an AR variant of its own is left out instead of being handed to a pass that has
-    /// never heard of it.
-    /// </summary>
-    internal static bool IsPortedToAr(string? style) => style is not null && NoteStyles.Contains(style) && !UnportedNoteStyles.Contains(style);
+    /// <summary>Whether a known style ID has a branch in the shared note-material shader used by AR quads.</summary>
+    internal static bool IsPortedToAr(string? style) => style is not null
+        && NoteStyles.Contains(style)
+        && PortedNoteStyles.Contains(style);
 
-    /// <summary>The style to draw in AR for a look's style: its own when ported, the flat fallback otherwise.</summary>
+    /// <summary>The AR style name: a known shader branch unchanged, otherwise the readable fallback.</summary>
     internal static string StyleForAr(string? style) => IsPortedToAr(style) ? style! : ArFallbackStyle;
 
-    /// <summary>The style name for the index the GPU look holds (mirrors the lookup on the settings side).</summary>
+    /// <summary>The style name for a valid GPU style index; clamps only when reading an existing look.</summary>
     internal static string StyleName(int noteStyleIndex)
     {
         var index = Math.Clamp(noteStyleIndex, 0, NoteStyles.Length - 1);
         return NoteStyles[index];
     }
 
-    /// <summary>The style index the AR layer uses for a look: the look's own when ported, the flat fallback otherwise.</summary>
-    internal static int StyleIndexForAr(int noteStyleIndex) => Array.IndexOf(NoteStyles, StyleForAr(StyleName(noteStyleIndex)));
+    /// <summary>Preserves supported style indices; invalid indices fail closed to the Neon fallback.</summary>
+    internal static int StyleIndexForAr(int noteStyleIndex)
+    {
+        if ((uint)noteStyleIndex >= (uint)NoteStyles.Length)
+            return Array.IndexOf(NoteStyles, ArFallbackStyle);
+        return Array.IndexOf(NoteStyles, StyleForAr(NoteStyles[noteStyleIndex]));
+    }
 }

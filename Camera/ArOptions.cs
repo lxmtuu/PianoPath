@@ -17,7 +17,7 @@ internal static class ArModes
 /// <summary>
 /// What the player chose for the overlay, in the units the settings page shows, and what that means for drawing it.
 /// A plain value with no settings class behind it so the arithmetic is tested on any machine; the settings class holds
-/// the same six numbers and hands them over through <c>PianoVisualSettings.ArOptionsValue</c>.
+/// the player's AR choices and hands them over through <c>PianoVisualSettings.ArOptionsValue</c>.
 /// </summary>
 /// <param name="Enabled">The overlay is on: the camera is the background and the notes and keys are drawn over it.</param>
 /// <param name="Mode">One of <see cref="ArModes.All"/>.</param>
@@ -28,17 +28,38 @@ internal static class ArModes
 /// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
 /// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
 /// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
-/// <param name="NotesInPerspective">The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</param>
+/// <param name="NotesInPerspective">Build notes from the calibrated 3D keyboard pose and project their camera-facing quads into the picture; stage-space falling-note trails stay suppressed. Ambient petals, stars and transients remain flat. Off keeps the legacy flat note overlay.</param>
 /// <param name="NoteMinScale">Minimum note length, percent of the note's width (AR-S4, Keysight "minimum note scaling"); zero keeps every note at its own length.</param>
+/// <param name="LivePressTrails">Draw the player's growing press bars over the camera; independent of the lit-key tint.</param>
+/// <param name="NoteDirectionTilt">The independent 3D tilt of note travel away from the default back-to-keys axis.</param>
+/// <param name="NoteDirectionAzimuth">The independent 3D azimuth around that axis.</param>
+/// <param name="RisingMidiNotes">In Perform mode, create a separate calibrated 3D note on each MIDI Note On; Note Off freezes its length but does not stop its travel.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
-    bool NotesInPerspective = false, double NoteMinScale = 0)
+    bool NotesInPerspective = false, double NoteMinScale = 0, bool LivePressTrails = false,
+    double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0, bool RisingMidiNotes = true)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
     internal const double KeyLightMin = 0, KeyLightMax = 100, KeyLightDefault = 60;
     internal const double DelayMin = 0, DelayMax = 300, DelayDefault = 0;
     internal const double NoteMinScaleMin = 0, NoteMinScaleMax = 200, NoteMinScaleDefault = 0;
+    internal const double NoteDirectionTiltMin = 0, NoteDirectionTiltMax = 180, NoteDirectionTiltDefault = 0;
+    internal const double NoteDirectionAzimuthMin = -180, NoteDirectionAzimuthMax = 180, NoteDirectionAzimuthDefault = 0;
+    /// <summary>The optional live press bars keep a fixed three-second reach; Learn lookahead is independent.</summary>
+    internal const double LivePressReachSeconds = 3;
+    /// <summary>Perform MIDI-note objects keep a fixed three-second reach; Learn lookahead is independent.</summary>
+    internal const double RisingMidiNoteReachSeconds = 3;
+
+    internal static ArNoteStyle LivePressNoteStyle(ArNoteStyle notes) => notes with
+    {
+        Reach = LivePressReachSeconds * notes.FallSpeed
+    };
+
+    internal static ArNoteStyle RisingMidiNoteStyle(ArNoteStyle notes) => notes with
+    {
+        Reach = RisingMidiNoteReachSeconds * notes.FallSpeed
+    };
 
     internal static readonly ArOptions Default = new(false, ArModes.Learn, OpacityDefault, LookaheadDefault, KeyLightDefault);
 
@@ -50,23 +71,31 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
         Lookahead = Fit(Lookahead, LookaheadMin, LookaheadMax, LookaheadDefault),
         KeyLight = Fit(KeyLight, KeyLightMin, KeyLightMax, KeyLightDefault),
         Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault),
-        NoteMinScale = Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault)
+        NoteMinScale = Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault),
+        NoteDirectionTilt = Fit(NoteDirectionTilt, NoteDirectionTiltMin, NoteDirectionTiltMax, NoteDirectionTiltDefault),
+        NoteDirectionAzimuth = Fit(NoteDirectionAzimuth, NoteDirectionAzimuthMin, NoteDirectionAzimuthMax, NoteDirectionAzimuthDefault)
     };
 
     /// <summary>
-    /// The notes are drawn in perspective by the stage's own note pass: the switch is on and the quality tier is not Lite.
-    /// Lite is the flat overlay it has always been, so it keeps the flat notes whatever the switch says.
+    /// The AR layer builds notes from the calibrated 3D pose when the switch is on and the quality tier is not Lite.
+    /// Lite keeps the legacy flat overlay whatever the switch says.
     /// </summary>
     internal bool NotesProjected => NotesInPerspective && Quality != ArQualityTier.Lite;
 
     /// <summary>The minimum note length as a fraction of the note's width, 0..2 (see <see cref="ArNoteMinimum"/>).</summary>
     internal float NoteMinAspect => (float)(Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault) / 100);
 
+    /// <summary>The normalized 3D direction independently chosen for AR note travel.</summary>
+    internal ArNoteDirection NoteDirection => new ArNoteDirection(NoteDirectionTilt, NoteDirectionAzimuth).Normalised();
+
     internal static double Fit(double value, double minimum, double maximum, double fallback) =>
         double.IsFinite(value) ? Math.Clamp(value, minimum, maximum) : fallback;
 
     /// <summary>Learn draws the notes to come; Perform leaves them out and keeps the lit keys.</summary>
     internal bool ShowsNotes => ArModes.Normalize(Mode) == ArModes.Learn;
+
+    /// <summary>Perform draws a new 3D note for each live MIDI onset when that independent setting is on.</summary>
+    internal bool ShowsRisingMidiNotes => ArModes.Normalize(Mode) == ArModes.Perform && RisingMidiNotes;
 
     /// <summary>The layer's opacity, 0..1.</summary>
     internal float LayerOpacity => (float)(Normalised().Opacity / 100);

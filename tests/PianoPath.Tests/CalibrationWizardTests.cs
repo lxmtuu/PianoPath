@@ -30,8 +30,123 @@ public class CalibrationWizardTests
         foreach (var corner in corners ?? Truth) Click(wizard, corner);
     }
 
+    private static bool SameCorners(IReadOnlyList<(double X, double Y)>? first, IReadOnlyList<(double X, double Y)>? second, double tolerance = 1e-6) =>
+        first is not null && second is not null && first.Count == second.Count
+        && first.Zip(second).All(pair => Math.Abs(pair.First.X - pair.Second.X) <= tolerance && Math.Abs(pair.First.Y - pair.Second.Y) <= tolerance);
+
     private static void Near(double expected, double actual, double tolerance = 1e-6) =>
         Assert.True(Math.Abs(expected - actual) <= tolerance, $"expected {expected}, got {actual}");
+
+    [Fact]
+    public void Pitch_yaw_roll_rotate_the_surface_in_3d_as_absolute_values_and_zero_restores_the_marked_baseline()
+    {
+        var wizard = Make(false);
+        PlaceAll(wizard);
+        var baseline = wizard.UsableCorners!.ToArray();
+
+        Assert.True(wizard.Set3DPose(24, 0, 0, 70));
+        var pitch = wizard.UsableCorners!.ToArray();
+        Assert.True(wizard.Set3DPose(0, 24, 0, 70));
+        var yaw = wizard.UsableCorners!.ToArray();
+        Assert.True(wizard.Set3DPose(0, 0, 24, 70));
+        var roll = wizard.UsableCorners!.ToArray();
+        Assert.False(SameCorners(pitch, yaw) || SameCorners(yaw, roll) || SameCorners(pitch, roll),
+            "Pitch, yaw and roll must change the 3D surface on different axes.");
+
+        Assert.True(wizard.Set3DPose(24, -15, 30, 70));
+        var compound = wizard.UsableCorners!.ToArray();
+        Assert.False(SameCorners(baseline, compound));
+        Assert.Equal(24, wizard.PitchDegrees);
+        Assert.Equal(-15, wizard.YawDegrees);
+        Assert.Equal(30, wizard.RollDegrees);
+        Assert.Equal(70, wizard.CameraFovDegrees);
+        Assert.True(wizard.Set3DPose(0, 0, 0, 70));
+        Assert.True(SameCorners(baseline, wizard.UsableCorners));
+        Assert.False(wizard.Set3DPose(double.NaN, 0, 0, 70));
+    }
+
+    [Fact]
+    public void Rotation_gizmo_axes_match_the_selected_euler_component_under_compound_3d_orientation()
+    {
+        var transform = new ArPoseTransform(.12, -.08, .04, 23, -17, 31, 1.15);
+        var vector = new ArVec3(.83, -.41, .72);
+        var rotated = transform.RotateVector(vector);
+        const double deltaDegrees = .001;
+        var deltaRadians = deltaDegrees * Math.PI / 180;
+
+        foreach (var axis in new[] { 'X', 'Y', 'Z' })
+        {
+            var changed = axis switch
+            {
+                'X' => (transform with { PitchDegrees = transform.PitchDegrees + deltaDegrees }).RotateVector(vector),
+                'Y' => (transform with { YawDegrees = transform.YawDegrees + deltaDegrees }).RotateVector(vector),
+                _ => (transform with { RollDegrees = transform.RollDegrees + deltaDegrees }).RotateVector(vector),
+            };
+            var derivative = (changed - rotated) / deltaRadians;
+            var expected = ArVec3.Cross(transform.RotationAxis(axis), rotated);
+            Assert.True((derivative - expected).Length < 2e-5,
+                $"The {axis} ring must rotate about the fixed-frame Euler axis for a compound pose.");
+        }
+    }
+
+    [Fact]
+    public void Reloading_a_calibration_restores_the_full_transform_fov_and_original_pose_baseline()
+    {
+        var wizard = Make(false);
+        PlaceAll(wizard);
+        var transform = new ArPoseTransform(.12, -.08, .04, 12, -8, 5, 1.15);
+        Assert.True(wizard.SetObjectTransform(transform, 87));
+        var saved = Assert.IsType<ArCalibration>(wizard.Finish(out var problem));
+        Assert.Equal(CalibrationProblem.None, problem);
+
+        var restored = new CalibrationWizard(W, H, KeyboardLayout.Standard88, saved.CameraFovDegrees);
+        restored.SetViewport(1000, 600, false);
+        restored.SetOrientation(KeyboardOrientations.Default(false));
+        Assert.True(restored.LoadCalibration(saved));
+        Assert.Equal(saved.Corners, restored.Points);
+        Assert.Equal(transform, restored.PoseTransform);
+        Assert.Equal(87, restored.CameraFovDegrees);
+        // The real window reapplies its viewport after loading; that must not replace the stored untransformed baseline with final corners.
+        restored.SetViewport(1000, 600, false);
+        Assert.True(restored.SetObjectTransform(transform, 92), "Changing only FOV must preserve the entire saved object transform.");
+        Assert.True(ArCameraPose.TryTransformCorners(KeyboardLayout.Standard88, Truth, W, H, 92, transform, out var expectedAtNewFov));
+        Assert.True(SameCorners(expectedAtNewFov, restored.UsableCorners),
+            "Reopening and changing only FOV must recompute from the saved baseline, not transform the already-final corners again.");
+        Assert.Equal(transform, restored.PoseTransform);
+        Assert.Equal(92, restored.CameraFovDegrees);
+    }
+
+    [Fact]
+    public void Object_translation_and_uniform_scale_change_the_key_surface_and_identity_restores_its_baseline()
+    {
+        var wizard = Make(false);
+        PlaceAll(wizard);
+        var baseline = wizard.UsableCorners!.ToArray();
+        var transform = new ArPoseTransform(.16, -.09, .04, 0, 0, 0, 1.4);
+        Assert.True(wizard.SetObjectTransform(transform, 70));
+        Assert.Equal(transform, wizard.PoseTransform);
+        Assert.False(SameCorners(baseline, wizard.UsableCorners));
+        Assert.True(wizard.SetObjectTransform(ArPoseTransform.Identity, 70));
+        Assert.True(SameCorners(baseline, wizard.UsableCorners));
+    }
+
+    [Fact]
+    public void Manually_moving_a_corner_rebases_the_pose_controls_without_losing_the_manual_adjustment()
+    {
+        var wizard = Make(false);
+        PlaceAll(wizard);
+        Assert.True(wizard.Set3DPose(18, -9, 14, 80));
+        var (x, y) = wizard.PointOnScreen(0);
+        Assert.True(wizard.PointerDown(x, y));
+        Assert.True(wizard.PointerMove(x + 4, y + 3));
+        wizard.PointerUp();
+        Assert.Equal(0, wizard.PitchDegrees);
+        Assert.Equal(0, wizard.YawDegrees);
+        Assert.Equal(0, wizard.RollDegrees);
+        var manuallyAdjusted = wizard.UsableCorners!.ToArray();
+        Assert.True(wizard.Set3DPose(0, 0, 0, 80));
+        Assert.True(SameCorners(manuallyAdjusted, wizard.UsableCorners));
+    }
 
     [Theory]
     [InlineData(false)]

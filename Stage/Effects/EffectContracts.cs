@@ -261,23 +261,30 @@ internal sealed record EffectContract(
     /// settings serialization, UI filtering or renderer dispatch. WPF, GPU and Recording are Native after
     /// material-specific read-back checks in <c>VerifyPngSequenceRecorder</c>, <c>VerifyGpuNotePassQueries</c>
     /// and <c>VerifyGpuNoteMaterials</c> (WPF PNG files and GPU <c>GpuRecordingTap</c> frames). Individual
-    /// parameter-to-recording bindings remain Unverified until each setting is exercised separately. AR names
-    /// its actual flat-quad fallback instead of claiming native facet/material support.
+    /// parameter-to-recording bindings remain Unverified. AR passes known style IDs to the shared material
+    /// shader on camera-facing quads, but AR material capability and parameter bindings remain Unverified
+    /// until an AR-specific style/value matrix is reviewed.
     /// </summary>
 internal static class EffectContractCatalog
 {
-    internal const string ArFlatQuadFallbackId = "ar.note.flat-quad";
-
     private static readonly EffectBackendCapability Native = new(EffectBackendState.Native);
     private static readonly EffectBackendCapability Unverified = new(EffectBackendState.Unverified);
     private static readonly EffectBackendCapability Unsupported = new(EffectBackendState.Unsupported);
-    private static readonly EffectBackendCapability ArFlatFallback = new(EffectBackendState.Fallback, ArFlatQuadFallbackId);
     private static readonly EffectParameterBindingProfile NativeParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+    // AR uses the shared shader path, but no per-setting AR evidence currently supports Applied/Ignored claims.
+    private static readonly EffectParameterBindingProfile ArMaterialParameterBindings = new(
+        EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectParameterBindingProfile ArAmbientParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
+    // S5's calibrated 3D projection consumes these settings, and selected output variants are now read back
+    // by WARP. Keep per-setting bindings Unverified until every declared value/range and lifecycle branch has coverage.
+    private static readonly EffectParameterBindingProfile ArProjectedParameterBindings = new(
+        EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectParameterBindingProfile GpuOnlyArAmbientParameterBindings = new(
         EffectParameterBindingState.Ignored, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
@@ -286,7 +293,7 @@ internal static class EffectContractCatalog
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -311,31 +318,31 @@ internal static class EffectContractCatalog
     // edge-width/3D and the shared refraction fringe, and the GPU Solid branch reads the same uniforms.
     private static readonly IReadOnlyList<EffectParameterContract> SolidParameters = Array.AsReadOnly(new[]
     {
-        Percentage("NoteTint", 0, 100),
-        Percentage("NoteGlow", 0, 200),
-        Percentage("NoteEdge", 0, 200),
-        Percentage("NoteEdgeWidth", 0, 100),
-        Percentage("NoteRefraction", 0, 100),
-        Boolean("Notes3D"),
+        Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
+        Boolean("Notes3D", ArMaterialParameterBindings),
     });
 
     private static readonly IReadOnlyList<EffectParameterContract> GemParameters = Array.AsReadOnly(new[]
     {
-        Percentage("NoteTint", 0, 100),
-        Percentage("NoteGlow", 0, 200),
-        Percentage("NoteEdge", 0, 200),
-        Percentage("NoteEdgeWidth", 0, 100),
-        Percentage("NoteRefraction", 0, 100),
-        Boolean("Notes3D"),
+        Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
+        Boolean("Notes3D", ArMaterialParameterBindings),
     });
 
     private static readonly IReadOnlyList<EffectParameterContract> CrystalOutlineParameters = Array.AsReadOnly(new[]
     {
-        Percentage("NoteTint", 0, 100),
-        Percentage("NoteGlow", 0, 200),
-        Percentage("NoteEdge", 0, 200),
-        Percentage("NoteEdgeWidth", 0, 100),
-        // WPF paints the crystal's refraction fringe; the current GPU CrystalOutline branch does not consume it.
+        Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
+        // WPF paints the crystal's refraction fringe; the GPU branch does not consume it. AR binding remains Unverified.
         Percentage("NoteRefraction", 0, 100, WpfOnlyRefractionBindings),
     });
 
@@ -353,7 +360,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             SolidParameters,
-            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             SolidCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.OpaqueBodyAndRim)),
         new EffectContract(
@@ -367,7 +374,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             GemParameters,
-            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             GemCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.FacetPlanes)),
         new EffectContract(
@@ -381,7 +388,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             CrystalOutlineParameters,
-            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             CrystalOutlineCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.AngularContourAndFacets)),
     });
@@ -420,9 +427,10 @@ internal static class EffectContractCatalog
     /// The second contract pilot: the four impact families that fire when a note lands. Both renderers draw
     /// all four (grep-verified in <c>PianoStage.cs</c> and the GPU simulation), hence Native there. Each
     /// family now also has its own GPU recording-tap read-back fixture (and WPF PNG write/read fixture), while
-    /// parameter bindings remain Unverified. The AR overlay intentionally omits stage-anchored
-    /// impact output: <c>GpuLook.From(overCamera)</c> disables new hits and <c>GpuStageSimulation.BuildSprites</c>
-    /// hides transients already in flight. All four impact families are therefore Unsupported in AR. Costs
+    /// parameter bindings remain Unverified. S5 preserves these pitch-tagged channels for calibrated 3D
+    /// projection instead of drawing their stage-space sprites over camera; selected Standard/Ultra variants now
+    /// have WARP pixel/counter coverage, but family and parameter capabilities remain Unverified until the full
+    /// choice/value/lifecycle matrix is exercised. Costs
     /// are all Unmeasured — no isolated probe has measured any of them, and this catalog must not invent
     /// numbers. Flash classification is kept conservative: the flash is a localised bright pulse (Local), the
     /// spark burst flickers without a strobe-area analysis (Unverified, so safety resolution suppresses it),
@@ -436,11 +444,11 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowImpactRings"),
-                Choice("ImpactWave"),
-                Percentage("ImpactWaveIntensity", 0, 150),
+                ArProjectedBoolean("ShowImpactRings"),
+                ArProjectedChoice("ImpactWave"),
+                ArProjectedPercentage("ImpactWaveIntensity", 0, 150),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -449,11 +457,11 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowImpactFlash"),
-                Choice("ImpactFlashStyle"),
-                Percentage("ImpactFlashIntensity", 0, 100),
+                ArProjectedBoolean("ShowImpactFlash"),
+                ArProjectedChoice("ImpactFlashStyle"),
+                ArProjectedPercentage("ImpactFlashIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Local, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -462,10 +470,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowEmbers"),
-                Choice("ImpactBurst"),
+                ArProjectedBoolean("ShowEmbers"),
+                ArProjectedChoice("ImpactBurst"),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -474,10 +482,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Choice("ImpactMorph"),
-                Percentage("ImpactMorphIntensity", 0, 100),
+                ArProjectedChoice("ImpactMorph"),
+                ArProjectedPercentage("ImpactMorphIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
     });
@@ -552,9 +560,11 @@ internal static class EffectContractCatalog
     /// IntrinsicAnimation; the hold bar merely mirrors the note's remaining duration, so it derives its motion
     /// from the song and stays NoIndependentAnimation. The electric arc flickers bright and has no strobe
     /// analysis yet: flash risk Unverified, safety resolution suppresses. The hue cycle is color-only and
-    /// declares no shape cue. The AR overlay suppresses stage note/key output (including already-active electric
-    /// arcs through <c>GpuLook.OverCamera</c> and <c>BuildSprites</c>), so all five families are Unsupported
-    /// there. Costs all Unmeasured.
+    /// declares no shape cue. S5 projects the retained hold channels from the pitch-tagged simulation through
+    /// the calibrated pose without drawing stage-space key/sprite pixels. VerifyArNoteProjection now isolates
+    /// HoldBar, HoldBreath, HoldVibration and HoldColorCycle on projected live bars; the family/parameter states
+    /// remain Unverified because those sampled settings do not cover every value or the full hold-arc/style matrix.
+    /// Costs all Unmeasured.
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> HoldFxPilot { get; } = Array.AsReadOnly(new[]
     {
@@ -564,10 +574,10 @@ internal static class EffectContractCatalog
             EffectClock.SongPosition, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("HoldBar"),
-                Percentage("HoldBarIntensity", 0, 100),
+                ArProjectedBoolean("HoldBar"),
+                ArProjectedPercentage("HoldBarIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -576,10 +586,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("HoldBreath"),
-                Percentage("HoldBreathRate", 0, 100),
+                ArProjectedBoolean("HoldBreath"),
+                ArProjectedPercentage("HoldBreathRate", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -588,10 +598,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("HoldVibration"),
-                Percentage("HoldVibrationAmount", 0, 100),
+                ArProjectedBoolean("HoldVibration"),
+                ArProjectedPercentage("HoldVibrationAmount", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -600,10 +610,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("HoldColorCycle"),
-                Percentage("HoldColorCycleSpeed", 0, 100),
+                ArProjectedBoolean("HoldColorCycle"),
+                ArProjectedPercentage("HoldColorCycleSpeed", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -612,10 +622,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("HoldElectricArc"),
-                Percentage("HoldArcIntensity", 0, 100),
+                ArProjectedBoolean("HoldElectricArc"),
+                ArProjectedPercentage("HoldArcIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -632,8 +642,10 @@ internal static class EffectContractCatalog
     /// (the WPF stage has no meteor pass), so WPF stays Unsupported there. Every member drifts or twinkles on
     /// its own clock (IntrinsicAnimation) and freezes under Reduced Motion. The star twinkle has no strobe
     /// analysis yet (Unverified, resolves to suppression); the slow layers carry no flash. Over a camera,
-    /// backdrop stars and key-anchored beams are Unsupported; the four ambient slots, shooting stars and petals
-    /// are Native only as screen-space camera composites. Their six WARP captured frames are checked by
+    /// backdrop stars remain Unsupported, while key-anchored beams have a new S5 3D projection and stay
+    /// Unverified after sampled WARP checks (the full beam setting/quality matrix is not covered); the four
+    /// ambient slots, shooting stars and petals are Native only as screen-space camera composites. Their six WARP
+    /// captured frames are checked by
     /// <c>VerifyArOverlayCapturedFrames</c>; this is not homography-projected or world-space AR. Costs all
     /// Unmeasured.
     /// </summary>
@@ -733,10 +745,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowLightBeams"),
-                Percentage("BeamIntensity", 0, 100),
+                ArProjectedBoolean("ShowLightBeams"),
+                ArProjectedPercentage("BeamIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -745,8 +757,9 @@ internal static class EffectContractCatalog
     /// The sixth contract pilot: the particle systems. Sparks, wisps and flames all run their own physics
     /// on their own clock (IntrinsicAnimation) and are drawn by both renderers. Sparks and flames flicker
     /// bright with no strobe analysis yet, so their flash risk stays Unverified and resolves to
-    /// suppression; the soft plasma wisps carry no flash. The AR overlay disables new emitters and omits
-    /// note/key transients already in flight (<c>GpuLook.OverCamera</c>), so all three are Unsupported there.
+    /// suppression; the soft plasma wisps carry no flash. S5 retains pitch-tagged bursts/emitters and projects
+    /// them through the calibrated pose; selected particle/release cases now pass WARP pixel/counter checks, but
+    /// all three AR family and parameter states remain Unverified pending broader shape/setting/lifecycle coverage.
     /// Costs all Unmeasured.
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> ParticlesFxPilot { get; } = Array.AsReadOnly(new[]
@@ -757,14 +770,14 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.PerNote,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowEmbers"),
-                Percentage("ParticleAmount", 0, 120),
-                Percentage("ParticleSpeed", 0, 300),
-                Percentage("ParticleSize", .2, 16),
-                Percentage("ParticleGlow", 0, 200),
-                Percentage("ParticleLife", .05, 3),
+                ArProjectedBoolean("ShowEmbers"),
+                ArProjectedPercentage("ParticleAmount", 0, 120),
+                ArProjectedPercentage("ParticleSpeed", 0, 300),
+                ArProjectedPercentage("ParticleSize", .2, 16),
+                ArProjectedPercentage("ParticleGlow", 0, 200),
+                ArProjectedPercentage("ParticleLife", .05, 3),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -773,13 +786,13 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowWisps"),
-                Percentage("WispAmount", 0, 150),
-                Percentage("WispSpeed", 20, 600),
-                Percentage("WispTurbulence", 0, 100),
-                Percentage("WispGlow", 0, 200),
+                ArProjectedBoolean("ShowWisps"),
+                ArProjectedPercentage("WispAmount", 0, 150),
+                ArProjectedPercentage("WispSpeed", 20, 600),
+                ArProjectedPercentage("WispTurbulence", 0, 100),
+                ArProjectedPercentage("WispGlow", 0, 200),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
         new EffectFamilyContract(
@@ -788,11 +801,11 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Boolean("ShowFlame"),
-                Percentage("FlameIntensity", 0, 100),
-                Percentage("FlameHeight", 0, 100),
+                ArProjectedBoolean("ShowFlame"),
+                ArProjectedPercentage("FlameIntensity", 0, 100),
+                ArProjectedPercentage("FlameHeight", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.Unverified, EffectReducedMotionBehavior.IntrinsicAnimation, EffectShapeCue.None)),
     });
@@ -806,8 +819,9 @@ internal static class EffectContractCatalog
     /// <summary>
     /// The seventh contract pilot: what happens at the key when a note ends. A single family: the release
     /// effect is an event-driven decay with no idle animation and no flash, drawn by both stage renderers.
-    /// The AR overlay disables new release events and omits in-flight stage transients, so this family is
-    /// Unsupported there. Cost Unmeasured.
+    /// S5 retains release events for calibrated 3D projection rather than drawing a stage-space sprite; Dissolve
+    /// is now read back on WARP, but the family and parameter bindings remain Unverified until release styles,
+    /// intensities and lifecycle variants are covered more broadly. Cost Unmeasured.
     /// </summary>
     internal static IReadOnlyList<EffectFamilyContract> ReleaseFxPilot { get; } = Array.AsReadOnly(new[]
     {
@@ -817,10 +831,10 @@ internal static class EffectContractCatalog
             EffectClock.RenderElapsed, EffectSeedPolicy.None,
             Array.AsReadOnly(new[]
             {
-                Choice("ReleaseEffect"),
-                Percentage("ReleaseIntensity", 0, 100),
+                ArProjectedChoice("ReleaseEffect"),
+                ArProjectedPercentage("ReleaseIntensity", 0, 100),
             }),
-            new EffectCapabilityProfile(Native, Native, Native, Unsupported),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             new EffectCostProfile(UnmeasuredCost, UnmeasuredCost, UnmeasuredCost, UnmeasuredCost),
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.None)),
     });
@@ -877,4 +891,13 @@ internal static class EffectContractCatalog
 
     private static EffectParameterContract Choice(string settingName, EffectParameterBindingProfile? bindings = null) =>
         new(settingName, EffectParameterKind.Choice, null, null, bindings ?? NativeParameterBindings);
+
+    private static EffectParameterContract ArProjectedPercentage(string settingName, double minimum, double maximum) =>
+        Percentage(settingName, minimum, maximum, ArProjectedParameterBindings);
+
+    private static EffectParameterContract ArProjectedBoolean(string settingName) =>
+        Boolean(settingName, ArProjectedParameterBindings);
+
+    private static EffectParameterContract ArProjectedChoice(string settingName) =>
+        Choice(settingName, ArProjectedParameterBindings);
 }

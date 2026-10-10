@@ -272,6 +272,8 @@ internal static partial class VerificationSuite
             $"A verification run must keep its fixtures out of the user's settings folder (using {PianoVisualSettingsStore.SettingsDirectory}).");
         var defaults = new PianoVisualSettings();
         Assert(!defaults.BackgroundGradient && !defaults.BackgroundGuide && !defaults.ShowStars && defaults.BackgroundImagePath == "", "A fresh visual profile should open on a black stage with no image or decorative background layers.");
+        Assert(defaults.PianoSoundEnabled && PianoVisualSettings.FromJson("{}").PianoSoundEnabled,
+            "Piano sound should stay enabled on first launch and when loading an older settings file without this property.");
         var migrated = PianoVisualSettings.FromJson("{\"BackgroundGradient\":true,\"BackgroundGuide\":true,\"ShowStars\":true,\"BackgroundImagePath\":\"C:\\\\piano.png\"}");
         Assert(!migrated.BackgroundGradient && !migrated.BackgroundGuide && !migrated.ShowStars && migrated.BackgroundAppearanceVersion == 2 && migrated.BackgroundImagePath == "C:\\piano.png" && migrated.BackgroundMode == "Image",
             "Legacy settings should switch to the black stage while preserving an optional selected image path and enabling image mode for it.");
@@ -281,6 +283,12 @@ internal static partial class VerificationSuite
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
+        var mutedSound = PianoVisualSettings.FromJson(new PianoVisualSettings { PianoSoundEnabled = false }.ToJson());
+        var localSound = new PianoVisualSettings { PianoSoundEnabled = false };
+        localSound.CopyFrom(new PianoVisualSettings { PianoSoundEnabled = true });
+        var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false }), out var sharedLook, out _);
+        Assert(!mutedSound.PianoSoundEnabled && !localSound.PianoSoundEnabled && sharedSound && sharedLook.PianoSoundEnabled,
+            "The mute preference should persist locally, stay machine-local when applying a look, and never travel in a shared preset.");
         var legacyStyleIds = new[] { "Solid", "Neon", "Glass", "Fire" };
         Assert(PianoVisualSettings.NoteStyles.Take(legacyStyleIds.Length).SequenceEqual(legacyStyleIds)
                 && PianoVisualSettings.NoteStyles.SequenceEqual([.. legacyStyleIds, "Gem", "CrystalOutline"]),
@@ -309,8 +317,9 @@ internal static partial class VerificationSuite
 
     /// <summary>
     /// Cross-checks the typed Gem/Crystal Outline pilot against the shipped setting strings, GPU indices and
-    /// existing clamps. WPF, GPU and both captured recording routes now have material-specific read-back checks;
-    /// AR remains the explicit flat-quad fallback and the isolated GPU cost stays a separate evidence gate.
+    /// existing clamps. WPF, GPU and both captured recording routes have material-specific read-back checks;
+    /// AR uses the shared note shader on camera-facing patches, but support and per-setting bindings stay
+    /// Unverified until the AR-specific style/value matrix is covered. The isolated GPU cost is separate.
     /// </summary>
     private static void VerifyEffectContractPilot()
     {
@@ -342,9 +351,11 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Fallback
-                    && contract.Capabilities.ArOverlay.FallbackId == "ar.note.flat-quad",
-                $"The {alias} contract must separate native WPF/GPU/recording capture from the actual flat AR fallback.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                    && contract.Capabilities.ArOverlay.FallbackId is null,
+                $"The {alias} contract must keep AR material support Unverified despite its shared-shader camera-quad route.");
+            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+                $"The {alias} contract must not claim AR parameter parity before the per-setting matrix is verified.");
             Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
                     && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                     && contract.Accessibility.NonColorCue != EffectShapeCue.None,
@@ -375,8 +386,8 @@ internal static partial class VerificationSuite
                 Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
                         && parameter.Bindings.GpuStage == expectedGpuBinding
                         && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
-                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Ignored,
-                    $"The {alias} input {parameter.SettingName} should describe its actual per-output binding, including captured recording and AR's flat fallback.");
+                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
+                    $"The {alias} input {parameter.SettingName} should keep its AR binding Unverified until the material setting has dedicated camera-quad coverage.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -402,7 +413,7 @@ internal static partial class VerificationSuite
             }
         }
 
-        Results.Add("PASS effect contract metadata: Solid, Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; WPF/PNG and GPU/GpuRecordingTap captures verify all three, AR names the flat-quad fallback, and isolated recording cost remains unmeasured.");
+        Results.Add("PASS effect contract metadata: Solid, Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; WPF/PNG and GPU/GpuRecordingTap captures verify all three, AR material support and per-setting bindings remain Unverified, and isolated recording cost remains unmeasured.");
     }
 
     /// <summary>
@@ -427,8 +438,8 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers and has its own captured recording frame; AR deliberately suppresses all stage-anchored impact output.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers and has its own captured recording frame; sampled S5 WARP cases exercise calibrated projection, but full AR family support remains Unverified.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost: no isolated probe has measured it.");
@@ -436,6 +447,8 @@ internal static partial class VerificationSuite
                 $"{contract.Id} is event-driven decay with no idle animation.");
             foreach (var parameter in contract.Parameters)
             {
+                Assert(parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
+                    $"{contract.Id}.{parameter.SettingName} AR binding stays Unverified: sampled WARP cases do not cover every declared choice/value.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -459,7 +472,7 @@ internal static partial class VerificationSuite
         Assert(AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Flash == FlashSuppression.NoChange
                 && AccessibilityContractResolver.Resolve(byId["impact.morph"].Accessibility, false, false, false).Motion == MotionSuppression.NoChange,
             "The key morph should keep its current behavior while every accessibility toggle is off.");
-        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, family Recording is verified by isolated captures, parameter bindings remain Unverified, AR is explicitly Unsupported, all costs stay Unmeasured, and flash-safety resolution matches the declared risks.");
+        Results.Add("PASS impact-FX contract metadata: wave/flash/burst/morph name their real settings with the right kinds, both stage renderers are native, family Recording is verified by isolated captures, selected calibrated-AR variants have WARP coverage, full family/parameter support remains Unverified pending the choice/value matrix, all costs stay Unmeasured, and flash-safety resolution matches the declared risks.");
     }
 
     /// <summary>
@@ -521,8 +534,9 @@ internal static partial class VerificationSuite
     /// <summary>
     /// Cross-checks the hold-FX pilot: the bar mirrors the note's remaining duration while breathing,
     /// vibration, hue cycling and arc flicker own their clock and freeze under Reduced Motion; the arc's
-    /// un-analysed flicker resolves to suppression under Reduce Flashes; both renderers are native for all
-    /// five and no cost is invented. Metadata coherence only; no renderer changed.
+    /// un-analysed flicker resolves to suppression under Reduce Flashes; both stage renderers are Native for all
+    /// five; VerifyArNoteProjection checks sampled calibrated-AR behavior, while family/parameter support remains
+    /// Unverified. This method checks metadata only.
     /// </summary>
     private static void VerifyHoldPilot()
     {
@@ -538,13 +552,15 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; the AR overlay deliberately leaves out notes and keys, so the hold effect is excluded there.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; S5 WARP checks sample the projected hold channels; full AR family support remains Unverified.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
             foreach (var parameter in contract.Parameters)
             {
+                Assert(parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
+                    $"{contract.Id}.{parameter.SettingName} AR binding stays Unverified: sampled WARP cases do not cover every declared choice/value.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"{contract.Id} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
@@ -574,14 +590,15 @@ internal static partial class VerificationSuite
             "The flickering arc's un-analysed flash risk resolves conservatively to suppression.");
         Assert(AccessibilityContractResolver.Resolve(byId["hold.breath"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "Reduce Flashes must leave the flash-less breathing glow alone.");
-        Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both renderers native, no cost invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS hold-FX contract metadata: bar/hold-duration-derived, breath/vibration/color-cycle/arc own their clock and freeze under Reduced Motion, the arc's flicker resolves conservatively under Reduce Flashes, both stage renderers native, VerifyArNoteProjection has separate hold-modifier WARP assertions; full AR family/parameter support remains Unverified, no cost invented.");
     }
 
     /// <summary>
     /// Cross-checks the ambient/atmosphere pilot: every member owns its clock and freezes under Reduced
     /// Motion; shooting stars are the second GPU-only member (the WPF stage has no meteor pass) and stay
-    /// Unsupported there; the star twinkle's un-analysed flash risk resolves conservatively while the slow
-    /// layers keep the sky untouched under Reduce Flashes; no cost is invented. Metadata coherence only.
+    /// Unsupported there; keyed-beam AR projection has a sampled WARP check but remains Unverified pending broader setting coverage, and the star twinkle's
+    /// un-analysed flash risk resolves conservatively while slow layers keep the sky untouched under Reduce Flashes.
+    /// This method checks metadata only; pixel behavior belongs to separate WARP fixtures.
     /// </summary>
     private static void VerifyAmbientPilot()
     {
@@ -627,19 +644,22 @@ internal static partial class VerificationSuite
                     && byId[id].Capabilities.GpuStage.State == EffectBackendState.Native,
                 $"{id} is drawn by both stage renderers in shipped code.");
         }
+        Assert(byId["atmosphere.beams"].Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                && byId["atmosphere.beams"].Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+            "A keyed-beam WARP sample runs, but full family/parameter support remains Unverified pending quality/value coverage.");
         Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.stars"].Accessibility, false, true, false).Flash == FlashSuppression.Suppress,
             "The twinkling star field's un-analysed flash risk resolves conservatively to suppression.");
         Assert(AccessibilityContractResolver.Resolve(byId["atmosphere.beams"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange
                 && AccessibilityContractResolver.Resolve(byId["ambient.energy"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "Reduce Flashes must leave the slow, flash-less sky layers untouched.");
-        Results.Add("PASS ambient contract metadata: the four ambient layers, stars, petals and beams are native on both renderers, shooting stars stay honestly GPU-only, every member freezes under Reduced Motion, the star twinkle resolves conservatively under Reduce Flashes, and no cost is invented. Metadata coherence only; no renderer changed.");
+        Results.Add("PASS ambient contract metadata: ambient layers, stars, petals and beams are native on both stage renderers, shooting stars stay honestly GPU-only, keyed-beam AR has sampled WARP coverage but remains Unverified pending the full setting matrix, every member freezes under Reduced Motion, star flash risk resolves conservatively, and no cost is invented; this check is metadata-only.");
     }
 
     /// <summary>
     /// Cross-checks the last two pilots: sparks/wisps/flames run their own physics and freeze under Reduced
     /// Motion, the flickering sparks and flames keep their flash risk Unverified (suppression under Reduce
     /// Flashes) while the soft wisps carry none, and the release effect is a plain event-driven decay.
-    /// Both renderers draw all four; no cost is invented. Metadata coherence only; no renderer changed.
+    /// Both stage renderers draw all four; sampled S5 AR projections pass WARP, while family/parameter support remains Unverified. This method checks metadata only.
     /// </summary>
     private static void VerifyParticlesReleasePilot()
     {
@@ -652,11 +672,13 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unsupported,
-                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; AR suppresses all unprojected particle/release effects.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified,
+                $"{contract.Id} is drawn by both stage renderers and has an isolated recording capture; S5 WARP checks sample particle/release channels through the saved pose; full AR family support remains Unverified.");
             Assert(new[] { contract.Cost.WpfStage, contract.Cost.GpuStage, contract.Cost.Recording, contract.Cost.ArOverlay }
                     .All(cost => cost.State == EffectCostState.Unmeasured && cost.P95Milliseconds is null),
                 $"{contract.Id} must not carry an invented cost.");
+            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+                $"{contract.Id} AR parameter bindings remain Unverified because the WARP suite samples only selected options/values.");
             foreach (var parameter in contract.Parameters)
             {
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
@@ -688,7 +710,7 @@ internal static partial class VerificationSuite
         Assert(byId["particles.wisps"].Accessibility.FlashRisk == EffectFlashRisk.None
                 && AccessibilityContractResolver.Resolve(byId["particles.wisps"].Accessibility, false, true, false).Flash == FlashSuppression.NoChange,
             "The soft plasma wisps carry no flash and must stay untouched under Reduce Flashes.");
-        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, flickering sparks/flames resolve conservatively under Reduce Flashes, release is a plain note-off decay, family recording has isolated captures, parameter bindings stay Unverified and cost remains Unmeasured.");
+        Results.Add("PASS particles/release contract metadata: sparks/wisps/flames own their physics and freeze under Reduced Motion, flickering sparks/flames resolve conservatively under Reduce Flashes, release is a plain note-off decay, family recording has isolated captures, selected S5 particle/release cases now have WARP coverage, but family/bindings remain Unverified without full style/value/lifecycle coverage; cost remains Unmeasured.");
     }
 
     /// <summary>
@@ -964,15 +986,17 @@ internal static partial class VerificationSuite
         // The overlay's own settings: defaults agree with ArOptions, wild values are pulled into range, and a look being
         // applied (a preset, a community look, a pasted code) neither switches the overlay on nor retunes it.
         var arDefault = new PianoVisualSettings();
-        Assert(!arDefault.ArEnabled && arDefault.ArOptionsValue == ArOptions.Default,
-            "A fresh install has the overlay off, and the settings' defaults are the ones ArOptions names.");
-        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900 }; arWild.Clamp();
-        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax,
-            "Out-of-range overlay values should be pulled into range when settings load.");
-        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120 };
-        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0 });
-        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120,
-            "Applying a look must keep every overlay setting.");
+        Assert(!arDefault.ArEnabled && !arDefault.ArLivePressTrails && arDefault.ArRisingMidiNotes && arDefault.ArOptionsValue == ArOptions.Default,
+            "A fresh install has the overlay and live press bars off, rising MIDI notes on for Perform, and settings defaults matching ArOptions.");
+        var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900, ArNoteDirectionTilt = 999, ArNoteDirectionAzimuth = -999 }; arWild.Clamp();
+        Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax
+                && arWild.ArNoteDirectionTilt == ArOptions.NoteDirectionTiltMax && arWild.ArNoteDirectionAzimuth == ArOptions.NoteDirectionAzimuthMin,
+            "Out-of-range overlay values and the independent 3D note direction should be pulled into range when settings load.");
+        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120, ArLivePressTrails = true, ArRisingMidiNotes = true, ArNoteDirectionTilt = 37, ArNoteDirectionAzimuth = -74 };
+        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0, ArLivePressTrails = false, ArRisingMidiNotes = false, ArNoteDirectionTilt = 0, ArNoteDirectionAzimuth = 0 });
+        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120 && arKept.ArLivePressTrails && arKept.ArRisingMidiNotes
+                && arKept.ArNoteDirectionTilt == 37 && arKept.ArNoteDirectionAzimuth == -74,
+            "Applying a look must keep every overlay setting, including both live channels and independent 3D note direction.");
         // AR-S4 remainder: the minimum note length is a setting of the look's own, so a look does not overwrite it
         var minKept = new PianoVisualSettings { ArNoteMinScale = 80 };
         minKept.CopyFrom(new PianoVisualSettings { ArNoteMinScale = 0 });
@@ -1516,12 +1540,38 @@ internal static partial class VerificationSuite
             "With the AR switch off the overlay leaves the stage alone.");
         Assert(toggles.ContainsKey(nameof(PianoVisualSettings.ArEnabled)) && choices.ContainsKey(nameof(PianoVisualSettings.ArMode))
                 && choices.ContainsKey(nameof(PianoVisualSettings.ArViewProfileId)) && choices.ContainsKey(nameof(PianoVisualSettings.ArQuality))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArNotesInPerspective))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArNoteWidthByVelocity))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArNoteFadeByVelocity))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArOpacity)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArLookahead))
-                && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay)),
-            "The Camera & FX page should carry the AR switch, the mode/view/quality pickers and the four sliders.");
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArKeyLight)) && sliders.ContainsKey(nameof(PianoVisualSettings.ArDelay))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteDirectionTilt))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteDirectionAzimuth))
+                && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteMinScale))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArLivePressTrails))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArRisingMidiNotes)),
+            "The AR controls should expose playback, calibration view, perspective, separate note-direction, live-key and timing settings.");
+        var arCards = (Dictionary<string, Border>)Field(window, "_cardsByTitle");
+        var expectedArCards = new[] { "AR OVERLAY", "KEYBOARD ALIGNMENT", "AR PLAYBACK", "3D NOTE PATH", "LIVE KEY RESPONSE", "STREAM & TIMING" };
+        Assert(expectedArCards.All(arCards.ContainsKey), "The Camera & FX page should group AR into setup, alignment, playback, 3D notes, live keys and stream timing cards.");
+        var noteCard = arCards["3D NOTE PATH"];
+        var settingRows = (System.Collections.IEnumerable)Field(window, "_settingRows");
+        var noteRows = settingRows.Cast<object>()
+            .Where(row => ReferenceEquals(row.GetType().GetField("Card", BindingFlags.Instance | BindingFlags.Public)!.GetValue(row), noteCard))
+            .Select(row => (string?)row.GetType().GetField("Property", BindingFlags.Instance | BindingFlags.Public)!.GetValue(row))
+            .ToArray();
+        string?[] expectedNoteRows =
+        [
+            nameof(PianoVisualSettings.ArNotesInPerspective), nameof(PianoVisualSettings.ArNoteDirectionTilt),
+            nameof(PianoVisualSettings.ArNoteDirectionAzimuth), nameof(PianoVisualSettings.ArNoteMinScale),
+        ];
+        Assert(noteRows.SequenceEqual(expectedNoteRows),
+            "The independent note-direction controls should immediately follow perspective, with minimum length after both.");
         var arText = () => ((TextBlock)Field(window, "_arStatus")).Text;
         Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;
+        var liveTrailsWas = visualSettings.ArLivePressTrails;
+        var risingMidiWas = visualSettings.ArRisingMidiNotes;
         toggles[nameof(PianoVisualSettings.ArEnabled)].IsChecked = true;
         Assert(visualSettings.ArEnabled, "Switching the overlay on in the dock should reach the settings.");
         Assert(engineRuns ? arText().StartsWith(Loc.T("Waiting for the camera."), StringComparison.Ordinal)
@@ -1549,9 +1599,22 @@ internal static partial class VerificationSuite
             var valueBoxes = (Dictionary<string, TextBox>)Field(window, "_visualValueBoxes");
             Assert(valueBoxes[nameof(PianoVisualSettings.ArLookahead)].Text == $"{2.5:0.0} s" && Math.Abs(gpuFeed.Ar!.Notes.Reach / gpuFeed.Ar.Notes.FallSpeed - 2.5) < 1e-9,
                 "The lookahead slider should show seconds and set how far above the keys notes come into view.");
+            toggles[nameof(PianoVisualSettings.ArLivePressTrails)].IsChecked = true;
+            Assert(visualSettings.ArLivePressTrails && gpuFeed.Ar!.ShowLiveTrails,
+                "The live-trail toggle should reach the selected AR drawing path.");
+            toggles[nameof(PianoVisualSettings.ArLivePressTrails)].IsChecked = false;
+            Assert(!gpuFeed.Ar!.ShowLiveTrails && Math.Abs(gpuFeed.Ar.KeyLight - .6f) < 1e-3,
+                "Turning live trails off must keep the separately configured key tint enabled.");
+            toggles[nameof(PianoVisualSettings.ArRisingMidiNotes)].IsChecked = false;
             choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Perform;
-            Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes, "The mode picker should reach the layer the engine draws.");
+            Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes && !gpuFeed.Ar.ShowRisingMidiNotes,
+                "Perform hides song notes, and its separate rising-MIDI-note switch reaches the AR layer.");
+            toggles[nameof(PianoVisualSettings.ArRisingMidiNotes)].IsChecked = true;
+            Assert(gpuFeed.Ar!.ShowRisingMidiNotes,
+                "Turning the rising-MIDI-note setting on in Perform should enable the independent AR note stream.");
             choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Learn;
+            Assert(!gpuFeed.Ar!.ShowRisingMidiNotes,
+                "Learn keeps upcoming song notes and does not duplicate each live MIDI event as a rising note.");
             Assert(ReferenceEquals(gpuFeed.Camera!.Ring, Field(window, "_cameraFrames")) && gpuFeed.Ar!.Calibration == window.ArCalibration.Current,
                 "The engine reads the camera's own ring and draws on the calibration in force.");
             var frameRing = (CameraFrameRing)Field(window, "_cameraFrames");
@@ -1567,7 +1630,7 @@ internal static partial class VerificationSuite
         Invoke(window, "ResetArCalibration_Click", window, new RoutedEventArgs());
         Assert(window.ArCalibration.State is ArCalibrationState.NotCalibrated or ArCalibrationState.NoSource && window.ArCalibration.Current is null,
             "RESET CALIBRATION should forget the calibration in force.");
-        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60;
+        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60; visualSettings.ArLivePressTrails = liveTrailsWas; visualSettings.ArRisingMidiNotes = risingMidiWas;
         Invoke(window, "RefreshSettingControls");
         Invoke(window, "ApplyArSource", null!, 0, 0);
         Invoke(window, "SyncCameraOverlay");
@@ -1711,8 +1774,8 @@ internal static partial class VerificationSuite
     /// <summary>
     /// AR-S3: the element catalogue, the three quality tiers and the look guard (docs/AR-OVERLAY-ROADMAP.md
     /// §14.3, §14.8). Lite draws the keys, the notes and the player's bars — what the overlay has always
-    /// drawn. A note style the overlay cannot render keeps its flat fallback, and a look never changes the
-    /// tier the overlay is drawn at.
+    /// drawn. Known material IDs pass through to the shared shader; unknown styles keep the readable fallback,
+    /// and a look never changes the tier the overlay is drawn at.
     /// </summary>
     private static void VerifyArQualityTiers()
     {
@@ -1729,14 +1792,14 @@ internal static partial class VerificationSuite
         var lastDropIndex = dropOrder.Length - 1;
         Assert(ArElement.Particles == dropOrder[0] && ArElement.ImpactLights == dropOrder[lastDropIndex],
             "Particles should be the first thing an over-budget frame drops, key glow the last.");
-        Assert(!ArLookGuard.IsPortedToAr("Gem") && !ArLookGuard.IsPortedToAr("CrystalOutline"),
-            "Gem and Crystal Outline still have no AR variant.");
-        Assert(ArLookGuard.StyleForAr("Gem") == ArLookGuard.ArFallbackStyle,
-            "An unported note style should fall back to Neon rather than claiming a facet look the flat projection cannot draw.");
+        Assert(ArLookGuard.IsPortedToAr("Gem") && ArLookGuard.IsPortedToAr("CrystalOutline"),
+            "Gem and Crystal Outline have branches in the shared shader used by AR note quads.");
+        Assert(ArLookGuard.StyleForAr("Gem") == "Gem" && ArLookGuard.StyleForAr("CrystalOutline") == "CrystalOutline",
+            "Known note materials should keep their shader IDs on the camera-facing AR patches.");
         Assert(ArLookGuard.StyleForAr("Neon") == "Neon" && ArLookGuard.StyleForAr("Fire") == "Fire",
-            "The styles that are ported should be passed through unchanged.");
+            "Known shader styles should be passed through unchanged.");
         Assert(!ArLookGuard.IsPortedToAr("Unknown") && ArLookGuard.StyleForAr("Unknown") == ArLookGuard.ArFallbackStyle && ArLookGuard.StyleForAr(null) == ArLookGuard.ArFallbackStyle,
-            "A style name the app does not know should fall back too, so a style added to the settings side without an AR variant is left out rather than drawn wrong.");
+            "Unknown or not-yet-ported styles should still fail closed to the readable fallback.");
         var settings = new PianoVisualSettings();
         Assert(settings.ArQuality == ArQualityTiers.StandardName, "Standard should be the default tier — not Lite, so existing users do not lose their key glow after upgrading.");
         var kept = new PianoVisualSettings { ArQuality = ArQualityTiers.LiteName };
@@ -1745,7 +1808,7 @@ internal static partial class VerificationSuite
         settings.ArQuality = "rubbish"; settings.Clamp();
         Assert(settings.ArQuality == ArQualityTiers.StandardName, "An unknown tier should clamp back to Standard rather than drawing nothing.");
         Assert(ArQualityTiers.Normalize("rubbish") == ArQualityTiers.StandardName, "The tier normaliser should also read an unknown name as Standard.");
-        Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, Gem/Crystal fallback, tier belongs to the machine.");
+        Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, known note-material shader routing, unknown-style fallback, tier belongs to the machine.");
     }
 
     /// <summary>
@@ -2066,6 +2129,14 @@ internal static partial class VerificationSuite
         var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400, AudioMasterGain = 8 };
         settings.Clamp();
         Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50 && settings.AudioMasterGain == 2, "The settings clamp should normalize the backend, latency target and output gain.");
+        using (var engine = new PianoAudioEngine())
+        {
+            Assert(engine.PlaybackEnabled, "The piano playback output should default on.");
+            engine.PlaybackEnabled = false;
+            Assert(!engine.PlaybackEnabled, "The piano playback-mute state should turn off.");
+            engine.PlaybackEnabled = true;
+            Assert(engine.PlaybackEnabled, "The piano playback-mute state should turn back on.");
+        }
         _ = AsioDriverRegistry.Names; // most machines have no HKLM\SOFTWARE\ASIO key; reading it must not throw
         Assert(AsioDriverRegistry.ClassIdOf("keyflow-not-a-driver") is null, "A driver name that is not installed should answer null, not throw.");
 
@@ -2087,7 +2158,7 @@ internal static partial class VerificationSuite
         var reverbDelta = 0.0;
         for (var i = 0; i < pcmReverb.Length; i++) reverbDelta = Math.Max(reverbDelta, Math.Abs(pcmReverb[i] - Math.Round((double)floatReverb[i] * short.MaxValue)));
         Assert(reverbDelta <= 1, $"The float and 16-bit reverb paths should agree to the LSB (max delta {reverbDelta}).");
-        Results.Add("PASS audio output: stable backend ids, clamped settings, safe ASIO registry reads, an audible bounded SFZ float path, and float/PCM parity for reverb.");
+        Results.Add("PASS audio output: stable backend ids, clamped settings, a toggleable playback-mute state, safe ASIO registry reads, an audible bounded SFZ float path, and float/PCM parity for reverb.");
     }
 
     private static void VerifyMidiDevicesAndKeyboardMap()
@@ -2527,6 +2598,7 @@ internal static partial class VerificationSuite
             (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
             (nameof(PianoVisualSettings.AudioLatencyMs), "AudioLatencyCombo"),
             (nameof(PianoVisualSettings.AudioMasterGain), "AudioGainSlider"),
+            (nameof(PianoVisualSettings.PianoSoundEnabled), "PianoSoundToggle"),
             (nameof(PianoVisualSettings.ReverbStyle), "ReverbStyleCombo"),
             (nameof(PianoVisualSettings.ReverbImpulseFile), "ReverbImpulseButton"),
             (nameof(PianoVisualSettings.PracticeAutoTempo), "AutoPracticeTempoCheck"),
@@ -5927,7 +5999,8 @@ internal static partial class VerificationSuite
         var quickControlsHost = Element<StackPanel>(window, "QuickAdjustControlsHost");
         var quickLayerHost = Element<WrapPanel>(window, "QuickAdjustLayerHost");
         var quickHandColorsCard = Element<FrameworkElement>(window, "QuickAdjustHandColorsCard");
-        // No null test for the eight elements above: Element<T> has already failed the run, naming the
+        var audioSoundToggle = Element<CheckBox>(window, "PianoSoundToggle");
+        // No null test for the nine elements above: Element<T> has already failed the run, naming the
         // missing element, if one was not there — and re-testing them here is what used to make the
         // compiler treat every later `menu.Visibility` in this method as a possible null dereference.
         Assert(menu.Visibility == Visibility.Collapsed && play.Visibility == Visibility.Collapsed, "Automated runs should start on the live stage with the menu closed.");
@@ -5945,10 +6018,32 @@ internal static partial class VerificationSuite
                 && quickControlsHost.Children.Count > 0 && quickLayerHost.Children.OfType<CheckBox>().Count() == 6
                 && KeyboardNavigation.GetTabNavigation((FrameworkElement)window.FindName("QuickAdjustCard")!) == KeyboardNavigationMode.Cycle,
             "The startup menu should open a focused quick-adjust surface with common style and stage-layer controls.");
+        var layerSwitches = quickLayerHost.Children.OfType<CheckBox>().ToArray();
+        var quickSoundToggle = (CheckBox)Field(window, "_quickPianoSoundToggle");
+        quickAdjust.UpdateLayout();
+        Assert(layerSwitches.All(toggle => toggle.HorizontalAlignment == HorizontalAlignment.Left && toggle.MinWidth < 150 && toggle.ActualWidth < 150)
+                && quickSoundToggle.HorizontalAlignment == HorizontalAlignment.Left
+                && quickSoundToggle.Parent is WrapPanel && quickSoundToggle.ActualWidth < 150,
+            "Quick Adjust switches should use compact, intrinsic sizing so each switch stays close to its caption rather than sitting at the far edge of a 150-pixel item.");
+
         var originalQuickStyle = visualSettings.NoteStyle;
         var originalQuickMode = visualSettings.ColorMode;
         var originalQuickBackground = visualSettings.ShowBackground;
         var originalQuickPresetModified = visualSettings.PresetModified;
+        var originalQuickSound = visualSettings.PianoSoundEnabled;
+        var audioEngine = (PianoAudioEngine)Field(window, "_audio");
+        Assert(audioSoundToggle.IsChecked == originalQuickSound && quickSoundToggle.IsChecked == originalQuickSound
+                && audioEngine.PlaybackEnabled == originalQuickSound,
+            "The Audio page, shared Quick Adjust switch and live audio engine should start synchronized.");
+        quickSoundToggle.IsChecked = !originalQuickSound;
+        Assert(visualSettings.PianoSoundEnabled != originalQuickSound && audioSoundToggle.IsChecked == !originalQuickSound
+                && audioEngine.PlaybackEnabled == !originalQuickSound && visualSettings.PresetModified == originalQuickPresetModified,
+            "Turning piano sound off or on in Quick Adjust should immediately mute/unmute the app output without changing the active look.");
+        audioSoundToggle.IsChecked = originalQuickSound;
+        Assert(visualSettings.PianoSoundEnabled == originalQuickSound && quickSoundToggle.IsChecked == originalQuickSound
+                && audioEngine.PlaybackEnabled == originalQuickSound,
+            "Changing piano sound from Audio should update the Quick Adjust switch and the output state.");
+        ((DispatcherTimer)Field(window, "_settingsSaveTimer")).Stop();
         var quickStyleChoice = quickChoices[nameof(PianoVisualSettings.NoteStyle)];
         var styleSourceChoice = visualChoices[nameof(PianoVisualSettings.NoteStyle)];
         Assert(quickStyleChoice.Items.Count > 1 && Equals(quickStyleChoice.SelectedValue, styleSourceChoice.SelectedValue),

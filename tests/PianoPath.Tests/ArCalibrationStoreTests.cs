@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Xunit;
 
 namespace PianoPath.Tests;
@@ -17,10 +18,71 @@ public sealed class ArCalibrationStoreTests : IDisposable
     public void A_calibration_saved_by_one_run_is_found_by_the_next_exactly()
     {
         var corners = new[] { (70.125, 292.5), (1214.0, 268.25), (1236.75, 421.0), (52.0, 449.875) };
-        Assert.True(new ArCalibrationStore(_dir).Set("usb#cam1", Default, W, H, 88, corners));
+        Assert.True(new ArCalibrationStore(_dir).Set("usb#cam1", Default, W, H, 88, corners, 93.75));
         var again = new ArCalibrationStore(_dir);
         Assert.Equal(corners, again.Get("usb#cam1", Default, W, H, 88));
+        Assert.Equal(93.75, again.GetCameraFov("usb#cam1", Default, W, H, 88));
+        var loaded = Assert.IsType<ArStoredCalibration>(again.GetCalibration("usb#cam1", Default, W, H, 88));
+        Assert.Equal(corners, loaded.PoseBaseCorners);
+        Assert.Equal(default(ArPoseRotation), loaded.Rotation);
+        Assert.Equal(ArPoseTransform.Identity, loaded.Transform);
         Assert.Equal(1, again.Count);
+    }
+
+    [Fact]
+    public void A_saved_3d_transform_round_trips_translation_uniform_scale_angles_fov_and_untransformed_baseline()
+    {
+        var baseline = Sample();
+        var transform = new ArPoseTransform(.12, -.08, .04, 4, -3, 2, 1.15);
+        Assert.True(ArCameraPose.TryTransformCorners(KeyboardLayout.Standard88, baseline, W, H, 83.5, transform, out var finalCorners));
+        var store = new ArCalibrationStore(_dir);
+        Assert.True(store.Set("cam", Default, W, H, 88, finalCorners, 83.5,
+            transform.PitchDegrees, transform.YawDegrees, transform.RollDegrees, baseline,
+            transform.PositionX, transform.PositionY, transform.PositionZ, transform.UniformScale));
+
+        var loaded = Assert.IsType<ArStoredCalibration>(new ArCalibrationStore(_dir).GetCalibration("cam", Default, W, H, 88));
+        Assert.Equal(finalCorners, loaded.Corners);
+        Assert.Equal(baseline, loaded.PoseBaseCorners);
+        Assert.Equal(83.5, loaded.CameraFovDegrees);
+        Assert.Equal(transform, loaded.Transform);
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, loaded.Corners, W, H, out var problem,
+            loaded.CameraFovDegrees, loaded.Transform, loaded.PoseBaseCorners);
+        Assert.Equal(CalibrationProblem.None, problem);
+        Assert.NotNull(calibration?.CameraPose);
+        Assert.Equal(transform, calibration!.Transform);
+        Assert.Equal(baseline, calibration.PoseBaseCorners);
+    }
+
+    [Fact]
+    public void A_version_3_entry_keeps_its_saved_fov_and_migrates_to_zero_rotation()
+    {
+        Directory.CreateDirectory(_dir);
+        File.WriteAllText(Path.Combine(_dir, ArCalibrationStore.FileName),
+            "{\"Version\":3,\"Entries\":[{\"CameraLink\":\"cam\",\"Profile\":\"default\",\"ImageWidth\":1280,\"ImageHeight\":720,\"KeyCount\":88,\"CameraFovDegrees\":91,\"Corners\":[70,292,1214,268,1236,421,52,449]}]}");
+        var loaded = Assert.IsType<ArStoredCalibration>(new ArCalibrationStore(_dir).GetCalibration("cam", Default, W, H, 88));
+        Assert.Equal(91, loaded.CameraFovDegrees);
+        Assert.Equal(ArPoseTransform.Identity, loaded.Transform);
+        Assert.Equal(Sample(), loaded.PoseBaseCorners);
+    }
+
+    [Fact]
+    public void A_version_4_entry_keeps_its_saved_rotation_and_defaults_translation_and_scale()
+    {
+        Directory.CreateDirectory(_dir);
+        var baseline = Sample();
+        Assert.True(ArCameraPose.TryRotateCorners(KeyboardLayout.Standard88, baseline, W, H, 91, 12, -8, 5, out var finalCorners));
+        static double[] Flat((double X, double Y)[] points) => points.SelectMany(point => new[] { point.X, point.Y }).ToArray();
+        var entry = new
+        {
+            CameraLink = "cam", Profile = "default", ImageWidth = W, ImageHeight = H, KeyCount = 88, CameraFovDegrees = 91d,
+            PosePitchDegrees = 12d, PoseYawDegrees = -8d, PoseRollDegrees = 5d,
+            Corners = Flat(finalCorners), PoseBaseCorners = Flat(baseline),
+        };
+        File.WriteAllText(Path.Combine(_dir, ArCalibrationStore.FileName), JsonSerializer.Serialize(new { Version = 4, Entries = new[] { entry } }));
+        var loaded = Assert.IsType<ArStoredCalibration>(new ArCalibrationStore(_dir).GetCalibration("cam", Default, W, H, 88));
+        Assert.Equal(new ArPoseTransform(0, 0, 0, 12, -8, 5, 1), loaded.Transform);
+        Assert.Equal(finalCorners, loaded.Corners);
+        Assert.Equal(baseline, loaded.PoseBaseCorners);
     }
 
     [Fact]
@@ -167,10 +229,14 @@ public sealed class ArCalibrationStoreTests : IDisposable
         var store = new ArCalibrationStore(_dir);
         Assert.Equal(1, store.Count);
         Assert.Equal(Sample(), store.Get("cam", Default, W, H, 88));
-        // Saving a second view writes both, under their own ids, and the file says it is version 2 now.
-        Assert.True(store.Set("cam", ArCalibrationProfiles.Overhead90.Id, W, H, 88, Sample()));
+        Assert.Equal(ArCameraPose.DefaultFovDegrees, store.GetCameraFov("cam", Default, W, H, 88));
+        var legacy = Assert.IsType<ArStoredCalibration>(store.GetCalibration("cam", Default, W, H, 88));
+        Assert.Equal(ArPoseTransform.Identity, legacy.Transform);
+        // Saving a second view writes both, under their own ids, and the file says it is version 5 now.
+        Assert.True(store.Set("cam", ArCalibrationProfiles.Overhead90.Id, W, H, 88, Sample(), 91.5));
         var text = File.ReadAllText(store.FilePath);
-        Assert.Contains("\"Version\": 2", text);
+        Assert.Contains("\"Version\": 5", text);
+        Assert.Equal(91.5, new ArCalibrationStore(_dir).GetCameraFov("cam", ArCalibrationProfiles.Overhead90.Id, W, H, 88));
         Assert.Contains("\"Profile\": \"default\"", text);
         Assert.Contains("\"Profile\": \"overhead90\"", text);
     }
@@ -194,6 +260,7 @@ public sealed class ArCalibrationStoreTests : IDisposable
         var store = new ArCalibrationStore(_dir);
         Assert.Equal(1, store.Count);
         Assert.Equal(Sample(), store.Get("cam", ArCalibrationProfiles.Tilt45.Id, W, H, 88));
+        Assert.Equal(ArCameraPose.DefaultFovDegrees, store.GetCameraFov("cam", ArCalibrationProfiles.Tilt45.Id, W, H, 88));
     }
 
     [Fact]

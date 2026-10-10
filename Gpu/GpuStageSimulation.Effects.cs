@@ -98,7 +98,7 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>The software stage's ColorFromHue (90 % chroma over a 10 % floor), sRGB 0..1.</summary>
-    private static Vector3 ColorFromHue(double hue)
+    internal static Vector3 ColorFromHue(double hue)
     {
         hue = (hue % 360 + 360) % 360;
         const double c = .9, m = .1;
@@ -108,14 +108,14 @@ internal sealed partial class GpuStageSimulation
     }
 
     /// <summary>The software stage's per-pitch base hue.</summary>
-    private static double Hue188(int pitch) => 188 + (pitch - FirstPitch) / (double)Math.Max(1, KeyCount - 1) * 112;
+    internal static double Hue188(int pitch) => 188 + (pitch - FirstPitch) / (double)Math.Max(1, KeyCount - 1) * 112;
 
     // ------------------------------------------------------------------------------------------------
     // impact morphs and release effects
     // ------------------------------------------------------------------------------------------------
 
     /// <summary>Impact phase, morph channel: what the note itself becomes when it lands.</summary>
-    private void SpawnImpactMorph(float x, float y, Vector3 color, float strength)
+    private void SpawnImpactMorph(int pitch, float x, float y, Vector3 color, float strength)
     {
         var look = _look;
         if (look.ImpactMorph == "None") return;
@@ -130,7 +130,7 @@ internal sealed partial class GpuStageSimulation
                 {
                     var angle = -MathF.PI / 2 + (Rand() - .5f) * 2.4f;
                     var speed = (140 + Rand() * 260) * (.6f + .4f * strength);
-                    Spawn(new Particle { Shape = Shape.Shard, X = x, Y = y - 2, Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed, Life = .5f + Rand() * .4f, Mass = 1, Phase = Rand() * MathF.Tau, Size = 2 + Rand() * 3.5f, Grav = 1.4f, DragK = 1, Glow = 1, Color = Vector3.Lerp(color, Vector3.One, .45f) });
+                    Spawn(new Particle { Shape = Shape.Shard, X = x, Y = y - 2, Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed, Life = .5f + Rand() * .4f, Mass = 1, Phase = Rand() * MathF.Tau, Size = 2 + Rand() * 3.5f, Grav = 1.4f, DragK = 1, Glow = 1, Color = Vector3.Lerp(color, Vector3.One, .45f) }, pitch, origin: 0);
                 }
                 break;
             }
@@ -138,11 +138,11 @@ internal sealed partial class GpuStageSimulation
             {
                 var count = Math.Clamp((int)(8 * intensity) + 3, 0, 20);
                 for (var i = 0; i < count; i++)
-                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 22, Y = y + 2, Vx = (Rand() - .5f) * 30, Vy = 40 + Rand() * 90, Life = .55f + Rand() * .45f, Mass = 2, Phase = Rand() * MathF.Tau, Size = 1.6f + Rand() * 2.2f, Grav = 1.1f, DragK = 1.6f, Glow = 1, Color = Vector3.Lerp(color, new Vector3(1f, .86f, .59f), .3f) });
+                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 22, Y = y + 2, Vx = (Rand() - .5f) * 30, Vy = 40 + Rand() * 90, Life = .55f + Rand() * .45f, Mass = 2, Phase = Rand() * MathF.Tau, Size = 1.6f + Rand() * 2.2f, Grav = 1.1f, DragK = 1.6f, Glow = 1, Color = Vector3.Lerp(color, new Vector3(1f, .86f, .59f), .3f) }, pitch, origin: 0);
                 break;
             }
             case "Absorb":
-                if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .3f, Kind = 3, Strength = strength, Color = color });
+                if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .3f, Kind = 3, Strength = strength, Color = color, Pitch = pitch, Channel = 1, Origin = 0 });
                 break;
             case "Bounce":
             {
@@ -150,13 +150,13 @@ internal sealed partial class GpuStageSimulation
                 for (var i = 0; i < count; i++)
                 {
                     var speed = 220 + Rand() * 320;
-                    Spawn(new Particle { Shape = Shape.Streak, X = x + (Rand() - .5f) * 10, Y = y, Vx = (Rand() - .5f) * 60, Vy = -speed, Life = .4f + Rand() * .3f, Mass = .6f, Phase = Rand() * MathF.Tau, Size = look.ParticleSize * (.5f + Rand() * .5f), Grav = 1, DragK = 1, Glow = 1, Color = i % 3 == 0 ? Vector3.One : color });
+                    Spawn(new Particle { Shape = Shape.Streak, X = x + (Rand() - .5f) * 10, Y = y, Vx = (Rand() - .5f) * 60, Vy = -speed, Life = .4f + Rand() * .3f, Mass = .6f, Phase = Rand() * MathF.Tau, Size = look.ParticleSize * (.5f + Rand() * .5f), Grav = 1, DragK = 1, Glow = 1, Color = i % 3 == 0 ? Vector3.One : color }, pitch, origin: 0);
                 }
-                if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .3f, Strength = .6f * strength, Color = Vector3.One });
+                if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .3f, Strength = .6f * strength, Color = Vector3.One, Pitch = pitch, Channel = 1, Origin = 0 });
                 break;
             }
             case "Morph":
-                if (_flashes.Count < 48) _flashes.Add(new Flash { X = x, Y = y, Life = .3f, Style = 3, Strength = strength, Color = color, Intensity = look.ImpactFlashIntensity });
+                if (_flashes.Count < 48) _flashes.Add(new Flash { X = x, Y = y, Life = .3f, Style = 3, Strength = strength, Color = color, Intensity = look.ImpactFlashIntensity, Pitch = pitch, Channel = 1, Origin = 0 });
                 break;
         }
     }
@@ -177,7 +177,7 @@ internal sealed partial class GpuStageSimulation
             {
                 var count = Math.Clamp((int)(6 * strength) + 2, 0, 10);
                 for (var i = 0; i < count; i++)
-                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 18, Y = y - 4, Vx = (Rand() - .5f) * 24, Vy = -(50 + Rand() * 90), Life = .7f + Rand() * .5f, Mass = .5f, Phase = Rand() * MathF.Tau, Size = 1.4f + Rand() * 1.6f, Grav = -.25f, DragK = 1, Glow = 1, Color = color });
+                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 18, Y = y - 4, Vx = (Rand() - .5f) * 24, Vy = -(50 + Rand() * 90), Life = .7f + Rand() * .5f, Mass = .5f, Phase = Rand() * MathF.Tau, Size = 1.4f + Rand() * 1.6f, Grav = -.25f, DragK = 1, Glow = 1, Color = color }, clamped, origin: 1);
                 break;
             }
             case "Dissolve":
@@ -186,7 +186,7 @@ internal sealed partial class GpuStageSimulation
                 for (var i = 0; i < count; i++)
                 {
                     var angle = Rand() * MathF.Tau; var speed = 20 + Rand() * 70;
-                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 26, Y = y - 6, Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed - 20, Life = .4f + Rand() * .35f, Mass = 1, Phase = Rand() * MathF.Tau, Size = .9f + Rand() * 1.1f, Grav = .3f, DragK = 2, Glow = 1, Color = color });
+                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 26, Y = y - 6, Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed - 20, Life = .4f + Rand() * .35f, Mass = 1, Phase = Rand() * MathF.Tau, Size = .9f + Rand() * 1.1f, Grav = .3f, DragK = 2, Glow = 1, Color = color }, clamped, origin: 1);
                 }
                 break;
             }
@@ -194,17 +194,17 @@ internal sealed partial class GpuStageSimulation
             {
                 var count = Math.Clamp((int)(4 * strength) + 2, 0, 8);
                 for (var i = 0; i < count; i++)
-                    Spawn(new Particle { Shape = Shape.Dust, X = x + (Rand() - .5f) * 20, Y = y - 6, Vx = (Rand() - .5f) * 20, Vy = -(30 + Rand() * 50), Life = .8f + Rand() * .6f, Mass = 1, Phase = Rand() * MathF.Tau, Size = 2 + Rand() * 2, Grav = -.1f, DragK = 2, Glow = 1, Color = Vector3.Lerp(new Vector3(.59f, .57f, .55f), color, .2f) });
+                    Spawn(new Particle { Shape = Shape.Dust, X = x + (Rand() - .5f) * 20, Y = y - 6, Vx = (Rand() - .5f) * 20, Vy = -(30 + Rand() * 50), Life = .8f + Rand() * .6f, Mass = 1, Phase = Rand() * MathF.Tau, Size = 2 + Rand() * 2, Grav = -.1f, DragK = 2, Glow = 1, Color = Vector3.Lerp(new Vector3(.59f, .57f, .55f), color, .2f) }, clamped, origin: 1);
                 break;
             }
             case "Snap Back":
-                if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .25f, Kind = 3, Strength = strength, Color = color });
+                if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .25f, Kind = 3, Strength = strength, Color = color, Pitch = clamped, Channel = 2, Origin = 1 });
                 break;
             case "Echo Rings":
                 if (_rings.Count < 95)
                 {
-                    _rings.Add(new Ring { X = x, Y = y, Life = .5f, Strength = .8f * strength, Color = color });
-                    _rings.Add(new Ring { X = x, Y = y, Life = .5f, Strength = .4f * strength, Color = Vector3.One });
+                    _rings.Add(new Ring { X = x, Y = y, Life = .5f, Strength = .8f * strength, Color = color, Pitch = clamped, Channel = 2, Origin = 1 });
+                    _rings.Add(new Ring { X = x, Y = y, Life = .5f, Strength = .4f * strength, Color = Vector3.One, Pitch = clamped, Channel = 2, Origin = 1 });
                 }
                 break;
         }

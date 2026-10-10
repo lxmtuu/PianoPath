@@ -49,7 +49,7 @@ Gallery CI run `37480841688` dùng `--preset` cho 14 built-in + 3 community và 
 
 ## 4. Lát note material — tách khỏi recipe preset
 
-`Gem` và `Crystal Outline` là lựa chọn vật liệu của renderer, không phải preset mới: không đổi `Concert Gold`, `Neon Violet`, `Two Hands` hay bất kỳ recipe/default nào. `Notes3D` là trục depth riêng (Gem hỗ trợ 2D/3D, Crystal Outline cố ý phẳng); `Streak` vẫn thuộc giai đoạn trail sau. CLI preview chỉ áp các override vào memory và gallery dùng thư mục settings tạm riêng, không ghi đè settings/preset người dùng. AR chưa được nhận hỗ trợ vì layer hiện tại vẫn vẽ note qua quad phẳng riêng.
+`Gem` và `Crystal Outline` là lựa chọn vật liệu của renderer, không phải preset mới: không đổi `Concert Gold`, `Neon Violet`, `Two Hands` hay bất kỳ recipe/default nào. `Notes3D` là trục depth riêng (Gem hỗ trợ 2D/3D, Crystal Outline cố ý phẳng); `Streak` vẫn thuộc giai đoạn trail sau. CLI preview chỉ áp các override vào memory và gallery dùng thư mục settings tạm riêng, không ghi đè settings/preset người dùng. AR camera-facing quads now route known material IDs through the shared shader; the new WARP style samples are pending CI, and full parameter/value parity plus webcam/hardware review remain Unverified.
 
 CI [37495463612](https://github.com/lxmtuu/PianoPath/actions/runs/37495463612) đã build và chạy `--verify` (2.188 assertions, 0 skipped), kiểm pixel WPF/GPU-WARP, rồi tạo `docs/previews/note-styles.jpg`: 9 material/depth cases × hai engine, mỗi capture 1080×700 thu còn 540×350. Đây là automated WPF + WARP gate, không phải GPU thật hay AR acceptance; readability/accessibility của toàn bộ 17 preset vẫn mở.
 

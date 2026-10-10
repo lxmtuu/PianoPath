@@ -243,9 +243,9 @@ internal sealed class GpuLook
     /// <summary>
     /// Builds the look from the settings. <paramref name="noteColor"/> is the stage's own colour function
     /// (note colour with every modulator and the saturation/contrast grade applied). <paramref name="overCamera"/> suppresses
-    /// the stage's own notes, keys and all key-anchored transients (including ones already in flight): the AR overlay draws
-    /// projected notes on a real keyboard in the camera picture, so unprojected stage geometry would land in the wrong place.
-    /// Ambient layers that are composited over the camera remain enabled.
+    /// the stage-space note/key/sprite draw paths, but preserves effect settings and simulation state: the calibrated AR layer
+    /// projects key-anchored live effects onto the real keyboard instead of dropping them or drawing misaligned 2D sprites.
+    /// Ambient layers that are composited over the camera remain enabled and screen-space.
     /// </summary>
     internal static GpuLook From(PianoVisualSettings s, Func<int, int, WpfColor> noteColor, double keyboardFraction, Func<WpfColor, WpfColor>? adjustColor = null, bool overCamera = false)
     {
@@ -259,9 +259,8 @@ internal sealed class GpuLook
         return new GpuLook
         {
             OverCamera = overCamera,
-            // Over the camera the stage's notes go, except when they are drawn in perspective (AR-S4): then the note pass is the
-            // one that draws them on the picture, and the look has to keep them.
-            ShowNotes = s.ShowNotes && (!overCamera || s.ArNotesProjected),
+            // The camera overlay owns its notes in both modes (flat or 3D-projected); never reopen the stage-space note pass.
+            ShowNotes = s.ShowNotes && !overCamera,
             NoteStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.NoteStyles, s.NoteStyle)),
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
@@ -281,16 +280,18 @@ internal sealed class GpuLook
             NoteLandingGlow = s.NoteLandingGlow, NoteLandingGlowAmount = P(s.NoteLandingGlowAmount),
             HoldBar = s.HoldBar, HoldBarIntensity = P(s.HoldBarIntensity), HoldBreath = s.HoldBreath, HoldBreathRate = P(s.HoldBreathRate),
             HoldVibration = s.HoldVibration, HoldVibrationAmount = P(s.HoldVibrationAmount),
-            HoldElectricArc = s.HoldElectricArc && !overCamera, HoldArcIntensity = P(s.HoldArcIntensity),
+            HoldElectricArc = s.HoldElectricArc, HoldArcIntensity = P(s.HoldArcIntensity),
 
-            ShowEmbers = s.ShowEmbers && !overCamera, ShowWisps = s.ShowWisps && !overCamera, ShowFlame = s.ShowFlame && s.FlameIntensity > 0 && !overCamera,
-            ShowImpactRings = s.ShowImpactRings && !overCamera, ShowImpactFlash = s.ShowImpactFlash && !overCamera,
+            // These are retained in camera mode because GpuStageSimulation feeds their pitch-tagged state to
+            // GpuArLayer. BuildSprites exits before drawing them in stage pixels, so no 2D effect is laid over the camera.
+            ShowEmbers = s.ShowEmbers, ShowWisps = s.ShowWisps, ShowFlame = s.ShowFlame && s.FlameIntensity > 0,
+            ShowImpactRings = s.ShowImpactRings, ShowImpactFlash = s.ShowImpactFlash,
             ImpactBurst = s.ZoneSplit ? "Zone" : s.ImpactBurst,
-            ImpactWave = overCamera ? "None" : s.ImpactWave, ImpactWaveIntensity = overCamera ? 0 : P(s.ImpactWaveIntensity),
+            ImpactWave = s.ImpactWave, ImpactWaveIntensity = P(s.ImpactWaveIntensity),
             ImpactFlashIntensity = P(s.ImpactFlashIntensity), RingSize = P(s.RingSize), RingSizeRaw = (float)s.RingSize,
             ImpactFlashStyle = s.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 },
-            ImpactMorph = overCamera ? "None" : s.ImpactMorph, ImpactMorphIntensity = overCamera ? 0 : P(s.ImpactMorphIntensity), ZoneSplitPitch = (int)Math.Round(s.ZoneSplitPitch),
-            ReleaseEffect = overCamera ? "Fade" : s.ReleaseEffect, ReleaseIntensity = overCamera ? 0 : P(s.ReleaseIntensity),
+            ImpactMorph = s.ImpactMorph, ImpactMorphIntensity = P(s.ImpactMorphIntensity), ZoneSplitPitch = (int)Math.Round(s.ZoneSplitPitch),
+            ReleaseEffect = s.ReleaseEffect, ReleaseIntensity = P(s.ReleaseIntensity),
             ParticleAmount = (float)s.ParticleAmount, ParticleResponse = (float)s.ParticleResponse, ParticleVelocity = (float)s.ParticleVelocity,
             ParticleSpeed = P(s.ParticleSpeed), ParticleRandomness = P(s.ParticleRandomness), ParticleSpread = P(s.ParticleSpread),
             ParticleLife = (float)s.ParticleLife, ParticleLifeRandomness = P(s.ParticleLifeRandomness), ParticleSize = (float)s.ParticleSize,
@@ -301,7 +302,7 @@ internal sealed class GpuLook
             WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",
 
-            ShowKeys = s.ShowKeys && !overCamera, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo && !overCamera, HaloIntensity = P(s.HaloIntensity),
+            ShowKeys = s.ShowKeys && !overCamera, AnimateKeys = s.AnimateKeys, ShowKeyFelt = s.ShowKeyFelt, ShowKeyShadow = s.ShowKeyShadow, ShowHalo = s.ShowHalo, HaloIntensity = P(s.HaloIntensity),
             KeyboardStyle = Math.Max(0, Array.IndexOf(PianoVisualSettings.KeyboardStyles, s.KeyboardStyle)),
             KeyboardFraction = (float)keyboardFraction, KeyOverhang = P(s.KeyOverhang), KeyPressDepth = P(s.KeyPressDepth),
             KeyLighting = P(s.KeyLighting), KeyGlowRadius = P(s.KeyGlowRadius), PressedKeyFixed = s.PressedKeyColorMode == "Fixed",
@@ -313,7 +314,7 @@ internal sealed class GpuLook
             ShowBackground = s.ShowBackground, BackgroundGradient = s.BackgroundGradient, BackgroundMotion = s.BackgroundMotion,
             BackgroundMotionAmount = P(s.BackgroundMotionAmount), BackgroundMotionSpeed = Speed(s.BackgroundMotionSpeed), ShowStars = s.ShowStars, StarDensity = P(s.StarDensity),
             Chroma = s.BackgroundMode == "ChromaGreen", BackgroundDim = P(s.BackgroundDim),
-            HorizonGlow = P(s.HorizonGlow), ShowLightBeams = s.ShowLightBeams && !overCamera, BeamIntensity = P(s.BeamIntensity),
+            HorizonGlow = P(s.HorizonGlow), ShowLightBeams = s.ShowLightBeams, BeamIntensity = P(s.BeamIntensity),
             BackgroundGuide = s.ShowBackground && s.BackgroundGuide, ShowPetals = s.ShowPetals, PetalAmount = (float)s.PetalAmount,
             AmbientEnergy = s.AmbientEnergy, AmbientEnergyAmount = P(s.AmbientEnergyAmount), AmbientEnergySpeed = Speed(s.AmbientEnergySpeed),
             AmbientNature = s.AmbientNature, AmbientNatureAmount = P(s.AmbientNatureAmount), AmbientNatureSpeed = Speed(s.AmbientNatureSpeed),

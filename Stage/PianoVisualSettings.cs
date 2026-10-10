@@ -97,6 +97,8 @@ internal sealed class PianoVisualSettings
     public double AudioLatencyMs { get; set; } = 5;
     /// <summary>Master piano output gain, 0.5–2.0; applied before the output limiter and the recording tap.</summary>
     public double AudioMasterGain { get; set; } = 1.25;
+    /// <summary>Whether this app's piano reaches the selected playback device; MIDI output and recorded audio remain independent.</summary>
+    public bool PianoSoundEnabled { get; set; } = true;
     /// <summary>Reverb character: <c>hall</c> (classic algorithmic), <c>concert</c> or <c>soundboard</c>
     /// (built-in convolution responses) or <c>custom</c> (the impulse file below). Unknown values fall
     /// back to <c>hall</c>.</summary>
@@ -423,7 +425,7 @@ internal sealed class PianoVisualSettings
     public double ArKeyLight { get; set; } = 60;
     /// <summary>How late the camera's picture is, milliseconds; the overlay is held back by this much so it shows what the picture shows. Never delays the sound.</summary>
     public double ArDelay { get; set; } = 0;
-    /// <summary>The quality tier of the AR overlay: Lite is the flat quads the overlay has always drawn, Standard adds the key and impact glows, Ultra adds particles, pulses and the rest.</summary>
+    /// <summary>The quality tier of the AR overlay. Lite leaves the real keys unchanged; Standard and Ultra add the key tint. Ultra's planned AR pulses and particles are not wired over the camera yet (AR-S5).</summary>
     public string ArQuality { get; set; } = ArQualityTiers.DefaultQuality;
     /// <summary>Notes and bars grow wider the harder the key is struck, instead of every strike having the same width.</summary>
     public bool ArNoteWidthByVelocity { get; set; } = false;
@@ -437,10 +439,18 @@ internal sealed class PianoVisualSettings
     public double ArNoteFadeSoft { get; set; } = 100;
     /// <summary>Fade-in of a note struck at the velocity ceiling, percent of the usual fade.</summary>
     public double ArNoteFadeHard { get; set; } = 100;
-    /// <summary>The notes and the stage's particles are drawn through the camera's view of the keys (AR-S4): a note far from the camera is smaller and is cut off at the horizon. Off keeps the flat notes the overlay has always drawn.</summary>
+    /// <summary>The song's notes are mapped through the camera's view of the keys (AR-S4); note trails are withheld until they can be projected correctly, while ambient petals and stars remain flat. Off keeps the flat notes.</summary>
     public bool ArNotesInPerspective { get; set; } = false;
+    /// <summary>Draw the player's growing press bars over the camera; the key tint remains independent. Off by default to avoid bright press trails in a stream or call.</summary>
+    public bool ArLivePressTrails { get; set; } = false;
+    /// <summary>In Perform mode, emit an independent 3D note on each MIDI Note On. The note travels along the calibrated AR direction and continues after Note Off; held key tint remains separate.</summary>
+    public bool ArRisingMidiNotes { get; set; } = true;
     /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
     public double ArNoteMinScale { get; set; } = 0;
+    /// <summary>Independent 3D pitch of AR note travel: 0° follows the default back-to-keys axis, 90° turns toward the player-side normal, and 180° reverses it.</summary>
+    public double ArNoteDirectionTilt { get; set; } = 0;
+    /// <summary>Independent 3D azimuth of AR note travel: -180°..180° sweeps the tilted direction around all keyboard axes.</summary>
+    public double ArNoteDirectionAzimuth { get; set; } = 0;
     /// <summary>
     /// Which view of the camera the marked key area is for: the camera stands at one angle to the keys (45°, 90° overhead,
     /// see <see cref="ArCalibrationProfiles"/>), and corners marked at one angle draw the notes in the wrong place at another.
@@ -505,7 +515,9 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale).Normalised();
+    internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
+        ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
+        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
 
     /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
     internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
@@ -626,7 +638,8 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
                 or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
-                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale)) continue;
+                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails) or nameof(ArRisingMidiNotes)
+                or nameof(ArNoteDirectionTilt) or nameof(ArNoteDirectionAzimuth)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked.
             if (property.Name == nameof(ArViewProfileId)) continue;
@@ -634,9 +647,9 @@ internal sealed class PianoVisualSettings
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
             if (property.Name is nameof(CameraSourceLink) or nameof(CameraVideoPath)) continue;
-            // And the audio output: the backend and its buffer belong to this machine's sound hardware,
-            // so applying a community look can never switch the player off their ASIO interface.
-            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain)) continue;
+            // Audio output and the piano sound switch belong to this machine, not to a visual look;
+            // applying a community preset can never change the player's device or mute their instrument.
+            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain) or nameof(PianoSoundEnabled)) continue;
             // The reverb room and its impulse file follow the machine too: the file path would not exist
             // on another computer, and a look should not silently change how the piano sounds.
             if (property.Name is nameof(ReverbStyle) or nameof(ReverbImpulseFile)) continue;
@@ -657,6 +670,7 @@ internal sealed class PianoVisualSettings
         CameraSourceLink = "";
         CameraVideoPath = "";
         ArViewProfileId = "";               // which view the camera stands at is this machine's; Clamp turns the empty id into the default view
+        PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
     }
 
     internal void Clamp()
@@ -749,8 +763,11 @@ internal sealed class PianoVisualSettings
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         ArViewProfileId = ArCalibrationProfiles.Normalize(ArViewProfileId).Id;
         ArQuality = ArQualityTiers.Normalize(ArQuality);
-        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay, ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality)).Normalised();
+        var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
+            ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
+            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
+        ArNoteDirectionTilt = ar.NoteDirectionTilt; ArNoteDirectionAzimuth = ar.NoteDirectionAzimuth;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);
         ArNoteMinScale = ArOptions.Fit(ArNoteMinScale, ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, ArOptions.NoteMinScaleDefault);

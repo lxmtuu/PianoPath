@@ -100,9 +100,10 @@ internal sealed partial class PianoStage
     private bool _arOverlay;
 
     /// <summary>
-    /// True while the AR overlay draws over the camera: the GPU look leaves out stage notes, keys and new note/key FX,
-    /// while <see cref="GpuStageSimulation.BuildSprites"/> also hides transients already in flight. Ambient screen-space
-    /// layers remain composited over the camera. Only the look changes; the saved settings are untouched.
+    /// True while calibrated AR draws over the camera: stage-space notes, key bodies and sprite drawing are suppressed,
+    /// while Live Stage settings and pitch-tagged simulation state remain available to GpuArLayer's calibrated 3D pass.
+    /// The renderer also gates stage-space keys/sprites whenever an uncalibrated camera is the background.
+    /// Ambient screen-space layers remain composited over the camera. Only the look changes; saved settings are untouched.
     /// </summary>
     internal bool ArOverlayActive
     {

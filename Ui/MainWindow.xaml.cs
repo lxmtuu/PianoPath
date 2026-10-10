@@ -84,6 +84,8 @@ public partial class MainWindow : Window
         // immediately rebuilding.
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
         _audio.MasterGain = _visualSettings.AudioMasterGain;
+        _audio.PlaybackEnabled = _visualSettings.PianoSoundEnabled;
+        SyncPianoSoundControls();
         _audio.OutputChanged += AudioEngine_OutputChanged;
         SourceInitialized += (_, _) => { _audio.SetAsioSystemHandle(new System.Windows.Interop.WindowInteropHelper(this).Handle); HookCameraChanges(); };
         // Same for the reverb room, which also shapes the very first pipeline.
@@ -1245,7 +1247,9 @@ public partial class MainWindow : Window
     internal void UpdateArFeed()
     {
         var plan = DecideAr();
+        var arLayerChanged = plan.ArLayer != _arPlan.ArLayer;
         _arPlan = plan;
+        if (arLayerChanged && SettingsSearchBox is not null) RefreshDependentRows();
         Stage.ArOverlayActive = plan.HideStageLayers;
         if (!plan.CameraLayer)
         {
@@ -1263,7 +1267,10 @@ public partial class MainWindow : Window
         _gpuFeed.Camera = new GpuCameraInput(_cameraFrames, PictureFit.Fit, _visualSettings.CameraMirror, 1f);
         var calibration = plan.ArLayer ? _arCalibration?.Current : null;
         _gpuFeed.Ar = calibration is null ? null
-            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes, (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect);
+            : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes,
+                (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect,
+                ShowLiveTrails: options.LivePressTrails, NoteDirection: options.NoteDirection,
+                ShowRisingMidiNotes: options.ShowsRisingMidiNotes);
         RefreshHandStatus();
         RefreshArStatus();
     }

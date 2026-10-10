@@ -15,7 +15,29 @@ internal static class CalibrationHints
         "Step 4 of 4: click the front-left corner: the lowest key, at the near edge, closest to you.",
     ];
 
-    private const string AdjustStep = "The grid shows where the keys would be. Drag a corner, or pick one with Tab and nudge it with the arrow keys (Shift for bigger steps), until the grid sits on your keys. Then press Done.";
+    private const string AdjustStep = "The grid shows the keys. Use the Unity-style gizmo or sliders to move, rotate and uniformly scale the keyboard in 3D; drag corners for fine tuning. Aim the separate note-travel arrow on the preview, or use the tilt and azimuth controls. Tab and the arrow keys nudge one selected corner. Then press Done.";
+
+    internal const string RotationTitle = "3D keyboard pose";
+    internal const string RotationTip = "These controls rotate the keyboard surface in 3D around its centre. Pitch, yaw and roll are independent of note travel; camera FOV adjusts the perspective estimate. The key corners remain the calibration anchor.";
+    internal const string RotationOutOfBounds = "That 3D pose would move a corner too far outside the picture or behind the camera.";
+    internal const string CameraFovTitle = "Camera FOV";
+    internal const string CameraFovTip = "Estimated horizontal camera field of view. Adjust it if perspective depth looks wrong; it is saved with this calibration.";
+    internal const string PitchTitle = "Pitch";
+    internal const string YawTitle = "Yaw";
+    internal const string RollTitle = "Roll";
+    internal const string TransformTitle = "Object transform";
+    internal const string TransformTip = "Move, rotate and uniformly scale the complete virtual keyboard in 3D. Translation uses keyboard-local units; scale preserves the key proportions. These controls never change note travel.";
+    internal const string ScaleTitle = "Scale";
+    internal const string ToolTitle = "Gizmo";
+    internal const string ToolTip = "Choose corner editing or a Unity-style Move, Rotate, Scale or note-direction gizmo. Drag its handles on the camera preview.";
+    internal const string NoteDirectionTitle = "Note travel";
+    internal const string NoteDirectionTip = "Note travel is independent of the keyboard transform. Drag its yellow preview arrow to aim within the keyboard plane, or set its 3D tilt and azimuth. The resulting direction is saved with stage settings.";
+    internal const string TiltTitle = "Tilt";
+    internal const string AzimuthTitle = "Azimuth";
+    internal const string ScreenUpTitle = "Aim screen-up";
+    internal const string ScreenUpTip = "Set note travel to the 3D direction in the keyboard plane that projects straight up in this camera preview.";
+    internal const string KeyDepthTitle = "Along key depth";
+    internal const string KeyDepthTip = "Set note travel along the keyboard's back-to-front depth axis, perpendicular to the row of keys.";
 
     /// <summary>The line above the picture for the step the wizard is at.</summary>
     internal static string ForStep(CalibrationWizard wizard) => wizard.Step switch
@@ -57,10 +79,23 @@ internal static class CalibrationHints
         _ => "Low notes on the left, far edge at the top",
     };
 
+    internal static string ForTool(CalibrationTool tool) => tool switch
+    {
+        CalibrationTool.Move => "Move",
+        CalibrationTool.Rotate => "Rotate",
+        CalibrationTool.Scale => "Scale",
+        CalibrationTool.NoteDirection => "Note direction",
+        _ => "Corner points",
+    };
+
     /// <summary>Every sentence the window can show, for the check that they all exist in the string table.</summary>
     internal static IEnumerable<string> All() =>
     [
-        .. CornerSteps, AdjustStep, OrientationTitle, OrientationTip,
+        .. CornerSteps, AdjustStep, OrientationTitle, OrientationTip, RotationTitle, RotationTip, RotationOutOfBounds,
+        CameraFovTitle, CameraFovTip, PitchTitle, YawTitle, RollTitle, TransformTitle, TransformTip, ScaleTitle,
+        ToolTitle, ToolTip, NoteDirectionTitle, NoteDirectionTip, TiltTitle, AzimuthTitle, ScreenUpTitle, ScreenUpTip,
+        KeyDepthTitle, KeyDepthTip,
+        .. Enum.GetValues<CalibrationTool>().Select(ForTool),
         .. Enum.GetValues<CalibrationProblem>().Where(p => p != CalibrationProblem.None).Select(ForProblem),
         .. Enum.GetValues<KeyboardOrientation>().Select(ForOrientation),
     ];

@@ -105,7 +105,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal double ShaderCompileMilliseconds { get; private set; }
 
     private ID3D11VertexShader _vsFullscreen = null!, _vsNote = null!, _vsKey = null!, _vsSprite = null!, _vsArQuad = null!;
-    private ID3D11PixelShader _psArQuad = null!, _psBackground = null!, _psNote = null!, _psKey = null!, _psSprite = null!, _psPrefilter = null!, _psDown = null!, _psUp = null!, _psComposite = null!;
+    private ID3D11PixelShader _psArQuad = null!, _psBackground = null!, _psNote = null!, _psKey = null!, _psSprite = null!, _psPrefilter = null!, _psDown = null!, _psUp = null!, _psComposite = null!, _psCompositeGeometry = null!, _psCompositeGlow = null!;
     private ID3D11BlendState _blendPremultiplied = null!, _blendAdditive = null!, _blendOpaque = null!;
     private ID3D11DepthStencilState _depthOff = null!, _depthWrite = null!, _depthRead = null!;
     private ID3D11RasterizerState _raster = null!;
@@ -287,6 +287,8 @@ internal sealed class GpuStageRenderer : IDisposable
         _psDown = Device.CreatePixelShader(Compile("PsBloomDown", "ps_5_0").Span);
         _psUp = Device.CreatePixelShader(Compile("PsBloomUp", "ps_5_0").Span);
         _psComposite = Device.CreatePixelShader(Compile("PsComposite", "ps_5_0").Span);
+        _psCompositeGeometry = Device.CreatePixelShader(Compile("PsCompositeGeometry", "ps_5_0").Span);
+        _psCompositeGlow = Device.CreatePixelShader(Compile("PsCompositeGlow", "ps_5_0").Span);
         ShaderCompileMilliseconds = watch.Elapsed.TotalMilliseconds;
     }
 
@@ -351,14 +353,39 @@ internal sealed class GpuStageRenderer : IDisposable
     /// </summary>
     internal void SetArKeyColors(Vector4[]? colors) => _arKeyColors = colors;
 
+    /// <summary>How many instances the stage-space note pass built in the last frame; camera regressions ensure it is zero over camera.</summary>
+    internal int StageNoteCount { get; private set; }
+    /// <summary>How many stage-space falling-note trails were built in the last frame.</summary>
+    internal int StageNoteTrailCount { get; private set; }
+    /// <summary>How many virtual key bodies the stage pass built; camera output must never use uncalibrated stage keys.</summary>
+    internal int StageKeyCount { get; private set; }
+    /// <summary>How many stage-space transient sprites were built before drawing the last frame.</summary>
+    internal int StageSpriteCount { get; private set; }
+
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
+    /// <summary>How many song-note quads the AR layer built, excluding key tint and Live Stage light spill.</summary>
+    internal int ArShapeCount => _arLayer.ShapeCount;
+    internal int AmbientCount => _ambientList.Count;
 
-    /// <summary>How many of those were lit keys (the rest are notes and the bars of the keys the player presses); verification reads it.</summary>
+    /// <summary>How many AR quads were lit-key patches; notes, bars, light spill and Live Stage effects are counted separately.</summary>
     internal int ArKeyQuadCount => _arLayer.KeyQuadCount;
 
     /// <summary>How many of those were bars of keys the player is pressing; verification reads it.</summary>
     internal int ArLiveBarCount => _arLayer.LiveBarCount;
+    internal int ArRisingMidiNoteCount => _arLayer.RisingMidiNoteCount;
+    internal int ArNoteTrailQuadCount => _arLayer.NoteTrailQuadCount;
+    internal int ArGhostNoteQuadCount => _arLayer.GhostNoteQuadCount;
+    internal int ArLandingGlowCount => _arLayer.LandingGlowCount;
+    internal int ArNoteLabelCount => _arLayer.NoteLabelCount;
+    internal int ArImpactLightCount => _arLayer.ImpactLightCount;
+    internal int ArNoteLightCount => _arLayer.NoteLightCount;
+    internal int ArPulseCount => _arLayer.PulseCount;
+    internal int ArParticleFxCount => _arLayer.ParticleFxCount;
+    internal int ArFlashCount => _arLayer.FlashCount;
+    internal int ArHoldArcCount => _arLayer.HoldArcCount;
+    internal int ArBeamCount => _arLayer.BeamCount;
+    internal int ArReleaseEffectCount => _arLayer.ReleaseEffectCount;
 
     /// <summary>The camera texture (null when there is no layer or no frame yet); verification reads its counters.</summary>
     internal GpuCameraTexture? CameraTexture => _camera;
@@ -380,43 +407,48 @@ internal sealed class GpuStageRenderer : IDisposable
     }
 
     /// <summary>Renders one frame of the stage into <paramref name="output"/> (a BGRA8 render target of the target's size).</summary>
-    internal void Render(GpuRenderTarget target, ID3D11RenderTargetView output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
+    /// <param name="alphaOutput">Writes premultiplied alpha-effects pixels without a camera or stage background.</param>
+    /// <param name="alphaGeometryOutput">Optional base-geometry output for the split geometry/glow stream mode.</param>
+    /// <param name="alphaGlowOutput">Optional bloom-only output for the split geometry/glow stream mode.</param>
+    internal void Render(GpuRenderTarget target, ID3D11RenderTargetView? output, GpuStageSimulation simulation, GpuFrameInput input, GpuSceneLayout layout,
         GpuInstanceList<GpuNoteInstance> notes, GpuInstanceList<GpuKeyInstance> keys, GpuInstanceList<GpuSpriteInstance> sprites,
-        GpuAdaptiveQualityTier qualityTier = GpuAdaptiveQualityTier.Full, bool sampleAdaptiveQuality = false)
+        GpuAdaptiveQualityTier qualityTier = GpuAdaptiveQualityTier.Full, bool sampleAdaptiveQuality = false, bool alphaOutput = false,
+        ID3D11RenderTargetView? alphaGeometryOutput = null, ID3D11RenderTargetView? alphaGlowOutput = null)
     {
         _notePassProfiler?.CollectReady();
         var quality = GpuAdaptiveQualityProfile.For(qualityTier);
         var look = input.Look;
-        // AR-S4b/AR-S4 remainder: the scene→image map the note and sprite passes can draw through, built from the same
-        // calibration, view and scene layout the flat AR quads use (Camera/ArSceneProjection.cs). The map rides in the
-        // frame constants whenever it can be built; only GpuArInput.ProjectedNotes opens the shader's branches, so a frame
-        // that does not ask for it draws exactly what it drew before the map existed — VerifyArNoteProjection reads both
-        // frames back on WARP and compares them byte for byte. The notes are built after the map so that the ones this
-        // pass draws can be cut to the picture the way the flat quads are.
-        var arMap = GpuArMap.None;
+        var cameraActive = CameraActive(look);
+        var alphaOverlayActive = !alphaOutput || _arInput is not null && cameraActive;
+        // Notes in perspective are owned by GpuArLayer and built from the calibration's metric 3D camera pose.
+        // Do not gate them on the old scene→image homography: that map has a horizon, and using it as a presence
+        // check made notes disappear when the flat map could not cover a scene rectangle. The shader's old map branch
+        // stays closed; its 2D mapping is not the active AR note path.
         GpuArInput? projectedInput = null;
-        ArView mapView = default;
-        if (_arInput is { } arMapInput && TryCameraView(target, look, out var view)
-            && _camera!.Width == arMapInput.Calibration.ImageWidth && _camera.Height == arMapInput.Calibration.ImageHeight
-            && ArSceneProjection.TryBuild(arMapInput.Calibration, view, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight), out var sceneMap))
-        {
-            arMap = new GpuArMap(sceneMap, arMapInput.ProjectedNotes, arMapInput.MinScalePx);
-            if (arMapInput.ProjectedNotes) { projectedInput = arMapInput; mapView = view; }
-        }
+        if (_arInput is { ProjectedNotes: true } arInput && arInput.Calibration.CameraPose is not null
+            && TryCameraView(target, look, out _)
+            && _camera!.Width == arInput.Calibration.ImageWidth && _camera.Height == arInput.Calibration.ImageHeight)
+            projectedInput = arInput;
         var arProjectedNotes = projectedInput is not null;
 
-        // Perform leaves the song's notes out, as the flat overlay does; the live trails of the keys the player holds stay.
+        // A full-screen camera background never receives scene-space notes or trails, calibrated or not.
+        // Virtual key bodies and uncalibrated stage sprites are gated below by cameraActive as well; only the calibrated
+        // GpuArLayer may add key tint, live bars or projected Live Stage effects over the camera.
         simulation.BuildNotes(input, layout, notes, songNotes: projectedInput?.ShowNotes ?? true,
-            onStage: !look.OverCamera || projectedInput is not null, minAspect: projectedInput?.MinAspect ?? 0);
-        if (projectedInput is { } cut)
-            TruncateNotesToPicture(notes, cut.Calibration, mapView, new ArSceneFrame(layout.Width, layout.HitY, layout.KeyboardHeight));
-        simulation.BuildKeys(look, layout, keys, out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
-        simulation.BuildSprites(look, layout, sprites);
+            onStage: !cameraActive && !look.OverCamera && !arProjectedNotes, minAspect: projectedInput?.MinAspect ?? 0,
+            liveTrails: !cameraActive && !look.OverCamera && !arProjectedNotes);
+        StageNoteCount = notes.Count;
+        StageNoteTrailCount = simulation.NoteTrailCount;
+        simulation.BuildKeys(look, layout, keys, cameraActive,
+            out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
+        StageKeyCount = keys.Count;
+        simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
         if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
-        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity);
+        StageSpriteCount = sprites.Count;
+        simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity, cameraOverlayActive: cameraActive);
 
-        var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, arMap);
+        var constants = BuildConstants(target, input, layout, simulation, frontHeight, blackLength, blackHeight, whiteWidth, blackWidth, GpuArMap.None, alphaOutput);
         var context = Context;
         context.UpdateSubresource(in constants, _frameBuffer);
         _notes.Upload(context, notes.Span);
@@ -427,7 +459,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation.LivePresses, _arList, arProjectedNotes);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
@@ -450,8 +482,8 @@ internal sealed class GpuStageRenderer : IDisposable
         context.OMSetBlendState(_blendOpaque);
         context.OMSetDepthStencilState(_depthOff, 0);
         context.VSSetShader(_vsFullscreen);
-        // the camera picture replaces the whole backdrop (sky, stars, horizon, key bed); the composite pass lays it under the light
-        if (!CameraActive(look))
+        // The camera picture replaces the backdrop in the normal composite; transparent AR output omits both backdrop and camera.
+        if (!alphaOutput && !cameraActive)
         {
             context.PSSetShader(_psBackground);
             if (_backgroundView is not null && look.ShowBackground && !look.Chroma) context.PSSetShaderResource(1, _backgroundView);
@@ -460,22 +492,19 @@ internal sealed class GpuStageRenderer : IDisposable
         }
 
         if (_atlasView is not null) context.PSSetShaderResource(6, _atlasView);
-        if (_ambientList.Count > 0)
+        if (alphaOverlayActive && _ambientList.Count > 0)
         {
-            // The ambient layers are the stage's atmosphere and stay where they are when the notes are in perspective:
-            // the sprite branch is switched off for this pass alone, and the frame constants go back up before the notes.
-            var flatAmbient = arProjectedNotes;
-            if (flatAmbient) { var flat = constants; flat.ArMatrixFlags = Vector4.Zero; context.UpdateSubresource(in flat, _frameBuffer); }
+            // Ambient petals, meteors and other atmosphere are always emitted screen-space; the 3D note path
+            // lives in the separate AR quad pass and never changes the sprite projection constants.
             context.OMSetBlendState(_blendPremultiplied);
             context.VSSetShader(_vsSprite);
             context.PSSetShader(_psSprite);
             context.VSSetShaderResource(4, _ambient.View);
             context.PSSetShaderResource(5, _keyColors.View);
             context.DrawInstanced(6, (uint)_ambientList.Count, 0, 0);
-            if (flatAmbient) context.UpdateSubresource(in constants, _frameBuffer);
         }
 
-        if (notes.Count > 0)
+        if (alphaOverlayActive && notes.Count > 0)
         {
             context.OMSetBlendState(_blendPremultiplied);
             context.VSSetShader(_vsNote);
@@ -485,7 +514,7 @@ internal sealed class GpuStageRenderer : IDisposable
             context.DrawInstanced(6, (uint)notes.Count, 0, 0);
             _notePassProfiler?.EndDraw(notePassQuery);
         }
-        if (keys.Count > 0)
+        if (alphaOverlayActive && keys.Count > 0)
         {
             context.OMSetBlendState(_blendOpaque);
             context.OMSetDepthStencilState(_depthWrite, 0);
@@ -494,7 +523,7 @@ internal sealed class GpuStageRenderer : IDisposable
             context.VSSetShaderResource(3, _keys.View);
             context.DrawInstanced(30, (uint)keys.Count, 0, 0);
         }
-        if (sprites.Count > 0)
+        if (alphaOverlayActive && sprites.Count > 0)
         {
             context.OMSetBlendState(_blendPremultiplied);
             context.OMSetDepthStencilState(_depthRead, 0);
@@ -506,7 +535,7 @@ internal sealed class GpuStageRenderer : IDisposable
         }
 
         // ---- AR layer: notes projected onto the camera picture ----
-        if (_arList.Count > 0)
+        if (alphaOverlayActive && _arList.Count > 0)
         {
             context.OMSetBlendState(_blendPremultiplied);
             context.OMSetDepthStencilState(_depthOff, 0);
@@ -536,18 +565,31 @@ internal sealed class GpuStageRenderer : IDisposable
             context.ClearRenderTargetView(target.BloomRtv[0]!, new Color4(0, 0, 0, 0));
         }
 
-        // ---- composite to the output ----
+        // ---- composite outputs ----
         context.OMSetBlendState(_blendOpaque);
-        context.OMSetRenderTargets(output);
         context.RSSetViewport(new Viewport(target.Width, target.Height));
-        context.PSSetShader(_psComposite);
-        context.PSSetShaderResource(0, target.HdrSrv!);
-        context.PSSetShaderResource(1, target.BloomSrv[0]!);
-        if (CameraActive(look)) context.PSSetShaderResource(7, _camera!.View!);
-        context.Draw(3, 0);
-        context.PSUnsetShaderResources(0, 2);
-        context.PSUnsetShaderResource(7);
+        if (output is not null)
+            CompositeTo(output, _psComposite, cameraActive);
+        if (alphaGeometryOutput is not null)
+            CompositeTo(alphaGeometryOutput, _psCompositeGeometry);
+        if (alphaGlowOutput is not null)
+            CompositeTo(alphaGlowOutput, _psCompositeGlow);
         if (qualityQuerySlot >= 0) EndAdaptiveQualitySample(qualityQuerySlot);
+
+        void CompositeTo(ID3D11RenderTargetView destination, ID3D11PixelShader shader, bool sampleCamera = false)
+        {
+            // Unbind the scene HDR target before sampling it. Binding its SRV first is a D3D11 read/write
+            // hazard: the runtime silently nulls that SRV while the same texture is still bound as an RTV,
+            // producing a black composite (caught by the WARP Gem/Crystal pixel checks).
+            context.OMSetRenderTargets(destination);
+            context.PSSetShader(shader);
+            context.PSSetShaderResource(0, target.HdrSrv!);
+            context.PSSetShaderResource(1, target.BloomSrv[0]!);
+            if (sampleCamera) context.PSSetShaderResource(7, _camera!.View!);
+            context.Draw(3, 0);
+            context.PSUnsetShaderResources(0, 2);
+            if (sampleCamera) context.PSUnsetShaderResource(7);
+        }
     }
 
     private void Pass(ID3D11RenderTargetView destination, (int Width, int Height) size, ID3D11PixelShader shader, ID3D11ShaderResourceView source, float texelX, float texelY, float z, float w)
@@ -575,7 +617,7 @@ internal sealed class GpuStageRenderer : IDisposable
     };
 
     private GpuFrameConstants BuildConstants(GpuRenderTarget target, GpuFrameInput input, GpuSceneLayout layout, GpuStageSimulation simulation,
-        float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth, GpuArMap arMap)
+        float frontHeight, float blackLength, float blackHeight, float whiteWidth, float blackWidth, GpuArMap arMap, bool alphaOutput)
     {
         var look = input.Look;
         var pixelsPerUnit = target.Height / Math.Max(1f, layout.Height);
@@ -618,33 +660,13 @@ internal sealed class GpuStageRenderer : IDisposable
             HitFx = new Vector4(look.ShowHalo && look.HaloPulse ? HaloMotionId(look.HaloPulseStyle) : 0,
                 look.HaloPulseIntensity * simulation.GlowBoost, look.HaloPulseSpeed, simulation.Activity),
             KeyRange = new Vector4(layout.Keys.FirstPitch, Math.Max(1, layout.Keys.KeyCount - 1), 0, 0),
-            ArPicture = ComputeArPicture(target, look, out var arFlags),
+            ArPicture = ComputeArPicture(target, look, alphaOutput, out var arFlags),
             ArFlags = arFlags,
             ArMatrix0 = arMap.Row0,
             ArMatrix1 = arMap.Row1,
             ArMatrix2 = arMap.Row2,
             ArMatrixFlags = arMap.Flags
         };
-    }
-
-    /// <summary>
-    /// AR-S4 remainder: cuts each note the projected pass draws to the part of it on the picture, using the cut the flat
-    /// AR quads make at the horizon (<see cref="ArSceneProjection.TruncateToPicture"/>). A note with nothing on the picture
-    /// is dropped, so the pass never spends a quad on it and the shader never sees a weight at or below the horizon.
-    /// </summary>
-    private static void TruncateNotesToPicture(GpuInstanceList<GpuNoteInstance> notes, ArCalibration calibration, ArView view, ArSceneFrame frame)
-    {
-        var span = notes.Writable;
-        var kept = 0;
-        for (var i = 0; i < span.Length; i++)
-        {
-            var note = span[i];
-            double top = note.Rect.Y, bottom = note.Rect.Y + note.Rect.W;
-            if (!ArSceneProjection.TruncateToPicture(calibration, view, frame, note.Rect.X, note.Rect.X + note.Rect.Z, ref top, ref bottom)) continue;
-            note.Rect = new Vector4(note.Rect.X, (float)top, note.Rect.Z, (float)(bottom - top));
-            span[kept++] = note;
-        }
-        notes.Keep(kept);
     }
 
     /// <summary>Where the camera picture lands on this output; false when no camera picture is drawn.</summary>
@@ -657,13 +679,15 @@ internal sealed class GpuStageRenderer : IDisposable
         return view.Valid;
     }
 
-    /// <summary>Where the camera picture lands on this output (pixels) and the flags the composite shader reads: x mirror, y active, z opacity.</summary>
-    private Vector4 ComputeArPicture(GpuRenderTarget target, GpuLook look, out Vector4 flags)
+    /// <summary>Where the camera picture lands on this output and composite flags: x mirror, y camera active, z opacity, w transparent alpha-effects output.</summary>
+    private Vector4 ComputeArPicture(GpuRenderTarget target, GpuLook look, bool alphaOutput, out Vector4 flags)
     {
-        flags = Vector4.Zero;
+        flags = new Vector4(0, 0, 0, alphaOutput ? 1 : 0);
         if (!TryCameraView(target, look, out var view)) return Vector4.Zero;
         var input = _cameraInput!;
-        flags = new Vector4(input.Mirror ? 1 : 0, 1, Math.Clamp(input.Opacity, 0f, 1f), 0);
+        flags.X = input.Mirror ? 1 : 0;
+        flags.Y = 1;
+        flags.Z = Math.Clamp(input.Opacity, 0f, 1f);
         return new Vector4((float)view.Left, (float)view.Top, (float)view.Width, (float)view.Height);
     }
 
@@ -679,7 +703,7 @@ internal sealed class GpuStageRenderer : IDisposable
         _adaptiveQualityProfiler?.Dispose();
         _adaptiveQualityProfiler = null;
         _adaptiveQualityController = null;
-        foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite,
+        foreach (var disposable in new IDisposable?[] { _vsFullscreen, _vsNote, _vsKey, _vsSprite, _vsArQuad, _psArQuad, _psBackground, _psNote, _psKey, _psSprite, _psPrefilter, _psDown, _psUp, _psComposite, _psCompositeGeometry, _psCompositeGlow,
             _blendPremultiplied, _blendAdditive, _blendOpaque, _depthOff, _depthWrite, _depthRead, _raster, _linear, _point, _frameBuffer, _passBuffer })
             disposable?.Dispose();
         Context.Dispose();

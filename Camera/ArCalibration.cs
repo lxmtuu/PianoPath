@@ -155,24 +155,52 @@ internal static class CalibrationQuad
 /// keys 0 to their front 1 — the same ones <c>tools/make_ar_sample.py</c> draws with.
 /// </para>
 /// </summary>
+internal sealed record ArStoredCalibration((double X, double Y)[] Corners, (double X, double Y)[] PoseBaseCorners,
+    double CameraFovDegrees, ArPoseTransform Transform)
+{
+    internal ArStoredCalibration((double X, double Y)[] corners, (double X, double Y)[] poseBaseCorners,
+        double cameraFovDegrees, ArPoseRotation rotation)
+        : this(corners, poseBaseCorners, cameraFovDegrees,
+            new ArPoseTransform(0, 0, 0, rotation.PitchDegrees, rotation.YawDegrees, rotation.RollDegrees, 1)) { }
+
+    internal ArPoseRotation Rotation => Transform.Rotation;
+}
+
 internal sealed class ArCalibration
 {
     /// <summary>How far down the key area the black keys reach: 95 mm of a 150 mm white key.</summary>
     internal const double BlackLengthShare = 95.0 / 150.0;
 
-    private ArCalibration(KeyboardLayout layout, (double X, double Y)[] corners, int width, int height, Homography toImage, Homography toKeyboard)
+    private ArCalibration(KeyboardLayout layout, (double X, double Y)[] corners, (double X, double Y)[] poseBaseCorners,
+        int width, int height, Homography toImage, Homography toKeyboard, double cameraFovDegrees, ArPoseTransform transform, ArCameraPose? cameraPose)
     {
-        Layout = layout; Corners = corners; ImageWidth = width; ImageHeight = height; ToImage = toImage; ToKeyboard = toKeyboard;
+        Layout = layout; Corners = corners; PoseBaseCorners = poseBaseCorners; ImageWidth = width; ImageHeight = height;
+        ToImage = toImage; ToKeyboard = toKeyboard; CameraFovDegrees = cameraFovDegrees; Transform = transform; CameraPose = cameraPose;
     }
 
     internal KeyboardLayout Layout { get; }
 
-    /// <summary>Back-left, back-right, front-right, front-left, in picture pixels.</summary>
+    /// <summary>Back-left, back-right, front-right, front-left, in picture pixels, after applying the saved 3D object transform.</summary>
     internal (double X, double Y)[] Corners { get; }
+
+    /// <summary>The untransformed four-corner baseline from which the saved absolute 3D object transform is applied.</summary>
+    internal (double X, double Y)[] PoseBaseCorners { get; }
+
+    internal ArPoseTransform Transform { get; }
+    internal ArPoseRotation Rotation => Transform.Rotation;
+    internal double PitchDegrees => Transform.PitchDegrees;
+    internal double YawDegrees => Transform.YawDegrees;
+    internal double RollDegrees => Transform.RollDegrees;
 
     internal int ImageWidth { get; }
 
     internal int ImageHeight { get; }
+
+    /// <summary>The horizontal camera field of view used to estimate a 3D pose from this plane homography.</summary>
+    internal double CameraFovDegrees { get; }
+
+    /// <summary>The approximate pinhole-camera pose; null only if the homography cannot be decomposed safely.</summary>
+    internal ArCameraPose? CameraPose { get; }
 
     /// <summary>Keyboard coordinates to picture pixels.</summary>
     internal Homography ToImage { get; }
@@ -185,7 +213,15 @@ internal sealed class ArCalibration
     /// <paramref name="problem"/>: the corners may not be used when <see cref="CalibrationQuad.CheckAnyWinding"/> finds
     /// anything wrong or when they define no usable map.
     /// </summary>
-    internal static ArCalibration? Create(KeyboardLayout layout, IReadOnlyList<(double X, double Y)> corners, int imageWidth, int imageHeight, out CalibrationProblem problem)
+    internal static ArCalibration? Create(KeyboardLayout layout, IReadOnlyList<(double X, double Y)> corners, int imageWidth, int imageHeight,
+        out CalibrationProblem problem, double cameraFovDegrees = ArCameraPose.DefaultFovDegrees,
+        ArPoseRotation rotation = default, IReadOnlyList<(double X, double Y)>? poseBaseCorners = null) =>
+        Create(layout, corners, imageWidth, imageHeight, out problem, cameraFovDegrees,
+            new ArPoseTransform(0, 0, 0, rotation.PitchDegrees, rotation.YawDegrees, rotation.RollDegrees, 1), poseBaseCorners);
+
+    internal static ArCalibration? Create(KeyboardLayout layout, IReadOnlyList<(double X, double Y)> corners, int imageWidth, int imageHeight,
+        out CalibrationProblem problem, double cameraFovDegrees, ArPoseTransform transform,
+        IReadOnlyList<(double X, double Y)>? poseBaseCorners = null)
     {
         problem = CalibrationQuad.CheckAnyWinding(corners, imageWidth, imageHeight);
         if (problem != CalibrationProblem.None) return null;
@@ -193,7 +229,13 @@ internal sealed class ArCalibration
         var toImage = Homography.FromPoints([(0, 0), (1, 0), (1, 1), (0, 1)], copy);
         var toKeyboard = toImage?.Inverse();
         if (toImage is null || toKeyboard is null) { problem = CalibrationProblem.Degenerate; return null; }
-        return new ArCalibration(layout, copy, imageWidth, imageHeight, toImage.Value, toKeyboard.Value);
+        var fov = ArCameraPose.NormalizeFov(cameraFovDegrees);
+        var pose = ArCameraPose.TryCreate(toImage.Value, copy, layout, imageWidth, imageHeight, fov, out var solved) ? solved : (ArCameraPose?)null;
+        var baseValid = poseBaseCorners is { Count: 4 }
+            && CalibrationQuad.CheckAnyWinding(poseBaseCorners, imageWidth, imageHeight) == CalibrationProblem.None;
+        var baseCorners = baseValid ? poseBaseCorners!.ToArray() : copy.ToArray();
+        var savedTransform = baseValid && transform.IsValid ? transform : ArPoseTransform.Identity;
+        return new ArCalibration(layout, copy, baseCorners, imageWidth, imageHeight, toImage.Value, toKeyboard.Value, fov, savedTransform, pose);
     }
 
     /// <summary>The picture pixel of a point of the keyboard.</summary>
@@ -246,10 +288,14 @@ internal sealed class ArCalibration
 internal sealed class CalibrationEditor
 {
     private readonly List<(double X, double Y)> _points = [];
+    private bool _preservePointOrder;
+    private readonly KeyboardLayout _layout;
+    private (double X, double Y)[]? _poseBaseCorners;
+    private ArPoseTransform _poseTransform = ArPoseTransform.Identity;
 
-    internal CalibrationEditor(int imageWidth, int imageHeight)
+    internal CalibrationEditor(int imageWidth, int imageHeight, KeyboardLayout? layout = null)
     {
-        ImageWidth = imageWidth; ImageHeight = imageHeight;
+        ImageWidth = imageWidth; ImageHeight = imageHeight; _layout = layout ?? KeyboardLayout.Standard88;
     }
 
     internal int ImageWidth { get; }
@@ -267,12 +313,16 @@ internal sealed class CalibrationEditor
     /// <summary>The names of the corners in the order they are asked for.</summary>
     internal static readonly string[] CornerNames = ["back-left", "back-right", "front-right", "front-left"];
 
+    internal ArPoseTransform PoseTransform => _poseTransform;
+
     /// <summary>
     /// What is wrong with the points as they stand. <see cref="CalibrationProblem.NotFourPoints"/> until all four are
     /// placed; after that the verdict of <see cref="CalibrationQuad.Check"/>, so a drag that makes the outline fold
     /// shows it at once, while the person is still dragging.
     /// </summary>
-    internal CalibrationProblem Problem => CalibrationQuad.Check(Seen(_points), ImageWidth, ImageHeight);
+    internal CalibrationProblem Problem => _preservePointOrder
+        ? CalibrationQuad.CheckAnyWinding(_points, ImageWidth, ImageHeight)
+        : CalibrationQuad.Check(Seen(_points), ImageWidth, ImageHeight);
 
     /// <summary>True when the keyboard shows left to right turned round in the picture as delivered (low notes on the right).</summary>
     internal bool FlipX { get; private set; }
@@ -284,7 +334,24 @@ internal sealed class CalibrationEditor
     /// Says how the keyboard sits in the picture as delivered: the points are judged and put in order as if the picture were turned
     /// round that way, which for a keyboard that is upside down in the picture is the way it looks right.
     /// </summary>
-    internal void SetFlips(bool flipX, bool flipY) { FlipX = flipX; FlipY = flipY; }
+    internal void SetFlips(bool flipX, bool flipY)
+    {
+        var flipsChanged = FlipX != flipX || FlipY != flipY;
+        if (_preservePointOrder && _points.Count == 4 && flipsChanged)
+        {
+            var current = _points.ToArray();
+            int source = 0;
+            for (var i = 0; i < 4; i++)
+            {
+                source = i;
+                if (FlipX != flipX) source = source switch { 0 => 1, 1 => 0, 2 => 3, _ => 2 };
+                if (FlipY != flipY) source = source switch { 0 => 3, 1 => 2, 2 => 1, _ => 0 };
+                _points[i] = current[source];
+            }
+        }
+        FlipX = flipX; FlipY = flipY;
+        if (_points.Count == 4 && flipsChanged) RememberPoseBase();
+    }
 
     /// <summary>The points as they would be if the keyboard sat upright in the picture.</summary>
     private (double X, double Y)[] Seen(IReadOnlyList<(double X, double Y)> points) => CalibrationQuad.Reflect(points, ImageWidth, ImageHeight, FlipX, FlipY);
@@ -300,6 +367,8 @@ internal sealed class CalibrationEditor
     private (double X, double Y)[]? Usable()
     {
         var points = _points.ToArray();
+        if (_preservePointOrder)
+            return CalibrationQuad.CheckAnyWinding(points, ImageWidth, ImageHeight) == CalibrationProblem.None ? points : null;
         var upright = Seen(points);
         if (CalibrationQuad.Order(upright) is { } ordered && CalibrationQuad.Check(ordered, ImageWidth, ImageHeight) == CalibrationProblem.None)
             return CalibrationQuad.Reflect(ordered, ImageWidth, ImageHeight, FlipX, FlipY);
@@ -318,6 +387,7 @@ internal sealed class CalibrationEditor
         if (IsComplete || !double.IsFinite(x) || !double.IsFinite(y)) return false;
         _points.Add(Hold(x, y));
         Selected = _points.Count - 1;
+        if (IsComplete) RememberPoseBase();
         return true;
     }
 
@@ -325,9 +395,65 @@ internal sealed class CalibrationEditor
     internal bool Move(int index, double x, double y)
     {
         if (index < 0 || index >= _points.Count || !double.IsFinite(x) || !double.IsFinite(y)) return false;
-        _points[index] = Hold(x, y);
+        var next = Hold(x, y);
+        var changed = _points[index] != next;
+        _points[index] = next;
         Selected = index;
+        if (changed && IsComplete) RememberPoseBase();
         return true;
+    }
+
+    /// <summary>Loads a saved, already ordered key area and its original 3D object-transform baseline.</summary>
+    internal bool LoadCorners(IReadOnlyList<(double X, double Y)> corners,
+        IReadOnlyList<(double X, double Y)>? poseBaseCorners = null)
+    {
+        if (CalibrationQuad.CheckAnyWinding(corners, ImageWidth, ImageHeight) != CalibrationProblem.None) return false;
+        _points.Clear();
+        _points.AddRange(corners);
+        Selected = _points.Count - 1;
+        _preservePointOrder = true;
+        _poseBaseCorners = poseBaseCorners is { Count: 4 }
+            && CalibrationQuad.CheckAnyWinding(poseBaseCorners, ImageWidth, ImageHeight) == CalibrationProblem.None
+            ? poseBaseCorners.ToArray() : corners.ToArray();
+        _poseTransform = ArPoseTransform.Identity;
+        return true;
+    }
+
+    internal bool LoadCalibration(IReadOnlyList<(double X, double Y)> corners,
+        IReadOnlyList<(double X, double Y)> poseBaseCorners, ArPoseTransform transform, double fovDegrees)
+    {
+        if (!LoadCorners(poseBaseCorners)) return false;
+        return SetPoseTransform(transform, fovDegrees) || LoadCorners(corners, poseBaseCorners);
+    }
+
+    /// <summary>Sets a complete absolute object transform from its last user-marked baseline, so input order cannot accumulate drift.</summary>
+    internal bool SetPoseTransform(ArPoseTransform transform, double fovDegrees)
+    {
+        if (!IsComplete || !transform.IsValid) return false;
+        var source = _poseBaseCorners ?? (_preservePointOrder ? _points.ToArray() : Usable());
+        if (source is null || !ArCameraPose.TryTransformCorners(_layout, source, ImageWidth, ImageHeight, fovDegrees, transform, out var transformed)) return false;
+        _points.Clear();
+        _points.AddRange(transformed);
+        _preservePointOrder = true;
+        _poseTransform = transform;
+        return true;
+    }
+
+    /// <summary>Compatibility helper for rotation-only controls.</summary>
+    internal bool SetPoseRotation(double pitchDegrees, double yawDegrees, double rollDegrees, double fovDegrees) =>
+        SetPoseTransform(_poseTransform with { PitchDegrees = pitchDegrees, YawDegrees = yawDegrees, RollDegrees = rollDegrees }, fovDegrees);
+
+    internal bool ResetPoseTransform(double fovDegrees)
+    {
+        if (!IsComplete) { _poseTransform = ArPoseTransform.Identity; return true; }
+        return SetPoseTransform(ArPoseTransform.Identity, fovDegrees);
+    }
+
+    private void RememberPoseBase()
+    {
+        var source = _preservePointOrder ? _points.ToArray() : Usable();
+        _poseBaseCorners = source?.ToArray();
+        _poseTransform = ArPoseTransform.Identity;
     }
 
     /// <summary>Moves a placed point by a number of pixels, as the arrow keys do.</summary>
@@ -355,24 +481,38 @@ internal sealed class CalibrationEditor
         if (_points.Count == 0) return false;
         _points.RemoveAt(_points.Count - 1);
         Selected = _points.Count - 1;
+        _poseBaseCorners = null;
+        _poseTransform = ArPoseTransform.Identity;
+        if (IsComplete) RememberPoseBase();
         return true;
     }
 
     /// <summary>Starts again.</summary>
-    internal void Clear() { _points.Clear(); Selected = -1; }
+    internal void Clear() { _points.Clear(); Selected = -1; _preservePointOrder = false; _poseBaseCorners = null; _poseTransform = ArPoseTransform.Identity; }
 
     /// <summary>
     /// Finishes: puts the points in order if they only need that, and builds the calibration for
     /// <paramref name="layout"/>. Null — with the reason — when the points are not good enough; the editor is not
     /// changed then.
     /// </summary>
-    internal ArCalibration? Finish(KeyboardLayout layout, out CalibrationProblem problem)
+    internal ArCalibration? Finish(KeyboardLayout layout, double cameraFovDegrees, ArPoseTransform transform, out CalibrationProblem problem)
     {
         if (Usable() is not { } points) { problem = Problem; return null; }       // judged the strict way: Create alone would take corners that run the other way
-        var result = ArCalibration.Create(layout, points, ImageWidth, ImageHeight, out problem);
+        var baseCorners = _poseBaseCorners ?? points;
+        var result = ArCalibration.Create(layout, points, ImageWidth, ImageHeight, out problem, cameraFovDegrees, transform, baseCorners);
         if (result is not null) { _points.Clear(); _points.AddRange(points); }
         return result;
     }
+
+    internal ArCalibration? Finish(KeyboardLayout layout, double cameraFovDegrees, ArPoseRotation rotation, out CalibrationProblem problem) =>
+        Finish(layout, cameraFovDegrees, _poseTransform with
+        { PitchDegrees = rotation.PitchDegrees, YawDegrees = rotation.YawDegrees, RollDegrees = rotation.RollDegrees }, out problem);
+
+    internal ArCalibration? Finish(KeyboardLayout layout, double cameraFovDegrees, out CalibrationProblem problem) =>
+        Finish(layout, cameraFovDegrees, _poseTransform, out problem);
+
+    internal ArCalibration? Finish(KeyboardLayout layout, out CalibrationProblem problem) =>
+        Finish(layout, ArCameraPose.DefaultFovDegrees, _poseTransform, out problem);
 
     private (double X, double Y) Hold(double x, double y) => (
         Math.Clamp(x, -CalibrationQuad.OutsideShare * ImageWidth, (1 + CalibrationQuad.OutsideShare) * ImageWidth),
@@ -400,10 +540,12 @@ internal sealed class ArCalibrationStore
     internal const string FileName = "ar-calibration.json";
 
     /// <summary>
-    /// The version this app writes. Version 2 adds the view each key area was marked for; a file from 1 has no such
-    /// field and its entries read as <see cref="ArCalibrationProfiles.LegacyId"/>, which is the view the app starts on.
+    /// The version this app writes. Version 2 adds the camera view, version 3 adds the estimated horizontal FOV, and
+    /// version 4 stores the 3D rotation and its unrotated baseline, and version 5 adds local translation and uniform scale.
+    /// Versions 1–2 use 70° FOV; version 3 retains its saved FOV. Pre-v4 files load at identity rotation, and v1–v4
+    /// entries default to zero translation and unit scale.
     /// </summary>
-    internal const int FormatVersion = 2;
+    internal const int FormatVersion = 5;
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
 
@@ -431,6 +573,36 @@ internal sealed class ArCalibrationStore
         }
     }
 
+    /// <summary>The saved camera FOV for this calibration, or the backward-compatible 70° default when it predates 3D pose data.</summary>
+    internal double GetCameraFov(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount)
+    {
+        lock (_gate)
+        {
+            var entry = _entries.FirstOrDefault(e => Matches(e, cameraLink, profileId, imageWidth, imageHeight, keyCount));
+            return ArCameraPose.NormalizeFov(entry?.CameraFovDegrees ?? ArCameraPose.DefaultFovDegrees);
+        }
+    }
+
+    /// <summary>Returns the complete stored calibration, including the original baseline for absolute 3D rotation controls.</summary>
+    internal ArStoredCalibration? GetCalibration(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount)
+    {
+        lock (_gate)
+        {
+            var entry = _entries.FirstOrDefault(e => Matches(e, cameraLink, profileId, imageWidth, imageHeight, keyCount));
+            if (entry is null) return null;
+            var corners = Points(entry);
+            var baseline = Points(entry.PoseBaseCorners) is { Length: 4 } savedBase ? savedBase : corners.ToArray();
+            var transform = Transform(entry);
+            if (!transform.IsValid || baseline.Length != 4
+                || CalibrationQuad.CheckAnyWinding(baseline, imageWidth, imageHeight) != CalibrationProblem.None)
+            {
+                transform = ArPoseTransform.Identity;
+                baseline = corners.ToArray();
+            }
+            return new ArStoredCalibration(corners, baseline, ArCameraPose.NormalizeFov(entry.CameraFovDegrees), transform);
+        }
+    }
+
     /// <summary>
     /// True when this camera and view have a calibration at some other picture size or keyboard size but not at this one,
     /// which is what lets the app say "calibrate again" instead of "never calibrated".
@@ -444,18 +616,31 @@ internal sealed class ArCalibrationStore
                                      string.Equals(e.Profile, profile, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>Saves the corners for this camera, view, picture size and keyboard size, replacing the earlier ones, and writes the file. False when the corners are not good enough or the file cannot be written.</summary>
-    internal bool Set(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount, IReadOnlyList<(double X, double Y)> corners)
+    /// <summary>Saves the final corners, FOV, full 3D object transform and its original baseline for this camera/view/size/layout.</summary>
+    internal bool Set(string cameraLink, string profileId, int imageWidth, int imageHeight, int keyCount,
+        IReadOnlyList<(double X, double Y)> corners, double cameraFovDegrees = ArCameraPose.DefaultFovDegrees,
+        double pitchDegrees = 0, double yawDegrees = 0, double rollDegrees = 0,
+        IReadOnlyList<(double X, double Y)>? poseBaseCorners = null,
+        double positionX = 0, double positionY = 0, double positionZ = 0, double uniformScale = 1)
     {
         if (CalibrationQuad.CheckAnyWinding(corners, imageWidth, imageHeight) != CalibrationProblem.None) return false;
         var profile = ArCalibrationProfiles.Normalize(profileId).Id;
+        var fov = ArCameraPose.NormalizeFov(cameraFovDegrees);
+        var transform = new ArPoseTransform(positionX, positionY, positionZ, pitchDegrees, yawDegrees, rollDegrees, uniformScale);
+        var baselineValid = poseBaseCorners is { Count: 4 }
+            && CalibrationQuad.CheckAnyWinding(poseBaseCorners, imageWidth, imageHeight) == CalibrationProblem.None;
+        if (!transform.IsValid || !baselineValid) { transform = ArPoseTransform.Identity; baselineValid = false; }
+        var baseline = baselineValid && poseBaseCorners is not null ? poseBaseCorners : corners;
         lock (_gate)
         {
             _entries.RemoveAll(e => Matches(e, cameraLink, profile, imageWidth, imageHeight, keyCount));
             _entries.Add(new Entry
             {
                 CameraLink = cameraLink ?? "", Profile = profile, ImageWidth = imageWidth, ImageHeight = imageHeight, KeyCount = keyCount,
+                CameraFovDegrees = fov, PosePitchDegrees = transform.PitchDegrees, PoseYawDegrees = transform.YawDegrees, PoseRollDegrees = transform.RollDegrees,
+                PosePositionX = transform.PositionX, PosePositionY = transform.PositionY, PosePositionZ = transform.PositionZ, PoseUniformScale = transform.UniformScale,
                 Corners = corners.SelectMany(p => new[] { p.X, p.Y }).ToArray(),
+                PoseBaseCorners = baseline.SelectMany(p => new[] { p.X, p.Y }).ToArray(),
             });
             if (_entries.Count > MaxEntries) _entries.RemoveRange(0, _entries.Count - MaxEntries);
             return Write();
@@ -495,6 +680,19 @@ internal sealed class ArCalibrationStore
                     if (!ArCalibrationProfiles.IsKnown(entry.Profile)) continue;      // a view this app cannot use: ask for a new calibration instead of guessing
                     entry.Profile = ArCalibrationProfiles.Normalize(entry.Profile).Id;
                     entry.CameraLink ??= "";
+                    entry.CameraFovDegrees = ArCameraPose.NormalizeFov(entry.CameraFovDegrees);
+                    var transform = Transform(entry);
+                    var baseCorners = Points(entry.PoseBaseCorners);
+                    if (!transform.IsValid || baseCorners.Length != 4
+                        || CalibrationQuad.CheckAnyWinding(baseCorners, entry.ImageWidth, entry.ImageHeight) != CalibrationProblem.None)
+                    {
+                        transform = ArPoseTransform.Identity;
+                        baseCorners = Points(entry);
+                    }
+                    entry.PosePitchDegrees = transform.PitchDegrees; entry.PoseYawDegrees = transform.YawDegrees; entry.PoseRollDegrees = transform.RollDegrees;
+                    entry.PosePositionX = transform.PositionX; entry.PosePositionY = transform.PositionY; entry.PosePositionZ = transform.PositionZ;
+                    entry.PoseUniformScale = transform.UniformScale;
+                    entry.PoseBaseCorners = baseCorners.SelectMany(p => new[] { p.X, p.Y }).ToArray();
                     _entries.RemoveAll(e => Matches(e, entry.CameraLink, entry.Profile, entry.ImageWidth, entry.ImageHeight, entry.KeyCount));
                     _entries.Add(entry);
                 }
@@ -522,8 +720,14 @@ internal sealed class ArCalibrationStore
         string.Equals(e.Profile ?? "", ArCalibrationProfiles.Normalize(profile).Id, StringComparison.OrdinalIgnoreCase) &&
         e.ImageWidth == width && e.ImageHeight == height && e.KeyCount == keys;
 
-    private static (double X, double Y)[] Points(Entry e) =>
-        [(e.Corners[0], e.Corners[1]), (e.Corners[2], e.Corners[3]), (e.Corners[4], e.Corners[5]), (e.Corners[6], e.Corners[7])];
+    private static ArPoseTransform Transform(Entry e) => new(e.PosePositionX, e.PosePositionY, e.PosePositionZ,
+        e.PosePitchDegrees, e.PoseYawDegrees, e.PoseRollDegrees, e.PoseUniformScale);
+
+    private static (double X, double Y)[] Points(Entry e) => Points(e.Corners);
+
+    private static (double X, double Y)[] Points(double[]? corners) => corners is { Length: 8 }
+        ? [(corners[0], corners[1]), (corners[2], corners[3]), (corners[4], corners[5]), (corners[6], corners[7])]
+        : [];
 
     private sealed class FileShape
     {
@@ -539,7 +743,21 @@ internal sealed class ArCalibrationStore
         public int ImageWidth { get; set; }
         public int ImageHeight { get; set; }
         public int KeyCount { get; set; }
-        /// <summary>x0, y0, x1, y1, x2, y2, x3, y3: back-left, back-right, front-right, front-left.</summary>
+        /// <summary>Estimated horizontal camera field of view in degrees; absent on older entries, which use the 70° default.</summary>
+        public double CameraFovDegrees { get; set; } = ArCameraPose.DefaultFovDegrees;
+        /// <summary>The absolute object-space pitch, yaw and roll of the calibrated keyboard surface.</summary>
+        public double PosePitchDegrees { get; set; }
+        public double PoseYawDegrees { get; set; }
+        public double PoseRollDegrees { get; set; }
+        /// <summary>Local object-space translation; absent before v5 and therefore zero.</summary>
+        public double PosePositionX { get; set; }
+        public double PosePositionY { get; set; }
+        public double PosePositionZ { get; set; }
+        /// <summary>Uniform object scale; absent before v5 and therefore one.</summary>
+        public double PoseUniformScale { get; set; } = 1;
+        /// <summary>x0, y0, x1, y1, x2, y2, x3, y3: final back-left, back-right, front-right, front-left.</summary>
         public double[] Corners { get; set; } = [];
+        /// <summary>The same four corners before applying the saved 3D object transform; absent in v1-v3 files.</summary>
+        public double[] PoseBaseCorners { get; set; } = [];
     }
 }

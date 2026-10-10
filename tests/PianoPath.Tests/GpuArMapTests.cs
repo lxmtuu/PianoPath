@@ -4,11 +4,10 @@ using Xunit;
 namespace PianoPath.Tests;
 
 /// <summary>
-/// AR-S4b: the scene→image map as the Frame cbuffer carries it (Gpu/StageShaders.hlsl <c>ArMatrix0..2</c> and
-/// <c>ArMatrixFlags</c>). The pixel half of the contract — that a note really lands where this map points — is
-/// held by <c>VerifyArNoteProjection</c>, which reads a rendered frame back on WARP; this pins the packing the
-/// shader reads, on any machine. The map itself is not re-derived here: <see cref="ArSceneProjectionTests"/>
-/// already holds it to <see cref="ArProjection"/>, corner by corner.
+/// Legacy shader-map packing only: the active perspective note pass uses the calibration's 3D camera pose and AR
+/// quads. Pixel-level render ownership, duplicate suppression and live-trail exclusion are checked by
+/// <c>VerifyArNoteProjection</c> on WARP. The map itself is not re-derived here: <see cref="ArSceneProjectionTests"/>
+/// holds it to <see cref="ArProjection"/>, corner by corner.
 /// </summary>
 public class GpuArMapTests
 {

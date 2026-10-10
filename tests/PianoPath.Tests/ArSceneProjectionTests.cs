@@ -3,10 +3,9 @@ using Xunit;
 namespace PianoPath.Tests;
 
 /// <summary>
-/// AR-S4: the scene→image map the stage's own note and sprite passes are drawn through
-/// (docs/AR-OVERLAY-ROADMAP.md §12, §14.10). Nothing here is a new opinion about where a key is: the map has to be
-/// the projection the overlay already has — <see cref="ArProjection"/>, pinned by the synthetic keyboard picture —
-/// read in the scene's coordinates instead of the keyboard's, so every test below is an agreement between the two.
+/// Regression coverage for the legacy scene→image map helpers retained for cbuffer compatibility. This is not the
+/// active AR-note path: that path uses the calibrated 3D camera pose and camera-facing quads. These tests still ensure
+/// the dormant map agrees with <see cref="ArProjection"/> and cannot be mistaken for a runtime note-presence gate.
 /// </summary>
 public class ArSceneProjectionTests
 {

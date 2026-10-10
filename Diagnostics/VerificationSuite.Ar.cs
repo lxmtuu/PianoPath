@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -8,9 +9,12 @@ namespace PianoPath;
 internal static partial class VerificationSuite
 {
     /// <summary>
-    /// Pins AR support to the actual composite contract: six ambient layers are verified over the camera;
-    /// stage-anchored note/key effects are suppressed, and note materials keep their explicit flat-quad fallback.
-    /// Pixel-level evidence for the visible and suppressed groups is exercised by VerifyArOverlayCapturedFrames.
+    /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 14 S5 families
+    /// remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix is incomplete),
+    /// four unprojected families stay Unsupported, and note-material capability/parameter bindings remain
+    /// Unverified although the shared shader renders on camera-facing quads. The WARP checks sample styles,
+    /// not a full parameter matrix. VerifyArOverlayCapturedFrames checks ambient/suppression; VerifyArNoteProjection
+    /// exercises selected S5 and note-material paths.
     /// </summary>
     private static void VerifyArOverlayExclusions()
     {
@@ -19,18 +23,37 @@ internal static partial class VerificationSuite
             "ambient.energy", "ambient.nature", "ambient.light", "ambient.cosmic",
             "atmosphere.shooting-stars", "atmosphere.petals",
         };
+        var unverifiedInAr = new HashSet<string>(StringComparer.Ordinal)
+        {
+            "impact.wave", "impact.flash", "impact.burst", "impact.morph",
+            "hold.bar", "hold.breath", "hold.vibration", "hold.color-cycle", "hold.arc",
+            "atmosphere.beams", "particles.sparks", "particles.wisps", "particles.flames", "release.fx",
+        };
         var families = EffectContractCatalog.AllFamilies;
         Assert(families.Count == 24, "AR classification should cover all 24 typed effect families.");
+        Assert(families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native) == 6
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified) == 14
+                && families.Count(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unsupported) == 4,
+            "AR evidence must distinguish six verified screen-space families, 14 unverified S5 projections and four unsupported unprojected families.");
         Assert(nativeInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Native).Select(family => family.Id)),
-            "Only the four ambient layers, shooting stars and petals are verified as native over the camera.");
+            "Only the four ambient layers, shooting stars and petals are verified Native over the camera.");
+        Assert(unverifiedInAr.SetEquals(families.Where(family => family.Capabilities.ArOverlay.State == EffectBackendState.Unverified).Select(family => family.Id)),
+            "Sampled S5 WARP checks do not justify Native family support or Applied bindings for every option/value.");
         foreach (var family in families)
         {
-            var expected = nativeInAr.Contains(family.Id) ? EffectBackendState.Native : EffectBackendState.Unsupported;
+            var expected = nativeInAr.Contains(family.Id) ? EffectBackendState.Native
+                : unverifiedInAr.Contains(family.Id) ? EffectBackendState.Unverified
+                : EffectBackendState.Unsupported;
             Assert(family.Capabilities.ArOverlay.State == expected,
-                $"{family.Id} must match the captured AR compositor evidence ({expected}).");
-            var expectedBinding = expected == EffectBackendState.Native ? EffectParameterBindingState.Applied : EffectParameterBindingState.Ignored;
+                $"{family.Id} must match its current AR evidence grade ({expected}).");
+            var expectedBinding = expected switch
+            {
+                EffectBackendState.Native => EffectParameterBindingState.Applied,
+                EffectBackendState.Unverified => EffectParameterBindingState.Unverified,
+                _ => EffectParameterBindingState.Ignored,
+            };
             Assert(family.Parameters.All(parameter => parameter.Bindings.ArOverlay == expectedBinding),
-                $"{family.Id} parameter bindings should match its AR output support state.");
+                $"{family.Id} parameter bindings should match its AR evidence state ({expectedBinding}).");
             Assert(family.Capabilities.Recording.State == EffectBackendState.Native,
                 $"{family.Id} may be Native for Recording only because its own family capture fixture reads back a real GPU take frame.");
             Assert(family.Parameters.All(parameter => parameter.Bindings.Recording == EffectParameterBindingState.Unverified),
@@ -41,11 +64,13 @@ internal static partial class VerificationSuite
         }
         foreach (var material in EffectContractCatalog.NoteMaterialPilot)
         {
-            Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Fallback
-                    && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
-                $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
+            Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                    && material.Capabilities.ArOverlay.FallbackId is null,
+                $"{material.Id} uses the shared material shader on AR quads, but its AR support remains Unverified.");
+            Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+                $"{material.Id} must keep per-setting AR bindings Unverified until their values are covered.");
         }
-        Results.Add("PASS AR contract classification: six camera-composited ambient families are Native, 18 stage-anchored families are Unsupported, note materials retain the ar.note.flat-quad fallback; all 24 family-level Recording claims have isolated capture fixtures, while parameter bindings remain Unverified.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 14 calibrated S5 projection families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete; four unprojected families stay Unsupported; note materials use the shared shader on camera-facing quads but their support and parameter bindings remain Unverified.");
     }
 
     /// <summary>
@@ -234,6 +259,14 @@ internal static partial class VerificationSuite
             int blue = pixels[i], green = pixels[i + 1], red = pixels[i + 2];
             return (Math.Max(red, Math.Max(green, blue)) - Math.Min(red, Math.Min(green, blue)), Math.Max(Math.Abs(red - 90), Math.Max(Math.Abs(green - 90), Math.Abs(blue - 90))));
         }
+        static int ChangedPixels(byte[] first, byte[] second, int threshold = 4)
+        {
+            var count = 0;
+            for (var i = 0; i < Math.Min(first.Length, second.Length); i += 4)
+                if (Math.Max(Math.Abs(first[i] - second[i]), Math.Max(Math.Abs(first[i + 1] - second[i + 1]), Math.Abs(first[i + 2] - second[i + 2]))) > threshold)
+                    count++;
+            return count;
+        }
 
         var flatRing = new CameraFrameRing(); PublishGrey(flatRing, 1280, 720);
         var flatInput = new GpuCameraInput(flatRing, PictureFit.Fit, false, 1f);
@@ -242,24 +275,31 @@ internal static partial class VerificationSuite
         ArNotes.Build(calibration!, arView, arNotes, 10, 1, ArNoteStyle.Default, expected);
         Assert(expected.Count == 4, $"Four of the five notes are in reach or sounding ({expected.Count}).");
         var arFrame = Render(MakeArFeed(flatInput, arInput));
-        // the sounding G4 also lights its key, so the keys are counted apart from the notes
-        Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 4 && renderer.ArKeyQuadCount >= 1, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount} quads, {renderer.ArKeyQuadCount} of them keys).");
+        // The sounding G4 also lights its key; standard quality may add neighboring-key light spill, so count note shapes separately.
+        Assert(renderer.ArShapeCount == expected.Count && renderer.ArKeyQuadCount >= 1,
+            $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArQuadCount} total).");
         var gemArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "Gem"));
         var crystalArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "CrystalOutline"));
-        Assert(arFrame.AsSpan().SequenceEqual(gemArFrame) && arFrame.AsSpan().SequenceEqual(crystalArFrame),
-            "AR should retain its projected flat-quad material fallback for Gem and Crystal Outline, not claim their stage facets.");
+        var neonGemPixels = ChangedPixels(arFrame, gemArFrame);
+        var neonCrystalPixels = ChangedPixels(arFrame, crystalArFrame);
+        var gemCrystalPixels = ChangedPixels(gemArFrame, crystalArFrame);
+        Assert(neonGemPixels > 100 && neonCrystalPixels > 100 && gemCrystalPixels > 100,
+            $"The AR note quad shader should render visibly distinct Gem and Crystal Outline branches (Neon/Gem {neonGemPixels}, Neon/Crystal {neonCrystalPixels}, Gem/Crystal {gemCrystalPixels} changed pixels); full AR parameter parity remains unverified.");
         var plain = Look(arFrame, width, height, (20, 20))!.Value;
         Assert(plain.Off <= 3 && plain.Spread <= 3, $"Away from every note the picture is the camera's grey (off by {plain.Off}).");
         foreach (var shape in expected)
         {
             var insideChecked = 0;
+            var colouredSamples = 0;
             foreach (var (s, t) in new[] { (.5, .5), (.2, .5), (.8, .5), (.5, .15), (.5, .85), (.5, .95) })
             {
                 if (Look(arFrame, width, height, Blend(shape.Patch, s, t)) is not { } inside) continue;
                 insideChecked++;
-                Assert(inside.Spread > 30 && inside.Off > 40, $"Note {shape.Pitch} should be coloured at ({s:0.00},{t:0.00}) of its quad, spread {inside.Spread}, off grey by {inside.Off}.");
+                Assert(inside.Off > 40, $"Note {shape.Pitch} should visibly change the camera at ({s:0.00},{t:0.00}) of its quad (off grey by {inside.Off}).");
+                if (inside.Spread > 30) colouredSamples++;
             }
             Assert(insideChecked >= 2, $"At least two sample points of note {shape.Pitch} should be on the output ({insideChecked}).");
+            Assert(colouredSamples > 0, $"At least one sample point of note {shape.Pitch} should preserve its saturated note colour beyond Neon's achromatic white core ({colouredSamples}).");
             foreach (var (s, t) in new[] { (-.3, .5), (1.3, .5), (.5, -.35), (-.3, .9), (1.3, .9) })
             {
                 if (Look(arFrame, width, height, Blend(shape.Patch, s, t)) is not { } outside) continue;
@@ -272,12 +312,13 @@ internal static partial class VerificationSuite
         Assert(overKeys is { } over && over.Off <= 3, "Just past the leading edge of a coming note the camera's grey must show.");
 
         Render(MakeArFeed(flatInput, arInput, playing: false));
-        Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 0, "A paused song draws no notes, like the stage.");
+        Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount == 0 && renderer.ArNoteLightCount == 0,
+            "A paused song draws no notes or key-light spill, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
         Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false)));
-        Assert(renderer.ArQuadCount == renderer.ArKeyQuadCount && renderer.ArKeyQuadCount >= 1,
-            "Perform mode draws no notes to come but still lights the key of the note that sounds.");
+        Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount >= 1,
+            "Perform mode draws no notes to come but still lights the key that sounds; standard-quality spill is a separate pass.");
         // ---- AR-1.4: held keys lit where they are in the picture ---------------------------------------------
         var held = new HashSet<int> { 60, 61, 64 };
         GpuStageFeed MakeKeyFeed(GpuArInput? ar)
@@ -292,8 +333,10 @@ internal static partial class VerificationSuite
         (double X, double Y) KeyPoint(double u, double v) { var p = calibration.ToPicture(u, v); return arView.ToOutput(p.X, p.Y); }
         var lit = RenderWarm(MakeKeyFeed(arInput));
         var litKeys = renderer.ArKeyQuadCount;
+        var litNoteLights = renderer.ArNoteLightCount;
         var unlit = RenderWarm(MakeKeyFeed(null));
-        Assert(litKeys == 5 && renderer.ArQuadCount == 0, $"Three held keys (C4 and E4 white, C#4 black) are five rectangles ({litKeys}).");
+        Assert(litKeys == 5 && litNoteLights > 0 && renderer.ArQuadCount == 0,
+            $"Three held keys (C4 and E4 white, C#4 black) are five rectangles plus neighboring-key spill ({litKeys} keys, {litNoteLights} spill quads).");
         int Change((double X, double Y) at)
         {
             var x = (int)Math.Floor(at.X); var y = (int)Math.Floor(at.Y);
@@ -313,10 +356,6 @@ internal static partial class VerificationSuite
             Assert(Change(at) > 25, $"A held key must be tinted: {what} changed by {Change(at)}.");
         (string What, (double X, double Y) At)[] shouldStay =
         [
-            ("D4, a white key not held", KeyPoint(layout.CenterX(62), .85)),
-            ("D4's stem between two black keys", KeyPoint((layout.Span(61).Right + layout.Span(63).Left) / 2, .3)),
-            ("D#4, a black key beside two held keys", KeyPoint(layout.CenterX(63), .3)),
-            ("F#4, a black key not held", KeyPoint(layout.CenterX(66), .3)),
             ("G5, far from any held key", KeyPoint(layout.CenterX(79), .85)),
             ("the air above C4", KeyPoint(layout.CenterX(60), -.3)),
         ];
@@ -330,18 +369,19 @@ internal static partial class VerificationSuite
         // still lights up, and a bar leaves it along the keyboard's own direction — the direction the song's notes
         // come from — stretching as the key is held. Perform mode keeps the bar: it leaves out the notes of the song
         // to come, not the mark of what the player just played.
-        GpuStageFeed ArFeed(int[] pitches, bool press)
+        GpuStageFeed ArFeed(int[] pitches, bool press, bool showTrails = true, float keyLight = .6f)
         {
             var feed = MakeFeed(flatInput);
             feed.SetState([], 0, false, new HashSet<int>(pitches));
-            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false);   // Perform: the song's notes are left out
+            feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false,
+                ShowLiveTrails: showTrails);   // Perform leaves out song notes; impact lights and optional press trails stay independent.
             if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
             return feed;
         }
-        (byte[] Pixels, int Bars, int Keys, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
+        (byte[] Pixels, int Bars, int Keys, int Impacts, int NoteLights, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
         {
             var pixels = GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, beforeFrame, 20260930);
-            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArQuadCount);
+            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArNoteLightCount, renderer.ArQuadCount);
         }
         int Probe(byte[] withBar, byte[] withoutBar, (double X, double Y) at)
         {
@@ -350,10 +390,20 @@ internal static partial class VerificationSuite
             var i = (y * width + x) * 4;
             return Math.Max(Math.Abs(withBar[i] - withoutBar[i]), Math.Max(Math.Abs(withBar[i + 1] - withoutBar[i + 1]), Math.Abs(withBar[i + 2] - withoutBar[i + 2])));
         }
-        var withoutBars = Draw(ArFeed([60, 61], press: false), 30);        // the same keys held, with no press behind them
+        // Both renders receive the same MIDI strikes and key-light setting. Turning trails off is the control so
+        // transient impact lights remain identical and only the two independently optional bars differ.
+        var withoutBars = Draw(ArFeed([60, 61], press: true, showTrails: false), 30);
         var withBars = Draw(ArFeed([60, 61], press: true), 30);
-        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Quads == 5,
-            $"Two keys pressed should light their three key rectangles and draw one bar each ({withBars.Quads} quads: {withBars.Keys} key, {withBars.Bars} bar).");
+        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Impacts == 2 && withBars.NoteLights > 0
+                && withBars.Quads == withBars.Keys + withBars.Bars + withBars.Impacts + withBars.NoteLights,
+            $"Two keys pressed should light three key rectangles, draw two bars, retain two strike lights and add neighboring spill ({withBars.Quads} quads: {withBars.Keys} keys, {withBars.Bars} bars, {withBars.Impacts} impacts, {withBars.NoteLights} spill).");
+        Assert(withoutBars.Bars == 0 && withoutBars.Keys == 3 && withoutBars.Impacts == 2 && withoutBars.NoteLights == withBars.NoteLights
+                && withoutBars.Quads == withoutBars.Keys + withoutBars.Impacts + withoutBars.NoteLights,
+            $"Turning live press trails off must remove only the bars, leaving key tint, neighboring spill and independent strike lights ({withoutBars.Quads} quads: {withoutBars.Keys} keys, {withoutBars.Impacts} impacts, {withoutBars.NoteLights} spill).");
+        var trailsOffNoTint = Draw(ArFeed([60, 61], press: true, showTrails: false, keyLight: 0), 30);
+        var tintedKey = KeyPoint(layout.CenterX(60), .85);
+        Assert(Probe(withoutBars.Pixels, trailsOffNoTint.Pixels, tintedKey) > 25,
+            "The key tint must still be visible when press trails are disabled.");
         int Bar((double X, double Y) at) => Probe(withBars.Pixels, withoutBars.Pixels, at);
         var behindC4 = KeyPoint(layout.CenterX(60), -.05); var behindCs4 = KeyPoint(layout.CenterX(61), -.05);
         Assert(Bar(behindC4) > 25 && Bar(behindCs4) > 25,
@@ -364,18 +414,20 @@ internal static partial class VerificationSuite
         Assert(Bar(farProbe) <= 2, $"A key held half a second has a short bar, well short of the look-ahead ({Bar(farProbe)} at -1.2).");
         // held twice as long: the bar has stretched past where it reached at half a second, in the keyboard's own direction
         var stretchedBars = Draw(ArFeed([60, 61], press: true), 60);
-        var withoutBarsLong = Draw(ArFeed([60, 61], press: false), 60);
+        var withoutBarsLong = Draw(ArFeed([60, 61], press: true, showTrails: false), 60);
         Assert(stretchedBars.Bars == 2 && Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe) > 25,
             $"The bar stretches as the key is held: past where half a second reached ({Probe(stretchedBars.Pixels, withoutBarsLong.Pixels, farProbe)} at -1.2).");
-        // let go: the bar ends a moment later, while the key stays lit — the light is what the key is, the bar is what the hand did
+        // Note Off freezes the live bar's hold length, but it continues travelling through its fixed AR reach;
+        // key tint remains the key's state, and strike lights have their own shorter lifetime.
         var letGoFeed = ArFeed([60, 61], press: true);
         var afterRelease = Draw(letGoFeed, 80, frame =>
         {
             if (frame != 20) return;
             letGoFeed.LiveNote(60, false, 0); letGoFeed.LiveNote(61, false, 0);
         });
-        Assert(afterRelease.Bars == 0 && afterRelease.Keys == 3 && afterRelease.Quads == 3,
-            $"Letting go ends the bars while the keys stay lit ({afterRelease.Quads} quads: {afterRelease.Keys} key, {afterRelease.Bars} bar).");
+        Assert(afterRelease.Bars == 2 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.NoteLights > 0
+                && afterRelease.Quads == afterRelease.Keys + afterRelease.Bars + afterRelease.NoteLights,
+            $"After Note Off the live bars keep travelling while strike lights fade and key tint plus spill remain ({afterRelease.Quads} quads: {afterRelease.Keys} keys, {afterRelease.Bars} bars, {afterRelease.NoteLights} spill).");
         // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
         var fadingFeed = ArFeed([60, 61], press: true);
         var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
@@ -383,9 +435,11 @@ internal static partial class VerificationSuite
             if (frame != 20) return;
             fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
-        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Quads == 5,
-            $"A key just let go keeps its bar for a moment ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} key, {fadingAfterRelease.Bars} bar five frames after the release).");
-        Results.Add("PASS ar live keys: the keys the player presses draw their own bars behind them, white or black, stretching along the keyboard as they are held and stopping at the look-ahead, gone a moment after the key is let go while the lit key stays; nothing is drawn over the key, behind a key that was not pressed, or beyond the reach — and Perform mode keeps them.");
+        Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 0
+                && fadingAfterRelease.NoteLights > 0
+                && fadingAfterRelease.Quads >= fadingAfterRelease.Keys + fadingAfterRelease.Bars + fadingAfterRelease.NoteLights,
+            $"A key just let go keeps its bar for a moment while key tint and spill remain; unrelated transients may add quads ({fadingAfterRelease.Quads} quads: {fadingAfterRelease.Keys} keys, {fadingAfterRelease.Bars} bars, {fadingAfterRelease.NoteLights} spill).");
+        Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
         Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
@@ -396,8 +450,8 @@ internal static partial class VerificationSuite
         Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
         VerifyArOverlayCapturedFrames(renderer);
-        Results.Add($"PASS ar keys: three held keys are five rectangles, each tinted where it is in the picture and nothing around it, black keys beside a held white key left alone; read back against the same frame without the layer.");
-        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal selections keep the flat-quad fallback; paused, zero opacity, no layer and a camera of another size draw nothing.");
+        Results.Add($"PASS ar keys: three held keys produce five tinted rectangles and separate neighboring-key spill at standard quality; distant keys and the air above the keyboard stay clear, read back against the same frame without the layer.");
+        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal use distinct material branches on AR quads, with the full parameter matrix still Unverified; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
     }
 
@@ -429,7 +483,7 @@ internal static partial class VerificationSuite
             AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
             HorizonGlow = 0, BloomIntensity = 0, Vignette = 0,
         };
-        GpuStageFeed MakeFeed(PianoVisualSettings settings, bool overCamera, bool sounding = true)
+        GpuStageFeed MakeFeed(PianoVisualSettings settings, bool overCamera, bool sounding = true, bool withCamera = true)
         {
             var feed = new GpuStageFeed();
             feed.SetStageHeight(height);
@@ -437,7 +491,7 @@ internal static partial class VerificationSuite
             IReadOnlyList<NoteEvent> stateNotes = sounding ? notes : Array.Empty<NoteEvent>();
             IReadOnlySet<int> pressed = sounding ? held : new HashSet<int>();
             feed.SetDeterministicState(stateNotes, sounding ? 1 : 0, sounding, pressed);
-            feed.Camera = camera;
+            if (withCamera) feed.Camera = camera;
             return feed;
         }
         byte[] Capture(GpuStageFeed feed, Action<int>? beforeFrame = null) =>
@@ -488,30 +542,39 @@ internal static partial class VerificationSuite
         busy.ShowLightBeams = true; busy.BeamIntensity = 100;
         var overCameraLook = GpuLook.From(busy, (pitch, track) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
         Assert(overCameraLook.OverCamera && !overCameraLook.ShowNotes && !overCameraLook.ShowKeys
-                && !overCameraLook.ShowEmbers && !overCameraLook.ShowWisps && !overCameraLook.ShowFlame
-                && !overCameraLook.ShowImpactRings && !overCameraLook.ShowImpactFlash && !overCameraLook.ShowLightBeams
-                && !overCameraLook.HoldElectricArc && overCameraLook.ImpactWave == "None" && overCameraLook.ImpactMorph == "None"
-                && overCameraLook.ReleaseEffect == "Fade" && overCameraLook.ReleaseIntensity == 0,
-            "The AR look must disable note/key effects before simulation and mark the camera composition for transient suppression.");
-        GpuStageFeed BusyFeed()
+                && overCameraLook.ShowEmbers && overCameraLook.ShowWisps && overCameraLook.ShowFlame
+                && overCameraLook.ShowImpactRings && overCameraLook.ShowImpactFlash && overCameraLook.ShowLightBeams
+                && overCameraLook.HoldElectricArc && overCameraLook.ShowHalo && overCameraLook.ImpactWave == "Shockwave" && overCameraLook.ImpactMorph == "Shatter"
+                && overCameraLook.ReleaseEffect == "Dissolve" && overCameraLook.ReleaseIntensity > 0,
+            "The camera-mode look must suppress stage-space note/key drawing but preserve Live Stage effect settings for the calibrated 3D AR pass.");
+        GpuStageFeed BusyFeed(bool withCamera = true)
         {
-            var feed = MakeFeed(busy, overCamera: false);
+            var feed = MakeFeed(busy, overCamera: false, withCamera: withCamera);
             feed.Impact(60, 1);
             feed.LiveNote(60, true, 1);
             feed.LiveNote(60, false, 1);
             return feed;
         }
-        var stageImage = Capture(BusyFeed());
+        var stageImage = Capture(BusyFeed(withCamera: false));
         Assert(ChangedPixels(background, stageImage, threshold: 8) > 30,
             "The busy fixture must visibly contain stage notes, keys and transients before its camera overlay is enabled.");
-        var transitioning = BusyFeed();
+        var transitioning = BusyFeed(withCamera: false);
         var hidden = Capture(transitioning, frame =>
         {
-            if (frame == 1) transitioning.SetLook(overCameraLook);
+            if (frame != 1) return;
+            var resumedImage = cameraRing.BeginWrite(width * height * 4, out var resumedSlot);
+            for (var i = 0; i < resumedImage.Length; i += 4)
+            {
+                resumedImage[i] = resumedImage[i + 1] = resumedImage[i + 2] = 90;
+                resumedImage[i + 3] = 255;
+            }
+            cameraRing.Publish(resumedSlot, width, height, Stopwatch.GetTimestamp());
+            transitioning.Camera = camera;
+            transitioning.SetLook(overCameraLook);
         });
         Assert(background.AsSpan().SequenceEqual(hidden),
             "The AR camera composite must hide active stage notes, keys and transients that were already in flight when the overlay turned on.");
-        Results.Add("PASS AR over-camera captured frames: WARP readback shows all six camera-composited ambient families, omits backdrop stars and key beams, and hides notes/keys plus in-flight impact, particle, hold and release effects when AR turns on.");
+        Results.Add("PASS AR over-camera captured frames: WARP readback shows all six screen-space ambient families, omits backdrop stars and uncalibrated key beams, preserves Live Stage effect settings for the AR projection, and suppresses their stage-space pixels when camera mode turns on.");
     }
 
     /// <summary>
@@ -784,8 +847,9 @@ internal static partial class VerificationSuite
     /// <summary>
     /// AR-1.5, the calibration window end to end on the real window: it refuses to open without a camera, a picture or the right
     /// size; shows the camera's picture the way the stage shows it; takes four clicks to a calibration that is saved for this
-    /// camera; keeps Done shut on corners that cannot be used; saves nothing when cancelled or when the camera changed behind
-    /// it; and draws the picture, the corners and the grid of keys where the wizard says they are, read back from a rendering.
+    /// camera; exercises the full-object Move/Rotate/Scale gizmo and numeric controls, the independent 3D note-direction arrow,
+    /// screen-up/key-depth aiming and FOV persistence; keeps Done shut on corners that cannot be used; saves nothing when cancelled
+    /// or when the camera changed behind it; and draws the picture, the corners and the key grid where the wizard says they are.
     /// </summary>
     private static void VerifyCalibrationWindow(MainWindow window, PianoVisualSettings visualSettings)
     {
@@ -793,6 +857,8 @@ internal static partial class VerificationSuite
         var ring = (CameraFrameRing)Field(window, "_cameraFrames");
         var mirrorWas = visualSettings.CameraMirror;
         var viewWas = visualSettings.ArViewProfileId;
+        var noteTiltWas = visualSettings.ArNoteDirectionTilt;
+        var noteAzimuthWas = visualSettings.ArNoteDirectionAzimuth;
         var view = ArCalibrationProfiles.Normalize(viewWas).Id;
         var otherView = ArCalibrationProfiles.All.First(profile => profile.Id != view);
         var keyCount = visualSettings.KeyboardLayoutChoice.KeyCount;
@@ -824,6 +890,8 @@ internal static partial class VerificationSuite
         {
             w.Surface.Measure(new Size(1000, 600)); w.Surface.Arrange(new Rect(0, 0, 1000, 600)); w.Surface.UpdateLayout();
         }
+        static void ClickButton(System.Windows.Controls.Button button) =>
+            button.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
         static byte[] Shot(CalibrationWindow w)
         {
             // the surface is not in a shown window, so its own drawing is asked for directly, as the stage's overlay is
@@ -838,6 +906,20 @@ internal static partial class VerificationSuite
         static int Differs(byte[] shot, int x, int y, byte b, byte g, byte r) => Math.Max(Math.Abs(shot[(y * 1000 + x) * 4] - b), Math.Max(Math.Abs(shot[(y * 1000 + x) * 4 + 1] - g), Math.Abs(shot[(y * 1000 + x) * 4 + 2] - r)));
         static bool SameCorners(IReadOnlyList<(double X, double Y)>? a, (double X, double Y)[] b) =>
             a is not null && a.Count == b.Length && a.Zip(b).All(pair => Math.Abs(pair.First.X - pair.Second.X) < 1e-6 && Math.Abs(pair.First.Y - pair.Second.Y) < 1e-6);
+        static bool ScreenPoint(ArCameraPose pose, ArVec3 local, ArView view, out Point point)
+        {
+            point = default;
+            if (!pose.TryProject(local, view, out var projected)) return false;
+            point = new Point(projected.X, projected.Y);
+            return true;
+        }
+        static bool ScreenAxis(ArCameraPose pose, ArCameraPose axisPose, ArVec3 centre, ArVec3 axis, ArView view, out System.Windows.Vector derivative)
+        {
+            derivative = default;
+            if (!pose.TryProjectDelta(pose.ToCamera(centre), axisPose.DirectionToCamera(axis), view, out var projected)) return false;
+            derivative = new System.Windows.Vector(projected.X, projected.Y);
+            return derivative.Length > 1e-6 && double.IsFinite(derivative.X) && double.IsFinite(derivative.Y);
+        }
 
         // ---- it opens only when there is something to mark corners on ----
         Invoke(window, "ApplyArSource", null!, 0, 0); ring.Clear();
@@ -860,6 +942,7 @@ internal static partial class VerificationSuite
             Invoke(window, "InjectCameraFrame", halves, W, H);
             var framesMirrored = mirror && !(bool)Field(window, "_arRawFrames");
             var before = opened;
+            var savedNoteDirection = ArNoteDirection.Default;
             Open(w =>
             {
                 Arrange(w);
@@ -903,16 +986,229 @@ internal static partial class VerificationSuite
                 w.OrientationBox.SelectedValue = turned;
                 Assert(w.Wizard.Orientation == turned && w.Wizard.Points.Count == 4 && w.Wizard.PreviewKeys().Count == keyCount,
                     "Choosing another orientation should read the same four corners another way and move none of them.");
-                w.OrientationBox.SelectedValue = upright;
-                Assert(w.Wizard.Orientation == upright && w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust, "Choosing the first orientation again should bring the first reading back.");
+                w.ResetOrientationButton.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert(w.Wizard.Orientation == upright && w.DoneButton.IsEnabled && w.Wizard.Step == WizardStep.Adjust,
+                    "The circular reset control should restore the orientation that was active when calibration opened.");
+                Assert(w.ToolBox.Items.Count == 5 && w.PositionXSlider.IsEnabled && w.UniformScaleSlider.IsEnabled,
+                    "A usable calibration should enable the five gizmo modes and the object translation/uniform-scale controls.");
+                var directionBeforeObjectTransform = w.NoteDirection;
+                var fovBeforeObjectTransform = w.Wizard.CameraFovDegrees;
+                w.PositionXSlider.Value = .08; w.PositionYSlider.Value = -.04; w.UniformScaleSlider.Value = 1.1;
+                Assert(Math.Abs(w.Wizard.PoseTransform.PositionX - .08) < .001 && Math.Abs(w.Wizard.PoseTransform.PositionY + .04) < .001
+                        && Math.Abs(w.Wizard.PoseTransform.UniformScale - 1.1) < .001 && w.NoteDirection == directionBeforeObjectTransform
+                        && Math.Abs(w.Wizard.CameraFovDegrees - fovBeforeObjectTransform) < .001,
+                    "Numeric controls should apply object translation and one uniform scale without changing independent note travel or camera FOV.");
+                w.PositionXSlider.Value = 0; w.PositionYSlider.Value = 0; w.UniformScaleSlider.Value = 1;
+                w.ToolBox.SelectedValue = CalibrationTool.Move;
+                var moveCalibration = w.Wizard.CurrentCalibration!;
+                var movePose = moveCalibration.CameraPose!.Value;
+                var baseCalibration = ArCalibration.Create(w.Wizard.Layout, moveCalibration.PoseBaseCorners, W, H, out _, w.Wizard.CameraFovDegrees);
+                Assert(baseCalibration?.CameraPose is not null, "The original key-area baseline should supply the gizmo's world axes.");
+                var basePose = baseCalibration!.CameraPose!.Value;
+                var gizmoCentre = new ArVec3(movePose.KeyboardWidthDepthRatio * .5, .5, 0);
+                Assert(ScreenPoint(movePose, gizmoCentre, w.Wizard.View, out var gizmoOrigin),
+                    "The Move gizmo origin should project through the keyboard centre.");
+                Assert(ScreenAxis(movePose, basePose, gizmoCentre, new ArVec3(1, 0, 0), w.Wizard.View, out var moveAxis),
+                    "The Move gizmo should project a screen-space axis through the keyboard centre.");
+                moveAxis.Normalize();
+                var moveStart = gizmoOrigin + moveAxis * 50;
+                Assert(w.Surface.HandlePress(moveStart), "Pressing a Move gizmo axis should start a transform drag.");
+                w.Surface.HandleMove(moveStart + moveAxis * 8);
+                w.Surface.HandleRelease();
+                Assert(Math.Abs(w.Wizard.PoseTransform.PositionX) + Math.Abs(w.Wizard.PoseTransform.PositionY)
+                        + Math.Abs(w.Wizard.PoseTransform.PositionZ) > .001 && w.NoteDirection == directionBeforeObjectTransform
+                        && Math.Abs(w.Wizard.CameraFovDegrees - fovBeforeObjectTransform) < .001,
+                    "Dragging the Move gizmo should translate the keyboard without changing note direction or camera FOV.");
+                Assert(w.Wizard.SetObjectTransform(ArPoseTransform.Identity, w.Wizard.CameraFovDegrees),
+                    "After testing this gizmo mode, the object transform should return to its original baseline.");
+                Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
+
+                w.ToolBox.SelectedValue = CalibrationTool.Rotate;
+                var compoundPose = new ArPoseTransform(.02, -.01, .01, 8, -5, 3, 1);
+                Assert(w.Wizard.SetObjectTransform(compoundPose, w.Wizard.CameraFovDegrees),
+                    "The Rotate gizmo should accept a compound arbitrary 3D keyboard orientation.");
+                Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
+                foreach (var axis in new[] { 'X', 'Y', 'Z' })
+                {
+                    var hasRingStart = w.Surface.TryRotationRingPoint(axis, 37, out var ringStart);
+                    var hasRingTarget = w.Surface.TryRotationRingPoint(axis, 49, out var ringTarget);
+                    Assert(hasRingStart && hasRingTarget, $"The {axis} rotation ring should project through the arbitrary 3D pose.");
+                    var before = w.Wizard.PoseTransform;
+                    Assert(w.Surface.HandlePress(ringStart), $"Pressing the projected {axis} ring should start its 3D rotation drag.");
+                    w.Surface.HandleMove(ringTarget);
+                    w.Surface.HandleRelease();
+                    var after = w.Wizard.PoseTransform;
+                    double Component(char selected) => selected switch
+                    {
+                        'X' => after.PitchDegrees - before.PitchDegrees,
+                        'Y' => after.YawDegrees - before.YawDegrees,
+                        _ => after.RollDegrees - before.RollDegrees,
+                    };
+                    Assert(Math.Abs(Component(axis) - 12) < .3,
+                        $"Dragging the {axis} ring should change its matching Euler component by the 12-degree projected arc.");
+                    Assert(axis != 'X' || (Math.Abs(after.YawDegrees - before.YawDegrees) < .001 && Math.Abs(after.RollDegrees - before.RollDegrees) < .001),
+                        "The X rotation ring should not modify Y or Z rotation.");
+                    Assert(axis != 'Y' || (Math.Abs(after.PitchDegrees - before.PitchDegrees) < .001 && Math.Abs(after.RollDegrees - before.RollDegrees) < .001),
+                        "The Y rotation ring should not modify X or Z rotation.");
+                    Assert(axis != 'Z' || (Math.Abs(after.PitchDegrees - before.PitchDegrees) < .001 && Math.Abs(after.YawDegrees - before.YawDegrees) < .001),
+                        "The Z rotation ring should not modify X or Y rotation.");
+                    Assert(w.Surface.TryRotationRingPoint(axis, 37, out var ringAfter)
+                            && (ringAfter - ringStart).Length < .001,
+                        $"The {axis} ring should stay anchored while its own angle changes, rather than drifting around the screen centre.");
+                }
+                Assert(w.NoteDirection == directionBeforeObjectTransform && Math.Abs(w.Wizard.CameraFovDegrees - fovBeforeObjectTransform) < .001,
+                    "Arbitrary ring rotation should preserve independent note direction and camera FOV.");
+                Assert(w.Wizard.SetObjectTransform(ArPoseTransform.Identity, w.Wizard.CameraFovDegrees),
+                    "After testing this gizmo mode, the object transform should return to its original baseline.");
+                Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
+
+                w.ToolBox.SelectedValue = CalibrationTool.Scale;
+                var scaleCalibration = w.Wizard.CurrentCalibration!;
+                var scalePose = scaleCalibration.CameraPose!.Value;
+                var scaleCentre = new ArVec3(scalePose.KeyboardWidthDepthRatio * .5, .5, 0);
+                Assert(ScreenPoint(scalePose, scaleCentre, w.Wizard.View, out var scaleOrigin),
+                    "The Scale gizmo centre should project through the keyboard centre.");
+                Assert(ScreenAxis(scalePose, scalePose, scaleCentre, new ArVec3(1, 1, 0).Normalized, w.Wizard.View, out var scaleAxis),
+                    "The Scale gizmo should project its uniform-scale handle.");
+                scaleAxis.Normalize();
+                var scaleEnd = scaleOrigin + scaleAxis * 78;
+                Assert(w.Surface.HandlePress(scaleEnd), "Pressing the Scale gizmo handle should start a uniform-scale drag.");
+                w.Surface.HandleMove(scaleEnd + scaleAxis * 12);
+                w.Surface.HandleRelease();
+                Assert(w.Wizard.PoseTransform.UniformScale > 1.01,
+                    "Dragging Scale should update one uniform scale while keeping all keyboard proportions.");
+                Assert(w.Wizard.SetObjectTransform(ArPoseTransform.Identity, w.Wizard.CameraFovDegrees),
+                    "After testing this gizmo mode, the object transform should return to its original baseline.");
+                Invoke(w, "SyncPoseControls"); w.Surface.Refresh();
+
+                w.ToolBox.SelectedValue = CalibrationTool.NoteDirection;
+                w.NoteTiltSlider.Value = 90; w.NoteAzimuthSlider.Value = 90;
+                Assert(w.NoteDirection.Vector.X > .999 && Math.Abs(w.NoteDirection.Vector.Y) < .001
+                        && Math.Abs(w.NoteDirection.Vector.Z) < .001,
+                    "The independent tilt and azimuth sliders should aim notes toward across-key motion in 3D.");
+                w.KeyDepthButton.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert(w.NoteDirection == ArNoteDirection.Default, "The key-depth control should aim perpendicular to the key row.");
+                w.ScreenUpButton.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                var directionCalibration = w.Wizard.CurrentCalibration!;
+                var directionPose = directionCalibration.CameraPose!.Value;
+                var directionCentre = new ArVec3(directionPose.KeyboardWidthDepthRatio * .5, .5, 0);
+                Assert(directionPose.TryProjectDelta(directionPose.ToCamera(directionCentre), directionPose.DirectionToCamera(w.NoteDirection.Vector),
+                    w.Wizard.View, out var screenDirection), "The chosen note direction should project at its keyboard centre.");
+                var screenLength = Math.Sqrt(screenDirection.X * screenDirection.X + screenDirection.Y * screenDirection.Y);
+                Assert(screenLength > 1e-6 && Math.Abs(screenDirection.X / screenLength) < 1e-3 && screenDirection.Y / screenLength < -.999
+                        && Math.Abs(w.NoteTiltSlider.Value - w.NoteDirection.TiltDegrees) < .001,
+                    "The preview arrow and direction sliders should agree on a 3D keyboard-plane direction projecting straight up.");
+                Assert(ScreenPoint(directionPose, directionCentre, w.Wizard.View, out var arrowOrigin),
+                    "The note-direction arrow should have a projectable centre for free aiming.");
+                var up = new System.Windows.Vector(screenDirection.X / screenLength, screenDirection.Y / screenLength);
+                var dragStart = arrowOrigin + up * 56;
+                const double aimDragRadians = 35 * Math.PI / 180;
+                var aimed = new System.Windows.Vector(up.X * Math.Cos(aimDragRadians) - up.Y * Math.Sin(aimDragRadians),
+                    up.X * Math.Sin(aimDragRadians) + up.Y * Math.Cos(aimDragRadians));
+                var dragTarget = arrowOrigin + aimed * 56;
+                Assert(w.Surface.HandlePress(dragStart), "Pressing the note-direction arrow should begin free 3D aiming.");
+                w.Surface.HandleMove(dragTarget);
+                w.Surface.HandleRelease();
+                Assert(directionPose.TryProjectDelta(directionPose.ToCamera(directionCentre),
+                    directionPose.DirectionToCamera(w.NoteDirection.Vector), w.Wizard.View, out var aimedScreenDirection),
+                    "The dragged note direction should remain projectable in the current keyboard pose.");
+                var aimedLength = Math.Sqrt(aimedScreenDirection.X * aimedScreenDirection.X + aimedScreenDirection.Y * aimedScreenDirection.Y);
+                Assert(aimedLength > 1e-6 && Math.Abs(aimedScreenDirection.X / aimedLength - aimed.X) < 1e-3
+                        && Math.Abs(aimedScreenDirection.Y / aimedLength - aimed.Y) < 1e-3
+                        && Math.Abs(w.NoteTiltSlider.Value - w.NoteDirection.TiltDegrees) < .001,
+                    "Dragging the preview arrow should choose an arbitrary screen heading and keep its numeric 3D controls synchronized.");
+
+                ClickButton(w.ResetToolButton);
+                Assert(Equals(w.ToolBox.SelectedValue, CalibrationTool.Corners), "The tool reset should return to corner editing.");
+                w.PitchSlider.Value = 12; w.YawSlider.Value = -11; w.RollSlider.Value = 8;
+                ClickButton(w.ResetYawButton);
+                Assert(Math.Abs(w.Wizard.PitchDegrees - 12) < .001 && Math.Abs(w.Wizard.YawDegrees) < .001 && Math.Abs(w.Wizard.RollDegrees - 8) < .001,
+                    "Resetting one Euler control should restore only that control to its default.");
+                ClickButton(w.ResetPitchButton); ClickButton(w.ResetRollButton);
+                Assert(w.Wizard.PoseTransform.Rotation == default, "The three per-axis rotation resets should restore the identity orientation.");
+                w.CameraFovSlider.Value = 89; ClickButton(w.ResetFovButton);
+                Assert(Math.Abs(w.Wizard.CameraFovDegrees - ArCameraPose.DefaultFovDegrees) < .001,
+                    "The FOV reset should restore its standard 70-degree default.");
+                w.PositionXSlider.Value = .2; w.PositionYSlider.Value = -.15; w.PositionZSlider.Value = .1; w.UniformScaleSlider.Value = 1.25;
+                ClickButton(w.ResetPositionXButton);
+                Assert(Math.Abs(w.Wizard.PoseTransform.PositionX) < .001 && Math.Abs(w.Wizard.PoseTransform.PositionY + .15) < .001,
+                    "Resetting one translation should leave the other object controls untouched.");
+                ClickButton(w.ResetPositionYButton); ClickButton(w.ResetPositionZButton); ClickButton(w.ResetScaleButton);
+                Assert(w.Wizard.PoseTransform == ArPoseTransform.Identity, "The per-axis translation and scale resets should restore an identity object transform.");
+                w.NoteTiltSlider.Value = 48; w.NoteAzimuthSlider.Value = -72;
+                ClickButton(w.ResetNoteTiltButton);
+                Assert(Math.Abs(w.NoteDirection.TiltDegrees) < .001 && Math.Abs(w.NoteDirection.AzimuthDegrees + 72) < .001,
+                    "Resetting note tilt should preserve independently adjustable note azimuth.");
+                ClickButton(w.ResetNoteAzimuthButton);
+                Assert(w.NoteDirection == ArNoteDirection.Default, "The note-direction reset controls should restore each default component independently.");
+                savedNoteDirection = w.NoteDirection;
+                w.ToolBox.SelectedValue = CalibrationTool.Corners;
+                var unrotatedPreview = w.Wizard.PreviewKeys().First(key => key.Pitch == 60).Corners;
+                w.PitchSlider.Value = 12;
+                var rotatedPreview = w.Wizard.PreviewKeys().First(key => key.Pitch == 60).Corners;
+                Assert(w.PitchSlider.IsEnabled && rotatedPreview.Zip(unrotatedPreview).Any(pair => Math.Abs(pair.First.X - pair.Second.X) > 1 || Math.Abs(pair.First.Y - pair.Second.Y) > 1)
+                        && w.DoneButton.IsEnabled && w.Wizard.Points.Count == 4,
+                    "The pitch control should rotate the calibrated keyboard in 3D, keeping all four corners usable and Done enabled.");
+                w.PitchSlider.Value = 0;
+                Assert(SameCorners(w.Wizard.UsableCorners, truth), "Returning the 3D pitch control to zero should restore the same ordered corners.");
+                w.CameraFovSlider.Value = 83;
+                Assert(Math.Abs(w.Wizard.CameraFovDegrees - 83) < .01,
+                    "The camera FOV control should update the pose estimate independently of pitch, yaw and roll.");
+                w.ScreenUpButton.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                savedNoteDirection = w.NoteDirection;
+                var finalDirectionPose = w.Wizard.CurrentCalibration!.CameraPose!.Value;
+                var finalDirectionCentre = new ArVec3(finalDirectionPose.KeyboardWidthDepthRatio * .5, .5, 0);
+                Assert(finalDirectionPose.TryProjectDelta(finalDirectionPose.ToCamera(finalDirectionCentre),
+                    finalDirectionPose.DirectionToCamera(savedNoteDirection.Vector), w.Wizard.View, out var finalScreenDirection),
+                    "The final screen-up direction should still project through the final FOV pose.");
+                var finalScreenLength = Math.Sqrt(finalScreenDirection.X * finalScreenDirection.X + finalScreenDirection.Y * finalScreenDirection.Y);
+                Assert(finalScreenLength > 1e-6 && Math.Abs(finalScreenDirection.X / finalScreenLength) < 1e-3
+                        && finalScreenDirection.Y / finalScreenLength < -.999,
+                    "Screen-up aiming should be based on the currently saved FOV and keyboard pose.");
                 w.Accept();
                 return w.Result is not null;
             });
             Assert(opened == before + 1, "A camera with a picture of the right size should open the window once.");
-            Assert(window.ArCalibration.State == ArCalibrationState.Ready && SameCorners(window.ArCalibration.Current?.Corners, truth),
-                $"Four clicks and Done should calibrate this camera with the corners that were marked on the picture as delivered (mirror {mirror}).");
-            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth),
-                "The calibration should be stored for this camera, view, picture size and keyboard size.");
+            Assert(window.ArCalibration.State == ArCalibrationState.Ready && SameCorners(window.ArCalibration.Current?.Corners, truth)
+                    && Math.Abs((window.ArCalibration.Current?.CameraFovDegrees ?? 0) - 83) < .01,
+                $"Four clicks and Done should calibrate this camera with the marked corners and chosen FOV (mirror {mirror}).");
+            Assert(SameCorners(window.ArCalibration.Store.Get("verification camera", view, W, H, keyCount), truth)
+                    && Math.Abs(window.ArCalibration.Store.GetCameraFov("verification camera", view, W, H, keyCount) - 83) < .01,
+                "Corners and camera FOV should be stored together for this camera, view, picture size and keyboard size.");
+            Assert(Math.Abs(visualSettings.ArNoteDirectionTilt - savedNoteDirection.TiltDegrees) < .001
+                    && Math.Abs(visualSettings.ArNoteDirectionAzimuth - savedNoteDirection.AzimuthDegrees) < .001,
+                "Accepting Calibrate should save the independent note direction into the user's visual settings.");
+            Open(w =>
+            {
+                Arrange(w);
+                w.PitchSlider.Value = 1; w.YawSlider.Value = -1; w.RollSlider.Value = 1;
+                w.CameraFovSlider.Value = 97;
+                w.StartOverButton.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
+                Assert(w.Wizard.Points.Count == 0 && w.Wizard.PitchDegrees == 0 && w.Wizard.YawDegrees == 0 && w.Wizard.RollDegrees == 0
+                        && w.PitchSlider.Value == 0 && w.YawSlider.Value == 0 && w.RollSlider.Value == 0
+                        && Math.Abs(w.Wizard.CameraFovDegrees - 97) < .01 && Math.Abs(w.CameraFovSlider.Value - 97) < .01,
+                    "Start over should sync the reset pitch/yaw/roll controls while preserving the chosen camera FOV.");
+                return false;
+            });
+            Open(w =>
+            {
+                Arrange(w);
+                Assert(SameCorners(w.Wizard.Points, truth) && SameCorners(w.Wizard.UsableCorners, truth) && w.RotationSlider.IsEnabled,
+                    "Opening the already marked camera and view should load the saved, ordered corners for adjustment.");
+                var savedOrientation = w.Wizard.Orientation;
+                var alternateOrientation = savedOrientation == KeyboardOrientation.LowRightFarBottom ? KeyboardOrientation.Upright : KeyboardOrientation.LowRightFarBottom;
+                w.OrientationBox.SelectedValue = alternateOrientation;
+                Assert(!SameCorners(w.Wizard.UsableCorners, truth), "Changing orientation on a loaded, ordered calibration should relabel its corners rather than silently ignoring the choice.");
+                w.OrientationBox.SelectedValue = savedOrientation;
+                Assert(SameCorners(w.Wizard.UsableCorners, truth), "Restoring the saved orientation should restore the ordered corner mapping.");
+                w.RotationSlider.Value = -6;
+                Assert(!SameCorners(w.Wizard.Points, truth), "A loaded calibration should rotate as one ordered key grid.");
+                w.RotationSlider.Value = 0;
+                w.Accept();
+                return w.Result is not null;
+            });
+            Assert(SameCorners(window.ArCalibration.Current?.Corners, truth),
+                "Saving the restored zero-angle adjustment should keep the saved calibration's corner order and positions.");
         }
 
         // ---- corners that cannot be used keep Done shut ----
@@ -1011,6 +1307,9 @@ internal static partial class VerificationSuite
             Arrange(w);
             Assert(w.Title == Loc.F("Mark the keys for the {0} view", Loc.T(ArCalibrationProfiles.Normalize(view).Name)),
                 $"The window that opens for the {view} view should say so (found “{w.Title}”).");
+            // Reopen now loads the saved corners; start over before this case marks a deliberately different set.
+            w.Wizard.Clear();
+            w.Surface.Refresh();
             Click(w, moved);
             visualSettings.ArViewProfileId = otherView.Id;
             Invoke(window, "ApplyArSource", "verification camera", W, H);
@@ -1035,17 +1334,20 @@ internal static partial class VerificationSuite
         Invoke(window, "ApplyArSource", null!, 0, 0);
         ring.Clear();
         visualSettings.CameraMirror = mirrorWas;
+        visualSettings.ArNoteDirectionTilt = noteTiltWas;
+        visualSettings.ArNoteDirectionAzimuth = noteAzimuthWas;
+        Invoke(window, "RefreshSettingControls");
         Invoke(window, "UpdateArFeed");
-        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Done shut on bad corners; New picture; nothing saved when cancelled, when the camera changed behind it, or when the view of the camera did; each view keeps its own key area and an unmarked view asks to be marked.");
+        Assert(Math.Abs(visualSettings.ArNoteDirectionTilt - noteTiltWas) < .001
+                && Math.Abs(visualSettings.ArNoteDirectionAzimuth - noteAzimuthWas) < .001,
+            "The calibration diagnostic should restore the user's note direction after testing the aiming controls.");
+        Results.Add("PASS calibration window: refuses without a camera, picture or the right size; the picture as the stage shows it; four clicks to a saved calibration, mirrored or not; Move/Rotate/Scale gizmo and numeric pose controls; independent note-direction sliders, screen-up and key-depth alignment; FOV and pose persistence; Done shut on bad corners; New picture; nothing saved when cancelled, when the camera changed behind it, or when the view of the camera did; each view keeps its own key area and an unmarked view asks to be marked.");
     }
 
     /// <summary>
-    /// AR-S4: the scene→image map the stage's own note and sprite passes are to be drawn through
-    /// (docs/AR-OVERLAY-ROADMAP.md §12, §14.10). The unit tests hold the map to <c>ArProjection</c>; this holds it to
-    /// the scene layout the renderer really builds — <c>GpuSceneLayout</c> lives on the far side of the WPF line and
-    /// cannot be linked into the test project, so the one thing that could silently break the map (a scene whose key
-    /// positions are not the keyboard's normalised ones, or a hit line that is not the back edge of the keys) is
-    /// checked here, on the layout the GPU stage is handed.
+    /// Regression for the legacy flat scene→image map helpers: the pure projection tests hold the map to <c>ArProjection</c>;
+    /// this holds it to the scene layout the renderer builds. The active AR note path uses <c>ArCameraPose</c> and
+    /// <c>Ar3DNoteProjection</c>, and must not use this map as a note-visibility gate.
     /// </summary>
     private static void VerifyArSceneProjection()
     {
@@ -1085,244 +1387,641 @@ internal static partial class VerificationSuite
                 }
             }
         }
-        Results.Add("PASS AR scene projection (AR-S4): the scene-to-image map agrees with ArProjection on the scene layout the renderer builds, at three output sizes, mirrored and not.");
+        Results.Add("PASS legacy AR scene projection helpers: the dormant scene-to-image map agrees with ArProjection on synthetic layouts at three output sizes, mirrored and not; active notes use the separate 3D camera-pose route.");
     }
 
     /// <summary>
-    /// AR-S4b, the scene→image map on the GPU (docs/AR-OVERLAY-ROADMAP.md §14.10): the stage's own note pass draws
-    /// through it over the camera picture, instead of the AR layer keeping flat note quads of its own. Read back on
-    /// WARP and checked twice over. Switched off — the default — the frame must not change by a single pixel even
-    /// with the whole map sitting in the frame constants beside the ones the stage already reads. Switched on, every
-    /// note must land inside the patch <see cref="ArProjection.TryProject"/> reports for its own rectangle, with the
-    /// sample keyboard and with the picture mirrored, and the min-scale floor the flags float4 carries must reach
-    /// the shader without moving the note.
+    /// WARP regression for the live AR render route: the calibrated 3D pose owns song-note quads, the stage-space
+    /// note/trail pass stays empty, and direction/FOV are not coupled to the old scene-to-image homography.
     /// </summary>
     private static void VerifyArNoteProjection()
     {
         const int width = 1280, height = 720;
-        // Solid notes with halo, bloom and every side effect off: what a frame can hold is the note body and the
-        // camera's grey, so the patch either holds note pixels or it does not and there is no glow to argue about.
         var settings = new PianoVisualSettings
         {
-            ShowNotes = true, NoteStyle = "Solid", NoteWidth = 100, NoteGlow = 0, NoteHeadGlow = 0, NoteRoundness = 0,
+            ShowNotes = true, NoteStyle = "Solid", NoteWidth = 100, NoteMinLength = 4, NoteGap = 1,
+            NoteGlow = 0, NoteHeadGlow = 0, NoteRoundness = 0,
             FallingPulse = false, FallingTrail = "None", FallingGhost = false, NoteShimmer = false, NoteLandingGlow = false,
             HoldBar = false, HoldBreath = false, HoldVibration = false, HoldColorCycle = false, HoldElectricArc = false,
             ShowEmbers = false, ShowWisps = false, ShowFlame = false, ShowImpactRings = false, ShowImpactFlash = false,
             ShowKeys = false, ShowHalo = false, ShowBackground = false, ShowStars = false, ShowLightBeams = false, ShowPetals = false,
             AmbientEnergy = "None", AmbientNature = "None", AmbientLight = "None", AmbientCosmic = "None",
-            BloomIntensity = 0, HorizonGlow = 0, Vignette = 0, ShootingStars = false
+            BloomIntensity = 0, HorizonGlow = 0, Vignette = 0, ShootingStars = false,
+            ArNotesInPerspective = true, ArLivePressTrails = false
         };
         var notes = new List<NoteEvent>
         {
-            new() { Pitch = 60, Start = 10.08, Duration = .18 },   // white key, hanging just above the keys
-            new() { Pitch = 64, Start = 10.2, Duration = .2 },     // two white keys over: bodies may not touch
-            new() { Pitch = 67, Start = 10.32, Duration = .22 }    // white key, highest of the three
+            new() { Pitch = 60, Start = 10.08, Duration = .18 },
+            new() { Pitch = 64, Start = 10.20, Duration = .20 },
+            new() { Pitch = 67, Start = 10.32, Duration = .22 }
         };
-        // The starts sit the notes in the air the projection really magnifies (SongFallSpeed puts a note
-        // 0.6 s out at v ~ -1.7 and 1.35 s out past the top of the frame): each body must lie wholly on the
-        // output, or its patch samples cannot be asked to show anything. The pitches stay two white keys
-        // apart because the bodies are a lane wide and a black key sits only ~10 px from its white
-        // neighbours - touching bodies would put a neighbour under the outside samples of the patch.
-        // the very layout the render loop builds from this feed, so the rectangles below are the drawn ones
-        var scene = new GpuSceneLayout(width, height, .205f);
-        var frame = new ArSceneFrame(scene.Width, scene.HitY, scene.KeyboardHeight);
+        var shortNotes = new List<NoteEvent>
+        {
+            new() { Pitch = 60, Start = 10.08, Duration = .02 },
+            new() { Pitch = 64, Start = 10.20, Duration = .02 },
+            new() { Pitch = 67, Start = 10.32, Duration = .02 }
+        };
         var corners = new (double X, double Y)[] { (70, 292), (1214, 268), (1236, 421), (52, 449) };
-        var calibration = ArCalibration.Create(scene.Keys, corners, 1280, 720, out var problem)
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, corners, 1280, 720, out var problem, 70)
             ?? throw new InvalidOperationException($"the sample corners were refused: {problem}");
-        // a grey camera picture: the note is the only colour a frame can hold
+        var savedCorners = calibration.Corners.ToArray();
         var ring = new CameraFrameRing();
         var grey = ring.BeginWrite(1280 * 720 * 4, out var slot);
-        Array.Fill(grey, (byte)90, 0, 1280 * 720 * 4);
-        for (var i = 3; i < grey.Length; i += 4) grey[i] = 255;
-        ring.Publish(slot, 1280, 720, Stopwatch.GetTimestamp());
-        GpuStageFeed MakeFeed(bool mirror, GpuArInput? ar, IReadOnlyList<NoteEvent>? song = null)
+        for (var i = 0; i < grey.Length; i += 4)
         {
-            var feed = new GpuStageFeed();
+            grey[i] = 90; grey[i + 1] = 90; grey[i + 2] = 90; grey[i + 3] = 255;
+        }
+        ring.Publish(slot, 1280, 720, Stopwatch.GetTimestamp());
+        var view = new ArView(1280, 720, width, height, PictureFit.Fit, false);
+
+        GpuStageFeed MakeFeed(GpuArInput? ar, bool mirror = false, IReadOnlyList<NoteEvent>? song = null,
+            double position = 10, bool playing = true, IReadOnlySet<int>? pressed = null, bool overCamera = true)
+        {
+            var feed = new GpuStageFeed { LabelAtlas = PianoStage.GpuGlyphAtlas };
             feed.SetStageHeight(height);
-            feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205));
-            feed.SetDeterministicState(song ?? notes, 10, true, new HashSet<int>());
+            feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: overCamera));
+            feed.SetDeterministicState(song ?? notes, position, playing, pressed ?? new HashSet<int>());
             feed.SetDeterministicBeatPulse(0);
             feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, mirror, 1f);
             feed.Ar = ar;
             return feed;
         }
-        // where (s, t) of a patch lands on the output, blended in perspective the way the rasteriser blends the quad
-        static (double X, double Y) Blend(ArPatch patch, double s, double t)
-        {
-            double weight = 0, x = 0, y = 0;
-            for (var i = 0; i < 4; i++)
-            {
-                var lambda = i switch { 0 => (1 - s) * (1 - t), 1 => s * (1 - t), 2 => s * t, _ => (1 - s) * t };
-                weight += lambda * patch[i].W; x += lambda * patch[i].W * patch[i].X; y += lambda * patch[i].W * patch[i].Y;
-            }
-            return (x / weight, y / weight);
-        }
-        // what a pixel says: colour spread and distance from the camera's grey, or null for a point off the output
+
+        using var renderer = GpuStageRenderer.Create(forceWarp: true);
+        byte[] Render(GpuStageFeed feed, bool alphaOutput = false) =>
+            GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _, null, 20260930, alphaOutput);
+        byte[] RenderFrames(GpuStageFeed feed, int frames, bool alphaOutput = false) =>
+            GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, null, 20260930, alphaOutput);
+
+        static (double X, double Y) Centre(ArPatch patch) =>
+            ((patch.BackLeft.X + patch.BackRight.X + patch.FrontRight.X + patch.FrontLeft.X) * .25,
+             (patch.BackLeft.Y + patch.BackRight.Y + patch.FrontRight.Y + patch.FrontLeft.Y) * .25);
+
         static (int Spread, int Off)? Look(byte[] pixels, int w, int h, (double X, double Y) at)
         {
             if (!(at.X >= 0 && at.Y >= 0 && at.X < w && at.Y < h)) return null;
             var i = ((int)Math.Floor(at.Y) * w + (int)Math.Floor(at.X)) * 4;
-            int blue = pixels[i], green = pixels[i + 1], red = pixels[i + 2];
-            return (Math.Max(red, Math.Max(green, blue)) - Math.Min(red, Math.Min(green, blue)),
-                Math.Max(Math.Abs(red - 90), Math.Max(Math.Abs(green - 90), Math.Abs(blue - 90))));
+            var b = pixels[i]; var g = pixels[i + 1]; var r = pixels[i + 2];
+            return (Math.Max(r, Math.Max(g, b)) - Math.Min(r, Math.Min(g, b)),
+                Math.Max(Math.Abs(r - 90), Math.Max(Math.Abs(g - 90), Math.Abs(b - 90))));
         }
-        static int NotePixels(byte[] pixels)
+
+        static int ColouredPixels(byte[] pixels, byte greyValue = 90)
         {
             var count = 0;
             for (var i = 0; i < pixels.Length; i += 4)
-                if (Math.Max(Math.Abs(pixels[i] - 90), Math.Max(Math.Abs(pixels[i + 1] - 90), Math.Abs(pixels[i + 2] - 90))) > 40) count++;
+                if (Math.Max(Math.Abs(pixels[i] - greyValue), Math.Max(Math.Abs(pixels[i + 1] - greyValue), Math.Abs(pixels[i + 2] - greyValue))) > 40) count++;
             return count;
         }
 
-        using var renderer = GpuStageRenderer.Create(forceWarp: true);
-        byte[] Render(GpuStageFeed feed) => GpuRenderLoop.RenderFrames(renderer, feed, width, height, 0, 1 / 60.0, false, out _);
-
-        // ---- default off: the map in the constants must not move one pixel ------------------------------
-        var withoutAr = Render(MakeFeed(false, null));
-        var mapInConstants = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 0f)));
-        Assert(withoutAr.AsSpan().SequenceEqual(mapInConstants),
-            "AR-S4b default off: with the whole scene→image map in the frame constants (the AR layer at zero opacity, the note branch's flag down) the frame must be byte-identical to one with no AR input at all — not one pixel may change.");
-        var defaultNotes = NotePixels(withoutAr);
-        Assert(defaultNotes > 500, $"The default frame must still show its notes over the picture before any of this proves anything ({defaultNotes} note pixels).");
-
-        // ---- the switch reaches the stage's look: over the camera the stage keeps its notes only when they are drawn in perspective
-        settings.ArNotesInPerspective = false;
-        var overCameraFlat = GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
-        settings.ArNotesInPerspective = true;
-        var overCameraPerspective = GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true);
-        settings.ArNotesInPerspective = false;
-        Assert(!overCameraFlat.ShowNotes, "Over the camera with the switch off the stage must leave its notes out (the flat AR layer draws them).");
-        Assert(overCameraPerspective.ShowNotes, "Over the camera with the switch on the stage must keep its notes: the note pass draws them in perspective.");
-
-        // ---- on: every note lands inside the patch ArProjection.TryProject reports for its own rectangle ----
-        foreach (var mirror in new[] { false, true })
+        static int ChangedPixels(byte[] first, byte[] second, int threshold = 8)
         {
-            var feed = MakeFeed(mirror, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true));
-            // the rectangles the note pass is handed, rebuilt on the CPU from the same deterministic input the frame is drawn from
-            var replica = new GpuStageSimulation(20260930);
-            var input = new GpuFrameInput();
-            feed.Capture(input, GpuStageFeed.Now);
-            replica.Step(1 / 60.0, input, feed, scene.Width);
-            var rects = new GpuInstanceList<GpuNoteInstance>(32);
-            replica.BuildNotes(input, scene, rects);
-            Assert(rects.Count == notes.Count, $"Every note of the fixture should reach the note pass ({rects.Count} of {notes.Count}).");
-            var drawn = Render(feed);
-            Assert(renderer.ArQuadCount == 0,
-                "With the note pass drawing through the map, the AR layer keeps no flat note or bar quad of its own.");
-            Assert(NotePixels(drawn) > 500, $"The projected notes must be drawn ({NotePixels(drawn)} note pixels, mirrored {mirror}).");
-            var view = new ArView(1280, 720, width, height, PictureFit.Fit, mirror);
-            foreach (var rect in rects.Span)
+            var count = 0;
+            for (var i = 0; i < Math.Min(first.Length, second.Length); i += 4)
+                if (Math.Max(Math.Abs(first[i] - second[i]), Math.Max(Math.Abs(first[i + 1] - second[i + 1]), Math.Abs(first[i + 2] - second[i + 2]))) > threshold) count++;
+            return count;
+        }
+
+        var defaultInput = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
+            ShowNotes: true, ProjectedNotes: true);
+
+        // The old flat scene→image homography may reject a scene frame at its horizon. That is not a reason to reject
+        // a calibrated 3D camera pose; the active renderer no longer uses the map as an AR note-presence gate.
+        Assert(!ArSceneProjection.TryBuild(calibration, view, new ArSceneFrame(0, 0, 0), out _),
+            "The regression fixture must make the legacy scene map unavailable.");
+        var expected = new List<Ar3DNoteShape>();
+        Ar3DNoteProjection.Build(calibration, view, notes, 10, .22, defaultInput.Notes,
+            defaultInput.NoteDirection, defaultInput.MinAspect, expected);
+        Assert(expected.Count == notes.Count,
+            $"The 3D note projection should build one patch per input note ({expected.Count} patches for {notes.Count} notes).");
+        var projected = Render(MakeFeed(defaultInput));
+        var projectedPixels = ColouredPixels(projected);
+        Assert(renderer.ArQuadCount == expected.Count && renderer.ArLiveBarCount == 0,
+            $"The AR quad pass should own one 3D patch per note ({renderer.ArQuadCount} quads for {expected.Count} notes), not the legacy scene-note pass.");
+        Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
+            $"The camera must suppress stage-space note bodies and falling trails (notes {renderer.StageNoteCount}, trails {renderer.StageNoteTrailCount}).");
+        Assert(projectedPixels > 500,
+            $"Projected AR note quads must change the camera frame; otherwise notes disappeared between input and the overlay pass ({projectedPixels} coloured pixels).");
+        foreach (var shape in expected)
+        {
+            var at = Centre(shape.Patch);
+            Assert(Look(projected, width, height, at) is { } pixel && pixel.Off > 40,
+                $"The rendered note for pitch {shape.Pitch} must occupy the camera-projected 3D patch centre ({at.X:0.0},{at.Y:0.0}).");
+        }
+
+        // AR note quads share the stage's material and sRGB-to-linear path, not the old flat cyan quad approximation.
+        var colorAt = Centre(expected[0].Patch);
+        var colorIndex = ((int)Math.Floor(colorAt.Y) * width + (int)Math.Floor(colorAt.X)) * 4;
+        var noteRed = projected[colorIndex + 2];
+        var noteGreen = projected[colorIndex + 1];
+        Assert(noteRed > noteGreen * 1.8,
+            $"A magenta sRGB note must be linearized before the HDR shader (expected red to stay well above green, got R={noteRed}, G={noteGreen}).");
+        var materialChanges = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var style in new[] { "Neon", "Glass", "Fire", "Gem", "CrystalOutline" })
+        {
+            settings.NoteStyle = style;
+            var styledNotes = Render(MakeFeed(defaultInput));
+            materialChanges[style] = ChangedPixels(projected, styledNotes, threshold: 4);
+            Assert(renderer.ArQuadCount == expected.Count,
+                $"Changing the AR note material to {style} must preserve one calibrated quad per song note.");
+        }
+        settings.NoteStyle = "Solid";
+        var materialChangeSummary = string.Join(", ", materialChanges.Select(pair => $"{pair.Key} {pair.Value}"));
+        Assert(materialChanges.Values.All(changed => changed > 100),
+            $"Each sampled known material branch should change the calibrated AR note pixels relative to Solid ({materialChangeSummary}); full parameter parity remains unverified.");
+
+        settings.NoteShimmer = true;
+        settings.NoteShimmerAmount = 100;
+        var shimmerNotes = Render(MakeFeed(defaultInput));
+        var shimmerPixels = ChangedPixels(projected, shimmerNotes, threshold: 4);
+        var shimmerQuads = renderer.ArQuadCount;
+        settings.NoteShimmer = false;
+        settings.NoteShimmerAmount = 45;
+        Assert(shimmerQuads == expected.Count * 2 && shimmerPixels > 20,
+            $"Note shimmer should draw a visible sheen inside each calibrated note quad ({shimmerQuads} quads, {shimmerPixels} changed pixels).");
+
+        settings.FallingTrail = "Glow";
+        settings.FallingTrailIntensity = 100;
+        settings.FallingTrailLength = 60;
+        var glowTrailNotes = Render(MakeFeed(defaultInput));
+        var glowTrailQuads = renderer.ArNoteTrailQuadCount;
+        var glowTrailPixels = ChangedPixels(projected, glowTrailNotes, threshold: 4);
+        settings.FallingTrail = "Stream";
+        var streamTrailNotes = Render(MakeFeed(defaultInput));
+        var streamTrailQuads = renderer.ArNoteTrailQuadCount;
+        Assert(glowTrailQuads == expected.Count && streamTrailQuads == expected.Count
+                && glowTrailPixels > 20 && ChangedPixels(glowTrailNotes, streamTrailNotes, threshold: 4) > 10,
+            $"Configured Glow and Stream note trails should stay on each calibrated 3D path and produce distinct pixels ({glowTrailQuads}/{streamTrailQuads} quads, {glowTrailPixels} changed pixels).");
+        settings.FallingTrail = "None";
+        settings.FallingGhost = true;
+        settings.FallingGhostAmount = 100;
+        var ghostNotes = Render(MakeFeed(defaultInput));
+        var ghostQuads = renderer.ArGhostNoteQuadCount;
+        Assert(ghostQuads >= expected.Count && ChangedPixels(projected, ghostNotes, threshold: 4) > 20,
+            $"Falling Ghost should add calibrated, pitch-bound echoes ahead of future notes ({ghostQuads} projected copies).");
+        settings.FallingGhost = false;
+        settings.NoteLandingGlow = true;
+        settings.NoteLandingGlowAmount = 100;
+        var landingNotes = Render(MakeFeed(defaultInput));
+        var landingGlowCount = renderer.ArLandingGlowCount;
+        Assert(landingGlowCount >= expected.Count && ChangedPixels(projected, landingNotes, threshold: 4) > 20,
+            $"Note Landing Glow should project an approach cue onto each upcoming real key ({landingGlowCount} calibrated glow quads).");
+        settings.NoteLandingGlow = false;
+        settings.NoteLandingGlowAmount = 18;
+        settings.ShowNoteLabels = true;
+        var labelledNotes = Render(MakeFeed(defaultInput));
+        var noteLabelCount = renderer.ArNoteLabelCount;
+        var noteLabelPixels = ChangedPixels(projected, labelledNotes, threshold: 4);
+        settings.ShowNoteLabels = false;
+        Assert(noteLabelCount > 0 && noteLabelPixels > 10,
+            $"Show note labels should sample the atlas on calibrated note quads ({noteLabelCount} projected labels, {noteLabelPixels} changed pixels).");
+
+        // The actual WARP AR pass must follow saved translation and uniform scale as well as the plane rotation.
+        var objectTransform = new ArPoseTransform(.06, -.03, .01, 8, -5, 3, 1.05);
+        Assert(ArCameraPose.TryTransformCorners(KeyboardLayout.Standard88, corners, 1280, 720, 70, objectTransform, out var transformedCorners),
+            "A modest full object transform should keep the keyboard plane projectable.");
+        var transformedCalibration = ArCalibration.Create(KeyboardLayout.Standard88, transformedCorners, 1280, 720,
+            out var transformProblem, 70, objectTransform, corners)
+            ?? throw new InvalidOperationException($"the transformed sample corners were refused: {transformProblem}");
+        var transformedInput = defaultInput with { Calibration = transformedCalibration };
+        var transformedShapes = new List<Ar3DNoteShape>();
+        Ar3DNoteProjection.Build(transformedCalibration, view, notes, 10, .22, transformedInput.Notes,
+            transformedInput.NoteDirection, transformedInput.MinAspect, transformedShapes);
+        var transformedPixels = Render(MakeFeed(transformedInput));
+        Assert(renderer.ArQuadCount == notes.Count && ColouredPixels(transformedPixels) > 500
+                && transformedShapes.Count == notes.Count && !transformedCorners.SequenceEqual(corners),
+            "A moved, uniformly scaled and rotated calibration should still reach the live camera AR-quad pass.");
+        foreach (var shape in transformedShapes)
+        {
+            var at = Centre(shape.Patch);
+            Assert(Look(transformedPixels, width, height, at) is { } pixel && pixel.Off > 40,
+                $"The transformed pitch-{shape.Pitch} note should land at its 3D projected centre ({at.X:0.0},{at.Y:0.0}).");
+        }
+
+        // Mirror changes only the output view, and the predicted 3D note corners must still match the visible quads.
+        var mirroredView = new ArView(1280, 720, width, height, PictureFit.Fit, true);
+        var mirroredExpected = new List<Ar3DNoteShape>();
+        Ar3DNoteProjection.Build(calibration, mirroredView, notes, 10, .22, defaultInput.Notes,
+            defaultInput.NoteDirection, defaultInput.MinAspect, mirroredExpected);
+        var mirrored = Render(MakeFeed(defaultInput, mirror: true));
+        Assert(renderer.ArQuadCount == mirroredExpected.Count && renderer.StageNoteCount == 0,
+            "Mirroring the camera must not send projected notes back through the flat stage pass.");
+        foreach (var shape in mirroredExpected)
+        {
+            var at = Centre(shape.Patch);
+            Assert(Look(mirrored, width, height, at) is { } pixel && pixel.Off > 40,
+                $"The mirrored pitch-{shape.Pitch} note must land in its 3D projected patch ({at.X:0.0},{at.Y:0.0}).");
+        }
+
+        // The note's travel vector is 3D and independent of the saved keyboard pose; changing it changes the render
+        // without changing the four calibration anchors.
+        var diagonalInput = defaultInput with { NoteDirection = new ArNoteDirection(72, 38) };
+        var diagonal = Render(MakeFeed(diagonalInput));
+        Assert(ChangedPixels(projected, diagonal) > 100 && renderer.ArQuadCount == notes.Count,
+            "A different 3D note direction must move/rotate the note billboards, not silently reuse the keyboard's flat travel axis.");
+        Assert(savedCorners.SequenceEqual(calibration.Corners),
+            "Changing note travel direction must never mutate the calibrated keyboard pose.");
+
+        // Perform is a separate mode: it drops the song notes while keeping key tint available.
+        var performInput = defaultInput with { ShowNotes = false };
+        var perform = Render(MakeFeed(performInput));
+        Assert(renderer.ArQuadCount == 0 && ColouredPixels(perform) == 0,
+            "Perform must omit future song-note quads instead of routing them through either note renderer.");
+        Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
+            "Perform over the camera must keep the stage-space note and trail pass empty as well.");
+
+        // Minimum length is measured in each note's own projected key width. It extends staccato notes but does not edit MIDI.
+        var shortNaturalInput = defaultInput;
+        var shortMinimumInput = defaultInput with { MinAspect = 2f };
+        var shortNatural = Render(MakeFeed(shortNaturalInput, song: shortNotes));
+        var naturalPixels = ColouredPixels(shortNatural);
+        var shortMinimum = Render(MakeFeed(shortMinimumInput, song: shortNotes));
+        var minimumPixels = ColouredPixels(shortMinimum);
+        Assert(renderer.ArQuadCount == shortNotes.Count && minimumPixels > naturalPixels,
+            $"A 200% minimum length must visibly lengthen short projected notes ({naturalPixels} → {minimumPixels} pixels).");
+
+        // Live press bars are independently switched from key tint and use the same 3D direction as song notes.
+        // The effect fixture deliberately enables several Live Stage families so S5 verifies the actual simulation output.
+        var liveFxLook = settings.Clone();
+        liveFxLook.ShowEmbers = true; liveFxLook.ParticleAmount = 90; liveFxLook.ParticleResponse = 100; liveFxLook.ParticleVelocity = 300;
+        liveFxLook.ShowWisps = true; liveFxLook.WispAmount = 55; liveFxLook.ShowFlame = true; liveFxLook.FlameIntensity = 85;
+        liveFxLook.ImpactBurst = "Confetti"; liveFxLook.ShowImpactRings = true; liveFxLook.ImpactWave = "Ripple";
+        liveFxLook.ImpactWaveIntensity = 100; liveFxLook.RingSize = 62; liveFxLook.ShowImpactFlash = true;
+        liveFxLook.ImpactFlashIntensity = 100; liveFxLook.ImpactFlashStyle = "Lightning";
+        liveFxLook.ImpactMorph = "Shatter"; liveFxLook.ImpactMorphIntensity = 100;
+        liveFxLook.ReleaseEffect = "Dissolve"; liveFxLook.ReleaseIntensity = 100;
+        liveFxLook.HoldElectricArc = true; liveFxLook.HoldArcIntensity = 100;
+        liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
+        GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
+            PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null)
+        {
+            var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
+            var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
+                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars),
+                song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
+            if (visualSettings is not null)
+                feed.SetLook(GpuLook.From(visualSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
+            // Give each WARP case an empty simulation history so an earlier effect cannot leak into the no-impact control.
+            feed.ClearTransient();
+            feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
+            feed.SetDeterministicBeatPulse(0);
+            foreach (var pitch in pressed) feed.LiveNote(pitch, true, .9f);
+            if (addImpact) feed.Impact(60, .9);
+            return feed;
+        }
+        GpuStageFeed UncalibratedFeed(PianoVisualSettings visual, bool triggerEffects)
+        {
+            var pressed = triggerEffects ? new HashSet<int> { 60 } : new HashSet<int>();
+            var feed = MakeFeed(null, song: Array.Empty<NoteEvent>(), position: 0, playing: false,
+                pressed: pressed, overCamera: false);
+            feed.SetLook(GpuLook.From(visual, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: false));
+            feed.ClearTransient();
+            feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
+            feed.SetDeterministicBeatPulse(0);
+            if (triggerEffects)
             {
-                var x0 = rect.Rect.X; var x1 = rect.Rect.X + rect.Rect.Z;
-                var y0 = rect.Rect.Y; var y1 = rect.Rect.Y + rect.Rect.W;
-                Assert(ArSceneProjection.TryProjectRect(calibration, view, frame, x0, x1, y0, y1, out var patch, out _, out _),
-                    $"The note rectangle [{x0:0},{y0:0}]–[{x1:0},{y1:0}] must project to a patch.");
-                var inside = 0;
-                foreach (var (s, t) in new[] { (.5, .5), (.35, .5), (.65, .5), (.5, .3), (.5, .7), (.5, .2), (.5, .8) })
-                {
-                    if (Look(drawn, width, height, Blend(patch, s, t)) is not { } pixel) continue;
-                    inside++;
-                    Assert(pixel.Spread > 30 && pixel.Off > 40,
-                        $"A note drawn through the map must fill the patch ArProjection.TryProject reports for its rectangle [{x0:0},{y0:0}]–[{x1:0},{y1:0}]: at ({s:0.00},{t:0.00}) of the patch the frame should hold the note colour (spread {pixel.Spread}, off grey {pixel.Off}, mirrored {mirror}).");
-                }
-                Assert(inside >= 4, $"At least four sample points of the patch of [{x0:0},{y0:0}]–[{x1:0},{y1:0}] should be on the output ({inside}, mirrored {mirror}).");
-                var outside = 0;
-                foreach (var (s, t) in new[] { (-.35, .5), (1.35, .5), (.5, -.35), (-.35, .9), (1.35, .9) })
-                {
-                    if (Look(drawn, width, height, Blend(patch, s, t)) is not { } pixel) continue;
-                    outside++;
-                    Assert(pixel.Off <= 4 && pixel.Spread <= 4,
-                        $"Just outside the patch of [{x0:0},{y0:0}]–[{x1:0},{y1:0}] ({s:0.00},{t:0.00}) the camera's grey must show — the note may not spill past the projection of its own rectangle (off by {pixel.Off}, mirrored {mirror}).");
-                }
-                Assert(outside >= 1, $"At least one outside sample should be on the output ({outside}, mirrored {mirror}).");
+                feed.LiveNote(60, true, .9f);
+                feed.Impact(60, .9);
             }
+            return feed;
         }
+        var quietUncalibratedLook = settings.Clone();
+        var busyUncalibratedLook = liveFxLook.Clone();
+        busyUncalibratedLook.ShowKeys = true;
+        busyUncalibratedLook.ShowBackground = true; busyUncalibratedLook.BackgroundGuide = true;
+        var uncalibratedIdleFrame = RenderFrames(UncalibratedFeed(quietUncalibratedLook, triggerEffects: false), 4);
+        var uncalibratedMidiFrame = RenderFrames(UncalibratedFeed(busyUncalibratedLook, triggerEffects: true), 4);
+        Assert(uncalibratedIdleFrame.AsSpan().SequenceEqual(uncalibratedMidiFrame)
+                && renderer.StageKeyCount == 0 && renderer.StageSpriteCount == 0
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+            "Before calibration, the camera must show physical keys only: no static virtual keyboard, Live Stage sprites, guide lanes, notes or falling trails may leak into the uncalibrated camera overlay.");
 
-        // ---- the min-scale floor the flags float4 carries: it reaches the shader and moves nothing ------
-        var plain = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true)));
-        var floored = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinScalePx: 24)));
-        Assert(!plain.AsSpan().SequenceEqual(floored),
-            "A non-zero min-scale floor must reach the note pass and change how the SDF measures (a floor the shader ignored would leave the frame byte-identical).");
-        // the body may not move under the floor: the same patches must still hold the note, inside and out
-        var viewPlain = new ArView(1280, 720, width, height, PictureFit.Fit, false);
-        var replicaFloored = new GpuStageSimulation(20260930);
-        var inputFloored = new GpuFrameInput();
-        var feedFloored = MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinScalePx: 24));
-        feedFloored.Capture(inputFloored, GpuStageFeed.Now);
-        replicaFloored.Step(1 / 60.0, inputFloored, feedFloored, scene.Width);
-        var rectsFloored = new GpuInstanceList<GpuNoteInstance>(32);
-        replicaFloored.BuildNotes(inputFloored, scene, rectsFloored);
-        foreach (var rect in rectsFloored.Span)
+        // BuildAmbient also guards its scene-only lane/trail geometry itself; it must not rely on BuildNotes
+        // having cleared the trail list earlier in this particular renderer order.
+        var sceneTrailSettings = settings.Clone();
+        sceneTrailSettings.ShowBackground = true; sceneTrailSettings.BackgroundGuide = true;
+        sceneTrailSettings.FallingTrail = "Glow"; sceneTrailSettings.FallingTrailIntensity = 100;
+        var sceneTrailLook = GpuLook.From(sceneTrailSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: false);
+        var sceneTrailFeed = new GpuStageFeed();
+        sceneTrailFeed.SetStageHeight(height);
+        sceneTrailFeed.SetLook(sceneTrailLook);
+        sceneTrailFeed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int> { 60 });
+        sceneTrailFeed.LiveNote(60, true, .9f);
+        var sceneTrailInput = new GpuFrameInput();
+        sceneTrailFeed.Capture(sceneTrailInput, GpuStageFeed.Now);
+        var sceneTrailSimulation = new GpuStageSimulation(20261010);
+        sceneTrailSimulation.Step(1 / 60.0, sceneTrailInput, sceneTrailFeed, width);
+        var sceneTrailLayout = new GpuSceneLayout(width, (float)sceneTrailInput.StageHeightDip, sceneTrailLook.KeyboardFraction);
+        sceneTrailSimulation.BuildNotes(sceneTrailInput, sceneTrailLayout, new GpuInstanceList<GpuNoteInstance>(16),
+            songNotes: false, onStage: true, liveTrails: true);
+        var sceneSpritesOverCamera = new GpuInstanceList<GpuSpriteInstance>(32);
+        var sceneSpritesOnStage = new GpuInstanceList<GpuSpriteInstance>(32);
+        sceneTrailSimulation.BuildAmbient(sceneTrailLook, sceneTrailLayout, sceneSpritesOverCamera, cameraOverlayActive: true);
+        sceneTrailSimulation.BuildAmbient(sceneTrailLook, sceneTrailLayout, sceneSpritesOnStage, cameraOverlayActive: false);
+        Assert(sceneTrailSimulation.NoteTrailCount > 0 && sceneSpritesOverCamera.Count == 0 && sceneSpritesOnStage.Count > 0,
+            "BuildAmbient must suppress scene-space guide lanes and falling trails over a camera even when the flat look itself is not marked OverCamera.");
+
+        var barsOn = RenderFrames(PressFeed(showBars: true, keyLight: .6f), 30);
+        var liveBarCount = renderer.ArLiveBarCount;
+        var barsOff = RenderFrames(PressFeed(showBars: false, keyLight: .6f), 30);
+        var noTint = RenderFrames(PressFeed(showBars: false, keyLight: 0), 30);
+        var barPixels = ChangedPixels(barsOn, barsOff);
+        var tintPixels = ChangedPixels(barsOff, noTint, threshold: 4);
+        Assert(liveBarCount > 0 && barPixels > 100 && renderer.ArLiveBarCount == 0,
+            $"The live-bar option should add camera-projected bars only when on ({liveBarCount} built, {barPixels} changed pixels; off built {renderer.ArLiveBarCount}).");
+        Assert(tintPixels > 20,
+            $"Turning bars off must not turn the independent held-key tint off ({tintPixels} pixels still respond to key-light strength).");
+
+        // Perform-mode Note On objects are independent of the optional press-bar channel and remain available in Lite.
+        var risingMidiInput = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
+            ShowNotes: false, Quality: ArQualityTier.Lite, NoteDirection: new ArNoteDirection(68, 37), ShowRisingMidiNotes: true);
+        var risingMidiFeed = MakeFeed(risingMidiInput, song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        risingMidiFeed.LiveNote(60, true, .45f);
+        var risingMidiFrame = GpuRenderLoop.RenderFrames(renderer, risingMidiFeed, width, height, 22, 1 / 60.0, false,
+            out _, frame =>
+            {
+                if (frame == 4 || frame == 10) risingMidiFeed.LiveNote(60, false, 0);
+                if (frame == 7) risingMidiFeed.LiveNote(60, true, .95f);
+            }, 20260930);
+        var risingMidiCount = renderer.ArRisingMidiNoteCount;
+        var risingMidiPixels = ColouredPixels(risingMidiFrame);
+        var noRisingMidiFeed = MakeFeed(risingMidiInput with { ShowRisingMidiNotes = false },
+            song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        noRisingMidiFeed.LiveNote(60, true, .45f);
+        var noRisingMidiFrame = GpuRenderLoop.RenderFrames(renderer, noRisingMidiFeed, width, height, 22, 1 / 60.0, false,
+            out _, frame =>
+            {
+                if (frame == 4 || frame == 10) noRisingMidiFeed.LiveNote(60, false, 0);
+                if (frame == 7) noRisingMidiFeed.LiveNote(60, true, .95f);
+            }, 20260930);
+        Assert(risingMidiCount == 2 && risingMidiPixels > 30 && renderer.ArRisingMidiNoteCount == 0
+                && renderer.ArLiveBarCount == 0 && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
+                && ChangedPixels(risingMidiFrame, noRisingMidiFrame, threshold: 4) > 25,
+            $"Each same-pitch MIDI Note On must create a distinct calibrated rising note that survives its Note Off, independently of press bars and Lite's transient gate ({risingMidiCount} notes, {risingMidiPixels} pixels; disabled count {renderer.ArRisingMidiNoteCount}).");
+
+        // These four Live Stage hold modifiers belong to the optional live-bar channel and must survive 3D projection.
+        (byte[] Pixels, int Bars) RenderHoldModifier(PianoVisualSettings holdSettings)
         {
-            Assert(ArSceneProjection.TryProjectRect(calibration, viewPlain, frame, rect.Rect.X, rect.Rect.X + rect.Rect.Z, rect.Rect.Y, rect.Rect.Y + rect.Rect.W, out var patch, out _, out _),
-                "The floored frame draws the same rectangles, which must project to the same patches.");
-            if (Look(floored, width, height, Blend(patch, .5, .5)) is { } pixel)
-                Assert(pixel.Spread > 30 && pixel.Off > 40,
-                    $"The min-scale floor may change how the SDF measures but not where the note is: its patch centre must still hold the note colour (spread {pixel.Spread}, off grey {pixel.Off}).");
-            if (Look(floored, width, height, Blend(patch, 1.35, .5)) is { } outside)
-                Assert(outside.Off <= 4 && outside.Spread <= 4,
-                    $"Under the min-scale floor the note may not spill past its patch either (off by {outside.Off}).");
+            var pixels = RenderFrames(PressFeed(showBars: true, keyLight: .6f, quality: ArQualityTier.Standard,
+                visualSettings: holdSettings, activePitches: new[] { 60 }), 12);
+            return (pixels, renderer.ArLiveBarCount);
         }
+        var holdBaseline = RenderHoldModifier(settings);
+        var holdBarZeroLook = settings.Clone(); holdBarZeroLook.HoldBar = true; holdBarZeroLook.HoldBarIntensity = 0;
+        var holdBarFullLook = settings.Clone(); holdBarFullLook.HoldBar = true; holdBarFullLook.HoldBarIntensity = 100;
+        var holdBarZero = RenderHoldModifier(holdBarZeroLook);
+        var holdBarFull = RenderHoldModifier(holdBarFullLook);
+        var holdBreathSlowLook = settings.Clone(); holdBreathSlowLook.HoldBreath = true; holdBreathSlowLook.HoldBreathRate = 0;
+        var holdBreathFastLook = settings.Clone(); holdBreathFastLook.HoldBreath = true; holdBreathFastLook.HoldBreathRate = 100;
+        var holdBreathSlow = RenderHoldModifier(holdBreathSlowLook);
+        var holdBreathFast = RenderHoldModifier(holdBreathFastLook);
+        var holdVibrationOffLook = settings.Clone(); holdVibrationOffLook.HoldVibration = true; holdVibrationOffLook.HoldVibrationAmount = 0;
+        var holdVibrationFullLook = settings.Clone(); holdVibrationFullLook.HoldVibration = true; holdVibrationFullLook.HoldVibrationAmount = 100;
+        var holdVibrationOff = RenderHoldModifier(holdVibrationOffLook);
+        var holdVibrationFull = RenderHoldModifier(holdVibrationFullLook);
+        var holdColorCycleOffLook = settings.Clone(); holdColorCycleOffLook.HoldColorCycle = true; holdColorCycleOffLook.HoldColorCycleSpeed = 0;
+        var holdColorCycleFullLook = settings.Clone(); holdColorCycleFullLook.HoldColorCycle = true; holdColorCycleFullLook.HoldColorCycleSpeed = 100;
+        var holdColorCycleOff = RenderHoldModifier(holdColorCycleOffLook);
+        var holdColorCycleFull = RenderHoldModifier(holdColorCycleFullLook);
+        var holdBarTogglePixels = ChangedPixels(holdBaseline.Pixels, holdBarFull.Pixels, threshold: 4);
+        var holdBarIntensityPixels = ChangedPixels(holdBarZero.Pixels, holdBarFull.Pixels, threshold: 4);
+        var holdBreathTogglePixels = ChangedPixels(holdBaseline.Pixels, holdBreathSlow.Pixels, threshold: 4);
+        var holdBreathRatePixels = ChangedPixels(holdBreathSlow.Pixels, holdBreathFast.Pixels, threshold: 4);
+        var holdVibrationTogglePixels = ChangedPixels(holdBaseline.Pixels, holdVibrationFull.Pixels, threshold: 4);
+        var holdVibrationAmountPixels = ChangedPixels(holdVibrationOff.Pixels, holdVibrationFull.Pixels, threshold: 4);
+        var holdColorCycleTogglePixels = ChangedPixels(holdBaseline.Pixels, holdColorCycleFull.Pixels, threshold: 4);
+        var holdColorCycleSpeedPixels = ChangedPixels(holdColorCycleOff.Pixels, holdColorCycleFull.Pixels, threshold: 4);
+        Assert(holdBaseline.Bars == 1 && holdBarZero.Bars == 1 && holdBarFull.Bars == 1
+                && holdBreathSlow.Bars == 1 && holdBreathFast.Bars == 1
+                && holdVibrationOff.Bars == 1 && holdVibrationFull.Bars == 1
+                && holdColorCycleOff.Bars == 1 && holdColorCycleFull.Bars == 1
+                && holdBarTogglePixels > 20 && holdBarIntensityPixels > 20
+                && holdBreathTogglePixels > 20 && holdBreathRatePixels > 20
+                && holdVibrationTogglePixels > 20 && holdVibrationAmountPixels > 20
+                && holdColorCycleTogglePixels > 20 && holdColorCycleSpeedPixels > 20,
+            $"Projected Live Stage bars must retain all four hold toggles and their representative parameter changes (bar {holdBarTogglePixels}/{holdBarIntensityPixels}, breath {holdBreathTogglePixels}/{holdBreathRatePixels}, vibration {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, color-cycle {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} changed pixels; bars {holdBaseline.Bars}/{holdBarZero.Bars}/{holdBarFull.Bars}/{holdBreathSlow.Bars}/{holdBreathFast.Bars}/{holdVibrationOff.Bars}/{holdVibrationFull.Bars}/{holdColorCycleOff.Bars}/{holdColorCycleFull.Bars}).");
 
-        // ---- AR-S4 remainder: Perform leaves the song's notes out; the minimum note length lengthens short notes;
-        // a sprite is drawn through the map where the picture holds it and culled whole past the horizon ----------
-        var performFrame = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: false, ProjectedNotes: true)));
-        var performDrop = NotePixels(plain) - NotePixels(performFrame);
-        Assert(performDrop >= 500,
-            $"Perform (ShowNotes off) must leave the song's notes out of the projected pass ({NotePixels(plain)} note pixels with them, {NotePixels(performFrame)} without).");
+        // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
+        var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
+        RenderFrames(standardFxFeed, 4);
+        var standardImpactLights = renderer.ArImpactLightCount;
+        var standardNoteLights = renderer.ArNoteLightCount;
+        var standardPulses = renderer.ArPulseCount;
+        var standardParticles = renderer.ArParticleFxCount;
+        var ultraFxFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
+        var ultraImpactFrame = RenderFrames(ultraFxFeed, 4);
+        var ultraImpactLights = renderer.ArImpactLightCount;
+        var ultraNoteLights = renderer.ArNoteLightCount;
+        var ultraPulses = renderer.ArPulseCount;
+        var ultraParticles = renderer.ArParticleFxCount;
+        var ultraFlashes = renderer.ArFlashCount;
+        var ultraHoldArcs = renderer.ArHoldArcCount;
+        var ultraBeams = renderer.ArBeamCount;
+        var noImpactUltra = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 }), 4);
+        var effectPixels = ChangedPixels(ultraImpactFrame, noImpactUltra, threshold: 4);
+        Assert(standardImpactLights > 0 && standardNoteLights > 0 && standardPulses == 0 && standardParticles == 0
+                && ultraImpactLights > 0 && ultraNoteLights > 0 && ultraPulses > 0 && ultraParticles > 0
+                && ultraFlashes > 0 && ultraHoldArcs > 0 && ultraBeams > 0 && effectPixels > 100
+                && renderer.ArLiveBarCount == 0,
+            $"S5 must retain the configured Live Stage hit/hold channels in calibrated 3D while respecting AR quality and the separate bar toggle (Standard lights {standardImpactLights}/{standardNoteLights}, Ultra {ultraImpactLights}/{ultraNoteLights}/{ultraPulses}/{ultraParticles}/{ultraFlashes}/{ultraHoldArcs}/{ultraBeams}, {effectPixels} impact pixels).");
 
-        // three very short notes, 5 DIP long: the pixel minimum of the shape card (16 DIP) is shorter than two note widths, so 200 % lengthens them
-        var shortNotes = new List<NoteEvent>
+        (byte[] Pixels, int Pulses, int Flashes) RenderFxVariant(PianoVisualSettings fxSettings)
         {
-            new() { Pitch = 60, Start = 10.08, Duration = .02 },
-            new() { Pitch = 64, Start = 10.2, Duration = .02 },
-            new() { Pitch = 67, Start = 10.32, Duration = .02 }
-        };
-        var shortPlain = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true), shortNotes));
-        var shortMin = Render(MakeFeed(false, new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true, MinAspect: 2f), shortNotes));
-        Assert(!shortPlain.AsSpan().SequenceEqual(shortMin),
-            "A minimum note length must reach the note pass and lengthen the short notes (the frame would be byte-identical otherwise).");
-        Assert(NotePixels(shortMin) > NotePixels(shortPlain),
-            $"At a minimum of two note widths the short notes must cover more of the picture ({NotePixels(shortPlain)} → {NotePixels(shortMin)} note pixels).");
+            var pixels = RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true,
+                visualSettings: fxSettings, activePitches: new[] { 60, 64 }), 4);
+            return (pixels, renderer.ArPulseCount, renderer.ArFlashCount);
+        }
+        var plasmaLook = liveFxLook.Clone(); plasmaLook.ImpactFlashStyle = "Plasma";
+        var plasmaVariant = RenderFxVariant(plasmaLook);
+        var morphLook = liveFxLook.Clone(); morphLook.ImpactFlashStyle = "Flash"; morphLook.ImpactMorph = "Morph";
+        var morphVariant = RenderFxVariant(morphLook);
+        var shockwaveLook = liveFxLook.Clone(); shockwaveLook.ImpactWave = "Shockwave"; shockwaveLook.ImpactMorph = "None";
+        var shockwaveVariant = RenderFxVariant(shockwaveLook);
+        var absorbLook = liveFxLook.Clone(); absorbLook.ImpactWave = "None"; absorbLook.ImpactMorph = "Absorb";
+        var absorbVariant = RenderFxVariant(absorbLook);
+        var plasmaPixels = ChangedPixels(ultraImpactFrame, plasmaVariant.Pixels, threshold: 4);
+        var morphPixels = ChangedPixels(ultraImpactFrame, morphVariant.Pixels, threshold: 4);
+        var shockwavePixels = ChangedPixels(ultraImpactFrame, shockwaveVariant.Pixels, threshold: 4);
+        var absorbPixels = ChangedPixels(ultraImpactFrame, absorbVariant.Pixels, threshold: 4);
+        Assert(plasmaVariant.Flashes > 0 && morphVariant.Flashes > 0 && shockwaveVariant.Pulses > 0 && absorbVariant.Pulses > 0
+                && plasmaPixels > 30 && morphPixels > 30 && shockwavePixels > 30 && absorbPixels > 30,
+            $"The projected style branches must retain Plasma/Morph flashes and Shockwave/Absorb rings ({plasmaVariant.Flashes}/{morphVariant.Flashes} flashes, {shockwaveVariant.Pulses}/{absorbVariant.Pulses} pulses; pixel deltas {plasmaPixels}/{morphPixels}/{shockwavePixels}/{absorbPixels}).");
 
-        // sprites: the column of pitch 64 — one sprite above the keys, drawn; one far past the horizon, culled whole
-        var flatView = new ArView(1280, 720, width, height, PictureFit.Fit, false);
-        Assert(ArSceneProjection.TryBuild(calibration, flatView, frame, out var flatMap),
-            "The sample calibration must carry a scene→image map for the sprite check.");
-        var column = scene.X(64);
-        var visibleY = scene.HitY - 60;
-        // the map's weight rises upward from the keys (1.36 some 1500 DIP above them), so the horizon can lie either way:
-        // it is the first point, scanning out from the keys in both directions, where the weight drops under the picture's minimum
-        var keysY = (double)scene.HitY;
-        var horizonY = Enumerable.Range(0, 4000).SelectMany(d => new[] { keysY + d, keysY - d })
-            .Cast<double?>().FirstOrDefault(y => flatMap.WeightAt(column, y!.Value) < .1);
-        Assert(horizonY is not null, "The scene→image map must reach its horizon within 4000 DIP of the keys, in one direction or the other.");
-        var culledY = horizonY!.Value;
-        var visible = new GpuSpriteInstance { PosSize = new System.Numerics.Vector4((float)column, (float)visibleY, 14, 0), Color = new System.Numerics.Vector4(4, 1, 4, 1), Dir = new System.Numerics.Vector4(0, -1, 0, 0) };
-        var culled = new GpuSpriteInstance { PosSize = new System.Numerics.Vector4((float)column, (float)culledY, 14, 0), Color = new System.Numerics.Vector4(4, 1, 4, 1), Dir = new System.Numerics.Vector4(0, -1, 0, 0) };
-        var projectedFeed = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0, ShowNotes: true, ProjectedNotes: true);
-        renderer.ExtraSprites = new[] { culled };
-        var culledFrame = Render(MakeFeed(false, projectedFeed));
-        renderer.ExtraSprites = new[] { visible };
-        var visibleFrame = Render(MakeFeed(false, projectedFeed));
+        // Live bars use the saved 3D pose even when the optional song-note perspective toggle is off.
+        var flatNotesLiveBars = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: .6f,
+                Quality: ArQualityTier.Standard, ShowNotes: false, ProjectedNotes: false, ShowLiveTrails: true),
+            song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int> { 60 });
+        flatNotesLiveBars.LiveNote(60, true, .9f);
+        RenderFrames(flatNotesLiveBars, 8);
+        Assert(renderer.ArLiveBarCount > 0 && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
+            "The live press bar remains 3D and stage-space notes/trails stay suppressed when Notes in perspective is toggled off.");
+
+        // Stage-space bars used to be culled as soon as their 2D tail left the canvas. A calibrated AR bar must
+        // stay alive beyond that edge, keep travelling in its 3D direction, then disappear exactly at its AR reach.
+        var releasePathFeed = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
+                ShowNotes: false, ProjectedNotes: false, ShowLiveTrails: true),
+            song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        releasePathFeed.LiveNote(60, true, .9f);
+        var releasePathInput = new GpuFrameInput();
+        var releasePathSimulation = new GpuStageSimulation(20261010);
+        var barsPastStageEdge = 0;
+        for (var frame = 0; frame <= 190; frame++)
+        {
+            if (frame == 4) releasePathFeed.LiveNote(60, false, 0);
+            releasePathFeed.Capture(releasePathInput, GpuStageFeed.Now);
+            releasePathSimulation.Step(1 / 60.0, releasePathInput, releasePathFeed, width);
+            if (frame == 70) barsPastStageEdge = releasePathSimulation.LivePresses.Count;
+        }
+        Assert(barsPastStageEdge == 1 && releasePathSimulation.LivePresses.Count == 0,
+            $"A released calibrated bar should outlive the old ~1.1 s stage-edge cutoff, then expire at its {ArOptions.LivePressReachSeconds:0.00} s fixed AR reach ({barsPastStageEdge} past the old edge, {releasePathSimulation.LivePresses.Count} at the limit).");
+
+        // A release is a separate effect phase and must be anchored to the source pitch, not flattened over camera.
+        var releaseFeed = PressFeed(false, .6f, ArQualityTier.Ultra, visualSettings: liveFxLook, activePitches: new[] { 60 });
+        var releaseFrame = GpuRenderLoop.RenderFrames(renderer, releaseFeed, width, height, 8, 1 / 60.0, false, out _, frame =>
+        {
+            if (frame != 4) return;
+            releaseFeed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, new HashSet<int>());
+            releaseFeed.LiveNote(60, false, 0);
+        }, 20260930);
+        var releaseEffects = renderer.ArReleaseEffectCount;
+        Assert(releaseEffects > 0 && renderer.ArParticleFxCount > 0 && ColouredPixels(releaseFrame) > 100,
+            $"The configured Dissolve release should emit a visible 3D release effect at its calibrated key ({releaseEffects} active releases, {renderer.ArParticleFxCount} particles).");
+
+        // Effects follow the keyboard transform and piano axes, independently of the note's editable travel direction.
+        var movedImpactFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            selectedCalibration: transformedCalibration, activePitches: new[] { 60, 64 });
+        var movedImpactFrame = RenderFrames(movedImpactFeed, 4);
+        var poseEffectPixels = ChangedPixels(ultraImpactFrame, movedImpactFrame, threshold: 4);
+        Assert(poseEffectPixels > 100,
+            $"Rotating/translating the calibrated piano must move the complete impact/hold effect group with it ({poseEffectPixels} changed pixels).");
+        var directionOnlyFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
+        directionOnlyFeed.Ar = directionOnlyFeed.Ar! with { NoteDirection = new ArNoteDirection(74, 39) };
+        var directionOnlyFrame = RenderFrames(directionOnlyFeed, 4);
+        Assert(ultraImpactFrame.AsSpan().SequenceEqual(directionOnlyFrame),
+            "Changing note travel direction alone must not rotate key-anchored Live Stage effects away from the calibrated piano.");
+
+        // The flat stage-space trail stays suppressed; the selected note trail is emitted only as a calibrated AR quad.
+        settings.FallingTrail = "None";
+        var noTrail = Render(MakeFeed(defaultInput));
+        settings.FallingTrail = "Glow";
+        var glowSetting = Render(MakeFeed(defaultInput));
+        var projectedGlowTrails = renderer.ArNoteTrailQuadCount;
+        Assert(!noTrail.AsSpan().SequenceEqual(glowSetting) && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
+                && projectedGlowTrails == notes.Count && renderer.ArQuadCount == notes.Count + projectedGlowTrails
+                && ChangedPixels(noTrail, glowSetting, threshold: 4) > 20,
+            $"Glow trails should add calibrated AR quads while the misaligned stage-space streak stays suppressed ({projectedGlowTrails} projected trails, stage {renderer.StageNoteTrailCount}).");
+        settings.FallingTrail = "None";
+        var uncalibratedCamera = Render(MakeFeed(null, overCamera: false));
+        settings.FallingTrail = "Glow";
+        var uncalibratedCameraWithTrailSetting = Render(MakeFeed(null, overCamera: false));
+        Assert(uncalibratedCamera.AsSpan().SequenceEqual(uncalibratedCameraWithTrailSetting)
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+            "Even before calibration, a full-screen camera background must not receive flat scene notes or falling-note trails.");
+        settings.FallingTrail = "None";
+
+        // ---- alpha-effects output: preserve the 3D quads, omit camera pixels, and return premultiplied BGRA ---------
+        var cameraComposite = Render(MakeFeed(defaultInput));
+        var transparent = Render(MakeFeed(defaultInput), alphaOutput: true);
+        const int backgroundX = 16, backgroundY = 16;
+        var backgroundAt = (backgroundY * width + backgroundX) * 4;
+        Assert(Math.Abs(cameraComposite[backgroundAt] - 90) <= 4 && Math.Abs(cameraComposite[backgroundAt + 1] - 90) <= 4
+                && Math.Abs(cameraComposite[backgroundAt + 2] - 90) <= 4,
+            "The ordinary AR composite should keep the camera picture visible behind the notes.");
+        Assert(transparent[backgroundAt] == 0 && transparent[backgroundAt + 1] == 0 && transparent[backgroundAt + 2] == 0 && transparent[backgroundAt + 3] == 0,
+            "The alpha-effects output must omit the camera and leave the empty background fully transparent.");
+        var alphaPixels = 0; var premultiplied = true;
+        for (var i = 0; i < transparent.Length; i += 4)
+        {
+            if (transparent[i + 3] > 0) alphaPixels++;
+            if (transparent[i] > transparent[i + 3] + 1 || transparent[i + 1] > transparent[i + 3] + 1 || transparent[i + 2] > transparent[i + 3] + 1) premultiplied = false;
+        }
+        Assert(alphaPixels > 500 && premultiplied,
+            $"Transparent AR should keep projected note pixels in premultiplied BGRA ({alphaPixels} pixels, premultiplied {premultiplied}).");
+        var noteCentre = Centre(expected[0].Patch);
+        var noteCentreIndex = ((int)Math.Floor(noteCentre.Y) * width + (int)Math.Floor(noteCentre.X)) * 4;
+        Assert(transparent[noteCentreIndex + 3] >= 240,
+            "A projected note body should retain opaque alpha in the camera-free output.");
+
+        // S6.2: the geometry layer keeps the solid projected note/direct hot core, while a deliberately bright
+        // additive sprite produces a softer bloom contribution in the independent glow layer. Both are read back once.
+        settings.BloomIntensity = 65;
+        const int glowX = 1100, glowY = 80;
+        renderer.ExtraSprites =
+        [
+            new GpuSpriteInstance
+            {
+                PosSize = new Vector4(glowX, glowY, 96, 9),
+                Color = new Vector4(6, 4, 3, .9f),
+                Dir = new Vector4(0, -1, 1, .2f)
+            }
+        ];
+        var activeExpected = new List<Ar3DNoteShape>();
+        Ar3DNoteProjection.Build(calibration, view, notes, 10.14, .22, defaultInput.Notes,
+            defaultInput.NoteDirection, defaultInput.MinAspect, activeExpected);
+        var activeCentre = Centre(activeExpected[0].Patch);
+        var activeCentreIndex = ((int)Math.Floor(activeCentre.Y) * width + (int)Math.Floor(activeCentre.X)) * 4;
+        var (geometryLayer, glowLayer) = GpuRenderLoop.RenderAlphaLayersOnce(renderer, MakeFeed(defaultInput, position: 10.14), width, height);
         renderer.ExtraSprites = null;
-        Assert(plain.AsSpan().SequenceEqual(culledFrame),
-            "A sprite whose quad reaches past the horizon must be culled whole: the frame must be byte-identical to the one without it.");
-        Assert(!plain.AsSpan().SequenceEqual(visibleFrame), "A sprite above the keys must be drawn through the map.");
-        Assert(ArSceneProjection.TryProjectRect(calibration, flatView, frame, column - 14, column + 14, visibleY - 14, visibleY + 14, out var spritePatch, out _, out _),
-            "The sprite's rectangle must project to a patch.");
-        var spriteDiff = 0;
-        for (var a = .2; a <= .81; a += .1)
-            for (var b = .2; b <= .81; b += .1)
-            {
-                var at = Blend(spritePatch, a, b);
-                if (!(at.X >= 0 && at.Y >= 0 && at.X < width && at.Y < height)) continue;
-                var i = ((int)Math.Floor(at.Y) * width + (int)Math.Floor(at.X)) * 4;
-                for (var c = 0; c < 3; c++) spriteDiff = Math.Max(spriteDiff, Math.Abs(visibleFrame[i + c] - plain[i + c]));
-            }
-        Assert(spriteDiff >= 60, $"The sprite above the keys must change the picture under its patch (largest channel change {spriteDiff}).");
-        Results.Add($"PASS AR note projection (AR-S4 remainder): Perform drops {performDrop} note pixels; a minimum note length of two widths lengthens the short notes ({NotePixels(shortPlain)} → {NotePixels(shortMin)}); a sprite above the keys changes the picture by {spriteDiff}, and one past the horizon is culled whole.");
+        settings.BloomIntensity = 0;
+        var glowProbe = (glowY * width + glowX) * 4;
+        var geometryPixels = 0; var glowPixels = 0; var splitPremultiplied = true;
+        for (var i = 0; i < geometryLayer.Length; i += 4)
+        {
+            if (geometryLayer[i + 3] > 0) geometryPixels++;
+            if (glowLayer[i + 3] > 0) glowPixels++;
+            if (geometryLayer[i] > geometryLayer[i + 3] + 1 || geometryLayer[i + 1] > geometryLayer[i + 3] + 1
+                || geometryLayer[i + 2] > geometryLayer[i + 3] + 1 || glowLayer[i] > glowLayer[i + 3] + 1
+                || glowLayer[i + 1] > glowLayer[i + 3] + 1 || glowLayer[i + 2] > glowLayer[i + 3] + 1)
+                splitPremultiplied = false;
+        }
+        var splitLayerDifference = ChangedPixels(geometryLayer, glowLayer, threshold: 4);
+        Assert(geometryPixels > 500 && glowPixels > 0 && splitLayerDifference > 100 && splitPremultiplied
+                && geometryLayer[activeCentreIndex + 3] >= 240 && geometryLayer[glowProbe + 3] > 0
+                && glowLayer[glowProbe + 3] > 0
+                && geometryLayer[backgroundAt + 3] == 0 && glowLayer[backgroundAt + 3] == 0,
+            $"S6.2 should return distinct synchronized premultiplied geometry/glow images: opaque note/direct hot core in Geometry, bloom in Glow, empty transparent corners ({geometryPixels}/{glowPixels} pixels, {splitLayerDifference} different; premultiplied {splitPremultiplied}).");
 
-        Results.Add($"PASS AR note projection (AR-S4b): default off the {width}×{height} frame is byte-identical with the whole map in the constants and without any AR input ({defaultNotes} note pixels unchanged); switched on, 3 notes on the sample keyboard land inside the ArProjection patches of their own rectangles, mirrored and not, with no flat AR note quads of their own; min-scale floor reaches the shader without moving them.");
+        // Ambient petals and meteors are deliberately rendered in screen-space: changing only note perspective must
+        // leave their WARP pixels byte-for-byte identical.
+        settings.ShowNotes = false;
+        settings.ShowBackground = true;
+        settings.ShowPetals = false;
+        settings.PetalAmount = 28;
+        settings.ShootingStars = false;
+        var ambientFlatInput = new GpuArInput(calibration, ArNoteStyle.Default, 0f, KeyLight: 0,
+            ShowNotes: false, ProjectedNotes: false);
+        var noPetals = Render(MakeFeed(ambientFlatInput), alphaOutput: true);
+        settings.ShowPetals = true;
+        var petalsFlat = Render(MakeFeed(ambientFlatInput), alphaOutput: true);
+        var petalPixels = 0;
+        for (var i = 3; i < petalsFlat.Length; i += 4) if (petalsFlat[i] > 0) petalPixels++;
+        Assert(renderer.AmbientCount > 0 && petalPixels > 0 && !noPetals.AsSpan().SequenceEqual(petalsFlat),
+            "The fixture must render visible screen-space petals before checking their projection behavior.");
+        settings.ArNotesInPerspective = true;
+        var petalsWithPerspective = Render(MakeFeed(ambientFlatInput with { ProjectedNotes = true }), alphaOutput: true);
+        Assert(petalsFlat.AsSpan().SequenceEqual(petalsWithPerspective),
+            "Enabling 3D note projection must leave the ambient-petal pass flat and byte-identical.");
+
+        settings.ShowPetals = false;
+        settings.ShootingStars = true;
+        settings.ShootingStarsAmount = 100;
+        byte[] RenderStars(bool projectedNotes) => RenderFrames(
+            MakeFeed(ambientFlatInput with { ProjectedNotes = projectedNotes }), 60, alphaOutput: true);
+        var starsFlat = RenderStars(projectedNotes: false);
+        var starPixels = 0;
+        for (var i = 3; i < starsFlat.Length; i += 4) if (starsFlat[i] > 0) starPixels++;
+        Assert(renderer.AmbientCount > 0 && starPixels > 0,
+            "The shooting-star fixture must contain visible alpha pixels, not only invisible additive RGB.");
+        var starsWithPerspective = RenderStars(projectedNotes: true);
+        Assert(starsFlat.AsSpan().SequenceEqual(starsWithPerspective),
+            "Enabling 3D note projection must leave shooting stars screen-space and byte-identical.");
+
+        Results.Add($"PASS AR 3D note render (AR-S4): WARP drew {projectedPixels} projected note pixels into {expected.Count} AR-owned quads with no stage notes/trails; the flat-map failure did not hide them, mirroring and independent 3D direction worked, Perform omitted notes, and minimum length grew short notes.");
+        Results.Add($"PASS AR note color/material/effects: magenta read back R/G {noteRed}/{noteGreen}; sampled known material branches changed [{materialChangeSummary}] pixels versus Solid; shimmer changed {shimmerPixels} pixels in {shimmerQuads} quads; Glow/Stream trails used {glowTrailQuads}/{streamTrailQuads} 3D quads; ghosts {ghostQuads}; landing glow {landingGlowCount} quads; atlas labels {noteLabelCount}/{noteLabelPixels}. Full parameter parity remains Unverified.");
+        Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
+        Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; a released bar survived the old stage-edge cull ({barsPastStageEdge}) and retired at 3D reach ({releasePathSimulation.LivePresses.Count}); flat falling-note trails added no pixels over the camera.");
+        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
+        Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }
 }

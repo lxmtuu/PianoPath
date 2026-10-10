@@ -43,11 +43,11 @@ cbuffer Frame : register(b0)
     float4 HitFx;        // x = hit-line motion id, y = intensity, z = speed, w = key activity
     float4 KeyRange;     // x = lowest pitch of the keyboard, y = pitches above it (keys - 1)
     float4 ArPicture;    // x,y = left, top and z,w = width, height of the camera picture on the output (px)
-    float4 ArFlags;      // x = 1 when the picture is mirrored, y = 1 when the camera layer is drawn, z = picture opacity
-    float4 ArMatrix0;    // AR-S4b scene->image map (Camera/ArSceneProjection.cs): xyz = row 0 (a, b, c)
-    float4 ArMatrix1;    // xyz = row 1 (d, e, f)
-    float4 ArMatrix2;    // xyz = row 2 (g, h, i); g*x + h*y + i is the weight, 1 at the keyboard's back-left corner
-    float4 ArMatrixFlags; // x = AR flags (bit 0: the note and sprite passes draw through the map), y = sqrt|det M|, z = min scale px, w = 0
+    float4 ArFlags;      // x = 1 when mirrored, y = 1 when the camera is active, z = picture opacity, w = 1 for transparent AR effects output
+    float4 ArMatrix0;    // legacy scene->image map rows; active AR notes use ArCameraPose + GpuArLayer quads instead
+    float4 ArMatrix1;
+    float4 ArMatrix2;
+    float4 ArMatrixFlags; // legacy shader-branch flags; the active renderer keeps all four lanes zero
 };
 
 cbuffer PassConstants : register(b1)
@@ -68,7 +68,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // x = fade-in 0..1, y = 1 while the note sounds, z = 1 for a lit key
+    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label
 };
 
 struct KeyInstance
@@ -114,9 +114,8 @@ float4 ToClip(float2 screenPx, float depth)
     return float4(ndc, depth, 1.0);
 }
 
-// AR-S4b: the scene->image map at a scene point (Camera/ArSceneProjection.cs): output pixels and the
-// homogeneous weight that place came from. The weight is the clip w, so rasterising interpolates the
-// quad in perspective - the way VsArQuad has always interpolated its flat quads.
+// Legacy shader helper for the dormant scene->image map branch. The normal renderer leaves ArMatrixFlags zero;
+// active 3D notes are projected on the CPU and drawn by VsArQuad from the camera-facing patches in GpuArLayer.
 float3 ArMapAt(float2 scene)
 {
     float3 at = float3(scene, 1.0);
@@ -335,6 +334,18 @@ float4 PsBackground(FullscreenOut i) : SV_Target
 // AR layer: quads of the keyboard plane projected onto the camera picture (Camera/ArProjection.cs)
 // ---------------------------------------------------------------------------------------------------
 
+// Common input to the full Live Stage note material, used by both stage-space notes and camera-projected AR notes.
+struct NoteMaterialInput
+{
+    float2 Local;      // scene DIPs from the note centre
+    float2 Half;       // half size in scene DIPs
+    float4 Color;      // linear rgb and opacity
+    float4 Misc;       // x = sounding, y = seed, z = head direction, w = hold-bar strength
+    float SceneY;      // scene DIPs
+};
+
+float4 ShadeNoteMaterial(NoteMaterialInput v);
+
 struct ArQuadOut
 {
     float4 Position : SV_Position;
@@ -348,16 +359,32 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     ArQuadInstance q = ArQuads[iid];
     // two triangles over the corners 0,1,2 and 0,2,3
     uint k = vid < 3u ? vid : (vid == 3u ? 0u : vid - 2u);
+    float2 uv = float2((k == 1u || k == 2u) ? 1.0 : 0.0, k >= 2u ? 1.0 : 0.0);
     float2 p = q.A.xy;
     float w = q.W.x;
     if (k == 1u) { p = q.A.zw; w = q.W.y; }
     else if (k == 2u) { p = q.B.xy; w = q.W.z; }
     else if (k == 3u) { p = q.B.zw; w = q.W.w; }
+    if (q.Misc.z < 0.5)
+    {
+        // PsNote needs a margin outside the body for its bevel and halo. Expand this same calibrated billboard
+        // in its own screen-facing axes and extend UVs so its interior still maps to the original note rectangle.
+        float2 across = ((q.A.zw - q.A.xy) + (q.B.xy - q.B.zw)) * 0.5;
+        float2 along = ((q.B.zw - q.A.xy) + (q.B.xy - q.A.zw)) * 0.5;
+        float width = max(length(across), 1e-3);
+        float height = max(length(along), 1e-3);
+        float2 acrossUnit = across / width;
+        float2 alongUnit = along / height;
+        float2 cornerSign = uv * 2.0 - 1.0;
+        float margin = (NoteA.w + NoteA.z + 2.0) * SceneSize.z;
+        p += acrossUnit * cornerSign.x * margin + alongUnit * cornerSign.y * margin;
+        uv += cornerSign * float2(margin / width, margin / height);
+    }
     float2 ndc = float2(p.x / ScreenTime.x * 2.0 - 1.0, 1.0 - p.y / ScreenTime.y * 2.0);
     ArQuadOut o;
     // the corner weight as clip w: the rasteriser then interpolates across the quad in perspective
     o.Position = float4(ndc * w, 0.0, w);
-    o.Uv = float2((k == 1u || k == 2u) ? 1.0 : 0.0, k >= 2u ? 1.0 : 0.0);
+    o.Uv = uv;
     o.Color = q.Color;
     o.Misc = q.Misc;
     return o;
@@ -365,18 +392,278 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
-    if (i.Misc.z > 0.5)
+    float kind = i.Misc.z;
+    if (kind < 0.5)
     {
-        // a lit key: its colour laid over the key in the picture, so a white key takes the tint and a dark one lights up
+        // Reuse the exact Live Stage material in linear light. UV derivatives recover the projected body's
+        // local pixel size, then convert it to scene DIPs so bevel/glow widths match PsNote at any output scale.
+        float2 uvPerPixel = max(fwidth(i.Uv), float2(1e-6, 1e-6));
+        float2 halfSize = 0.5 / uvPerPixel / max(SceneSize.z, 1e-3);
+        NoteMaterialInput note;
+        note.Local = (i.Uv - 0.5) * 2.0 * halfSize;
+        note.Half = halfSize;
+        note.Color = i.Color;
+        note.Misc = float4(i.Misc.x, i.Misc.y, 1.0, i.Misc.w);
+        note.SceneY = i.Position.y / max(SceneSize.z, 1e-3);
+        return ShadeNoteMaterial(note);
+    }
+    if (kind > 0.5 && kind < 1.5)
+    {
+        // A lit physical key: its colour replaces part of the camera pixel, rather than adding a virtual key body.
         float ka = i.Color.a;
         return float4(i.Color.rgb * 1.1 * ka, ka);
     }
-    float side = min(i.Uv.x, 1.0 - i.Uv.x);
-    float rim = 1.0 - smoothstep(0.0, 0.16, side);
-    float lead = smoothstep(0.55, 1.0, i.Uv.y);
-    float3 c = i.Color.rgb * (1.0 + 0.45 * rim + 0.35 * lead + 0.5 * i.Misc.y);
-    float a = i.Color.a * i.Misc.x;
-    return float4(c * a, a);
+    if (kind > 1.5 && kind < 2.5)
+    {
+        // Live Stage particle material. The CPU projects the real simulated particle and selects its family;
+        // this shader supplies each family's soft ember, streak, droplet, shard, flame, dust or wisp silhouette.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float progress = saturate(i.Misc.x);
+        float shape = floor(i.Misc.y + 0.5);
+        float phase = i.Misc.w;
+        float coverage = 0.0;
+        float gain = 0.0;
+        if (shape < 0.5) // ember / dot
+        {
+            float r2 = dot(p, p);
+            coverage = exp(-r2 * 5.5) + exp(-r2 * 1.8) * 0.24;
+            gain = exp(-r2 * 7.0) * 1.5 + exp(-r2 * 2.0) * 0.45;
+        }
+        else if (shape < 1.5) // velocity-aligned streak
+        {
+            float edge = exp(-p.y * p.y * 18.0);
+            float tip = saturate(1.15 - abs(p.x) * 0.92);
+            coverage = edge * tip;
+            gain = edge * (0.55 + 1.2 * tip);
+        }
+        else if (shape < 2.5) // tumbling confetti
+        {
+            float angle = phase + progress * 7.0;
+            float cs = cos(angle), sn = sin(angle);
+            float2 q = float2(p.x * cs - p.y * sn, p.x * sn + p.y * cs);
+            float diamond = abs(q.x) * 0.78 + abs(q.y) * 0.78;
+            coverage = 1.0 - smoothstep(0.78, 1.0, diamond);
+            gain = coverage * 1.05;
+        }
+        else if (shape < 3.5) // slow, soft dust
+        {
+            float r2 = dot(p, p);
+            coverage = exp(-r2 * 2.7) * 0.7;
+            gain = exp(-r2 * 2.2) * 0.7;
+        }
+        else if (shape < 4.5) // rising flame, tapered toward its tip
+        {
+            float h = i.Uv.y;
+            float width = lerp(0.74, 0.08, h);
+            float centre = 0.5 + sin(h * 8.0 + phase) * 0.07 * h;
+            float across = abs(i.Uv.x - centre);
+            float body = 1.0 - smoothstep(width * 0.58, width, across);
+            float base = smoothstep(0.0, 0.16, h);
+            coverage = body * base * (1.0 - progress * 0.28);
+            gain = coverage * (1.35 + 0.55 * (1.0 - h));
+        }
+        else if (shape < 5.5) // liquid bead with a specular dot
+        {
+            float r2 = dot(p, p);
+            float bead = 1.0 - smoothstep(0.62, 1.0, r2);
+            float highlight = exp(-dot(p - float2(-0.27, -0.31), p - float2(-0.27, -0.31)) * 55.0);
+            coverage = bead;
+            gain = bead * 1.05 + highlight * 0.9;
+        }
+        else if (shape < 6.5) // narrow glass shard, point leading
+        {
+            float along = saturate((p.x + 1.0) * 0.5);
+            float halfWidth = lerp(0.08, 0.58, along) * (1.0 - 0.32 * along);
+            float shard = 1.0 - smoothstep(halfWidth * 0.72, halfWidth, abs(p.y));
+            coverage = shard * saturate(1.18 - abs(p.x) * 0.82);
+            gain = coverage * 1.65;
+        }
+        else // wisps: an undulating, tapered thread
+        {
+            float wave = sin(p.x * 7.0 + phase + progress * 6.0) * 0.32;
+            float width = lerp(0.08, 0.28, saturate(1.0 - abs(p.x)));
+            float thread = exp(-pow((p.y - wave) / width, 2.0) * 2.4);
+            coverage = thread * saturate(1.0 - abs(p.x) * 0.6);
+            gain = coverage * (0.75 + 0.6 * sin(progress * 6.283 + phase));
+        }
+        float a = saturate(coverage) * i.Color.a;
+        return float4(i.Color.rgb * gain * i.Color.a, a);
+    }
+    if (kind > 2.5 && kind < 3.5)
+    {
+        // 3D-projected key/impact light and spill on the calibrated real key plane.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float beam = exp(-p.x * p.x * 3.2 - p.y * p.y * 1.45);
+        float hot = exp(-dot(p, p) * 4.5);
+        float coverage = beam * i.Color.a * 0.8;
+        return float4(i.Color.rgb * (beam * 0.72 + hot * 0.9) * i.Color.a, coverage);
+    }
+    if (kind > 3.5 && kind < 4.5)
+    {
+        // The ring itself is simulated by Live Stage; these are its actual style, radius and decay, not a generic hit pulse.
+        float r = length(i.Uv * 2.0 - 1.0);
+        float width = max(i.Misc.y, 0.006);
+        float band = exp(-pow((r - i.Misc.x) / width, 2.0));
+        float style = floor(i.Misc.w + 0.5);
+        float core = exp(-dot(i.Uv * 2.0 - 1.0, i.Uv * 2.0 - 1.0) * 4.0);
+        float body = band;
+        float gain = 1.0;
+        if (style > 0.5 && style < 1.5) { body = saturate(band * 1.45 + core * 0.20); gain = 1.35 + core * 0.6; }
+        else if (style > 1.5 && style < 2.5) { body = band * 0.85; gain = 1.15; }
+        else if (style > 2.5) { body = band; gain = 1.3; }
+        float alpha = saturate(body) * i.Color.a;
+        return float4(i.Color.rgb * gain * alpha, alpha);
+    }
+    if (kind > 4.5 && kind < 5.5)
+    {
+        // 3D ribbon segments for the configured electric hold arcs and lightning flash.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float across = exp(-p.y * p.y * (10.0 + i.Misc.y * 18.0));
+        float taper = saturate(1.1 - abs(p.x) * 0.85);
+        float core = exp(-p.y * p.y * 48.0) * taper;
+        float alpha = saturate((across * 0.38 + core * 0.8) * i.Color.a);
+        return float4(i.Color.rgb * (across * 0.75 + core * 1.5) * i.Color.a, alpha);
+    }
+    if (kind > 5.5 && kind < 6.5)
+    {
+        // Live Stage flash channel: soft flare, plasma caustics or the impact-morph star.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float r = length(p);
+        float style = floor(i.Misc.y + 0.5);
+        float progress = saturate(i.Misc.x);
+        float coverage, gain;
+        if (style > 2.5)
+        {
+            float angle = atan2(p.y, p.x);
+            float radius = lerp(0.34, 0.98, 0.5 + 0.5 * cos(angle * 5.0));
+            float star = 1.0 - smoothstep(radius - 0.07, radius + 0.07, r);
+            float glow = exp(-r * 2.8) * (1.0 - progress * 0.5);
+            coverage = saturate(star + glow * 0.38);
+            gain = star * 1.8 + glow * 0.85;
+        }
+        else if (style > 1.5)
+        {
+            float swirl = sin(r * 24.0 - progress * 13.0 + atan2(p.y, p.x) * 3.0);
+            float shell = exp(-r * r * 2.2);
+            float caustic = exp(-swirl * swirl * 5.0) * shell;
+            coverage = saturate(shell * 0.35 + caustic * 0.72);
+            gain = shell * 0.85 + caustic * 1.75;
+        }
+        else
+        {
+            float core = exp(-r * r * 8.0);
+            float skirt = exp(-r * r * 2.0) * saturate((1.0 - r) * 2.2);
+            coverage = saturate(core + skirt * 0.55);
+            gain = core * 1.55 + skirt * 0.75;
+        }
+        float alpha = coverage * i.Color.a;
+        return float4(i.Color.rgb * gain * i.Color.a, alpha);
+    }
+    if (kind > 6.5 && kind < 7.5)
+    {
+        // A keyed light beam in the piano's local surface-normal direction, not an uncalibrated screen-space sprite.
+        float2 p = i.Uv * 2.0 - 1.0;
+        float width = exp(-p.x * p.x * 5.5);
+        float taper = saturate(1.0 - abs(p.x) * 0.6);
+        float along = pow(saturate(1.0 - i.Uv.y), 0.72);
+        float glow = width * taper * along;
+        float core = exp(-p.x * p.x * 24.0) * along;
+        float a = saturate((glow * 0.45 + core * 0.42) * i.Color.a);
+        return float4(i.Color.rgb * (glow * 0.9 + core * 0.85) * i.Color.a, a);
+    }
+    if (kind > 7.5 && kind < 8.5)
+    {
+        // The note sheen rides inside the same pitch-tagged, calibrated AR patch (not a flat stage-space sprite).
+        float phase = i.Misc.x;
+        float strength = saturate(i.Misc.y);
+        float sweepA = 0.5 + 0.5 * sin(ScreenTime.z * 0.50 + phase);
+        float sweepB = 0.5 + 0.5 * sin(ScreenTime.z * 0.77 + phase + 2.1);
+        float2 a = (i.Uv - float2(0.16 + 0.68 * sweepA, 0.5)) * float2(1.0 / 0.13, 1.0 / 0.72);
+        float2 b = (i.Uv - float2(0.16 + 0.68 * sweepB, 0.5)) * float2(1.0 / 0.13, 1.0 / 0.72);
+        float lobeA = exp(-dot(a, a) * 2.0);
+        float lobeB = exp(-dot(b, b) * 2.0);
+        float gainA = (0.10 + 0.20 * pow(sin(sweepA * PI), 2.0)) * lobeA;
+        float gainB = (0.10 + 0.20 * pow(sin(sweepB * PI), 2.0)) * lobeB * 0.55;
+        float gain = (gainA + gainB) * strength;
+        float3 tint = lerp(i.Color.rgb, float3(1.3, 1.3, 1.3), 0.72);
+        return float4(tint * gain * i.Color.a * 2.2, 0.0);
+    }
+    if (kind > 8.5 && kind < 9.5)
+    {
+        // The seven note-trail variants share one calibrated 3D ribbon. UV.y runs from the attached edge
+        // (1) to the fading end (0); colour, length and quality gates remain settings-driven on the CPU.
+        float style = floor(i.Misc.x + 0.5);
+        float seed = i.Misc.w;
+        float strength = saturate(i.Misc.y);
+        float across = i.Uv.x * 2.0 - 1.0;
+        float along = saturate(i.Uv.y);
+        float fade = pow(along, 1.2);
+        float coverage = 0.0;
+        float gain = 1.0;
+        float3 tint = i.Color.rgb;
+        if (style < 0.5) // Glow
+        {
+            coverage = exp(-across * across * 2.4) * fade * 0.52;
+            gain = 1.3;
+        }
+        else if (style < 1.5) // Sparkles
+        {
+            float2 cell = floor(i.Uv * float2(5.0, 13.0));
+            float2 jitter = frac(float2(Hash21(cell + seed), Hash21(cell + seed + 7.1)) + 0.17) - 0.5;
+            float2 local = frac(i.Uv * float2(5.0, 13.0)) - 0.5 - jitter * 0.54;
+            float twinkle = 0.35 + 0.65 * abs(sin(ScreenTime.z * (3.0 + Hash21(cell + seed + 2.7) * 5.0) + seed + cell.y));
+            coverage = exp(-dot(local * float2(1.5, 1.0), local * float2(1.5, 1.0)) * 42.0) * fade * twinkle * 0.78;
+            gain = 1.7;
+        }
+        else if (style < 2.5) // Speed Lines
+        {
+            float lineOffset = abs(frac(i.Uv.x * 6.0 + seed * 0.13) - 0.5);
+            float dash = step(0.20, frac(i.Uv.y * 3.0 + seed * 0.07 + ScreenTime.z * 0.11));
+            coverage = exp(-lineOffset * lineOffset * 540.0) * dash * fade * 0.52;
+            gain = 1.6;
+        }
+        else if (style < 3.5) // Blur
+        {
+            coverage = exp(-across * across * 1.65) * fade * 0.22;
+            gain = 0.72;
+        }
+        else if (style < 4.5) // Ribbon
+        {
+            float centre = sin(i.Uv.y * 6.283 + ScreenTime.z * 3.0 + seed) * 0.32 * (1.0 - along * 0.25);
+            coverage = exp(-pow((across - centre) * 3.4, 2.0)) * fade * 0.7;
+            gain = 1.55;
+        }
+        else if (style < 5.5) // Rainbow
+        {
+            float hue = frac(i.Uv.y * 0.58 + ScreenTime.z * 0.25 + seed * 0.013);
+            tint = 0.5 + 0.5 * cos((hue + float3(0.0, 0.333333, 0.666667)) * (2.0 * PI));
+            coverage = exp(-across * across * 1.8) * fade * 0.56;
+            gain = 1.45;
+        }
+        else // Stream
+        {
+            float2 cell = floor(i.Uv * float2(6.0, 16.0));
+            float phase = frac(i.Uv.y * 16.0 - ScreenTime.z * 0.55 + Hash21(cell + seed));
+            float x = frac(i.Uv.x * 6.0 + Hash21(cell + seed + 3.1)) - 0.5;
+            coverage = exp(-x * x * 90.0 - pow((phase - 0.5) * 2.0, 2.0) * 22.0) * fade * 0.75;
+            gain = 1.55;
+        }
+        float alpha = saturate(coverage * strength) * i.Color.a;
+        return float4(tint * gain * alpha, alpha);
+    }
+    if (kind > 9.5 && kind < 10.5)
+    {
+        // A note-name atlas cell on a calibrated note patch; it never becomes a screen-space sprite over the camera.
+        float cell = i.Misc.x;
+        float2 cellXY = float2(fmod(cell, 16.0), floor(cell / 16.0));
+        float2 atlasUv = (cellXY + i.Uv) / float2(16.0, 24.0);
+        float coverage = AtlasTex.SampleLevel(LinearClamp, atlasUv, 0).a;
+        float alpha = coverage * i.Color.a;
+        return float4(i.Color.rgb * alpha, alpha);
+    }
+
+    // Unknown future quad kinds remain readable; note bodies above use the shared SDF material.
+    return float4(i.Color.rgb * i.Color.a, i.Color.a);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -386,8 +673,8 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
 struct NoteOut
 {
     float4 Position : SV_Position;
-    float2 Local : TEXCOORD0;      // px from the note centre
-    float2 Half : TEXCOORD1;       // half size px
+    float2 Local : TEXCOORD0;      // scene DIPs from the note centre
+    float2 Half : TEXCOORD1;       // half size in scene DIPs
     float4 Color : TEXCOORD2;
     float4 Misc : TEXCOORD3;
     float SceneY : TEXCOORD4;
@@ -404,17 +691,12 @@ NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     NoteOut o;
     if (ArMatrixFlags.x > 0.5)
     {
-        // AR-S4b: the note rect through the scene->image map, which is what the flat AR quads stood in for.
-        // Each vertex takes one corner of the rect and the map's weight there becomes the clip w, so the quad
-        // is interpolated in perspective exactly as VsArQuad's is. Local and Half are multiplied by the map's
-        // magnification at the note's centre - one scale for the whole note, so the SDF body is exactly the
-        // projected rect - and the division by SceneSize.z cancels the pixels-per-unit PsNote multiplies every
-        // distance by: the SDF below then measures real output pixels. Min scale px is the floor on that
-        // magnification, so a note far from the camera cannot collapse under a pixel. While the flag is down
-        // none of this runs and the pass is the one from before AR-S4b, pixel for pixel.
+        // Dormant legacy scene->image branch. The active AR renderer deliberately keeps ArMatrixFlags zero and
+        // emits calibrated 3D notes through GpuArLayer/Ar3DNoteProjection instead; do not use this branch as the
+        // runtime note path or as a condition for whether projected notes exist.
         float3 at = ArMapAt(centre + local);
         float3 mid = ArMapAt(centre);
-        float w = max(at.z, 1e-3);                   // on and beyond the horizon nothing can be drawn; the slice that truncates notes there is still to come
+        float w = max(at.z, 1e-3);                   // legacy branch expects CPU-side horizon clipping; the active AR quad path clips at the 3D near plane
         float wm = max(mid.z, 1e-3);
         float scale = max(ArMatrixFlags.y / (wm * sqrt(wm)), ArMatrixFlags.z) / SceneSize.z;
         float2 ndc = at.xy / w / ScreenTime.xy * float2(2.0, -2.0) + float2(-1.0, 1.0);
@@ -434,7 +716,18 @@ NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     return o;
 }
 
-float4 PsNote(NoteOut v) : SV_Target
+float4 PsNote(NoteOut note) : SV_Target
+{
+    NoteMaterialInput material;
+    material.Local = note.Local;
+    material.Half = note.Half;
+    material.Color = note.Color;
+    material.Misc = note.Misc;
+    material.SceneY = note.SceneY;
+    return ShadeNoteMaterial(material);
+}
+
+float4 ShadeNoteMaterial(NoteMaterialInput v)
 {
     float2 p = v.Local;
     float2 hb = max(v.Half, 0.5);
@@ -884,11 +1177,10 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     // flares and the hit line sit in front of the keys; particles fly behind them
     if ((kind > 3.5 && kind < 4.5) || (kind > 5.5 && kind < 6.5)) depth = 0.01;
     SpriteOut o;
-    if (ArMatrixFlags.x > 0.5)
+    if (ArMatrixFlags.x > 1.5)
     {
-        // AR-S4 remainder: the sprite pass draws through the scene->image map, the way VsNote draws a note, so
-        // particles, flares, beams and shapes land on the camera picture in perspective. Their sizes are scene
-        // DIPs, which the map scales at the point each vertex lands, so nothing here needs a magnification.
+        // Reserved for an explicit future sprite-projection option. Ambient particles, petals, meteors and
+        // transients stay flat on the camera by default even while the AR notes use perspective.
         // A sprite is culled whole when any of its four corners reaches the horizon. The weight is affine, so its
         // least value over the quad is at a corner; the corners depend only on the instance, so all six of its
         // vertices agree on whether it is drawn at all.
@@ -1251,11 +1543,9 @@ float3 LinearToSrgb(float3 c)
     return lerp(high, low, step(c, 0.0031308));
 }
 
-float4 PsComposite(FullscreenOut i) : SV_Target
+float3 GradeCompositeColor(float3 linearColor, FullscreenOut i)
 {
-    float4 scene = SourceTex.SampleLevel(PointClamp, i.Uv, 0);
-    float3 bloom = SecondTex.SampleLevel(LinearClamp, i.Uv, 0).rgb * Post2.y;
-    float3 c = (scene.rgb + bloom) * Post.x;
+    float3 c = linearColor * Post.x;
     if (Post.y > 0.5) c = AcesFitted(c * 1.25);
     else c = c / (1.0 + max(Luma(c) - 1.0, 0.0));
     float l = Luma(c);
@@ -1268,7 +1558,32 @@ float4 PsComposite(FullscreenOut i) : SV_Target
     }
     float3 display = LinearToSrgb(c);
     float noise = Hash21(i.Position.xy + frac(ScreenTime.z) * 61.0) - 0.5;
-    display += noise * Post2.w;
+    return display + noise * Post2.w;
+}
+
+float4 PsComposite(FullscreenOut i) : SV_Target
+{
+    float4 scene = SourceTex.SampleLevel(PointClamp, i.Uv, 0);
+    float3 bloom = SecondTex.SampleLevel(LinearClamp, i.Uv, 0).rgb * Post2.y;
+    float3 linearColor = scene.rgb + bloom;
+    float alphaOutputCoverage = 0.0;
+    if (ArFlags.w > 0.5)
+    {
+        // The HDR scene is accumulated premultiplied. Unassociate before nonlinear tone mapping, then
+        // premultiply again in display space for WPF/DWM's Pbgra32 contract.
+        if (ArFlags.y < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+        float energy = max(Luma(max(linearColor, 0.0)), 0.0);
+        float lightCoverage = 1.0 - exp(-energy * 0.42);
+        alphaOutputCoverage = saturate(max(scene.a, lightCoverage));
+        linearColor /= max(alphaOutputCoverage, 1e-4);
+    }
+    float3 display = GradeCompositeColor(linearColor, i);
+    if (ArFlags.w > 0.5)
+    {
+        // Stream/OBS output: never mix in the camera, stage background or chroma fill. Additive light/bloom
+        // contributes soft coverage; RGB is premultiplied only after tone mapping the unassociated color.
+        return float4(saturate(display) * alphaOutputCoverage, alphaOutputCoverage);
+    }
     if (ArFlags.y > 0.5)
     {
         // the camera picture sits under the light: what the stage draws solid hides it, light adds to it
@@ -1285,4 +1600,31 @@ float4 PsComposite(FullscreenOut i) : SV_Target
         display = lerp(float3(0.0, 1.0, 0.0), display, coverage);
     }
     return float4(display, 1.0);
+}
+
+// Geometry is the tone-mapped direct scene (including emissive cores) without the bloom pyramid. Glow
+// contains only the soft bloom contribution: low-energy additive pixels stay visible in Geometry instead of
+// disappearing when bloom is disabled, while the broad halo can be blended independently in OBS.
+float4 PsCompositeGeometry(FullscreenOut i) : SV_Target
+{
+    if (ArFlags.w < 0.5 || ArFlags.y < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+    float4 scene = SourceTex.SampleLevel(PointClamp, i.Uv, 0);
+    float directEnergy = max(Luma(max(scene.rgb, 0.0)), 0.0);
+    float directLightCoverage = 1.0 - exp(-directEnergy * 0.42);
+    float coverage = saturate(max(scene.a, directLightCoverage));
+    if (coverage <= 1e-4) return float4(0.0, 0.0, 0.0, 0.0);
+    float3 linearColor = scene.rgb / max(coverage, 1e-4);
+    float3 display = GradeCompositeColor(linearColor, i);
+    return float4(saturate(display) * coverage, coverage);
+}
+
+float4 PsCompositeGlow(FullscreenOut i) : SV_Target
+{
+    if (ArFlags.w < 0.5 || ArFlags.y < 0.5) return float4(0.0, 0.0, 0.0, 0.0);
+    float3 linearColor = max(SecondTex.SampleLevel(LinearClamp, i.Uv, 0).rgb * Post2.y, 0.0);
+    float energy = max(Luma(linearColor), 0.0);
+    float coverage = saturate(1.0 - exp(-energy * 0.42));
+    if (coverage <= 1e-4) return float4(0.0, 0.0, 0.0, 0.0);
+    float3 display = GradeCompositeColor(linearColor / max(coverage, 1e-4), i);
+    return float4(saturate(display) * coverage, coverage);
 }

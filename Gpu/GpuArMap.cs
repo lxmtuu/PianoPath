@@ -3,21 +3,19 @@ using System.Numerics;
 namespace PianoPath;
 
 /// <summary>
-/// The scene→image map as the note pass reads it out of the Frame cbuffer (AR-S4b, Gpu/StageShaders.hlsl):
-/// the map's three rows and one float4 of (AR flags, √|det M|, min scale px). The packing lives here, in one
-/// place the portable test project can hold to the shader's layout without a GPU; the pixel half of the
-/// contract is <c>VerifyArNoteProjection</c>, which reads a rendered frame back on WARP and finds each note
-/// inside the patch <see cref="ArProjection.TryProject"/> reports for its own rectangle.
+/// Legacy scene→image map packing for the dormant AR shader branch in <c>Gpu/StageShaders.hlsl</c>. The active
+/// perspective-note route keeps these flags zero: <see cref="Ar3DNoteProjection"/> builds camera-facing quads from
+/// <see cref="ArCameraPose"/> and submits them through the AR layer. This remains for the portable cbuffer-layout
+/// tests and the flat-map helpers; it is not a gate on whether AR notes are emitted.
 /// </summary>
 /// <remarks>The map is <see cref="ArSceneMatrix"/>, built by <see cref="ArSceneProjection.TryBuild"/> from the
-/// same calibration, view and scene layout the flat AR quads use. The shader's <c>VsNote</c> multiplies a note's
-/// Local and Half by √|det M| / w^1.5 at the note's centre (floored at min scale px), so the SDF measures real
-/// output pixels; the weight at each rect corner becomes the clip w, which is what makes the quad interpolate
-/// in perspective.</remarks>
+/// calibration, the picture's output view and a stage-scene layout.</remarks>
 internal readonly struct GpuArMap
 {
-    /// <summary><c>ArMatrixFlags.x</c>: the note pass and the sprite pass draw through the map (the "Notes in perspective" switch). Notes are cut to the picture on the CPU (<c>GpuStageRenderer</c>); sprites are culled in <c>VsSprite</c> when they reach the horizon.</summary>
+    /// <summary>Bit 0 of <c>ArMatrixFlags.x</c>: only the note pass may draw through this map. Ambient sprites stay flat on the camera.</summary>
     internal const float NotesThroughMap = 1f;
+    /// <summary>Bit 1 is reserved for an explicitly opted-in future sprite projection; AR overlay ambient remains flat by default.</summary>
+    internal const float SpritesThroughMap = 2f;
 
     internal GpuArMap(ArSceneMatrix map, bool notes, float minScalePx)
     {

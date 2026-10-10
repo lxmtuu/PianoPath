@@ -61,12 +61,15 @@
     <Compile Include="..\..\Gpu\GpuAdaptiveQuality.cs" Link="Product\Gpu\GpuAdaptiveQuality.cs" />
     <Compile Include="..\..\Gpu\GpuArMap.cs" Link="Product\Gpu\GpuArMap.cs" />
     <Compile Include="..\..\Gpu\GpuInstanceList.cs" Link="Product\Gpu\GpuInstanceList.cs" />
+    <Compile Include="..\..\Gpu\GpuRecordingTap.cs" Link="Product\Gpu\GpuRecordingTap.cs" />
     <Compile Include="..\..\Stage\Effects\EffectContracts.cs" Link="Product\Stage\Effects\EffectContracts.cs" />
     <Compile Include="..\..\Stage\Effects\AccessibilityContracts.cs" Link="Product\Stage\Effects\AccessibilityContracts.cs" />
     <Compile Include="..\..\Gpu\GpuAdapterSelection.cs" Link="Product\Gpu\GpuAdapterSelection.cs" />
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
     <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
     <Compile Include="..\..\Camera\ArCalibration.cs" Link="Product\Camera\ArCalibration.cs" />
+    <Compile Include="..\..\Camera\ArCameraPose.cs" Link="Product\Camera\ArCameraPose.cs" />
+    <Compile Include="..\..\Camera\Ar3DNoteProjection.cs" Link="Product\Camera\Ar3DNoteProjection.cs" />
     <Compile Include="..\..\Camera\ArCalibrationProfile.cs" Link="Product\Camera\ArCalibrationProfile.cs" />
     <Compile Include="..\..\Camera\ArView.cs" Link="Product\Camera\ArView.cs" />
     <Compile Include="..\..\Camera\ArProjection.cs" Link="Product\Camera\ArProjection.cs" />
