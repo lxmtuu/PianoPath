@@ -138,6 +138,9 @@ internal readonly record struct ArNoteShape(ArPatch Patch, int Pitch, int NoteIn
 /// <param name="Strength">How hard it was pressed, 0..1 (MIDI velocity), for the colour.</param>
 internal readonly record struct ArLivePress(int Pitch, double Age, double HeldSeconds, bool Down, float Strength);
 
+/// <summary>A one-shot MIDI Note-On object for Perform mode; it keeps travelling after release until its calibrated reach expires.</summary>
+internal readonly record struct ArLiveMidiNote(int Pitch, double Age, double HeldSeconds, bool Down, float Strength);
+
 /// <summary>One bar of a pressed key: the patch to draw and how solid it is. There is no note behind it, so unlike
 /// <see cref="ArNoteShape"/> it carries no index into a song.</summary>
 /// <param name="Patch">Where on the output the bar goes: its leading edge on the back edge of the keys.</param>

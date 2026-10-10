@@ -373,6 +373,11 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>How many of those were bars of keys the player is pressing; verification reads it.</summary>
     internal int ArLiveBarCount => _arLayer.LiveBarCount;
+    internal int ArRisingMidiNoteCount => _arLayer.RisingMidiNoteCount;
+    internal int ArNoteTrailQuadCount => _arLayer.NoteTrailQuadCount;
+    internal int ArGhostNoteQuadCount => _arLayer.GhostNoteQuadCount;
+    internal int ArLandingGlowCount => _arLayer.LandingGlowCount;
+    internal int ArNoteLabelCount => _arLayer.NoteLabelCount;
     internal int ArImpactLightCount => _arLayer.ImpactLightCount;
     internal int ArNoteLightCount => _arLayer.NoteLightCount;
     internal int ArPulseCount => _arLayer.PulseCount;

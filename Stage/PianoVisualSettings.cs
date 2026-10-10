@@ -441,6 +441,8 @@ internal sealed class PianoVisualSettings
     public bool ArNotesInPerspective { get; set; } = false;
     /// <summary>Draw the player's growing press bars over the camera; the key tint remains independent. Off by default to avoid bright press trails in a stream or call.</summary>
     public bool ArLivePressTrails { get; set; } = false;
+    /// <summary>In Perform mode, emit an independent 3D note on each MIDI Note On. The note travels along the calibrated AR direction and continues after Note Off; held key tint remains separate.</summary>
+    public bool ArRisingMidiNotes { get; set; } = true;
     /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
     public double ArNoteMinScale { get; set; } = 0;
     /// <summary>Independent 3D pitch of AR note travel: 0° follows the default back-to-keys axis, 90° turns toward the player-side normal, and 180° reverses it.</summary>
@@ -513,7 +515,7 @@ internal sealed class PianoVisualSettings
 
     internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
         ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
-        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth).Normalised();
+        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
 
     /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
     internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
@@ -634,7 +636,7 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
                 or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
-                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails)
+                or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails) or nameof(ArRisingMidiNotes)
                 or nameof(ArNoteDirectionTilt) or nameof(ArNoteDirectionAzimuth)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked.
@@ -760,7 +762,7 @@ internal sealed class PianoVisualSettings
         ArQuality = ArQualityTiers.Normalize(ArQuality);
         var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
             ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
-            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth).Normalised();
+            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         ArNoteDirectionTilt = ar.NoteDirectionTilt; ArNoteDirectionAzimuth = ar.NoteDirectionAzimuth;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);

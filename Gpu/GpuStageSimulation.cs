@@ -84,12 +84,20 @@ internal sealed partial class GpuStageSimulation
         public int Pitch; public float Age, Held, Strength; public bool KeyDown, Released, Hit;
     }
 
+    /// <summary>One emitted AR note per MIDI Note On; it is independent of the optional held-key bar.</summary>
+    private sealed class RisingMidiNote
+    {
+        public int Pitch; public double Age, HeldSeconds; public float Strength; public bool Down;
+    }
+
     private readonly Particle[] _particles = new Particle[MaxParticles];
     private int _count;
     private readonly List<Ring> _rings = [];
     private readonly List<Flash> _flashes = [];
     private readonly List<LiveTrail> _trails = [];
     private readonly List<ArLivePress> _livePresses = [];
+    private readonly List<RisingMidiNote> _risingMidiNotes = [];
+    private readonly List<ArLiveMidiNote> _arRisingMidiNotes = [];
     private readonly List<GpuArImpact> _arImpacts = [];
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128];
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
@@ -114,6 +122,8 @@ internal sealed partial class GpuStageSimulation
     /// list, this is what the keys under the fingers draw.
     /// </summary>
     internal IReadOnlyList<ArLivePress> LivePresses => _livePresses;
+    /// <summary>One calibrated, independently travelling AR note per recent MIDI Note On while Perform mode is enabled.</summary>
+    internal IReadOnlyList<ArLiveMidiNote> ArRisingMidiNotes => _arRisingMidiNotes;
     /// <summary>Recent strikes for the camera-projected impact-light pass.</summary>
     internal IReadOnlyList<GpuArImpact> ArImpacts => _arImpacts;
     /// <summary>The same simulated particles, waves and flashes used by the stage, with the source pitch preserved for 3D AR projection.</summary>
@@ -177,6 +187,7 @@ internal sealed partial class GpuStageSimulation
     internal void Clear()
     {
         _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear(); _arImpacts.Clear();
+        _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); _livePresses.Clear();
         Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_active);
     }
 
@@ -184,8 +195,16 @@ internal sealed partial class GpuStageSimulation
     internal void Step(double seconds, GpuFrameInput input, GpuStageFeed feed, float sceneWidth)
     {
         var look = _look = input.Look;
+        // A 2D trail is culled at the stage edge; a calibrated 3D bar stays in simulation until its own AR reach is consumed.
+        var arLiveReleaseSeconds = feed.Ar is { ShowLiveTrails: true } ar
+            && ar.Quality != ArQualityTier.Lite && ar.Calibration.CameraPose is not null && ar.Notes.IsUsable
+                ? Math.Clamp(ar.LivePressStyle.Reach / ar.LivePressStyle.FallSpeed, 0, ArOptions.LivePressReachSeconds)
+                : 0;
+        var risingMidiStyle = feed.Ar is { ShowRisingMidiNotes: true } midiAr
+            && midiAr.Calibration.CameraPose is not null && midiAr.Notes.IsUsable ? midiAr.RisingMidiNoteStyle : null;
         if (feed.TakeClearRequest()) Clear();
         var frameDt = (float)Math.Clamp(seconds, 0, .05);
+        if (risingMidiStyle is null) { _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); }
         for (var i = _arImpacts.Count - 1; i >= 0; i--)
         {
             var aged = _arImpacts[i] with { Age = _arImpacts[i].Age + frameDt };
@@ -229,11 +248,23 @@ internal sealed partial class GpuStageSimulation
         // ---- live events and hits from the UI thread ----
         while (feed.TryDequeueLive(out var live))
         {
-            if (live.Down) _trails.Add(new LiveTrail { Pitch = live.Pitch, KeyDown = true, Strength = live.Strength });
+            if (live.Down)
+            {
+                _trails.Add(new LiveTrail { Pitch = live.Pitch, KeyDown = true, Strength = live.Strength });
+                if (risingMidiStyle is not null && live.Pitch is >= 0 and < 128)
+                    _risingMidiNotes.Add(new RisingMidiNote { Pitch = live.Pitch, Down = true, Strength = live.Strength });
+            }
             else
             {
                 for (var i = _trails.Count - 1; i >= 0; i--)
                     if (_trails[i].Pitch == live.Pitch && _trails[i].KeyDown) { _trails[i].KeyDown = false; _trails[i].Released = true; SpawnReleaseFx(live.Pitch, layout); break; }
+                for (var i = _risingMidiNotes.Count - 1; i >= 0; i--)
+                    if (_risingMidiNotes[i].Pitch == live.Pitch && _risingMidiNotes[i].Down)
+                    {
+                        _risingMidiNotes[i].Down = false;
+                        _risingMidiNotes[i].HeldSeconds = _risingMidiNotes[i].Age;
+                        break;
+                    }
             }
         }
         while (feed.TryDequeueHit(out var hit)) Impact(hit.Pitch, hit.Strength, layout);
@@ -398,23 +429,39 @@ internal sealed partial class GpuStageSimulation
         }
         for (var i = _rings.Count - 1; i >= 0; i--) { var r = _rings[i]; r.Age += frameDt; if (r.Age >= r.Life) _rings.RemoveAt(i); else _rings[i] = r; }
         for (var i = _flashes.Count - 1; i >= 0; i--) { var f = _flashes[i]; f.Age += frameDt; if (f.Age >= f.Life) _flashes.RemoveAt(i); else _flashes[i] = f; }
+        if (risingMidiStyle is { } liveNoteStyle)
+        {
+            var life = liveNoteStyle.Reach / liveNoteStyle.FallSpeed;
+            for (var i = _risingMidiNotes.Count - 1; i >= 0; i--)
+            {
+                var note = _risingMidiNotes[i];
+                note.Age += frameDt;
+                if (note.Down) note.HeldSeconds = note.Age;
+                if (note.Age >= life) { _risingMidiNotes.RemoveAt(i); continue; }
+            }
+            _arRisingMidiNotes.Clear();
+            foreach (var note in _risingMidiNotes)
+                _arRisingMidiNotes.Add(new ArLiveMidiNote(note.Pitch, note.Age, note.HeldSeconds, note.Down, note.Strength));
+        }
         for (var i = _trails.Count - 1; i >= 0; i--)
         {
             var trail = _trails[i];
             trail.Age += frameDt;
             if (trail.KeyDown) trail.Held += frameDt;
+            var releaseAge = trail.Age - trail.Held;
+            var reachedArLimit = arLiveReleaseSeconds > 0 && releaseAge >= arLiveReleaseSeconds;
             if (look.Rising)
             {
                 trail.Hit = true;
-                var tailY = layout.HitY - (trail.Age - trail.Held) * look.LiveFallSpeed;
-                if (trail.Released && tailY < -32) _trails.RemoveAt(i);
+                var tailY = layout.HitY - releaseAge * look.LiveFallSpeed;
+                if (trail.Released && (reachedArLimit || arLiveReleaseSeconds <= 0 && tailY < -32)) _trails.RemoveAt(i);
             }
             else
             {
                 var y = 28 + trail.Age * look.LiveFallSpeed;
                 if (!trail.Hit && y >= layout.HitY) { trail.Hit = true; Impact(trail.Pitch, .8f, layout); }
                 var tailY = y - 28 - trail.Held * look.LiveFallSpeed;
-                if (trail.Released && tailY > layout.HitY + 32) _trails.RemoveAt(i);
+                if (trail.Released && (reachedArLimit || arLiveReleaseSeconds <= 0 && tailY > layout.HitY + 32)) _trails.RemoveAt(i);
             }
         }
         // what the AR layer draws for the player's own hands, in the order the keys went down

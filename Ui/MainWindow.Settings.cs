@@ -80,6 +80,7 @@ public partial class MainWindow
         [nameof(PianoVisualSettings.NoteFallSpeed)] = "tempo speed velocity scroll fast slow fps",
         [nameof(PianoVisualSettings.NoteStyle)] = "material surface gemstone crystal prism facets outline flat",
         [nameof(PianoVisualSettings.Notes3D)] = "depth bevel dimensional flat 2d 3d",
+        [nameof(PianoVisualSettings.ArRisingMidiNotes)] = "midi live note on noteoff rising perform 3d",
         [nameof(PianoVisualSettings.NoteGlow)] = "brightness halo shine luminance",
         [nameof(PianoVisualSettings.NoteTint)] = "opacity alpha transparency",
         [nameof(PianoVisualSettings.NoteWidth)] = "thickness bar lane size",
@@ -603,15 +604,15 @@ public partial class MainWindow
         ButtonRow(alignment, ("CALIBRATE", CalibrateAr_Click, null), ("RESET CALIBRATION", ResetArCalibration_Click, null));
         Note(alignment, "In Calibrate, drag the Move / Rotate / Scale gizmo or use the numeric controls to translate, rotate and uniformly scale the keyboard. Note travel has its own separate controls.");
 
-        var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint. Lookahead applies only in Learn mode.");
-        Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint remains available and press bars are optional below.",
+        var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint and optional rising MIDI notes. Lookahead applies to song notes in Learn only; 3D live bars and Perform notes use independent fixed 3-second reaches.");
+        Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint and the independently toggled rising MIDI notes remain available.",
             (ArModes.Learn, "Learn"), (ArModes.Perform, "Perform"));
         SliderRow(playback, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before a song note sounds it starts to appear above the keys. Longer shows more of the song; shorter keeps the picture calmer.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(playback, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "Adjust the strength of AR notes and key lighting over the camera picture.");
 
         var notes = Card(CameraSettingsHost, "3D NOTE PATH", "Perspective notes follow the saved keyboard pose. Their travel direction is independent: changing it never moves or rotates the keyboard.");
-        Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "On projects song notes as camera-facing 3D quads from the saved keyboard pose. Off keeps the legacy flat note overlay. Note travel is adjusted below; falling-note trails are omitted over the camera to avoid misaligned streaks. Ambient petals and stars stay flat. Needs Direct3D and a valid calibration.");
+        Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Use the Live Stage note material and colour. On projects notes as camera-facing quads from the saved 3D keyboard pose; note shimmer stays with its pitch. Off keeps the legacy flat note overlay. Stage-space falling trails are omitted over the camera; ambient petals and stars remain screen-space. Requires Direct3D and a valid calibration.");
         SliderRow(notes, "Note direction tilt", nameof(PianoVisualSettings.ArNoteDirectionTilt), ArOptions.NoteDirectionTiltMin, ArOptions.NoteDirectionTiltMax, "0° sends notes along key depth, perpendicular to the key row, toward the player. 90° points away from the key surface; 180° reverses key depth.")
             .VisibleWhen = () => _visualSettings.ArNotesProjected;
         SliderRow(notes, "Note direction azimuth", nameof(PianoVisualSettings.ArNoteDirectionAzimuth), ArOptions.NoteDirectionAzimuthMin, ArOptions.NoteDirectionAzimuthMax, "Azimuth turns note travel around the keyboard's 3D axes. At 90° tilt it can aim across the key row. Use Calibrate's Screen-up or Along key depth buttons for quick directions.")
@@ -619,9 +620,10 @@ public partial class MainWindow
         SliderRow(notes, "Minimum note length", nameof(PianoVisualSettings.ArNoteMinScale), ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, "Set the shortest 3D note as a share of its key width. Zero keeps the MIDI duration; larger values extend very short notes, while same-key repeats stay separate. Lite uses flat notes, so this setting applies only to perspective notes.")
             .VisibleWhen = () => _visualSettings.ArNotesProjected;
 
-        var live = Card(CameraSettingsHost, "LIVE KEY RESPONSE", "Key tint works on its own. Live press bars are optional; velocity settings below change note width and fade, not key tint.");
-        SliderRow(live, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the real key colour unchanged, even when live press bars are off.");
-        Toggle(live, "Live press bars", nameof(PianoVisualSettings.ArLivePressTrails), "Show a bar extending from each key while it is held, fading shortly after release. Off by default for a cleaner stream or call. Turning bars off never disables key tint.");
+        var live = Card(CameraSettingsHost, "LIVE KEY RESPONSE", "Key tint, rising MIDI notes and held-key press bars are independent. Velocity settings below change note width and fade, not key tint.");
+        SliderRow(live, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the real key colour unchanged, even when live notes and press bars are off.");
+        Toggle(live, "MIDI notes rise in Perform", nameof(PianoVisualSettings.ArRisingMidiNotes), "In Perform mode, each MIDI Note On creates its own calibrated 3D note that travels along the AR note direction. Note Off freezes its length; it keeps moving to a fixed three-second reach, independent of Learn lookahead. Repeated strikes of one pitch stay separate. This note stream is independent of key tint and optional live press bars; it requires a valid calibration.");
+        Toggle(live, "Live press bars", nameof(PianoVisualSettings.ArLivePressTrails), "Show a bar growing from each pressed key. With a valid 3D camera pose on Standard or Ultra, release does not freeze it: the bar keeps moving along the selected note path to a fixed three-second reach, independent of Learn lookahead. In Lite or the flat fallback, it fades in place. Off by default for a cleaner stream or call. Turning bars off never disables key tint.");
         Toggle(live, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Let MIDI velocity change the width of song notes and live press bars.");
         SliderRow(live, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a very soft strike, as a percentage of the normal note width.")
             .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
@@ -637,7 +639,7 @@ public partial class MainWindow
         SliderRow(output, "Camera delay", nameof(PianoVisualSettings.ArDelay), ArOptions.DelayMin, ArOptions.DelayMax, "Delay the camera picture and its AR notes together so they line up with your hands. The piano audio itself is not delayed; recordings with the camera align their audio separately. Zero adds no delay.");
         ButtonRow(output, ("MEASURE DELAY", MeasureArDelay_Click, null));
         Note(output, "Measure delay: press about twenty keys while your hands are visible in the camera. PianoPath compares the key presses with the picture and suggests a matching delay.");
-        Choice(output, "Quality", nameof(PianoVisualSettings.ArQuality), "Lite omits AR lights. Standard adds key tint and projected impact lights; Ultra adds key-plane pulses and rising sparks. AR transients are experimental; notes and press bars remain available at every tier.",
+        Choice(output, "Quality", nameof(PianoVisualSettings.ArQuality), "Lite omits AR lighting and transients but keeps notes and live bars. Standard adds calibrated key tint, neighboring-key spill and projected impact lights. Ultra also enables key-plane rings, particle bursts, flashes, hold arcs and keyed beams. AR transient effects remain experimental; notes and bars are available at every tier.",
             (ArQualityTiers.LiteName, "Lite"), (ArQualityTiers.StandardName, "Standard"), (ArQualityTiers.UltraName, "Ultra"));
         ButtonRow(output, ("OPEN TRANSPARENT AR OUTPUT", OpenArAlphaOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;
         ButtonRow(output, ("OPEN GEOMETRY + GLOW OUTPUTS", OpenArGeometryGlowOutput_Click, null)).VisibleWhen = () => _arPlan.ArLayer;

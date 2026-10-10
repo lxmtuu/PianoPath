@@ -33,10 +33,11 @@ internal static class ArModes
 /// <param name="LivePressTrails">Draw the player's growing press bars over the camera; independent of the lit-key tint.</param>
 /// <param name="NoteDirectionTilt">The independent 3D tilt of note travel away from the default back-to-keys axis.</param>
 /// <param name="NoteDirectionAzimuth">The independent 3D azimuth around that axis.</param>
+/// <param name="RisingMidiNotes">In Perform mode, create a separate calibrated 3D note on each MIDI Note On; Note Off freezes its length but does not stop its travel.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
     bool NotesInPerspective = false, double NoteMinScale = 0, bool LivePressTrails = false,
-    double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0)
+    double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0, bool RisingMidiNotes = true)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
@@ -45,6 +46,20 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     internal const double NoteMinScaleMin = 0, NoteMinScaleMax = 200, NoteMinScaleDefault = 0;
     internal const double NoteDirectionTiltMin = 0, NoteDirectionTiltMax = 180, NoteDirectionTiltDefault = 0;
     internal const double NoteDirectionAzimuthMin = -180, NoteDirectionAzimuthMax = 180, NoteDirectionAzimuthDefault = 0;
+    /// <summary>The optional live press bars keep a fixed three-second reach; Learn lookahead is independent.</summary>
+    internal const double LivePressReachSeconds = 3;
+    /// <summary>Perform MIDI-note objects keep a fixed three-second reach; Learn lookahead is independent.</summary>
+    internal const double RisingMidiNoteReachSeconds = 3;
+
+    internal static ArNoteStyle LivePressNoteStyle(ArNoteStyle notes) => notes with
+    {
+        Reach = LivePressReachSeconds * notes.FallSpeed
+    };
+
+    internal static ArNoteStyle RisingMidiNoteStyle(ArNoteStyle notes) => notes with
+    {
+        Reach = RisingMidiNoteReachSeconds * notes.FallSpeed
+    };
 
     internal static readonly ArOptions Default = new(false, ArModes.Learn, OpacityDefault, LookaheadDefault, KeyLightDefault);
 
@@ -78,6 +93,9 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
 
     /// <summary>Learn draws the notes to come; Perform leaves them out and keeps the lit keys.</summary>
     internal bool ShowsNotes => ArModes.Normalize(Mode) == ArModes.Learn;
+
+    /// <summary>Perform draws a new 3D note for each live MIDI onset when that independent setting is on.</summary>
+    internal bool ShowsRisingMidiNotes => ArModes.Normalize(Mode) == ArModes.Perform && RisingMidiNotes;
 
     /// <summary>The layer's opacity, 0..1.</summary>
     internal float LayerOpacity => (float)(Normalised().Opacity / 100);

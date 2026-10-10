@@ -244,6 +244,7 @@
     "ArNoteFadeHard": 100.0,
     "ArNotesInPerspective": false,
     "ArLivePressTrails": false,
+    "ArRisingMidiNotes": true,
     "ArNoteMinScale": 0.0,
     "ArNoteDirectionTilt": 0.0,
     "ArNoteDirectionAzimuth": 0.0,

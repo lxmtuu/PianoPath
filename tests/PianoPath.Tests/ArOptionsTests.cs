@@ -63,6 +63,17 @@ public class ArOptionsTests
     }
 
     [Fact]
+    public void Rising_live_midi_notes_are_enabled_by_default_but_only_draw_in_perform_mode()
+    {
+        Assert.True(ArOptions.Default.RisingMidiNotes);
+        Assert.False(ArOptions.Default.ShowsRisingMidiNotes);
+        var perform = new ArOptions(true, ArModes.Perform, 100, 3, 60);
+        Assert.True(perform.ShowsRisingMidiNotes);
+        Assert.False((perform with { RisingMidiNotes = false }).ShowsRisingMidiNotes);
+        Assert.False((perform with { Mode = ArModes.Learn }).ShowsRisingMidiNotes);
+    }
+
+    [Fact]
     public void Percent_becomes_a_fraction()
     {
         var o = new ArOptions(true, ArModes.Learn, 40, 3, 25);

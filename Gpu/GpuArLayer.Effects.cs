@@ -11,6 +11,189 @@ internal sealed partial class GpuArLayer
     private static readonly ArVec3 Depth = new(0, 1, 0);
     private static readonly ArVec3 Normal = new(0, 0, 1);
 
+    /// <summary>Pose-projects note ghosts, trails and approach glows which the stage keeps in its screen-space sprite pass.</summary>
+    private void BuildProjectedSongNoteEffects(GpuArInput ar, ArView view, Ar3DNoteShape shape, NoteEvent note,
+        double position, float opacity, GpuLook look, GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads)
+    {
+        if (ar.Calibration.CameraPose is not { } pose) return;
+        var color = SongNoteColor(shape.Pitch, note, shape.Sounding, look, simulation.Time);
+        var noteOpacity = note.Played ? .42f : 1f;
+
+        AddProjectedNoteTrail(ar.Notes.Reach, shape, color, opacity * noteOpacity * (float)shape.Fade,
+            look, simulation.Time, quads, pose, view);
+
+        if (look.FallingGhost && !shape.Sounding && look.FallingGhostAmount > .01f)
+        {
+            var strength = look.FallingGhostAmount * noteOpacity;
+            var copies = strength > .66f ? 3 : strength > .33f ? 2 : 1;
+            var bodyLength = Math.Max(0, shape.TailDistance - shape.HeadDistance);
+            var step = Math.Max(.05, .06 + bodyLength * .12);
+            for (var i = 1; i <= copies; i++)
+            {
+                // Song notes advance toward the key plane as the playhead moves, so their leading echoes use
+                // smaller keyboard-local distances. Each copy remains its own camera-facing quad at the pose.
+                var offset = step * i;
+                var head = Math.Max(0, shape.HeadDistance - offset);
+                var tail = Math.Max(0, shape.TailDistance - offset);
+                if (!(tail > head + 1e-7)
+                    || !Ar3DNoteProjection.TryPatch(pose, view, shape.Target, shape.Travel, head, tail,
+                        shape.HalfWidthWorld, out var ghostPatch, out _, out _, out _)) continue;
+                AddSongNote(quads, ghostPatch, shape.Pitch, shape.NoteIndex, false, shape.Fade,
+                    note, opacity * (float)(strength * .3 / i), look, simulation.Time, ghostPass: true);
+                GhostNoteQuadCount++;
+            }
+        }
+
+        if (!look.NoteLandingGlow || look.Chroma) return;
+        var until = note.Start - position;
+        if (!(until > 0) || until > .55) return;
+        var rise = 1 - Math.Clamp(until / .55, 0, 1);
+        var glowStrength = (float)(look.NoteLandingGlowAmount * rise * rise * (.7 + .3 * simulation.Activity));
+        if (glowStrength <= .01f) return;
+        var center = shape.Target + Depth * .27;
+        var halfWidth = shape.HalfWidthWorld * 1.4;
+        var halfDepth = .035 + .05 * rise;
+        var linear = GpuStageSimulation.ToLinear(color);
+        if (Ar3DNoteProjection.TryProjectBillboard(pose, view, center, Across, Depth,
+                halfWidth, halfDepth, out var broadGlow))
+        {
+            quads.Add(Pack(broadGlow, linear * 1.7f, opacity * glowStrength * .5f, new Vector4(0, 0, 3, 0)));
+            LandingGlowCount++;
+        }
+        if (Ar3DNoteProjection.TryProjectBillboard(pose, view, center, Across, Depth,
+                halfWidth * .48, halfDepth * .52, out var hotGlow))
+        {
+            quads.Add(Pack(hotGlow, Vector3.One * 1.9f, opacity * glowStrength * .8f, new Vector4(0, 0, 3, 0)));
+            LandingGlowCount++;
+        }
+    }
+
+    private void BuildProjectedRisingMidiEffects(GpuArInput ar, ArView view, Ar3DLiveMidiNote note, float opacity,
+        GpuLook look, double time, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose)
+    {
+        var color = LiveNoteColor(note.Pitch, note.Held, note.Strength, look.NoteColor(note.Pitch, 0), look, time);
+        var reach = ar.RisingMidiNoteStyle.Reach;
+        AddProjectedTrail(reach, note.Pitch, note.Target, note.Travel, note.HeadDistance, note.TailDistance,
+            note.HalfWidthWorld, true, color, opacity * (float)note.Fade, look, time, quads, pose, view);
+        if (!look.FallingGhost || note.Held || look.FallingGhostAmount <= .01f) return;
+        AddProjectedMovingGhosts(note.Target, note.Travel, note.HeadDistance, note.TailDistance,
+            note.HalfWidthWorld, reach, note.Fade, opacity, look, quads, pose, view,
+            (patch, fade, ghostOpacity) => AddLiveBar(quads, patch, note.Pitch, fade, false, note.Strength,
+                look.NoteColor(note.Pitch, 0), ghostOpacity, look, time, ghostPass: true));
+    }
+
+    private void BuildProjectedLiveBarEffects(GpuArInput ar, ArView view, Ar3DLiveBar bar, float opacity,
+        GpuLook look, double time, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose)
+    {
+        var color = LiveNoteColor(bar.Pitch, bar.Held, bar.Strength, look.NoteColor(bar.Pitch, 0), look, time);
+        AddProjectedTrail(ar.LivePressStyle.Reach, bar.Pitch, bar.Target, bar.Travel, bar.HeadDistance, bar.TailDistance,
+            bar.HalfWidthWorld, true, color, opacity * (float)bar.Fade, look, time, quads, pose, view);
+        if (!look.FallingGhost || bar.Held || look.FallingGhostAmount <= .01f) return;
+        AddProjectedMovingGhosts(bar.Target, bar.Travel, bar.HeadDistance, bar.TailDistance,
+            bar.HalfWidthWorld, ar.LivePressStyle.Reach, bar.Fade, opacity, look, quads, pose, view,
+            (patch, fade, ghostOpacity) => AddLiveBar(quads, patch, bar.Pitch, fade, false, bar.Strength,
+                look.NoteColor(bar.Pitch, 0), ghostOpacity, look, time, ghostPass: true));
+    }
+
+    private void AddProjectedMovingGhosts(ArVec3 target, ArVec3 travel, double headDistance,
+        double tailDistance, double halfWidthWorld, double reach, double fade, float opacity,
+        GpuLook look, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose, ArView view,
+        Action<ArPatch, double, float> drawGhost)
+    {
+        var strength = look.FallingGhostAmount;
+        if (strength <= .01f) return;
+        var copies = strength > .66f ? 3 : strength > .33f ? 2 : 1;
+        var bodyLength = Math.Max(0, tailDistance - headDistance);
+        var step = Math.Max(.05, .06 + bodyLength * .12);
+        for (var i = 1; i <= copies; i++)
+        {
+            // Rising live objects advance toward increasing depth distances; copies lead farther along that same path.
+            var head = Math.Min(reach, headDistance + step * i);
+            var tail = Math.Min(reach, tailDistance + step * i);
+            if (!(tail > head + 1e-7)
+                || !Ar3DNoteProjection.TryPatch(pose, view, target, travel, head, tail, halfWidthWorld,
+                    out var ghostPatch, out _, out _, out _)) continue;
+            var ghostOpacity = opacity * (float)(strength * .3 / i);
+            drawGhost(ghostPatch, fade, ghostOpacity);
+            GhostNoteQuadCount++;
+        }
+    }
+
+    private void BuildProjectedSongNoteLabel(ArView view, Ar3DNoteShape shape, NoteEvent note, float opacity,
+        GpuLook look, double time, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose)
+    {
+        var color = SongNoteColor(shape.Pitch, note, shape.Sounding, look, time);
+        var noteOpacity = note.Played ? .42f : 1f;
+        AddProjectedNoteLabel(view, shape.Pitch, shape.Target, shape.Travel, shape.HeadDistance, shape.TailDistance,
+            shape.HalfWidthWorld, shape.HalfWidthPixels, shape.HalfLengthPixels, shape.Fade,
+            color, opacity * noteOpacity, look, quads, pose);
+    }
+
+    private void BuildProjectedLiveNoteLabel(ArView view, int pitch, ArVec3 target, ArVec3 travel,
+        double headDistance, double tailDistance, double halfWidthWorld, double halfWidthPixels,
+        double halfLengthPixels, double fade, bool held, float strength, float opacity, GpuLook look,
+        double time, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose)
+    {
+        var color = LiveNoteColor(pitch, held, strength, look.NoteColor(pitch, 0), look, time);
+        AddProjectedNoteLabel(view, pitch, target, travel, headDistance, tailDistance, halfWidthWorld,
+            halfWidthPixels, halfLengthPixels, fade, color, opacity, look, quads, pose);
+    }
+
+    private void AddProjectedNoteLabel(ArView view, int pitch, ArVec3 target, ArVec3 travel,
+        double headDistance, double tailDistance, double halfWidthWorld, double halfWidthPixels,
+        double halfLengthPixels, double fade, Vector3 color, float opacity, GpuLook look,
+        GpuInstanceList<GpuArQuad> quads, ArCameraPose pose)
+    {
+        if (!look.ShowNoteLabels || halfWidthPixels * 2 < 11 || halfLengthPixels * 2 < 15) return;
+        var length = tailDistance - headDistance;
+        if (!(length > 1e-7)) return;
+        var fontPixels = Math.Min(11, halfWidthPixels * 2 * .62);
+        var worldPerPixel = length / (2 * halfLengthPixels);
+        var glyphLength = Math.Min(length, fontPixels * worldPerPixel);
+        var glyphHalfWidth = Math.Min(halfWidthWorld, glyphLength);
+        if (!(glyphLength > 1e-7) || !(glyphHalfWidth > 0)) return;
+        // The note-name atlas cell is anchored near the leading/key-side edge, like the Stage label's lower edge.
+        var labelStart = headDistance;
+        var labelEnd = Math.Min(tailDistance, labelStart + glyphLength);
+        if (!Ar3DNoteProjection.TryPatch(pose, view, target, travel, labelStart, labelEnd,
+                glyphHalfWidth, out var patch, out _, out _, out _)) return;
+        var luminance = (.2126f * color.X + .7152f * color.Y + .0722f * color.Z) * 255;
+        var textColor = look.NoteStyle == 1 || luminance <= 150
+            ? Vector3.One : GpuStageSimulation.ToLinear(new Vector3(12 / 255f, 8 / 255f, 20 / 255f));
+        var cell = (halfWidthPixels * 2 >= 20 ? GpuStageSimulation.AtlasNoteCell : GpuStageSimulation.AtlasShortCell) + pitch;
+        quads.Add(Pack(patch, textColor, opacity * (float)fade * (230 / 255f), new Vector4(cell, 0, 10, 0)));
+        NoteLabelCount++;
+    }
+
+    private void AddProjectedNoteTrail(double reach, Ar3DNoteShape shape, Vector3 color, float opacity,
+        GpuLook look, double time, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose, ArView view) =>
+        AddProjectedTrail(reach, shape.Pitch, shape.Target, shape.Travel, shape.HeadDistance, shape.TailDistance,
+            shape.HalfWidthWorld, false, color, opacity, look, time, quads, pose, view);
+
+    private void AddProjectedTrail(double reach, int pitch, ArVec3 target, ArVec3 travel, double headDistance,
+        double tailDistance, double halfWidthWorld, bool trailsBehindMotion, Vector3 color, float opacity,
+        GpuLook look, double time, GpuInstanceList<GpuArQuad> quads, ArCameraPose pose, ArView view)
+    {
+        if (look.FallingTrail == "None" || look.FallingTrailIntensity <= .01f || opacity <= .001f) return;
+        var kind = look.FallingTrail switch
+        {
+            "Glow" => 0, "Sparkles" => 1, "Speed Lines" => 2, "Blur" => 3,
+            "Ribbon" => 4, "Rainbow" => 5, "Stream" => 6, _ => -1
+        };
+        if (kind < 0) return;
+        var bodyLength = Math.Max(0, tailDistance - headDistance);
+        var trailLength = Math.Max(.08, bodyLength * look.FallingTrailLength + .08);
+        var start = trailsBehindMotion ? Math.Max(0, headDistance - trailLength) : tailDistance;
+        var end = trailsBehindMotion ? headDistance : Math.Min(reach, tailDistance + trailLength);
+        if (!(end > start + 1e-7)
+            || !Ar3DNoteProjection.TryPatch(pose, view, target, travel, start, end,
+                halfWidthWorld, out var patch, out _, out _, out _)) return;
+        quads.Add(Pack(patch, GpuStageSimulation.ToLinear(color) * 1.35f,
+            opacity * look.FallingTrailIntensity,
+            new Vector4(kind, look.FallingTrailIntensity, 9, pitch * 1.6180339f + (float)time * .13f)));
+        NoteTrailQuadCount++;
+    }
+
     /// <summary>Soft note-light spill lands on neighbouring real keys, using the same glow history as the key tint.</summary>
     private void BuildProjectedNoteLights(GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors,
         GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)

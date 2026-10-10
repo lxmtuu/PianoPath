@@ -1418,7 +1418,7 @@ internal static partial class VerificationSuite
         GpuStageFeed MakeFeed(GpuArInput? ar, bool mirror = false, IReadOnlyList<NoteEvent>? song = null,
             double position = 10, bool playing = true, IReadOnlySet<int>? pressed = null, bool overCamera = true)
         {
-            var feed = new GpuStageFeed();
+            var feed = new GpuStageFeed { LabelAtlas = PianoStage.GpuGlyphAtlas };
             feed.SetStageHeight(height);
             feed.SetLook(GpuLook.From(settings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: overCamera));
             feed.SetDeterministicState(song ?? notes, position, playing, pressed ?? new HashSet<int>());
@@ -1489,6 +1489,69 @@ internal static partial class VerificationSuite
             Assert(Look(projected, width, height, at) is { } pixel && pixel.Off > 40,
                 $"The rendered note for pitch {shape.Pitch} must occupy the camera-projected 3D patch centre ({at.X:0.0},{at.Y:0.0}).");
         }
+
+        // AR note quads share the stage's material and sRGB-to-linear path, not the old flat cyan quad approximation.
+        var colorAt = Centre(expected[0].Patch);
+        var colorIndex = ((int)Math.Floor(colorAt.Y) * width + (int)Math.Floor(colorAt.X)) * 4;
+        var noteRed = projected[colorIndex + 2];
+        var noteGreen = projected[colorIndex + 1];
+        Assert(noteRed > noteGreen * 1.8,
+            $"A magenta sRGB note must be linearized before the HDR shader (expected red to stay well above green, got R={noteRed}, G={noteGreen}).");
+        settings.NoteStyle = "Glass";
+        var glassNotes = Render(MakeFeed(defaultInput));
+        settings.NoteStyle = "Gem";
+        var gemNotes = Render(MakeFeed(defaultInput));
+        settings.NoteStyle = "Solid";
+        Assert(ChangedPixels(projected, glassNotes, threshold: 4) > 100
+                && ChangedPixels(projected, gemNotes, threshold: 4) > 100
+                && renderer.ArQuadCount == expected.Count,
+            "Camera-projected notes must respond to the same Glass and Gem material branches as Live Stage without changing their 3D quad count.");
+
+        settings.NoteShimmer = true;
+        settings.NoteShimmerAmount = 100;
+        var shimmerNotes = Render(MakeFeed(defaultInput));
+        var shimmerPixels = ChangedPixels(projected, shimmerNotes, threshold: 4);
+        var shimmerQuads = renderer.ArQuadCount;
+        settings.NoteShimmer = false;
+        settings.NoteShimmerAmount = 45;
+        Assert(shimmerQuads == expected.Count * 2 && shimmerPixels > 20,
+            $"Note shimmer should draw a visible sheen inside each calibrated note quad ({shimmerQuads} quads, {shimmerPixels} changed pixels).");
+
+        settings.FallingTrail = "Glow";
+        settings.FallingTrailIntensity = 100;
+        settings.FallingTrailLength = 60;
+        var glowTrailNotes = Render(MakeFeed(defaultInput));
+        var glowTrailQuads = renderer.ArNoteTrailQuadCount;
+        var glowTrailPixels = ChangedPixels(projected, glowTrailNotes, threshold: 4);
+        settings.FallingTrail = "Stream";
+        var streamTrailNotes = Render(MakeFeed(defaultInput));
+        var streamTrailQuads = renderer.ArNoteTrailQuadCount;
+        Assert(glowTrailQuads == expected.Count && streamTrailQuads == expected.Count
+                && glowTrailPixels > 20 && ChangedPixels(glowTrailNotes, streamTrailNotes, threshold: 4) > 10,
+            $"Configured Glow and Stream note trails should stay on each calibrated 3D path and produce distinct pixels ({glowTrailQuads}/{streamTrailQuads} quads, {glowTrailPixels} changed pixels).");
+        settings.FallingTrail = "None";
+        settings.FallingGhost = true;
+        settings.FallingGhostAmount = 100;
+        var ghostNotes = Render(MakeFeed(defaultInput));
+        var ghostQuads = renderer.ArGhostNoteQuadCount;
+        Assert(ghostQuads >= expected.Count && ChangedPixels(projected, ghostNotes, threshold: 4) > 20,
+            $"Falling Ghost should add calibrated, pitch-bound echoes ahead of future notes ({ghostQuads} projected copies).");
+        settings.FallingGhost = false;
+        settings.NoteLandingGlow = true;
+        settings.NoteLandingGlowAmount = 100;
+        var landingNotes = Render(MakeFeed(defaultInput));
+        var landingGlowCount = renderer.ArLandingGlowCount;
+        Assert(landingGlowCount >= expected.Count && ChangedPixels(projected, landingNotes, threshold: 4) > 20,
+            $"Note Landing Glow should project an approach cue onto each upcoming real key ({landingGlowCount} calibrated glow quads).");
+        settings.NoteLandingGlow = false;
+        settings.NoteLandingGlowAmount = 18;
+        settings.ShowNoteLabels = true;
+        var labelledNotes = Render(MakeFeed(defaultInput));
+        var noteLabelCount = renderer.ArNoteLabelCount;
+        var noteLabelPixels = ChangedPixels(projected, labelledNotes, threshold: 4);
+        settings.ShowNoteLabels = false;
+        Assert(noteLabelCount > 0 && noteLabelPixels > 10,
+            $"Show note labels should sample the atlas on calibrated note quads ({noteLabelCount} projected labels, {noteLabelPixels} changed pixels).");
 
         // The actual WARP AR pass must follow saved translation and uniform scale as well as the plane rotation.
         var objectTransform = new ArPoseTransform(.06, -.03, .01, 8, -5, 3, 1.05);
@@ -1646,6 +1709,33 @@ internal static partial class VerificationSuite
         Assert(tintPixels > 20,
             $"Turning bars off must not turn the independent held-key tint off ({tintPixels} pixels still respond to key-light strength).");
 
+        // Perform-mode Note On objects are independent of the optional press-bar channel and remain available in Lite.
+        var risingMidiInput = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
+            ShowNotes: false, Quality: ArQualityTier.Lite, NoteDirection: new ArNoteDirection(68, 37), ShowRisingMidiNotes: true);
+        var risingMidiFeed = MakeFeed(risingMidiInput, song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        risingMidiFeed.LiveNote(60, true, .45f);
+        var risingMidiFrame = GpuRenderLoop.RenderFrames(renderer, risingMidiFeed, width, height, 22, 1 / 60.0, false,
+            out _, frame =>
+            {
+                if (frame == 4 || frame == 10) risingMidiFeed.LiveNote(60, false, 0);
+                if (frame == 7) risingMidiFeed.LiveNote(60, true, .95f);
+            }, 20260930);
+        var risingMidiCount = renderer.ArRisingMidiNoteCount;
+        var risingMidiPixels = ColouredPixels(risingMidiFrame);
+        var noRisingMidiFeed = MakeFeed(risingMidiInput with { ShowRisingMidiNotes = false },
+            song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        noRisingMidiFeed.LiveNote(60, true, .45f);
+        var noRisingMidiFrame = GpuRenderLoop.RenderFrames(renderer, noRisingMidiFeed, width, height, 22, 1 / 60.0, false,
+            out _, frame =>
+            {
+                if (frame == 4 || frame == 10) noRisingMidiFeed.LiveNote(60, false, 0);
+                if (frame == 7) noRisingMidiFeed.LiveNote(60, true, .95f);
+            }, 20260930);
+        Assert(risingMidiCount == 2 && risingMidiPixels > 30 && renderer.ArRisingMidiNoteCount == 0
+                && renderer.ArLiveBarCount == 0 && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
+                && ChangedPixels(risingMidiFrame, noRisingMidiFrame, threshold: 4) > 25,
+            $"Each same-pitch MIDI Note On must create a distinct calibrated rising note that survives its Note Off, independently of press bars and Lite's transient gate ({risingMidiCount} notes, {risingMidiPixels} pixels; disabled count {renderer.ArRisingMidiNoteCount}).");
+
         // These four Live Stage hold modifiers belong to the optional live-bar channel and must survive 3D projection.
         (byte[] Pixels, int Bars) RenderHoldModifier(PianoVisualSettings holdSettings)
         {
@@ -1743,6 +1833,25 @@ internal static partial class VerificationSuite
         RenderFrames(flatNotesLiveBars, 8);
         Assert(renderer.ArLiveBarCount > 0 && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
             "The live press bar remains 3D and stage-space notes/trails stay suppressed when Notes in perspective is toggled off.");
+
+        // Stage-space bars used to be culled as soon as their 2D tail left the canvas. A calibrated AR bar must
+        // stay alive beyond that edge, keep travelling in its 3D direction, then disappear exactly at its AR reach.
+        var releasePathFeed = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
+                ShowNotes: false, ProjectedNotes: false, ShowLiveTrails: true),
+            song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        releasePathFeed.LiveNote(60, true, .9f);
+        var releasePathInput = new GpuFrameInput();
+        var releasePathSimulation = new GpuStageSimulation(20261010);
+        var barsPastStageEdge = 0;
+        for (var frame = 0; frame <= 190; frame++)
+        {
+            if (frame == 4) releasePathFeed.LiveNote(60, false, 0);
+            releasePathFeed.Capture(releasePathInput, GpuStageFeed.Now);
+            releasePathSimulation.Step(1 / 60.0, releasePathInput, releasePathFeed, width);
+            if (frame == 70) barsPastStageEdge = releasePathSimulation.LivePresses.Count;
+        }
+        Assert(barsPastStageEdge == 1 && releasePathSimulation.LivePresses.Count == 0,
+            $"A released calibrated bar should outlive the old ~1.1 s stage-edge cutoff, then expire at its {ArOptions.LivePressReachSeconds:0.00} s fixed AR reach ({barsPastStageEdge} past the old edge, {releasePathSimulation.LivePresses.Count} at the limit).");
 
         // A release is a separate effect phase and must be anchored to the source pitch, not flattened over camera.
         var releaseFeed = PressFeed(false, .6f, ArQualityTier.Ultra, visualSettings: liveFxLook, activePitches: new[] { 60 });
@@ -1884,8 +1993,9 @@ internal static partial class VerificationSuite
             "Enabling 3D note projection must leave shooting stars screen-space and byte-identical.");
 
         Results.Add($"PASS AR 3D note render (AR-S4): WARP drew {projectedPixels} projected note pixels into {expected.Count} AR-owned quads with no stage notes/trails; the flat-map failure did not hide them, mirroring and independent 3D direction worked, Perform omitted notes, and minimum length grew short notes.");
+        Results.Add($"PASS AR note color/material/effects: magenta read back R/G {noteRed}/{noteGreen}; Glass/Gem changed {ChangedPixels(projected, glassNotes, threshold: 4)}/{ChangedPixels(projected, gemNotes, threshold: 4)} pixels; shimmer changed {shimmerPixels} pixels in {shimmerQuads} quads; Glow/Stream trails used {glowTrailQuads}/{streamTrailQuads} 3D quads; ghosts {ghostQuads}; landing glow {landingGlowCount} quads; atlas labels {noteLabelCount}/{noteLabelPixels}.");
         Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
-        Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; flat falling-note trails added no pixels over the camera.");
+        Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; a released bar survived the old stage-edge cull ({barsPastStageEdge}) and retired at 3D reach ({releasePathSimulation.LivePresses.Count}); flat falling-note trails added no pixels over the camera.");
         Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
         Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }

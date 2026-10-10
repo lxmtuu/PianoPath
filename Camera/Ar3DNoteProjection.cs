@@ -39,11 +39,18 @@ internal readonly record struct ArNoteDirection(double TiltDegrees = 0, double A
 
 /// <summary>A GPU-ready note patch and the pixel-space half-size used by the shared note material.</summary>
 internal readonly record struct Ar3DNoteShape(ArPatch Patch, int Pitch, int NoteIndex, bool Black, bool Sounding, double Fade,
-    double HalfWidthPixels, double HalfLengthPixels, double SceneY);
+    double HalfWidthPixels, double HalfLengthPixels, double SceneY, ArVec3 Target, ArVec3 Travel,
+    double HeadDistance, double TailDistance, double HalfWidthWorld);
 
 /// <summary>A 3D-projected live key bar, still independent of the key's own tint.</summary>
 internal readonly record struct Ar3DLiveBar(ArPatch Patch, int Pitch, double Fade, bool Held, float Strength,
-    double HalfWidthPixels, double HalfLengthPixels, double SceneY);
+    double HalfWidthPixels, double HalfLengthPixels, double SceneY, ArVec3 Target, ArVec3 Travel,
+    double HeadDistance, double TailDistance, double HalfWidthWorld);
+
+/// <summary>A travelling, velocity-colored AR note emitted by one MIDI Note On.</summary>
+internal readonly record struct Ar3DLiveMidiNote(ArPatch Patch, int Pitch, double Fade, bool Held, float Strength,
+    double HalfWidthPixels, double HalfLengthPixels, double SceneY, ArVec3 Target, ArVec3 Travel,
+    double HeadDistance, double TailDistance, double HalfWidthWorld);
 
 /// <summary>
 /// Makes notes and optional live bars in actual keyboard-local 3D, projected through the calibration's camera pose.
@@ -100,9 +107,10 @@ internal static class Ar3DNoteProjection
 
                 var target = new ArVec3(layout.CenterX(note.Pitch) * pose.KeyboardWidthDepthRatio, 0, 0);
                 if (!TryPatch(pose, view, target, travel, headDistance, tailDistance, halfWidth, out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;
-                var fade = Math.Clamp((style.Reach - headDistance) / (style.Reach * .25), 0, 1) * style.FadeGraph.Sample(velocity);
+                var fadeRate = Math.Clamp(style.FadeGraph.Sample(velocity), .1, 2);
+                var fade = Math.Clamp((style.Reach - headDistance) * fadeRate / (style.Reach * .25), 0, 1);
                 into.Add(new Ar3DNoteShape(patch, note.Pitch, index, wantBlack, note.Start <= position && note.End > position,
-                    fade, halfWidthPx, halfLengthPx, sceneY));
+                    fade, halfWidthPx, halfLengthPx, sceneY, target, travel, headDistance, tailDistance, halfWidth));
             }
         }
     }
@@ -125,11 +133,16 @@ internal static class Ar3DNoteProjection
                 if (!layout.Contains(press.Pitch) || KeyboardLayout.IsBlack(press.Pitch) != wantBlack) continue;
                 if (!double.IsFinite(press.Age) || !double.IsFinite(press.HeldSeconds) || press.HeldSeconds <= 0) continue;
                 var gone = 1.0;
+                var releaseDistance = 0.0;
                 if (!press.Down)
                 {
                     var since = press.Age - press.HeldSeconds;
-                    if (!(since >= 0) || since >= ArNotes.ReleaseLife) continue;
-                    gone = .65 * Math.Clamp(1 - since / ArNotes.ReleaseLife, 0, 1);
+                    if (!(since >= 0) || !double.IsFinite(since)) continue;
+                    // A released bar keeps travelling along its selected 3D direction. Its lifetime follows the
+                    // same physical reach/speed as song notes rather than the legacy flat overlay's 350 ms fade.
+                    releaseDistance = since * style.FallSpeed;
+                    if (!(releaseDistance < style.Reach)) continue;
+                    gone = .65 * Math.Clamp(1 - releaseDistance / style.Reach, 0, 1);
                 }
                 var length = Math.Min(style.Reach, press.HeldSeconds * style.FallSpeed);
                 if (length < style.MinLength) continue;
@@ -138,9 +151,58 @@ internal static class Ar3DNoteProjection
                 var halfWidth = (right - left) * pose.KeyboardWidthDepthRatio * style.WidthShareFor(velocity) * .5;
                 if (!(halfWidth > 0) || !double.IsFinite(halfWidth)) continue;
                 var target = new ArVec3(layout.CenterX(press.Pitch) * pose.KeyboardWidthDepthRatio, 0, 0);
-                if (!TryPatch(pose, view, target, travel, 0, length, halfWidth, out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;
+                var headDistance = releaseDistance;
+                var tailDistance = Math.Min(style.Reach, releaseDistance + length);
+                if (!(tailDistance > headDistance + 1e-7)) continue;
+                if (!TryPatch(pose, view, target, travel, headDistance, tailDistance, halfWidth, out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;
                 var fade = Math.Clamp(1 - length / style.Reach, .08, 1) * gone * style.FadeGraph.Sample(velocity);
-                into.Add(new Ar3DLiveBar(patch, press.Pitch, fade, press.Down, press.Strength, halfWidthPx, halfLengthPx, sceneY));
+                into.Add(new Ar3DLiveBar(patch, press.Pitch, fade, press.Down, press.Strength,
+                    halfWidthPx, halfLengthPx, sceneY, target, travel, headDistance, tailDistance, halfWidth));
+            }
+        }
+    }
+
+    /// <summary>Fills one calibrated travelling note per live MIDI onset; Note Off freezes the body's held duration, not its motion.</summary>
+    internal static void BuildRisingMidiNotes(ArCalibration calibration, ArView view, IReadOnlyList<ArLiveMidiNote> notes,
+        ArNoteStyle style, ArNoteDirection direction, List<Ar3DLiveMidiNote> into, PianoSimulation? simulation = null)
+    {
+        into.Clear();
+        if (calibration.CameraPose is not { } pose || !style.IsUsable || !view.Valid || notes.Count == 0) return;
+        direction = direction.Normalised();
+        var travel = direction.Vector;
+        var layout = calibration.Layout;
+        var maxLength = Math.Min(style.Reach, Math.Max(style.MinLength, style.Reach * .25));
+
+        // Keep MIDI onset order within each colour pass, matching the song-note white-then-black draw order.
+        for (var pass = 0; pass < 2; pass++)
+        {
+            var wantBlack = pass == 1;
+            foreach (var note in notes)
+            {
+                if (!layout.Contains(note.Pitch) || KeyboardLayout.IsBlack(note.Pitch) != wantBlack
+                    || !double.IsFinite(note.Age) || note.Age < 0 || !double.IsFinite(note.HeldSeconds) || note.HeldSeconds < 0) continue;
+                var headDistance = note.Age * style.FallSpeed;
+                if (!(headDistance < style.Reach)) continue;
+                var velocity = simulation?.ActivityForVelocity(note.Strength * 127) ?? Math.Clamp(note.Strength, 0, 1);
+                var (left, right) = layout.Span(note.Pitch);
+                var noteWidth = (right - left) * pose.KeyboardWidthDepthRatio * style.WidthShareFor(velocity);
+                var halfWidth = noteWidth * .5;
+                if (!(halfWidth > 0) || !double.IsFinite(halfWidth)) continue;
+
+                // Each Note On starts a distinct object at the key and advances immediately. Its body grows to the
+                // physical hold duration, then freezes at Note Off while the leading edge continues to the AR reach.
+                var length = Math.Min(maxLength, Math.Max(style.MinLength, note.HeldSeconds * style.FallSpeed));
+                var tailDistance = Math.Min(style.Reach, headDistance + length);
+                if (!(tailDistance > headDistance + 1e-7)) continue;
+                var target = new ArVec3(layout.CenterX(note.Pitch) * pose.KeyboardWidthDepthRatio, 0, 0);
+                if (!TryPatch(pose, view, target, travel, headDistance, tailDistance, halfWidth,
+                    out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;
+                var fadeOut = Math.Clamp((style.Reach - headDistance) / (style.Reach * .25), 0, 1);
+                var fadeRate = Math.Clamp(style.FadeGraph.Sample(velocity), .1, 2);
+                var fadeIn = Math.Clamp(note.Age * fadeRate / .045, .25, 1);
+                var fade = fadeOut * fadeIn;
+                into.Add(new Ar3DLiveMidiNote(patch, note.Pitch, fade, note.Down, note.Strength,
+                    halfWidthPx, halfLengthPx, sceneY, target, travel, headDistance, tailDistance, halfWidth));
             }
         }
     }

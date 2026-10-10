@@ -68,7 +68,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // x/y/w = material parameters, z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam
+    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label
 };
 
 struct KeyInstance
@@ -334,6 +334,18 @@ float4 PsBackground(FullscreenOut i) : SV_Target
 // AR layer: quads of the keyboard plane projected onto the camera picture (Camera/ArProjection.cs)
 // ---------------------------------------------------------------------------------------------------
 
+// Common input to the full Live Stage note material, used by both stage-space notes and camera-projected AR notes.
+struct NoteMaterialInput
+{
+    float2 Local;      // scene DIPs from the note centre
+    float2 Half;       // half size in scene DIPs
+    float4 Color;      // linear rgb and opacity
+    float4 Misc;       // x = sounding, y = seed, z = head direction, w = hold-bar strength
+    float SceneY;      // scene DIPs
+};
+
+float4 ShadeNoteMaterial(NoteMaterialInput v);
+
 struct ArQuadOut
 {
     float4 Position : SV_Position;
@@ -347,16 +359,32 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     ArQuadInstance q = ArQuads[iid];
     // two triangles over the corners 0,1,2 and 0,2,3
     uint k = vid < 3u ? vid : (vid == 3u ? 0u : vid - 2u);
+    float2 uv = float2((k == 1u || k == 2u) ? 1.0 : 0.0, k >= 2u ? 1.0 : 0.0);
     float2 p = q.A.xy;
     float w = q.W.x;
     if (k == 1u) { p = q.A.zw; w = q.W.y; }
     else if (k == 2u) { p = q.B.xy; w = q.W.z; }
     else if (k == 3u) { p = q.B.zw; w = q.W.w; }
+    if (q.Misc.z < 0.5)
+    {
+        // PsNote needs a margin outside the body for its bevel and halo. Expand this same calibrated billboard
+        // in its own screen-facing axes and extend UVs so its interior still maps to the original note rectangle.
+        float2 across = ((q.A.zw - q.A.xy) + (q.B.xy - q.B.zw)) * 0.5;
+        float2 along = ((q.B.zw - q.A.xy) + (q.B.xy - q.A.zw)) * 0.5;
+        float width = max(length(across), 1e-3);
+        float height = max(length(along), 1e-3);
+        float2 acrossUnit = across / width;
+        float2 alongUnit = along / height;
+        float2 cornerSign = uv * 2.0 - 1.0;
+        float margin = (NoteA.w + NoteA.z + 2.0) * SceneSize.z;
+        p += acrossUnit * cornerSign.x * margin + alongUnit * cornerSign.y * margin;
+        uv += cornerSign * float2(margin / width, margin / height);
+    }
     float2 ndc = float2(p.x / ScreenTime.x * 2.0 - 1.0, 1.0 - p.y / ScreenTime.y * 2.0);
     ArQuadOut o;
     // the corner weight as clip w: the rasteriser then interpolates across the quad in perspective
     o.Position = float4(ndc * w, 0.0, w);
-    o.Uv = float2((k == 1u || k == 2u) ? 1.0 : 0.0, k >= 2u ? 1.0 : 0.0);
+    o.Uv = uv;
     o.Color = q.Color;
     o.Misc = q.Misc;
     return o;
@@ -365,6 +393,20 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if (kind < 0.5)
+    {
+        // Reuse the exact Live Stage material in linear light. UV derivatives recover the projected body's
+        // local pixel size, then convert it to scene DIPs so bevel/glow widths match PsNote at any output scale.
+        float2 uvPerPixel = max(fwidth(i.Uv), float2(1e-6, 1e-6));
+        float2 halfSize = 0.5 / uvPerPixel / max(SceneSize.z, 1e-3);
+        NoteMaterialInput note;
+        note.Local = (i.Uv - 0.5) * 2.0 * halfSize;
+        note.Half = halfSize;
+        note.Color = i.Color;
+        note.Misc = float4(i.Misc.x, i.Misc.y, 1.0, i.Misc.w);
+        note.SceneY = i.Position.y / max(SceneSize.z, 1e-3);
+        return ShadeNoteMaterial(note);
+    }
     if (kind > 0.5 && kind < 1.5)
     {
         // A lit physical key: its colour replaces part of the camera pixel, rather than adding a virtual key body.
@@ -529,16 +571,99 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
         float a = saturate((glow * 0.45 + core * 0.42) * i.Color.a);
         return float4(i.Color.rgb * (glow * 0.9 + core * 0.85) * i.Color.a, a);
     }
+    if (kind > 7.5 && kind < 8.5)
+    {
+        // The note sheen rides inside the same pitch-tagged, calibrated AR patch (not a flat stage-space sprite).
+        float phase = i.Misc.x;
+        float strength = saturate(i.Misc.y);
+        float sweepA = 0.5 + 0.5 * sin(ScreenTime.z * 0.50 + phase);
+        float sweepB = 0.5 + 0.5 * sin(ScreenTime.z * 0.77 + phase + 2.1);
+        float2 a = (i.Uv - float2(0.16 + 0.68 * sweepA, 0.5)) * float2(1.0 / 0.13, 1.0 / 0.72);
+        float2 b = (i.Uv - float2(0.16 + 0.68 * sweepB, 0.5)) * float2(1.0 / 0.13, 1.0 / 0.72);
+        float lobeA = exp(-dot(a, a) * 2.0);
+        float lobeB = exp(-dot(b, b) * 2.0);
+        float gainA = (0.10 + 0.20 * pow(sin(sweepA * PI), 2.0)) * lobeA;
+        float gainB = (0.10 + 0.20 * pow(sin(sweepB * PI), 2.0)) * lobeB * 0.55;
+        float gain = (gainA + gainB) * strength;
+        float3 tint = lerp(i.Color.rgb, float3(1.3, 1.3, 1.3), 0.72);
+        return float4(tint * gain * i.Color.a * 2.2, 0.0);
+    }
+    if (kind > 8.5 && kind < 9.5)
+    {
+        // The seven note-trail variants share one calibrated 3D ribbon. UV.y runs from the attached edge
+        // (1) to the fading end (0); colour, length and quality gates remain settings-driven on the CPU.
+        float style = floor(i.Misc.x + 0.5);
+        float seed = i.Misc.w;
+        float strength = saturate(i.Misc.y);
+        float across = i.Uv.x * 2.0 - 1.0;
+        float along = saturate(i.Uv.y);
+        float fade = pow(along, 1.2);
+        float coverage = 0.0;
+        float gain = 1.0;
+        float3 tint = i.Color.rgb;
+        if (style < 0.5) // Glow
+        {
+            coverage = exp(-across * across * 2.4) * fade * 0.52;
+            gain = 1.3;
+        }
+        else if (style < 1.5) // Sparkles
+        {
+            float2 cell = floor(i.Uv * float2(5.0, 13.0));
+            float2 jitter = frac(float2(Hash21(cell + seed), Hash21(cell + seed + 7.1)) + 0.17) - 0.5;
+            float2 local = frac(i.Uv * float2(5.0, 13.0)) - 0.5 - jitter * 0.54;
+            float twinkle = 0.35 + 0.65 * abs(sin(ScreenTime.z * (3.0 + Hash21(cell + seed + 2.7) * 5.0) + seed + cell.y));
+            coverage = exp(-dot(local * float2(1.5, 1.0), local * float2(1.5, 1.0)) * 42.0) * fade * twinkle * 0.78;
+            gain = 1.7;
+        }
+        else if (style < 2.5) // Speed Lines
+        {
+            float line = abs(frac(i.Uv.x * 6.0 + seed * 0.13) - 0.5);
+            float dash = step(0.20, frac(i.Uv.y * 3.0 + seed * 0.07 + ScreenTime.z * 0.11));
+            coverage = exp(-line * line * 540.0) * dash * fade * 0.52;
+            gain = 1.6;
+        }
+        else if (style < 3.5) // Blur
+        {
+            coverage = exp(-across * across * 1.65) * fade * 0.22;
+            gain = 0.72;
+        }
+        else if (style < 4.5) // Ribbon
+        {
+            float centre = sin(i.Uv.y * 6.283 + ScreenTime.z * 3.0 + seed) * 0.32 * (1.0 - along * 0.25);
+            coverage = exp(-pow((across - centre) * 3.4, 2.0)) * fade * 0.7;
+            gain = 1.55;
+        }
+        else if (style < 5.5) // Rainbow
+        {
+            float hue = frac(i.Uv.y * 0.58 + ScreenTime.z * 0.25 + seed * 0.013);
+            tint = 0.5 + 0.5 * cos((hue + float3(0.0, 0.333333, 0.666667)) * (2.0 * PI));
+            coverage = exp(-across * across * 1.8) * fade * 0.56;
+            gain = 1.45;
+        }
+        else // Stream
+        {
+            float2 cell = floor(i.Uv * float2(6.0, 16.0));
+            float phase = frac(i.Uv.y * 16.0 - ScreenTime.z * 0.55 + Hash21(cell + seed));
+            float x = frac(i.Uv.x * 6.0 + Hash21(cell + seed + 3.1)) - 0.5;
+            coverage = exp(-x * x * 90.0 - pow((phase - 0.5) * 2.0, 2.0) * 22.0) * fade * 0.75;
+            gain = 1.55;
+        }
+        float alpha = saturate(coverage * strength) * i.Color.a;
+        return float4(tint * gain * alpha, alpha);
+    }
+    if (kind > 9.5 && kind < 10.5)
+    {
+        // A note-name atlas cell on a calibrated note patch; it never becomes a screen-space sprite over the camera.
+        float cell = i.Misc.x;
+        float2 cellXY = float2(fmod(cell, 16.0), floor(cell / 16.0));
+        float2 atlasUv = (cellXY + i.Uv) / float2(16.0, 24.0);
+        float coverage = AtlasTex.SampleLevel(LinearClamp, atlasUv, 0).a;
+        float alpha = coverage * i.Color.a;
+        return float4(i.Color.rgb * alpha, alpha);
+    }
 
-    // Song notes and live press bars. The optional central hold stripe is independent of key tint.
-    float side = min(i.Uv.x, 1.0 - i.Uv.x);
-    float rim = 1.0 - smoothstep(0.0, 0.16, side);
-    float lead = smoothstep(0.55, 1.0, i.Uv.y);
-    float stripe = exp(-pow((i.Uv.x - 0.5) / 0.11, 2.0));
-    float3 c = i.Color.rgb * (1.0 + 0.45 * rim + 0.35 * lead + 0.5 * i.Misc.y);
-    c += i.Color.rgb * stripe * i.Misc.w * 1.55;
-    float a = i.Color.a * i.Misc.x;
-    return float4(c * a, a);
+    // Unknown future quad kinds remain readable; note bodies above use the shared SDF material.
+    return float4(i.Color.rgb * i.Color.a, i.Color.a);
 }
 
 // ---------------------------------------------------------------------------------------------------
@@ -548,8 +673,8 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
 struct NoteOut
 {
     float4 Position : SV_Position;
-    float2 Local : TEXCOORD0;      // px from the note centre
-    float2 Half : TEXCOORD1;       // half size px
+    float2 Local : TEXCOORD0;      // scene DIPs from the note centre
+    float2 Half : TEXCOORD1;       // half size in scene DIPs
     float4 Color : TEXCOORD2;
     float4 Misc : TEXCOORD3;
     float SceneY : TEXCOORD4;
@@ -591,7 +716,18 @@ NoteOut VsNote(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     return o;
 }
 
-float4 PsNote(NoteOut v) : SV_Target
+float4 PsNote(NoteOut note) : SV_Target
+{
+    NoteMaterialInput material;
+    material.Local = note.Local;
+    material.Half = note.Half;
+    material.Color = note.Color;
+    material.Misc = note.Misc;
+    material.SceneY = note.SceneY;
+    return ShadeNoteMaterial(material);
+}
+
+float4 ShadeNoteMaterial(NoteMaterialInput v)
 {
     float2 p = v.Local;
     float2 hb = max(v.Half, 0.5);

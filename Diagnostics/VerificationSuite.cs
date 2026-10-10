@@ -975,17 +975,17 @@ internal static partial class VerificationSuite
         // The overlay's own settings: defaults agree with ArOptions, wild values are pulled into range, and a look being
         // applied (a preset, a community look, a pasted code) neither switches the overlay on nor retunes it.
         var arDefault = new PianoVisualSettings();
-        Assert(!arDefault.ArEnabled && !arDefault.ArLivePressTrails && arDefault.ArOptionsValue == ArOptions.Default,
-            "A fresh install has the overlay and live press trails off, and the settings' defaults are the ones ArOptions names.");
+        Assert(!arDefault.ArEnabled && !arDefault.ArLivePressTrails && arDefault.ArRisingMidiNotes && arDefault.ArOptionsValue == ArOptions.Default,
+            "A fresh install has the overlay and live press bars off, rising MIDI notes on for Perform, and settings defaults matching ArOptions.");
         var arWild = new PianoVisualSettings { ArEnabled = true, ArMode = "Karaoke", ArOpacity = double.NaN, ArLookahead = 99, ArKeyLight = -5, ArDelay = 9000, ArNoteMinScale = 900, ArNoteDirectionTilt = 999, ArNoteDirectionAzimuth = -999 }; arWild.Clamp();
         Assert(arWild.ArEnabled && arWild.ArMode == "Learn" && arWild.ArOpacity == ArOptions.OpacityDefault && arWild.ArLookahead == ArOptions.LookaheadMax && arWild.ArKeyLight == ArOptions.KeyLightMin && arWild.ArDelay == ArOptions.DelayMax && arWild.ArNoteMinScale == ArOptions.NoteMinScaleMax
                 && arWild.ArNoteDirectionTilt == ArOptions.NoteDirectionTiltMax && arWild.ArNoteDirectionAzimuth == ArOptions.NoteDirectionAzimuthMin,
             "Out-of-range overlay values and the independent 3D note direction should be pulled into range when settings load.");
-        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120, ArLivePressTrails = true, ArNoteDirectionTilt = 37, ArNoteDirectionAzimuth = -74 };
-        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0, ArLivePressTrails = false, ArNoteDirectionTilt = 0, ArNoteDirectionAzimuth = 0 });
-        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120 && arKept.ArLivePressTrails
+        var arKept = new PianoVisualSettings { ArEnabled = true, ArMode = "Perform", ArOpacity = 70, ArLookahead = 2, ArKeyLight = 30, ArDelay = 120, ArLivePressTrails = true, ArRisingMidiNotes = true, ArNoteDirectionTilt = 37, ArNoteDirectionAzimuth = -74 };
+        arKept.CopyFrom(new PianoVisualSettings { ArEnabled = false, ArMode = "Learn", ArOpacity = 100, ArLookahead = 5, ArKeyLight = 90, ArDelay = 0, ArLivePressTrails = false, ArRisingMidiNotes = false, ArNoteDirectionTilt = 0, ArNoteDirectionAzimuth = 0 });
+        Assert(arKept.ArEnabled && arKept.ArMode == "Perform" && arKept.ArOpacity == 70 && arKept.ArLookahead == 2 && arKept.ArKeyLight == 30 && arKept.ArDelay == 120 && arKept.ArLivePressTrails && arKept.ArRisingMidiNotes
                 && arKept.ArNoteDirectionTilt == 37 && arKept.ArNoteDirectionAzimuth == -74,
-            "Applying a look must keep every overlay setting, including press-trail toggle and independent 3D note direction.");
+            "Applying a look must keep every overlay setting, including both live channels and independent 3D note direction.");
         // AR-S4 remainder: the minimum note length is a setting of the look's own, so a look does not overwrite it
         var minKept = new PianoVisualSettings { ArNoteMinScale = 80 };
         minKept.CopyFrom(new PianoVisualSettings { ArNoteMinScale = 0 });
@@ -1537,7 +1537,8 @@ internal static partial class VerificationSuite
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteDirectionTilt))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteDirectionAzimuth))
                 && sliders.ContainsKey(nameof(PianoVisualSettings.ArNoteMinScale))
-                && toggles.ContainsKey(nameof(PianoVisualSettings.ArLivePressTrails)),
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArLivePressTrails))
+                && toggles.ContainsKey(nameof(PianoVisualSettings.ArRisingMidiNotes)),
             "The AR controls should expose playback, calibration view, perspective, separate note-direction, live-key and timing settings.");
         var arCards = (Dictionary<string, Border>)Field(window, "_cardsByTitle");
         var expectedArCards = new[] { "AR OVERLAY", "KEYBOARD ALIGNMENT", "AR PLAYBACK", "3D NOTE PATH", "LIVE KEY RESPONSE", "STREAM & TIMING" };
@@ -1559,6 +1560,7 @@ internal static partial class VerificationSuite
         Assert(arText() == Loc.T("The AR overlay is off. Switch it on to play on your real keyboard."), "The AR card should say the overlay is off.");
         var arWas = visualSettings.ArEnabled;
         var liveTrailsWas = visualSettings.ArLivePressTrails;
+        var risingMidiWas = visualSettings.ArRisingMidiNotes;
         toggles[nameof(PianoVisualSettings.ArEnabled)].IsChecked = true;
         Assert(visualSettings.ArEnabled, "Switching the overlay on in the dock should reach the settings.");
         Assert(engineRuns ? arText().StartsWith(Loc.T("Waiting for the camera."), StringComparison.Ordinal)
@@ -1592,9 +1594,16 @@ internal static partial class VerificationSuite
             toggles[nameof(PianoVisualSettings.ArLivePressTrails)].IsChecked = false;
             Assert(!gpuFeed.Ar!.ShowLiveTrails && Math.Abs(gpuFeed.Ar.KeyLight - .6f) < 1e-3,
                 "Turning live trails off must keep the separately configured key tint enabled.");
+            toggles[nameof(PianoVisualSettings.ArRisingMidiNotes)].IsChecked = false;
             choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Perform;
-            Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes, "The mode picker should reach the layer the engine draws.");
+            Assert(visualSettings.ArMode == ArModes.Perform && !gpuFeed.Ar!.ShowNotes && !gpuFeed.Ar.ShowRisingMidiNotes,
+                "Perform hides song notes, and its separate rising-MIDI-note switch reaches the AR layer.");
+            toggles[nameof(PianoVisualSettings.ArRisingMidiNotes)].IsChecked = true;
+            Assert(gpuFeed.Ar!.ShowRisingMidiNotes,
+                "Turning the rising-MIDI-note setting on in Perform should enable the independent AR note stream.");
             choices[nameof(PianoVisualSettings.ArMode)].SelectedValue = ArModes.Learn;
+            Assert(!gpuFeed.Ar!.ShowRisingMidiNotes,
+                "Learn keeps upcoming song notes and does not duplicate each live MIDI event as a rising note.");
             Assert(ReferenceEquals(gpuFeed.Camera!.Ring, Field(window, "_cameraFrames")) && gpuFeed.Ar!.Calibration == window.ArCalibration.Current,
                 "The engine reads the camera's own ring and draws on the calibration in force.");
             var frameRing = (CameraFrameRing)Field(window, "_cameraFrames");
@@ -1610,7 +1619,7 @@ internal static partial class VerificationSuite
         Invoke(window, "ResetArCalibration_Click", window, new RoutedEventArgs());
         Assert(window.ArCalibration.State is ArCalibrationState.NotCalibrated or ArCalibrationState.NoSource && window.ArCalibration.Current is null,
             "RESET CALIBRATION should forget the calibration in force.");
-        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60; visualSettings.ArLivePressTrails = liveTrailsWas;
+        visualSettings.ArEnabled = arWas; visualSettings.ArMode = ArModes.Learn; visualSettings.ArOpacity = 100; visualSettings.ArLookahead = 3; visualSettings.ArKeyLight = 60; visualSettings.ArLivePressTrails = liveTrailsWas; visualSettings.ArRisingMidiNotes = risingMidiWas;
         Invoke(window, "RefreshSettingControls");
         Invoke(window, "ApplyArSource", null!, 0, 0);
         Invoke(window, "SyncCameraOverlay");

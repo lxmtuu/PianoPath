@@ -17,10 +17,10 @@ public class Ar3DNoteProjectionTests
     private static NoteEvent Note(int pitch, double start, double duration) => new() { Pitch = pitch, Start = start, Duration = duration };
 
     private static List<Ar3DNoteShape> Build(IReadOnlyList<NoteEvent> notes, double position = 10,
-        ArNoteDirection direction = default, double minAspect = 0, double maxDuration = 3)
+        ArNoteDirection direction = default, double minAspect = 0, double maxDuration = 3, ArNoteStyle? style = null)
     {
         var into = new List<Ar3DNoteShape> { default };
-        Ar3DNoteProjection.Build(Calibration, View, notes, position, maxDuration, Style, direction, minAspect, into);
+        Ar3DNoteProjection.Build(Calibration, View, notes, position, maxDuration, style ?? Style, direction, minAspect, into);
         return into;
     }
 
@@ -39,6 +39,18 @@ public class Ar3DNoteProjectionTests
             Assert.True(double.IsFinite(patch[i].X) && double.IsFinite(patch[i].Y));
             Assert.True(double.IsFinite(patch[i].W) && patch[i].W > ArCameraPose.NearPlane);
         }
+    }
+
+    private static (double X, double Y) Centre(ArPatch patch) =>
+        ((patch.BackLeft.X + patch.BackRight.X + patch.FrontRight.X + patch.FrontLeft.X) * .25,
+         (patch.BackLeft.Y + patch.BackRight.Y + patch.FrontRight.Y + patch.FrontLeft.Y) * .25);
+
+    private static List<Ar3DLiveMidiNote> BuildRisingMidi(IReadOnlyList<ArLiveMidiNote> notes,
+        ArNoteDirection direction = default, ArNoteStyle? style = null)
+    {
+        var into = new List<Ar3DLiveMidiNote>();
+        Ar3DNoteProjection.BuildRisingMidiNotes(Calibration, View, notes, style ?? Style, direction, into);
+        return into;
     }
 
     [Fact]
@@ -96,7 +108,9 @@ public class Ar3DNoteProjectionTests
         Assert.Equal(new[] { 1, 2, 3 }, shapes.Select(shape => shape.NoteIndex));
         Assert.Equal(new[] { false, false, true }, shapes.Select(shape => shape.Black));
         Assert.All(shapes, shape => AssertFinite(shape.Patch));
-        Assert.All(shapes, shape => Assert.True(shape.HalfWidthPixels > 0 && shape.HalfLengthPixels > 0 && double.IsFinite(shape.SceneY)));
+        Assert.All(shapes, shape => Assert.True(shape.HalfWidthPixels > 0 && shape.HalfLengthPixels > 0 && double.IsFinite(shape.SceneY)
+            && shape.Target.IsFinite && shape.Travel.IsFinite && shape.HalfWidthWorld > 0
+            && shape.HeadDistance >= 0 && shape.TailDistance > shape.HeadDistance));
         Assert.True(shapes[0].HalfLengthPixels > shapes[1].HalfLengthPixels,
             "The next same-pitch onset must shorten the older note without removing both notes.");
     }
@@ -141,6 +155,137 @@ public class Ar3DNoteProjectionTests
         Assert.InRange(bar.Strength, .899f, .901f);
         AssertFinite(bar.Patch);
         Assert.True(bar.HalfWidthPixels > 0 && bar.HalfLengthPixels > 0);
+        Assert.True(bar.Target.IsFinite && bar.Travel.IsFinite && bar.HalfWidthWorld > 0
+            && bar.HeadDistance == 0 && bar.TailDistance > bar.HeadDistance);
+    }
+
+    [Fact]
+    public void Each_midi_note_on_emits_a_separate_3d_note_that_keeps_travelling_after_note_off()
+    {
+        var direction = new ArNoteDirection(68, 37);
+        var held = new ArLiveMidiNote(60, Age: .22, HeldSeconds: .22, Down: true, Strength: .9f);
+        var released = new ArLiveMidiNote(60, Age: .52, HeldSeconds: .22, Down: false, Strength: .9f);
+        var heldShape = Assert.Single(BuildRisingMidi([held], direction));
+        var releasedShape = Assert.Single(BuildRisingMidi([released], direction));
+        Assert.True(heldShape.Held);
+        Assert.False(releasedShape.Held);
+        Assert.Equal(60, releasedShape.Pitch);
+        Assert.InRange(releasedShape.Strength, .899f, .901f);
+        AssertFinite(heldShape.Patch);
+        AssertFinite(releasedShape.Patch);
+        Assert.True(releasedShape.HalfWidthPixels > 0 && releasedShape.HalfLengthPixels > 0);
+        Assert.True(releasedShape.Target.IsFinite && releasedShape.Travel.IsFinite && releasedShape.HalfWidthWorld > 0
+            && releasedShape.HeadDistance > heldShape.HeadDistance && releasedShape.TailDistance > releasedShape.HeadDistance);
+
+        var heldCentre = Centre(heldShape.Patch);
+        var releasedCentre = Centre(releasedShape.Patch);
+        Assert.True(Math.Hypot(releasedCentre.X - heldCentre.X, releasedCentre.Y - heldCentre.Y) > 5,
+            "Note Off freezes the note body but must not freeze its 3D travel centre.");
+
+        var repeatedSamePitch = BuildRisingMidi([
+            new ArLiveMidiNote(60, .12, .12, false, .4f),
+            new ArLiveMidiNote(60, .3, .3, true, .95f)
+        ], direction);
+        Assert.Equal(2, repeatedSamePitch.Count);
+        Assert.All(repeatedSamePitch, shape => Assert.Equal(60, shape.Pitch));
+        Assert.Empty(BuildRisingMidi([new ArLiveMidiNote(60, Style.Reach / Style.FallSpeed, .2, false, .9f)], direction));
+    }
+
+    [Fact]
+    public void Live_bar_and_Perform_note_reaches_are_fixed_and_do_not_follow_Learn_lookahead()
+    {
+        var shortLookahead = Style with { Reach = 1.5 };
+        var longLookahead = Style with { Reach = 9 };
+        var shortLivePress = ArOptions.LivePressNoteStyle(shortLookahead);
+        var longLivePress = ArOptions.LivePressNoteStyle(longLookahead);
+        var shortRisingMidi = ArOptions.RisingMidiNoteStyle(shortLookahead);
+        var longRisingMidi = ArOptions.RisingMidiNoteStyle(longLookahead);
+
+        Assert.Equal(3d, ArOptions.LivePressReachSeconds);
+        Assert.Equal(3d, ArOptions.RisingMidiNoteReachSeconds);
+        Assert.Equal(ArOptions.RisingMidiNoteReachSeconds * Style.FallSpeed, shortRisingMidi.Reach);
+        Assert.Equal(shortRisingMidi.Reach, longRisingMidi.Reach);
+        Assert.Equal(ArOptions.LivePressReachSeconds * Style.FallSpeed, shortLivePress.Reach);
+        Assert.Equal(shortLivePress.Reach, longLivePress.Reach);
+        Assert.Equal(Style.WidthGraph, longRisingMidi.WidthGraph);
+        Assert.Equal(Style.FadeGraph, longRisingMidi.FadeGraph);
+    }
+
+    [Fact]
+    public void Song_note_fade_velocity_graph_controls_the_same_reach_fade_used_by_the_projected_note()
+    {
+        var style = Style with
+        {
+            FadeVelocity = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .5, Max: 1)
+        };
+        var start = 10 + (style.Reach - .6) / style.FallSpeed;
+        var notes = new[]
+        {
+            new NoteEvent { Pitch = 60, Start = start, Duration = .4, Velocity = 20 },
+            new NoteEvent { Pitch = 64, Start = start, Duration = .4, Velocity = 110 }
+        };
+        var shapes = Build(notes, style: style);
+
+        Assert.Equal(2, shapes.Count);
+        Assert.True(shapes[1].Fade > shapes[0].Fade,
+            "A harder projected song-note strike should use the faster end of the same AR fade graph.");
+    }
+
+    [Fact]
+    public void Rising_midi_notes_use_the_same_velocity_width_and_fade_graphs_as_ar_song_notes()
+    {
+        var style = Style with
+        {
+            WidthVelocity = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .4, Max: 1),
+            FadeVelocity = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .5, Max: 1)
+        };
+        var softAndHard = BuildRisingMidi([
+            new ArLiveMidiNote(60, .02, .02, true, .2f),
+            new ArLiveMidiNote(60, .02, .02, true, .9f)
+        ], style: style);
+        Assert.Equal(2, softAndHard.Count);
+        Assert.True(softAndHard[1].HalfWidthPixels > softAndHard[0].HalfWidthPixels,
+            "A hard MIDI onset should use the hard end of the AR note-width graph.");
+        Assert.True(softAndHard[1].Fade > softAndHard[0].Fade,
+            "A hard MIDI onset should fade in faster, through the same AR fade graph as song notes.");
+
+        var flat = BuildRisingMidi([
+            new ArLiveMidiNote(60, .02, .02, true, .2f),
+            new ArLiveMidiNote(60, .02, .02, true, .9f)
+        ]);
+        Assert.Equal(flat[0].HalfWidthPixels, flat[1].HalfWidthPixels, 9);
+        Assert.Equal(flat[0].Fade, flat[1].Fade, 9);
+    }
+
+    [Fact]
+    public void A_released_live_bar_keeps_moving_along_its_calibrated_3d_path_until_it_reaches_its_limit()
+    {
+        var pose = Calibration.CameraPose!.Value;
+        var heldSeconds = .8;
+        var held = Assert.Single(BuildLive([new ArLivePress(60, heldSeconds, heldSeconds, true, .9f)]));
+        var ageAfterRelease = heldSeconds + .3;
+        var released = Assert.Single(BuildLive([new ArLivePress(60, ageAfterRelease, heldSeconds, false, .9f)]));
+
+        Assert.True(released.Fade < held.Fade);
+        var heldCentre = Centre(held.Patch);
+        var releasedCentre = Centre(released.Patch);
+        var movedPixels = Math.Hypot(releasedCentre.X - heldCentre.X, releasedCentre.Y - heldCentre.Y);
+        Assert.True(movedPixels > 5, $"The bar must keep travelling after note-off, not only fade in place ({movedPixels:0.0}px moved).");
+
+        // Verify the centre against the selected keyboard-local travel vector transformed by the calibrated camera pose.
+        var target = new ArVec3(Calibration.Layout.CenterX(60) * pose.KeyboardWidthDepthRatio, 0, 0);
+        var travelCamera = pose.DirectionToCamera(ArNoteDirection.Default.Vector);
+        var heldDistance = heldSeconds * Style.FallSpeed * .5;
+        var releasedDistance = (ageAfterRelease - heldSeconds) * Style.FallSpeed + heldDistance;
+        Assert.True(pose.TryProject(pose.ToCamera(target) - travelCamera * heldDistance, out var heldImage));
+        Assert.True(pose.TryProject(pose.ToCamera(target) - travelCamera * releasedDistance, out var releasedImage));
+        var expectedHeld = View.ToOutput(heldImage.X, heldImage.Y);
+        var expectedReleased = View.ToOutput(releasedImage.X, releasedImage.Y);
+        Assert.InRange(Math.Hypot(heldCentre.X - expectedHeld.X, heldCentre.Y - expectedHeld.Y), 0, 1.0);
+        Assert.InRange(Math.Hypot(releasedCentre.X - expectedReleased.X, releasedCentre.Y - expectedReleased.Y), 0, 1.0);
+
+        var afterReach = heldSeconds + Style.Reach / Style.FallSpeed;
+        Assert.Empty(BuildLive([new ArLivePress(60, afterReach, heldSeconds, false, .9f)]));
     }
 
     [Fact]

@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>x/y/w carry note or effect parameters; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6 or beam 7.</summary>
+    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9 or note label 10.</summary>
     public Vector4 Misc;
 }
 
@@ -31,7 +31,15 @@ internal struct GpuArQuad
 /// <param name="MinAspect">The minimum note length as a fraction of its projected key width; 0 keeps each note's natural length.</param>
 /// <param name="ShowLiveTrails">Draw bars for keys the player presses, in flat or projected mode; key tint is separate.</param>
 /// <param name="NoteDirection">Independent keyboard-local 3D direction of the notes and live bars.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default);
+/// <param name="ShowRisingMidiNotes">In Perform mode, draw each MIDI Note On as a separate calibrated 3D note that keeps travelling after Note Off.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false)
+{
+    /// <summary>Live press bars keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
+    internal ArNoteStyle LivePressStyle => ArOptions.LivePressNoteStyle(Notes);
+
+    /// <summary>Perform notes keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
+    internal ArNoteStyle RisingMidiNoteStyle => ArOptions.RisingMidiNoteStyle(Notes);
+}
 
 /// <summary>Builds calibrated quads for the camera layer: projected notes, real-key tint and pitch-tagged Live Stage effects.</summary>
 internal sealed partial class GpuArLayer
@@ -40,6 +48,7 @@ internal sealed partial class GpuArLayer
     private readonly List<ArLiveBar> _liveBars = [];
     private readonly List<Ar3DNoteShape> _projectedShapes = [];
     private readonly List<Ar3DLiveBar> _projectedLiveBars = [];
+    private readonly List<Ar3DLiveMidiNote> _risingMidiNotes = [];
     private readonly List<ArPatch> _keyPatches = [];
 
     /// <summary>Key glow below this is not drawn.</summary>
@@ -51,6 +60,11 @@ internal sealed partial class GpuArLayer
     internal int KeyQuadCount { get; private set; }
     internal int ShapeCount => _shapes.Count + _projectedShapes.Count;
     internal int LiveBarCount { get; private set; }
+    internal int RisingMidiNoteCount { get; private set; }
+    internal int NoteTrailQuadCount { get; private set; }
+    internal int GhostNoteQuadCount { get; private set; }
+    internal int LandingGlowCount { get; private set; }
+    internal int NoteLabelCount { get; private set; }
     internal int ImpactLightCount { get; private set; }
     internal int NoteLightCount { get; private set; }
     internal int PulseCount { get; private set; }
@@ -69,8 +83,9 @@ internal sealed partial class GpuArLayer
         GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads, bool projectedNotes)
     {
         quads.Clear();
-        _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear();
-        KeyQuadCount = LiveBarCount = 0;
+        _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear(); _risingMidiNotes.Clear();
+        KeyQuadCount = LiveBarCount = RisingMidiNoteCount = 0;
+        NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = 0;
         ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
         if (ar.Opacity <= 0) return;
 
@@ -99,19 +114,22 @@ internal sealed partial class GpuArLayer
             var position = input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f);
             if (projectedNotes)
             {
-                // The selected note direction is independent of the piano pose. These are the only song-note quads
-                // projected by this layer; stage-space note bodies and falling trails remain suppressed over camera.
+                // The selected note direction is independent of the piano pose. Song-note bodies and their ghosts,
+                // trails and landing cues all come from calibrated 3D patches; stage-space sprites remain suppressed.
                 Ar3DNoteProjection.Build(ar.Calibration, view, input.Notes, position, input.MaxNoteDuration, ar.Notes,
                     ar.NoteDirection, ar.MinAspect, _projectedShapes, VelocityBand);
                 foreach (var shape in _projectedShapes)
                 {
                     if ((uint)shape.NoteIndex >= (uint)input.Notes.Count) continue;
                     var note = input.Notes[shape.NoteIndex];
-                    var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
-                        : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
-                        : look.NoteColor(note.Pitch, note.Track);
-                    quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity,
-                        new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
+                    BuildProjectedSongNoteEffects(ar, view, shape, note, position, opacity, look, simulation, quads);
+                    var patch = shape.Patch;
+                    if (shape.Sounding && look.HoldVibration)
+                        patch = VibrateLiveBar(ar.Calibration, view, shape.Pitch, patch, look, simulation.Time, simulation.SimulationWidth);
+                    AddSongNote(quads, patch, shape.Pitch, shape.NoteIndex, shape.Sounding, shape.Fade,
+                        note, opacity, look, simulation.Time);
+                    if (ar.Calibration.CameraPose is { } labelPose)
+                        BuildProjectedSongNoteLabel(view, shape, note, opacity, look, simulation.Time, quads, labelPose);
                 }
             }
             else
@@ -121,11 +139,8 @@ internal sealed partial class GpuArLayer
                 {
                     if ((uint)shape.NoteIndex >= (uint)input.Notes.Count) continue;
                     var note = input.Notes[shape.NoteIndex];
-                    var color = note.Played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
-                        : note.Missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
-                        : look.NoteColor(note.Pitch, note.Track);
-                    quads.Add(Pack(shape.Patch, color, note.Played ? .42f * opacity : opacity,
-                        new Vector4((float)shape.Fade, shape.Sounding ? 1 : 0, 0, 0)));
+                    AddSongNote(quads, shape.Patch, shape.Pitch, shape.NoteIndex, shape.Sounding, shape.Fade,
+                        note, opacity, look, simulation.Time);
                 }
             }
         }
@@ -135,49 +150,143 @@ internal sealed partial class GpuArLayer
         if (ar.Calibration.CameraPose is { } pose && ar.Quality != ArQualityTier.Lite)
             BuildStageEffects(ar, view, simulation, keyColors, quads, opacity, look, layout, pose);
 
+        // MIDI onsets are note objects, not optional held-key bars. Keep them in the calibrated pose even in Lite;
+        // they share the note material and direction controls and continue after Note Off until their reach expires.
+        var risingMidiNotes = simulation.ArRisingMidiNotes;
+        if (ar.ShowRisingMidiNotes && ar.Calibration.CameraPose is not null && risingMidiNotes.Count > 0)
+        {
+            Ar3DNoteProjection.BuildRisingMidiNotes(ar.Calibration, view, risingMidiNotes, ar.RisingMidiNoteStyle,
+                ar.NoteDirection, _risingMidiNotes, VelocityBand);
+            foreach (var note in _risingMidiNotes)
+            {
+                if (ar.Calibration.CameraPose is { } midiPose)
+                    BuildProjectedRisingMidiEffects(ar, view, note, opacity, look, simulation.Time, quads, midiPose);
+                var patch = note.Patch;
+                if (note.Held && look.HoldVibration)
+                    patch = VibrateLiveBar(ar.Calibration, view, note.Pitch, patch, look, simulation.Time, simulation.SimulationWidth);
+                var color = look.NoteColor(note.Pitch, 0);
+                AddLiveBar(quads, patch, note.Pitch, note.Fade, note.Held, note.Strength,
+                    color, opacity, look, simulation.Time);
+                if (ar.Calibration.CameraPose is { } labelPose)
+                    BuildProjectedLiveNoteLabel(view, note.Pitch, note.Target, note.Travel, note.HeadDistance,
+                        note.TailDistance, note.HalfWidthWorld, note.HalfWidthPixels, note.HalfLengthPixels,
+                        note.Fade, note.Held, note.Strength, opacity, look, simulation.Time, quads, labelPose);
+                RisingMidiNoteCount++;
+            }
+        }
+
         var live = simulation.LivePresses;
         if (!ar.ShowLiveTrails || live.Count == 0) return;
         var liveProjected = ar.Calibration.CameraPose is not null && ar.Quality != ArQualityTier.Lite;
         if (liveProjected)
         {
-            Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.Notes, ar.NoteDirection, _projectedLiveBars, VelocityBand);
+            Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, ar.NoteDirection, _projectedLiveBars, VelocityBand);
             foreach (var bar in _projectedLiveBars)
             {
+                if (ar.Calibration.CameraPose is { } livePose)
+                    BuildProjectedLiveBarEffects(ar, view, bar, opacity, look, simulation.Time, quads, livePose);
                 var patch = bar.Patch;
                 if (bar.Held && look.HoldVibration)
                     patch = VibrateLiveBar(ar.Calibration, view, bar.Pitch, patch, look, simulation.Time, simulation.SimulationWidth);
                 var color = look.NoteColor(bar.Pitch, 0);
-                AddLiveBar(quads, patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time, ar.Quality != ArQualityTier.Lite);
+                AddLiveBar(quads, patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time);
+                if (ar.Calibration.CameraPose is { } labelPose)
+                    BuildProjectedLiveNoteLabel(view, bar.Pitch, bar.Target, bar.Travel, bar.HeadDistance,
+                        bar.TailDistance, bar.HalfWidthWorld, bar.HalfWidthPixels, bar.HalfLengthPixels,
+                        bar.Fade, bar.Held, bar.Strength, opacity, look, simulation.Time, quads, labelPose);
                 LiveBarCount++;
             }
         }
         else
         {
-            ArNotes.BuildLive(ar.Calibration, view, live, ar.Notes, _liveBars, VelocityBand);
+            ArNotes.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, _liveBars, VelocityBand);
             foreach (var bar in _liveBars)
             {
                 var color = look.NoteColor(bar.Pitch, 0);
-                AddLiveBar(quads, bar.Patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time, ar.Quality != ArQualityTier.Lite);
+                AddLiveBar(quads, bar.Patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time);
                 LiveBarCount++;
             }
         }
     }
 
-    private static void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
-        float strength, Vector3 color, float opacity, GpuLook look, double time, bool allowVelocityTint)
+    private static Vector3 SongNoteColor(int pitch, NoteEvent note, bool sounding, GpuLook look, double time)
     {
-        var holdBreath = held && look.HoldBreath
-            ? .72 + .28 * Math.Sin(time * (1 + look.HoldBreathRate * 5)) : 1;
+        var played = note.Played;
+        var missed = note.Missed;
+        var color = played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f)
+            : missed ? new Vector3(1f, 83 / 255f, 113 / 255f)
+            : look.NoteColor(pitch, note.Track);
+        if (!played && !missed && look.VelocityColor && look.VelocityColorAmount > 0)
+            color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(note.Velocity / 127f), look.VelocityColorAmount);
+        if (sounding && look.HoldColorCycle)
+        {
+            var cycling = GpuStageSimulation.ColorFromHue(GpuStageSimulation.Hue188(pitch) + time * look.HoldColorCycleSpeed * 3);
+            color = Vector3.Lerp(color, cycling, .8f);
+        }
+        if (look.RainbowTrail) color = GpuStageSimulation.ColorFromHue(time * look.RainbowHueSpeed + pitch * 9);
+        return color;
+    }
+
+    private static void AddSongNote(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, int noteIndex,
+        bool sounding, double fade, NoteEvent note, float opacity, GpuLook look, double time, bool ghostPass = false)
+    {
+        var played = note.Played;
+        var color = SongNoteColor(pitch, note, sounding, look, time);
+        var noteOpacity = played ? .42f : 1f;
+        var pulse = look.FallingPulse && !sounding
+            ? .62f + .38f * MathF.Sin((float)time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f) : 1f;
+        var breath = sounding && look.HoldBreath
+            ? .72f + .28f * MathF.Sin((float)time * (1 + look.HoldBreathRate * 5)) : 1f;
+        var linear = GpuStageSimulation.ToLinear(color) * breath;
+        var alpha = opacity * noteOpacity * (float)Math.Clamp(fade, 0, 1) * pulse;
+        var holdBar = sounding && look.HoldBar ? look.HoldBarIntensity * opacity * noteOpacity * (float)Math.Clamp(fade, 0, 1) : 0;
+        var seed = (noteIndex % 97) / 97f;
+        quads.Add(Pack(patch, linear, alpha, new Vector4(sounding ? 1 : 0, seed, 0, holdBar)));
+        if (!ghostPass) AddNoteShimmer(quads, patch, pitch, linear, alpha, look);
+    }
+
+    private static Vector3 LiveNoteColor(int pitch, bool held, float strength, Vector3 color, GpuLook look, double time)
+    {
         if (held && look.HoldColorCycle)
         {
             var cycling = GpuStageSimulation.ColorFromHue(GpuStageSimulation.Hue188(pitch) + time * look.HoldColorCycleSpeed * 3);
             color = Vector3.Lerp(color, cycling, .8f);
         }
-        if (allowVelocityTint && look.VelocityColor && look.VelocityColorAmount > 0)
+        if (look.VelocityColor && look.VelocityColorAmount > 0)
             color = Vector3.Lerp(color, GpuStageSimulation.VelocityTint(strength), look.VelocityColorAmount);
-        var holdBar = held && look.HoldBar ? look.HoldBarIntensity : 0;
-        quads.Add(Pack(patch, color, opacity,
-            new Vector4((float)(fade * holdBreath), held ? 1 : 0, 0, holdBar)));
+        return look.RainbowTrail ? GpuStageSimulation.ColorFromHue(time * look.RainbowHueSpeed + pitch * 9) : color;
+    }
+
+    private static void AddLiveBar(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch, double fade, bool held,
+        float strength, Vector3 color, float opacity, GpuLook look, double time, bool ghostPass = false)
+    {
+        var breath = held && look.HoldBreath
+            ? .72f + .28f * MathF.Sin((float)time * (1 + look.HoldBreathRate * 5)) : 1f;
+        color = LiveNoteColor(pitch, held, strength, color, look, time);
+
+        var pulse = look.FallingPulse && !held
+            ? .62f + .38f * MathF.Sin((float)time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f) : 1f;
+        var linear = GpuStageSimulation.ToLinear(color) * breath;
+        var alpha = opacity * (float)Math.Clamp(fade, 0, 1) * pulse;
+        var holdBar = held && look.HoldBar ? look.HoldBarIntensity * opacity * (float)Math.Clamp(fade, 0, 1) : 0;
+        var seed = (pitch % 97) / 97f;
+        quads.Add(Pack(patch, linear, alpha, new Vector4(held ? 1 : 0, seed, 0, holdBar)));
+        if (!ghostPass) AddNoteShimmer(quads, patch, pitch, linear, alpha, look);
+    }
+
+    /// <summary>Projects the GPU stage's moving note sheen along an AR note's own calibrated quad.</summary>
+    private static void AddNoteShimmer(GpuInstanceList<GpuArQuad> quads, ArPatch patch, int pitch,
+        Vector3 linearColor, float alpha, GpuLook look)
+    {
+        if (!look.NoteShimmer || look.NoteShimmerAmount <= .01f || alpha <= .01f) return;
+        var width = (Math.Hypot(patch.BackRight.X - patch.BackLeft.X, patch.BackRight.Y - patch.BackLeft.Y)
+                     + Math.Hypot(patch.FrontRight.X - patch.FrontLeft.X, patch.FrontRight.Y - patch.FrontLeft.Y)) * .5;
+        var length = (Math.Hypot(patch.FrontLeft.X - patch.BackLeft.X, patch.FrontLeft.Y - patch.BackLeft.Y)
+                      + Math.Hypot(patch.FrontRight.X - patch.BackRight.X, patch.FrontRight.Y - patch.BackRight.Y)) * .5;
+        if (width < 5 || length < 6) return;
+        var phase = pitch * 1.6180339f + .37f;
+        quads.Add(Pack(patch, linearColor, alpha,
+            new Vector4(phase, look.NoteShimmerAmount, 8, 0)));
     }
 
     private static GpuArQuad Pack(ArPatch patch, Vector3 color, float alpha, Vector4 misc) => new()
