@@ -246,8 +246,8 @@ try {
                 'Salamander Grand Piano V3 is downloaded only when requested (about 748 MB); its CC BY 3.0',
                 'attribution is written beside the sample files in the local piano installation folder.',
                 '',
-                'Every `.exe` is **code-signed** through SignPath, so Windows does not show "Windows protected your PC"',
-                'when installing or on first run. `SHA256SUMS.txt` covers every file above.',
+                'The `.exe` files are **not code-signed yet**, so Windows may show "Windows protected your PC" on first run:',
+                'choose **More info → Run anyway**. `SHA256SUMS.txt` covers every file above.',
                 '',
                 "Documentation: https://github.com/$Repository/blob/$Branch/README.en.md · " +
                 "https://github.com/$Repository/blob/$Branch/README.md",

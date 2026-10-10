@@ -85,10 +85,9 @@ be cancelled/resumed, and the CC BY 3.0 attribution is saved beside the samples 
 installation folder.
 
 - **Checking a download**: each release carries `SHA256SUMS.txt`; compare with
-  `Get-FileHash .\Keyflow-2.0.0-win-x64.zip -Algorithm SHA256`. The packages are **code-signed**;
+  `Get-FileHash .\Keyflow-2.0.0-win-x64.zip -Algorithm SHA256`. The packages are **not code-signed yet**;
   the hash table remains the quick way to be sure the file that arrived is the file the pipeline built.
-- **SmartScreen**: the packages are **Authenticode-signed through SignPath** by the release pipeline, so
-  Windows does not show *"Windows protected your PC"* on install or first run.
+- **SmartScreen**: the packages are **not Authenticode-signed yet**, so Windows may show *"Windows protected your PC"* on install or first run; choose **More info → Run anyway**.
 - **Keep the licence**: `LICENSE.txt` (MIT) travels with the application. Salamander's CC BY 3.0 notice
   is in the piano data folder after the user downloads the sample library.
 - **What changed**: [CHANGELOG.en.md](CHANGELOG.en.md) (Vietnamese edition: [CHANGELOG.md](CHANGELOG.md))

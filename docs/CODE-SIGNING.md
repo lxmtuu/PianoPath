@@ -1,8 +1,18 @@
 # Ký mã (code signing) · SignPath — cách Keyflow hết bảng "Windows protected your PC"
 
-> *English summary: every release package — the three `PianoPath.exe` files and `Keyflow-Setup-<version>.exe`
-> — is Authenticode-signed through [SignPath](https://signpath.io/) inside `release.yml`, **before** the ZIPs
-> are packed and `SHA256SUMS.txt` is computed. The release workflow refuses to publish an unsigned package.
+> **Trạng thái (2026-10-10): chưa ký mã.** SignPath Foundation đã từ chối đơn đăng ký dự án mã nguồn mở vì
+> dự án chưa đủ độ phủ công khai (sao, fork, người đóng góp, bài viết bên ngoài). Vì vậy `release.yml` **không
+> còn bước ký**: các gói 2.0.0 phát hành chưa ký số, và trang phát hành hướng dẫn "More info → Run anyway".
+> Gói trả phí của SignPath (từ 500 USD/năm) chỉ cấp chứng chỉ EV cho tổ chức đã đăng ký pháp lý. Phần thiết lập
+> bên dưới giữ lại để tham khảo khi quay lại ký mã — khi đó phải thêm lại bước ký vào `release.yml`.
+
+> **Status (2026-10-10): not code-signed.** SignPath Foundation declined the open-source application, so
+> `release.yml` no longer has a signing step. The 2.0.0 packages are unsigned. The setup below is kept for
+> reference for when signing is added back.
+
+> *English summary (historical design, not active since 2026-10-10): the release packages were to be
+> Authenticode-signed through [SignPath](https://signpath.io/) inside `release.yml`, **before** the ZIPs
+> are packed and `SHA256SUMS.txt` is computed, and the workflow would refuse to publish an unsigned package.
 > This document is the one-time setup a maintainer does on the SignPath side and in this repository's
 > settings; the pipeline itself needs no change after that.*
 

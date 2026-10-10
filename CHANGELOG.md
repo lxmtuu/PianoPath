@@ -49,8 +49,8 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 
 ### Đóng gói & phát hành
 
-- **Ký mã cho mọi gói tải về**: ba bản `PianoPath.exe` (`win-x64`, `win-x64-fd`, `win-arm64`) và bộ cài `Keyflow-Setup-*.exe` được ký Authenticode qua **SignPath** ngay trong `release.yml`, *trước* khi đóng ZIP và tính `SHA256SUMS.txt`, nên chữ ký nằm trong chính tệp người dùng tải về. Windows SmartScreen không còn hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu. Lượt phát hành **bắt buộc** có cấu hình ký mã: thiếu secret/variable SignPath là run dừng ngay kèm hướng dẫn, không bao giờ phát hành gói chưa ký, và `Get-AuthenticodeSignature` kiểm lại từng chữ ký trước khi đóng gói. Thiết lập một lần nằm ở `docs/CODE-SIGNING.md` (SignPath Foundation — miễn phí cho dự án open source).
-- Ba gói ZIP giờ được đóng **sau** khi ký mã (trước đây là ngay sau publish); tên tệp và `SHA256SUMS.txt` giữ nguyên dạng cũ.
+- **Gói chưa được ký mã số**: SignPath Foundation từ chối đơn đăng ký mã nguồn mở, nên bản 2.0.0 phát hành các gói **chưa ký** (`PianoPath.exe` ×3 và `Keyflow-Setup-*.exe`). Windows SmartScreen có thể hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu: bấm *More info → Run anyway*, rồi đối chiếu tệp với `SHA256SUMS.txt`. `release.yml` không còn bước ký; hướng ký về sau nằm ở `docs/CODE-SIGNING.md`.
+- Ba gói ZIP được đóng sau khi bộ cài đã biên dịch xong; tên tệp và `SHA256SUMS.txt` giữ nguyên dạng cũ.
 
 ## 1.0.0 — 2026-10-03
 
