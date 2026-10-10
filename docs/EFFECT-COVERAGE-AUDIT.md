@@ -25,7 +25,7 @@
 | Hạng mục | Kết quả audit |
 |---|---|
 | Số mục trong catalog | 87; 86 mang `Available`, `falling.color-gradient` hiện được đánh dấu `Planned` vì ColorMode=Gradient chỉ trải màu theo pitch, chưa hòa hai màu dọc thân nốt. |
-| CI gate hiện tại | Windows CI [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330), commit `95c5aee`: static, portable tests, Release build, full `--verify`/WARP, installer và previews/gallery đều PASS; dùng synthetic/WARP input, không xác nhận hardware. AR/S5 performance chưa được đo trên GPU thật. |
+| CI gate hiện tại | Windows CI [38014563330](https://github.com/lxmtuu/PianoPath/actions/runs/38014563330), commit `95c5aee`: static, portable tests, Release build, full `--verify`/WARP, installer và previews/gallery đều PASS; dùng synthetic/WARP input, không xác nhận hardware. CI frame-budget step cũng chạy trên WARP; số liệu đó không phải benchmark phần cứng/AR. AR/S5 performance trên GPU thật vẫn chưa được xác minh. |
 | Phân loại | 40 lifecycle + 31 ambient + 9 modulators + 7 themes; các nhóm có alias/chia sẻ kênh, không phải 87 renderer riêng. |
 | Nguồn metadata runtime | `EffectCatalog` không được UI/renderer dùng làm nguồn options hay capability trong app hiện tại; tham chiếu ngoài chính tệp catalog chủ yếu là verification/docs. UI và settings khai báo riêng trong `PianoVisualSettings`/`MainWindow.Settings`. |
 | “Available” có chặn UI không? | Không. Runtime không đọc `EffectStatus` để lọc options; hiện có 86 `Available`, 1 `Planned`. `Planned` chỉ đúng metadata trong inventory, không tự ẩn một control UI tương ứng. |
