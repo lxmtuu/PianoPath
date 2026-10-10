@@ -617,9 +617,9 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
         }
         else if (style < 2.5) // Speed Lines
         {
-            float line = abs(frac(i.Uv.x * 6.0 + seed * 0.13) - 0.5);
+            float lineOffset = abs(frac(i.Uv.x * 6.0 + seed * 0.13) - 0.5);
             float dash = step(0.20, frac(i.Uv.y * 3.0 + seed * 0.07 + ScreenTime.z * 0.11));
-            coverage = exp(-line * line * 540.0) * dash * fade * 0.52;
+            coverage = exp(-lineOffset * lineOffset * 540.0) * dash * fade * 0.52;
             gain = 1.6;
         }
         else if (style < 3.5) // Blur
