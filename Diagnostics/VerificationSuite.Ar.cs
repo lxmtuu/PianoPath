@@ -1878,14 +1878,16 @@ internal static partial class VerificationSuite
         Assert(ultraImpactFrame.AsSpan().SequenceEqual(directionOnlyFrame),
             "Changing note travel direction alone must not rotate key-anchored Live Stage effects away from the calibrated piano.");
 
-        // Falling-note trail FX are stage-space geometry; over a camera they must be omitted, not left as misaligned flat streaks.
+        // The flat stage-space trail stays suppressed; the selected note trail is emitted only as a calibrated AR quad.
         settings.FallingTrail = "None";
         var noTrail = Render(MakeFeed(defaultInput));
         settings.FallingTrail = "Glow";
         var glowSetting = Render(MakeFeed(defaultInput));
-        Assert(noTrail.AsSpan().SequenceEqual(glowSetting) && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
-                && renderer.ArQuadCount == notes.Count,
-            "Enabling a flat stage Glow trail must not add a misaligned streak over the camera; the 3D AR notes remain visible.");
+        var projectedGlowTrails = renderer.ArNoteTrailQuadCount;
+        Assert(!noTrail.AsSpan().SequenceEqual(glowSetting) && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
+                && projectedGlowTrails == notes.Count && renderer.ArQuadCount == notes.Count + projectedGlowTrails
+                && ChangedPixels(noTrail, glowSetting, threshold: 4) > 20,
+            $"Glow trails should add calibrated AR quads while the misaligned stage-space streak stays suppressed ({projectedGlowTrails} projected trails, stage {renderer.StageNoteTrailCount}).");
         settings.FallingTrail = "None";
         var uncalibratedCamera = Render(MakeFeed(null, overCamera: false));
         settings.FallingTrail = "Glow";
