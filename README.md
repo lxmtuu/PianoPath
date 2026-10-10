@@ -148,7 +148,7 @@ dotnet run --project .\PianoPath.csproj -c Release       # biên dịch (nếu c
 | `--play-dialog` / `--shortcuts` | Mở sẵn hộp thoại Play / thẻ phím tắt để chụp ảnh (dùng cùng `--snapshot`). |
 | `--lang=<en\|vi>` | Chạy một lần bằng ngôn ngữ chỉ định, **ghi đè** cài đặt đã lưu — dùng để chụp ảnh giao diện tiếng Việt hoặc kiểm bản dịch mà không đụng vào `%LOCALAPPDATA%\Keyflow`. |
 | `--preset=<tên>` / `--play-chord` | Áp một preset có sẵn chỉ trong lần chạy này (không cần dấu cách: `--preset=GalaxyVoyage`), và giữ thêm một hợp âm rải khi chụp để hiện các hiệu ứng giữ phím nối các phím (tia điện). CI dùng chúng để chụp `stage-gpu-galaxy.png` và `stage-gpu-storm.png`. |
-| `--note-style=<Solid\|Neon\|Glass\|Fire\|Gem\|CrystalOutline>` / `--note-depth=<2d\|3d>` | Ghi đè vật liệu và chiều sâu nốt **chỉ trong lần chạy preview** (có thể dùng `Crystal Outline` hoặc `CrystalOutline`); không sửa file cài đặt/preset. `Gem` và `Crystal Outline` chỉ áp dụng trên stage WPF/GPU; CI dựng cả hai đường renderer trong gallery 50%. AR dùng pass quad camera-facing riêng để chiếu nốt 3D, nhưng chưa có biến thể AR cho hai material này. |
+| `--note-style=<Solid\|Neon\|Glass\|Fire\|Gem\|CrystalOutline>` / `--note-depth=<2d\|3d>` | Ghi đè vật liệu và chiều sâu nốt **chỉ trong lần chạy preview** (có thể dùng `Crystal Outline` hoặc `CrystalOutline`); không sửa file cài đặt/preset. `Gem` và `Crystal Outline` áp dụng trên stage WPF/GPU; AR camera-facing quads cũng route style IDs qua shared `ShadeNoteMaterial`. Regression WARP mới sample đủ sáu style branches và Gem/Crystal trên flat AR path, đang chờ CI; full setting/value parity, webcam và hardware còn Unverified. |
 | `--background-image=<file.png>` | Vẽ một ảnh cụ thể phía sau bàn phím **chỉ trong lần chạy này**: không bật cờ "đã sửa", không tự lưu, nên `visual-settings.json` giữ nguyên. CI dùng nó để render ảnh minh hoạ tính năng ảnh nền từ ảnh mẫu `docs/samples/stage-backdrop.png` (sinh bởi `tools/make_stage_background.py`) thay vì ảnh chụp của người nào đó. |
 | `--settings-dir=<thư mục>` | Đọc/ghi cài đặt và preset người dùng ở thư mục khác (mặc định `%LOCALAPPDATA%\Keyflow`) — hữu ích cho bản portable hoặc khi muốn chụp ảnh từ trạng thái mặc định. Chạy `--verify` luôn tự dùng thư mục tạm nên **không bao giờ ghi đè cài đặt/preset thật của bạn**. |
 
@@ -271,7 +271,7 @@ Mọi preset có sẵn, mỗi preset vẽ bằng cả hai engine cạnh nhau (ph
 
 ![Các vật liệu nốt ở 50% — WPF/software bên trái, GPU/WARP bên phải](docs/previews/note-styles.jpg)
 
-`Gem` và `Crystal Outline` là material của sân khấu WPF/GPU, không đổi pitch/thời lượng và không phải trail. `Notes3D` là trục depth độc lập; `Streak` vẫn để giai đoạn trail sau. AR dùng camera-facing quad riêng với pose chiếu 3D, nhưng chưa có biến thể AR cho hai material mới. Workflow dựng lại cả hai gallery; `tools/check_sources.py` đối chiếu preset gallery với `Stage/VisualPresets.cs` và kiểm tra ma trận 9×2, artifact cùng drift gate của note-material gallery.
+`Gem` và `Crystal Outline` là material của sân khấu WPF/GPU; AR camera-facing quads dùng chung shader material nhưng không dùng mesh stage. `Notes3D` là trục depth độc lập; `Streak` vẫn để giai đoạn trail sau. WARP style samples cho AR đang chờ CI; full parameter/value parity, webcam và hardware vẫn Unverified. Workflow dựng lại hai gallery; `tools/check_sources.py` kiểm tra preset gallery, ma trận note-material 9×2, artifact và drift gate.
 
 ### Âm thanh, MIDI & luyện tập
 

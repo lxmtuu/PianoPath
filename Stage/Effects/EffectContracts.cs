@@ -261,20 +261,22 @@ internal sealed record EffectContract(
     /// settings serialization, UI filtering or renderer dispatch. WPF, GPU and Recording are Native after
     /// material-specific read-back checks in <c>VerifyPngSequenceRecorder</c>, <c>VerifyGpuNotePassQueries</c>
     /// and <c>VerifyGpuNoteMaterials</c> (WPF PNG files and GPU <c>GpuRecordingTap</c> frames). Individual
-    /// parameter-to-recording bindings remain Unverified until each setting is exercised separately. AR names
-    /// its actual flat-quad fallback instead of claiming native facet/material support.
+    /// parameter-to-recording bindings remain Unverified. AR passes known style IDs to the shared material
+    /// shader on camera-facing quads, but AR material capability and parameter bindings remain Unverified
+    /// until an AR-specific style/value matrix is reviewed.
     /// </summary>
 internal static class EffectContractCatalog
 {
-    internal const string ArFlatQuadFallbackId = "ar.note.flat-quad";
-
     private static readonly EffectBackendCapability Native = new(EffectBackendState.Native);
     private static readonly EffectBackendCapability Unverified = new(EffectBackendState.Unverified);
     private static readonly EffectBackendCapability Unsupported = new(EffectBackendState.Unsupported);
-    private static readonly EffectBackendCapability ArFlatFallback = new(EffectBackendState.Fallback, ArFlatQuadFallbackId);
     private static readonly EffectParameterBindingProfile NativeParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+    // AR uses the shared shader path, but no per-setting AR evidence currently supports Applied/Ignored claims.
+    private static readonly EffectParameterBindingProfile ArMaterialParameterBindings = new(
+        EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectParameterBindingProfile ArAmbientParameterBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Applied,
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Applied);
@@ -291,7 +293,7 @@ internal static class EffectContractCatalog
         EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
     private static readonly EffectParameterBindingProfile WpfOnlyRefractionBindings = new(
         EffectParameterBindingState.Applied, EffectParameterBindingState.Ignored,
-        EffectParameterBindingState.Unverified, EffectParameterBindingState.Ignored);
+        EffectParameterBindingState.Unverified, EffectParameterBindingState.Unverified);
     private static readonly EffectCostAssessment UnmeasuredCost = new(EffectCostState.Unmeasured);
 
     // Manual-review record of the physical-adapter probe (2026-10-07, AMD Radeon(TM) Graphics, iGPU):
@@ -316,31 +318,31 @@ internal static class EffectContractCatalog
     // edge-width/3D and the shared refraction fringe, and the GPU Solid branch reads the same uniforms.
     private static readonly IReadOnlyList<EffectParameterContract> SolidParameters = Array.AsReadOnly(new[]
     {
-        Percentage("NoteTint", 0, 100),
-        Percentage("NoteGlow", 0, 200),
-        Percentage("NoteEdge", 0, 200),
-        Percentage("NoteEdgeWidth", 0, 100),
-        Percentage("NoteRefraction", 0, 100),
-        Boolean("Notes3D"),
+        Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
+        Boolean("Notes3D", ArMaterialParameterBindings),
     });
 
     private static readonly IReadOnlyList<EffectParameterContract> GemParameters = Array.AsReadOnly(new[]
     {
-        Percentage("NoteTint", 0, 100),
-        Percentage("NoteGlow", 0, 200),
-        Percentage("NoteEdge", 0, 200),
-        Percentage("NoteEdgeWidth", 0, 100),
-        Percentage("NoteRefraction", 0, 100),
-        Boolean("Notes3D"),
+        Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteRefraction", 0, 100, ArMaterialParameterBindings),
+        Boolean("Notes3D", ArMaterialParameterBindings),
     });
 
     private static readonly IReadOnlyList<EffectParameterContract> CrystalOutlineParameters = Array.AsReadOnly(new[]
     {
-        Percentage("NoteTint", 0, 100),
-        Percentage("NoteGlow", 0, 200),
-        Percentage("NoteEdge", 0, 200),
-        Percentage("NoteEdgeWidth", 0, 100),
-        // WPF paints the crystal's refraction fringe; the current GPU CrystalOutline branch does not consume it.
+        Percentage("NoteTint", 0, 100, ArMaterialParameterBindings),
+        Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
+        Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
+        // WPF paints the crystal's refraction fringe; the GPU branch does not consume it. AR binding remains Unverified.
         Percentage("NoteRefraction", 0, 100, WpfOnlyRefractionBindings),
     });
 
@@ -358,7 +360,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             SolidParameters,
-            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             SolidCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.OpaqueBodyAndRim)),
         new EffectContract(
@@ -372,7 +374,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             GemParameters,
-            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             GemCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.FacetPlanes)),
         new EffectContract(
@@ -386,7 +388,7 @@ internal static class EffectContractCatalog
             EffectClock.None,
             EffectSeedPolicy.None,
             CrystalOutlineParameters,
-            new EffectCapabilityProfile(Native, Native, Native, ArFlatFallback),
+            new EffectCapabilityProfile(Native, Native, Native, Unverified),
             CrystalOutlineCosts,
             new EffectAccessibilityContract(EffectFlashRisk.None, EffectReducedMotionBehavior.NoIndependentAnimation, EffectShapeCue.AngularContourAndFacets)),
     });

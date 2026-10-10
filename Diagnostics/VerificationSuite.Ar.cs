@@ -11,8 +11,10 @@ internal static partial class VerificationSuite
     /// <summary>
     /// Pins AR support to its evidence grade: six screen-space ambient families are Native, 14 S5 families
     /// remain Unverified despite sampled calibrated-3D WARP checks (the full choice/value matrix is incomplete),
-    /// four unprojected families stay Unsupported, and note materials keep their explicit flat-quad fallback.
-    /// VerifyArOverlayCapturedFrames checks ambient/suppression; VerifyArNoteProjection exercises sampled S5 paths.
+    /// four unprojected families stay Unsupported, and note-material capability/parameter bindings remain
+    /// Unverified although the shared shader renders on camera-facing quads. The WARP checks sample styles,
+    /// not a full parameter matrix. VerifyArOverlayCapturedFrames checks ambient/suppression; VerifyArNoteProjection
+    /// exercises selected S5 and note-material paths.
     /// </summary>
     private static void VerifyArOverlayExclusions()
     {
@@ -62,11 +64,13 @@ internal static partial class VerificationSuite
         }
         foreach (var material in EffectContractCatalog.NoteMaterialPilot)
         {
-            Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Fallback
-                    && material.Capabilities.ArOverlay.FallbackId == EffectContractCatalog.ArFlatQuadFallbackId,
-                $"{material.Id} must keep the tested flat-quad AR fallback, not claim native Gem/Crystal facets.");
+            Assert(material.Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                    && material.Capabilities.ArOverlay.FallbackId is null,
+                $"{material.Id} uses the shared material shader on AR quads, but its AR support remains Unverified.");
+            Assert(material.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+                $"{material.Id} must keep per-setting AR bindings Unverified until their values are covered.");
         }
-        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 14 calibrated S5 projection families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete; four unprojected families stay Unsupported, note materials retain the ar.note.flat-quad fallback, and unverified parameter bindings remain conservative.");
+        Results.Add("PASS AR contract classification: six screen-space ambient families are Native; 14 calibrated S5 projection families remain Unverified after sampled WARP checks because the full style/value/parameter matrix is incomplete; four unprojected families stay Unsupported; note materials use the shared shader on camera-facing quads but their support and parameter bindings remain Unverified.");
     }
 
     /// <summary>
@@ -255,6 +259,14 @@ internal static partial class VerificationSuite
             int blue = pixels[i], green = pixels[i + 1], red = pixels[i + 2];
             return (Math.Max(red, Math.Max(green, blue)) - Math.Min(red, Math.Min(green, blue)), Math.Max(Math.Abs(red - 90), Math.Max(Math.Abs(green - 90), Math.Abs(blue - 90))));
         }
+        static int ChangedPixels(byte[] first, byte[] second, int threshold = 4)
+        {
+            var count = 0;
+            for (var i = 0; i < Math.Min(first.Length, second.Length); i += 4)
+                if (Math.Max(Math.Abs(first[i] - second[i]), Math.Max(Math.Abs(first[i + 1] - second[i + 1]), Math.Abs(first[i + 2] - second[i + 2]))) > threshold)
+                    count++;
+            return count;
+        }
 
         var flatRing = new CameraFrameRing(); PublishGrey(flatRing, 1280, 720);
         var flatInput = new GpuCameraInput(flatRing, PictureFit.Fit, false, 1f);
@@ -268,8 +280,11 @@ internal static partial class VerificationSuite
             $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArQuadCount} total).");
         var gemArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "Gem"));
         var crystalArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "CrystalOutline"));
-        Assert(arFrame.AsSpan().SequenceEqual(gemArFrame) && arFrame.AsSpan().SequenceEqual(crystalArFrame),
-            "AR should retain its projected flat-quad material fallback for Gem and Crystal Outline, not claim their stage facets.");
+        var neonGemPixels = ChangedPixels(arFrame, gemArFrame);
+        var neonCrystalPixels = ChangedPixels(arFrame, crystalArFrame);
+        var gemCrystalPixels = ChangedPixels(gemArFrame, crystalArFrame);
+        Assert(neonGemPixels > 100 && neonCrystalPixels > 100 && gemCrystalPixels > 100,
+            $"The AR note quad shader should render visibly distinct Gem and Crystal Outline branches (Neon/Gem {neonGemPixels}, Neon/Crystal {neonCrystalPixels}, Gem/Crystal {gemCrystalPixels} changed pixels); full AR parameter parity remains unverified.");
         var plain = Look(arFrame, width, height, (20, 20))!.Value;
         Assert(plain.Off <= 3 && plain.Spread <= 3, $"Away from every note the picture is the camera's grey (off by {plain.Off}).");
         foreach (var shape in expected)
@@ -432,7 +447,7 @@ internal static partial class VerificationSuite
 
         VerifyArOverlayCapturedFrames(renderer);
         Results.Add($"PASS ar keys: three held keys produce five tinted rectangles and separate neighboring-key spill at standard quality; distant keys and the air above the keyboard stay clear, read back against the same frame without the layer.");
-        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal selections keep the flat-quad fallback; paused, zero opacity, no layer and a camera of another size draw nothing.");
+        Results.Add($"PASS ar notes: 4 of 5 notes of a song projected onto the sample keyboard and read back, inside and just outside their quads; Gem/Crystal use distinct material branches on AR quads, with the full parameter matrix still Unverified; paused, zero opacity, no layer and a camera of another size draw nothing.");
         Results.Add($"PASS ar camera layer: one texture reused across frames and re-created once for a new size, bad frames refused; fit, mirror, half opacity, bars and crop read back from a {width}×{height} frame on {renderer.AdapterName} in {started.Elapsed.TotalSeconds:0.0} s.");
     }
 
@@ -1497,15 +1512,19 @@ internal static partial class VerificationSuite
         var noteGreen = projected[colorIndex + 1];
         Assert(noteRed > noteGreen * 1.8,
             $"A magenta sRGB note must be linearized before the HDR shader (expected red to stay well above green, got R={noteRed}, G={noteGreen}).");
-        settings.NoteStyle = "Glass";
-        var glassNotes = Render(MakeFeed(defaultInput));
-        settings.NoteStyle = "Gem";
-        var gemNotes = Render(MakeFeed(defaultInput));
+        var materialChanges = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var style in new[] { "Neon", "Glass", "Fire", "Gem", "CrystalOutline" })
+        {
+            settings.NoteStyle = style;
+            var styledNotes = Render(MakeFeed(defaultInput));
+            materialChanges[style] = ChangedPixels(projected, styledNotes, threshold: 4);
+            Assert(renderer.ArQuadCount == expected.Count,
+                $"Changing the AR note material to {style} must preserve one calibrated quad per song note.");
+        }
         settings.NoteStyle = "Solid";
-        Assert(ChangedPixels(projected, glassNotes, threshold: 4) > 100
-                && ChangedPixels(projected, gemNotes, threshold: 4) > 100
-                && renderer.ArQuadCount == expected.Count,
-            "Camera-projected notes must respond to the same Glass and Gem material branches as Live Stage without changing their 3D quad count.");
+        var materialChangeSummary = string.Join(", ", materialChanges.Select(pair => $"{pair.Key} {pair.Value}"));
+        Assert(materialChanges.Values.All(changed => changed > 100),
+            $"Each sampled known material branch should change the calibrated AR note pixels relative to Solid ({materialChangeSummary}); full parameter parity remains unverified.");
 
         settings.NoteShimmer = true;
         settings.NoteShimmerAmount = 100;
@@ -1995,7 +2014,7 @@ internal static partial class VerificationSuite
             "Enabling 3D note projection must leave shooting stars screen-space and byte-identical.");
 
         Results.Add($"PASS AR 3D note render (AR-S4): WARP drew {projectedPixels} projected note pixels into {expected.Count} AR-owned quads with no stage notes/trails; the flat-map failure did not hide them, mirroring and independent 3D direction worked, Perform omitted notes, and minimum length grew short notes.");
-        Results.Add($"PASS AR note color/material/effects: magenta read back R/G {noteRed}/{noteGreen}; Glass/Gem changed {ChangedPixels(projected, glassNotes, threshold: 4)}/{ChangedPixels(projected, gemNotes, threshold: 4)} pixels; shimmer changed {shimmerPixels} pixels in {shimmerQuads} quads; Glow/Stream trails used {glowTrailQuads}/{streamTrailQuads} 3D quads; ghosts {ghostQuads}; landing glow {landingGlowCount} quads; atlas labels {noteLabelCount}/{noteLabelPixels}.");
+        Results.Add($"PASS AR note color/material/effects: magenta read back R/G {noteRed}/{noteGreen}; sampled known material branches changed [{materialChangeSummary}] pixels versus Solid; shimmer changed {shimmerPixels} pixels in {shimmerQuads} quads; Glow/Stream trails used {glowTrailQuads}/{streamTrailQuads} 3D quads; ghosts {ghostQuads}; landing glow {landingGlowCount} quads; atlas labels {noteLabelCount}/{noteLabelPixels}. Full parameter parity remains Unverified.");
         Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
         Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; a released bar survived the old stage-edge cull ({barsPastStageEdge}) and retired at 3D reach ({releasePathSimulation.LivePresses.Count}); flat falling-note trails added no pixels over the camera.");
         Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");

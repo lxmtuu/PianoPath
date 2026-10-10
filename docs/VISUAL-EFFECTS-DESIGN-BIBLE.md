@@ -123,7 +123,7 @@ Prototype HTML dùng cùng JSON nhưng là canvas minh họa HTML, **không ph�
 
 | Cụm thiết kế | Điểm bám hiện tại | Trạng thái Phase 1 |
 |---|---|---|
-| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Cả 17 preset và Gem/Crystal Outline đã build/render trên WPF/software + GPU/WARP; note-style pixel tests và gallery 50% pass CI [37495463612]. Review contrast/fixed-scene đầy đủ của preset vẫn còn mở; hardware/AR chưa được xác nhận. |
+| Note palette/material | `PianoVisualSettings.ColorMode`, `Palette`, `NoteStyle`, `NoteColor*`, `NoteGlow`, `NoteEdge`, `NoteRefraction` | Cả 17 preset và Gem/Crystal Outline đã build/render trên WPF/software + GPU/WARP; note-style pixel tests và gallery 50% pass CI [37495463612]. AR camera-facing quads now route all six known note styles through the shared shader; new WARP samples await CI. Full AR parameter/value parity, webcam and hardware remain Unverified; preset contrast/fixed-scene review is also open. |
 | Motion theo note | `FallingTrail`, `FallingPulse`, `Hold*`, `ReleaseEffect`, `Impact*` | Recipe đã chọn lọc lớp và qua suite hiện có; Phase 3/4 vẫn phải kiểm tra từng behavior/capability. |
 | Atmosphere/compositor | `Ambient*`, `BackgroundMotion`, `Bloom*`, `PianoStage` và GPU passes | Gallery xác nhận code path WPF/WARP, không khẳng định parity trên hardware hay AR. |
 | Color Gradient | `ColorMode="Gradient"` | Hiện là theo pitch. Gradient head-to-tail vẫn là `Planned` trong `EffectCatalog`. |

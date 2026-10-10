@@ -296,7 +296,7 @@ Theme chỉ là một đồ thị thiết lập các effect đã có. Chọn the
 
 Những thứ dưới đây là “visual system” quan trọng nhưng không cộng vào số 87:
 
-- **Note material:** Solid / Neon / Glass / Fire / Gem / Crystal Outline; roundness, edge, tint, head glow and shimmer. `Notes3D` remains an independent depth axis; Streak stays in a later trail phase. Gem/Crystal Outline render on WPF + D3D11/WARP, not the current flat-quad AR overlay.
+- **Note material:** Solid / Neon / Glass / Fire / Gem / Crystal Outline; roundness, edge, tint, head glow and shimmer. `Notes3D` remains an independent depth axis; Streak stays in a later trail phase. AR camera-facing quads use the shared material shader, with six-style WARP samples added (CI pending); full AR parameter/value parity and real-camera/hardware review remain Unverified.
 - **Màu nốt:** Gradient, PerHand, PerTrack, RainbowPitch, RainbowTime; track/hand colors.
 - **Background motion:** Aurora, Nebula, Prism, Ember Haze, Ocean Flow, Retro Grid; có None và amount/speed/color.
 - **Hit-line motion:** Pulse, Sweep, Twin Comets, Spectrum, Electric Arc, Ripple.

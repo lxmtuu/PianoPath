@@ -55,16 +55,15 @@ public sealed class EffectContractTests
     }
 
     [Fact]
-    public void Material_recording_is_verified_but_ar_keeps_the_flat_quad_fallback()
+    public void Material_recording_is_verified_but_ar_material_support_remains_unverified()
     {
-        Assert.Equal("ar.note.flat-quad", EffectContractCatalog.ArFlatQuadFallbackId);
         foreach (var contract in EffectContractCatalog.NoteMaterialPilot)
         {
             Assert.Equal(EffectBackendState.Native, contract.Capabilities.WpfStage.State);
             Assert.Equal(EffectBackendState.Native, contract.Capabilities.GpuStage.State);
             Assert.Equal(EffectBackendState.Native, contract.Capabilities.Recording.State);
-            Assert.Equal(EffectBackendState.Fallback, contract.Capabilities.ArOverlay.State);
-            Assert.Equal("ar.note.flat-quad", contract.Capabilities.ArOverlay.FallbackId);
+            Assert.Equal(EffectBackendState.Unverified, contract.Capabilities.ArOverlay.State);
+            Assert.Null(contract.Capabilities.ArOverlay.FallbackId);
 
             foreach (var cost in new[] { contract.Cost.WpfStage, contract.Cost.Recording, contract.Cost.ArOverlay })
             {
@@ -126,20 +125,20 @@ public sealed class EffectContractTests
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
             Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording);
-            Assert.Equal(EffectParameterBindingState.Ignored, parameter.Bindings.ArOverlay);
+            Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay);
         });
         Assert.All(crystal.Parameters.Where(parameter => parameter.SettingName != "NoteRefraction"), parameter =>
         {
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.WpfStage);
             Assert.Equal(EffectParameterBindingState.Applied, parameter.Bindings.GpuStage);
             Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.Recording);
-            Assert.Equal(EffectParameterBindingState.Ignored, parameter.Bindings.ArOverlay);
+            Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay);
         });
         var crystalRefraction = crystal.Parameters.Single(parameter => parameter.SettingName == "NoteRefraction");
         Assert.Equal(EffectParameterBindingState.Applied, crystalRefraction.Bindings.WpfStage);
         Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.GpuStage);
         Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.Recording);
-        Assert.Equal(EffectParameterBindingState.Ignored, crystalRefraction.Bindings.ArOverlay);
+        Assert.Equal(EffectParameterBindingState.Unverified, crystalRefraction.Bindings.ArOverlay);
     }
 
     [Fact]
@@ -291,8 +290,9 @@ public sealed class EffectContractTests
             .Parameters.Single(parameter => parameter.SettingName == "PetalAmount").Maximum!.Value);
         Assert.All(EffectContractCatalog.NoteMaterialPilot, material =>
         {
-            Assert.Equal(EffectBackendState.Fallback, material.Capabilities.ArOverlay.State);
-            Assert.Equal("ar.note.flat-quad", material.Capabilities.ArOverlay.FallbackId);
+            Assert.Equal(EffectBackendState.Unverified, material.Capabilities.ArOverlay.State);
+            Assert.Null(material.Capabilities.ArOverlay.FallbackId);
+            Assert.All(material.Parameters, parameter => Assert.Equal(EffectParameterBindingState.Unverified, parameter.Bindings.ArOverlay));
         });
     }
 

@@ -191,7 +191,7 @@ Mọi preset có sẵn, mỗi preset vẽ bằng cả hai engine cạnh nhau (ph
 
 ![Các vật liệu nốt ở 50% — WPF/software bên trái, GPU/WARP bên phải](docs/previews/note-styles.jpg)
 
-`Gem` và `Crystal Outline` là material của sân khấu WPF/GPU, không đổi pitch/thời lượng và không phải trail. `Notes3D` là trục depth độc lập; `Streak` vẫn để giai đoạn trail sau. AR dùng camera-facing quad riêng với pose chiếu 3D, nhưng chưa có biến thể AR cho hai material mới. Workflow dựng lại cả hai gallery; `tools/check_sources.py` đối chiếu preset gallery với `Stage/VisualPresets.cs` và kiểm tra ma trận 9×2, artifact cùng drift gate của note-material gallery.
+`Gem` và `Crystal Outline` là material của sân khấu WPF/GPU; AR camera-facing quads dùng chung shader material nhưng không dùng mesh stage. `Notes3D` là trục depth độc lập; `Streak` vẫn để giai đoạn trail sau. WARP style samples cho AR đang chờ CI; full parameter/value parity, webcam và hardware vẫn Unverified. Workflow dựng lại hai gallery; `tools/check_sources.py` kiểm tra preset gallery, ma trận note-material 9×2, artifact và drift gate.
 
 ### Âm thanh, MIDI & luyện tập
 

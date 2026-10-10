@@ -309,8 +309,9 @@ internal static partial class VerificationSuite
 
     /// <summary>
     /// Cross-checks the typed Gem/Crystal Outline pilot against the shipped setting strings, GPU indices and
-    /// existing clamps. WPF, GPU and both captured recording routes now have material-specific read-back checks;
-    /// AR remains the explicit flat-quad fallback and the isolated GPU cost stays a separate evidence gate.
+    /// existing clamps. WPF, GPU and both captured recording routes have material-specific read-back checks;
+    /// AR uses the shared note shader on camera-facing patches, but support and per-setting bindings stay
+    /// Unverified until the AR-specific style/value matrix is covered. The isolated GPU cost is separate.
     /// </summary>
     private static void VerifyEffectContractPilot()
     {
@@ -342,9 +343,11 @@ internal static partial class VerificationSuite
             Assert(contract.Capabilities.WpfStage.State == EffectBackendState.Native
                     && contract.Capabilities.GpuStage.State == EffectBackendState.Native
                     && contract.Capabilities.Recording.State == EffectBackendState.Native
-                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Fallback
-                    && contract.Capabilities.ArOverlay.FallbackId == "ar.note.flat-quad",
-                $"The {alias} contract must separate native WPF/GPU/recording capture from the actual flat AR fallback.");
+                    && contract.Capabilities.ArOverlay.State == EffectBackendState.Unverified
+                    && contract.Capabilities.ArOverlay.FallbackId is null,
+                $"The {alias} contract must keep AR material support Unverified despite its shared-shader camera-quad route.");
+            Assert(contract.Parameters.All(parameter => parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified),
+                $"The {alias} contract must not claim AR parameter parity before the per-setting matrix is verified.");
             Assert(contract.Accessibility.FlashRisk == EffectFlashRisk.None
                     && contract.Accessibility.ReducedMotionBehavior == EffectReducedMotionBehavior.NoIndependentAnimation
                     && contract.Accessibility.NonColorCue != EffectShapeCue.None,
@@ -402,7 +405,7 @@ internal static partial class VerificationSuite
             }
         }
 
-        Results.Add("PASS effect contract metadata: Solid, Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; WPF/PNG and GPU/GpuRecordingTap captures verify all three, AR names the flat-quad fallback, and isolated recording cost remains unmeasured.");
+        Results.Add("PASS effect contract metadata: Solid, Gem and CrystalOutline retain their exact JSON aliases and GPU IDs; WPF/PNG and GPU/GpuRecordingTap captures verify all three, AR material support and per-setting bindings remain Unverified, and isolated recording cost remains unmeasured.");
     }
 
     /// <summary>
@@ -1763,8 +1766,8 @@ internal static partial class VerificationSuite
     /// <summary>
     /// AR-S3: the element catalogue, the three quality tiers and the look guard (docs/AR-OVERLAY-ROADMAP.md
     /// §14.3, §14.8). Lite draws the keys, the notes and the player's bars — what the overlay has always
-    /// drawn. A note style the overlay cannot render keeps its flat fallback, and a look never changes the
-    /// tier the overlay is drawn at.
+    /// drawn. Known material IDs pass through to the shared shader; unknown styles keep the readable fallback,
+    /// and a look never changes the tier the overlay is drawn at.
     /// </summary>
     private static void VerifyArQualityTiers()
     {
@@ -1781,14 +1784,14 @@ internal static partial class VerificationSuite
         var lastDropIndex = dropOrder.Length - 1;
         Assert(ArElement.Particles == dropOrder[0] && ArElement.ImpactLights == dropOrder[lastDropIndex],
             "Particles should be the first thing an over-budget frame drops, key glow the last.");
-        Assert(!ArLookGuard.IsPortedToAr("Gem") && !ArLookGuard.IsPortedToAr("CrystalOutline"),
-            "Gem and Crystal Outline still have no AR variant.");
-        Assert(ArLookGuard.StyleForAr("Gem") == ArLookGuard.ArFallbackStyle,
-            "An unported note style should fall back to Neon rather than claiming a facet look the flat projection cannot draw.");
+        Assert(ArLookGuard.IsPortedToAr("Gem") && ArLookGuard.IsPortedToAr("CrystalOutline"),
+            "Gem and Crystal Outline have branches in the shared shader used by AR note quads.");
+        Assert(ArLookGuard.StyleForAr("Gem") == "Gem" && ArLookGuard.StyleForAr("CrystalOutline") == "CrystalOutline",
+            "Known note materials should keep their shader IDs on the camera-facing AR patches.");
         Assert(ArLookGuard.StyleForAr("Neon") == "Neon" && ArLookGuard.StyleForAr("Fire") == "Fire",
-            "The styles that are ported should be passed through unchanged.");
+            "Known shader styles should be passed through unchanged.");
         Assert(!ArLookGuard.IsPortedToAr("Unknown") && ArLookGuard.StyleForAr("Unknown") == ArLookGuard.ArFallbackStyle && ArLookGuard.StyleForAr(null) == ArLookGuard.ArFallbackStyle,
-            "A style name the app does not know should fall back too, so a style added to the settings side without an AR variant is left out rather than drawn wrong.");
+            "Unknown or not-yet-ported styles should still fail closed to the readable fallback.");
         var settings = new PianoVisualSettings();
         Assert(settings.ArQuality == ArQualityTiers.StandardName, "Standard should be the default tier — not Lite, so existing users do not lose their key glow after upgrading.");
         var kept = new PianoVisualSettings { ArQuality = ArQualityTiers.LiteName };
@@ -1797,7 +1800,7 @@ internal static partial class VerificationSuite
         settings.ArQuality = "rubbish"; settings.Clamp();
         Assert(settings.ArQuality == ArQualityTiers.StandardName, "An unknown tier should clamp back to Standard rather than drawing nothing.");
         Assert(ArQualityTiers.Normalize("rubbish") == ArQualityTiers.StandardName, "The tier normaliser should also read an unknown name as Standard.");
-        Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, Gem/Crystal fallback, tier belongs to the machine.");
+        Results.Add("PASS AR quality tiers (AR-S3): Lite/Standard/Ultra elements, drop order, known note-material shader routing, unknown-style fallback, tier belongs to the machine.");
     }
 
     /// <summary>
