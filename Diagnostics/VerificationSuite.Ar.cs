@@ -263,8 +263,9 @@ internal static partial class VerificationSuite
         ArNotes.Build(calibration!, arView, arNotes, 10, 1, ArNoteStyle.Default, expected);
         Assert(expected.Count == 4, $"Four of the five notes are in reach or sounding ({expected.Count}).");
         var arFrame = Render(MakeArFeed(flatInput, arInput));
-        // the sounding G4 also lights its key, so the keys are counted apart from the notes
-        Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 4 && renderer.ArKeyQuadCount >= 1, $"The renderer should draw one quad for each note in reach ({renderer.ArQuadCount} quads, {renderer.ArKeyQuadCount} of them keys).");
+        // The sounding G4 also lights its key; standard quality may add neighboring-key light spill, so count note shapes separately.
+        Assert(renderer.ArShapeCount == expected.Count && renderer.ArKeyQuadCount >= 1,
+            $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArQuadCount} total).");
         var gemArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "Gem"));
         var crystalArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "CrystalOutline"));
         Assert(arFrame.AsSpan().SequenceEqual(gemArFrame) && arFrame.AsSpan().SequenceEqual(crystalArFrame),
@@ -293,12 +294,13 @@ internal static partial class VerificationSuite
         Assert(overKeys is { } over && over.Off <= 3, "Just past the leading edge of a coming note the camera's grey must show.");
 
         Render(MakeArFeed(flatInput, arInput, playing: false));
-        Assert(renderer.ArQuadCount - renderer.ArKeyQuadCount == 0, "A paused song draws no notes, like the stage.");
+        Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount == 0 && renderer.ArNoteLightCount == 0,
+            "A paused song draws no notes or key-light spill, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
         Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false)));
-        Assert(renderer.ArQuadCount == renderer.ArKeyQuadCount && renderer.ArKeyQuadCount >= 1,
-            "Perform mode draws no notes to come but still lights the key of the note that sounds.");
+        Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount >= 1,
+            "Perform mode draws no notes to come but still lights the key that sounds; standard-quality spill is a separate pass.");
         // ---- AR-1.4: held keys lit where they are in the picture ---------------------------------------------
         var held = new HashSet<int> { 60, 61, 64 };
         GpuStageFeed MakeKeyFeed(GpuArInput? ar)
@@ -313,8 +315,10 @@ internal static partial class VerificationSuite
         (double X, double Y) KeyPoint(double u, double v) { var p = calibration.ToPicture(u, v); return arView.ToOutput(p.X, p.Y); }
         var lit = RenderWarm(MakeKeyFeed(arInput));
         var litKeys = renderer.ArKeyQuadCount;
+        var litNoteLights = renderer.ArNoteLightCount;
         var unlit = RenderWarm(MakeKeyFeed(null));
-        Assert(litKeys == 5 && renderer.ArQuadCount == 0, $"Three held keys (C4 and E4 white, C#4 black) are five rectangles ({litKeys}).");
+        Assert(litKeys == 5 && litNoteLights > 0 && renderer.ArQuadCount == 0,
+            $"Three held keys (C4 and E4 white, C#4 black) are five rectangles plus neighboring-key spill ({litKeys} keys, {litNoteLights} spill quads).");
         int Change((double X, double Y) at)
         {
             var x = (int)Math.Floor(at.X); var y = (int)Math.Floor(at.Y);
@@ -334,10 +338,6 @@ internal static partial class VerificationSuite
             Assert(Change(at) > 25, $"A held key must be tinted: {what} changed by {Change(at)}.");
         (string What, (double X, double Y) At)[] shouldStay =
         [
-            ("D4, a white key not held", KeyPoint(layout.CenterX(62), .85)),
-            ("D4's stem between two black keys", KeyPoint((layout.Span(61).Right + layout.Span(63).Left) / 2, .3)),
-            ("D#4, a black key beside two held keys", KeyPoint(layout.CenterX(63), .3)),
-            ("F#4, a black key not held", KeyPoint(layout.CenterX(66), .3)),
             ("G5, far from any held key", KeyPoint(layout.CenterX(79), .85)),
             ("the air above C4", KeyPoint(layout.CenterX(60), -.3)),
         ];
@@ -360,10 +360,10 @@ internal static partial class VerificationSuite
             if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
             return feed;
         }
-        (byte[] Pixels, int Bars, int Keys, int Impacts, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
+        (byte[] Pixels, int Bars, int Keys, int Impacts, int NoteLights, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
         {
             var pixels = GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, beforeFrame, 20260930);
-            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArQuadCount);
+            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArNoteLightCount, renderer.ArQuadCount);
         }
         int Probe(byte[] withBar, byte[] withoutBar, (double X, double Y) at)
         {
@@ -376,10 +376,12 @@ internal static partial class VerificationSuite
         // transient impact lights remain identical and only the two independently optional bars differ.
         var withoutBars = Draw(ArFeed([60, 61], press: true, showTrails: false), 30);
         var withBars = Draw(ArFeed([60, 61], press: true), 30);
-        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Impacts == 2 && withBars.Quads == 7,
-            $"Two keys pressed should light three key rectangles, draw two bars and retain two strike lights ({withBars.Quads} quads: {withBars.Keys} keys, {withBars.Bars} bars, {withBars.Impacts} impacts).");
-        Assert(withoutBars.Bars == 0 && withoutBars.Keys == 3 && withoutBars.Impacts == 2 && withoutBars.Quads == 5,
-            $"Turning live press trails off must remove only the bars, leaving key tint and independent strike lights ({withoutBars.Quads} quads: {withoutBars.Keys} keys, {withoutBars.Impacts} impacts).");
+        Assert(withBars.Bars == 2 && withBars.Keys == 3 && withBars.Impacts == 2 && withBars.NoteLights > 0
+                && withBars.Quads == withBars.Keys + withBars.Bars + withBars.Impacts + withBars.NoteLights,
+            $"Two keys pressed should light three key rectangles, draw two bars, retain two strike lights and add neighboring spill ({withBars.Quads} quads: {withBars.Keys} keys, {withBars.Bars} bars, {withBars.Impacts} impacts, {withBars.NoteLights} spill).");
+        Assert(withoutBars.Bars == 0 && withoutBars.Keys == 3 && withoutBars.Impacts == 2 && withoutBars.NoteLights == withBars.NoteLights
+                && withoutBars.Quads == withoutBars.Keys + withoutBars.Impacts + withoutBars.NoteLights,
+            $"Turning live press trails off must remove only the bars, leaving key tint, neighboring spill and independent strike lights ({withoutBars.Quads} quads: {withoutBars.Keys} keys, {withoutBars.Impacts} impacts, {withoutBars.NoteLights} spill).");
         var trailsOffNoTint = Draw(ArFeed([60, 61], press: true, showTrails: false, keyLight: 0), 30);
         var tintedKey = KeyPoint(layout.CenterX(60), .85);
         Assert(Probe(withoutBars.Pixels, trailsOffNoTint.Pixels, tintedKey) > 25,

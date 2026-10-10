@@ -364,9 +364,11 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
+    /// <summary>How many song-note quads the AR layer built, excluding key tint and Live Stage light spill.</summary>
+    internal int ArShapeCount => _arLayer.ShapeCount;
     internal int AmbientCount => _ambientList.Count;
 
-    /// <summary>How many of those were lit keys (the rest are notes and the bars of the keys the player presses); verification reads it.</summary>
+    /// <summary>How many AR quads were lit-key patches; notes, bars, light spill and Live Stage effects are counted separately.</summary>
     internal int ArKeyQuadCount => _arLayer.KeyQuadCount;
 
     /// <summary>How many of those were bars of keys the player is pressing; verification reads it.</summary>
