@@ -378,8 +378,8 @@ internal static partial class VerificationSuite
                 Assert(parameter.Bindings.WpfStage == EffectParameterBindingState.Applied
                         && parameter.Bindings.GpuStage == expectedGpuBinding
                         && parameter.Bindings.Recording == EffectParameterBindingState.Unverified
-                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Ignored,
-                    $"The {alias} input {parameter.SettingName} should describe its actual per-output binding, including captured recording and AR's flat fallback.");
+                        && parameter.Bindings.ArOverlay == EffectParameterBindingState.Unverified,
+                    $"The {alias} input {parameter.SettingName} should keep its AR binding Unverified until the material setting has dedicated camera-quad coverage.");
                 var property = typeof(PianoVisualSettings).GetProperty(parameter.SettingName);
                 Assert(property is not null, $"The {alias} parameter {parameter.SettingName} should refer to an existing setting.");
                 if (property is null) continue;
