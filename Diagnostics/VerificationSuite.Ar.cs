@@ -290,13 +290,16 @@ internal static partial class VerificationSuite
         foreach (var shape in expected)
         {
             var insideChecked = 0;
+            var colouredSamples = 0;
             foreach (var (s, t) in new[] { (.5, .5), (.2, .5), (.8, .5), (.5, .15), (.5, .85), (.5, .95) })
             {
                 if (Look(arFrame, width, height, Blend(shape.Patch, s, t)) is not { } inside) continue;
                 insideChecked++;
-                Assert(inside.Spread > 30 && inside.Off > 40, $"Note {shape.Pitch} should be coloured at ({s:0.00},{t:0.00}) of its quad, spread {inside.Spread}, off grey by {inside.Off}.");
+                Assert(inside.Off > 40, $"Note {shape.Pitch} should visibly change the camera at ({s:0.00},{t:0.00}) of its quad (off grey by {inside.Off}).");
+                if (inside.Spread > 30) colouredSamples++;
             }
             Assert(insideChecked >= 2, $"At least two sample points of note {shape.Pitch} should be on the output ({insideChecked}).");
+            Assert(colouredSamples > 0, $"At least one sample point of note {shape.Pitch} should preserve its saturated note colour beyond Neon's achromatic white core ({colouredSamples}).");
             foreach (var (s, t) in new[] { (-.3, .5), (1.3, .5), (.5, -.35), (-.3, .9), (1.3, .9) })
             {
                 if (Look(arFrame, width, height, Blend(shape.Patch, s, t)) is not { } outside) continue;
