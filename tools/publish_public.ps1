@@ -90,7 +90,11 @@ if (-not $Branch) { $Branch = "release/public-$Tag" }
 Write-Step 'Checking git and the GitHub CLI'
 $gh = Get-Command gh -ErrorAction SilentlyContinue
 if (-not $gh) { throw 'the GitHub CLI (gh) was not found: https://cli.github.com' }
+# gh reports its status on stderr; under $ErrorActionPreference = 'Stop' that would end the script on success.
+$savedPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
 & gh auth status 2>&1 | Out-Host
+$ErrorActionPreference = $savedPreference
 if ($LASTEXITCODE -ne 0) { throw 'gh is not logged in; run `gh auth login` first' }
 
 Write-Step "Checking the tag $Tag"
@@ -234,7 +238,11 @@ try {
         $paths = @($files | ForEach-Object { $_.FullName })
 
         Write-Step "Attaching $($files.Count) file(s) to the $Tag release on $Repository"
+        # A missing release is the normal case on a first publish; its stderr must not end the script.
+        $savedPreference = $ErrorActionPreference
+        $ErrorActionPreference = 'Continue'
         & gh release view $Tag --repo $Repository 2>&1 | Out-Null
+        $ErrorActionPreference = $savedPreference
         if ($LASTEXITCODE -eq 0) {
             & gh release upload $Tag @paths --repo $Repository --clobber | Out-Host
             if ($LASTEXITCODE -ne 0) { throw 'gh release upload failed' }
