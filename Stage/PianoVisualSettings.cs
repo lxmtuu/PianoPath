@@ -443,6 +443,12 @@ internal sealed class PianoVisualSettings
     public bool ArNotesInPerspective { get; set; } = false;
     /// <summary>Draw the player's growing press bars over the camera; the key tint remains independent. Off by default to avoid bright press trails in a stream or call.</summary>
     public bool ArLivePressTrails { get; set; } = false;
+    /// <summary>Live press bars fade by their own lifetime — walked forward as the bar stretches and backwards over the release (AR‑6.2 Keysight keypress parity) — instead of the always-on length fade.</summary>
+    public bool ArLiveFadeByLifetime { get; set; } = false;
+    /// <summary>Solidity of a live bar the moment the key goes down, percent of full, when the lifetime fade is on.</summary>
+    public double ArLiveFadeStart { get; set; } = 60;
+    /// <summary>Solidity of a live bar once it has stretched to its full reach, percent of full, when the lifetime fade is on.</summary>
+    public double ArLiveFadeEnd { get; set; } = 100;
     /// <summary>In Perform mode, emit an independent 3D note on each MIDI Note On. The note travels along the calibrated AR direction and continues after Note Off; held key tint remains separate.</summary>
     public bool ArRisingMidiNotes { get; set; } = true;
     /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
@@ -515,9 +521,14 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
+    /// <summary>The lifetime fade of a live press bar, built the same way from <see cref="ArLiveFadeByLifetime"/>; null keeps the legacy length fade.</summary>
+    internal GraphVariable? ArLiveFadeGraph => ArLiveFadeByLifetime
+        ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArLiveFadeStart / 100, Max: ArLiveFadeEnd / 100)
+        : null;
+
     internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
         ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
-        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
+        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes, ArLiveFadeGraph).Normalised();
 
     /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
     internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
@@ -638,6 +649,7 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
                 or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
+                or nameof(ArLiveFadeByLifetime) or nameof(ArLiveFadeStart) or nameof(ArLiveFadeEnd)
                 or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails) or nameof(ArRisingMidiNotes)
                 or nameof(ArNoteDirectionTilt) or nameof(ArNoteDirectionAzimuth)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
@@ -765,11 +777,12 @@ internal sealed class PianoVisualSettings
         ArQuality = ArQualityTiers.Normalize(ArQuality);
         var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
             ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
-            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
+            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes, ArLiveFadeGraph).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         ArNoteDirectionTilt = ar.NoteDirectionTilt; ArNoteDirectionAzimuth = ar.NoteDirectionAzimuth;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);
+        ArLiveFadeStart = Math.Clamp(ArLiveFadeStart, 0, 100); ArLiveFadeEnd = Math.Clamp(ArLiveFadeEnd, 0, 100);
         ArNoteMinScale = ArOptions.Fit(ArNoteMinScale, ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, ArOptions.NoteMinScaleDefault);
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);

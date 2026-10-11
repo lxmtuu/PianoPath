@@ -355,7 +355,7 @@ Chủ repo đưa hai ảnh cần đạt: **(A)** nhìn thẳng từ trên xuốn
 | AR‑6.4 cửa sổ OBS, 6.5 webcam ảo, 6.6 sidecar | ❌ | | | stream/call là ưu tiên của chủ repo |
 | Tài liệu người dùng (README, CHANGELOG song ngữ) | ✅ mục **Unreleased** | | | README chưa có mục tả AR, chỉ có cờ `--bench-ar`; viết khi AR ra bản |
 
-**Còn nợ kỹ thuật đã biết:** `ArDelay` toàn cục (đề xuất AR‑3.5, cần chủ repo duyệt theo §14.11); mở camera chặn luồng giao diện tới 20 s; `StartCameraOverlay` đồng bộ; AR không áp `NoteStyle` và các hiệu ứng (§12) — ma trận *cảnh→ảnh* đã có (**AR‑S4a**, `Camera/ArSceneProjection.cs`, kiểm bằng `ArSceneProjectionTests` + `VerifyArSceneProjection`) và đã nối xuống GPU cho pass nốt (**AR‑S4b**: nhánh AR trong `VsNote`, `w` làm clip w, **mặc định tắt** — `GpuArInput.ProjectedNotes`, kiểm bằng `GpuArMapTests` + `VerifyArNoteProjection` đọc lại điểm ảnh trên WARP); còn thiếu nhánh AR trong `VsSprite`, shape/truncate của nốt, min‑scale đúng nghĩa và công tắc nối pass nốt đó vào giao diện.
+**Còn nợ kỹ thuật đã biết:** `ArDelay` đã lưu theo từng camera (AR‑3.5, 2026‑10‑11), không còn toàn cục; mở camera chặn luồng giao diện tới 20 s; `StartCameraOverlay` đồng bộ; AR không áp `NoteStyle` và các hiệu ứng (§12) — ma trận *cảnh→ảnh* đã có (**AR‑S4a**, `Camera/ArSceneProjection.cs`, kiểm bằng `ArSceneProjectionTests` + `VerifyArSceneProjection`) và đã nối xuống GPU cho pass nốt (**AR‑S4b**: nhánh AR trong `VsNote`, `w` làm clip w, **mặc định tắt** — `GpuArInput.ProjectedNotes`, kiểm bằng `GpuArMapTests` + `VerifyArNoteProjection` đọc lại điểm ảnh trên WARP); còn thiếu nhánh AR trong `VsSprite`, shape/truncate của nốt, min‑scale đúng nghĩa và công tắc nối pass nốt đó vào giao diện.
 
 **Từ 2026‑10‑09:** thiết kế lại toàn bộ hệ thống AR — xem §14. Mục AR‑6.2 trong bảng trên ("vệt phẳng cho phím tự bấm") là **AR‑S0** của bản mới; phần style nốt/hiệu ứng chuyển thành AR‑S4/AR‑S5.
 
@@ -400,7 +400,7 @@ phần chi tiết của các phần tử đó lấy từ trang intro/effect/gall
 | 3 | **Simulation** dùng chung cho mọi hiệu ứng | Hợp đồng `PianoSimulation` cho activity/damping/pedal/notes-per-second; `GpuStageSimulation` giữ state render và transient MIDI | ✅ AR‑S1; S5 hiện lưu riêng impact gần đây để chiếu effect AR theo pose |
 | 4 | **Thứ tự theo độ cao Z**, mặc định là cho 2D | Pose camera pinhole + mặt phím keyboard-local; project bốn góc của note/effect thay vì dựa vào một mặt phẳng màn hình | 🟡 `ArCameraPose` / `Ar3DNoteProjection` đang hoạt động cho note, live bar và S5 transient; chưa có catalogue độ cao chung |
 | 5 | Nốt: mọc theo mảnh, min-scale, truncate, size graph | Port vào pass note AR, giữ min-length theo bề rộng phím chiếu và hướng 3D độc lập | 🟡 `Ar3DNoteProjection.Build`; shared Live Stage note-material shader đã nối vào AR, regression WARP đang được mở rộng cho sáu style; min-scale còn thiếu |
-| 6 | Keypress: phủ phím + fade hai chiều | Key tint luôn độc lập; live bars là toggle riêng, chiếu theo pose/hướng note khi bật | 🟡 tint và projected bars có; fade graph/coverage đầy đủ còn thiếu |
+| 6 | Keypress: phủ phím + fade hai chiều | Key tint luôn độc lập; live bars là toggle riêng, chiếu theo pose/hướng note khi bật | 🟡 tint và projected bars có; **fade graph hai chiều ✅ (2026‑10‑11)**: `Bar fade follows lifetime` (mặc định tắt) mờ vệt theo vòng đời — xuôi khi giữ, ngược lúc nhả; coverage (Clean/Inset/Full) và màu theo velocity còn thiếu |
 | 7 | Impact light: đèn ở hàng phím, sáng theo velocity, kéo dài theo pedal | Blob ánh sáng projected tại phím MIDI vừa đánh, có strength/lifetime độc lập với live bars | 🟡 S5 Standard impact/note-light output có WARP counter/pixel sample PASS; graph/pedal sustain và camera tuning chưa hoàn tất |
 | 8 | Note light: hắt sáng xuống; nghiêng thì lệch | `spill` của sân khấu 2D chưa đủ; AR cần project vùng spill trên mặt phím đã calibration | 🟡 2D spill còn trong stage; spill riêng cho camera AR chưa có |
 | 9 | Màu theo **kênh MIDI** = tách hai tay | Thêm chế độ `Channel` (mỗi tay một màu) + `Activity`/`Notes‑sec` | 🟡 hiện có màu theo track và velocity tint; MIDI-channel mode còn thiếu |
@@ -448,7 +448,7 @@ bài học AR của Keysight là phải chỉnh lại theo góc máy — nên m�
 | `Light bars` (viền/hắt mép) | Scene | ❌ | gradient quanh mép phím; **không** đổ bóng (bài học AR) | `VsArQuad` |
 | `Overlay / HUD` | Scene | ❌ | đếm nốt, hiển thị pedal, tên nốt, watermark; vẽ sau cùng, **không** qua homography | pass riêng |
 | `Note objects` | Effect | 🟡 `Ar3DNoteProjection.Build` chiếu billboard camera-facing qua pose; Lite/off còn giữ flat route | shape × trắng/đen, min-scale, truncate, size graph, mọc theo mảnh | `GpuArLayer` → `VsArQuad` qua pose 3D |
-| `Keypresses` | Effect | 🟡 active-key tint + toggle live bars riêng; bars có route 3D khi bật | coverage, fade graph hai chiều, màu theo velocity; giữ toggle độc lập với key tint | `GpuArLayer` → `VsArQuad` |
+| `Keypresses` | Effect | 🟡 active-key tint + toggle live bars riêng; bars có route 3D khi bật; fade hai chiều (graph theo vòng đời) ✅ 2026‑10‑11 | coverage (Clean/Inset/Full), màu theo velocity; giữ toggle độc lập với key tint | `GpuArLayer` → `VsArQuad` |
 | `Impact lights` | Effect | 🟡 S5 WARP: MIDI impact cue/decay và neighboring-key spill có counter/pixel sample tại Standard+ | tiếp: spill theo graph/candle flicker và kiểm tra màu/độ sáng ngoài camera thật | `GpuArLayer` → `VsArQuad`, bốn góc chiếu từ pose 3D |
 | `Note lights` (spill) | Effect | 🟡 `spill` của sân khấu 2D; chưa có spill camera-space | hắt sáng trên mặt phẳng đã calibration, bán kính theo graph | pass AR chưa có |
 | `Pulses` | Effect | 🟡 S5 WARP: Ultra pulse/ring có counter + selected pixel variant checks | tune bán kính/lifetime theo velocity và kiểm tra dưới pose nghiêng | `GpuArLayer` → `VsArQuad`, bốn góc 3D |
@@ -481,6 +481,7 @@ internal readonly record struct GraphVariable(bool Graph, double Start, double S
 - **Lưu**: graph thuộc *look* → đi theo preset và mã chia sẻ; độ cao/khung nhìn thuộc máy như calibration.
 - **Kiểm chứng**: test thuần cho `Sample` (kẹp, curve, NaN) — ✅ AR‑S2; `--verify` đọc lại pixel cho vài graph mẫu — đợi AR‑S4 (phép chiếu vào pass nốt).
 - **UI (AR‑S2)**: mỗi graph chỉ 2 tay cầm (mềm ↔ mạnh) + công tắc bật/tắt; `Curve`/`Start`/`Stop` chưa mở ra giao diện — đúng như §14.9 đã hứa (không vẽ đồ thị trong bảng cài đặt).
+- **AR‑6.2 ✅ (2026‑10‑11)**: graph thứ ba của AR — độ mờ của vệt nhấn trực tiếp theo vòng đời, input là quãng vệt đã vươn 0..1 — đi xuôi khi giữ phím và đi ngược lại suốt pha nhả (`Camera/ArLiveFade.cs`, bật bằng `Bar fade follows lifetime`, mặc định tắt; cùng định dạng 1 toggle + 2 thanh trượt). Pha nhả vẫn kết hợp với dim sẵn có nên vệt biến mất trọn vẹn ở cả flat lẫn route 3D. Kiểm chứng: `ArLiveFadeTests` (thuần) + fact mới trong `ArNotesTests`/`Ar3DNoteProjectionTests` + `--verify` (`VerifyArGraphVariable`); mặc định tắt nên vẻ ngoài cũ đứng nguyên.
 - **AR‑S3 ✅ (2026‑10‑09)**: `ArElementCatalog` định nghĩa 11 phần tử (họ scene/effect, pass vẽ, tier tối thiểu); `ArQualityTier` Lite/Standard/Ultra với thứ tự cắt tất định (hạt → pulse → light bars → HUD → note light → damper → octave lines → impact lights), phím/nốt/vệt không bao giờ bị cắt; picker **Quality** trong thẻ AR, mặc định Standard (nâng cấp không mất ánh phím), thuộc máy nên áp look không đổi; `ArLookGuard` giữ nguyên sáu style đã biết cho shared shader; tên style không biết hoặc chưa được port vẫn dùng `Neon` fail-closed
 (một style thêm vào trang cài đặt trước khi có biến thể AR sẽ bị loại khỏi AR chứ không được đưa cho một pass chưa từng nghe tên nó).
 
@@ -502,7 +503,7 @@ làm artifact.
 
 - **Đã có (2026‑10‑10)**: wizard đặt 4 góc, lưu khung nhìn + horizontal FOV; Calibrate có gizmo Move/Rotate/Scale kiểu Unity và các núm số translation/scale đồng đều/pitch/yaw/roll. Transform tuyệt đối áp dụng từ baseline, chỉnh tay một góc thì baseline được rebase. Version 5 lưu FOV, translation, scale đồng đều, pitch/yaw/roll và baseline chưa biến đổi; v1–v4 tiếp tục đọc với translation 0 và scale 1. v3–v4 giữ FOV đã lưu, v1–v2 dùng FOV 70°; v1–v3 dùng góc 0°, còn v4 giữ rotation. Calibration vẫn thuộc máy.
 - **Hướng nốt độc lập**: hai điều khiển 3D tilt/azimuth trong AR settings định hướng note/live bars mà không xoay pose bàn phím. Pose và note direction được lưu trong settings cục bộ; preset không ghi đè chúng theo quy tắc local-only hiện tại.
-- `ArDelay` vẫn toàn cục (AR‑3.5 vẫn cần chủ repo duyệt).
+- AR‑3.5 ✅ (2026‑10‑11): độ trễ camera lưu theo định danh camera trong `ar-delay.json` cạnh cài đặt; thuộc máy như calibration, preset/mã chia sẻ không mang nó.
 - **Thêm 1 — overlay kiểm tra**: vẽ lưới phím + 4 góc đã lưu lên ảnh camera đang chạy (nút "ALIGNMENT CHECK"), để thấy
   ngay camera có bị xê dịch — analog của "ảnh alignment" bên Keysight.
 - **Thêm 2 — đo trôi**: so mép hàng phím trong khung mới với calibration; lệch quá ngưỡng → nhắc đánh dấu lại
@@ -550,7 +551,7 @@ toán thuần + test khung tổng hợp trước, máy thật để **Unverified
 ### 14.11 Những gì **không** đổi (ràng buộc của chủ repo)
 
 - **Pose 3D tự do là yêu cầu hiện hành**: pitch/yaw/roll của mặt phím và tilt/azimuth của hướng nốt được chỉnh riêng; không tái dựng mesh vật lý đầy đủ của đàn — chỉ mặt phím đã calibration và các billboard note/live-bar được dựng/project. Không dùng giới hạn flat-only cũ để thu hẹp yêu cầu này.
-- `ArDelay` vẫn toàn cục (AR‑3.5 chỉ làm khi chủ repo duyệt).
+- Độ trễ camera lưu theo từng camera (AR‑3.5, 2026‑10‑11) và thuộc máy; preset/mã chia sẻ không đổi nó.
 - Calibration thuộc máy (camera + khung nhìn), preset/mã chia sẻ không đổi nó.
 - MIDI là sự thật; không nhận phím từ hình/âm thanh; không model nặng trong gói mặc định.
 - Không âm thanh; không telemetry; mọi thứ kiểm chứng bằng khung tổng hợp.

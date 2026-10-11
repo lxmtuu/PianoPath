@@ -1728,9 +1728,10 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
-    /// AR-S2: the graph parameter (docs/AR-OVERLAY-ROADMAP.md §14.5) and the two velocity graphs of the
-    /// overlay's note style, wired from the settings page through <see cref="ArOptions"/> to the style the
-    /// AR layer draws with. Flat by default, so the drawings are unchanged unless the player asks.
+    /// AR-S2: the graph parameter (docs/AR-OVERLAY-ROADMAP.md §14.5), the two velocity graphs and the
+    /// live-bar lifetime fade (§14.5) of the overlay's note style, wired from the settings page through
+    /// <see cref="ArOptions"/> to the style the AR layer draws with. Flat by default, so the drawings are
+    /// unchanged unless the player asks.
     /// </summary>
     private static void VerifyArGraphVariable()
     {
@@ -1762,13 +1763,29 @@ internal static partial class VerificationSuite
         Assert(settings.ArNoteWidthSoft == 50 && settings.ArNoteFadeHard == 100, "Clamping should keep in-range graph sliders as they are.");
         settings.ArNoteWidthSoft = 1000; settings.Clamp();
         Assert(settings.ArNoteWidthSoft == 200, "Clamping should pull an out-of-range width slider back into range.");
+        // The live-bar lifetime graph (AR-6.2): off by default, and its two sliders walk from birth to full reach.
+        Assert(new PianoVisualSettings().ArOptionsValue.NoteStyle.LiveFade is null,
+            "The default overlay should keep the legacy length fade: no lifetime graph on the style.");
+        var live = new PianoVisualSettings { ArLiveFadeByLifetime = true, ArLiveFadeStart = 60, ArLiveFadeEnd = 100 };
+        var liveStyle = live.ArOptionsValue.NoteStyle;
+        var liveGraph = liveStyle.LiveFade ?? default;
+        Assert(liveStyle.LiveFade is not null
+                && Math.Abs(liveGraph.Sample(0) - .6) < 1e-9 && Math.Abs(liveGraph.Sample(1) - 1) < 1e-9,
+            "The live-bar fade graph should walk the birth slider to the full-length slider over the bar's stretch.");
+        live.ArLiveFadeStart = 300; live.Clamp();
+        Assert(live.ArLiveFadeStart == 100, "Clamping should pull an out-of-range lifetime slider back into range.");
+        Assert(Math.Abs(ArLiveFade.Opacity(liveGraph, .5, true, 0) - .8) < 1e-9
+                && Math.Abs(ArLiveFade.Opacity(liveGraph, .5, false, .5) - .7) < 1e-9,
+            "Held should walk the graph forwards and the release should walk the same graph backwards.");
+        Assert(Math.Abs(ArLiveFade.Opacity(null, .92, true, 0) - .08) < 1e-9,
+            "Without the graph the legacy floor still stands.");
         // A look never carries the graphs: they belong to the overlay on this camera.
-        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50 };
+        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50, ArLiveFadeByLifetime = true, ArLiveFadeStart = 20 };
         var target = new PianoVisualSettings();
         target.CopyFrom(look);
-        Assert(!target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100,
-            "Applying a look should not change the overlay's velocity graphs.");
-        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade graphs wired from settings to the note style.");
+        Assert(!target.ArLiveFadeByLifetime && !target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100 && target.ArLiveFadeStart == 60,
+            "Applying a look should not change the overlay's velocity or lifetime graphs.");
+        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade/lifetime graphs wired from settings to the note style, the lifetime fade walking both ways, all look-guarded.");
     }
 
     /// <summary>

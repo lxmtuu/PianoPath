@@ -299,6 +299,21 @@ public class Ar3DNoteProjectionTests
     }
 
     [Fact]
+    public void A_lifetime_fade_walks_the_graph_with_hold_and_release_in_3d_too()
+    {
+        var live = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .2, Max: 1);
+        var style = Style with { LiveFade = live };
+        var f = .5 * Style.FallSpeed / Style.Reach;
+        var held = Assert.Single(BuildLive([new ArLivePress(60, .5, .5, true, .9f)], style: style));
+        var released = Assert.Single(BuildLive([new ArLivePress(60, .8, .5, false, .9f)], style: style));
+        // held: the graph stands at the bar's stretch; released: it walked back by how far the bar has travelled toward its reach
+        var stretchBack = .3 * Style.FallSpeed / Style.Reach;
+        Assert.Equal(.2 + .8 * f, held.Fade, 9);
+        Assert.Equal((.2 + .8 * f * (1 - stretchBack)) * (.65 * .9), released.Fade, 9);
+        Assert.True(released.Fade < held.Fade);
+    }
+
+    [Fact]
     public void Elevated_billboards_follow_the_saved_3d_pose_and_project_all_four_corners()
     {
         var baseline = Corners.Select(point => (640 + (point.X - 640) * .62, 360 + (point.Y - 360) * .62)).ToArray();

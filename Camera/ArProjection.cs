@@ -100,8 +100,9 @@ internal static class ArProjection
 /// <param name="WidthShare">How much of its key's width a note fills at full size, 0..1.</param>
 /// <param name="WidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/> over the simulation's 0..1 activity): null or flat keeps every note the same width, a graph makes hard strikes wider. Lives in the look, so presets carry it.</param>
 /// <param name="FadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/> over the same input): null or flat keeps the fade the same for every note, a graph brings hard strikes in faster.</param>
+/// <param name="LiveFade">How a live press bar's solidity follows its own lifetime (a <see cref="GraphVariable"/> over how far the bar has stretched, walked forward while the key is held and backwards over the release — AR‑6.2 Keysight keypress parity): null keeps the legacy length fade, see <see cref="ArLiveFade"/>.</param>
 internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, double MinLength = .06, double Gap = .015, double WidthShare = .86,
-    GraphVariable? WidthVelocity = null, GraphVariable? FadeVelocity = null)
+    GraphVariable? WidthVelocity = null, GraphVariable? FadeVelocity = null, GraphVariable? LiveFade = null)
 {
     internal static readonly ArNoteStyle Default = new();
 
@@ -218,10 +219,12 @@ internal static class ArNotes
                 if (!layout.Contains(press.Pitch) || KeyboardLayout.IsBlack(press.Pitch) != wantBlack) continue;
                 if (!double.IsFinite(press.Age) || !double.IsFinite(press.HeldSeconds) || press.HeldSeconds <= 0) continue;
                 var gone = 1.0;                                 // how much of the bar is left now the finger may have left the key
+                var releaseFraction = 0.0;                      // how far the release has travelled through its life, for the backward walk
                 if (!press.Down)
                 {
                     var since = press.Age - press.HeldSeconds;
                     if (!(since >= 0) || since >= ReleaseLife) continue;   // let go and already gone, or an age that makes no sense
+                    releaseFraction = Math.Clamp(since / ReleaseLife, 0, 1);
                     gone = .65 * Math.Clamp(1 - since / ReleaseLife, 0, 1);
                 }
                 var length = Math.Min(style.Reach, press.HeldSeconds * style.FallSpeed);
@@ -230,7 +233,8 @@ internal static class ArNotes
                 var (left, right) = layout.Span(press.Pitch);
                 var centre = (left + right) / 2; var half = (right - left) / 2 * style.WidthShareFor(velocity);
                 if (!ArProjection.TryProject(calibration, view, centre - half, centre + half, -length, 0, out var patch, out _, out _)) continue;
-                into.Add(new ArLiveBar(patch, press.Pitch, Math.Clamp(1 - length / style.Reach, .08, 1) * gone * style.FadeGraph.Sample(velocity), press.Down, press.Strength));
+                var fade = ArLiveFade.Opacity(style.LiveFade, length / style.Reach, press.Down, releaseFraction) * gone * style.FadeGraph.Sample(velocity);
+                into.Add(new ArLiveBar(patch, press.Pitch, fade, press.Down, press.Strength));
             }
         }
     }

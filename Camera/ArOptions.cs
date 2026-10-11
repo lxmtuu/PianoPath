@@ -34,10 +34,12 @@ internal static class ArModes
 /// <param name="NoteDirectionTilt">The independent 3D tilt of note travel away from the default back-to-keys axis.</param>
 /// <param name="NoteDirectionAzimuth">The independent 3D azimuth around that axis.</param>
 /// <param name="RisingMidiNotes">In Perform mode, create a separate calibrated 3D note on each MIDI Note On; Note Off freezes its length but does not stop its travel.</param>
+/// <param name="LiveFadeGraph">The fade-over-lifetime of live press bars (a <see cref="GraphVariable"/> walked forward while the key is held and backwards over the release, AR‑6.2 Keysight keypress parity); null keeps the legacy length fade.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
     bool NotesInPerspective = false, double NoteMinScale = 0, bool LivePressTrails = false,
-    double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0, bool RisingMidiNotes = true)
+    double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0, bool RisingMidiNotes = true,
+    GraphVariable? LiveFadeGraph = null)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
@@ -115,6 +117,7 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     {
         Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed,
         WidthVelocity = (Normalised().NoteWidthVelocity ?? GraphVariable.Flat).Normalised(),
-        FadeVelocity = (Normalised().NoteFadeVelocity ?? GraphVariable.Flat).Normalised()
+        FadeVelocity = (Normalised().NoteFadeVelocity ?? GraphVariable.Flat).Normalised(),
+        LiveFade = Normalised().LiveFadeGraph?.Normalised()
     };
 }
