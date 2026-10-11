@@ -2,7 +2,7 @@
 
 > **This is the release repository, not the source repository.** It carries only Keyflow's built
 > packages and its user documentation; the source lives in a separate repository. Everything here
-> is produced by the source repository's release pipeline at exactly tag `v2.0.0` — see
+> is produced by the source repository's release pipeline at exactly tag `v2.0.1` — see
 > **[Downloading a release](#downloading-a-release)** below, **[Releases](https://github.com/lxmtuu/KeyFlow/releases/latest)** for the
 > newest one, and **[Issues](https://github.com/lxmtuu/KeyFlow/issues)** to report a defect.
 >
@@ -60,21 +60,21 @@ else's artwork.*
 
 ## Downloading a release
 
-Every release (`v2.0.0` and later) is a GitHub **Release** holding four packages and a
+Every release (`v2.0.1` and later) is a GitHub **Release** holding four packages and a
 `SHA256SUMS.txt` covering all of them: **[https://github.com/lxmtuu/KeyFlow/releases/latest](https://github.com/lxmtuu/KeyFlow/releases/latest)**.
 
 | File | What it is | What the target PC needs |
 | --- | --- | --- |
-| `Keyflow-2.0.0-win-x64.zip` | Portable **self-contained** build: unzip and run `PianoPath.exe` | Nothing else |
-| `Keyflow-Setup-2.0.0.exe` | **Installer** for Windows x64: Start Menu/Desktop shortcuts, an uninstall entry, an English/Vietnamese wizard | Nothing else |
-| `Keyflow-2.0.0-win-x64-fd.zip` | **Framework-dependent** build, far smaller | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| `Keyflow-2.0.0-win-arm64.zip` | Windows on ARM, self-contained (published by CI; no ARM machine has run it yet) | Nothing else |
+| `Keyflow-2.0.1-win-x64.zip` | Portable **self-contained** build: unzip and run `PianoPath.exe` | Nothing else |
+| `Keyflow-Setup-2.0.1.exe` | **Installer** for Windows x64: Start Menu/Desktop shortcuts, an uninstall entry, an English/Vietnamese wizard | Nothing else |
+| `Keyflow-2.0.1-win-x64-fd.zip` | **Framework-dependent** build, far smaller | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `Keyflow-2.0.1-win-arm64.zip` | Windows on ARM, self-contained (published by CI; no ARM machine has run it yet) | Nothing else |
 
 Run the installer and you are done; for a ZIP, **unzip the whole folder and run `PianoPath.exe`** — never
 separate `PianoPath.exe` from its `LICENSE.txt`:
 
 ```
-Keyflow-2.0.0-win-x64\
+Keyflow-2.0.1-win-x64\
 ├── PianoPath.exe              ← the single executable
 └── LICENSE.txt                ← the MIT licence, which has to travel with copies
 ```
@@ -85,7 +85,7 @@ be cancelled/resumed, and the CC BY 3.0 attribution is saved beside the samples 
 installation folder.
 
 - **Checking a download**: each release carries `SHA256SUMS.txt`; compare with
-  `Get-FileHash .\Keyflow-2.0.0-win-x64.zip -Algorithm SHA256`. The packages are **not code-signed yet**;
+  `Get-FileHash .\Keyflow-2.0.1-win-x64.zip -Algorithm SHA256`. The packages are **not code-signed yet**;
   the hash table remains the quick way to be sure the file that arrived is the file the pipeline built.
 - **SmartScreen**: the packages are **not Authenticode-signed yet**, so Windows may show *"Windows protected your PC"* on install or first run; choose **More info → Run anyway**.
 - **Keep the licence**: `LICENSE.txt` (MIT) travels with the application. Salamander's CC BY 3.0 notice
