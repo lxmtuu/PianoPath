@@ -166,7 +166,10 @@ public sealed class ArDelayStoreTests : IDisposable
         var store = new ArDelayStore(blocker);                       // the "folder" is a file
         Assert.Equal(0, store.Count);
         Assert.False(store.Set(Webcam, 80));
-        Assert.False(store.Remove(Webcam));
+        // The file refused it, but the value itself is kept in memory for the session — the calibration store
+        // degrades the same way, so one unwritable folder does not make the overlay forget the camera mid-run.
+        Assert.Equal(80d, store.Get(Webcam));
+        Assert.False(store.Remove("never-saved"));
     }
 
     [Fact]
