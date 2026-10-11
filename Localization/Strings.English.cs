@@ -630,7 +630,7 @@ internal static class StringsEnglish
         ["Key labels"] = "Key labels",
         ["Key light"] = "Key light",
         ["Key tint"] = "Key tint",
-        ["Key tint, rising MIDI notes and held-key press bars are independent. Velocity settings below change note width and fade, not key tint."] = "Key tint, rising MIDI notes and held-key press bars are independent. Velocity settings below change note width and fade, not key tint.",
+        ["Key tint, rising MIDI notes and press bars are independent. The velocity knobs below change note width and fade, never key tint; the bars' lifetime fade and coverage keep their own knobs, and their velocity tint follows the look."] = "Key tint, rising MIDI notes and press bars are independent. The velocity knobs below change note width and fade, never key tint; the bars' lifetime fade and coverage keep their own knobs, and their velocity tint follows the look.",
         ["Key tolerance"] = "Key tolerance",
         ["Keyboard"] = "Keyboard",
         ["Keyboard & Shortcuts"] = "Keyboard & Shortcuts",

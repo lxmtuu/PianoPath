@@ -630,7 +630,7 @@ internal static class StringsVietnamese
         ["Key labels"] = "Nhãn phím",
         ["Key light"] = "Đèn phím",
         ["Key tint"] = "Độ ngả màu phím",
-        ["Key tint, rising MIDI notes and held-key press bars are independent. Velocity settings below change note width and fade, not key tint."] = "Màu phím, nốt MIDI chạy lên và vệt phím đang giữ là các chức năng độc lập. Cài đặt lực nhấn bên dưới đổi độ rộng và độ mờ nốt, không đổi màu phím.",
+        ["Key tint, rising MIDI notes and press bars are independent. The velocity knobs below change note width and fade, never key tint; the bars' lifetime fade and coverage keep their own knobs, and their velocity tint follows the look."] = "Màu phím, nốt MIDI chạy lên và vệt phím là các chức năng độc lập. Các núm lực nhấn bên dưới đổi độ rộng và độ mờ nốt, tuyệt đối không đổi màu phím; độ mờ theo vòng đời và độ phủ của vệt có núm riêng, còn màu theo lực nhấn của vệt đi theo giao diện.",
         ["Key tolerance"] = "Ngưỡng key màu",
         ["Keyboard"] = "Bàn phím",
         ["Keyboard & Shortcuts"] = "Bàn phím & phím tắt",
