@@ -17,6 +17,12 @@ một số: quên một bản sao là kiểm tra tĩnh đỏ, không phải mộ
 Giới hạn kỹ thuật của sản phẩm nằm ở mục *[Giới hạn hiện tại](README.md#giới-hạn-hiện-tại)* của README và
 không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP.md`](docs/ROADMAP.md).
 
+## Unreleased
+
+### AR overlay
+
+- **Vạch damper phát sáng ôm mép sau phím** (catalogue `Dampers`, vẽ từ bậc AR Standard trở lên): một vạch sáng mềm dính liền mép sau của hàng phím — đúng «vạch đánh» sáng rực trong các video đàn quay thẳng từ trên xuống. Vạch luôn mỏng quanh mép; pedal sustain nhấn xuống (mức 0..1, không nhị phân) làm nó vươn sâu ra thân đàn và sáng dậy. Màu lấy **màu halo** của look (cùng gia đình với Pedal Glow trên sân khấu) nên tự hợp với mọi preset, bloom vẽ hào quang quanh lõi nóng, bậc Lite không vẽ — đúng catalogue. Cùng lúc, khung nhìn **90° overhead** (góc quay phổ biến nhất cho hình kiểu này) được `VerifyArNoteProjection` chiếu lại toàn bộ trên WARP — vệt nhấn, tint velocity, vạch damper — để CI khóa góc quay này theo từng build; kiểm xUnit `ArDampersTests` chạy trên mọi máy.
+
 ## 2.0.1 — 2026-10-12
 
 ### AR overlay

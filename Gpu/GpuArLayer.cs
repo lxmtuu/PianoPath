@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9 or note label 10.</summary>
+    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10 or damper strip 11.</summary>
     public Vector4 Misc;
 }
 
@@ -73,6 +73,7 @@ internal sealed partial class GpuArLayer
     internal int HoldArcCount { get; private set; }
     internal int BeamCount { get; private set; }
     internal int ReleaseEffectCount { get; private set; }
+    internal int DamperStripCount { get; private set; }
 
     /// <summary>
     /// Refills the projected AR quads. Key tint remains independent of the optional live bars. Actual stage-simulation
@@ -87,6 +88,7 @@ internal sealed partial class GpuArLayer
         KeyQuadCount = LiveBarCount = RisingMidiNoteCount = 0;
         NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = 0;
         ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
+        DamperStripCount = 0;
         if (ar.Opacity <= 0) return;
 
         var opacity = Math.Clamp(ar.Opacity, 0f, 1f);
@@ -104,6 +106,16 @@ internal sealed partial class GpuArLayer
                 quads.Add(Pack(patch, new Vector3(key.X, key.Y, key.Z), Math.Min(1f, key.W) * keyLight * opacity, new Vector4(1, 0, 1, 0)));
                 KeyQuadCount++;
             }
+        }
+
+        // The damper strip is a scene element, so it packs before everything born with a strike: it hugs the key
+        // back edge, waves only with the pedal level, and takes the look's halo colour (the Pedal Glow family).
+        var damperLift = ArDampers.ClampLevel(input.SustainLevel);
+        if (ArElementCatalog.CanDraw(ar.Quality, ArElement.Dampers)
+            && ArDampers.TryPatch(ar.Calibration, view, damperLift, out var damperPatch))
+        {
+            quads.Add(Pack(damperPatch, look.HaloColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4(0, 0, 11f, 0)));
+            DamperStripCount++;
         }
 
         if (ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0)

@@ -71,7 +71,7 @@ internal sealed partial class PianoStage
                 feed.LabelAtlas ??= GpuGlyphAtlas;
                 PublishGpuLook();
                 feed.SetStageHeight(ActualHeight);
-                feed.SetSustain(_sustainPedal);
+                feed.SetSustainLevel(_sustainPedal, _simulation.Sustain);
                 feed.SetPointer(_pointerX, _pointerY);
                 ForwardGpuState();
             }

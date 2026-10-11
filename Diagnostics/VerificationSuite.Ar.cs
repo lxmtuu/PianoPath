@@ -277,7 +277,7 @@ internal static partial class VerificationSuite
         var arFrame = Render(MakeArFeed(flatInput, arInput));
         // The sounding G4 also lights its key; standard quality may add neighboring-key light spill, so count note shapes separately.
         Assert(renderer.ArShapeCount == expected.Count && renderer.ArKeyQuadCount >= 1,
-            $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArQuadCount} total).");
+            $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArObjectQuadCount} object quads plus {renderer.ArDamperStripCount} damper strips).");
         var gemArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "Gem"));
         var crystalArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "CrystalOutline"));
         var neonGemPixels = ChangedPixels(arFrame, gemArFrame);
@@ -315,7 +315,7 @@ internal static partial class VerificationSuite
         Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount == 0 && renderer.ArNoteLightCount == 0,
             "A paused song draws no notes or key-light spill, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
-        Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
+        Assert(renderer.ArObjectQuadCount == 0, "An AR layer at zero opacity draws nothing.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false)));
         Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount >= 1,
             "Perform mode draws no notes to come but still lights the key that sounds; standard-quality spill is a separate pass.");
@@ -335,7 +335,7 @@ internal static partial class VerificationSuite
         var litKeys = renderer.ArKeyQuadCount;
         var litNoteLights = renderer.ArNoteLightCount;
         var unlit = RenderWarm(MakeKeyFeed(null));
-        Assert(litKeys == 5 && litNoteLights > 0 && renderer.ArQuadCount == 0,
+        Assert(litKeys == 5 && litNoteLights > 0 && renderer.ArObjectQuadCount == 0,
             $"Three held keys (C4 and E4 white, C#4 black) are five rectangles plus neighboring-key spill ({litKeys} keys, {litNoteLights} spill quads).");
         int Change((double X, double Y) at)
         {
@@ -362,7 +362,7 @@ internal static partial class VerificationSuite
         foreach (var (what, at) in shouldStay)
             Assert(Change(at) <= 2, $"Only held keys light up: {what} changed by {Change(at)}.");
         RenderWarm(MakeKeyFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, 0f)));
-        Assert(renderer.ArQuadCount == 0, "A key light strength of zero draws no key.");
+        Assert(renderer.ArObjectQuadCount == 0, "A key light strength of zero draws no key.");
 
         // ---- the keys under the player's own hands: a bar leaves the key ---------------------------------------
         // No song at all: nothing plays and no notes are loaded, which is what playing freely looks like. The key
@@ -381,7 +381,7 @@ internal static partial class VerificationSuite
         (byte[] Pixels, int Bars, int Keys, int Impacts, int NoteLights, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
         {
             var pixels = GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, beforeFrame, 20260930);
-            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArNoteLightCount, renderer.ArQuadCount);
+            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArNoteLightCount, renderer.ArObjectQuadCount);
         }
         int Probe(byte[] withBar, byte[] withoutBar, (double X, double Y) at)
         {
@@ -442,12 +442,12 @@ internal static partial class VerificationSuite
         Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
-        Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
+        Assert(renderer.ArObjectQuadCount == 0, "Without an AR layer there are no AR quads.");
         var smallRing = new CameraFrameRing(); PublishGradient(smallRing, 160, 90);
         Render(MakeArFeed(new GpuCameraInput(smallRing, PictureFit.Fit, false, 1f), arInput));
-        Assert(renderer.ArQuadCount == 0, "A camera that is not the size the calibration was made at must hide the AR layer, not draw notes in the wrong place.");
+        Assert(renderer.ArObjectQuadCount == 0, "A camera that is not the size the calibration was made at must hide the AR layer, not draw notes in the wrong place.");
         Render(MakeArFeed(null, arInput));
-        Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
+        Assert(renderer.ArObjectQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
         VerifyArOverlayCapturedFrames(renderer);
         Results.Add($"PASS ar keys: three held keys produce five tinted rectangles and separate neighboring-key spill at standard quality; distant keys and the air above the keyboard stay clear, read back against the same frame without the layer.");
@@ -1496,8 +1496,8 @@ internal static partial class VerificationSuite
             $"The 3D note projection should build one patch per input note ({expected.Count} patches for {notes.Count} notes).");
         var projected = Render(MakeFeed(defaultInput));
         var projectedPixels = ColouredPixels(projected);
-        Assert(renderer.ArQuadCount == expected.Count && renderer.ArLiveBarCount == 0,
-            $"The AR quad pass should own one 3D patch per note ({renderer.ArQuadCount} quads for {expected.Count} notes), not the legacy scene-note pass.");
+        Assert(renderer.ArObjectQuadCount == expected.Count && renderer.ArLiveBarCount == 0,
+            $"The AR quad pass should own one 3D patch per note ({renderer.ArObjectQuadCount} quads for {expected.Count} notes), not the legacy scene-note pass.");
         Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
             $"The camera must suppress stage-space note bodies and falling trails (notes {renderer.StageNoteCount}, trails {renderer.StageNoteTrailCount}).");
         Assert(projectedPixels > 500,
@@ -1522,7 +1522,7 @@ internal static partial class VerificationSuite
             settings.NoteStyle = style;
             var styledNotes = Render(MakeFeed(defaultInput));
             materialChanges[style] = ChangedPixels(projected, styledNotes, threshold: 4);
-            Assert(renderer.ArQuadCount == expected.Count,
+            Assert(renderer.ArObjectQuadCount == expected.Count,
                 $"Changing the AR note material to {style} must preserve one calibrated quad per song note.");
         }
         settings.NoteStyle = "Solid";
@@ -1534,7 +1534,7 @@ internal static partial class VerificationSuite
         settings.NoteShimmerAmount = 100;
         var shimmerNotes = Render(MakeFeed(defaultInput));
         var shimmerPixels = ChangedPixels(projected, shimmerNotes, threshold: 4);
-        var shimmerQuads = renderer.ArQuadCount;
+        var shimmerQuads = renderer.ArObjectQuadCount;
         settings.NoteShimmer = false;
         settings.NoteShimmerAmount = 45;
         Assert(shimmerQuads == expected.Count * 2 && shimmerPixels > 20,
@@ -1588,7 +1588,7 @@ internal static partial class VerificationSuite
         Ar3DNoteProjection.Build(transformedCalibration, view, notes, 10, .22, transformedInput.Notes,
             transformedInput.NoteDirection, transformedInput.MinAspect, transformedShapes);
         var transformedPixels = Render(MakeFeed(transformedInput));
-        Assert(renderer.ArQuadCount == notes.Count && ColouredPixels(transformedPixels) > 500
+        Assert(renderer.ArObjectQuadCount == notes.Count && ColouredPixels(transformedPixels) > 500
                 && transformedShapes.Count == notes.Count && !transformedCorners.SequenceEqual(corners),
             "A moved, uniformly scaled and rotated calibration should still reach the live camera AR-quad pass.");
         foreach (var shape in transformedShapes)
@@ -1604,7 +1604,7 @@ internal static partial class VerificationSuite
         Ar3DNoteProjection.Build(calibration, mirroredView, notes, 10, .22, defaultInput.Notes,
             defaultInput.NoteDirection, defaultInput.MinAspect, mirroredExpected);
         var mirrored = Render(MakeFeed(defaultInput, mirror: true));
-        Assert(renderer.ArQuadCount == mirroredExpected.Count && renderer.StageNoteCount == 0,
+        Assert(renderer.ArObjectQuadCount == mirroredExpected.Count && renderer.StageNoteCount == 0,
             "Mirroring the camera must not send projected notes back through the flat stage pass.");
         foreach (var shape in mirroredExpected)
         {
@@ -1617,7 +1617,7 @@ internal static partial class VerificationSuite
         // without changing the four calibration anchors.
         var diagonalInput = defaultInput with { NoteDirection = new ArNoteDirection(72, 38) };
         var diagonal = Render(MakeFeed(diagonalInput));
-        Assert(ChangedPixels(projected, diagonal) > 100 && renderer.ArQuadCount == notes.Count,
+        Assert(ChangedPixels(projected, diagonal) > 100 && renderer.ArObjectQuadCount == notes.Count,
             "A different 3D note direction must move/rotate the note billboards, not silently reuse the keyboard's flat travel axis.");
         Assert(savedCorners.SequenceEqual(calibration.Corners),
             "Changing note travel direction must never mutate the calibrated keyboard pose.");
@@ -1625,8 +1625,8 @@ internal static partial class VerificationSuite
         // Perform is a separate mode: it drops the song notes while keeping key tint available.
         var performInput = defaultInput with { ShowNotes = false };
         var perform = Render(MakeFeed(performInput));
-        Assert(renderer.ArQuadCount == 0 && ColouredPixels(perform) == 0,
-            "Perform must omit future song-note quads instead of routing them through either note renderer.");
+        Assert(renderer.ArObjectQuadCount == 0 && renderer.ArDamperStripCount == 1,
+            "Perform must omit future song-note quads instead of routing them through either note renderer; the damper strip, a scene element tied to the pedal and not the song, stays.");
         Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
             "Perform over the camera must keep the stage-space note and trail pass empty as well.");
 
@@ -1637,7 +1637,7 @@ internal static partial class VerificationSuite
         var naturalPixels = ColouredPixels(shortNatural);
         var shortMinimum = Render(MakeFeed(shortMinimumInput, song: shortNotes));
         var minimumPixels = ColouredPixels(shortMinimum);
-        Assert(renderer.ArQuadCount == shortNotes.Count && minimumPixels > naturalPixels,
+        Assert(renderer.ArObjectQuadCount == shortNotes.Count && minimumPixels > naturalPixels,
             $"A 200% minimum length must visibly lengthen short projected notes ({naturalPixels} → {minimumPixels} pixels).");
 
         // Live press bars are independently switched from key tint and use the same 3D direction as song notes.
@@ -1653,7 +1653,8 @@ internal static partial class VerificationSuite
         liveFxLook.HoldElectricArc = true; liveFxLook.HoldArcIntensity = 100;
         liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
         GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
-            PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null)
+            PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null,
+            bool sustain = false)
         {
             var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
             var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
@@ -1665,6 +1666,7 @@ internal static partial class VerificationSuite
             feed.ClearTransient();
             feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
             feed.SetDeterministicBeatPulse(0);
+            feed.SetSustainLevel(sustain, 1);
             foreach (var pitch in pressed) feed.LiveNote(pitch, true, .9f);
             if (addImpact) feed.Impact(60, .9);
             return feed;
@@ -1693,7 +1695,7 @@ internal static partial class VerificationSuite
         var uncalibratedMidiFrame = RenderFrames(UncalibratedFeed(busyUncalibratedLook, triggerEffects: true), 4);
         Assert(uncalibratedIdleFrame.AsSpan().SequenceEqual(uncalibratedMidiFrame)
                 && renderer.StageKeyCount == 0 && renderer.StageSpriteCount == 0
-                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArObjectQuadCount == 0,
             "Before calibration, the camera must show physical keys only: no static virtual keyboard, Live Stage sprites, guide lanes, notes or falling trails may leak into the uncalibrated camera overlay.");
 
         // BuildAmbient also guards its scene-only lane/trail geometry itself; it must not rely on BuildNotes
@@ -1809,6 +1811,37 @@ internal static partial class VerificationSuite
         Assert(velocityTinted.Bars == 1 && velocityTintPixels > 20,
             $"A live bar must retint with the pressing strength when the look enables velocity colour ({velocityTintPixels} changed pixels, bars {velocityTinted.Bars}).");
 
+        // Catalogue Dampers (roadmap §14.3): the strip hugs the key back edge from Standard up, lifts with the
+        // sustain level 0..1 and takes the look's halo colour; Lite must never draw it.
+        var damperDown = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true), 8);
+        var damperStripCount = renderer.ArDamperStripCount;
+        var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 8);
+        var damperLiftPixels = ChangedPixels(damperUp, damperDown, threshold: 4);
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, sustain: true), 4);
+        Assert(damperStripCount == 1 && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0,
+            $"Sustain must lift the damper strip over the key back edge at Standard and the strip must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {renderer.ArDamperStripCount} strips at Lite).");
+
+        // The 90° overhead view (the odyssey-style top-down look): a fronto-parallel quad is this homography's best
+        // case, and every in-plane element — bars, velocity tint, coverage, the damper strip — must project whole.
+        var overhead = ArCalibration.Create(KeyboardLayout.Standard88,
+            [(40, 150), (1240, 150), (1240, 270), (40, 270)], width, height, out var overheadProblem);
+        Assert(overhead is not null, $"A fronto-parallel keyboard rectangle must calibrate for a 90° overhead camera ({overheadProblem}).");
+        var overheadBars = RenderFrames(PressFeed(showBars: true, keyLight: .6f, selectedCalibration: overhead!), 12);
+        var overheadBarCount = renderer.ArLiveBarCount;
+        var overheadTinted = RenderFrames(PressFeed(showBars: true, keyLight: .6f,
+            visualSettings: velocityTintLook, selectedCalibration: overhead!), 12);
+        var overheadTintPixels = ChangedPixels(overheadBars, overheadTinted, threshold: 4);
+        var overheadDamperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false,
+            selectedCalibration: overhead!), 8);
+        Assert(renderer.ArDamperStripCount == 1, "A drawn damper strip must be counted at Standard, even pedal-up.");
+        var overheadDamper = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true,
+            selectedCalibration: overhead!), 8);
+        Assert(renderer.ArDamperStripCount == 1, "The sustained frame must keep drawing the damper strip.");
+        var overheadDamperPixels = ChangedPixels(overheadDamperUp, overheadDamper, threshold: 4);
+        Assert(overheadBarCount > 0 && ColouredPixels(overheadBars) > 200 && overheadTintPixels > 20
+                && overheadDamperPixels > 20,
+            $"The 90° overhead view must project live bars, the look's velocity tint and the pedal-lifted damper strip whole (bars {overheadBarCount}, tint {overheadTintPixels} pixels, damper lift {overheadDamperPixels} pixels).");
+
         // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
         var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
         RenderFrames(standardFxFeed, 4);
@@ -1916,7 +1949,7 @@ internal static partial class VerificationSuite
         var glowSetting = Render(MakeFeed(defaultInput));
         var projectedGlowTrails = renderer.ArNoteTrailQuadCount;
         Assert(!noTrail.AsSpan().SequenceEqual(glowSetting) && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
-                && projectedGlowTrails == notes.Count && renderer.ArQuadCount == notes.Count + projectedGlowTrails
+                && projectedGlowTrails == notes.Count && renderer.ArObjectQuadCount == notes.Count + projectedGlowTrails
                 && ChangedPixels(noTrail, glowSetting, threshold: 4) > 20,
             $"Glow trails should add calibrated AR quads while the misaligned stage-space streak stays suppressed ({projectedGlowTrails} projected trails, stage {renderer.StageNoteTrailCount}).");
         settings.FallingTrail = "None";
@@ -1924,7 +1957,7 @@ internal static partial class VerificationSuite
         settings.FallingTrail = "Glow";
         var uncalibratedCameraWithTrailSetting = Render(MakeFeed(null, overCamera: false));
         Assert(uncalibratedCamera.AsSpan().SequenceEqual(uncalibratedCameraWithTrailSetting)
-                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArObjectQuadCount == 0,
             "Even before calibration, a full-screen camera background must not receive flat scene notes or falling-note trails.");
         settings.FallingTrail = "None";
 
@@ -2029,7 +2062,7 @@ internal static partial class VerificationSuite
         Results.Add($"PASS AR note color/material/effects: magenta read back R/G {noteRed}/{noteGreen}; sampled known material branches changed [{materialChangeSummary}] pixels versus Solid; shimmer changed {shimmerPixels} pixels in {shimmerQuads} quads; Glow/Stream trails used {glowTrailQuads}/{streamTrailQuads} 3D quads; ghosts {ghostQuads}; landing glow {landingGlowCount} quads; atlas labels {noteLabelCount}/{noteLabelPixels}. Full parameter parity remains Unverified.");
         Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
         Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; a released bar survived the old stage-edge cull ({barsPastStageEdge}) and retired at 3D reach ({releasePathSimulation.LivePresses.Count}); flat falling-note trails added no pixels over the camera.");
-        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; the look's velocity tint recoloured a bar in {velocityTintPixels} pixels; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
+        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; the look's velocity tint recoloured a bar in {velocityTintPixels} pixels at the leaned view and {overheadTintPixels} at 90° overhead; sustain lifted the damper strip in {damperLiftPixels} pixels leaned / {overheadDamperPixels} overhead (Lite drew none, overhead projected {overheadBarCount} bars); impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
         Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }
 }

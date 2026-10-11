@@ -18,6 +18,12 @@ check red instead of shipping a release that states two versions.
 The product's technical limits live in the release README's *[Current limitations](README.en.md#current-limitations)*
 section and are not repeated here; the internal development roadmap is not part of the public release repository.
 
+## Unreleased
+
+### AR overlay
+
+- **A glowing damper strip hugs the back edge of the keys** (the catalogue's `Dampers` element, drawn from the AR Standard tier up): a soft bright line glued to the keys' back edge — the luminous "strike line" of top-down piano videos. The line always skims the edge; pressing the sustain pedal (level 0..1, not a boolean) reaches it out over the fallboard and brightens it. Its colour is the look's **halo colour** (the same family as the stage's Pedal Glow), so it blends with every preset, and bloom builds a halo around its hot core; the Lite tier never draws it, as the catalogue demands. At the same time the **90° overhead** view profile — the most common angle for this filming style — now has `VerifyArNoteProjection` projecting the whole pipeline on WARP once more through a fronto-parallel calibration — live bars, velocity tint, the damper strip — so CI locks that angle down on every build; `ArDampersTests` runs on any machine.
+
 ## 2.0.1 — 2026-10-12
 
 ### AR overlay

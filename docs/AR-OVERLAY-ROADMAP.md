@@ -443,7 +443,7 @@ bài học AR của Keysight là phải chỉnh lại theo góc máy — nên m�
 | Phần tử | Họ | Hôm nay | Việc cần | Pass |
 |---|---|---|---|---|
 | `Piano keys` (thân phím) | Scene | ✅ `ArKeys.Patches` có hình học trắng = mặt + thân, đen = một hình; patch chỉ phát khi key có glow MIDI; lúc im không vẽ bàn phím ảo tĩnh, theo quyết định của chủ repo | giữ active-key tint độc lập với live bars; không phủ geometry khi MIDI im | `VsArQuad` |
-| `Dampers` (dải mép sau phím) | Scene | ❌ | dải mỏng nhích lên theo damping 0..1 (sustain 0..1 chứ không nhị phân) | `VsArQuad` |
+| `Dampers` (dải mép sau phím) | Scene | ✅ 2026‑10‑12: vạch phát sáng mềm ôm mép sau phím (v=0), vươn theo sustain 0..1, màu halo của look, shader `PsArQuad` kind 11, bloom quanh lõi; WARP đo lift ở pose 45° lẫn `overhead90`, Lite không vẽ | — | `VsArQuad` |
 | `Octave lines` | Scene | ❌ | vạch mờ mỗi quãng tám, theo dõi `KeyboardLayout` | `VsArQuad` |
 | `Light bars` (viền/hắt mép) | Scene | ❌ | gradient quanh mép phím; **không** đổ bóng (bài học AR) | `VsArQuad` |
 | `Overlay / HUD` | Scene | ❌ | đếm nốt, hiển thị pedal, tên nốt, watermark; vẽ sau cùng, **không** qua homography | pass riêng |

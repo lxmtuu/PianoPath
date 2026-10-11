@@ -68,7 +68,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label
+    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip
 };
 
 struct KeyInstance
@@ -660,6 +660,19 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
         float coverage = AtlasTex.SampleLevel(LinearClamp, atlasUv, 0).a;
         float alpha = coverage * i.Color.a;
         return float4(i.Color.rgb * alpha, alpha);
+    }
+    if (kind > 10.5 && kind < 11.5)
+    {
+        // The damper strip (roadmap §14.3, the Dampers element): a soft glowing line glued to the key back edge.
+        // uv.y runs from the fallboard side (0) to the key edge (1): a hot core hugs the key edge while a broad
+        // halo falls away across the strip; the two u ends feather so the line never hard-cuts at the frame.
+        float feather = 1.0 - i.Uv.y;
+        float core = exp(-feather * feather * 38.0) * 2.1;
+        float halo = exp(-feather * 5.0) * 0.55;
+        float ends = smoothstep(0.0, 0.004, i.Uv.x) * (1.0 - smoothstep(0.996, 1.0, i.Uv.x));
+        float gain = (core + halo) * ends;
+        float alpha = saturate(gain * 0.5) * i.Color.a;
+        return float4(i.Color.rgb * gain * i.Color.a, alpha);
     }
 
     // Unknown future quad kinds remain readable; note bodies above use the shared SDF material.
