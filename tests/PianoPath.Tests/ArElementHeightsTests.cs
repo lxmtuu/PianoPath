@@ -8,14 +8,17 @@ public class ArElementHeightsTests
     private const int W = 1280, H = 720;
 
     private static readonly ArCalibration Lean45 = ArCalibration.Create(KeyboardLayout.Standard88,
-        [(70, 292), (1214, 268), (1236, 421), (52, 449)], W, H, out var p45)!;
+        [(70, 292), (1214, 268), (1236, 421), (52, 449)], W, H, out _)!;
 
     private static readonly ArCalibration Overhead90 = ArCalibration.Create(KeyboardLayout.Standard88,
-        [(40, 150), (1240, 150), (1240, 270), (40, 270)], W, H, out var p90)!;
+        [(40, 150), (1240, 150), (1240, 270), (40, 270)], W, H, out _)!;
 
-    private static readonly ArCameraPose Pose45 = p45!;
-    private static readonly ArCameraPose Pose90 = p90!;
+    private static readonly ArCameraPose Pose45 = PoseOf(Lean45);
+    private static readonly ArCameraPose Pose90 = PoseOf(Overhead90);
     private static readonly ArView View = new(W, H, W, H, PictureFit.Fit, false);
+
+    private static ArCameraPose PoseOf(ArCalibration calibration) =>
+        calibration.CameraPose ?? throw new InvalidOperationException("the sample corners must solve a camera pose");
 
     [Fact]
     public void The_table_locks_the_catalogue_numbers()
