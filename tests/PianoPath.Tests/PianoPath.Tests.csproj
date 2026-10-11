@@ -76,6 +76,8 @@
     <Compile Include="..\..\Camera\ArSceneProjection.cs" Link="Product\Camera\ArSceneProjection.cs" />
     <Compile Include="..\..\Camera\ArKeys.cs" Link="Product\Camera\ArKeys.cs" />
     <Compile Include="..\..\Camera\ArOptions.cs" Link="Product\Camera\ArOptions.cs" />
+    <Compile Include="..\..\Camera\ArDelayStore.cs" Link="Product\Camera\ArDelayStore.cs" />
+    <Compile Include="..\..\Camera\ArDelaySession.cs" Link="Product\Camera\ArDelaySession.cs" />
     <Compile Include="..\..\Camera\ArNoteMinimum.cs" Link="Product\Camera\ArNoteMinimum.cs" />
     <Compile Include="..\..\Camera\ArPlan.cs" Link="Product\Camera\ArPlan.cs" />
     <Compile Include="..\..\Camera\CalibrationWizard.cs" Link="Product\Camera\CalibrationWizard.cs" />

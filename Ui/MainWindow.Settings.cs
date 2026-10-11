@@ -1289,6 +1289,8 @@ public partial class MainWindow
         Prop(property).SetValue(_visualSettings, slider.Value);
         if (_visualValueBoxes.TryGetValue(property, out var box) && !box.IsKeyboardFocused) box.Text = FormatSetting(property, slider.Value);
         MarkModified(property);
+        // AR‑3.5: a delay tuned while a camera is open belongs to that camera; moving to another one brings its own back.
+        if (property is nameof(PianoVisualSettings.ArDelay)) ArDelays.Remember(_visualSettings.ArDelay);
         if (property is nameof(PianoVisualSettings.RecordingFrameRate)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.RecordingFormat)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.HandSplitPitch) && ModeCombo.SelectedIndex is 2 or 3) { ApplyTrackFilter(); UpdateSongUi(); }

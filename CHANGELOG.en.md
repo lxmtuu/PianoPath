@@ -20,6 +20,10 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 
 ## Unreleased
 
+### AR overlay
+
+- **The camera delay is now remembered per camera** (AR‑3.5): `Camera delay` used to be one number for the whole machine, while every camera is late by its own amount (a USB webcam ≈ 60–150 ms; a virtual camera or a phone-as-webcam is very different). The delay is now stored under the camera's identity — the same key the calibration file uses — in `ar-delay.json` beside the settings folder: leaving a camera files the slider's value under it, opening one again brings its own delay back to the slider and the engine alike, and dragging the slider or accepting a **MEASURE DELAY** result writes to the camera that is open. The new value is covered by `ArDelayStoreTests` and `ArDelaySessionTests` in the xUnit project that runs on Linux and Windows alike.
+
 ## 2.0.0 — 2026-10-10
 
 ### Interface & graphics

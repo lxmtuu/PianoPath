@@ -19,6 +19,10 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 
 ## Unreleased
 
+### AR overlay
+
+- **Độ trễ camera ghi nhớ theo từng camera** (AR‑3.5): `Camera delay` từng là một con số cho cả máy, trong khi mỗi camera trễ một lượng riêng (webcam USB ≈ 60–150 ms; camera ảo hay điện thoại làm webcam khác hẳn). Nay độ trễ được lưu theo định danh camera — cùng khoá với file calibration — trong `ar-delay.json` cạnh thư mục cài đặt: rỗi khỏi một camera thì giá trị thanh trượt được ghi lại cho camera đó, mở lại camera thì độ trễ của chính nó tự nạp lại cho cả thanh trượt lẫn engine, và kéo thanh trượt hay chấp nhận kết quả **MEASURE DELAY** đều ghi vào camera đang mở. Giá trị mới được kiểm bởi `ArDelayStoreTests` và `ArDelaySessionTests` trong project test xUnit chạy trên cả Linux lẫn Windows.
+
 ## 2.0.0 — 2026-10-10
 
 ### Giao diện & đồ hoạ

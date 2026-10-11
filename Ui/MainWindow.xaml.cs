@@ -1224,6 +1224,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _cameraUiTimer;
     private string _cameraSignature = "";
     private ArCalibrationSession? _arCalibration;
+    private ArDelaySession? _arDelays;
     private string _arSource = "";
     private int _arWidth, _arHeight;
     private ArPlan _arPlan = ArPlan.Off;
@@ -1282,15 +1283,28 @@ public partial class MainWindow : Window
     internal ArCalibrationSession ArCalibration => _arCalibration ??= new ArCalibrationSession(new ArCalibrationStore(PianoVisualSettingsStore.SettingsDirectory));
 
     /// <summary>
+    /// The camera delay of the camera that is open (AR‑3.5): a USB webcam and a virtual camera are late by different
+    /// amounts, so the Camera delay slider's value is kept per camera and comes back when that camera opens again.
+    /// Lazy for the same reason as the calibration: a check that points the settings folder somewhere temporary gets
+    /// a store there.
+    /// </summary>
+    internal ArDelaySession ArDelays => _arDelays ??= new ArDelaySession(new ArDelayStore(PianoVisualSettingsStore.SettingsDirectory));
+
+    /// <summary>
     /// Tells the calibration which source is open (null for none) and brings it up to date with the keyboard size and the
     /// view of the camera the settings name. It is safe to call whenever anything changes; nothing happens unless the
     /// source, its picture size, the keyboard size or the view is different from last time.
     /// </summary>
     private void ApplyArSource(string? source, int width, int height)
     {
+        // AR‑3.5: the delay belongs to the camera. Leaving one files the slider's value under its link; arriving at
+        // one whose delay was ever tuned brings that delay back, with the slider and the engine following (the same
+        // source re-applied changes nothing — SwitchTo says so with a null).
+        var stored = ArDelays.SwitchTo(source, _visualSettings.ArDelay);
         _arSource = source ?? ""; _arWidth = width; _arHeight = height;
         if (_arSource.Length == 0) _arCalibration?.Clear();       // nothing open and nothing made yet: no reason to read the file
         else ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice, _visualSettings.ArViewProfileId);
+        if (stored is { } delay) ApplyStoredArDelay(delay);
     }
 
     /// <summary>
