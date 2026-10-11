@@ -153,7 +153,9 @@ internal static class Ar3DNoteProjection
                 var halfWidth = (right - left) * pose.KeyboardWidthDepthRatio * style.WidthShareFor(velocity) * .5;
                 if (!(halfWidth > 0) || !double.IsFinite(halfWidth)) continue;
                 var target = new ArVec3(layout.CenterX(press.Pitch) * pose.KeyboardWidthDepthRatio, 0, 0);
-                var headDistance = releaseDistance;
+                // One world unit is one key depth in this frame, so the style's coverage fraction places the bar's
+                // leading edge that far past the key's back edge without touching the pose.
+                var headDistance = releaseDistance - style.LiveBarCoverFraction;
                 var tailDistance = Math.Min(style.Reach, releaseDistance + length);
                 if (!(tailDistance > headDistance + 1e-7)) continue;
                 if (!TryPatch(pose, view, target, travel, headDistance, tailDistance, halfWidth, out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;

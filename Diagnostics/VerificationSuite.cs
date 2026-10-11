@@ -1779,13 +1779,23 @@ internal static partial class VerificationSuite
             "Held should walk the graph forwards and the release should walk the same graph backwards.");
         Assert(Math.Abs(ArLiveFade.Opacity(null, .92, true, 0) - .08) < 1e-9,
             "Without the graph the legacy floor still stands.");
+        // Coverage (AR-6.2): the slider is a percentage, 100 keeps the legacy edge and the style carries the fraction.
+        Assert(Math.Abs(new PianoVisualSettings().ArOptionsValue.NoteStyle.LiveBarCoverFraction) < 1e-12,
+            "The default overlay should keep the bar's leading edge at the keys, as it always was.");
+        var covering = new PianoVisualSettings { ArLiveBarCoverPercent = 160 };
+        Assert(Math.Abs(covering.ArOptionsValue.NoteStyle.LiveBarCoverFraction - .6) < 1e-9,
+            "The coverage slider should reach the style as a fraction along the keys' depth.");
+        covering.ArLiveBarCoverPercent = 900; covering.Clamp();
+        Assert(covering.ArLiveBarCoverPercent == 300, "Clamping should pull an out-of-range coverage slider back into range.");
+        Assert(Math.Abs(new PianoVisualSettings { ArLiveBarCoverPercent = 25 }.ArOptionsValue.NoteStyle.LiveBarCoverFraction + .75) < 1e-9,
+            "At the low end the bar floats most of a key depth away from the keys instead.");
         // A look never carries the graphs: they belong to the overlay on this camera.
-        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50, ArLiveFadeByLifetime = true, ArLiveFadeStart = 20 };
+        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50, ArLiveFadeByLifetime = true, ArLiveFadeStart = 20, ArLiveBarCoverPercent = 260 };
         var target = new PianoVisualSettings();
         target.CopyFrom(look);
-        Assert(!target.ArLiveFadeByLifetime && !target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100 && target.ArLiveFadeStart == 60,
-            "Applying a look should not change the overlay's velocity or lifetime graphs.");
-        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade/lifetime graphs wired from settings to the note style, the lifetime fade walking both ways, all look-guarded.");
+        Assert(!target.ArLiveFadeByLifetime && !target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100 && target.ArLiveFadeStart == 60 && target.ArLiveBarCoverPercent == 100,
+            "Applying a look should not change the overlay's velocity or lifetime graphs, or its bar coverage.");
+        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade/lifetime graphs plus the live-bar coverage wired from settings to the note style, the lifetime fade walking both ways, all look-guarded.");
     }
 
     /// <summary>

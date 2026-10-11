@@ -35,11 +35,12 @@ internal static class ArModes
 /// <param name="NoteDirectionAzimuth">The independent 3D azimuth around that axis.</param>
 /// <param name="RisingMidiNotes">In Perform mode, create a separate calibrated 3D note on each MIDI Note On; Note Off freezes its length but does not stop its travel.</param>
 /// <param name="LiveFadeGraph">The fade-over-lifetime of live press bars (a <see cref="GraphVariable"/> walked forward while the key is held and backwards over the release, AR‑6.2 Keysight keypress parity); null keeps the legacy length fade.</param>
+/// <param name="LiveBarCoverFraction">How far onto the keys a live bar runs, as a fraction of the keys' depth (AR‑6.2 coverage): 0 stops at the back edge — today's look; 1 reaches the front edge.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
     bool NotesInPerspective = false, double NoteMinScale = 0, bool LivePressTrails = false,
     double NoteDirectionTilt = 0, double NoteDirectionAzimuth = 0, bool RisingMidiNotes = true,
-    GraphVariable? LiveFadeGraph = null)
+    GraphVariable? LiveFadeGraph = null, double LiveBarCoverFraction = 0)
 {
     internal const double OpacityMin = 10, OpacityMax = 100, OpacityDefault = 100;
     internal const double LookaheadMin = 1, LookaheadMax = 6, LookaheadDefault = 3;
@@ -48,6 +49,7 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
     internal const double NoteMinScaleMin = 0, NoteMinScaleMax = 200, NoteMinScaleDefault = 0;
     internal const double NoteDirectionTiltMin = 0, NoteDirectionTiltMax = 180, NoteDirectionTiltDefault = 0;
     internal const double NoteDirectionAzimuthMin = -180, NoteDirectionAzimuthMax = 180, NoteDirectionAzimuthDefault = 0;
+    internal const double LiveBarCoverFractionMin = -.75, LiveBarCoverFractionMax = 2, LiveBarCoverFractionDefault = 0;
     /// <summary>The optional live press bars keep a fixed three-second reach; Learn lookahead is independent.</summary>
     internal const double LivePressReachSeconds = 3;
     /// <summary>Perform MIDI-note objects keep a fixed three-second reach; Learn lookahead is independent.</summary>
@@ -75,7 +77,8 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
         Delay = Fit(Delay, DelayMin, DelayMax, DelayDefault),
         NoteMinScale = Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault),
         NoteDirectionTilt = Fit(NoteDirectionTilt, NoteDirectionTiltMin, NoteDirectionTiltMax, NoteDirectionTiltDefault),
-        NoteDirectionAzimuth = Fit(NoteDirectionAzimuth, NoteDirectionAzimuthMin, NoteDirectionAzimuthMax, NoteDirectionAzimuthDefault)
+        NoteDirectionAzimuth = Fit(NoteDirectionAzimuth, NoteDirectionAzimuthMin, NoteDirectionAzimuthMax, NoteDirectionAzimuthDefault),
+        LiveBarCoverFraction = Fit(LiveBarCoverFraction, LiveBarCoverFractionMin, LiveBarCoverFractionMax, LiveBarCoverFractionDefault)
     };
 
     /// <summary>
@@ -118,6 +121,7 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
         Reach = Normalised().Lookahead * ArNoteStyle.Default.FallSpeed,
         WidthVelocity = (Normalised().NoteWidthVelocity ?? GraphVariable.Flat).Normalised(),
         FadeVelocity = (Normalised().NoteFadeVelocity ?? GraphVariable.Flat).Normalised(),
-        LiveFade = Normalised().LiveFadeGraph?.Normalised()
+        LiveFade = Normalised().LiveFadeGraph?.Normalised(),
+        LiveBarCoverFraction = Normalised().LiveBarCoverFraction
     };
 }

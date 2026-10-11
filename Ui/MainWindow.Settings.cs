@@ -629,6 +629,10 @@ public partial class MainWindow
             .VisibleWhen = () => _visualSettings.ArLiveFadeByLifetime;
         SliderRow(live, "Fade at full length", nameof(PianoVisualSettings.ArLiveFadeEnd), 0, 100, "How solid a live bar stays once it has stretched to its full reach, percent of full; smaller lets long-hold bars dim into the keys.")
             .VisibleWhen = () => _visualSettings.ArLiveFadeByLifetime;
+        ButtonRow(live, (_arLiveBarCoverageOpen ? "LESS · LIVE BAR COVERAGE" : "MORE · LIVE BAR COVERAGE", ArLiveBarCoverageMore_Click, null))
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails;
+        SliderRow(live, "Bar coverage on the keys", nameof(PianoVisualSettings.ArLiveBarCoverPercent), 25, 300, "How far onto the keys a live bar's leading edge may run, percent of the keys' depth. 100 is the familiar look: the bar stops where the keys start. 200 reaches the front edge of a white key — full coverage — and beyond it spills past the keys. Smaller holds the bar free of the keys.")
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails && _arLiveBarCoverageOpen;
         Toggle(live, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Let MIDI velocity change the width of song notes and live press bars.");
         SliderRow(live, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a very soft strike, as a percentage of the normal note width.")
             .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
@@ -688,6 +692,16 @@ public partial class MainWindow
             _ => Loc.F("AR overlay on · {0} view · {1} × {2} · {3} keys · {4}", view, snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
                 + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default),
         };
+    }
+
+    private bool _arLiveBarCoverageOpen;
+
+    /// <summary>The More/Less chevron of the live-bar coverage knob: it only hides and shows the slider, whose value is stored as soon as it slides.</summary>
+    private void ArLiveBarCoverageMore_Click(object sender, RoutedEventArgs e)
+    {
+        _arLiveBarCoverageOpen = !_arLiveBarCoverageOpen;
+        if (sender is Button button) Loc.Set(button, _arLiveBarCoverageOpen ? "LESS · LIVE BAR COVERAGE" : "MORE · LIVE BAR COVERAGE");
+        RefreshDependentRows();
     }
 
     /// <summary>

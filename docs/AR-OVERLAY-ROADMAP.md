@@ -448,7 +448,7 @@ bài học AR của Keysight là phải chỉnh lại theo góc máy — nên m�
 | `Light bars` (viền/hắt mép) | Scene | ❌ | gradient quanh mép phím; **không** đổ bóng (bài học AR) | `VsArQuad` |
 | `Overlay / HUD` | Scene | ❌ | đếm nốt, hiển thị pedal, tên nốt, watermark; vẽ sau cùng, **không** qua homography | pass riêng |
 | `Note objects` | Effect | 🟡 `Ar3DNoteProjection.Build` chiếu billboard camera-facing qua pose; Lite/off còn giữ flat route | shape × trắng/đen, min-scale, truncate, size graph, mọc theo mảnh | `GpuArLayer` → `VsArQuad` qua pose 3D |
-| `Keypresses` | Effect | 🟡 active-key tint + toggle live bars riêng; bars có route 3D khi bật; fade hai chiều (graph theo vòng đời) ✅ 2026‑10‑11 | coverage (Clean/Inset/Full), màu theo velocity; giữ toggle độc lập với key tint | `GpuArLayer` → `VsArQuad` |
+| `Keypresses` | Effect | 🟡 active-key tint + toggle live bars riêng; bars có route 3D khi bật; fade hai chiều (graph theo vòng đời) ✅ 2026‑10‑11 | coverage slider ✅ 2026‑10‑12 (Clean→Full là một thanh trượt liên tục), màu theo velocity; giữ toggle độc lập với key tint | `GpuArLayer` → `VsArQuad` |
 | `Impact lights` | Effect | 🟡 S5 WARP: MIDI impact cue/decay và neighboring-key spill có counter/pixel sample tại Standard+ | tiếp: spill theo graph/candle flicker và kiểm tra màu/độ sáng ngoài camera thật | `GpuArLayer` → `VsArQuad`, bốn góc chiếu từ pose 3D |
 | `Note lights` (spill) | Effect | 🟡 `spill` của sân khấu 2D; chưa có spill camera-space | hắt sáng trên mặt phẳng đã calibration, bán kính theo graph | pass AR chưa có |
 | `Pulses` | Effect | 🟡 S5 WARP: Ultra pulse/ring có counter + selected pixel variant checks | tune bán kính/lifetime theo velocity và kiểm tra dưới pose nghiêng | `GpuArLayer` → `VsArQuad`, bốn góc 3D |
