@@ -253,6 +253,7 @@
     "ArNoteMinScale": 0.0,
     "ArNoteDirectionTilt": 0.0,
     "ArNoteDirectionAzimuth": 0.0,
-    "ArViewProfileId": "default"
+    "ArViewProfileId": "default",
+    "ArAlignmentCheck": false
   }
 }

@@ -258,7 +258,9 @@ internal sealed partial class GpuArLayer
             var halfKey = (right - left) * ratio * .5;
             // Retain the strike's own note/velocity colour; current modulation must not recolour a transient in flight.
             var linear = GpuStageSimulation.ToLinear(impact.Color);
-            var center = new ArVec3(layout.CenterX(impact.Pitch) * ratio, .12, 0);
+            // The catalogue's tiny heights (ArElementHeights): the flare hovers 0.2 cm over the struck key, so on a
+            // leaned camera it never z-hides behind the key fronts; overhead the lift stays sub-pixel by design.
+            var center = new ArVec3(layout.CenterX(impact.Pitch) * ratio, .12, -ArElementHeights.ImpactGlow);
             var fade = (float)Math.Pow(Math.Clamp(1 - impact.Age / .62, 0, 1), 1.25);
             var alpha = Math.Clamp(opacity * strength * fade * simulation.GlowBoost, 0, 1);
             if (alpha <= .004f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, center, Across, Depth,
@@ -290,6 +292,9 @@ internal sealed partial class GpuArLayer
             var baseAlpha = opacity * channelIntensity * strength;
             var pixelUnit = pose.KeyboardWidthDepthRatio / Math.Max(1, simulation.SimulationWidth);
             var center = StageSurfacePoint(simulation, layout, pose, ring.Pitch, ring.X, ring.Y);
+            // Catalogue floor (ArElementHeights): a ring never comes closer than 0.3 cm to the key plane, while
+            // rings the stage has already lifted keep their rise untouched.
+            center = ArElementHeights.Lifted(center, ArElementHeights.PulseMinimum);
             var rawSize = look.RingSizeRaw;
 
             switch (ring.Kind)

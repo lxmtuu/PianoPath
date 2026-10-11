@@ -1271,7 +1271,7 @@ public partial class MainWindow : Window
             : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes,
                 (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect,
                 ShowLiveTrails: options.LivePressTrails, NoteDirection: options.NoteDirection,
-                ShowRisingMidiNotes: options.ShowsRisingMidiNotes);
+                ShowRisingMidiNotes: options.ShowsRisingMidiNotes, AlignmentGuides: _visualSettings.ArAlignmentCheck);
         RefreshHandStatus();
         RefreshArStatus();
     }

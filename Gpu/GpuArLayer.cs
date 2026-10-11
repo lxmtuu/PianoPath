@@ -32,7 +32,8 @@ internal struct GpuArQuad
 /// <param name="ShowLiveTrails">Draw bars for keys the player presses, in flat or projected mode; key tint is separate.</param>
 /// <param name="NoteDirection">Independent keyboard-local 3D direction of the notes and live bars.</param>
 /// <param name="ShowRisingMidiNotes">In Perform mode, draw each MIDI Note On as a separate calibrated 3D note that keeps travelling after Note Off.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false)
+/// <param name="AlignmentGuides">The alignment check: redraw the saved key area's frame and octave lines over the live picture, packed last, on any tier.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false)
 {
     /// <summary>Live press bars keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
     internal ArNoteStyle LivePressStyle => ArOptions.LivePressNoteStyle(Notes);
@@ -50,6 +51,11 @@ internal sealed partial class GpuArLayer
     private readonly List<Ar3DLiveBar> _projectedLiveBars = [];
     private readonly List<Ar3DLiveMidiNote> _risingMidiNotes = [];
     private readonly List<ArPatch> _keyPatches = [];
+    private readonly List<ArAlignmentGuides.GuidePatch> _alignmentGuides = [];
+
+    // The alignment guides borrow the key-tint shader branch (Misc.z = 1) in an off-white that no look can recolour.
+    private static readonly Vector3 GuideColor = new(.92f, .98f, 1f);
+    private static readonly Vector4 GuideKind = new(0, 0, 1, 0);
 
     /// <summary>Key glow below this is not drawn.</summary>
     internal const float MinKeyGlow = .02f;
@@ -75,6 +81,9 @@ internal sealed partial class GpuArLayer
     internal int ReleaseEffectCount { get; private set; }
     internal int DamperStripCount { get; private set; }
 
+    /// <summary>Guide line quads packed by the alignment check (roadmap §14.7 "Thêm 1"); verification reads it.</summary>
+    internal int AlignmentGuideCount { get; private set; }
+
     /// <summary>
     /// Refills the projected AR quads. Key tint remains independent of the optional live bars. Actual stage-simulation
     /// particles, rings and flashes retain their MIDI pitch and are projected through the saved 3D pose; stage-space
@@ -89,6 +98,7 @@ internal sealed partial class GpuArLayer
         NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = 0;
         ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
         DamperStripCount = 0;
+        AlignmentGuideCount = 0;
         if (ar.Opacity <= 0) return;
 
         var opacity = Math.Clamp(ar.Opacity, 0f, 1f);
@@ -188,35 +198,49 @@ internal sealed partial class GpuArLayer
         }
 
         var live = simulation.LivePresses;
-        if (!ar.ShowLiveTrails || live.Count == 0) return;
-        var liveProjected = ar.Calibration.CameraPose is not null && ar.Quality != ArQualityTier.Lite;
-        if (liveProjected)
+        if (ar.ShowLiveTrails && live.Count > 0)
         {
-            Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, ar.NoteDirection, _projectedLiveBars, VelocityBand);
-            foreach (var bar in _projectedLiveBars)
+            var liveProjected = ar.Calibration.CameraPose is not null && ar.Quality != ArQualityTier.Lite;
+            if (liveProjected)
             {
-                if (ar.Calibration.CameraPose is { } livePose)
-                    BuildProjectedLiveBarEffects(ar, view, bar, opacity, look, simulation.Time, quads, livePose);
-                var patch = bar.Patch;
-                if (bar.Held && look.HoldVibration)
-                    patch = VibrateLiveBar(ar.Calibration, view, bar.Pitch, patch, look, simulation.Time, simulation.SimulationWidth);
-                var color = look.NoteColor(bar.Pitch, 0);
-                AddLiveBar(quads, patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time);
-                if (ar.Calibration.CameraPose is { } labelPose)
-                    BuildProjectedLiveNoteLabel(view, bar.Pitch, bar.Target, bar.Travel, bar.HeadDistance,
-                        bar.TailDistance, bar.HalfWidthWorld, bar.HalfWidthPixels, bar.HalfLengthPixels,
-                        bar.Fade, bar.Held, bar.Strength, opacity, look, simulation.Time, quads, labelPose);
-                LiveBarCount++;
+                Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, ar.NoteDirection, _projectedLiveBars, VelocityBand);
+                foreach (var bar in _projectedLiveBars)
+                {
+                    if (ar.Calibration.CameraPose is { } livePose)
+                        BuildProjectedLiveBarEffects(ar, view, bar, opacity, look, simulation.Time, quads, livePose);
+                    var patch = bar.Patch;
+                    if (bar.Held && look.HoldVibration)
+                        patch = VibrateLiveBar(ar.Calibration, view, bar.Pitch, patch, look, simulation.Time, simulation.SimulationWidth);
+                    var color = look.NoteColor(bar.Pitch, 0);
+                    AddLiveBar(quads, patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time);
+                    if (ar.Calibration.CameraPose is { } labelPose)
+                        BuildProjectedLiveNoteLabel(view, bar.Pitch, bar.Target, bar.Travel, bar.HeadDistance,
+                            bar.TailDistance, bar.HalfWidthWorld, bar.HalfWidthPixels, bar.HalfLengthPixels,
+                            bar.Fade, bar.Held, bar.Strength, opacity, look, simulation.Time, quads, labelPose);
+                    LiveBarCount++;
+                }
+            }
+            else
+            {
+                ArNotes.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, _liveBars, VelocityBand);
+                foreach (var bar in _liveBars)
+                {
+                    var color = look.NoteColor(bar.Pitch, 0);
+                    AddLiveBar(quads, bar.Patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time);
+                    LiveBarCount++;
+                }
             }
         }
-        else
+
+        // The alignment check packs last (roadmap §14.7 "Thêm 1"): the saved key area's frame and octave lines
+        // draw over every note and effect, on any tier, so a bumped camera reads as crooked lines at a glance.
+        if (ar.AlignmentGuides)
         {
-            ArNotes.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, _liveBars, VelocityBand);
-            foreach (var bar in _liveBars)
+            ArAlignmentGuides.Build(ar.Calibration, view, _alignmentGuides);
+            foreach (var guide in _alignmentGuides)
             {
-                var color = look.NoteColor(bar.Pitch, 0);
-                AddLiveBar(quads, bar.Patch, bar.Pitch, bar.Fade, bar.Held, bar.Strength, color, opacity, look, simulation.Time);
-                LiveBarCount++;
+                quads.Add(Pack(guide.Patch, GuideColor, guide.Alpha * opacity, GuideKind));
+                AlignmentGuideCount++;
             }
         }
     }

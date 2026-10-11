@@ -1654,11 +1654,11 @@ internal static partial class VerificationSuite
         liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
         GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
             PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null,
-            bool sustain = false)
+            bool sustain = false, bool alignment = false)
         {
             var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
             var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
-                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars),
+                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars, AlignmentGuides: alignment),
                 song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
             if (visualSettings is not null)
                 feed.SetLook(GpuLook.From(visualSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
@@ -1841,6 +1841,17 @@ internal static partial class VerificationSuite
         Assert(overheadBarCount > 0 && ColouredPixels(overheadBars) > 200 && overheadTintPixels > 20
                 && overheadDamperPixels > 20,
             $"The 90° overhead view must project live bars, the look's velocity tint and the pedal-lifted damper strip whole (bars {overheadBarCount}, tint {overheadTintPixels} pixels, damper lift {overheadDamperPixels} pixels).");
+
+        // Alignment check (roadmap §14.7 "Thêm 1"): the saved key area redraws as a frame with octave lines, packed
+        // after every effect so a bumped camera reads at a glance, on any tier, only while calibrated.
+        var guidesOn = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: true), 8);
+        var guideCount = renderer.ArAlignmentGuideCount;
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, alignment: true), 4);
+        var liteGuideCount = renderer.ArAlignmentGuideCount;
+        var guidesOff = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: false), 8);
+        var guidePixels = ChangedPixels(guidesOff, guidesOn, threshold: 4);
+        Assert(guideCount > 4 && liteGuideCount > 4 && renderer.ArAlignmentGuideCount == 0 && guidePixels > 100,
+            $"The alignment check must redraw the saved key area over the live frame on any tier and switch fully off ({guideCount} guides at Standard, {liteGuideCount} at Lite, {guidePixels} changed pixels).");
 
         // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
         var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });

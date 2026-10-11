@@ -468,6 +468,13 @@ internal sealed class PianoVisualSettings
     /// </summary>
     public string ArViewProfileId { get; set; } = ArCalibrationProfiles.LegacyId;
 
+    /// <summary>
+    /// Redraws the saved key area as a frame with octave lines right over the live camera picture (roadmap §14.7
+    /// "Thêm 1"), so a bumped tripod reads as lines that no longer sit on the real keys. It is a check of this
+    /// machine's own calibration, so — like the view above — applying or sharing a look never changes it.
+    /// </summary>
+    public bool ArAlignmentCheck { get; set; }
+
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
@@ -659,8 +666,9 @@ internal sealed class PianoVisualSettings
                 or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails) or nameof(ArRisingMidiNotes)
                 or nameof(ArNoteDirectionTilt) or nameof(ArNoteDirectionAzimuth)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
-            // that switched views would ask the player to mark keys that are already marked.
-            if (property.Name == nameof(ArViewProfileId)) continue;
+            // that switched views would ask the player to mark keys that are already marked. The alignment check
+            // couples straight to that calibration, so it follows the view onto the machine list.
+            if (property.Name is nameof(ArViewProfileId) or nameof(ArAlignmentCheck)) continue;
             // Which camera, or which video file, is this machine's too: a look must never switch the player off the camera they
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
@@ -688,6 +696,7 @@ internal sealed class PianoVisualSettings
         CameraSourceLink = "";
         CameraVideoPath = "";
         ArViewProfileId = "";               // which view the camera stands at is this machine's; Clamp turns the empty id into the default view
+        ArAlignmentCheck = false;           // the drift check talks to this machine's own calibration, never to a shared look
         PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
     }
 

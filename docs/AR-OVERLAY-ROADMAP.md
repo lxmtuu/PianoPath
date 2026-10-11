@@ -427,7 +427,7 @@ MIDI ─► PianoSimulation ──► Element spawner ──► Effect elements 
 |---|---|---|
 | 1. Simulation | activity có floor/ceiling, tắt dần theo pitch + damping, 3 pedal, notes/sec, total | ✅ `Stage/PianoSimulation` (AR‑S1) — `GpuStageSimulation` lo glow/heat/spill và lịch sử impact AR |
 | 2. Tham số | `GraphVariable` + catalogue đầu vào (velocity, tiến trình, pitch, notes/sec, activity, damping) | 🟡 AR‑S2: hai graph velocity có; graph cho tham số AR khác còn thiếu |
-| 3. Phần tử | Scene + Effect (§14.3), quality gate và pass vẽ; độ cao 3D theo từng phần tử còn là việc tiếp theo | 🟡 `ArElementCatalog`/`ArQualityTier` đã có; catalogue chưa đầy đủ |
+| 3. Phần tử | Scene + Effect (§14.3), quality gate và pass vẽ; độ cao 3D theo từng phần tử: bảng cm đã khóa (`ArElementHeights`, 2026‑10‑12) — impact 0,2 cm, pulse ≥ 0,3 cm | 🟡 `ArElementCatalog`/`ArQualityTier` đã có; catalogue chưa đầy đủ |
 | 4. Chiếu | Pose pinhole + hiệu chỉnh mặt phẳng; từng góc của note/effect đi qua saved keyboard pose/FOV | 🟡 active 3D note/live-bar/S5 transient pass; selected note/S5 routes pass WARP; không phụ thuộc `ArSceneProjection` horizon |
 | 5. Đầu ra | composite / alpha-effects / geometry+glow / stencil / render / camera ảo | 🟡 S6.1 alpha và S6.2 Geometry+Glow có WARP readback PASS; stencil/render chưa có, manual OBS validation còn thiếu |
 
@@ -437,6 +437,12 @@ nhân tỉ lệ cục bộ (độ lớn tỉ lệ với khoảng cách trong ả
 vì một cảnh 3D. Bảng mặc định dự kiến (cm): phím 0 · damper 0.1 · nốt 0.1 · keypress 0.15 · impact glow 0.2 ·
 note-light spill 0.05 · pulse 0.3 · hạt 0.4 · HUD 0 (vẽ cuối, không qua homography). Đây là **số khởi đầu cho 2D**;
 bài học AR của Keysight là phải chỉnh lại theo góc máy — nên mỗi khung nhìn (45°/90°) có bộ độ cao trong preset AR.
+Cập nhật 2026‑10‑12: bảng cm đã khóa trong `Camera/ArElementHeights.cs` (1 đơn vị chiều sâu phím = 15 cm, qua
+`ArCameraPose.KeyboardDepthMillimetres`) — impact flare nổi đúng 0,2 cm trên phím bị đánh, pulse được bảo đảm không
+bao giờ xuống dưới 0,3 cm (`Lifted` chỉ nâng, không hạ phần tử đang bay cao); key tint, note-light spill, damper và
+HUD cố tình giữ 0 vì vật lý của chúng là dính mặt phẳng. xUnit `ArElementHeightsTests` khóa bảng số và chứng minh
+ở khung 90° độ nâng đi dọc trục nhìn (dưới mức pixel) trong khi ở 45° đọc được ngược mép sau phím — vì vậy WARP
+diff cố ý không gating hai số này.
 
 ### 14.3 Catalogue phần tử AR
 
@@ -444,12 +450,12 @@ bài học AR của Keysight là phải chỉnh lại theo góc máy — nên m�
 |---|---|---|---|---|
 | `Piano keys` (thân phím) | Scene | ✅ `ArKeys.Patches` có hình học trắng = mặt + thân, đen = một hình; patch chỉ phát khi key có glow MIDI; lúc im không vẽ bàn phím ảo tĩnh, theo quyết định của chủ repo | giữ active-key tint độc lập với live bars; không phủ geometry khi MIDI im | `VsArQuad` |
 | `Dampers` (dải mép sau phím) | Scene | ✅ 2026‑10‑12: vạch phát sáng mềm ôm mép sau phím (v=0), vươn theo sustain 0..1, màu halo của look, shader `PsArQuad` kind 11, bloom quanh lõi; WARP đo lift ở pose 45° lẫn `overhead90`, Lite không vẽ | — | `VsArQuad` |
-| `Octave lines` | Scene | ❌ | vạch mờ mỗi quãng tám, theo dõi `KeyboardLayout` | `VsArQuad` |
+| `Octave lines` | Scene | 🟡 2026‑10‑12: vạch trắng mờ (alpha .22) đứng ở mọi phím C có phím hai bên, theo `KeyboardLayout` — hiện chỉ vẽ trong chế độ Alignment check | overlay thường trực riêng nếu cần | `VsArQuad` |
 | `Light bars` (viền/hắt mép) | Scene | ❌ | gradient quanh mép phím; **không** đổ bóng (bài học AR) | `VsArQuad` |
 | `Overlay / HUD` | Scene | ❌ | đếm nốt, hiển thị pedal, tên nốt, watermark; vẽ sau cùng, **không** qua homography | pass riêng |
 | `Note objects` | Effect | 🟡 `Ar3DNoteProjection.Build` chiếu billboard camera-facing qua pose; Lite/off còn giữ flat route | shape × trắng/đen, min-scale, truncate, size graph, mọc theo mảnh | `GpuArLayer` → `VsArQuad` qua pose 3D |
 | `Keypresses` | Effect | ✅ active-key tint + toggle live bars riêng; bars có route 3D khi bật; fade hai chiều (graph theo vòng đời) ✅ 2026‑10‑11 | coverage slider ✅ 2026‑10‑12 (Clean→Full là một thanh trượt liên tục), màu theo velocity ✅ (`VelocityColor` của look, theo strength thật, đo WARP 2026‑10‑12); giữ toggle độc lập với key tint | `GpuArLayer` → `VsArQuad` |
-| `Impact lights` | Effect | 🟡 S5 WARP: MIDI impact cue/decay và neighboring-key spill có counter/pixel sample tại Standard+ | tiếp: spill theo graph/candle flicker và kiểm tra màu/độ sáng ngoài camera thật | `GpuArLayer` → `VsArQuad`, bốn góc chiếu từ pose 3D |
+| `Impact lights` | Effect | 🟡 S5 WARP: MIDI impact cue/decay và neighboring-key spill có counter/pixel sample tại Standard+; tâm flare nổi 0,2 cm theo `ArElementHeights` (2026‑10‑12) | tiếp: spill theo graph/candle flicker và kiểm tra màu/độ sáng ngoài camera thật | `GpuArLayer` → `VsArQuad`, bốn góc chiếu từ pose 3D |
 | `Note lights` (spill) | Effect | 🟡 `spill` của sân khấu 2D; chưa có spill camera-space | hắt sáng trên mặt phẳng đã calibration, bán kính theo graph | pass AR chưa có |
 | `Pulses` | Effect | 🟡 S5 WARP: Ultra pulse/ring có counter + selected pixel variant checks | tune bán kính/lifetime theo velocity và kiểm tra dưới pose nghiêng | `GpuArLayer` → `VsArQuad`, bốn góc 3D |
 | `Particles` | Effect | 🟡 S5 WARP: projected particle aggregate/counters pass ở Ultra; từng shape/physics vẫn cần matrix riêng | mở rộng catalogue shape/physics sau khi pixel/benchmark xác nhận | `GpuArLayer` → `VsArQuad` billboards từ pose 3D |
@@ -504,8 +510,13 @@ làm artifact.
 - **Đã có (2026‑10‑10)**: wizard đặt 4 góc, lưu khung nhìn + horizontal FOV; Calibrate có gizmo Move/Rotate/Scale kiểu Unity và các núm số translation/scale đồng đều/pitch/yaw/roll. Transform tuyệt đối áp dụng từ baseline, chỉnh tay một góc thì baseline được rebase. Version 5 lưu FOV, translation, scale đồng đều, pitch/yaw/roll và baseline chưa biến đổi; v1–v4 tiếp tục đọc với translation 0 và scale 1. v3–v4 giữ FOV đã lưu, v1–v2 dùng FOV 70°; v1–v3 dùng góc 0°, còn v4 giữ rotation. Calibration vẫn thuộc máy.
 - **Hướng nốt độc lập**: hai điều khiển 3D tilt/azimuth trong AR settings định hướng note/live bars mà không xoay pose bàn phím. Pose và note direction được lưu trong settings cục bộ; preset không ghi đè chúng theo quy tắc local-only hiện tại.
 - AR‑3.5 ✅ (2026‑10‑11): độ trễ camera lưu theo định danh camera trong `ar-delay.json` cạnh cài đặt; thuộc máy như calibration, preset/mã chia sẻ không mang nó.
-- **Thêm 1 — overlay kiểm tra**: vẽ lưới phím + 4 góc đã lưu lên ảnh camera đang chạy (nút "ALIGNMENT CHECK"), để thấy
-  ngay camera có bị xê dịch — analog của "ảnh alignment" bên Keysight.
+- **Thêm 1 — overlay kiểm tra**: ✅ 2026‑10‑12. Toggle **Alignment check** trong thẻ KEYBOARD ALIGNMENT vẽ lại khung
+  4 cạnh của vùng phím đã lưu cùng vạch quãng tám (trắng .5/.22) ngay trên ảnh camera đang chạy — pack sau cùng để
+  đọc trên mọi hiệu ứng, mọi quality tier, chỉ khi đã calibrated; camera xê dịch đọc được ngay, đúng analog của
+  "ảnh alignment" bên Keysight. Hình học thuần trong `Camera/ArAlignmentGuides.cs` (xUnit `ArAlignmentGuidesTests`),
+  `PianoVisualSettings.ArAlignmentCheck` thuộc máy cùng nhánh `ArViewProfileId`/calibration nên preset/mã chia sẻ
+  không mang, còn `VerifyArNoteProjection` có WARP block riêng (`ArAlignmentGuideCount` > 4 ở Standard lẫn Lite,
+  pixel bật/tắt đổi rõ, tắt là về 0).
 - **Thêm 2 — đo trôi**: so mép hàng phím trong khung mới với calibration; lệch quá ngưỡng → nhắc đánh dấu lại
   (không tự sửa).
 - **Thêm 3 — xuất/nhập bản sao căn chỉnh** (JSON + ảnh chụp) để backup trước khi chỉnh chân máy.
@@ -527,7 +538,7 @@ không bao giờ cắt phím/nốt/keypress. Nối vào `GpuAdaptiveQuality` s�
 
 - Thẻ AR hiện có **Notes in perspective**, hai núm **Note direction tilt / azimuth** ngay sau toggle và trước **Minimum length, share of width**; hai núm này độc lập pose keyboard. **Live press bars** mặc định tắt và không điều khiển key tint. Giữ View / Mode / Delay / Calibrate; ambient flowers/stars luôn screen-space.
 - Mã chia sẻ mang look + graph ⇒ cần **`KEYFLOW-LOOK-2`** (đọc được mã bản 1); `docs/SETTINGS-WIRING-AUDIT.md` cập nhật.
-- Máy‑cục‑bộ vẫn là: calibration (góc + FOV), keyboard 3D pose, hướng note 3D, khung nhìn, delay, màn hình xuất, camera. Calibration version 5 lưu FOV + translation + scale đồng đều + pitch/yaw/roll + baseline; v1–v4 đọc tiếp với translation 0, scale 1 (v3/v4 giữ FOV, v1/v2 dùng 70°; v1–v3 mặc định góc 0°, v4 giữ rotation). Settings mới mặc định live bars off.
+- Máy‑cục‑bộ vẫn là: calibration (góc + FOV), keyboard 3D pose, hướng note 3D, khung nhìn, alignment check (2026‑10‑12), delay, màn hình xuất, camera. Calibration version 5 lưu FOV + translation + scale đồng đều + pitch/yaw/roll + baseline; v1–v4 đọc tiếp với translation 0, scale 1 (v3/v4 giữ FOV, v1/v2 dùng 70°; v1–v3 mặc định góc 0°, v4 giữ rotation). Settings mới mặc định live bars off.
 
 ### 14.10 Thứ tự thi công (AR‑S0…AR‑S9)
 

@@ -603,6 +603,7 @@ public partial class MainWindow
             ArViewProfileChoices());
         ButtonRow(alignment, ("CALIBRATE", CalibrateAr_Click, null), ("RESET CALIBRATION", ResetArCalibration_Click, null));
         Note(alignment, "In Calibrate, drag the Move / Rotate / Scale gizmo or use the numeric controls to translate, rotate and uniformly scale the keyboard. Note travel has its own separate controls.");
+        Toggle(alignment, "Alignment check", nameof(PianoVisualSettings.ArAlignmentCheck), "Redraws the saved key area as a frame with octave lines right over the live camera picture, on any quality level. When the lines no longer sit on the real keys — after a bumped tripod or a moved keyboard — calibrate again. Works only while a calibration exists; the check draws nothing before that.");
 
         var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint and optional rising MIDI notes. Lookahead applies to song notes in Learn only; 3D live bars and Perform notes use independent fixed 3-second reaches.");
         Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint and the independently toggled rising MIDI notes remain available.",

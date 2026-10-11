@@ -364,9 +364,11 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
-    /// <summary>The AR list minus the damper strip: the count every per-note/per-key assertion means by AR quads. The
-    /// strip counter answers the last built frame, so an idle layer must never subtract more than the list holds.</summary>
-    internal int ArObjectQuadCount => Math.Max(0, _arList.Count - Math.Min(_arList.Count, _arLayer.DamperStripCount));
+    /// <summary>The AR list minus the scene elements (damper strip, alignment guides): the count every per-note/per-key
+    /// assertion means by AR quads. Both counters answer the last built frame, so an idle layer must never subtract
+    /// more than the list holds.</summary>
+    internal int ArObjectQuadCount => Math.Max(0,
+        _arList.Count - Math.Min(_arList.Count, _arLayer.DamperStripCount + _arLayer.AlignmentGuideCount));
     /// <summary>How many song-note quads the AR layer built, excluding key tint and Live Stage light spill.</summary>
     internal int ArShapeCount => _arLayer.ShapeCount;
     internal int AmbientCount => _ambientList.Count;
@@ -383,6 +385,8 @@ internal sealed class GpuStageRenderer : IDisposable
     internal int ArNoteLabelCount => _arLayer.NoteLabelCount;
     internal int ArImpactLightCount => _arLayer.ImpactLightCount;
     internal int ArDamperStripCount => _arLayer.DamperStripCount;
+    /// <summary>How many alignment-check guide quads the last calibrated frame drew; verification reads it.</summary>
+    internal int ArAlignmentGuideCount => _arLayer.AlignmentGuideCount;
     internal int ArNoteLightCount => _arLayer.NoteLightCount;
     internal int ArPulseCount => _arLayer.PulseCount;
     internal int ArParticleFxCount => _arLayer.ParticleFxCount;
