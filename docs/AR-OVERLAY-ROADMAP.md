@@ -558,7 +558,7 @@ không bao giờ cắt phím/nốt/keypress. Nối vào `GpuAdaptiveQuality` s�
 ### 14.9 Cài đặt, preset, mã chia sẻ
 
 - Thẻ AR hiện có **Notes in perspective**, hai núm **Note direction tilt / azimuth** ngay sau toggle và trước **Minimum length, share of width**; hai núm này độc lập pose keyboard. **Live press bars** mặc định tắt và không điều khiển key tint. Giữ View / Mode / Delay / Calibrate; ambient flowers/stars luôn screen-space.
-- ✅ 2026‑10‑13 — Mã chia sẻ mang look + graph: **`KEYFLOW-LOOK-2`** ra đời (đọc được mã bản 1 nguyên từng bit), `docs/SETTINGS-WIRING-AUDIT.md` đã cập nhật. Payload mang kèm mọi graph AR (độ rộng/fade nốt theo velocity, fade vệt nhấn theo lifetime); khóa bằng `VisualPresetShareTests` (6 nhóm) + `VerifyPresetShareCodes` mở rộng.
+- ✅ 2026‑10‑13 — Mã chia sẻ mang look + graph: **`KEYFLOW-LOOK-2`** ra đời (đọc được mã bản 1 nguyên từng bit), `docs/SETTINGS-WIRING-AUDIT.md` đã cập nhật. Payload mang kèm mọi graph AR (độ rộng/fade nốt theo velocity, fade vệt nhấn theo lifetime); khóa bằng `ShareCodeEnvelopeTests` (6 fact, phần vận chuyển thuần tách ra `Stage/ShareCodeEnvelope.cs`) + `VerifyPresetShareCodes` mở rộng.
 - Máy‑cục‑bộ vẫn là: calibration (góc + FOV), keyboard 3D pose, hướng note 3D, khung nhìn, alignment check (2026‑10‑12), delay, màn hình xuất, camera. Calibration version 5 lưu FOV + translation + scale đồng đều + pitch/yaw/roll + baseline; v1–v4 đọc tiếp với translation 0, scale 1 (v3/v4 giữ FOV, v1/v2 dùng 70°; v1–v3 mặc định góc 0°, v4 giữ rotation). Settings mới mặc định live bars off.
 
 ### 14.10 Thứ tự thi công (AR‑S0…AR‑S9)

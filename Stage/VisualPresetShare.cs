@@ -1,22 +1,11 @@
-using System.IO;
-using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
 
 namespace PianoPath;
 
 /// <summary>
-/// Shares a look as one line of text: the settings JSON, gzipped and base64url-encoded behind a version
-/// prefix, so a preset can travel through a chat message or a forum post instead of a file.
-///
-/// <para>
-/// Version 2 marks the payload as one that carries the look and its AR graphs together (roadmap §14.9):
-/// the note width/fade velocity graphs and the live-bar lifetime fade ride along with the colours and
-/// densities. The JSON envelope was already complete, so the version-1 payload is the same bytes behind
-/// the older marker, and a code written by any older Keyflow keeps opening bit for bit — <see cref="Prefix"/>
-/// is only what <em>new</em> codes leave under. Codes from any other version are refused with the version
-/// reason, exactly as before.
-/// </para>
+/// Shares a look as one line of text: the settings JSON inside <see cref="ShareCodeEnvelope"/>'s version-2
+/// wrapper, so a preset can travel through a chat message or a forum post instead of a file.
 ///
 /// <para>
 /// Two rules keep a code safe to paste. The <see cref="BackgroundImagePath"/> is dropped before
@@ -24,21 +13,21 @@ namespace PianoPath;
 /// that used an image falls back to its solid colour instead. And the decoded text is clamped and
 /// migrated through <see cref="PianoVisualSettings.Clamp"/> exactly like a file that was just loaded, so
 /// a hand-edited or truncated code cannot put the renderer into a state the settings file could not
-/// produce. Codes are sized and read with hard limits, so a hostile one cannot exhaust memory.
+/// produce.
 /// </para>
 /// </summary>
 internal static class VisualPresetShare
 {
     /// <summary>Marks a new code as a Keyflow look, version 2 — the look and its AR graphs travel together.</summary>
-    internal const string Prefix = "KEYFLOW-LOOK-2:";
+    internal const string Prefix = ShareCodeEnvelope.Prefix;
     /// <summary>The marker every older Keyflow wrote; those codes still open, bit for bit.</summary>
-    internal const string LegacyPrefix = "KEYFLOW-LOOK-1:";
+    internal const string LegacyPrefix = ShareCodeEnvelope.LegacyPrefix;
     /// <summary>Longest accepted code; the real ones are a few hundred characters.</summary>
-    internal const int MaxCodeLength = 32_000;
+    internal const int MaxCodeLength = ShareCodeEnvelope.MaxCodeLength;
     /// <summary>Most decoded JSON that will ever be read out of a code.</summary>
-    internal const int MaxPayloadBytes = 256 * 1024;
+    internal const int MaxPayloadBytes = ShareCodeEnvelope.MaxPayloadBytes;
 
-    private static readonly JsonSerializerOptions Options = new() { WriteIndented = false };
+    internal const string JsonReason = "The code is damaged: its payload is not a Keyflow look.";
 
     /// <summary>The shareable code for a look, with the background image path removed.</summary>
     internal static string Encode(PianoVisualSettings settings)
@@ -46,10 +35,7 @@ internal static class VisualPresetShare
         var payload = settings.Clone();
         payload.ClearMachineLocal();
         if (payload.BackgroundMode == "Image") payload.BackgroundMode = "Solid";
-        var json = Encoding.UTF8.GetBytes(payload.ToJson());
-        using var buffer = new MemoryStream();
-        using (var gzip = new GZipStream(buffer, CompressionLevel.SmallestSize, leaveOpen: true)) gzip.Write(json, 0, json.Length);
-        return Prefix + ToBase64Url(buffer.ToArray());
+        return ShareCodeEnvelope.Wrap(Encoding.UTF8.GetBytes(payload.ToJson()));
     }
 
     /// <summary>
@@ -59,39 +45,10 @@ internal static class VisualPresetShare
     internal static bool TryDecode(string? code, out PianoVisualSettings look, out string error)
     {
         look = new PianoVisualSettings();
-        error = "";
-        // A code is often pasted wrapped by a chat client, so every kind of whitespace inside it is ignored.
-        var text = new string((code ?? "").Where(character => !char.IsWhiteSpace(character)).ToArray());
-        if (text.Length == 0) { error = "The code is empty."; return false; }
-        if (text.Length > MaxCodeLength) { error = "The code is longer than a Keyflow look code can be."; return false; }
-        // Version 1 beside version 2: every code a Keyflow ever wrote for sharing a look keeps working.
-        var prefix = text.StartsWith(Prefix, StringComparison.Ordinal) ? Prefix
-            : text.StartsWith(LegacyPrefix, StringComparison.Ordinal) ? LegacyPrefix
-            : null;
-        if (prefix is null)
-        {
-            error = text.StartsWith("KEYFLOW-", StringComparison.Ordinal)
-                ? "The code was made by a different version of Keyflow."
-                : "This does not look like a Keyflow look code.";
-            return false;
-        }
-        byte[] json;
-        try { json = FromBase64Url(text[prefix.Length..]); }
-        catch (FormatException) { error = "The code is damaged: its text is not base64."; return false; }
-        if (json.Length > MaxPayloadBytes) { error = "The code is larger than any Keyflow look."; return false; }
+        if (!ShareCodeEnvelope.TryUnwrap(code, out var json, out error)) return false;
         try
         {
-            using var input = new MemoryStream(json);
-            using var gunzip = new GZipStream(input, CompressionMode.Decompress);
-            using var output = new MemoryStream();
-            var chunk = new byte[8192];
-            int read;
-            while ((read = gunzip.Read(chunk, 0, chunk.Length)) > 0)
-            {
-                if (output.Length + read > MaxPayloadBytes) { error = "The code expands to more than any Keyflow look."; return false; }
-                output.Write(chunk, 0, read);
-            }
-            var settings = PianoVisualSettings.FromJson(Encoding.UTF8.GetString(output.ToArray()));
+            var settings = PianoVisualSettings.FromJson(Encoding.UTF8.GetString(json));
             settings.Clamp();
             // A shared look never carries a picture; the background image path is quoted text the recipient
             // does not have, so the look keeps its colours and falls back to the solid background.
@@ -100,16 +57,6 @@ internal static class VisualPresetShare
             look = settings;
             return true;
         }
-        catch (InvalidDataException) { error = "The code is damaged: its payload cannot be decompressed."; return false; }
-        catch (JsonException) { error = "The code is damaged: its payload is not a Keyflow look."; return false; }
-    }
-
-    private static string ToBase64Url(byte[] bytes) =>
-        Convert.ToBase64String(bytes).TrimEnd('=').Replace('+', '-').Replace('/', '_');
-
-    private static byte[] FromBase64Url(string text)
-    {
-        var standard = text.Replace('-', '+').Replace('_', '/');
-        return Convert.FromBase64String(standard.PadRight((standard.Length + 3) / 4 * 4, '='));
+        catch (JsonException) { error = JsonReason; return false; }
     }
 }
