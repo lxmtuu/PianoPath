@@ -2516,7 +2516,7 @@ internal static partial class VerificationSuite
                         "The looped fixture must start over cleanly when its end is reached.");
                 }
                 var buffer = fileRing.BeginWrite(videoBuffer.Length, out var slot);
-                videoBuffer.AsSpan().CopyTo(buffer);
+                videoBuffer.CopyTo(buffer, 0);
                 fileRing.Publish(slot, vw, vh, Stopwatch.GetTimestamp());
             }
             var fileCalibration = ArCalibration.Create(KeyboardLayout.Standard88, [(20, 85), (303, 78), (310, 124), (15, 131)], vw, vh, out var fileProblem);

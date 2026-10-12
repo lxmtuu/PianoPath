@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -107,8 +108,8 @@ public partial class MainWindow
                     reader.Rewind();    // a take longer than the clip loops the camera, like the live overlay
                     reader.TryReadFrame(videoBuffer, mirror: false, out _, out _);
                 }
-                var buffer = ring.BeginWrite(videoBuffer.Length, out var slot);
-                videoBuffer.AsSpan().CopyTo(buffer);
+                var buffer = fileRing.BeginWrite(videoBuffer.Length, out var slot);
+                videoBuffer.CopyTo(buffer, 0);
                 ring.Publish(slot, reader.Width, reader.Height, Stopwatch.GetTimestamp());
                 var feed = new GpuStageFeed();
                 feed.SetStageHeight(job.StageHeight);
