@@ -48,7 +48,8 @@ public partial class MainWindow
         var missing = new List<string>();
         if (_allNotes.Count == 0) missing.Add(Loc.T("open a MIDI file (Play menu)"));
         if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) missing.Add(Loc.T("choose a camera video file (Camera page)"));
-        if (_arCalibration?.Current is not { } calibration) missing.Add(Loc.T("calibrate the keyboard on that source (Camera page)"));
+        var calibration = _arCalibration?.Current;
+        if (calibration is null) missing.Add(Loc.T("calibrate the keyboard on that source (Camera page)"));
         if (missing.Count > 0) { SetArExportStatus(Loc.F("Not yet: {0}.", string.Join("; ", missing))); return; }
 
         var dialog = new SaveFileDialog
@@ -71,7 +72,7 @@ public partial class MainWindow
             ShowRisingMidiNotes: arOptions.ShowsRisingMidiNotes, AlignmentGuides: false,
             ShowDamperStrip: _visualSettings.ArDamperStrip, AlignmentGuideColor: ArGuideColor(),
             ViewProfileId: _visualSettings.ArViewProfileId);
-        var frameRate = Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
+        var frameRate = (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
         var resolutionCap = _visualSettings.RecordingResolution switch { "720p" => 1280, "1080p" => 1920, _ => 0 };
         var stageHeight = Math.Max(120, Stage.ActualHeight);
         var seconds = SongDuration() + 1.0;   // a one-second settle tail, so the last notes finish falling
@@ -108,7 +109,7 @@ public partial class MainWindow
                     reader.Rewind();    // a take longer than the clip loops the camera, like the live overlay
                     reader.TryReadFrame(videoBuffer, mirror: false, out _, out _);
                 }
-                var buffer = fileRing.BeginWrite(videoBuffer.Length, out var slot);
+                var buffer = ring.BeginWrite(videoBuffer.Length, out var slot);
                 videoBuffer.CopyTo(buffer, 0);
                 ring.Publish(slot, reader.Width, reader.Height, Stopwatch.GetTimestamp());
                 var feed = new GpuStageFeed();
