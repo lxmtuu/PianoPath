@@ -10,6 +10,15 @@ namespace PianoPath;
 /// prefix, so a preset can travel through a chat message or a forum post instead of a file.
 ///
 /// <para>
+/// Version 2 marks the payload as one that carries the look and its AR graphs together (roadmap §14.9):
+/// the note width/fade velocity graphs and the live-bar lifetime fade ride along with the colours and
+/// densities. The JSON envelope was already complete, so the version-1 payload is the same bytes behind
+/// the older marker, and a code written by any older Keyflow keeps opening bit for bit — <see cref="Prefix"/>
+/// is only what <em>new</em> codes leave under. Codes from any other version are refused with the version
+/// reason, exactly as before.
+/// </para>
+///
+/// <para>
 /// Two rules keep a code safe to paste. The <see cref="BackgroundImagePath"/> is dropped before
 /// encoding — it points at a file on the sender's disk, so the recipient could never load it, and a look
 /// that used an image falls back to its solid colour instead. And the decoded text is clamped and
@@ -20,8 +29,10 @@ namespace PianoPath;
 /// </summary>
 internal static class VisualPresetShare
 {
-    /// <summary>Marks the payload as a Keyflow look and as version 1 of the format.</summary>
-    internal const string Prefix = "KEYFLOW-LOOK-1:";
+    /// <summary>Marks a new code as a Keyflow look, version 2 — the look and its AR graphs travel together.</summary>
+    internal const string Prefix = "KEYFLOW-LOOK-2:";
+    /// <summary>The marker every older Keyflow wrote; those codes still open, bit for bit.</summary>
+    internal const string LegacyPrefix = "KEYFLOW-LOOK-1:";
     /// <summary>Longest accepted code; the real ones are a few hundred characters.</summary>
     internal const int MaxCodeLength = 32_000;
     /// <summary>Most decoded JSON that will ever be read out of a code.</summary>
@@ -53,7 +64,11 @@ internal static class VisualPresetShare
         var text = new string((code ?? "").Where(character => !char.IsWhiteSpace(character)).ToArray());
         if (text.Length == 0) { error = "The code is empty."; return false; }
         if (text.Length > MaxCodeLength) { error = "The code is longer than a Keyflow look code can be."; return false; }
-        if (!text.StartsWith(Prefix, StringComparison.Ordinal))
+        // Version 1 beside version 2: every code a Keyflow ever wrote for sharing a look keeps working.
+        var prefix = text.StartsWith(Prefix, StringComparison.Ordinal) ? Prefix
+            : text.StartsWith(LegacyPrefix, StringComparison.Ordinal) ? LegacyPrefix
+            : null;
+        if (prefix is null)
         {
             error = text.StartsWith("KEYFLOW-", StringComparison.Ordinal)
                 ? "The code was made by a different version of Keyflow."
@@ -61,7 +76,7 @@ internal static class VisualPresetShare
             return false;
         }
         byte[] json;
-        try { json = FromBase64Url(text[Prefix.Length..]); }
+        try { json = FromBase64Url(text[prefix.Length..]); }
         catch (FormatException) { error = "The code is damaged: its text is not base64."; return false; }
         if (json.Length > MaxPayloadBytes) { error = "The code is larger than any Keyflow look."; return false; }
         try

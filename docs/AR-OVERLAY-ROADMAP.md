@@ -57,7 +57,7 @@ Giữ nguyên **ba luật** của `docs/ROADMAP.md` §0 và thêm bốn điều:
 |---|---|
 | **Toán thuần, kiểm chứng bằng khung tổng hợp** | Mọi thuật toán (hình học phím, homography, dò bàn phím, đo độ trễ) viết thành hàm thuần như `CameraOverlay`/`HandTracker`, test bằng ảnh do chính repo vẽ. Không test nào cần webcam |
 | **Không thêm dependency nặng ở lõi** | Cùng triết lý "không model, không tải về" của hand tracking. OpenCV/ONNX chỉ vào dưới dạng **tuỳ chọn tải một lần** (AR‑5), không bao giờ trong gói mặc định |
-| **Căn chỉnh thuộc về máy, không thuộc về preset** | Calibration lưu theo (camera, độ phân giải), giống GPU FPS/VSync: áp preset **không** đổi nó; mã chia sẻ preset (`KEYFLOW-LOOK-1`) **không** mang nó (giống đường dẫn ảnh nền) |
+| **Căn chỉnh thuộc về máy, không thuộc về preset** | Calibration lưu theo (camera, độ phân giải), giống GPU FPS/VSync: áp preset **không** đổi nó; mã chia sẻ preset (`KEYFLOW-LOOK-2`, đọc được cả mã bản 1) **không** mang nó (giống đường dẫn ảnh nền) |
 | **MIDI là sự thật, camera là phụ** | Biết phím nào đang bấm là việc của MIDI. Camera chỉ trả lời "phím nằm ở đâu" và "tay ở đâu". Vì vậy nhận diện phím bấm từ hình/âm thanh nằm trong mục *không làm* (§9), nhất quán với `docs/ROADMAP.md` §5 |
 
 ## 3. Kiến trúc đề xuất
@@ -558,7 +558,7 @@ không bao giờ cắt phím/nốt/keypress. Nối vào `GpuAdaptiveQuality` s�
 ### 14.9 Cài đặt, preset, mã chia sẻ
 
 - Thẻ AR hiện có **Notes in perspective**, hai núm **Note direction tilt / azimuth** ngay sau toggle và trước **Minimum length, share of width**; hai núm này độc lập pose keyboard. **Live press bars** mặc định tắt và không điều khiển key tint. Giữ View / Mode / Delay / Calibrate; ambient flowers/stars luôn screen-space.
-- Mã chia sẻ mang look + graph ⇒ cần **`KEYFLOW-LOOK-2`** (đọc được mã bản 1); `docs/SETTINGS-WIRING-AUDIT.md` cập nhật.
+- ✅ 2026‑10‑13 — Mã chia sẻ mang look + graph: **`KEYFLOW-LOOK-2`** ra đời (đọc được mã bản 1 nguyên từng bit), `docs/SETTINGS-WIRING-AUDIT.md` đã cập nhật. Payload mang kèm mọi graph AR (độ rộng/fade nốt theo velocity, fade vệt nhấn theo lifetime); khóa bằng `VisualPresetShareTests` (6 nhóm) + `VerifyPresetShareCodes` mở rộng.
 - Máy‑cục‑bộ vẫn là: calibration (góc + FOV), keyboard 3D pose, hướng note 3D, khung nhìn, alignment check (2026‑10‑12), delay, màn hình xuất, camera. Calibration version 5 lưu FOV + translation + scale đồng đều + pitch/yaw/roll + baseline; v1–v4 đọc tiếp với translation 0, scale 1 (v3/v4 giữ FOV, v1/v2 dùng 70°; v1–v3 mặc định góc 0°, v4 giữ rotation). Settings mới mặc định live bars off.
 
 ### 14.10 Thứ tự thi công (AR‑S0…AR‑S9)

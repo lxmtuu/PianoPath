@@ -223,6 +223,7 @@ internal static partial class VerificationSuite
     {
         var look = VisualPresets.FindBuiltIn("Ice Crystal")!.Settings.Clone();
         look.NoteGlow = 123; look.HandSplitPitch = 55; look.BackgroundImagePath = @"C:\pictures\mine.png"; look.BackgroundMode = "Image";
+        look.ArNoteWidthByVelocity = true; look.ArNoteWidthSoft = 72; look.ArNoteWidthHard = 146; look.ArLiveFadeByLifetime = true; look.ArLiveFadeStart = 33;
         var code = VisualPresetShare.Encode(look);
         Assert(code.StartsWith(VisualPresetShare.Prefix, StringComparison.Ordinal) && code.Length > 80 && !code.Contains('+') && !code.Contains('/') && !code.Contains('\n'),
             "A share code should start with the version prefix and be one line of URL-safe text.");
@@ -230,6 +231,9 @@ internal static partial class VerificationSuite
         Assert(VisualPresetShare.TryDecode(code, out var decoded, out var reason) && reason.Length == 0, "A code that was just produced must decode.");
         Assert(decoded.NoteGlow == 123 && decoded.HandSplitPitch == 55 && decoded.NoteStyle == look.NoteStyle && decoded.PresetName == look.PresetName,
             "A decoded look should carry every setting of the original, so the two machines render the same stage.");
+        Assert(decoded.ArNoteWidthByVelocity && decoded.ArNoteWidthSoft == 72 && decoded.ArNoteWidthHard == 146
+                && decoded.ArLiveFadeByLifetime && decoded.ArLiveFadeStart == 33 && decoded.ArLiveFadeEnd == look.ArLiveFadeEnd,
+            "A version-2 code should carry the AR velocity and lifetime graphs with the look, so the receiving machine draws the same graphs.");
         Assert(decoded.BackgroundImagePath == "" && decoded.BackgroundMode == "Solid",
             "A share code must not carry a local image path; a look that used an image falls back to its solid background.");
 
@@ -237,11 +241,17 @@ internal static partial class VerificationSuite
         Assert(VisualPresetShare.TryDecode(wrapped, out var unwrapped, out _) && unwrapped.NoteGlow == 123,
             "A code pasted back from a chat window, wrapped and indented, should still read.");
 
+        // Roadmap §14.9: a code an older Keyflow wrote is the same payload behind the older marker.
+        var legacy = VisualPresetShare.LegacyPrefix + code[VisualPresetShare.Prefix.Length..];
+        Assert(VisualPresetShare.TryDecode(legacy, out var fromV1, out var legacyReason) && legacyReason.Length == 0
+                && fromV1.NoteGlow == 123 && fromV1.ArNoteWidthHard == 146 && fromV1.HandSplitPitch == 55,
+            "Every version-1 code ever shared must keep opening bit for bit, so old looks still travel.");
+
         Assert(!VisualPresetShare.TryDecode("", out _, out var empty) && empty == "The code is empty."
                 && !VisualPresetShare.TryDecode(null, out _, out var missing) && missing == "The code is empty.",
             "An empty code should be refused with the reason for it.");
         Assert(!VisualPresetShare.TryDecode("hello there", out _, out var foreign) && foreign == "This does not look like a Keyflow look code."
-                && !VisualPresetShare.TryDecode("KEYFLOW-LOOK-2:AAAA", out _, out var other) && other == "The code was made by a different version of Keyflow.",
+                && !VisualPresetShare.TryDecode("KEYFLOW-LOOK-9:AAAA", out _, out var other) && other == "The code was made by a different version of Keyflow.",
             "Text that is not a Keyflow look, and a code from another format version, should be refused with different reasons.");
         Assert(!VisualPresetShare.TryDecode(VisualPresetShare.Prefix + "not base64!!", out _, out var damaged) && damaged == "The code is damaged: its text is not base64."
                 && !VisualPresetShare.TryDecode(VisualPresetShare.Prefix + "AAAA", out _, out var undecodable) && undecodable == "The code is damaged: its payload cannot be decompressed.",
@@ -258,7 +268,7 @@ internal static partial class VerificationSuite
         Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(crazy), out var clamped, out _)
                 && clamped.NoteFallSpeed == 1000 && clamped.ParticleAmount == 120 && clamped.Palette == "Spectrum",
             "A look whose values are out of range should arrive clamped, exactly like a loaded settings file.");
-        Results.Add("PASS look share codes: version-prefixed URL-safe text, exact round trip without the local image path, wrapped codes tolerated, and empty, foreign, oversized and damaged codes refused with a reason.");
+        Results.Add("PASS look share codes: KEYFLOW-LOOK-2 text carrying the look and its AR graphs, every version-1 code still opening bit for bit, URL-safe single lines without the local image path, wrapped codes tolerated, and empty, foreign, other-version, oversized and damaged codes refused with a reason.");
     }
 
     private static void VerifyVisualSettings()
