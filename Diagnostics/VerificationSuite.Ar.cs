@@ -2168,6 +2168,46 @@ internal static partial class VerificationSuite
         Results.Add($"PASS AR drift watch: a 9-pixel move of the key picture was read as {moved.OffsetX:0.#}, {moved.OffsetY:0.#} pixels (threshold {threshold:0.#} px at {w} px wide) while the still picture read {aligned.Pixels:0.#} px and an 18% brightness change stayed silent; the watch nags after {ArDriftMeter.FlagHoldReadings} readings in a row and never moves the calibration itself.");
     }
 
+    private static void VerifyCalibrationAdvice()
+    {
+        // roadmap §14.7 "Thêm 4 — hướng dẫn ngay trong cửa sổ": the calibration window's live lookout, checked on the
+        // same synthetic frames the xUnit suite locks — a palm in frame fires, quiet keys/felt/wood stay silent, and
+        // with all four corners down only what is INSIDE the quad is watched.
+        const int w = 320, h = 180;
+        var quiet = new byte[w * h * 4];
+        var rng = new Random(4);
+        for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                var i = (y * w + x) * 4;
+                var lum = y > 120 ? (200 + rng.Next(30)) : (34 + rng.Next(18));
+                if (y > 120 && x % 40 > 32) lum = 24;
+                quiet[i] = quiet[i + 1] = quiet[i + 2] = (byte)lum; quiet[i + 3] = 255;
+            }
+        void PaintHand(byte[] px, int cx, int cy, int radius)
+        {
+            for (var y = cy - radius; y <= cy + radius; y++)
+                for (var x = cx - radius; x <= cx + radius; x++)
+                {
+                    if (x < 0 || y < 0 || x >= w || y >= h || (x - cx) * (x - cx) + (y - cy) * (y - cy) > radius * radius) continue;
+                    var i = (y * w + x) * 4;
+                    px[i] = 140; px[i + 1] = 174; px[i + 2] = 226; px[i + 3] = 255;
+                }
+        }
+        var (warnQuiet, shareQuiet) = CalibrationAdvice.CheckPicture(quiet, w, h, null);
+        Assert(!warnQuiet && shareQuiet < CalibrationAdvice.SkinWarningFraction, "White and black keys over dark wood never read as skin.");
+        var palm = (byte[])quiet.Clone();
+        PaintHand(palm, w / 2, h / 2, 42);
+        var (warnPalm, sharePalm) = CalibrationAdvice.CheckPicture(palm, w, h, null);
+        Assert(warnPalm, "A palm-sized skin blob in frame fires the hands advice before the corners are down.");
+        (double X, double Y)[] quad = [(40, 100), (280, 100), (290, 170), (30, 170)];
+        var inside = (byte[])quiet.Clone(); PaintHand(inside, 160, 135, 30);
+        var outside = (byte[])quiet.Clone(); PaintHand(outside, 30, 30, 30);
+        Assert(CalibrationAdvice.CheckPicture(inside, w, h, quad).HandsInTheWay, "Skin inside the marked quad fires.");
+        Assert(!CalibrationAdvice.CheckPicture(outside, w, h, quad).HandsInTheWay, "A waving arm beside the keys is nobody's business.");
+        Results.Add($"PASS Calibration framing advice: a quiet keyboard read {shareQuiet:0.000} skin (silent), a palm fired at {sharePalm:0.000}, and with corners down the lookout watches only the inside of the quad (inside fired, outside stayed silent; threshold {CalibrationAdvice.SkinWarningFraction:0%}).");
+    }
+
     private static void VerifyArCalibrationArchive()
     {
         // roadmap §14.7 "Thêm 3 — xuất/nhập bản sao căn chỉnh": the portable backup must round-trip every field of

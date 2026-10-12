@@ -536,7 +536,12 @@ làm artifact.
   đủ kiểm tra như calibrate mới — hàng hỏng bị đếm và bỏ qua, không làm hỏng dữ liệu; tệp lạ version mới hơn bị từ
   chối bằng lỗi rõ ràng. Không thêm key `PianoVisualSettings` nào nên preset/mã chia sẻ không đụng tới. xUnit
   `ArCalibrationArchiveTests` + `--verify` (`VerifyArCalibrationArchive`).
-- **Thêm 4 — hướng dẫn ngay trong cửa sổ**: góc máy qua vai, tránh fisheye, tay ngoài vùng.
+- **Thêm 4 — hướng dẫn ngay trong cửa sổ**: ✅ 2026‑10‑12. Cửa sổ Calibrate in hai câu mẹo dựng cảnh (máy qua vai
+  nhìn dọc phím; tránh ống quá rộng/fisheye; tay ra ngoài khung khi đánh dấu) — phần chữ thường trực — và thêm trạm
+  quan sát sống `Camera/CalibrationAdvice.cs`: lobe da Y′CbCr quét ảnh still đang hiển thị (chung bước mẫu 3
+  pixel), tay da chiếm quá 3 % là dòng note nhắc khẽ — khắp ảnh trước khi đủ 4 góc, chỉ trong quad sau khi đủ
+  (point-in-quad trên cùng bước mẫu; cánh tay ngoài vùng không tính). Là lời khuyên, không phải cửa chặn; gỗ sồi
+  nắng có thể mượn màu da. xUnit `CalibrationAdviceTests` + `--verify` (`VerifyCalibrationAdvice`).
 - **Thêm 5 — preset AR theo khung nhìn**: độ cao/phần tử khác nhau cho 45° và 90° (đi cùng `ArViewProfileId`).
 
 ### 14.8 Ngân sách hiệu năng: AR‑Lite / AR‑Standard / AR‑Ultra

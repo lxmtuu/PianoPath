@@ -635,7 +635,7 @@ internal sealed class CalibrationSurface : FrameworkElement
 internal sealed class CalibrationWindow : Window
 {
     private readonly CalibrationSurface _surface;
-    private readonly TextBlock _hint, _note;
+    private readonly TextBlock _hint, _note, _tips;
     private readonly Button _done, _undo, _startOver, _screenUp, _keyDepth;
     private readonly Button _resetOrientation, _resetFov, _resetPitch, _resetYaw, _resetRoll;
     private readonly Button _resetPositionX, _resetPositionY, _resetPositionZ, _resetScale, _resetTool;
@@ -680,6 +680,15 @@ internal sealed class CalibrationWindow : Window
         _surface = new CalibrationSurface(picture, wizard, mirror, noteDirection);
         _hint = new TextBlock { FontSize = 13, TextWrapping = TextWrapping.Wrap, MinHeight = 38, Margin = new Thickness(16, 12, 16, 8), Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)) };
         _note = new TextBlock { FontSize = 11, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(255, 190, 120)), Margin = new Thickness(0, 2, 0, 0) };
+        // roadmap §14.7 "Thêm 4": the two set-up tips nobody remembers on their first calibration, said once, plainly.
+        _tips = new TextBlock
+        {
+            FontSize = 11.5, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(158, 148, 170)),
+            Margin = new Thickness(16, 0, 16, 6),
+            Text = Loc.T("Hang the camera over your shoulder, looking down the keys: the low notes on one side, the far key edge along the top of the picture. A camera square overhead reads every key, a camera across the keys hides the far ones.") + "\n"
+                 + Loc.T("Avoid a very wide lens (phone ultra-wide, fisheye): the rows of keys bend toward the picture edges, and corners marked on bent rows never stay on the real keys.") + "  "
+                 + Loc.T("Keep hands out of the picture while marking: the camera's exposure walks as a hand waves, and the saved frame must see keys, not fingers."),
+        };
 
         var info = new TextBlock { FontSize = 11, Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)) };
         info.Text = profile is null
@@ -800,6 +809,7 @@ internal sealed class CalibrationWindow : Window
 
         var root = new DockPanel();
         DockPanel.SetDock(_hint, Dock.Top); root.Children.Add(_hint);
+        DockPanel.SetDock(_tips, Dock.Top); root.Children.Add(_tips);
         DockPanel.SetDock(orientationRow, Dock.Top); root.Children.Add(orientationRow);
         DockPanel.SetDock(fovRow, Dock.Top); root.Children.Add(fovRow);
         DockPanel.SetDock(poseRow, Dock.Top); root.Children.Add(poseRow);
@@ -813,6 +823,7 @@ internal sealed class CalibrationWindow : Window
         _surface.Changed += RefreshText;
         _surface.NoteDirectionChanged += Surface_NoteDirectionChanged;
         RefreshText();
+        UpdateFramingNote(picture);
         Loaded += (_, _) => _surface.Focus();
     }
 
@@ -970,8 +981,16 @@ internal sealed class CalibrationWindow : Window
             _note.Text = Loc.T("The new picture has a different size. Close this window and mark the keys again.");
             return;
         }
-        _note.Text = "";
         _surface.SetPicture(picture);
+        UpdateFramingNote(picture);
+    }
+
+    /// <summary>Live framing advice (roadmap §14.7 "Thêm 4"): skin-coloured movement inside the marked keys once the corners are down, anywhere in the picture before — one read of the still the window shows, never a timer.</summary>
+    private void UpdateFramingNote(CalibrationPicture picture)
+    {
+        var (handsInTheWay, _) = CalibrationAdvice.CheckPicture(picture.Bgra, picture.Width, picture.Height,
+            Wizard.Points.Count == 4 ? Wizard.Points : null);
+        _note.Text = handsInTheWay && !Wizard.IsDragging ? Loc.T("Something skin-coloured moves inside the picture (hands?). Keep hands outside the key area while calibrating.") : "";
     }
 
     /// <summary>Done: takes the calibration out of the wizard and closes. Does nothing while the corners cannot be used.</summary>
