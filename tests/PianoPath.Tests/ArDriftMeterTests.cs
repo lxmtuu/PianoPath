@@ -33,7 +33,7 @@ public class ArDriftMeterTests
             for (var x = (int)Math.Ceiling(xa); x < Math.Min(W, xb); x++)
             {
                 var u = (x - xa) / (xb - xa);
-                var lum = (int)Math.Floor(u * 13) % 2 == 0 ? 232 : 56;   // wide bands: within the search window the pattern is unique, so a move cannot alias onto the next stripe
+                var lum = (int)Math.Floor(u * 26) % 2 == 0 ? 232 : 56;   // 45 px bands: unique across the search window, so a move cannot alias onto the next stripe
                 if (u > .3 && u < .72 && tv < .6) lum = Math.Min(lum, 44);   // a dark middle band: the black-key half
                 lum = (int)Math.Clamp(lum * brightness + 6 + (rng.NextDouble() - .5) * 6, 0, 255);
                 var i = (y * W + x) * 4;
@@ -48,7 +48,7 @@ public class ArDriftMeterTests
                 for (var x = 300; x < Math.Min(W, 300 + bw); x++)
                 {
                     var i = (y * W + x) * 4;
-                    px[i] = px[i + 1] = px[i + 2] = (byte)Math.Min(px[i], 36);
+                    px[i] = px[i + 1] = px[i + 2] = (byte)Math.Min((int)px[i], 36);
                 }
         }
         return px;
