@@ -27,13 +27,14 @@ public class VideoRenderProfileTests
     }
 
     [Theory]
-    [InlineData(2, 320, 180, 160, 90)]
-    [InlineData(4, 640, 360, 160, 90)]
-    public void DownsampleBoxesTheRenderDownToTheOutput(int ds, int rw, int rh, int ow, int oh)
+    [InlineData(2, 640, 360)]
+    [InlineData(4, 320, 180)]
+    public void DownsampleBoxesTheRenderDownToTheOutput(int ds, int ow, int oh)
     {
+        // The render always draws up to the cap; the downsample only shrinks what the writer receives.
         var plan = ArVideoRenderProfile.Plan(1280, 720, 2, 30, ds, maxSide: 1280);
-        Assert.Equal(rw, plan.RenderWidth);
-        Assert.Equal(rh, plan.RenderHeight);
+        Assert.Equal(1280, plan.RenderWidth);
+        Assert.Equal(720, plan.RenderHeight);
         Assert.Equal(ow, plan.Width);
         Assert.Equal(oh, plan.Height);
         Assert.Equal(ds, plan.Downsample);

@@ -2390,8 +2390,10 @@ internal static partial class VerificationSuite
             }
             Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
             Assert(keyLevels.Count == 6, $"The take must carry six probe readings (got {keyLevels.Count}).");
-            Assert(keyLevels[1] + 16 <= keyLevels[2] && keyLevels[0] + 16 <= keyLevels[2],
-                $"The pressed-key ticks must outshine the quiet ones at the C4 light (quiet {keyLevels[0]}/{keyLevels[1]}, pressed {keyLevels[2]}).");
+            // Keys light the moment they are pressed (ticks 1–3) and go quiet when the take goes quiet.
+            Assert(keyLevels[0] < 160 && keyLevels[5] < 170 && keyLevels[1] > keyLevels[0] + 40 && keyLevels[2] > keyLevels[0] + 40
+                    && keyLevels[3] > keyLevels[0] + 40 && keyLevels[5] < keyLevels[2] - 40,
+                $"The C4 light must be quiet at the take's ends and lit through the pressed ticks ({string.Join("/", keyLevels)}).");
 
             // PNG: downsample 2 boxes the 320×180 sweep into 160×90 frames — and the sweep itself replays bit-identically.
             var pngPlan = ArVideoRenderProfile.Plan(cw, ch, 0.5, 12, downsample: 2, maxSide: 320);
