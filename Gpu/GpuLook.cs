@@ -38,6 +38,8 @@ internal sealed class GpuLook
     public bool Notes3D { get; init; } = true;
     /// <summary>Note names printed inside the bars when there is room (Style → SHAPE &amp; STYLE).</summary>
     public bool ShowNoteLabels { get; init; }
+    /// <summary>The «KEYFLOW» strip above the keys, drawn GPU-side so offline takes carry it too.</summary>
+    public bool ShowWatermark { get; init; }
     /// <summary>Song note speed in DIPs per second, identical to the software stage.</summary>
     public float SongFallSpeed { get; init; } = 258;
     /// <summary>Live trail speed in DIPs per second (the software stage uses NoteFallSpeed directly).</summary>
@@ -271,6 +273,7 @@ internal sealed class GpuLook
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
             NoteEdge = P(s.NoteEdge), NoteHeadGlow = P(s.NoteHeadGlow), NoteRefraction = P(s.NoteRefraction), NoteTexture = P(s.NoteTexture),
             Notes3D = s.Notes3D, ShowNoteLabels = s.ShowNoteLabels,
+            ShowWatermark = s.ShowWatermark,
             SongFallSpeed = (float)(258 * s.NoteFallSpeed / 550), LiveFallSpeed = (float)s.NoteFallSpeed,
             Rising = s.NoteDirection == "Up",
             VelocityColor = s.VelocityColor, VelocityColorAmount = P(s.VelocityColorAmount),

@@ -96,6 +96,9 @@ internal sealed class GpuStageFeed
     private GpuBackgroundImage? _labelAtlas;
     /// <summary>The glyph atlas (note names, Matrix Rain glyphs); built once on the UI thread, uploaded once by the render thread.</summary>
     internal GpuBackgroundImage? LabelAtlas { get => Volatile.Read(ref _labelAtlas); set => Volatile.Write(ref _labelAtlas, value); }
+    private GpuBackgroundImage? _watermark;
+    /// <summary>The «KEYFLOW» strip for the GPU watermark (sprite kind 16); built once on the UI thread.</summary>
+    internal GpuBackgroundImage? Watermark { get => Volatile.Read(ref _watermark); set => Volatile.Write(ref _watermark, value); }
 
     /// <summary>Sustain pedal state (drives Pedal Glow). Releasing also drops the stored continuous level.</summary>
     internal void SetSustain(bool down)

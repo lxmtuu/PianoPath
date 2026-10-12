@@ -69,6 +69,8 @@ internal sealed partial class PianoStage
                 _gpuBackgroundSource = null;
                 PublishGpuBackground();
                 feed.LabelAtlas ??= GpuGlyphAtlas;
+                // The GPU draws the watermark itself (sprite kind 16), so live, recorded and offline frames match.
+                feed.Watermark = _visual.ShowWatermark ? GpuWatermark : null;
                 PublishGpuLook();
                 feed.SetStageHeight(ActualHeight);
                 feed.SetSustainLevel(_sustainPedal, _simulation.Sustain);
@@ -154,6 +156,32 @@ internal sealed partial class PianoStage
             var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
             bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
             return s_gpuGlyphAtlas = new GpuBackgroundImage { Pixels = pixels, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Version = 1 };
+        }
+    }
+
+    private static GpuBackgroundImage? s_gpuWatermark;
+    /// <summary>
+    /// The «KEYFLOW» line for the GPU watermark, rasterized once with the same WPF text stack the software
+    /// stage prints it with — white text, coverage in alpha, solid height <see cref="ArVideoWatermark.StripHeight"/>
+    /// DIPs so the GPU sprite and the software overlay land on the same pixels.
+    /// </summary>
+    internal static GpuBackgroundImage GpuWatermark
+    {
+        get
+        {
+            if (s_gpuWatermark is not null) return s_gpuWatermark;
+            var formatted = new FormattedText("KEYFLOW", System.Globalization.CultureInfo.InvariantCulture, FlowDirection.LeftToRight,
+                LabelBoldTypeface, 11, Brushes.White, 1.0);
+            var width = (int)Math.Ceiling(formatted.Width);
+            var height = (int)Math.Round(ArVideoWatermark.StripHeight);
+            var visual = new DrawingVisual();
+            using (var dc = visual.RenderOpen())
+                dc.DrawText(formatted, new Point((width - formatted.Width) / 2, (height - formatted.Height) / 2));
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(visual);
+            var pixels = new byte[bitmap.PixelWidth * bitmap.PixelHeight * 4];
+            bitmap.CopyPixels(pixels, bitmap.PixelWidth * 4, 0);
+            return s_gpuWatermark = new GpuBackgroundImage { Pixels = pixels, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Version = 1 };
         }
     }
 
@@ -271,7 +299,7 @@ internal sealed partial class PianoStage
         }
         DrawHandMarker(dc, width, keyTop, lane);
         DrawCameraOverlay(dc, width, height);
-        if (_visual.ShowWatermark) DrawWatermark(dc, width, height);
+        if (_visual.ShowWatermark && _gpu is null) DrawWatermark(dc, width, height); // the GPU frame already carries it, kind 16
         if (_visual.ShowCounter || _visual.ShowFps) DrawCounter(dc, width);
         dc.Pop(); dc.Pop();
     }

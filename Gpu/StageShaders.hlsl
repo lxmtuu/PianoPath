@@ -96,6 +96,7 @@ Texture2D SourceTex : register(t0);
 Texture2D SecondTex : register(t1);
 Texture2D AtlasTex : register(t6);       // glyph atlas: 16 x 24 cells of 64 x 32 px, coverage in alpha
 Texture2D CameraTex : register(t7);      // the newest camera picture, display-encoded (not sRGB-converted on read)
+Texture2D MarkTex : register(t8);        // the export watermark strip, whole-line text coverage in alpha
 SamplerState LinearClamp : register(s0);
 SamplerState PointClamp : register(s1);
 
@@ -1178,7 +1179,8 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
             else if (kind < 12.5) extent = float2(size, size * 0.866);                      // Sierpinski triangle
             else if (kind < 13.5) extent = float2(size * 1.4, max(s.Dir.w, 1.0));           // aurora curtain
             else if (kind < 14.5) { extent = float2(size, size * 0.8); depth = 0.01; }      // star
-            else extent = float2(size, max(s.Dir.x, 0.5));                                  // gradient rectangle
+            else if (kind < 15.5) extent = float2(size, max(s.Dir.x, 0.5));                 // gradient rectangle
+            else { extent = float2(size * max(s.Dir.z, 0.01), size); depth = 0.01; }        // 16: watermark strip, Dir.z = W/H aspect
             extra = kind > 11.5 && kind < 12.5 ? float4(s.Dir.xyz, 0.0) : float4(extent, 0.0, 0.0);
         }
     }
@@ -1331,12 +1333,19 @@ float4 SpriteShape(SpriteOut v)
         float edge = exp(-pow(d / (w * 1.6), 2.0));
         return float4((c * fill + edge * 1.2) * a, a * max(fill, edge));
     }
-    // rectangle with a vertical alpha gradient: Params.z at the top, Params.y at the bottom
-    float2 px2 = v.Local * v.Extra.xy;
-    float2 inset = v.Extra.xy - abs(px2);
-    float mask = saturate(inset.x + 0.5) * saturate(inset.y + 0.5);
-    float grad = lerp(v.Params.z, v.Params.y, v.Local.y * 0.5 + 0.5);
-    return float4(c * a * grad * mask, 0.0);
+    if (kind < 15.5)
+    {
+        // rectangle with a vertical alpha gradient: Params.z at the top, Params.y at the bottom
+        float2 px2 = v.Local * v.Extra.xy;
+        float2 inset = v.Extra.xy - abs(px2);
+        float mask = saturate(inset.x + 0.5) * saturate(inset.y + 0.5);
+        float grad = lerp(v.Params.z, v.Params.y, v.Local.y * 0.5 + 0.5);
+        return float4(c * a * grad * mask, 0.0);
+    }
+    // 16: the watermark strip — the whole line of text lives in MarkTex; the instance colour tints it.
+    float2 markUv = v.Local * 0.5 + 0.5;
+    float mark = MarkTex.SampleLevel(LinearClamp, markUv, 0).a;
+    return float4(c * a * mark, a * mark);
 }
 
 float4 PsSprite(SpriteOut v) : SV_Target

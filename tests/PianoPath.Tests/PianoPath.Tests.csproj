@@ -43,6 +43,7 @@
     <Compile Include="..\..\Video\ArVideoRenderProfile.cs" Link="Product\Video\ArVideoRenderProfile.cs" />
     <Compile Include="..\..\Video\BgraPack.cs" Link="Product\Video\BgraPack.cs" />
     <Compile Include="..\..\Video\ArVideoAudio.cs" Link="Product\Video\ArVideoAudio.cs" />
+    <Compile Include="..\..\Video\ArVideoWatermark.cs" Link="Product\Video\ArVideoWatermark.cs" />
     <Compile Include="..\..\Camera\ArElementCatalog.cs" Link="Product\Camera\ArElementCatalog.cs" />
     <Compile Include="..\..\Camera\ArLiveFade.cs" Link="Product\Camera\ArLiveFade.cs" />
     <Compile Include="..\..\Camera\ArDampers.cs" Link="Product\Camera\ArDampers.cs" />

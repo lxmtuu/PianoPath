@@ -2304,20 +2304,21 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
-    /// AR render-to-video (roadmap §14.10 AR‑S7, frame half): the profile plans the geometry and rate, the
-    /// offline sweep draws the scripted ticks at a fixed time step over the camera picture and writes them
-    /// as a real AVI and as a PNG frame folder, and a live-shaped render of the same script gives the same
-    /// pixels. Audio and the watermark sit in the S7 voice half and are not claimed here.
+    /// AR render-to-video (roadmap §14.10 AR‑S7): the profile plans the geometry and rate, the offline sweep
+    /// draws the scripted ticks at a fixed time step over the camera picture and writes them as a real AVI
+    /// and as a PNG frame folder, the take's SFZ voice lands sample-exact, and with the look's watermark on
+    /// the GPU draws the «KEYFLOW» strip itself — sprite kind 16, exactly where the software stage prints it.
     /// </summary>
     private static void VerifyArRenderToVideo()
     {
         const int cw = 640, ch = 360;
-        var quiet = new PianoVisualSettings
+        PianoVisualSettings QuietLook() => new()
         {
             BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = false,
             ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
             ShowLightBeams = false, ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
         };
+        var quiet = QuietLook();
         var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(40, 170), (606, 156), (620, 248), (30, 262)], cw, ch, out var problem);
         Assert(calibration is not null, $"The take script's corners must calibrate ({problem}).");
         var ring = new CameraFrameRing();
@@ -2336,12 +2337,13 @@ internal static partial class VerificationSuite
         }
 
         // The script: quiet before and after; keys held through ticks 1–3; an impact flash on tick 2.
-        GpuStageFeed TickFeed(int tick)
+        GpuStageFeed TickFeed(int tick, PianoVisualSettings look)
         {
             PublishTickCamera(tick);
             var held = tick is >= 1 and <= 3 ? new HashSet<int> { 60, 64 } : new HashSet<int>();
             var feed = new GpuStageFeed(); feed.SetStageHeight(360);
-            feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+            feed.SetLook(GpuLook.From(look, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+            if (look.ShowWatermark) feed.Watermark = PianoStage.GpuWatermark; // the GPU prints its own strip (kind 16)
             feed.ClearTransient();
             feed.SetDeterministicState([], 0, false, held);
             feed.SetDeterministicBeatPulse(0);
@@ -2367,7 +2369,7 @@ internal static partial class VerificationSuite
             var aviPath = Path.Combine(directory, "take.avi");
             ArVideoTake aviTake;
             using (var recorder = new AviVideoRecorder(aviPath, aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
-                aviTake = ArRenderToVideo.Run(renderer, TickFeed, aviPlan, recorder);
+                aviTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), aviPlan, recorder);
             Assert(aviTake.FramesWritten == 6 && aviTake.Seconds is > 0.45 and <= 0.6 && File.Exists(aviPath) && new FileInfo(aviPath).Length > 2000,
                 $"The engine should write every planned frame into the AVI (frames {aviTake.FramesWritten}, seconds {aviTake.Seconds:0.##}).");
             var reader = CameraFrameReader.OpenFile(aviPath, out var readError);
@@ -2403,20 +2405,20 @@ internal static partial class VerificationSuite
             var pngDir = Path.Combine(directory, "frames");
             using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
             {
-                var pngTake = ArRenderToVideo.Run(renderer, TickFeed, pngPlan, recorder, (i, bgra) => firstBuffers.Add(bgra));
+                var pngTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), pngPlan, recorder, (i, bgra) => firstBuffers.Add(bgra));
                 Assert(pngTake.FramesWritten == 6 && pngTake.Downsample == 2, "The PNG take writes the full sweep.");
             }
             Assert(Directory.GetFiles(pngDir, "frame-*.png").Length == 6 && File.Exists(Path.Combine(pngDir, PngSequenceRecorder.ManifestName))
                     && firstBuffers.All(b => b.Length == 160 * 4 * 90),
                 "The take writes one PNG per tick plus the manifest, from 160×90 BGRA readbacks.");
             // So khung live ↔ render: tick 2 by hand, the exact call the engine made, is the same picture bit for bit.
-            var liveTick = GpuRenderLoop.RenderFrames(renderer, TickFeed(2), 320, 180, 0, pngPlan.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
+            var liveTick = GpuRenderLoop.RenderFrames(renderer, TickFeed(2, quiet), 320, 180, 0, pngPlan.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
             Assert(BgraPack.Box2(liveTick, 320, 180).AsSpan().SequenceEqual(firstBuffers[2]),
                 "A live-shaped render of the same tick, same fixed time step and same seed must land on the take's third frame bit for bit.");
             // And the whole take seconds as an export: a second sweep of the same script writes the same readbacks.
             var secondBuffers = new List<byte[]>();
             using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
-                ArRenderToVideo.Run(renderer, TickFeed, pngPlan, recorder, (i, bgra) => secondBuffers.Add(bgra));
+                ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), pngPlan, recorder, (i, bgra) => secondBuffers.Add(bgra));
             Assert(secondBuffers.Count == firstBuffers.Count && firstBuffers.Zip(secondBuffers).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second)),
                 "Two offline sweeps of one script must be byte-identical — render-to-video owns no clock of its own.");
 
@@ -2435,7 +2437,7 @@ internal static partial class VerificationSuite
             ArVideoTake voiceTake;
             using (var recorder = new PngSequenceRecorder(Path.Combine(directory, "voice"), aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
             using (var wav = WavWriter.TryCreate(voiceWav)!)
-                voiceTake = ArRenderToVideo.Run(renderer, TickFeed, aviPlan, recorder,
+                voiceTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), aviPlan, recorder,
                     audio: new ArVideoAudio(new SfzSynthesizer(SfzReader.Read(voiceSfz), 44100), tick => voiceEvents.GetValueOrDefault(tick, []), wav!));
             Assert(voiceTake.FramesWritten == 6 && voiceTake.AudioSeconds is > 0.45 and <= 0.51,
                 $"The voiced take should time its piano track by the ticks ({voiceTake.AudioSeconds:0.###} seconds of audio with {voiceTake.FramesWritten} frames).");
@@ -2447,7 +2449,35 @@ internal static partial class VerificationSuite
             var heldEnergy = Enumerable.Range(0, 60).Sum(i => Math.Abs((int)VoiceAt(10000 + i * 40)) + Math.Abs((int)VoiceAt(15000 + i * 40)));
             Assert(Math.Abs((int)VoiceAt(100)) < 2000 && heldEnergy > 2000,
                 $"The onset's first milliseconds must stay near-silent and the held ticks must ring (onset {Math.Abs((int)VoiceAt(100))}, held {heldEnergy}).");
-            Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, and the voiced take mixes its SFZ piano into 22050 WAV frames — exactly the six ticks of the video — with the onset ramping gently and the held ticks loud.");
+
+            // Watermark: the look's toggle and the strip the UI rasterized turn into one kind-16 sprite per
+            // frame. The exact same tick renders with and without it; every differing byte must sit inside
+            // the strip's rect, and the strip itself must be visibly lit.
+            var markedLook = QuietLook(); markedLook.ShowWatermark = true;
+            var markedBuffers = new List<byte[]>();
+            using (var recorder = new PngSequenceRecorder(Path.Combine(directory, "marked"), pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+                ArRenderToVideo.Run(renderer, tick => TickFeed(tick, markedLook), pngPlan, recorder, (i, bgra) => markedBuffers.Add(bgra));
+            Assert(markedBuffers.Count == firstBuffers.Count, "The watermarked take covers the same ticks.");
+            var stripImage = PianoStage.GpuWatermark;
+            var strip = ArVideoWatermark.Place(640, 360, 360 - 360 * .205f, stripImage.Width, stripImage.Height)
+                ?? throw new InvalidOperationException("The strip bitmap must place.");
+            var halfWidth = strip.HalfHeight * strip.Aspect;
+            var outScale = pngPlan.Width / (float)pngPlan.RenderWidth;
+            var x0 = (int)Math.Floor((strip.CenterX - halfWidth) * outScale) - 1;
+            var x1 = (int)Math.Ceiling((strip.CenterX + halfWidth) * outScale) + 1;
+            var y0 = (int)Math.Floor((strip.CenterY - strip.HalfHeight) * outScale) - 1;
+            var y1 = (int)Math.Ceiling((strip.CenterY + strip.HalfHeight) * outScale) + 1;
+            var lit = 0; var outside = 0;
+            for (var i = 0; i < firstBuffers[2].Length; i += 4)
+            {
+                if (firstBuffers[2][i] == markedBuffers[2][i]) continue;
+                var px = i / 4; var x = px % pngPlan.Width; var y = px / pngPlan.Width;
+                if (x < x0 || x > x1 || y < y0 || y > y1) outside++; else lit++;
+            }
+            Assert(lit >= 16 && outside == 0,
+                $"The GPU watermark lights exactly its own strip and nothing else (lit {lit}, outside {outside}, rect x {x0}..{x1}, y {y0}..{y1}).");
+            // And the toggle really is the switch: a take identical in every other way never changes outside the strip.
+            Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 22050 WAV frames — exactly the six ticks of the video — with the onset ramping gently and the held ticks loud, and the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }
