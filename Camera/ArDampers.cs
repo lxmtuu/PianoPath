@@ -18,6 +18,11 @@ namespace PianoPath;
 /// </summary>
 internal static class ArDampers
 {
+    /// <summary>Where the strip's colour comes from: the look's halo colour, or the player's own pick.</summary>
+    internal static readonly string[] ColorModes = ["Halo", "Custom"];
+
+    internal const string DefaultColorMode = "Halo";
+
     /// <summary>The strip's depth past the key back edge with the pedal up, in key-depth units (.06 ≈ 9 mm).</summary>
     internal const double BaseDepth = .06;
 

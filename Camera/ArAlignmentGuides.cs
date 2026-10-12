@@ -32,6 +32,21 @@ internal static class ArAlignmentGuides
 
     internal readonly record struct GuidePatch(ArPatch Patch, float Alpha);
 
+    /// <summary>High-contrast guide colours the player may pick: each must read over both dark video and bright keys.</summary>
+    internal static readonly string[] ColorIds = ["White", "Cyan", "Yellow", "Magenta", "Lime"];
+
+    internal const string DefaultColorId = "White";
+
+    /// <summary>The RGB of a guide colour id in off-white HDR space; anything unknown keeps the default white.</summary>
+    internal static (float R, float G, float B) ColorFor(string? id) => id switch
+    {
+        "Cyan" => (.35f, .95f, 1f),
+        "Yellow" => (1f, .92f, .35f),
+        "Magenta" => (1f, .4f, .95f),
+        "Lime" => (.55f, 1f, .45f),
+        _ => (.92f, .98f, 1f),
+    };
+
     /// <summary>
     /// Projects the fixed guide set — the key area's four borders first, then one line at every octave boundary with
     /// keys on both sides — into <paramref name="into"/>. Without a usable projection (uncalibrated camera) the list

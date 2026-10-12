@@ -1271,7 +1271,8 @@ public partial class MainWindow : Window
             : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes,
                 (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect,
                 ShowLiveTrails: options.LivePressTrails, NoteDirection: options.NoteDirection,
-                ShowRisingMidiNotes: options.ShowsRisingMidiNotes, AlignmentGuides: _visualSettings.ArAlignmentCheck);
+                ShowRisingMidiNotes: options.ShowsRisingMidiNotes, AlignmentGuides: _visualSettings.ArAlignmentCheck,
+                ShowDamperStrip: _visualSettings.ArDamperStrip, AlignmentGuideColor: ArGuideColor());
         RefreshHandStatus();
         RefreshArStatus();
     }
@@ -1281,6 +1282,13 @@ public partial class MainWindow : Window
     /// use, so a check that points the settings folder somewhere temporary gets a store there.
     /// </summary>
     internal ArCalibrationSession ArCalibration => _arCalibration ??= new ArCalibrationSession(new ArCalibrationStore(PianoVisualSettingsStore.SettingsDirectory));
+
+    /// <summary>The alignment frame colour from the settings pick; unknown ids fall back to the off-white default.</summary>
+    private System.Numerics.Vector3 ArGuideColor()
+    {
+        var (r, g, b) = ArAlignmentGuides.ColorFor(_visualSettings.ArAlignmentGuideColor);
+        return new System.Numerics.Vector3(r, g, b);
+    }
 
     /// <summary>
     /// The camera delay of the camera that is open (AR‑3.5): a USB webcam and a virtual camera are late by different

@@ -475,6 +475,26 @@ internal sealed class PianoVisualSettings
     /// </summary>
     public bool ArAlignmentCheck { get; set; }
 
+    /// <summary>
+    /// Colour of the alignment check's frame and octave lines (one of <see cref="ArAlignmentGuides.ColorIds"/>). Like
+    /// the check itself it belongs to this machine — a shared look never picks another player's diagnostic colour.
+    /// The initializer spells ArAlignmentGuides.DefaultColorId out as a literal so the preset generator can parse it.
+    /// </summary>
+    public string ArAlignmentGuideColor { get; set; } = "White";
+
+    /// <summary>
+    /// Draws the AR damper strip (roadmap §14.3, the catalogue's <c>Dampers</c> element): the glowing line hugging
+    /// the keys' back edge, lifted by sustain 0..1, from the Standard tier up. A look decision, so presets carry it.
+    /// </summary>
+    public bool ArDamperStrip { get; set; } = true;
+
+    /// <summary>"Halo" keeps the strip in the look's halo family; "Custom" tints it with <see cref="ArDamperStripColor"/>.
+    /// The initializer spells ArDampers.DefaultColorMode out as a literal so the preset generator can parse it.</summary>
+    public string ArDamperStripColorMode { get; set; } = "Halo";
+
+    /// <summary>Custom damper strip colour, used when <see cref="ArDamperStripColorMode"/> is "Custom".</summary>
+    public string ArDamperStripColor { get; set; } = "#8FE8FF";
+
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
     internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
@@ -668,7 +688,7 @@ internal sealed class PianoVisualSettings
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked. The alignment check
             // couples straight to that calibration, so it follows the view onto the machine list.
-            if (property.Name is nameof(ArViewProfileId) or nameof(ArAlignmentCheck)) continue;
+            if (property.Name is nameof(ArViewProfileId) or nameof(ArAlignmentCheck) or nameof(ArAlignmentGuideColor)) continue;
             // Which camera, or which video file, is this machine's too: a look must never switch the player off the camera they
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
@@ -697,6 +717,7 @@ internal sealed class PianoVisualSettings
         CameraVideoPath = "";
         ArViewProfileId = "";               // which view the camera stands at is this machine's; Clamp turns the empty id into the default view
         ArAlignmentCheck = false;           // the drift check talks to this machine's own calibration, never to a shared look
+        ArAlignmentGuideColor = ArAlignmentGuides.DefaultColorId;   // the check's colour follows it onto the machine list
         PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
     }
 
@@ -790,6 +811,8 @@ internal sealed class PianoVisualSettings
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         ArViewProfileId = ArCalibrationProfiles.Normalize(ArViewProfileId).Id;
         ArQuality = ArQualityTiers.Normalize(ArQuality);
+        if (!ArDampers.ColorModes.Contains(ArDamperStripColorMode)) ArDamperStripColorMode = ArDampers.DefaultColorMode;
+        if (!ArAlignmentGuides.ColorIds.Contains(ArAlignmentGuideColor)) ArAlignmentGuideColor = ArAlignmentGuides.DefaultColorId;
         var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
             ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
             ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes, ArLiveFadeGraph,

@@ -449,7 +449,7 @@ diff cố ý không gating hai số này.
 | Phần tử | Họ | Hôm nay | Việc cần | Pass |
 |---|---|---|---|---|
 | `Piano keys` (thân phím) | Scene | ✅ `ArKeys.Patches` có hình học trắng = mặt + thân, đen = một hình; patch chỉ phát khi key có glow MIDI; lúc im không vẽ bàn phím ảo tĩnh, theo quyết định của chủ repo | giữ active-key tint độc lập với live bars; không phủ geometry khi MIDI im | `VsArQuad` |
-| `Dampers` (dải mép sau phím) | Scene | ✅ 2026‑10‑12: vạch phát sáng mềm ôm mép sau phím (v=0), vươn theo sustain 0..1, màu halo của look, shader `PsArQuad` kind 11, bloom quanh lõi; WARP đo lift ở pose 45° lẫn `overhead90`, Lite không vẽ | — | `VsArQuad` |
+| `Dampers` (dải mép sau phím) | Scene | ✅ 2026‑10‑12: vạch phát sáng mềm ôm mép sau phím (v=0), vươn theo sustain 0..1, shader `PsArQuad` kind 11, bloom quanh lõi; WARP đo lift ở pose 45° lẫn `overhead90`, Lite không vẽ. Cùng ngày: toggle bật/tắt (`ArDamperStrip`, mặc định bật) và màu vạch **Theo look (halo) / Tự chọn** (`ArDamperStripColorMode` + `ArDamperStripColor`, thuộc look; WARP sample pixel màu custom tại tâm vạch) | — | `VsArQuad` |
 | `Octave lines` | Scene | 🟡 2026‑10‑12: vạch trắng mờ (alpha .22) đứng ở mọi phím C có phím hai bên, theo `KeyboardLayout` — hiện chỉ vẽ trong chế độ Alignment check | overlay thường trực riêng nếu cần | `VsArQuad` |
 | `Light bars` (viền/hắt mép) | Scene | ❌ | gradient quanh mép phím; **không** đổ bóng (bài học AR) | `VsArQuad` |
 | `Overlay / HUD` | Scene | ❌ | đếm nốt, hiển thị pedal, tên nốt, watermark; vẽ sau cùng, **không** qua homography | pass riêng |
@@ -516,7 +516,9 @@ làm artifact.
   "ảnh alignment" bên Keysight. Hình học thuần trong `Camera/ArAlignmentGuides.cs` (xUnit `ArAlignmentGuidesTests`),
   `PianoVisualSettings.ArAlignmentCheck` thuộc máy cùng nhánh `ArViewProfileId`/calibration nên preset/mã chia sẻ
   không mang, còn `VerifyArNoteProjection` có WARP block riêng (`ArAlignmentGuideCount` > 4 ở Standard lẫn Lite,
-  pixel bật/tắt đổi rõ, tắt là về 0).
+  pixel bật/tắt đổi rõ, tắt là về 0). Cùng ngày: màu khung chọn được — 5 màu tương phản cao White/Cyan/Yellow/
+  Magenta/Lime (`ArAlignmentGuideColor`, thuộc máy theo chế độ kiểm tra; bảng ánh xạ thuần `ArAlignmentGuides.ColorFor`,
+  WARP kiểm recolour không đổi hình học).
 - **Thêm 2 — đo trôi**: so mép hàng phím trong khung mới với calibration; lệch quá ngưỡng → nhắc đánh dấu lại
   (không tự sửa).
 - **Thêm 3 — xuất/nhập bản sao căn chỉnh** (JSON + ảnh chụp) để backup trước khi chỉnh chân máy.

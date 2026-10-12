@@ -85,6 +85,20 @@ public class ArAlignmentGuidesTests
     }
 
     [Fact]
+    public void Guide_colours_offer_five_high_contrast_picks_with_a_white_fallback()
+    {
+        Assert.Equal(new[] { "White", "Cyan", "Yellow", "Magenta", "Lime" }, ArAlignmentGuides.ColorIds);
+        Assert.Equal("White", ArAlignmentGuides.DefaultColorId);
+        var seen = new HashSet<(float R, float G, float B)>();
+        foreach (var id in ArAlignmentGuides.ColorIds)
+            Assert.True(seen.Add(ArAlignmentGuides.ColorFor(id)), $"Guide colours must stay distinct: {id}");
+        // Anything unknown — another language, a misspelling, an empty store — keeps the readable white.
+        Assert.Equal(ArAlignmentGuides.ColorFor("White"), ArAlignmentGuides.ColorFor("magenta"));
+        Assert.Equal(ArAlignmentGuides.ColorFor("White"), ArAlignmentGuides.ColorFor(null));
+        Assert.Equal(ArAlignmentGuides.ColorFor("White"), ArAlignmentGuides.ColorFor(""));
+    }
+
+    [Fact]
     public void A_second_build_reuses_the_list_without_leaking_stale_lines()
     {
         var into = Guides(Lean45);

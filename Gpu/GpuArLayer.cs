@@ -33,7 +33,9 @@ internal struct GpuArQuad
 /// <param name="NoteDirection">Independent keyboard-local 3D direction of the notes and live bars.</param>
 /// <param name="ShowRisingMidiNotes">In Perform mode, draw each MIDI Note On as a separate calibrated 3D note that keeps travelling after Note Off.</param>
 /// <param name="AlignmentGuides">The alignment check: redraw the saved key area's frame and octave lines over the live picture, packed last, on any tier.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false)
+/// <param name="ShowDamperStrip">Draw the glowing damper strip hugging the keys' back edge (Standard tier up).</param>
+/// <param name="AlignmentGuideColor">Guide frame colour from the settings pick; the default keeps the built-in off-white.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false, bool ShowDamperStrip = true, Vector3 AlignmentGuideColor = default)
 {
     /// <summary>Live press bars keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
     internal ArNoteStyle LivePressStyle => ArOptions.LivePressNoteStyle(Notes);
@@ -121,10 +123,10 @@ internal sealed partial class GpuArLayer
         // The damper strip is a scene element, so it packs before everything born with a strike: it hugs the key
         // back edge, waves only with the pedal level, and takes the look's halo colour (the Pedal Glow family).
         var damperLift = ArDampers.ClampLevel(input.SustainLevel);
-        if (ArElementCatalog.CanDraw(ar.Quality, ArElement.Dampers)
+        if (ar.ShowDamperStrip && ArElementCatalog.CanDraw(ar.Quality, ArElement.Dampers)
             && ArDampers.TryPatch(ar.Calibration, view, damperLift, out var damperPatch))
         {
-            quads.Add(Pack(damperPatch, look.HaloColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4(0, 0, 11f, 0)));
+            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4(0, 0, 11f, 0)));
             DamperStripCount++;
         }
 
@@ -236,10 +238,11 @@ internal sealed partial class GpuArLayer
         // draw over every note and effect, on any tier, so a bumped camera reads as crooked lines at a glance.
         if (ar.AlignmentGuides)
         {
+            var guideColor = ar.AlignmentGuideColor == default ? GuideColor : ar.AlignmentGuideColor;
             ArAlignmentGuides.Build(ar.Calibration, view, _alignmentGuides);
             foreach (var guide in _alignmentGuides)
             {
-                quads.Add(Pack(guide.Patch, GuideColor, guide.Alpha * opacity, GuideKind));
+                quads.Add(Pack(guide.Patch, guideColor, guide.Alpha * opacity, GuideKind));
                 AlignmentGuideCount++;
             }
         }

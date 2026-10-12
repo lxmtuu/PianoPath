@@ -211,6 +211,8 @@ internal sealed class GpuLook
     // ---- colours (sRGB 0..1) ----
     public Vector3 BackgroundColor { get; init; }
     public Vector3 HaloColor { get; init; } = new(.78f, .43f, 1f);
+    /// <summary>The AR damper strip's colour: the halo colour, or the look's custom strip pick.</summary>
+    public Vector3 ArDamperColor { get; init; } = new(.78f, .43f, 1f);
     public Vector3 PressedKeyColor { get; init; } = new(.97f, .51f, 1f);
     public Vector3 KeyFeltColor { get; init; } = new(.77f, .11f, .29f);
     public Vector3 PetalColor { get; init; } = new(1f, .7f, .81f);
@@ -256,6 +258,9 @@ internal sealed class GpuLook
                 colors[pitch * TrackSlots + track] = ToVector(noteColor(pitch, track));
         static float P(double value) => (float)(value / 100);
         static float Speed(double value) => (float)(.25 + value / 100 * 1.75);
+        // The AR damper strip follows the look's halo family unless the look gives it a colour of its own.
+        var halo = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f));
+        var arDamperColor = s.ArDamperStripColorMode == "Custom" ? ParseHex(s.ArDamperStripColor, halo) : halo;
         return new GpuLook
         {
             OverCamera = overCamera,
@@ -327,7 +332,8 @@ internal sealed class GpuLook
             AudioReactive = s.AudioReactive, AudioReactiveAmount = P(s.AudioReactiveAmount),
 
             BackgroundColor = ParseHex(s.BackgroundColor, Vector3.Zero),
-            HaloColor = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f)),
+            HaloColor = halo,
+            ArDamperColor = arDamperColor,
             PressedKeyColor = ParseHex(s.PressedKeyColor, new Vector3(.97f, .51f, 1f)),
             KeyFeltColor = ParseHex(s.KeyFeltColor, new Vector3(.77f, .11f, .29f)),
             // Atmospheric tints use the same colour grade as the rest of the stage.

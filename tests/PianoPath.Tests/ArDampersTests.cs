@@ -44,6 +44,13 @@ public class ArDampersTests
     }
 
     [Fact]
+    public void Strip_colour_modes_are_just_the_halo_family_or_a_custom_pick()
+    {
+        Assert.Equal(new[] { "Halo", "Custom" }, ArDampers.ColorModes);
+        Assert.Equal("Halo", ArDampers.DefaultColorMode);
+    }
+
+    [Fact]
     public void Strip_starts_where_the_keys_start_and_lifts_behind_them()
     {
         Assert.True(ArDampers.TryPatch(Lean45, View, 0, out var pedalUp));

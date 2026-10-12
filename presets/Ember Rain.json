@@ -254,6 +254,10 @@
     "ArNoteDirectionTilt": 0.0,
     "ArNoteDirectionAzimuth": 0.0,
     "ArViewProfileId": "default",
-    "ArAlignmentCheck": false
+    "ArAlignmentCheck": false,
+    "ArAlignmentGuideColor": "White",
+    "ArDamperStrip": true,
+    "ArDamperStripColorMode": "Halo",
+    "ArDamperStripColor": "#8FE8FF"
   }
 }

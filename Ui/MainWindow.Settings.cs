@@ -604,6 +604,9 @@ public partial class MainWindow
         ButtonRow(alignment, ("CALIBRATE", CalibrateAr_Click, null), ("RESET CALIBRATION", ResetArCalibration_Click, null));
         Note(alignment, "In Calibrate, drag the Move / Rotate / Scale gizmo or use the numeric controls to translate, rotate and uniformly scale the keyboard. Note travel has its own separate controls.");
         Toggle(alignment, "Alignment check", nameof(PianoVisualSettings.ArAlignmentCheck), "Redraws the saved key area as a frame with octave lines right over the live camera picture, on any quality level. When the lines no longer sit on the real keys — after a bumped tripod or a moved keyboard — calibrate again. Works only while a calibration exists; the check draws nothing before that.");
+        Choice(alignment, "Guide colour", nameof(PianoVisualSettings.ArAlignmentGuideColor), "High-contrast colour of the alignment frame and octave lines; White reads on most cameras. The pick belongs to this machine, like the check itself.",
+            ArAlignmentGuides.ColorIds.Select(id => (id, id)).ToArray())
+            .VisibleWhen = () => _visualSettings.ArAlignmentCheck;
 
         var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint and optional rising MIDI notes. Lookahead applies to song notes in Learn only; 3D live bars and Perform notes use independent fixed 3-second reaches.");
         Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint and the independently toggled rising MIDI notes remain available.",
@@ -611,6 +614,12 @@ public partial class MainWindow
         SliderRow(playback, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before a song note sounds it starts to appear above the keys. Longer shows more of the song; shorter keeps the picture calmer.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(playback, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "Adjust the strength of AR notes and key lighting over the camera picture.");
+        Toggle(playback, "Damper strip", nameof(PianoVisualSettings.ArDamperStrip), "The glowing line hugging the keys' back edge, drawn from the AR Standard tier up. The sustain pedal widens and brightens it (level 0..1). Turn it off for a calmer picture.");
+        Choice(playback, "Damper strip colour", nameof(PianoVisualSettings.ArDamperStripColorMode), "Follow look (halo) tints the strip with the look's halo colour, the same family as the stage's Pedal Glow; Custom uses the colour below.",
+            ("Halo", "Follow look (halo)"), ("Custom", "Custom"))
+            .VisibleWhen = () => _visualSettings.ArDamperStrip;
+        ColorRow(playback, "Custom strip colour", nameof(PianoVisualSettings.ArDamperStripColor), "Colour of the damper strip when Damper strip colour is Custom.")
+            .VisibleWhen = () => _visualSettings.ArDamperStrip && _visualSettings.ArDamperStripColorMode == "Custom";
 
         var notes = Card(CameraSettingsHost, "3D NOTE PATH", "Perspective notes follow the saved keyboard pose. Their travel direction is independent: changing it never moves or rotates the keyboard.");
         Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Use the Live Stage note material and colour. On projects notes as camera-facing quads from the saved 3D keyboard pose; note shimmer stays with its pitch. Off keeps the legacy flat note overlay. Stage-space falling trails are omitted over the camera; ambient petals and stars remain screen-space. Requires Direct3D and a valid calibration.");

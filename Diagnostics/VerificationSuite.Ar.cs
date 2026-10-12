@@ -1481,6 +1481,12 @@ internal static partial class VerificationSuite
                 if (Math.Max(Math.Abs(first[i] - second[i]), Math.Max(Math.Abs(first[i + 1] - second[i + 1]), Math.Abs(first[i + 2] - second[i + 2]))) > threshold) count++;
             return count;
         }
+        // BGRA readback: [i] blue, [i+1] green, [i+2] red.
+        static (int R, int G, int B) Sample(byte[] pixels, int w, (double X, double Y) at)
+        {
+            var i = ((int)Math.Floor(at.Y) * w + (int)Math.Floor(at.X)) * 4;
+            return (pixels[i + 2], pixels[i + 1], pixels[i]);
+        }
 
         var defaultInput = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
             ShowNotes: true, ProjectedNotes: true);
@@ -1654,11 +1660,12 @@ internal static partial class VerificationSuite
         liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
         GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
             PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null,
-            bool sustain = false, bool alignment = false)
+            bool sustain = false, bool alignment = false, bool showStrip = true, Vector3 guideColor = default)
         {
             var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
             var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
-                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars, AlignmentGuides: alignment),
+                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars, AlignmentGuides: alignment,
+                    ShowDamperStrip: showStrip, AlignmentGuideColor: guideColor),
                 song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
             if (visualSettings is not null)
                 feed.SetLook(GpuLook.From(visualSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
@@ -1821,6 +1828,24 @@ internal static partial class VerificationSuite
         Assert(damperStripCount == 1 && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0,
             $"Sustain must lift the damper strip over the key back edge at Standard and the strip must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {renderer.ArDamperStripCount} strips at Lite).");
 
+        // The strip follows the player's choice too (2026-10-12): the toggle removes its quad entirely, and a Custom
+        // colour mode repaints the same strip away from the look's halo family.
+        var stripOff = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true, showStrip: false), 8);
+        Assert(renderer.ArDamperStripCount == 0, "The damper strip toggle must remove the strip quad.");
+        var damperColorLook = settings.Clone();
+        damperColorLook.ArDamperStripColorMode = "Custom";
+        damperColorLook.ArDamperStripColor = "#00C8FF";
+        var customStrip = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true, visualSettings: damperColorLook), 8);
+        var customStripPixels = ChangedPixels(damperDown, customStrip, threshold: 4);
+        Assert(renderer.ArDamperStripCount == 1 && customStripPixels > 20 && ChangedPixels(stripOff, customStrip, threshold: 4) > 20,
+            $"A custom strip colour must repaint the damper strip ({customStripPixels} changed pixels against the halo look).");
+        Assert(ArDampers.TryPatch(calibration, view, .75, out var stripPatch), "The strip patch must project for colour sampling.");
+        var stripCentre = Centre(stripPatch);
+        var haloPixel = Sample(damperDown, width, stripCentre);
+        var customPixel = Sample(customStrip, width, stripCentre);
+        Assert(customPixel.G - customPixel.R > haloPixel.G - haloPixel.R + 10,
+            $"A cyan strip pick must lean the strip pixel green where the halo purple leaned red (halo {haloPixel}, custom {customPixel}).");
+
         // The 90° overhead view (the odyssey-style top-down look): a fronto-parallel quad is this homography's best
         // case, and every in-plane element — bars, velocity tint, coverage, the damper strip — must project whole.
         var overhead = ArCalibration.Create(KeyboardLayout.Standard88,
@@ -1852,6 +1877,12 @@ internal static partial class VerificationSuite
         var guidePixels = ChangedPixels(guidesOff, guidesOn, threshold: 4);
         Assert(guideCount > 4 && liteGuideCount > 4 && renderer.ArAlignmentGuideCount == 0 && guidePixels > 100,
             $"The alignment check must redraw the saved key area over the live frame on any tier and switch fully off ({guideCount} guides at Standard, {liteGuideCount} at Lite, {guidePixels} changed pixels).");
+
+        // The guide colour is one of five high-contrast picks; recolouring must repaint the lines, not rebuild them.
+        var cyanGuides = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: true,
+            guideColor: new Vector3(.35f, .95f, 1f)), 8);
+        Assert(renderer.ArAlignmentGuideCount == guideCount && ChangedPixels(guidesOn, cyanGuides, threshold: 4) > 20,
+            "A custom guide colour must recolour the alignment frame without changing its lines.");
 
         // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
         var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
