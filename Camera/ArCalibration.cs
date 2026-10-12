@@ -659,6 +659,36 @@ internal sealed class ArCalibrationStore
         }
     }
 
+    /// <summary>Every entry saved of one camera, verbatim, for the portable backup (§14.7 "Thêm 3").</summary>
+    internal IReadOnlyList<ArCalibrationArchiveRow> ExportRows(string cameraLink)
+    {
+        lock (_gate) return _entries
+            .Where(e => string.Equals(e.CameraLink, cameraLink, StringComparison.OrdinalIgnoreCase))
+            .Select(e => new ArCalibrationArchiveRow(e.Profile ?? "", e.ImageWidth, e.ImageHeight, e.KeyCount, e.CameraFovDegrees,
+                e.PosePositionX, e.PosePositionY, e.PosePositionZ, e.PosePitchDegrees, e.PoseYawDegrees, e.PoseRollDegrees, e.PoseUniformScale,
+                (double[])(e.Corners ?? []).Clone(), (double[])(e.PoseBaseCorners ?? []).Clone()))
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Puts a backup's rows back under the backup's own camera link. Every row goes through <see cref="Set"/> again,
+    /// so the same checks run as if the corners had just been marked; rows that fail are counted and skipped.
+    /// </summary>
+    internal (int Restored, int Skipped) ImportRows(string cameraLink, IEnumerable<ArCalibrationArchiveRow> rows)
+    {
+        var restored = 0; var skipped = 0;
+        foreach (var row in rows)
+        {
+            var corners = ArCalibrationArchive.Points(row.Corners);
+            var baselinePoints = ArCalibrationArchive.Points(row.PoseBaseCorners);
+            if (Set(cameraLink, row.Profile, row.ImageWidth, row.ImageHeight, row.KeyCount, corners, row.CameraFovDegrees,
+                    row.PitchDegrees, row.YawDegrees, row.RollDegrees, baselinePoints.Length == 4 ? baselinePoints : null,
+                    row.PositionX, row.PositionY, row.PositionZ, row.UniformScale)) restored++;
+            else skipped++;
+        }
+        return (restored, skipped);
+    }
+
     /// <summary>Reads the file again, dropping whatever cannot be trusted.</summary>
     internal void Reload()
     {

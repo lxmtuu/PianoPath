@@ -527,7 +527,15 @@ làm artifact.
   Calibration **không bao giờ tự bị sửa**; canh tạm nghỉ khi đang đo độ trễ (đều dùng cột sọc `FrameTap` của
   `CameraFrameRing`). Logic thuần khóa bằng xUnit `ArDriftMeterTests` (frame tổng hợp: trôi 9 px đo ±3, sáng ±18 %
   và bàn tay quét qua không báo động) và `--verify` (`VerifyArDriftWatch`).
-- **Thêm 3 — xuất/nhập bản sao căn chỉnh** (JSON + ảnh chụp) để backup trước khi chỉnh chân máy.
+- **Thêm 3 — xuất/nhập bản sao căn chỉnh**: ✅ 2026‑10‑12. Hai nút **EXPORT CALIBRATION** / **IMPORT CALIBRATION**
+  (thẻ KEYBOARD ALIGNMENT). Xuất gom **mọi** calibration của camera đang dùng (mọi khung nhìn, kích thước ảnh và cỡ
+  phím) vào một tệp JSON `keyflow-ar-calibration` v1 (`Camera/ArCalibrationArchive.cs`, thuần), kèm ảnh PNG chụp
+  frame hiện tại đặt cạnh tệp để người dùng nhận ra đó là camera nào (ảnh chỉ để nhìn — phục hồi không cần). Nhập khôi
+  phục các hàng về
+  **đúng cameraLink trong tệp** (rỗng thì về camera đang dùng), mỗi hàng đi qua lại `ArCalibrationStore.Set` nên qua
+  đủ kiểm tra như calibrate mới — hàng hỏng bị đếm và bỏ qua, không làm hỏng dữ liệu; tệp lạ version mới hơn bị từ
+  chối bằng lỗi rõ ràng. Không thêm key `PianoVisualSettings` nào nên preset/mã chia sẻ không đụng tới. xUnit
+  `ArCalibrationArchiveTests` + `--verify` (`VerifyArCalibrationArchive`).
 - **Thêm 4 — hướng dẫn ngay trong cửa sổ**: góc máy qua vai, tránh fisheye, tay ngoài vùng.
 - **Thêm 5 — preset AR theo khung nhìn**: độ cao/phần tử khác nhau cho 45° và 90° (đi cùng `ArViewProfileId`).
 

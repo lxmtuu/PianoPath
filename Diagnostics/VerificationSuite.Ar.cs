@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
@@ -2165,5 +2166,47 @@ internal static partial class VerificationSuite
         Assert(!moved.IsDrift(ArDriftMeter.ThresholdPixels(w * 4)) && moved.IsDrift(ArDriftMeter.ThresholdPixels(w)),
             "The pixel threshold scales with the picture width, so the same move only flags at the matching resolution.");
         Results.Add($"PASS AR drift watch: a 9-pixel move of the key picture was read as {moved.OffsetX:0.#}, {moved.OffsetY:0.#} pixels (threshold {threshold:0.#} px at {w} px wide) while the still picture read {aligned.Pixels:0.#} px and an 18% brightness change stayed silent; the watch nags after {ArDriftMeter.FlagHoldReadings} readings in a row and never moves the calibration itself.");
+    }
+
+    private static void VerifyArCalibrationArchive()
+    {
+        // roadmap §14.7 "Thêm 3 — xuất/nhập bản sao căn chỉnh": the portable backup must round-trip every field of
+        // every saved calibration of one camera, refuse what is not this archive in plain words, and put rows back
+        // only after they pass the same checks a fresh calibration passes — checked without a camera or a window,
+        // in a throwaway folder like the xUnit suite does.
+        (double X, double Y)[] cornerSet = [(70, 292), (1214, 268), (1236, 421), (52, 449)];
+        ArCalibrationArchiveRow Row(string profile, int keyCount = 88) => new(
+            profile, 1280, 720, keyCount, 71.5,
+            PositionX: .5, PositionY: -.25, PositionZ: 1.2,
+            PitchDegrees: 3, YawDegrees: -2, RollDegrees: 1, UniformScale: 1.04,
+            Corners: ArCalibrationArchive.Flat(cornerSet),
+            PoseBaseCorners: [68, 290, 1212, 266, 1234, 419, 50, 447]);
+        var json = ArCalibrationArchive.ToJson(new ArCalibrationArchiveBundle(
+            "\\\\?\\USB#VID_0ECA", "Studio Cam", AppInfo.Version, "2026-10-12T10:30:00Z",
+            true, 1280, 720, 0, [Row("tilt45"), Row("overhead90")]));
+        Assert(ArCalibrationArchive.TryRead(json, out var bundle, out var refused) && bundle!.Rows.Count == 2 && bundle.SkippedRows == 0,
+            "A backup of two calibrations reads back with both rows and nothing skipped.");
+        var overhead = bundle.Rows.Single(row => row.Profile == "overhead90");
+        Assert(Math.Abs(overhead.CameraFovDegrees - 71.5) < 1e-6 && Math.Abs(overhead.UniformScale - 1.04) < 1e-9 && overhead.Corners.SequenceEqual(ArCalibrationArchive.Flat(cornerSet)),
+            "FOV, pose, scale and corners survive the trip exactly.");
+        Assert(!ArCalibrationArchive.TryRead("{\"preset\": 1}", out _, out var wrongKind) && wrongKind.Length > 0,
+            "A file that is not this archive is refused with a reason, never guessed at.");
+        var crossed = Row("tilt45") with { Corners = [100, 100, 900, 100, 100, 600, 900, 600] };
+        Assert(ArCalibrationArchive.TryRead(ArCalibrationArchive.ToJson(new ArCalibrationArchiveBundle("cam", "", "", "", false, 0, 0, 0, [crossed, Row("tilt45")])), out var weeded, out _)
+            && weeded!.Rows.Count == 1 && weeded.SkippedRows == 1,
+            "A row whose corners would never draw is skipped, and the good row still comes back.");
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var store = new ArCalibrationStore(directory);
+            Assert(store.Set("\\\\?\\USB#VID_0ECA", "tilt45", 1280, 720, 88, cornerSet, 71.5), "The live store keeps the calibration to export.");
+            var exported = store.ExportRows("\\\\?\\USB#VID_0ECA");
+            Assert(exported.Count == 1 && store.ExportRows("\\\\?\\USB#VID_OTHER").Count == 0, "The backup holds exactly the camera asked for.");
+            var (restored, skipped) = new ArCalibrationStore(directory).ImportRows("\\\\?\\USB#VID_0ECA", exported);
+            Assert(restored == 1 && skipped == 0, "Every exported row goes back through the store's own checks.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+        Results.Add($"PASS AR calibration backup: 2 rows round-tripped every field (FOV 71.5°, scale 1.04, corners exact) through {ArCalibrationArchive.FormatId} v{ArCalibrationArchive.FormatVersion}, a wrong file was refused in words, 1 unusable row skipped instead of drawn, and the store exported 1 camera and restored 1/1 rows.");
     }
 }
