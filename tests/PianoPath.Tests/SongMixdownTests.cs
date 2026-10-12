@@ -21,7 +21,7 @@ public class SongMixdownTests
                 Assert.Equal(22050, ArVideoMixdown.MixTake(new ArVideoAudio(synth, _ => [], wav!), plan));
             var bytes = File.ReadAllBytes(path);
             Assert.Equal(WavWriter.HeaderBytes + 22050 * 4, bytes.Length);
-            Assert.Equal(BitConverter.ToInt32(bytes, 40), 22050 * 4);            // the close patched the data size
+            Assert.Equal(22050 * 4, BitConverter.ToInt32(bytes, 40));            // the close patched the data size
             Assert.All(bytes.Skip(WavWriter.HeaderBytes), b => Assert.Equal(0, b)); // no events: a quiet take stays quiet
         }
         finally { try { File.Delete(path); } catch { } }

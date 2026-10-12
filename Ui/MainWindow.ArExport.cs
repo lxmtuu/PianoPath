@@ -1,9 +1,11 @@
 using System.IO;
+using System.Windows;
+using System.Windows.Controls;
 using Microsoft.Win32;
 
 namespace PianoPath;
 
-internal partial class MainWindow
+public partial class MainWindow
 {
     private TextBlock? _arExportStatus;
     private volatile bool _arExportBusy;

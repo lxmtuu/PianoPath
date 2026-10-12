@@ -23,10 +23,11 @@ public class VideoWatermarkTests
     [Fact]
     public void ThePlacementKeepsTheSoftwareStagesOwnDistanceFromTheHitLine()
     {
-        var mark = ArVideoWatermark.Place(200, 112, 88, 110, 22)!.Value;
-        // A small export frame keeps the strip whole: it shrinks instead of sliding or clipping.
+        var mark = ArVideoWatermark.Place(120, 112, 88, 110, 22)!.Value;
+        // A small export frame keeps the strip whole: it shrinks instead of sliding or clipping
+        // (a 110×22 strip is 55 DIPs wide; the margins of a 120-DIP scene only allow 52).
         var halfWidth = mark.HalfHeight * mark.Aspect;
-        Assert.True(mark.CenterX - halfWidth >= ArVideoWatermark.MarginX && mark.CenterX + halfWidth <= 200 - ArVideoWatermark.MarginX,
+        Assert.True(mark.CenterX - halfWidth >= ArVideoWatermark.MarginX && mark.CenterX + halfWidth <= 120 - ArVideoWatermark.MarginX,
             $"The strip must keep its side margins (half-width {halfWidth}).");
         Assert.True(mark.HalfHeight < 11, $"On a narrow scene the strip shrinks ({mark.HalfHeight}).");
     }
