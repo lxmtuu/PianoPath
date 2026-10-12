@@ -91,9 +91,13 @@ internal sealed partial class GpuArLayer
     /// Refills the projected AR quads. Key tint remains independent of the optional live bars. Actual stage-simulation
     /// particles, rings and flashes retain their MIDI pitch and are projected through the saved 3D pose; stage-space
     /// sprites are never placed flat over the camera. Ambient sprites are owned by the separate screen-space pass.
+    /// <para><paramref name="adaptiveTier"/> carries roadmap §14.8's budget into the build (<see cref="ArQualityBudget"/>):
+    /// while the GPU is over budget the frame draws fewer effect families, always in the same order, and the three
+    /// things that are the overlay — keys, notes, keypresses — stay whatever the tier does.</para>
     /// </summary>
     internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors,
-        GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads, bool projectedNotes)
+        GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads, bool projectedNotes,
+        GpuAdaptiveQualityTier adaptiveTier = GpuAdaptiveQualityTier.Full)
     {
         quads.Clear();
         _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear(); _risingMidiNotes.Clear();
@@ -131,13 +135,14 @@ internal sealed partial class GpuArLayer
             DamperStripCount++;
         }
 
-        if (ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0)
+        if (ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
+            && !ArQualityBudget.IsCut(adaptiveTier, ArBudgetCut.NoteLights))
             BuildProjectedNoteLights(ar, view, keyColors, quads, opacity * keyLight, look, layout, keyPose);
 
         if (ar.ShowNotes && input.Playing && input.Notes.Count > 0)
         {
             var position = input.Position - Math.Clamp(ar.DelaySeconds, 0f, 1f);
-            if (projectedNotes)
+            if (projectedNotes && !ArQualityBudget.IsCut(adaptiveTier, ArBudgetCut.NoteStyle))
             {
                 // The selected note direction is independent of the piano pose. Song-note bodies and their ghosts,
                 // trails and landing cues all come from calibrated 3D patches; stage-space sprites remain suppressed.
@@ -173,7 +178,7 @@ internal sealed partial class GpuArLayer
         // S5 maps the simulation's hit/hold/release channels only when a full camera pose is available. Even if
         // song-note perspective is switched off, live effects stay attached to the calibrated piano in 3D.
         if (ar.Calibration.CameraPose is { } pose && ar.Quality != ArQualityTier.Lite)
-            BuildStageEffects(ar, view, simulation, keyColors, quads, opacity, look, layout, pose);
+            BuildStageEffects(ar, view, simulation, keyColors, quads, opacity, look, layout, pose, adaptiveTier);
 
         // MIDI onsets are note objects, not optional held-key bars. Keep them in the calibrated pose even in Lite;
         // they share the note material and direction controls and continue after Note Off until their reach expires.

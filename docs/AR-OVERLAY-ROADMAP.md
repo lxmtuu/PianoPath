@@ -552,7 +552,7 @@ làm artifact.
 | `AR‑Standard` | + shape nốt/min-scale, impact glow, spill | mục tiêu 60 fps ở 1080p |
 | `AR‑Ultra` | + pulse, hạt, note light đầy đủ, light bars | cần card thật; `--bench-ar` làm cổng |
 
-Thứ tự cắt khi vượt ngân sách (tất định, test được): **hạt → pulse → note light → light bars → style nốt → impact glow**;
+Thứ tự cắt khi vượt ngân sách (tất định, test được) ✅ 2026‑10‑13 qua `Camera/ArQualityBudget.cs` + `GpuArLayer`/`GpuStageRenderer` (`ArBudgetTierOverride` làm seam cho verify): **hạt → pulse → note light → light bars → style nốt → impact glow**;
 không bao giờ cắt phím/nốt/keypress. Nối vào `GpuAdaptiveQuality` sẵn có.
 
 ### 14.9 Cài đặt, preset, mã chia sẻ

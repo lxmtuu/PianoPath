@@ -1881,6 +1881,23 @@ internal static partial class VerificationSuite
                 && renderer.ArImpactLightCount > 0 && renderer.ArPulseCount > 0 && renderer.ArParticleFxCount > 0,
             $"A 90° overhead view must hide beams and hold arcs while keeping impact lights, pulses and particles (beams {renderer.ArBeamCount}, arcs {renderer.ArHoldArcCount}, lights {renderer.ArImpactLightCount}, pulses {renderer.ArPulseCount}, particles {renderer.ArParticleFxCount}).");
 
+        // roadmap §14.8: an AR frame over budget drops families in roadmap's sentence order — same style, same look,
+        // just the deepest adaptive tier — while the things that ARE the overlay (keys, notes, keypresses) stay put.
+        var budgetCutFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 });
+        renderer.ArBudgetTierOverride = GpuAdaptiveQualityTier.AmbientMinimal;
+        RenderFrames(budgetCutFeed, 4);
+        var cutKeyQuads = renderer.ArKeyQuadCount;
+        var cutStrip = renderer.ArDamperStripCount;
+        Assert(renderer.ArBeamCount == 0 && renderer.ArPulseCount == 0 && renderer.ArImpactLightCount == 0
+                && renderer.ArParticleFxCount == 0 && renderer.ArNoteLightCount == 0
+                && cutKeyQuads > 0 && cutStrip == 1,
+            $"A deeply over-budget AR frame must cut particles, pulses, note lights, beams and the impact glow while keys and the damper strip stay (keys {cutKeyQuads}, strip {cutStrip}, beams {renderer.ArBeamCount}, pulses {renderer.ArPulseCount}, impacts {renderer.ArImpactLightCount}, particles {renderer.ArParticleFxCount}, note lights {renderer.ArNoteLightCount}).");
+        renderer.ArBudgetTierOverride = null;
+        RenderFrames(budgetCutFeed, 4);
+        Assert(renderer.ArImpactLightCount > 0 && renderer.ArPulseCount > 0 && renderer.ArBeamCount > 0,
+            "The cut is strictly transient: with the budget healthy again the lights come back without touching any setting.");
+
         // Alignment check (roadmap §14.7 "Thêm 1"): the saved key area redraws as a frame with octave lines, packed
         // after every effect so a bumped camera reads at a glance, on any tier, only while calibrated.
         var guidesOn = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: true), 8);
@@ -2215,6 +2232,30 @@ internal static partial class VerificationSuite
         Assert(CalibrationAdvice.CheckPicture(inside, w, h, quad).HandsInTheWay, "Skin inside the marked quad fires.");
         Assert(!CalibrationAdvice.CheckPicture(outside, w, h, quad).HandsInTheWay, "A waving arm beside the keys is nobody's business.");
         Results.Add($"PASS Calibration framing advice: a quiet keyboard read {shareQuiet:0.000} skin (silent), a palm fired at {sharePalm:0.000}, and with corners down the lookout watches only the inside of the quad (inside fired, outside stayed silent; threshold {CalibrationAdvice.SkinWarningFraction:0%}).");
+    }
+
+    private static void VerifyArQualityBudget()
+    {
+        // roadmap §14.8: the drop rule in its sentence order (particles → pulses → note lights → light bars → note
+        // style → impact glow), each adaptive tier cutting a deterministic count, and the overlay's three essences
+        // — keys, notes, keypresses — untouched no matter how deep the pressure goes; the WARP half lives inside
+        // VerifyArNoteProjection, which plays one over-budget frame on the same look and counts what survives.
+        Assert(ArQualityBudget.CutOrder.Length == 6
+                && ArQualityBudget.CutOrder[0] == ArBudgetCut.Particles
+                && ArQualityBudget.CutOrder[^1] == ArBudgetCut.ImpactLights,
+            "The cut table must open with particles and close with the impact glow, as the roadmap's sentence says.");
+        Assert(ArQualityBudget.CutCountFor(GpuAdaptiveQualityTier.Full) == 0
+                && ArQualityBudget.CutCountFor(GpuAdaptiveQualityTier.BloomReduced) == 1
+                && ArQualityBudget.CutCountFor(GpuAdaptiveQualityTier.AmbientMinimal) == ArQualityBudget.CutOrder.Length
+                && ArQualityBudget.IsCut(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.NoteLights)
+                && !ArQualityBudget.IsCut(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.LightBars),
+            "Each adaptive step cuts exactly one more family down the order, never deeper than the table.");
+        foreach (var tier in System.Enum.GetValues<GpuAdaptiveQualityTier>())
+            Assert(ArQualityBudget.CanDraw(ArQualityTier.Lite, tier, ArElement.PianoKeys)
+                    && ArQualityBudget.CanDraw(ArQualityTier.Lite, tier, ArElement.NoteObjects)
+                    && ArQualityBudget.CanDraw(ArQualityTier.Lite, tier, ArElement.Keypresses),
+                "Keys, notes and keypresses stay drawable at any tier under any adaptive pressure.");
+        Results.Add($"PASS AR quality budget: {ArQualityBudget.CutOrder.Length} deterministic cuts in the roadmap's order across {(int)GpuAdaptiveQualityTier.AmbientMinimal + 1} adaptive steps (deeper tier ⇒ deeper cut), with keys/notes/keypresses proved outside every cut; the transient WARP half renders inside VerifyArNoteProjection.");
     }
 
     private static void VerifyArCalibrationArchive()

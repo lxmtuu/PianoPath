@@ -219,6 +219,12 @@ internal sealed class GpuStageRenderer : IDisposable
 
     internal bool AdaptiveQualityProfilingAvailable => _adaptiveQualityProfiler is not null;
 
+    /// <summary>
+    /// Verification seam: an explicit AR budget override (roadmap §14.8) used only by <c>--verify</c>, so a WARP
+    /// rehearsal can ask for a deeper cut than the timestamp profiler would choose by itself. Null in the app.
+    /// </summary>
+    internal GpuAdaptiveQualityTier? ArBudgetTierOverride { get; set; }
+
     /// <summary>Polls completed GPU timings without waiting; disables the optional probe if the driver reports an error.</summary>
     internal bool CollectAdaptiveQualitySamples()
     {
@@ -466,8 +472,11 @@ internal sealed class GpuStageRenderer : IDisposable
         _keyColors.Upload(context, simulation.KeyColors);
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
+        // roadmap §14.8: every AR build hears the adaptive tier (the verify seam first, the profiler otherwise) and
+        // drops what roadmap's sentence says, never what it forbids.
+        var arBudgetTier = ArBudgetTierOverride ?? _adaptiveQualityController?.Tier ?? GpuAdaptiveQualityTier.Full;
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();

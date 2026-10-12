@@ -231,22 +231,26 @@ internal sealed partial class GpuArLayer
     }
 
     private void BuildStageEffects(GpuArInput ar, ArView view, GpuStageSimulation simulation, IReadOnlyList<Vector4> keyColors,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose,
+        GpuAdaptiveQualityTier adaptiveTier)
     {
         // The view-tuned table (roadmap §14.7 "Thêm 5"): same stage, same look, but the lift of the flat-born
         // effects comes from the camera's angle, and the stand-up quads stay home on the straight-down view.
         var preset = ArViewPresets.ForProfile(ar.ViewProfileId);
-        if (ArElementCatalog.CanDraw(ar.Quality, ArElement.ImpactLights))
+        // Each gate below passes through roadmap §14.8's adaptive budget (ArQualityBudget), in its exact sentence
+        // order: particles first, then pulses, note lights (in Build), light bars, note style, the impact glow last.
+        if (ArQualityBudget.CanDraw(ar.Quality, adaptiveTier, ArElement.ImpactLights))
             BuildImpactLights(view, simulation, quads, opacity, layout, pose, preset);
-        if (ArElementCatalog.CanDraw(ar.Quality, ArElement.Pulses))
+        if (ArQualityBudget.CanDraw(ar.Quality, adaptiveTier, ArElement.Pulses))
             BuildStageRings(view, simulation, quads, opacity, look, layout, pose, preset);
-        if (!ArElementCatalog.CanDraw(ar.Quality, ArElement.Particles)) return;
+        if (!ArQualityBudget.CanDraw(ar.Quality, adaptiveTier, ArElement.Particles)) return;
 
         BuildStageParticles(view, simulation, quads, opacity, look, layout, pose);
         BuildStageFlashes(view, simulation, quads, opacity, look, layout, pose);
         if (!preset.TallEffectsVisible) return;
         BuildHoldArcs(view, simulation, quads, opacity, look, layout, pose);
-        BuildLightBeams(view, keyColors, quads, opacity, look, layout, pose);
+        if (!ArQualityBudget.IsCut(adaptiveTier, ArBudgetCut.LightBars))
+            BuildLightBeams(view, keyColors, quads, opacity, look, layout, pose);
     }
 
     private void BuildImpactLights(ArView view, GpuStageSimulation simulation,
