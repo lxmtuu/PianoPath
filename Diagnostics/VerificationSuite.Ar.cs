@@ -2133,7 +2133,7 @@ internal static partial class VerificationSuite
                 for (var x = (int)Math.Ceiling(xa); x < Math.Min(w, xb); x++)
                 {
                     var u = (x - xa) / (xb - xa);
-                    var lum = (int)Math.Floor(u * 52) % 2 == 0 ? 232 : 56;
+                    var lum = (int)Math.Floor(u * 13) % 2 == 0 ? 232 : 56;   // wide bands: within the search window the pattern is unique, so a move cannot alias onto the next stripe
                     if (u > .3 && u < .72 && tv < .6) lum = Math.Min(lum, 44);
                     lum = (int)Math.Clamp(lum * brightness + 6 + (rng.NextDouble() - .5) * 6, 0, 255);
                     var i = (y * w + x) * 4;
