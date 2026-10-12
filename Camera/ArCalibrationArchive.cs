@@ -74,8 +74,10 @@ internal static class ArCalibrationArchive
         var transform = new ArPoseTransform(raw.PositionX, raw.PositionY, raw.PositionZ, raw.PitchDegrees, raw.YawDegrees, raw.RollDegrees, raw.UniformScale);
         var baselineValid = Points(raw.PoseBaseCorners) is { Length: 4 } baseline
             && CalibrationQuad.CheckAnyWinding(baseline, raw.ImageWidth, raw.ImageHeight) == CalibrationProblem.None;
+        // The store combines these the opposite way on the way OUT of a fresh calibration (an invalid baseline means
+        // "no pose baseline", not "discard the pose"): keeping a good pose while the baseline falls back to the
+        // corners is what Set() does too, so a restore behaves like the original save.
         if (!transform.IsValid) transform = ArPoseTransform.Identity;
-        if (!transform.IsValid || !baselineValid) { transform = ArPoseTransform.Identity; baselineValid = false; }
         row = raw with
         {
             Profile = ArCalibrationProfiles.Normalize(raw.Profile).Id,
@@ -118,7 +120,9 @@ internal static class ArCalibrationArchive
         if (envelope is null || !string.Equals(envelope.Format, FormatId, StringComparison.Ordinal))
         { error = "That file is not a Keyflow calibration backup."; return false; }
         if (envelope.FormatVersion > FormatVersion)
-        { error = "The backup was written by a newer Keyflow; update the app to read it."; return false; }
+        { error = "The backup was written by a newer Keyflow."; return false; }
+        if (envelope.Calibrations is null || envelope.Calibrations.Length == 0)
+        { error = "The backup holds no calibrations."; return false; }
         var rows = new List<ArCalibrationArchiveRow>();
         var skipped = 0;
         foreach (var raw in envelope.Calibrations ?? [])
