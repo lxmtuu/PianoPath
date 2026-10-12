@@ -1512,6 +1512,7 @@ public partial class MainWindow : Window
     private void PumpCameraFrame()
     {
         PollLatency();
+        PollDriftWatch();
         if (_arPlan.CameraLayer)               // the engine's render thread is the ring's reader while the overlay is drawn
         {
             if (++_arStatusTicks % 30 == 0) { RefreshArStatus(); RefreshCameraOverlayStatus(announce: false); }

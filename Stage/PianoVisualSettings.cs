@@ -476,6 +476,15 @@ internal sealed class PianoVisualSettings
     public bool ArAlignmentCheck { get; set; }
 
     /// <summary>
+    /// The drift watch (roadmap §14.7 "Thêm 2") samples the key area's picture every few seconds and compares it
+    /// with this machine's saved calibration; once the keys have wandered past a small threshold for a few
+    /// readings in a row — a bumped tripod, a shifted piano — the AR status line nags to mark the corners again.
+    /// It never moves the calibration on its own, and like the check above it belongs to this machine's own
+    /// calibration, so applying or sharing a look never switches it on or off elsewhere.
+    /// </summary>
+    public bool ArDriftWatch { get; set; } = true;
+
+    /// <summary>
     /// Colour of the alignment check's frame and octave lines (one of <see cref="ArAlignmentGuides.ColorIds"/>). Like
     /// the check itself it belongs to this machine — a shared look never picks another player's diagnostic colour.
     /// The initializer spells ArAlignmentGuides.DefaultColorId out as a literal so the preset generator can parse it.
@@ -688,7 +697,7 @@ internal sealed class PianoVisualSettings
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
             // that switched views would ask the player to mark keys that are already marked. The alignment check
             // couples straight to that calibration, so it follows the view onto the machine list.
-            if (property.Name is nameof(ArViewProfileId) or nameof(ArAlignmentCheck) or nameof(ArAlignmentGuideColor)) continue;
+            if (property.Name is nameof(ArViewProfileId) or nameof(ArAlignmentCheck) or nameof(ArAlignmentGuideColor) or nameof(ArDriftWatch)) continue;
             // Which camera, or which video file, is this machine's too: a look must never switch the player off the camera they
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
@@ -718,6 +727,7 @@ internal sealed class PianoVisualSettings
         ArViewProfileId = "";               // which view the camera stands at is this machine's; Clamp turns the empty id into the default view
         ArAlignmentCheck = false;           // the drift check talks to this machine's own calibration, never to a shared look
         ArAlignmentGuideColor = ArAlignmentGuides.DefaultColorId;   // the check's colour follows it onto the machine list
+        ArDriftWatch = true;                // the watch is this machine's own assistant, kept on until the player says otherwise
         PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
     }
 

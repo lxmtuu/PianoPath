@@ -519,8 +519,14 @@ làm artifact.
   pixel bật/tắt đổi rõ, tắt là về 0). Cùng ngày: màu khung chọn được — 5 màu tương phản cao White/Cyan/Yellow/
   Magenta/Lime (`ArAlignmentGuideColor`, thuộc máy theo chế độ kiểm tra; bảng ánh xạ thuần `ArAlignmentGuides.ColorFor`,
   WARP kiểm recolour không đổi hình học).
-- **Thêm 2 — đo trôi**: so mép hàng phím trong khung mới với calibration; lệch quá ngưỡng → nhắc đánh dấu lại
-  (không tự sửa).
+- **Thêm 2 — đo trôi**: ✅ 2026‑10‑12. Toggle **Canh khung camera có trôi** (thẻ KEYBOARD ALIGNMENT, mặc định bật,
+  thuộc máy cùng nhánh calibration): cột ghim là lưới sáng của vùng phím lúc bắt đầu canh (region của
+  `MotionEnergy.KeysRegion`); cứ ~2 s so khung đang chạy với cột ghim qua `Camera/ArDriftMeter.cs` — quét dịch
+  thô‑rồi‑mịn trên ô 3 pixel, bù độ sáng trung bình, trung bình cắt 70 % để tay chơi/bóng đổ không tính; trôi quá
+  ngưỡng (~0,5 % chiều rộng ảnh) trong 3 lần đo liền → dòng trạng thái AR nhắc «mở Calibrate và đánh dấu lại».
+  Calibration **không bao giờ tự bị sửa**; canh tạm nghỉ khi đang đo độ trễ (đều dùng cột sọc `FrameTap` của
+  `CameraFrameRing`). Logic thuần khóa bằng xUnit `ArDriftMeterTests` (frame tổng hợp: trôi 9 px đo ±3, sáng ±18 %
+  và bàn tay quét qua không báo động) và `--verify` (`VerifyArDriftWatch`).
 - **Thêm 3 — xuất/nhập bản sao căn chỉnh** (JSON + ảnh chụp) để backup trước khi chỉnh chân máy.
 - **Thêm 4 — hướng dẫn ngay trong cửa sổ**: góc máy qua vai, tránh fisheye, tay ngoài vùng.
 - **Thêm 5 — preset AR theo khung nhìn**: độ cao/phần tử khác nhau cho 45° và 90° (đi cùng `ArViewProfileId`).

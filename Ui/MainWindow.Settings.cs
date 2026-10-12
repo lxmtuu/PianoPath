@@ -607,6 +607,7 @@ public partial class MainWindow
         Choice(alignment, "Guide colour", nameof(PianoVisualSettings.ArAlignmentGuideColor), "High-contrast colour of the alignment frame and octave lines; White reads on most cameras. The pick belongs to this machine, like the check itself.",
             ArAlignmentGuides.ColorIds.Select(id => (id, id)).ToArray())
             .VisibleWhen = () => _visualSettings.ArAlignmentCheck;
+        Toggle(alignment, "Watch for camera drift", nameof(PianoVisualSettings.ArDriftWatch), "Samples the key area's picture every few seconds and compares it with the saved calibration. If the keys have wandered past a small threshold for a few readings in a row — a bumped tripod, a shifted piano — the AR status line asks for the corners to be marked again. It never moves the calibration on its own, and pauses while the camera delay is being measured.");
 
         var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint and optional rising MIDI notes. Lookahead applies to song notes in Learn only; 3D live bars and Perform notes use independent fixed 3-second reaches.");
         Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint and the independently toggled rising MIDI notes remain available.",
@@ -701,7 +702,8 @@ public partial class MainWindow
             ArStatus.NeedsCalibration => Loc.F("The camera runs at {0} × {1}. The keys have not been marked yet for the {2} view on a {3}-key keyboard.", snapshot.ImageWidth, snapshot.ImageHeight, view, keys),
             ArStatus.Outdated => Loc.F("The saved key area of the {2} view was marked for another picture size or keyboard size. Mark it again for {0} × {1} and {3} keys.", snapshot.ImageWidth, snapshot.ImageHeight, view, keys),
             _ => Loc.F("AR overlay on · {0} view · {1} × {2} · {3} keys · {4}", view, snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
-                + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default),
+                + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default)
+                + (_driftText.Length > 0 ? " " + _driftText : ""),
         };
     }
 
@@ -722,7 +724,7 @@ public partial class MainWindow
     private void RefreshArStatus()
     {
         if (_arStatus is null) return;
-        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, _visualSettings.ArViewProfileId, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
+        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, _visualSettings.ArViewProfileId, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default), _driftText);
         if (key == _arStatusKey) return;
         _arStatusKey = key;
         Loc.Bind(_arStatus, ArStatusText);

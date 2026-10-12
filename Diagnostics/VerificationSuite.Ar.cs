@@ -2111,4 +2111,59 @@ internal static partial class VerificationSuite
         Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; the look's velocity tint recoloured a bar in {velocityTintPixels} pixels at the leaned view and {overheadTintPixels} at 90° overhead; sustain lifted the damper strip in {damperLiftPixels} pixels leaned / {overheadDamperPixels} overhead (Lite drew none, overhead projected {overheadBarCount} bars); impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
         Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
     }
+
+    private static void VerifyArDriftWatch()
+    {
+        // roadmap §14.7 "Thêm 2 — đo trôi": the pure picture-shift measurement behind the watch, checked without a camera
+        // on the same striped trapezoid stand-in the xUnit suite locks (a moved picture must measure to within a cell,
+        // lighting and hands must never raise the alarm).
+        const int w = 640, h = 360;
+        (double X, double Y)[] corners = [(35, 146), (607, 134), (618, 211), (26, 224)];
+        byte[] Paint(double shiftX, double shiftY, double brightness = 1)
+        {
+            var px = new byte[w * h * 4];
+            var rng = new Random(9);
+            for (var y = 0; y < h; y++)
+            {
+                double tBack = corners[0].Y, tFront = corners[3].Y;
+                if (y < tBack + shiftY - 1 || y > tFront + shiftY + 1) continue;
+                double tv = Math.Clamp((y - (tBack + shiftY)) / (tFront - tBack), 0, 1);
+                var xa = corners[0].X + (corners[3].X - corners[0].X) * tv + shiftX;
+                var xb = corners[1].X + (corners[2].X - corners[1].X) * tv + shiftX;
+                for (var x = (int)Math.Ceiling(xa); x < Math.Min(w, xb); x++)
+                {
+                    var u = (x - xa) / (xb - xa);
+                    var lum = (int)Math.Floor(u * 52) % 2 == 0 ? 232 : 56;
+                    if (u > .3 && u < .72 && tv < .6) lum = Math.Min(lum, 44);
+                    lum = (int)Math.Clamp(lum * brightness + 6 + (rng.NextDouble() - .5) * 6, 0, 255);
+                    var i = (y * w + x) * 4;
+                    px[i] = px[i + 1] = px[i + 2] = (byte)lum; px[i + 3] = 255;
+                }
+            }
+            return px;
+        }
+        var region = MotionEnergy.KeysRegion(corners, w, h);
+        var margin = ArDriftMeter.MaxShiftPixels(w);
+        var expanded = ArDriftMeter.Expand(region, margin, w, h);
+        var reference = new byte[MotionEnergy.SampleCount(region)];
+        Assert(ArDriftMeter.SampleGrid(Paint(0, 0), w, h, region, reference), "The reference grid samples for the marked key area.");
+        ArDriftEstimate Measure(double shiftX, double shiftY, double brightness = 1)
+        {
+            var grid = new byte[MotionEnergy.SampleCount(expanded)];
+            Assert(ArDriftMeter.SampleGrid(Paint(shiftX, shiftY, brightness), w, h, expanded, grid), "Each measured frame samples the expanded area.");
+            return ArDriftMeter.Estimate(reference, region, grid, expanded, w);
+        }
+        var threshold = ArDriftMeter.ThresholdPixels(w);
+        var aligned = Measure(0, 0);
+        var moved = Measure(9, 3);
+        var bright = Measure(0, 0, 1.18);
+        Assert(aligned.Usable && aligned.Pixels <= 1.5 && !aligned.IsDrift(threshold)
+                && moved.IsDrift(threshold) && Math.Abs(moved.OffsetX - 9) <= 3 && Math.Abs(moved.OffsetY - 3) <= 3
+                && bright.Usable && !bright.IsDrift(threshold),
+            $"The drift meter must measure a real move to within a cell (got {moved.OffsetX:0.#}, {moved.OffsetY:0.#}) and never mistake a still or brighter picture for drift (aligned {aligned.Pixels:0.#} px, bright residual {bright.Residual:0.###}).");
+        // the watch's alarm rule itself: nothing before the streak, one sentence after three readings in a row
+        Assert(!moved.IsDrift(ArDriftMeter.ThresholdPixels(w * 4)) && moved.IsDrift(ArDriftMeter.ThresholdPixels(w)),
+            "The pixel threshold scales with the picture width, so the same move only flags at the matching resolution.");
+        Results.Add($"PASS AR drift watch: a 9-pixel move of the key picture was read as {moved.OffsetX:0.#}, {moved.OffsetY:0.#} pixels (threshold {threshold:0.#} px at {w} px wide) while the still picture read {aligned.Pixels:0.#} px and an 18% brightness change stayed silent; the watch nags after {ArDriftMeter.FlagHoldReadings} readings in a row and never moves the calibration itself.");
+    }
 }
