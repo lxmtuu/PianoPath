@@ -18,31 +18,33 @@ public class ArQualityBudgetTests
             ArQualityBudget.CutOrder);
     }
 
+    // tier values: Full = 0, BloomReduced = 1, BloomMinimal = 2, AmbientReduced = 3, AmbientMinimal = 4 (enum order)
     [Theory]
-    [InlineData(GpuAdaptiveQualityTier.Full, 0)]
-    [InlineData(GpuAdaptiveQualityTier.BloomReduced, 1)]
-    [InlineData(GpuAdaptiveQualityTier.BloomMinimal, 2)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, 3)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientMinimal, 6)]
-    public void EachAdaptiveTierCutsExactlySoManyFamilies(GpuAdaptiveQualityTier tier, int expected)
+    [InlineData(0, 0)]
+    [InlineData(1, 1)]
+    [InlineData(2, 2)]
+    [InlineData(3, 3)]
+    [InlineData(4, 6)]
+    public void EachAdaptiveTierCutsExactlySoManyFamilies(int tierValue, int expected)
     {
+        var tier = (GpuAdaptiveQualityTier)tierValue;
         Assert.Equal(expected, ArQualityBudget.CutCountFor(tier));
         Assert.True(expected <= ArQualityBudget.CutOrder.Length, "never deeper than the table itself");
     }
 
     [Theory]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.Particles, true)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.Pulses, true)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.NoteLights, true)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.LightBars, false)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.NoteStyle, false)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.ImpactLights, false)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientMinimal, ArBudgetCut.ImpactLights, true)]
-    [InlineData(GpuAdaptiveQualityTier.AmbientMinimal, ArBudgetCut.NoteStyle, true)]
-    [InlineData(GpuAdaptiveQualityTier.Full, ArBudgetCut.Particles, false)]
-    public void CutsHappenOnlyAtOrPastTheirStep(GpuAdaptiveQualityTier tier, ArBudgetCut cut, bool expected)
+    [InlineData(3, 0, true)]
+    [InlineData(3, 1, true)]
+    [InlineData(3, 2, true)]
+    [InlineData(3, 3, false)]
+    [InlineData(3, 4, false)]
+    [InlineData(3, 5, false)]
+    [InlineData(4, 5, true)]
+    [InlineData(4, 4, true)]
+    [InlineData(0, 0, false)]
+    public void CutsHappenOnlyAtOrPastTheirStep(int tierValue, int cutValue, bool expected)
     {
-        Assert.Equal(expected, ArQualityBudget.IsCut(tier, cut));
+        Assert.Equal(expected, ArQualityBudget.IsCut((GpuAdaptiveQualityTier)tierValue, (ArBudgetCut)cutValue));
     }
 
     [Fact]
