@@ -375,7 +375,10 @@ internal static partial class VerificationSuite
             feed.SetState([], 0, false, new HashSet<int>(pitches));
             feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false,
                 ShowLiveTrails: showTrails);   // Perform leaves out song notes; impact lights and optional press trails stay independent.
-            if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
+            // A physical note-on arrives as a pair on the same wall-clock frame — the held note and its strike
+            // impact (Ui/MainWindow.xaml.cs); the strike lights come from that explicit hit, exactly as they do
+            // for a real hand, not from the falling trail's touchdown (which stays quiet by design).
+            if (press) foreach (var pitch in pitches) { feed.LiveNote(pitch, true, .9f); feed.Impact(pitch, .9); }
             return feed;
         }
         (byte[] Pixels, int Bars, int Keys, int Impacts, int NoteLights, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
@@ -428,11 +431,12 @@ internal static partial class VerificationSuite
         Assert(afterRelease.Bars == 2 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.NoteLights > 0
                 && afterRelease.Quads == afterRelease.Keys + afterRelease.Bars + afterRelease.NoteLights,
             $"After Note Off the live bars keep travelling while strike lights fade and key tint plus spill remain ({afterRelease.Quads} quads: {afterRelease.Keys} keys, {afterRelease.Bars} bars, {afterRelease.NoteLights} spill).");
-        // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
+        // a moment after the release — past the strike lights' .85 s lifetime — the bars are still there, dimming;
+        // the key light was never part of the deal either way
         var fadingFeed = ArFeed([60, 61], press: true);
-        var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
+        var fadingAfterRelease = Draw(fadingFeed, 60, frame =>
         {
-            if (frame != 20) return;
+            if (frame != 55) return;
             fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
         Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 0

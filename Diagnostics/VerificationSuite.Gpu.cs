@@ -168,10 +168,10 @@ internal static partial class VerificationSuite
 
         // The hand drives the light: the quiet-to-loud band and the bloom-in/settle tail the xUnit curves lock,
         // restated here so the curve and the corridor cannot drift apart in a maintenance pass.
-        Assert(GpuStageSimulation.ImpactDynamic(1) / GpuStageSimulation.ImpactDynamic(.3f) > 2.4f
-            && GpuStageSimulation.ImpactSizeBoost(1) / GpuStageSimulation.ImpactSizeBoost(.3f) > 2.2f
-            && GpuStageSimulation.FlashStyleStrength(1) / GpuStageSimulation.FlashStyleStrength(.3f) > 2.7f
-            && GpuStageSimulation.FlashEnvelope(.06f) > .75f && GpuStageSimulation.FlashEnvelope(.9f) < .02f,
+        Assert(StageLightCurves.ImpactDynamic(1) / StageLightCurves.ImpactDynamic(.3f) > 2.4f
+            && StageLightCurves.ImpactSizeBoost(1) / StageLightCurves.ImpactSizeBoost(.3f) > 2.2f
+            && StageLightCurves.FlashStyleStrength(1) / StageLightCurves.FlashStyleStrength(.3f) > 2.7f
+            && StageLightCurves.FlashEnvelope(.06f) > .75f && StageLightCurves.FlashEnvelope(.9f) < .02f,
             "The impact light must open a wide quiet-to-loud band (brightness, size and styled channels) with a ~55 ms attack and a smoothly settling tail.");
 
         // A held key breathes: once the glow is full (under a ten-thousandth of a second) and the breath ramp has

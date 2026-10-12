@@ -300,7 +300,7 @@ internal sealed partial class GpuStageSimulation
         {
             var c = ToLinear(_keyColor[pitch]);
             // A held key breathes: a slow, quiet sway on its light so a long press feels alive (Live Stage key glow and AR tint share this colour buffer).
-            KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? Math.Min(1, _glow[pitch] * KeyBreathMultiplier(_keyHold[pitch], _time, pitch)) : 0);
+            KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? Math.Min(1, _glow[pitch] * StageLightCurves.KeyBreathMultiplier(_keyHold[pitch], _time, pitch)) : 0);
         }
 
         // ---- continuous emitters on sounding keys ----
@@ -482,27 +482,6 @@ internal sealed partial class GpuStageSimulation
         _particles[_count++] = tagged;
     }
 
-    // ---- shared light curves (pure, so xUnit can lock them) ----------------------------------------------
-
-    /// <summary>Brightness response of an impact: soft hits stay quiet, hard hits open up — a wider dynamic band than the old linear mix.</summary>
-    internal static float ImpactDynamic(float strength) { var s = Math.Clamp(strength, 0, 1); return .42f + 1.18f * s * s; }
-
-    /// <summary>Size response of an impact flare: quiet hits stay a spark, hard hits bloom wider.</summary>
-    internal static float ImpactSizeBoost(float strength) { var s = Math.Clamp(strength, 0, 1); return 1.35f + 2.6f * s * s; }
-
-    /// <summary>Strength the Lightning/Plasma flashes inherit: weighted toward the note's strength but never black.</summary>
-    internal static float FlashStyleStrength(float strength) { var s = Math.Clamp(strength, 0, 1); return .35f + .85f * s * s; }
-
-    /// <summary>Flash envelope: a fast attack (about 55 ms) and a smooth quadratic tail, so impacts bloom in and settle instead of popping on and clipping off.</summary>
-    internal static float FlashEnvelope(float phase) { var u = Math.Clamp(phase, 0, 1); var attack = Math.Min(1, u / .055f); var d = 1f - u; return attack * d * d; }
-
-    /// <summary>Breathing amplitude of a held key's light: silent at first, smoothstepping up over ~1.25 s so short taps stay crisp.</summary>
-    internal static float HoldBreathAmp(double heldSeconds) { var t = Math.Clamp(((float)heldSeconds - .35f) / .9f, 0, 1); return t * t * (3 - 2 * t) * .075f; }
-
-    /// <summary>The held-key light multiplier: gentle phase-offset sway per key, always within ~±7.5% of the steady glow.</summary>
-    internal static float KeyBreathMultiplier(double heldSeconds, double timeSeconds, int pitch)
-        => 1 + HoldBreathAmp(heldSeconds) * MathF.Sin((float)(timeSeconds * (MathF.Tau / 1.85f) + pitch * .55f));
-
     /// <summary>A note reached the keys: wave, flash, morph and burst, styled like the software stage.</summary>
     private void Impact(int pitch, float strength, GpuSceneLayout layout)
     {
@@ -523,7 +502,7 @@ internal sealed partial class GpuStageSimulation
         if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0 && _flashes.Count < 48)
         {
             if (look.ImpactFlashStyle == 0)
-                _flashes.Add(new Flash { X = x, Y = y, Life = .38f, Size = layout.Lane * ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = .38f, Size = layout.Lane * StageLightCurves.ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * StageLightCurves.ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
             else
                 _flashes.Add(new Flash { X = x, Y = y, Life = .26f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
         }
@@ -778,7 +757,7 @@ internal sealed partial class GpuStageSimulation
         return new GpuKeyInstance
         {
             Box = new Vector4(x0, x1, length, height),
-            Emit = new Vector4(color, Math.Min(1, _glow[pitch] * KeyBreathMultiplier(_keyHold[pitch], _time, pitch))),
+            Emit = new Vector4(color, Math.Min(1, _glow[pitch] * StageLightCurves.KeyBreathMultiplier(_keyHold[pitch], _time, pitch))),
             Misc = new Vector4(kind, look.AnimateKeys ? _press[pitch] : 0, Math.Max(0, left), Math.Max(0, right)),
             Base = new Vector4(baseHeight, _spill[pitch], depthOffset, 0)
         };
@@ -881,7 +860,7 @@ internal sealed partial class GpuStageSimulation
         {
             var u = flash.Age / flash.Life;
             if (flash.Style != 0) { AddFlashSprites(sprites, look, flash, scaleX); continue; }
-            var c = ToLinear(flash.Color) * flash.Intensity * FlashEnvelope(u);
+            var c = ToLinear(flash.Color) * flash.Intensity * StageLightCurves.FlashEnvelope(u);
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(flash.X * scaleX, flash.Y, flash.Size * (.8f + u * .6f), 4), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 0, u) });
         }
         if (look.HoldElectricArc && look.HoldArcIntensity > .01f) AddElectricArcs(sprites, look, layout);
