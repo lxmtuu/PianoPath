@@ -522,7 +522,7 @@ làm artifact.
 - **Thêm 2 — đo trôi**: ✅ 2026‑10‑12. Toggle **Canh khung camera có trôi** (thẻ KEYBOARD ALIGNMENT, mặc định bật,
   thuộc máy cùng nhánh calibration): cột ghim là lưới sáng của vùng phím lúc bắt đầu canh (region của
   `MotionEnergy.KeysRegion`); cứ ~2 s so khung đang chạy với cột ghim qua `Camera/ArDriftMeter.cs` — quét dịch
-  thô‑rồi‑mịn trên ô 3 pixel, bù độ sáng trung bình, trung bình cắt 70 % để tay chơi/bóng đổ không tính; trôi quá
+  thô‑rồi‑mịn trên ô 3 pixel, bù độ sáng trung bình, trung bình cắt đuôi 10 % để tay chơi/bóng đổ không tính (cứt ít thôi: trôi thật rải sai số khắp trường); trôi quá
   ngưỡng (~0,5 % chiều rộng ảnh) trong 3 lần đo liền → dòng trạng thái AR nhắc «mở Calibrate và đánh dấu lại».
   Calibration **không bao giờ tự bị sửa**; canh tạm nghỉ khi đang đo độ trễ (đều dùng cột sọc `FrameTap` của
   `CameraFrameRing`). Logic thuần khóa bằng xUnit `ArDriftMeterTests` (frame tổng hợp: trôi 9 px đo ±3, sáng ±18 %

@@ -97,7 +97,7 @@ internal static class ArDriftMeter
             }
             Array.Sort(scratch, 0, n);
             double sum = 0;
-            var keep = Math.Max(1, (int)(n * .7));      // drop the noisiest third: hands and shadows live there
+            var keep = Math.Max(1, (int)(n * .9));      // drop the noisiest decile only: hands and shadows live there, but a real move spreads small diffs over the whole field and must not be trimmed away
             for (var i = 0; i < keep; i++) sum += scratch[i];
             return sum / keep / 255.0;
         }
