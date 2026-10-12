@@ -2419,7 +2419,35 @@ internal static partial class VerificationSuite
                 ArRenderToVideo.Run(renderer, TickFeed, pngPlan, recorder, (i, bgra) => secondBuffers.Add(bgra));
             Assert(secondBuffers.Count == firstBuffers.Count && firstBuffers.Zip(secondBuffers).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second)),
                 "Two offline sweeps of one script must be byte-identical — render-to-video owns no clock of its own.");
-            Results.Add("PASS AR render-to-video (frame half): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, and two sweeps of one script are byte-identical.");
+
+            // Voice: the take's own piano track. A synthetic one-zone SFZ stands in for the real instrument —
+            // NoteOn on tick 0, NoteOff on tick 4 — and the WAV must cover exactly the take's six ticks.
+            var sampleWav = Path.Combine(directory, "ar-video-sample.wav");
+            WriteTestWav(sampleWav, channels: 2, bits: 16, rate: 44100, frames: 22050, wave: i => Math.Sin(i * 2 * Math.PI * 440 / 44100) * .33);
+            var voiceSfz = Path.Combine(directory, "ar-video-sample.sfz");
+            File.WriteAllText(voiceSfz, "<region> sample=ar-video-sample.wav hivel=127 lovel=1 pitch_keycenter=60 ampeg_release=0.2");
+            var voiceEvents = new Dictionary<int, ArVideoNoteEvent[]>
+            {
+                [0] = [new ArVideoNoteEvent(60, 110, On: true)],
+                [4] = [new ArVideoNoteEvent(60, 0, On: false)],
+            };
+            var voiceWav = Path.ChangeExtension(aviPath, ".wav");
+            ArVideoTake voiceTake;
+            using (var recorder = new PngSequenceRecorder(Path.Combine(directory, "voice"), aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
+            using (var wav = WavWriter.TryCreate(voiceWav)!)
+                voiceTake = ArRenderToVideo.Run(renderer, TickFeed, aviPlan, recorder,
+                    audio: new ArVideoAudio(new SfzSynthesizer(SfzReader.Read(voiceSfz), 44100), tick => voiceEvents.GetValueOrDefault(tick, []), wav!));
+            Assert(voiceTake.FramesWritten == 6 && voiceTake.AudioSeconds is > 0.45 and <= 0.51,
+                $"The voiced take should time its piano track by the ticks ({voiceTake.AudioSeconds:0.###} seconds of audio with {voiceTake.FramesWritten} frames).");
+            var voiceBytes = File.ReadAllBytes(voiceWav);
+            Assert(voiceBytes.Length == WavWriter.HeaderBytes + 22050 * 4 && BitConverter.ToInt32(voiceBytes, 40) == 22050 * 4,
+                $"Six ticks at 12 fps are 22050 stereo samples at 44.1 kHz, patched into the header on close (file {voiceBytes.Length} bytes).");
+            var voicePcm = voiceBytes.Skip(WavWriter.HeaderBytes).ToArray();
+            short VoiceAt(long frame) => BitConverter.ToInt16(voicePcm, (int)(frame * 4));
+            var heldEnergy = Enumerable.Range(0, 60).Sum(i => Math.Abs((int)VoiceAt(10000 + i * 40)) + Math.Abs((int)VoiceAt(15000 + i * 40)));
+            Assert(Math.Abs((int)VoiceAt(100)) < 2000 && heldEnergy > 2000,
+                $"The onset's first milliseconds must stay near-silent and the held ticks must ring (onset {Math.Abs((int)VoiceAt(100))}, held {heldEnergy}).");
+            Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, and the voiced take mixes its SFZ piano into 22050 WAV frames — exactly the six ticks of the video — with the onset ramping gently and the held ticks loud.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }
