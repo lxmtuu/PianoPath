@@ -2492,13 +2492,21 @@ internal static partial class VerificationSuite
             // And the toggle really is the switch: a take identical in every other way never changes outside the strip.
 
             // Export through a REAL camera video file — the fixture is pressed with the app's own MP4 writer
-            // and decoded with the app's own CameraFrameReader, the exact picks of the Recording card: the
-            // engine reads one video frame per tick off a ring, and the take must carry the file's stripe on
+            // and decoded with the app's own CameraFrameReader, the exact picks of the Recording card. The
+            // Media Foundation trick-play floor reads a finished file at half speed, and the fixture's padded
+            // span above makes that half speed tick per frame, and the take must carry the file's stripe on
             // the left and its grey brightening exactly tick by tick.
             var cameraMp4 = Path.Combine(directory, "camera.mp4");
             const int vw = 320, vh = 180;
-            using (var maker = new Mp4Recorder(cameraMp4, vw, vh, 24, withAudio: false))
+            using (var maker = new Mp4Recorder(cameraMp4, vw, vh, 24, withAudio: true))
+            {
+                // 46 real frames in a 24-frame index: the trick-play floor reads the source at half speed,
+                // so every take tick sees a fresh frame (the sink pads the tail already, but a take can read
+                // the file part-way through its finalizing, where only complete samples count). The audio
+                // tail is silence marking the same real span, not an honest stream.
                 for (var tick = 0; tick < 24; tick++) maker.WriteFrame(CameraTestVideo.Picture(vw, vh, tick));
+                maker.AppendSilence(44100 * 23L / 24);
+            }
             Assert(File.Exists(cameraMp4), "The MP4 fixture itself must land where it was written.");
             using var fileReader = CameraFrameReader.OpenFile(cameraMp4, out var fileError)
                 ?? throw new InvalidOperationException($"The fixture the app's own writer made must read back ({fileError}).");

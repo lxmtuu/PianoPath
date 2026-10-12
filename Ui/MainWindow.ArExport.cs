@@ -87,6 +87,7 @@ public partial class MainWindow
     private sealed record ArExportJob(string Target, string VideoPath,
         List<NoteEvent> Notes, GpuLook Look, GpuArInput Ar,
         bool Mirror, double StageHeight, int FrameRate, double Seconds, bool WithAudio, int ResolutionCap);
+    // The settings frame-rate is the recording's breath; the camera clip feeds at half of it, source-domain.
 
     private void RunArExport(ArExportJob job)
     {
@@ -97,7 +98,9 @@ public partial class MainWindow
                 ?? throw new InvalidOperationException(Loc.F("The camera video file would not open: {0}", openError));
             using var renderer = GpuStageRenderer.Create(forceWarp: false);
             var maxSide = job.ResolutionCap > 0 ? job.ResolutionCap : Math.Max(reader.Width, reader.Height);
-            var plan = ArVideoRenderProfile.Plan(reader.Width, reader.Height, job.Seconds, job.FrameRate, downsample: 1, maxSide);
+            // Media Foundation trick play decodes a finished file at half speed, so the camera-video clock
+            // runs at half the take's clock: one tick holds every other source frame.
+            var plan = ArVideoRenderProfile.Plan(reader.Width, reader.Height, job.Seconds, job.FrameRate / 2, downsample: 1, maxSide);
             var ring = new CameraFrameRing();
             var videoBuffer = new byte[reader.Width * reader.Height * 4];
             var script = ArVideoExportScript.MapNotes(job.Notes.Select(note => (note.Start, note.End, note.Pitch, note.Velocity)), plan.Frames, plan.FrameRate);
