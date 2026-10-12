@@ -1311,6 +1311,7 @@ internal static class StringsEnglish
         ["The camera overlay could not be opened."] = "The camera overlay could not be opened.",
         ["The camera reported no video modes, so its default mode is used."] = "The camera reported no video modes, so its default mode is used.",
         ["The camera runs at {0} × {1}. The keys have not been marked yet for the {2} view on a {3}-key keyboard."] = "The camera runs at {0} × {1}. The keys have not been marked yet for the {2} view on a {3}-key keyboard.",
+        ["The camera video decoder stalled while the take was rendering."] = "The camera video decoder stalled while the take was rendering.",
         ["The camera video file would not open: {0}"] = "The camera video file would not open: {0}",
         ["The camera was closed, so nothing was saved."] = "The camera was closed, so nothing was saved.",
         ["The camera would not deliver {0} as 32-bit frames, so its default mode is used."] = "The camera would not deliver {0} as 32-bit frames, so its default mode is used.",

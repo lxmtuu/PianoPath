@@ -107,10 +107,16 @@ public partial class MainWindow
             WavWriter? wav = null; SfzSynthesizer? synth = null;
             GpuStageFeed Feed(int tick)
             {
-                if (!reader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH) || gotW != reader.Width || gotH != reader.Height)
+                // The decoder of a finished file paces near real time, and the render ticks run faster than
+                // the clock they are planning: an empty stream tick waits for the decoder (the take's plan
+                // already asks for only half of the clip's own speed), four seconds at most.
+                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 4;
+                while (!reader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH) || gotW != reader.Width || gotH != reader.Height)
                 {
-                    reader.Rewind();    // a take longer than the clip loops the camera, like the live overlay
-                    reader.TryReadFrame(videoBuffer, mirror: false, out _, out _);
+                    if (reader.AtEnd) { reader.Rewind(); continue; }   // a take longer than the clip loops the camera, like the live overlay
+                    if (Stopwatch.GetTimestamp() > deadline)
+                        throw new InvalidOperationException(Loc.T("The camera video decoder stalled while the take was rendering."));
+                    System.Threading.Thread.Sleep(2);
                 }
                 var buffer = ring.BeginWrite(videoBuffer.Length, out var slot);
                 videoBuffer.CopyTo(buffer, 0);

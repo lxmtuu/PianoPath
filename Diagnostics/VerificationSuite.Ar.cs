@@ -2516,12 +2516,22 @@ internal static partial class VerificationSuite
             var videoBuffer = new byte[vw * vh * 4];
             void PublishFileFrameToRing()
             {
-                if (!fileReader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH)
-                        || gotW != vw || gotH != vh)
+                // The CI box decodes a finished file near real time: the six quick ticks can outrun the
+                // decoder, so an empty stream tick waits out the shortfall instead of looping the clip early.
+                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
+                while (true)
                 {
-                    fileReader.Rewind();
-                    Assert(fileReader.TryReadFrame(videoBuffer, mirror: false, out gotW, out gotH) && gotW == vw && gotH == vh,
-                        "The looped fixture must start over cleanly when its end is reached.");
+                    var got = fileReader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH) && gotW == vw && gotH == vh;
+                    if (got) break;
+                    if (fileReader.AtEnd)
+                    {
+                        fileReader.Rewind();
+                        Assert(fileReader.TryReadFrame(videoBuffer, mirror: false, out gotW, out gotH) && gotW == vw && gotH == vh,
+                            "The looped fixture must start over cleanly when its end is reached.");
+                        break;
+                    }
+                    Assert(Stopwatch.GetTimestamp() < deadline, "The fixture decoder must deliver within the wait window.");
+                    System.Threading.Thread.Sleep(2);
                 }
                 var buffer = fileRing.BeginWrite(videoBuffer.Length, out var slot);
                 videoBuffer.CopyTo(buffer, 0);

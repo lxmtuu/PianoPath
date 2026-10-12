@@ -1311,6 +1311,7 @@ internal static class StringsVietnamese
         ["The camera overlay could not be opened."] = "Không mở được lớp phủ camera.",
         ["The camera reported no video modes, so its default mode is used."] = "Camera không báo chế độ video nào, nên dùng chế độ mặc định của nó.",
         ["The camera runs at {0} × {1}. The keys have not been marked yet for the {2} view on a {3}-key keyboard."] = "Camera đang chạy ở {0} × {1}. Chưa đánh dấu vùng phím cho khung nhìn {2} trên đàn {3} phím.",
+        ["The camera video decoder stalled while the take was rendering."] = "Bộ giải mã video máy ảnh ngừng nhận lúc video đang vẽ.",
         ["The camera video file would not open: {0}"] = "Không mở được file video camera: {0}",
         ["The camera was closed, so nothing was saved."] = "Camera đã đóng nên chưa lưu gì.",
         ["The camera would not deliver {0} as 32-bit frames, so its default mode is used."] = "Camera không đưa {0} ra khung 32-bit được, nên dùng chế độ mặc định của nó.",
