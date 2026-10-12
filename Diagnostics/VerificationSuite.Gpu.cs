@@ -148,6 +148,53 @@ internal static partial class VerificationSuite
         Assert(keyboard > 60, $"The GPU frame should show a lit white-key keyboard along the bottom (average luma {keyboard:0}).");
         Assert(keyboard > sky + 20, $"The keyboard should stand out from the dark stage above it (keys {keyboard:0}, stage {sky:0}).");
         Assert(distinct.Count > 40, $"The GPU frame should be a picture, not a flat fill ({distinct.Count} distinct sampled colours).");
+
+        // One press, one flash, in both note directions. The falling head of a live trail used to strike a second
+        // impact when it reached the key line in the falling direction — exactly the "the light repeats when the
+        // note touches the keys even though I am not pressing" complaint. The finger is now the only source.
+        var dupLook = GpuLook.From(new PianoVisualSettings { NoteDirection = "Down" }, (_, _) => Color.FromRgb(255, 80, 220), .205);
+        var dupFeed = new GpuStageFeed(); dupFeed.SetStageHeight(height);
+        dupFeed.SetLook(dupLook);
+        dupFeed.SetState([], 0, false, new HashSet<int> { 60 });
+        // deliberately no feed.Impact: any impact family inside the next seconds can only have come from the duplicate
+        dupFeed.LiveNote(60, true, .9f);
+        var dupInput = new GpuFrameInput(); dupFeed.Capture(dupInput, GpuStageFeed.Now);
+        var dupSim = new GpuStageSimulation(20261012);
+        var dupStep = 0;
+        for (; dupStep < 170 && dupSim.ArImpacts.Count == 0 && dupSim.ArRingCount == 0 && dupSim.ArFlashCount == 0; dupStep++)
+            dupSim.Step(1 / 60.0, dupInput, dupFeed, width);
+        Assert(dupStep == 170,
+            "A live press must flash exactly once, at the finger: after 2.8 s of falling-trail motion — well past the trail head's key-line touchdown in the falling direction — no impact, ring or flash may spawn from that touchdown.");
+
+        // The hand drives the light: the quiet-to-loud band and the bloom-in/settle tail the xUnit curves lock,
+        // restated here so the curve and the corridor cannot drift apart in a maintenance pass.
+        Assert(GpuStageSimulation.ImpactDynamic(1) / GpuStageSimulation.ImpactDynamic(.3f) > 2.4f
+            && GpuStageSimulation.ImpactSizeBoost(1) / GpuStageSimulation.ImpactSizeBoost(.3f) > 2.2f
+            && GpuStageSimulation.FlashStyleStrength(1) / GpuStageSimulation.FlashStyleStrength(.3f) > 2.7f
+            && GpuStageSimulation.FlashEnvelope(.06f) > .75f && GpuStageSimulation.FlashEnvelope(.9f) < .02f,
+            "The impact light must open a wide quiet-to-loud band (brightness, size and styled channels) with a ~55 ms attack and a smoothly settling tail.");
+
+        // A held key breathes: once the glow is full (under a ten-thousandth of a second) and the breath ramp has
+        // finished (1.25 s), the shared key-tint buffer sways a few percent; Live Stage key glow and the AR tint
+        // read the same buffer, so both inherit the sway.
+        var breathFeed = new GpuStageFeed(); breathFeed.SetStageHeight(height);
+        breathFeed.SetLook(dupLook);
+        breathFeed.SetState([], 0, false, new HashSet<int> { 60 });
+        breathFeed.LiveNote(60, true, .9f);
+        var breathInput = new GpuFrameInput(); breathFeed.Capture(breathInput, GpuStageFeed.Now);
+        var breathSim = new GpuStageSimulation(20261012);
+        for (var warm = 0; warm < 96; warm++) breathSim.Step(1 / 60.0, breathInput, breathFeed, width); // 1.6 s held
+        float breathLow = 2, breathHigh = -1;
+        // 16 samples at 0.117 s strides sweep longer than the 1.85 s breath period, so the sway's extremes are caught whatever the phase
+        for (var sample = 0; sample < 16; sample++)
+        {
+            var alpha = breathSim.KeyColors[60].W;
+            breathLow = Math.Min(breathLow, alpha);
+            breathHigh = Math.Max(breathHigh, alpha);
+            for (var skip = 0; skip < 7; skip++) breathSim.Step(1 / 60.0, breathInput, breathFeed, width);
+        }
+        Assert(breathHigh - breathLow > .05f && breathLow > .85f,
+            $"A held key's light must sway a gentle few percent once the breath ramps in — sampled {breathLow:0.###} .. {breathHigh:0.###} (a tap before 0.35 s stays a steady glow, locked by the xUnit curve).");
         VerifyGpuNoteMaterials(width, height);
         VerifyGpuNotePassQueries(width, height);
         var motionFeed = new GpuStageFeed(); motionFeed.SetStageHeight(height);
