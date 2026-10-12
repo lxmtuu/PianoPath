@@ -2226,7 +2226,7 @@ internal static partial class VerificationSuite
             true, 1280, 720, 0, [Row("tilt45"), Row("overhead90")]));
         Assert(ArCalibrationArchive.TryRead(json, out var bundle, out var refused) && bundle!.Rows.Count == 2 && bundle.SkippedRows == 0,
             "A backup of two calibrations reads back with both rows and nothing skipped.");
-        var overhead = bundle.Rows.Single(row => row.Profile == "overhead90");
+        var overhead = bundle!.Rows.Single(row => row.Profile == "overhead90");
         Assert(Math.Abs(overhead.CameraFovDegrees - 71.5) < 1e-6 && Math.Abs(overhead.UniformScale - 1.04) < 1e-9 && overhead.Corners.SequenceEqual(ArCalibrationArchive.Flat(cornerSet)),
             "FOV, pose, scale and corners survive the trip exactly.");
         Assert(!ArCalibrationArchive.TryRead("{\"preset\": 1}", out _, out var wrongKind) && wrongKind.Length > 0,

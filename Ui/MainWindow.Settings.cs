@@ -603,7 +603,6 @@ public partial class MainWindow
             ArViewProfileChoices());
         ButtonRow(alignment, ("CALIBRATE", CalibrateAr_Click, null), ("RESET CALIBRATION", ResetArCalibration_Click, null));
         ButtonRow(alignment, ("EXPORT CALIBRATION", ExportArCalibrationBackup_Click, null), ("IMPORT CALIBRATION", ImportArCalibrationBackup_Click, null));
-        ButtonRow(alignment, ("EXPORT CALIBRATION", ExportArCalibrationBackup, null), ("IMPORT CALIBRATION", ImportArCalibrationBackup, null));
         Note(alignment, "In Calibrate, drag the Move / Rotate / Scale gizmo or use the numeric controls to translate, rotate and uniformly scale the keyboard. Note travel has its own separate controls.");
         Toggle(alignment, "Alignment check", nameof(PianoVisualSettings.ArAlignmentCheck), "Redraws the saved key area as a frame with octave lines right over the live camera picture, on any quality level. When the lines no longer sit on the real keys — after a bumped tripod or a moved keyboard — calibrate again. Works only while a calibration exists; the check draws nothing before that.");
         Choice(alignment, "Guide colour", nameof(PianoVisualSettings.ArAlignmentGuideColor), "High-contrast colour of the alignment frame and octave lines; White reads on most cameras. The pick belongs to this machine, like the check itself.",

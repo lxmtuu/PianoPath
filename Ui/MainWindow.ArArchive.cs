@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text.Json;
 using System.Windows;
+using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
@@ -20,7 +21,7 @@ public partial class MainWindow
     {
         var rows = ArCalibration.Store.ExportRows(_arSource)
             .Where(row => _arWidth <= 0 || (row.ImageWidth == _arWidth && row.ImageHeight == _arHeight))
-            .Where(row => _visualSettings.KeyboardLayoutChoice <= 0 || row.KeyCount == _visualSettings.KeyboardLayoutChoice)
+            .Where(row => row.KeyCount == _visualSettings.KeyboardLayoutChoice.KeyCount)
             .ToArray();
         if (rows.Count == 0)
         { ShowMessage(Loc.T("Nothing is saved for this camera yet — mark the keys with Calibrate first."), "AR calibration backup", MessageBoxImage.Information); return; }
