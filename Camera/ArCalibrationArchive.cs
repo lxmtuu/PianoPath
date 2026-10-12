@@ -36,6 +36,7 @@ internal static class ArCalibrationArchive
     internal const int FormatVersion = 1;
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
+    private static readonly JsonSerializerOptions ReadOptions = new() { PropertyNameCaseInsensitive = true };
 
     private sealed class Envelope
     {
@@ -115,7 +116,7 @@ internal static class ArCalibrationArchive
     {
         bundle = null; error = "";
         Envelope? envelope;
-        try { envelope = JsonSerializer.Deserialize<Envelope>(json); }
+        try { envelope = JsonSerializer.Deserialize<Envelope>(json, ReadOptions); }
         catch (JsonException) { error = "The file is not readable JSON."; return false; }
         if (envelope is null || !string.Equals(envelope.Format, FormatId, StringComparison.Ordinal))
         { error = "That file is not a Keyflow calibration backup."; return false; }

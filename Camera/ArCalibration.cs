@@ -629,7 +629,10 @@ internal sealed class ArCalibrationStore
         var transform = new ArPoseTransform(positionX, positionY, positionZ, pitchDegrees, yawDegrees, rollDegrees, uniformScale);
         var baselineValid = poseBaseCorners is { Count: 4 }
             && CalibrationQuad.CheckAnyWinding(poseBaseCorners, imageWidth, imageHeight) == CalibrationProblem.None;
-        if (!transform.IsValid || !baselineValid) { transform = ArPoseTransform.Identity; baselineValid = false; }
+        // A bad pose means junk, junk is thrown away; a missing or bad BASELINE only means "this calibration did
+        // not come from the QUALIFY dial" — the pose keeps its translation and scale and the corners replace the
+        // baseline, so moving a calibration between cameras does not flatten what the user dialled in.
+        if (!transform.IsValid) transform = ArPoseTransform.Identity;
         var baseline = baselineValid && poseBaseCorners is not null ? poseBaseCorners : corners;
         lock (_gate)
         {
