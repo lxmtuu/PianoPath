@@ -25,7 +25,7 @@ internal static class ArVideoMixdown
 
     /// <summary>Samples covered by ticks 0..<paramref name="tick"/> inclusive; the take is this long after that tick.</summary>
     internal static long FramesThrough(int tick, int frameRate) =>
-        Math.Round((tick + 1) * (SampleRate / (double)frameRate), MidpointRounding.AwayFromZero);
+        (long)Math.Round((tick + 1) * (SampleRate / (double)frameRate), MidpointRounding.AwayFromZero);
 
     /// <summary>Renders the whole voice take; returns the sample frames written (== the take's seconds, in samples).</summary>
     internal static long MixTake(ArVideoAudio audio, ArVideoRenderProfile profile)

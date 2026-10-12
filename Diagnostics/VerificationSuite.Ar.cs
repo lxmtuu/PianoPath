@@ -2467,13 +2467,21 @@ internal static partial class VerificationSuite
             var x1 = (int)Math.Ceiling((strip.CenterX + halfWidth) * outScale) + 1;
             var y0 = (int)Math.Floor((strip.CenterY - strip.HalfHeight) * outScale) - 1;
             var y1 = (int)Math.Ceiling((strip.CenterY + strip.HalfHeight) * outScale) + 1;
-            var lit = 0; var outside = 0;
-            for (var i = 0; i < firstBuffers[2].Length; i += 4)
+            var quietFrame = firstBuffers[2]; var markedFrame = markedBuffers[2];
+            static int DifferentPixels(byte[] left, byte[] right, int width, int x0, int x1, int y0, int y1, bool countInside)
             {
-                if (firstBuffers[2][i] == markedBuffers[2][i]) continue;
-                var px = i / 4; var x = px % pngPlan.Width; var y = px / pngPlan.Width;
-                if (x < x0 || x > x1 || y < y0 || y > y1) outside++; else lit++;
+                var changed = 0;
+                for (var y = 0; y < right.Length / 4 / width; y++)
+                    for (var x = 0; x < width; x++)
+                    {
+                        var i = (y * width + x) * 4;
+                        if (left[i] == right[i] && left[i + 1] == right[i + 1] && left[i + 2] == right[i + 2] && left[i + 3] == right[i + 3]) continue;
+                        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) { if (countInside) changed++; } else if (!countInside) changed++;
+                    }
+                return changed;
             }
+            var lit = DifferentPixels(quietFrame, markedFrame, pngPlan.Width, x0, x1, y0, y1, countInside: true);
+            var outside = DifferentPixels(quietFrame, markedFrame, pngPlan.Width, x0, x1, y0, y1, countInside: false);
             Assert(lit >= 16 && outside == 0,
                 $"The GPU watermark lights exactly its own strip and nothing else (lit {lit}, outside {outside}, rect x {x0}..{x1}, y {y0}..{y1}).");
             // And the toggle really is the switch: a take identical in every other way never changes outside the strip.
