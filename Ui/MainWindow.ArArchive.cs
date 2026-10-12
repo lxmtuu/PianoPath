@@ -1,104 +1,109 @@
+using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using System.Windows;
+using System.Windows.Media.Imaging;
 using Microsoft.Win32;
 
 namespace PianoPath;
 
 /// <summary>
-/// The KEYBOARD ALIGNMENT card's EXPORT CALIBRATION / IMPORT CALIBRATION buttons (§14.7 "Thêm 3"). A backup is one
-/// JSON file holding every saved calibration of the camera in use — every view, picture size and keyboard size —
-/// plus a snapshot picture of that camera saved beside the file, so a person browsing old backups can see which
-/// camera the file belongs to (the picture is for people only; restoring never looks at it). Restoring runs every
-/// row through the same checks a fresh calibration passes; rows that fail are counted and skipped, never trusted.
-/// No setting is touched, so presets and share codes are unaffected, like the calibrations themselves.
+/// The "Thêm 3" buttons of the KEYBOARD ALIGNMENT card (roadmap §14.7): EXPORT CALIBRATION writes every calibration
+/// saved for the camera in use (all views, picture sizes and keyboard sizes) to one JSON document, with a snapshot of
+/// the camera's current frame beside it for the archive a person keeps (restoring never needs the picture); IMPORT
+/// CALIBRATION reads such a file back under its own camera link — every row passes the same checks a fresh calibration
+/// passes, so what the restore puts down is exactly what the app would have accepted from clicking the corners today.
 /// </summary>
 public partial class MainWindow
 {
-    /// <summary>Saves every calibration of the camera in use to one file, with a picture of the camera beside it.</summary>
-    private void ExportArCalibrationBackup(object sender, RoutedEventArgs e)
+    private void ExportArCalibrationBackup_Click(object sender, RoutedEventArgs e)
     {
-        if (_arSource.Length == 0) { ShowMessage(Loc.T("Open the camera or a video on the Camera page first — the backup belongs to the camera in use."), "AR calibration backup", MessageBoxImage.Information); return; }
-        var rows = ArCalibration.Store.ExportRows(_arSource);
-        if (rows.Count == 0) { ShowMessage(Loc.T("Nothing is saved for this camera yet — mark the keys with Calibrate first."), "AR calibration backup", MessageBoxImage.Information); return; }
-        var name = ArBackupCameraName();
+        var rows = ArCalibration.Store.ExportRows(_arSource)
+            .Where(row => _arWidth <= 0 || (row.ImageWidth == _arWidth && row.ImageHeight == _arHeight))
+            .Where(row => _visualSettings.KeyboardLayoutChoice <= 0 || row.KeyCount == _visualSettings.KeyboardLayoutChoice)
+            .ToArray();
+        if (rows.Count == 0)
+        { ShowMessage(Loc.T("Nothing is saved for this camera yet — mark the keys with Calibrate first."), "AR calibration backup", MessageBoxImage.Information); return; }
+        var cameraName = ArBackupCameraName();
         var dlg = new SaveFileDialog
         {
             Title = Loc.T("Export the AR calibration backup"),
             Filter = Loc.T("Keyflow calibration backup (*.json)|*.json"),
-            FileName = "keyflow-ar-calibration-" + DateTime.Now.ToString("yyyyMMdd-HHmm") + ".json",
+            FileName = "keyflow-calibration-" + MakeSlug(cameraName) + ".json",
             DefaultExt = ".json",
             AddExtension = true,
         };
         if (dlg.ShowDialog(this) != true) return;
         try
         {
-            // The newest live frame turned the way the calibrator marks corners on: the camera's own picture, mirrored
-            // back when the camera thread mirrored it for display.
-            var picture = CalibrationPicture.Capture(_cameraFrames, _visualSettings.CameraMirror && !_arRawFrames);
-            File.WriteAllText(dlg.FileName,
-                ArCalibrationArchive.ToJson(new ArCalibrationArchiveBundle(_arSource, name, AppInfo.Version, DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm\" UTC\""),
-                    picture is not null, picture?.Width ?? 0, picture?.Height ?? 0, 0, rows)));
-            if (picture is not null)
-                WriteArBackupPng(Path.ChangeExtension(dlg.FileName, ".png"), picture.Bgra, picture.Width, picture.Height);
-            ShowMessage(Loc.F(picture is not null
-                    ? "Exported {0} saved calibrations for {1}; a snapshot picture sits beside the file."
-                    : "Exported {0} saved calibrations for {1} (no camera picture to archive).", rows.Count, name),
-                "AR calibration backup", MessageBoxImage.Information);
+            var pict = CalibrationPicture.Capture(_cameraFrames, _visualSettings.CameraMirror && !_arRawFrames);
+            File.WriteAllText(dlg.FileName, ArCalibrationArchive.ToJson(new ArCalibrationArchiveBundle(
+                _arSource, cameraName, AppInfo.Version, DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
+                pict is not null, _arWidth, _arHeight, 0, rows)));
+            if (pict is not null) WriteBackupPicture(Path.ChangeExtension(dlg.FileName, ".png"), pict);
+            ShowMessage(Loc.F(pict is not null
+                    ? "Exported {0} saved calibrations for {1}. A snapshot picture sits beside the file."
+                    : "Exported {0} saved calibrations for {1} (no camera picture was ready to archive).",
+                rows.Count, cameraName), "AR calibration backup", MessageBoxImage.Information);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or System.Runtime.InteropServices.ExternalException)
-        {
-            ShowMessage(Loc.F("That file could not be used: {0}", ex.Message), "AR calibration backup", MessageBoxImage.Exclamation);
-        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        { ShowMessage(Loc.F("That file could not be used: {0}", ex.Message), "AR calibration backup", MessageBoxImage.Warning); }
     }
 
-    /// <summary>Puts a backup's calibrations back, every row checked the way a fresh calibration is checked.</summary>
-    private void ImportArCalibrationBackup(object sender, RoutedEventArgs e)
+    private void ImportArCalibrationBackup_Click(object sender, RoutedEventArgs e)
     {
         var dlg = new OpenFileDialog
         {
             Title = Loc.T("Restore an AR calibration backup"),
             Filter = Loc.T("Keyflow calibration backup (*.json)|*.json"),
+            DefaultExt = ".json",
             CheckFileExists = true,
         };
         if (dlg.ShowDialog(this) != true) return;
         try
         {
-            if (!ArCalibrationArchive.TryRead(File.ReadAllText(dlg.FileName), out var bundle, out var error) || bundle is null)
-            {
-                ShowMessage(Loc.F("That file could not be used: {0}", error), "AR calibration backup", MessageBoxImage.Exclamation);
-                return;
-            }
-            var (restored, skipped) = ArCalibration.Store.ImportRows(
-                bundle.CameraLink.Length > 0 ? bundle.CameraLink : _arSource, bundle.Rows);
-            skipped += bundle.SkippedRows;
-            // The same refresh the end of a calibration does: the overlay re-reads the store and draws the restored grid.
-            if (_arSource.Length > 0)
+            if (!ArCalibrationArchive.TryRead(File.ReadAllText(dlg.FileName), out var bundle, out var error))
+            { ShowMessage(Loc.F("That file could not be used: {0}", error), "AR calibration backup", MessageBoxImage.Warning); return; }
+            var link = bundle!.CameraLink.Length > 0 ? bundle.CameraLink : _arSource;
+            if (link.Length == 0)
+            { ShowMessage(Loc.T("Open the camera or a video on the Camera page first — the backup belongs to the camera in use."), "AR calibration backup", MessageBoxImage.Information); return; }
+            var (restored, skipped) = ArCalibration.Store.ImportRows(link, bundle.Rows);
+            if (_arSource.Length > 0)      // reload whatever is open: restored corners for THIS camera appear at once
                 ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice, _visualSettings.ArViewProfileId);
-            ShowMessage(Loc.F("Restored {0} calibrations ({1} rows skipped: they failed the same checks a fresh calibration passes).",
-                    restored, skipped), "AR calibration backup", MessageBoxImage.Information);
+            UpdateArFeed();
+            ShowMessage(Loc.F("Restored {0} calibrations for camera {1} ({2} rows skipped: they failed the same checks a fresh calibration passes).",
+                restored, bundle.CameraName.Length > 0 ? bundle.CameraName : link, skipped), "AR calibration backup", MessageBoxImage.Information);
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-        {
-            ShowMessage(Loc.F("That file could not be used: {0}", ex.Message), "AR calibration backup", MessageBoxImage.Exclamation);
-        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or JsonException)
+        { ShowMessage(Loc.F("That file could not be used: {0}", ex.Message), "AR calibration backup", MessageBoxImage.Warning); }
     }
 
-    /// <summary>A name a person recognises for the camera in use: the list name, or the video's file name.</summary>
+    /// <summary>The human name of the camera in use, as the settings picker shows it (the link itself when the picker has none).</summary>
     private string ArBackupCameraName()
     {
-        var fromList = _cameraDevices.FirstOrDefault(device => string.Equals(device.Link, _arSource, StringComparison.OrdinalIgnoreCase))?.Name;
-        if (!string.IsNullOrWhiteSpace(fromList)) return fromList;
-        if (!string.IsNullOrWhiteSpace(_visualSettings.CameraVideoPath)) return Path.GetFileName(_visualSettings.CameraVideoPath);
-        return _arSource.Length > 0 ? _arSource : Loc.T("this camera");
+        if (_visualChoiceOptions.TryGetValue(nameof(PianoVisualSettings.CameraSourceLink), out var options))
+            foreach (var (value, caption) in options)
+                if (string.Equals(value, _arSource, StringComparison.OrdinalIgnoreCase)) return caption;
+        return _arSource;
     }
 
-    /// <summary>Writes the snapshot as a PNG so it sits next to the JSON in the same folder for people to see.</summary>
-    private static void WriteArBackupPng(string path, byte[] bgra, int width, int height)
+    /// <summary>Letters, digits and dashes of a name, for the backup file's default name.</summary>
+    private static string MakeSlug(string name)
     {
-        var source = System.Windows.Media.Imaging.BitmapSource.Create(
-            width, height, 96, 96, System.Windows.Media.PixelFormats.Bgra32, null, bgra, width * 4);
-        var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
-        encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(source));
+        var chars = name.ToLowerInvariant().Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray();
+        var slug = new string(chars);
+        while (slug.Contains("--")) slug = slug.Replace("--", "-");
+        slug = slug.Trim('-');
+        return slug.Length == 0 ? "camera" : slug.Length > 40 ? slug[..40].TrimEnd('-') : slug;
+    }
+
+    /// <summary>The snapshot archived next to the JSON: the raw camera frame as a PNG a person can open.</summary>
+    private static void WriteBackupPicture(string path, CalibrationPicture picture)
+    {
+        var source = BitmapSource.Create(picture.Width, picture.Height, 96, 96, PixelFormats.Bgra32, null, picture.Bgra, picture.Width * 4);
+        source.Freeze();
+        var encoder = new PngBitmapEncoder();
+        encoder.Frames.Add(BitmapFrame.Create(source));
         using var stream = File.Create(path);
         encoder.Save(stream);
     }
