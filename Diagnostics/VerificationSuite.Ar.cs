@@ -2302,4 +2302,123 @@ internal static partial class VerificationSuite
         finally { try { Directory.Delete(directory, true); } catch { } }
         Results.Add($"PASS AR calibration backup: 2 rows round-tripped every field (FOV 71.5°, scale 1.04, corners exact) through {ArCalibrationArchive.FormatId} v{ArCalibrationArchive.FormatVersion}, a wrong file was refused in words, 1 unusable row skipped instead of drawn, and the store exported 1 camera and restored 1/1 rows.");
     }
+
+    /// <summary>
+    /// AR render-to-video (roadmap §14.10 AR‑S7, frame half): the profile plans the geometry and rate, the
+    /// offline sweep draws the scripted ticks at a fixed time step over the camera picture and writes them
+    /// as a real AVI and as a PNG frame folder, and a live-shaped render of the same script gives the same
+    /// pixels. Audio and the watermark sit in the S7 voice half and are not claimed here.
+    /// </summary>
+    private static void VerifyArRenderToVideo()
+    {
+        const int cw = 640, ch = 360;
+        var quiet = new PianoVisualSettings
+        {
+            BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = false,
+            ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowLightBeams = false, ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+        };
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(40, 170), (606, 156), (620, 248), (30, 262)], cw, ch, out var problem);
+        Assert(calibration is not null, $"The take script's corners must calibrate ({problem}).");
+        var ring = new CameraFrameRing();
+        void PublishTickCamera(int tick)
+        {
+            // The camera itself steps too: a bright left stripe plus a grey that brightens with every tick.
+            var grey = 90 + tick * 8;
+            var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
+            for (var pixel = 0; pixel < cw * ch; pixel++)
+            {
+                var level = pixel % cw < cw / 12 ? grey + 60 : grey;
+                var i = pixel * 4;
+                buffer[i] = (byte)level; buffer[i + 1] = (byte)level; buffer[i + 2] = (byte)level; buffer[i + 3] = 255;
+            }
+            ring.Publish(slot, cw, ch, Stopwatch.GetTimestamp());
+        }
+
+        // The script: quiet before and after; keys held through ticks 1–3; an impact flash on tick 2.
+        GpuStageFeed TickFeed(int tick)
+        {
+            PublishTickCamera(tick);
+            var held = tick is >= 1 and <= 3 ? new HashSet<int> { 60, 64 } : new HashSet<int>();
+            var feed = new GpuStageFeed(); feed.SetStageHeight(360);
+            feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+            feed.ClearTransient();
+            feed.SetDeterministicState([], 0, false, held);
+            feed.SetDeterministicBeatPulse(0);
+            if (tick == 2) { feed.LiveNote(60, true, .8f); feed.Impact(60, .8); }
+            if (tick == 3) feed.LiveNote(64, true, .7f);
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
+            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .8f);
+            return feed;
+        }
+
+        using var renderer = GpuStageRenderer.Create(forceWarp: true);
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-arvideo-" + Guid.NewGuid().ToString("N"));
+        var view = new ArView(cw, ch, 200, 112, PictureFit.Fit, false);
+        (int X, int Y) At(int pitch, double v) { var p = calibration!.ToPicture(calibration.Layout.CenterX(pitch), v); var o = view.ToOutput(p.X, p.Y); return ((int)Math.Floor(o.X), (int)Math.Floor(o.Y)); }
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            // AVI: the sweep writes every planned frame at the planned geometry, and the file reads back as video.
+            var aviPlan = ArVideoRenderProfile.Plan(cw, ch, lengthSeconds: 0.5, frameRate: 12, downsample: 1, maxSide: 200);
+            Assert(aviPlan.RenderWidth == 200 && aviPlan.RenderHeight == 112 && aviPlan.Width == 200 && aviPlan.Frames == 6,
+                "The take planner should cap the long side to 200 px and count half a second at 12 fps as six frames.");
+            var aviPath = Path.Combine(directory, "take.avi");
+            ArVideoTake aviTake;
+            using (var recorder = new AviVideoRecorder(aviPath, aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
+                aviTake = ArRenderToVideo.Run(renderer, TickFeed, aviPlan, recorder);
+            Assert(aviTake.FramesWritten == 6 && aviTake.Seconds is > 0.45 and <= 0.6 && File.Exists(aviPath) && new FileInfo(aviPath).Length > 2000,
+                $"The engine should write every planned frame into the AVI (frames {aviTake.FramesWritten}, seconds {aviTake.Seconds:0.##}).");
+            var reader = CameraFrameReader.OpenFile(aviPath, out var readError);
+            Assert(reader is not null, $"The take must read back as a video ({readError}); the media stack of the CI box decodes the app's own AVI as part of the recording checks.");
+            var lumaLeftStripe0 = 0; var keyLevels = new List<int>();
+            using (reader)
+            {
+                Assert(reader!.Width == 200 && reader.Height == 112, $"The AVI must come back at the plan's size (got {reader.Width}×{reader.Height}).");
+                var frame = new byte[200 * 112 * 4];
+                var frameIndex = 0;
+                while (reader.TryReadFrame(frame, mirror: false, out var gotWidth, out var gotHeight))
+                {
+                    Assert(gotWidth == 200 && gotHeight == 112 && frame[3] == 255, "Every take frame is opaque and at the plan's size.");
+                    if (frameIndex == 0) lumaLeftStripe0 = frame[0];
+                    var key = At(60, .85);
+                    keyLevels.Add(frame[(key.Y * 200 + key.X) * 4]);
+                    frameIndex++;
+                }
+                Assert(frameIndex == 6, $"All six ticks must be in the file (read {frameIndex}).");
+            }
+            Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
+            Assert(keyLevels.Count == 6, $"The take must carry six probe readings (got {keyLevels.Count}).");
+            Assert(keyLevels[1] + 16 <= keyLevels[2] && keyLevels[0] + 16 <= keyLevels[2],
+                $"The pressed-key ticks must outshine the quiet ones at the C4 light (quiet {keyLevels[0]}/{keyLevels[1]}, pressed {keyLevels[2]}).");
+
+            // PNG: downsample 2 boxes the 320×180 sweep into 160×90 frames — and the sweep itself replays bit-identically.
+            var pngPlan = ArVideoRenderProfile.Plan(cw, ch, 0.5, 12, downsample: 2, maxSide: 320);
+            Assert(pngPlan.RenderWidth == 320 && pngPlan.RenderHeight == 180 && pngPlan.Width == 160 && pngPlan.Height == 90,
+                "Downsample 2 should box a 320×180 render into a 160×90 output frame.");
+            var firstBuffers = new List<byte[]>();
+            var pngDir = Path.Combine(directory, "frames");
+            using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+            {
+                var pngTake = ArRenderToVideo.Run(renderer, TickFeed, pngPlan, recorder, (i, bgra) => firstBuffers.Add(bgra));
+                Assert(pngTake.FramesWritten == 6 && pngTake.Downsample == 2, "The PNG take writes the full sweep.");
+            }
+            Assert(Directory.GetFiles(pngDir, "frame-*.png").Length == 6 && File.Exists(Path.Combine(pngDir, PngSequenceRecorder.ManifestName))
+                    && firstBuffers.All(b => b.Length == 160 * 4 * 90),
+                "The take writes one PNG per tick plus the manifest, from 160×90 BGRA readbacks.");
+            // So khung live ↔ render: tick 2 by hand, the exact call the engine made, is the same picture bit for bit.
+            var liveTick = GpuRenderLoop.RenderFrames(renderer, TickFeed(2), 320, 180, 0, pngPlan.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
+            Assert(BgraPack.Box2(liveTick, 320, 180).AsSpan().SequenceEqual(firstBuffers[2]),
+                "A live-shaped render of the same tick, same fixed time step and same seed must land on the take's third frame bit for bit.");
+            // And the whole take seconds as an export: a second sweep of the same script writes the same readbacks.
+            var secondBuffers = new List<byte[]>();
+            using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+                ArRenderToVideo.Run(renderer, TickFeed, pngPlan, recorder, (i, bgra) => secondBuffers.Add(bgra));
+            Assert(secondBuffers.Count == firstBuffers.Count && firstBuffers.Zip(secondBuffers).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second)),
+                "Two offline sweeps of one script must be byte-identical — render-to-video owns no clock of its own.");
+            Results.Add("PASS AR render-to-video (frame half): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, and two sweeps of one script are byte-identical.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+    }
 }

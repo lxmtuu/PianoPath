@@ -39,6 +39,9 @@
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
     <Compile Include="..\..\Stage\GraphVariable.cs" Link="Product\Stage\GraphVariable.cs" />
     <Compile Include="..\..\Stage\ShareCodeEnvelope.cs" Link="Product\Stage\ShareCodeEnvelope.cs" />
+    <Compile Include="..\..\Video\IFrameRecorder.cs" Link="Product\Video\IFrameRecorder.cs" />
+    <Compile Include="..\..\Video\ArVideoRenderProfile.cs" Link="Product\Video\ArVideoRenderProfile.cs" />
+    <Compile Include="..\..\Video\BgraPack.cs" Link="Product\Video\BgraPack.cs" />
     <Compile Include="..\..\Camera\ArElementCatalog.cs" Link="Product\Camera\ArElementCatalog.cs" />
     <Compile Include="..\..\Camera\ArLiveFade.cs" Link="Product\Camera\ArLiveFade.cs" />
     <Compile Include="..\..\Camera\ArDampers.cs" Link="Product\Camera\ArDampers.cs" />
