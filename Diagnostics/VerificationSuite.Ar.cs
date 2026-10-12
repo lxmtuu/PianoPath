@@ -1894,7 +1894,10 @@ internal static partial class VerificationSuite
                 && cutKeyQuads > 0 && cutStrip == 1,
             $"A deeply over-budget AR frame must cut particles, pulses, note lights, beams and the impact glow while keys and the damper strip stay (keys {cutKeyQuads}, strip {cutStrip}, beams {renderer.ArBeamCount}, pulses {renderer.ArPulseCount}, impacts {renderer.ArImpactLightCount}, particles {renderer.ArParticleFxCount}, note lights {renderer.ArNoteLightCount}).");
         renderer.ArBudgetTierOverride = null;
-        RenderFrames(budgetCutFeed, 4);
+        // A rebuilt feed: the same look and calibration, budget healthy — a fresh strike triggers the whole
+        // Ultra set again, because nothing in the look itself was touched by the cut.
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 }), 4);
         Assert(renderer.ArImpactLightCount > 0 && renderer.ArPulseCount > 0 && renderer.ArBeamCount > 0,
             "The cut is strictly transient: with the budget healthy again the lights come back without touching any setting.");
 
