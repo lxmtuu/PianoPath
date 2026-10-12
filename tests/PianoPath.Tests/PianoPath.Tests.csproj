@@ -89,6 +89,7 @@
     <Compile Include="..\..\Camera\CalibrationWizard.cs" Link="Product\Camera\CalibrationWizard.cs" />
     <Compile Include="..\..\Camera\CalibrationPicture.cs" Link="Product\Camera\CalibrationPicture.cs" />
     <Compile Include="..\..\Camera\ArCalibrationArchive.cs" Link="Product\Camera\ArCalibrationArchive.cs" />
+    <Compile Include="..\..\Camera\ArViewPresets.cs" Link="Product\Camera\ArViewPresets.cs" />
     <Compile Include="..\..\Camera\CalibrationAdvice.cs" Link="Product\Camera\CalibrationAdvice.cs" />
     <Compile Include="..\..\Camera\CalibrationHints.cs" Link="Product\Camera\CalibrationHints.cs" />
     <Compile Include="..\..\Camera\ArCalibrationSession.cs" Link="Product\Camera\ArCalibrationSession.cs" />

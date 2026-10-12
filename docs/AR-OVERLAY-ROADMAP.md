@@ -542,7 +542,7 @@ làm artifact.
   pixel), tay da chiếm quá 3 % là dòng note nhắc khẽ — khắp ảnh trước khi đủ 4 góc, chỉ trong quad sau khi đủ
   (point-in-quad trên cùng bước mẫu; cánh tay ngoài vùng không tính). Là lời khuyên, không phải cửa chặn; gỗ sồi
   nắng có thể mượn màu da. xUnit `CalibrationAdviceTests` + `--verify` (`VerifyCalibrationAdvice`).
-- **Thêm 5 — preset AR theo khung nhìn**: độ cao/phần tử khác nhau cho 45° và 90° (đi cùng `ArViewProfileId`).
+- **Thêm 5 — preset AR theo khung nhìn**: ✅ 2026‑10‑13. `Camera/ArViewPresets.cs` (thuần) tay bảng theo id khung nhìn: camera nghiêng (45°/legacy/tự do) giữ độ cao catalogue (impact 0,2 cm, pulse 0,3 cm) và đủ hiệu ứng; `overhead90` thu lift còn 0,05 cm / 0,1 cm và giấu hold arc + light beam (quad đứng ép thành sợi nhiễu khi nhìn thẳng xuống). `GpuArInput` nhận `ViewProfileId` (mặc định Legacy → nghiêng, mọi call-site cũ giữ nguyên pixel), layer dùng preset cho impact/rings/beams/arcs; MainWindow feed id thật. Không thêm key `PianoVisualSettings` nào (id vốn machine-local). xUnit `ArViewPresetTests` (bảng số, chuẩn hóa id, units/Lifted) + `--verify` (overhead: beams/arcs=0; lights/pulses/particles >0 trên WARP).
 
 ### 14.8 Ngân sách hiệu năng: AR‑Lite / AR‑Standard / AR‑Ultra
 

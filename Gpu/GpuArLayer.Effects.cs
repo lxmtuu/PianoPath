@@ -233,20 +233,24 @@ internal sealed partial class GpuArLayer
     private void BuildStageEffects(GpuArInput ar, ArView view, GpuStageSimulation simulation, IReadOnlyList<Vector4> keyColors,
         GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
     {
+        // The view-tuned table (roadmap §14.7 "Thêm 5"): same stage, same look, but the lift of the flat-born
+        // effects comes from the camera's angle, and the stand-up quads stay home on the straight-down view.
+        var preset = ArViewPresets.ForProfile(ar.ViewProfileId);
         if (ArElementCatalog.CanDraw(ar.Quality, ArElement.ImpactLights))
-            BuildImpactLights(view, simulation, quads, opacity, layout, pose);
+            BuildImpactLights(view, simulation, quads, opacity, layout, pose, preset);
         if (ArElementCatalog.CanDraw(ar.Quality, ArElement.Pulses))
-            BuildStageRings(view, simulation, quads, opacity, look, layout, pose);
+            BuildStageRings(view, simulation, quads, opacity, look, layout, pose, preset);
         if (!ArElementCatalog.CanDraw(ar.Quality, ArElement.Particles)) return;
 
         BuildStageParticles(view, simulation, quads, opacity, look, layout, pose);
         BuildStageFlashes(view, simulation, quads, opacity, look, layout, pose);
+        if (!preset.TallEffectsVisible) return;
         BuildHoldArcs(view, simulation, quads, opacity, look, layout, pose);
         BuildLightBeams(view, keyColors, quads, opacity, look, layout, pose);
     }
 
     private void BuildImpactLights(ArView view, GpuStageSimulation simulation,
-        GpuInstanceList<GpuArQuad> quads, float opacity, KeyboardLayout layout, ArCameraPose pose)
+        GpuInstanceList<GpuArQuad> quads, float opacity, KeyboardLayout layout, ArCameraPose pose, ArViewPreset preset)
     {
         var ratio = pose.KeyboardWidthDepthRatio;
         foreach (var impact in simulation.ArImpacts)
@@ -258,9 +262,9 @@ internal sealed partial class GpuArLayer
             var halfKey = (right - left) * ratio * .5;
             // Retain the strike's own note/velocity colour; current modulation must not recolour a transient in flight.
             var linear = GpuStageSimulation.ToLinear(impact.Color);
-            // The catalogue's tiny heights (ArElementHeights): the flare hovers 0.2 cm over the struck key, so on a
-            // leaned camera it never z-hides behind the key fronts; overhead the lift stays sub-pixel by design.
-            var center = new ArVec3(layout.CenterX(impact.Pitch) * ratio, .12, -ArElementHeights.ImpactGlow);
+            // The view-tuned paper-thin lift (ArViewPresets): leaned cameras keep the catalogue's 0.2 cm so the
+            // flare never z-hides behind the key fronts; overhead it shrinks to a film the plane can be read through.
+            var center = new ArVec3(layout.CenterX(impact.Pitch) * ratio, .12, -preset.ImpactGlow);
             var fade = (float)Math.Pow(Math.Clamp(1 - impact.Age / .62, 0, 1), 1.25);
             var alpha = Math.Clamp(opacity * strength * fade * simulation.GlowBoost, 0, 1);
             if (alpha <= .004f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, center, Across, Depth,
@@ -271,7 +275,7 @@ internal sealed partial class GpuArLayer
     }
 
     private void BuildStageRings(ArView view, GpuStageSimulation simulation,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose, ArViewPreset preset)
     {
         for (var i = 0; i < simulation.ArRingCount; i++)
         {
@@ -292,9 +296,9 @@ internal sealed partial class GpuArLayer
             var baseAlpha = opacity * channelIntensity * strength;
             var pixelUnit = pose.KeyboardWidthDepthRatio / Math.Max(1, simulation.SimulationWidth);
             var center = StageSurfacePoint(simulation, layout, pose, ring.Pitch, ring.X, ring.Y);
-            // Catalogue floor (ArElementHeights): a ring never comes closer than 0.3 cm to the key plane, while
-            // rings the stage has already lifted keep their rise untouched.
-            center = ArElementHeights.Lifted(center, ArElementHeights.PulseMinimum);
+            // The view-tuned pulse floor (ArViewPresets): rings never come nearer the key plane than their view's
+            // minimum, while rings the stage has already lifted keep their rise untouched.
+            center = ArElementHeights.Lifted(center, preset.PulseMinimum);
             var rawSize = look.RingSizeRaw;
 
             switch (ring.Kind)

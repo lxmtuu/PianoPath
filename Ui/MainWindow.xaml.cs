@@ -1272,7 +1272,8 @@ public partial class MainWindow : Window
                 (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect,
                 ShowLiveTrails: options.LivePressTrails, NoteDirection: options.NoteDirection,
                 ShowRisingMidiNotes: options.ShowsRisingMidiNotes, AlignmentGuides: _visualSettings.ArAlignmentCheck,
-                ShowDamperStrip: _visualSettings.ArDamperStrip, AlignmentGuideColor: ArGuideColor());
+                ShowDamperStrip: _visualSettings.ArDamperStrip, AlignmentGuideColor: ArGuideColor(),
+                ViewProfileId: _visualSettings.ArViewProfileId);
         RefreshHandStatus();
         RefreshArStatus();
     }

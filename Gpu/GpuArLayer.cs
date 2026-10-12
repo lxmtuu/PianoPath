@@ -35,7 +35,8 @@ internal struct GpuArQuad
 /// <param name="AlignmentGuides">The alignment check: redraw the saved key area's frame and octave lines over the live picture, packed last, on any tier.</param>
 /// <param name="ShowDamperStrip">Draw the glowing damper strip hugging the keys' back edge (Standard tier up).</param>
 /// <param name="AlignmentGuideColor">Guide frame colour from the settings pick; the default keeps the built-in off-white.</param>
-internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false, bool ShowDamperStrip = true, Vector3 AlignmentGuideColor = default)
+/// <param name="ViewProfileId">The view the camera is at (roadmap §14.7 "Thêm 5"): the layer retunes the effect heights and hides the stand-up quads for the 90° overhead view; the default keeps the leaned look at every call site.</param>
+internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false, bool ShowDamperStrip = true, Vector3 AlignmentGuideColor = default, string? ViewProfileId = null)
 {
     /// <summary>Live press bars keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
     internal ArNoteStyle LivePressStyle => ArOptions.LivePressNoteStyle(Notes);

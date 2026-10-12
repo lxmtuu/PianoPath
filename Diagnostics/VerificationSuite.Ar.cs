@@ -1665,12 +1665,12 @@ internal static partial class VerificationSuite
         liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
         GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
             PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null,
-            bool sustain = false, bool alignment = false, bool showStrip = true, Vector3 guideColor = default)
+            bool sustain = false, bool alignment = false, bool showStrip = true, Vector3 guideColor = default, string? viewProfileId = null)
         {
             var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
             var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
                     ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars, AlignmentGuides: alignment,
-                    ShowDamperStrip: showStrip, AlignmentGuideColor: guideColor),
+                    ShowDamperStrip: showStrip, AlignmentGuideColor: guideColor, ViewProfileId: viewProfileId),
                 song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
             if (visualSettings is not null)
                 feed.SetLook(GpuLook.From(visualSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
@@ -1871,6 +1871,15 @@ internal static partial class VerificationSuite
         Assert(overheadBarCount > 0 && ColouredPixels(overheadBars) > 200 && overheadTintPixels > 20
                 && overheadDamperPixels > 20,
             $"The 90° overhead view must project live bars, the look's velocity tint and the pedal-lifted damper strip whole (bars {overheadBarCount}, tint {overheadTintPixels} pixels, damper lift {overheadDamperPixels} pixels).");
+
+        // View presets (roadmap §14.7 "Thêm 5"): the same overhead camera feeds the same ultra effect set, but the
+        // stand-up quads stay home while the flat-born lights keep drawing — the opposite of the leaned camera above.
+        var overheadUltraFx = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 }, selectedCalibration: overhead!, viewProfileId: ArCalibrationProfiles.Overhead90.Id);
+        RenderFrames(overheadUltraFx, 4);
+        Assert(renderer.ArBeamCount == 0 && renderer.ArHoldArcCount == 0
+                && renderer.ArImpactLightCount > 0 && renderer.ArPulseCount > 0 && renderer.ArParticleFxCount > 0,
+            $"A 90° overhead view must hide beams and hold arcs while keeping impact lights, pulses and particles (beams {renderer.ArBeamCount}, arcs {renderer.ArHoldArcCount}, lights {renderer.ArImpactLightCount}, pulses {renderer.ArPulseCount}, particles {renderer.ArParticleFxCount}).");
 
         // Alignment check (roadmap §14.7 "Thêm 1"): the saved key area redraws as a frame with octave lines, packed
         // after every effect so a bumped camera reads at a glance, on any tier, only while calibrated.
