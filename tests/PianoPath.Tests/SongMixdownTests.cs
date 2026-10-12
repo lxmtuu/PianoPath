@@ -18,7 +18,7 @@ public class SongMixdownTests
             var plan = ArVideoRenderProfile.Plan(640, 360, 0.5, 12, 1, 200);
             var synth = new TickingSynth();
             using (var wav = WavWriter.TryCreate(path)!)
-                Assert.Equal(22050, ArVideoMixdown.MixTake(new ArVideoAudio(synth, _ => []), plan));
+                Assert.Equal(22050, ArVideoMixdown.MixTake(new ArVideoAudio(synth, _ => [], wav!), plan));
             var bytes = File.ReadAllBytes(path);
             Assert.Equal(WavWriter.HeaderBytes + 22050 * 4, bytes.Length);
             Assert.Equal(BitConverter.ToInt32(bytes, 40), 22050 * 4);            // the close patched the data size
@@ -37,7 +37,7 @@ public class SongMixdownTests
             Assert.Equal(7, plan.Frames);
             var targetEnd = ArVideoMixdown.FramesThrough(6, 13);                  // cumulative rounding, never per-tick
             using (var wav = WavWriter.TryCreate(path)!)
-                Assert.Equal(targetEnd, ArVideoMixdown.MixTake(new ArVideoAudio(new TickingSynth(), _ => []), plan));
+                Assert.Equal(targetEnd, ArVideoMixdown.MixTake(new ArVideoAudio(new TickingSynth(), _ => [], wav!), plan));
         }
         finally { try { File.Delete(path); } catch { } }
     }
