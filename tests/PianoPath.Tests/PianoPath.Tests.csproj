@@ -44,6 +44,7 @@
     <Compile Include="..\..\Video\BgraPack.cs" Link="Product\Video\BgraPack.cs" />
     <Compile Include="..\..\Video\ArVideoAudio.cs" Link="Product\Video\ArVideoAudio.cs" />
     <Compile Include="..\..\Video\ArVideoWatermark.cs" Link="Product\Video\ArVideoWatermark.cs" />
+    <Compile Include="..\..\Video\ArVideoExportScript.cs" Link="Product\Video\ArVideoExportScript.cs" />
     <Compile Include="..\..\Camera\ArElementCatalog.cs" Link="Product\Camera\ArElementCatalog.cs" />
     <Compile Include="..\..\Camera\ArLiveFade.cs" Link="Product\Camera\ArLiveFade.cs" />
     <Compile Include="..\..\Camera\ArDampers.cs" Link="Product\Camera\ArDampers.cs" />
@@ -106,6 +107,7 @@
     <Compile Include="..\..\Camera\CameraListing.cs" Link="Product\Camera\CameraListing.cs" />
     <Compile Include="..\..\Camera\CameraNames.cs" Link="Product\Camera\CameraNames.cs" />
     <Compile Include="..\..\Camera\CameraFrameRing.cs" Link="Product\Camera\CameraFrameRing.cs" />
+    <Compile Include="..\..\Camera\CameraTestVideo.cs" Link="Product\Camera\CameraTestVideo.cs" />
     <Compile Include="..\..\Camera\FramePacer.cs" Link="Product\Camera\FramePacer.cs" />
     <Compile Include="..\..\Camera\CameraAgeMeter.cs" Link="Product\Camera\CameraAgeMeter.cs" />
     <Compile Include="..\..\Camera\ArKeyHistory.cs" Link="Product\Camera\ArKeyHistory.cs" />

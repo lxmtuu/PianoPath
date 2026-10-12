@@ -116,10 +116,16 @@ internal sealed partial class PianoStage
     private void PublishGpuLook()
     {
         if (_gpu is null) return;
+        _gpu.SetLook(SnapshotGpuLook());
+        _gpuLookElapsed = _elapsed;
+    }
+
+    /// <summary>The look the GPU would draw right now, frozen in one value — the offline AR export renders it.</summary>
+    internal GpuLook SnapshotGpuLook()
+    {
         var height = ActualHeight;
         var fraction = height >= 1 ? KeyboardHeight / height : .205 * _visual.KeyboardScale / 100;
-        _gpu.SetLook(GpuLook.From(_visual, (pitch, track) => AdjustColor(NoteColor(pitch, track)), Math.Clamp(fraction, .05, .6), AdjustColor, _arOverlay));
-        _gpuLookElapsed = _elapsed;
+        return GpuLook.From(_visual, (pitch, track) => AdjustColor(NoteColor(pitch, track)), Math.Clamp(fraction, .05, .6), AdjustColor, _arOverlay);
     }
 
     private static GpuBackgroundImage? s_gpuGlyphAtlas;

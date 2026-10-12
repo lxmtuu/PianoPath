@@ -2306,8 +2306,9 @@ internal static partial class VerificationSuite
     /// <summary>
     /// AR render-to-video (roadmap §14.10 AR‑S7): the profile plans the geometry and rate, the offline sweep
     /// draws the scripted ticks at a fixed time step over the camera picture and writes them as a real AVI
-    /// and as a PNG frame folder, the take's SFZ voice lands sample-exact, and with the look's watermark on
-    /// the GPU draws the «KEYFLOW» strip itself — sprite kind 16, exactly where the software stage prints it.
+    /// and as a PNG frame folder, the take's SFZ voice lands sample-exact, with the look's watermark on the
+    /// GPU draws the «KEYFLOW» strip itself, and a real camera video file feeds the engine one frame a tick —
+    /// the Recording card's export route end to end.
     /// </summary>
     private static void VerifyArRenderToVideo()
     {
@@ -2485,7 +2486,77 @@ internal static partial class VerificationSuite
             Assert(lit >= 16 && outside == 0,
                 $"The GPU watermark lights exactly its own strip and nothing else (lit {lit}, outside {outside}, rect x {x0}..{x1}, y {y0}..{y1}).");
             // And the toggle really is the switch: a take identical in every other way never changes outside the strip.
-            Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 22050 WAV frames — exactly the six ticks of the video — with the onset ramping gently and the held ticks loud, and the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it.");
+
+            // Export through a REAL camera video file — the fixture is pressed with the app's own MP4 writer
+            // and decoded with the app's own CameraFrameReader, the exact picks of the Recording card: the
+            // engine reads one video frame per tick off a ring, and the take must carry the file's stripe on
+            // the left and its grey brightening exactly tick by tick.
+            var cameraMp4 = Path.Combine(directory, "camera.mp4");
+            const int vw = 320, vh = 180;
+            using (var maker = new Mp4Recorder(cameraMp4, vw, vh, 24, withAudio: false))
+                for (var tick = 0; tick < 24; tick++) maker.WriteFrame(CameraTestVideo.Picture(vw, vh, tick));
+            Assert(File.Exists(cameraMp4), "The MP4 fixture itself must land where it was written.");
+            using var fileReader = CameraFrameReader.OpenFile(cameraMp4, out var fileError)
+                ?? throw new InvalidOperationException($"The fixture the app's own writer made must read back ({fileError}).");
+            Assert(fileReader.Width == vw && fileReader.Height == vh,
+                $"The fixture must come back at its own size ({fileReader.Width}×{fileReader.Height}).");
+            var fileRing = new CameraFrameRing();
+            var videoBuffer = new byte[vw * vh * 4];
+            void PublishFileFrameToRing()
+            {
+                if (!fileReader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH)
+                        || gotW != vw || gotH != vh)
+                {
+                    fileReader.Rewind();
+                    Assert(fileReader.TryReadFrame(videoBuffer, mirror: false, out gotW, out gotH) && gotW == vw && gotH == vh,
+                        "The looped fixture must start over cleanly when its end is reached.");
+                }
+                var buffer = fileRing.BeginWrite(videoBuffer.Length, out var slot);
+                videoBuffer.AsSpan().CopyTo(buffer);
+                fileRing.Publish(slot, vw, vh, Stopwatch.GetTimestamp());
+            }
+            var fileCalibration = ArCalibration.Create(KeyboardLayout.Standard88, [(20, 85), (303, 78), (310, 124), (15, 131)], vw, vh, out var fileProblem);
+            Assert(fileCalibration is not null, $"The fixture's corners must calibrate ({fileProblem}).");
+            GpuStageFeed FileFeed(int tick)
+            {
+                PublishFileFrameToRing();
+                var held = tick is >= 1 and <= 3 ? new HashSet<int> { 60, 64 } : new HashSet<int>();
+                var feed = new GpuStageFeed(); feed.SetStageHeight(360);
+                feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+                feed.ClearTransient();
+                feed.SetDeterministicState([], 0, false, held);
+                feed.SetDeterministicBeatPulse(0);
+                feed.Camera = new GpuCameraInput(fileRing, PictureFit.Fit, false, 1f);
+                feed.Ar = new GpuArInput(fileCalibration!, ArNoteStyle.Default, 1f, KeyLight: .8f);
+                return feed;
+            }
+            var exportAvi = Path.Combine(directory, "export.avi");
+            ArVideoTake exportTake;
+            using (var recorder = new AviVideoRecorder(exportAvi, aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
+                exportTake = ArRenderToVideo.Run(renderer, FileFeed, aviPlan, recorder);
+            Assert(exportTake.FramesWritten == 6 && File.Exists(exportAvi),
+                $"The camera-file take must write every planned frame ({exportTake.FramesWritten}).");
+            var exportReader = CameraFrameReader.OpenFile(exportAvi, out var exportError);
+            Assert(exportReader is not null, $"The camera-file take must read back as video ({exportError}).");
+            var stripeLevels = new List<int>();
+            using (exportReader)
+            {
+                var frame = new byte[aviPlan.Width * aviPlan.Height * 4];
+                while (exportReader!.TryReadFrame(frame, mirror: false, out var gotW, out var gotH))
+                {
+                    Assert(gotW == aviPlan.Width && gotH == aviPlan.Height, "The export AVI keeps the plan's size.");
+                    var luma = 0; var count = 0;
+                    for (var y = 8; y < gotH - 8; y += 6)
+                        for (var x = 2; x < aviPlan.Width / 12; x += 5) { luma += frame[(y * gotW + x) * 4]; count++; }
+                    stripeLevels.Add(luma / count);
+                }
+            }
+            Assert(stripeLevels.Count == 6, $"All six ticks of the camera-file take must read back ({stripeLevels.Count}).");
+            var brightened = 0;
+            for (var i = 1; i < stripeLevels.Count; i++) if (stripeLevels[i] > stripeLevels[i - 1]) brightened++;
+            Assert(brightened >= 4 && stripeLevels[5] > stripeLevels[0] + 16,
+                $"The file's greys must tick through the engine in order (levels {string.Join("/", stripeLevels)}).");
+            Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 6 frames, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 22050 WAV frames — exactly the six ticks of the video — with the onset ramping gently and the held ticks loud, the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it, and a real camera video file — an MP4 pressed by the app's own writer and decoded by its reader — ticks through the engine one frame a tick, its stripe brightening in order.");
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }

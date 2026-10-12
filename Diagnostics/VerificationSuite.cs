@@ -5066,9 +5066,14 @@ internal static partial class VerificationSuite
                 "A machine with no Salamander piano loaded should record video only instead of writing an empty WAV.");
             SetField(window, "_recordingPath", hadPath);
             Invoke(window, "UpdateRecordingInfo");
+
+            // The AR render-to-video card under OUTPUT: present, and honest about what it still waits for.
+            var arExport = (TextBlock)Field(window, "_arExportStatus");
+            Assert(arExport is not null && arExport.Text.Contains(Loc.T("no song open yet"), StringComparison.Ordinal),
+                $"With no song open the AR export card must say so among the things it waits for ({arExport?.Text}).");
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
-        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine without the Salamander piano.");
+        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine without the Salamander piano, and the AR render-to-video card reporting what it still needs.");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>

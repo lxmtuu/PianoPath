@@ -921,6 +921,8 @@ public partial class MainWindow
             "Record Salamander piano audio with the video. AVI and PNG sequence recordings get a stereo WAV; MP4 embeds AAC. Without the piano, recording is video-only.");
         Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
             "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+
+        BuildArExportCard();
     }
 
     /// <summary>
