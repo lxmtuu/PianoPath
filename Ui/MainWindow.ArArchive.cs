@@ -19,10 +19,10 @@ public partial class MainWindow
 {
     private void ExportArCalibrationBackup_Click(object sender, RoutedEventArgs e)
     {
-        var rows = ArCalibration.Store.ExportRows(_arSource)
+        List<ArCalibrationArchiveRow> rows = ArCalibration.Store.ExportRows(_arSource)
             .Where(row => _arWidth <= 0 || (row.ImageWidth == _arWidth && row.ImageHeight == _arHeight))
             .Where(row => row.KeyCount == _visualSettings.KeyboardLayoutChoice.KeyCount)
-            .ToArray();
+            .ToList();
         if (rows.Count == 0)
         { ShowMessage(Loc.T("Nothing is saved for this camera yet — mark the keys with Calibrate first."), "AR calibration backup", MessageBoxImage.Information); return; }
         var cameraName = ArBackupCameraName();

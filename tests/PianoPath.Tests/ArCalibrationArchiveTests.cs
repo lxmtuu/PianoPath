@@ -22,7 +22,7 @@ public class ArCalibrationArchiveTests
 
     private static ArCalibrationArchiveBundle Bundle(params ArCalibrationArchiveRow[] rows) => new(
         "\\\\?\\USB#VID_1234", "Streamcam", "2.0.1", "2026-10-12T20:00:00Z",
-        true, 1280, 720, rows);
+        true, 1280, 720, 0, rows);
 
     [Fact]
     public void ABackupRoundTripsEveryField()
@@ -64,7 +64,7 @@ public class ArCalibrationArchiveTests
         Assert.True(ArCalibrationArchive.TryRead(json, out var bundle, out _), "the file as a whole is fine");
         var rows = bundle!.Rows;
         Assert.Equal(2, rows.Count(r => r is not null));
-        Assert.Single(rows.Where(r => r.Profile == ArCalibrationArchiveRowFromSanitize("overhead90")));
+        Assert.Single(rows, r => r.Profile == ArCalibrationArchiveRowFromSanitize("overhead90"));
         // the crossed quad is dropped entirely; the broken baseline falls back to the corners, like the store's own load path does
         var fallen = rows.Single(r => r.Profile == "tilt45");                                    // the broken baseline row survives as tilt45
         Assert.Equal(Corners88, fallen.PoseBaseCorners);
