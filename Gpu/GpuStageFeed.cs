@@ -20,6 +20,8 @@ internal sealed class GpuFrameInput
     public GpuLook Look = new();
     public float BeatPulse;
     public bool Sustain;
+    /// <summary>Continuous sustain pedal level 0..1 (0 whenever <see cref="Sustain"/> is false); the AR damper strip lifts by it, so half-pedalling shows wherever the host reports it.</summary>
+    public float SustainLevel;
     public float PointerX = .5f, PointerY = .5f;
     public double StageHeightDip = 720;
 }
@@ -52,6 +54,7 @@ internal sealed class GpuStageFeed
     private GpuLook _look = new();
     private float _beatPulse;
     private bool _sustain;
+    private double _sustainLevel;
     private long _beatStamp;
     private float _pointerX = .5f, _pointerY = .5f;
     private double _stageHeightDip = 720;
@@ -93,13 +96,22 @@ internal sealed class GpuStageFeed
     private GpuBackgroundImage? _labelAtlas;
     /// <summary>The glyph atlas (note names, Matrix Rain glyphs); built once on the UI thread, uploaded once by the render thread.</summary>
     internal GpuBackgroundImage? LabelAtlas { get => Volatile.Read(ref _labelAtlas); set => Volatile.Write(ref _labelAtlas, value); }
+    private GpuBackgroundImage? _watermark;
+    /// <summary>The «KEYFLOW» strip for the GPU watermark (sprite kind 16); built once on the UI thread.</summary>
+    internal GpuBackgroundImage? Watermark { get => Volatile.Read(ref _watermark); set => Volatile.Write(ref _watermark, value); }
 
-    /// <summary>Sustain pedal state (drives Pedal Glow).</summary>
+    /// <summary>Sustain pedal state (drives Pedal Glow). Releasing also drops the stored continuous level.</summary>
     internal void SetSustain(bool down)
     {
-        lock (_gate) _sustain = down;
+        lock (_gate) { _sustain = down; if (!down) _sustainLevel = 0; }
     }
 
+    /// <summary>Sustain pedal state together with its continuous level 0..1; the AR damper strip lifts by it, so
+    /// half-pedalling shows wherever the host measures it (0..1, not a boolean; the level reads 0 when released).</summary>
+    internal void SetSustainLevel(bool down, double level)
+    {
+        lock (_gate) { _sustain = down; _sustainLevel = down ? ArDampers.ClampLevel(level) : 0; }
+    }
     internal void SetStageHeight(double dips)
     {
         if (dips < 1) return;
@@ -224,6 +236,7 @@ internal sealed class GpuStageFeed
             Array.Copy(_pressed, input.Pressed, 128);
             input.BeatPulse = _fixedBeatPulse ? _beatPulse : _beatPulse * BeatDecay();
             input.Sustain = _sustain;
+            input.SustainLevel = (float)_sustainLevel;
             input.PointerX = _pointerX; input.PointerY = _pointerY;
             input.StageHeightDip = _stageHeightDip;
         }

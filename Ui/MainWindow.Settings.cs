@@ -602,7 +602,13 @@ public partial class MainWindow
         Choice(alignment, "View", nameof(PianoVisualSettings.ArViewProfileId), "Choose the camera angle that matches how it sees the keys. Each view keeps its own calibration; changing the view does not reuse another view's corners.",
             ArViewProfileChoices());
         ButtonRow(alignment, ("CALIBRATE", CalibrateAr_Click, null), ("RESET CALIBRATION", ResetArCalibration_Click, null));
+        ButtonRow(alignment, ("EXPORT CALIBRATION", ExportArCalibrationBackup_Click, null), ("IMPORT CALIBRATION", ImportArCalibrationBackup_Click, null));
         Note(alignment, "In Calibrate, drag the Move / Rotate / Scale gizmo or use the numeric controls to translate, rotate and uniformly scale the keyboard. Note travel has its own separate controls.");
+        Toggle(alignment, "Alignment check", nameof(PianoVisualSettings.ArAlignmentCheck), "Redraws the saved key area as a frame with octave lines right over the live camera picture, on any quality level. When the lines no longer sit on the real keys — after a bumped tripod or a moved keyboard — calibrate again. Works only while a calibration exists; the check draws nothing before that.");
+        Choice(alignment, "Guide colour", nameof(PianoVisualSettings.ArAlignmentGuideColor), "High-contrast colour of the alignment frame and octave lines; White reads on most cameras. The pick belongs to this machine, like the check itself.",
+            ArAlignmentGuides.ColorIds.Select(id => (id, id)).ToArray())
+            .VisibleWhen = () => _visualSettings.ArAlignmentCheck;
+        Toggle(alignment, "Watch for camera drift", nameof(PianoVisualSettings.ArDriftWatch), "Samples the key area's picture every few seconds and compares it with the saved calibration. If the keys have wandered past a small threshold for a few readings in a row — a bumped tripod, a shifted piano — the AR status line asks for the corners to be marked again. It never moves the calibration on its own, and pauses while the camera delay is being measured.");
 
         var playback = Card(CameraSettingsHost, "AR PLAYBACK", "Learn shows upcoming song notes; Perform hides song notes while keeping live key tint and optional rising MIDI notes. Lookahead applies to song notes in Learn only; 3D live bars and Perform notes use independent fixed 3-second reaches.");
         Choice(playback, "Mode", nameof(PianoVisualSettings.ArMode), "Learn shows the song's upcoming notes on the real keys. Perform hides song notes for live playing; key tint and the independently toggled rising MIDI notes remain available.",
@@ -610,6 +616,12 @@ public partial class MainWindow
         SliderRow(playback, "Lookahead", nameof(PianoVisualSettings.ArLookahead), ArOptions.LookaheadMin, ArOptions.LookaheadMax, "How many seconds before a song note sounds it starts to appear above the keys. Longer shows more of the song; shorter keeps the picture calmer.")
             .VisibleWhen = () => _visualSettings.ArMode == ArModes.Learn;
         SliderRow(playback, "Overlay opacity", nameof(PianoVisualSettings.ArOpacity), ArOptions.OpacityMin, ArOptions.OpacityMax, "Adjust the strength of AR notes and key lighting over the camera picture.");
+        Toggle(playback, "Damper strip", nameof(PianoVisualSettings.ArDamperStrip), "The glowing line hugging the keys' back edge, drawn from the AR Standard tier up. The sustain pedal widens and brightens it (level 0..1). Turn it off for a calmer picture.");
+        Choice(playback, "Damper strip colour", nameof(PianoVisualSettings.ArDamperStripColorMode), "Follow look (halo) tints the strip with the look's halo colour, the same family as the stage's Pedal Glow; Custom uses the colour below.",
+            ("Halo", "Follow look (halo)"), ("Custom", "Custom"))
+            .VisibleWhen = () => _visualSettings.ArDamperStrip;
+        ColorRow(playback, "Custom strip colour", nameof(PianoVisualSettings.ArDamperStripColor), "Colour of the damper strip when Damper strip colour is Custom.")
+            .VisibleWhen = () => _visualSettings.ArDamperStrip && _visualSettings.ArDamperStripColorMode == "Custom";
 
         var notes = Card(CameraSettingsHost, "3D NOTE PATH", "Perspective notes follow the saved keyboard pose. Their travel direction is independent: changing it never moves or rotates the keyboard.");
         Toggle(notes, "Notes in perspective", nameof(PianoVisualSettings.ArNotesInPerspective), "Use the Live Stage note material and colour. On projects notes as camera-facing quads from the saved 3D keyboard pose; note shimmer stays with its pitch. Off keeps the legacy flat note overlay. Stage-space falling trails are omitted over the camera; ambient petals and stars remain screen-space. Requires Direct3D and a valid calibration.");
@@ -620,10 +632,20 @@ public partial class MainWindow
         SliderRow(notes, "Minimum note length", nameof(PianoVisualSettings.ArNoteMinScale), ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, "Set the shortest 3D note as a share of its key width. Zero keeps the MIDI duration; larger values extend very short notes, while same-key repeats stay separate. Lite uses flat notes, so this setting applies only to perspective notes.")
             .VisibleWhen = () => _visualSettings.ArNotesProjected;
 
-        var live = Card(CameraSettingsHost, "LIVE KEY RESPONSE", "Key tint, rising MIDI notes and held-key press bars are independent. Velocity settings below change note width and fade, not key tint.");
+        var live = Card(CameraSettingsHost, "LIVE KEY RESPONSE", "Key tint, rising MIDI notes and press bars are independent. The velocity knobs below change note width and fade, never key tint; the bars' lifetime fade and coverage keep their own knobs, and their velocity tint follows the look.");
         SliderRow(live, "Key tint", nameof(PianoVisualSettings.ArKeyLight), ArOptions.KeyLightMin, ArOptions.KeyLightMax, "How strongly a key you press is tinted in the camera picture. Zero leaves the real key colour unchanged, even when live notes and press bars are off.");
         Toggle(live, "MIDI notes rise in Perform", nameof(PianoVisualSettings.ArRisingMidiNotes), "In Perform mode, each MIDI Note On creates its own calibrated 3D note that travels along the AR note direction. Note Off freezes its length; it keeps moving to a fixed three-second reach, independent of Learn lookahead. Repeated strikes of one pitch stay separate. This note stream is independent of key tint and optional live press bars; it requires a valid calibration.");
         Toggle(live, "Live press bars", nameof(PianoVisualSettings.ArLivePressTrails), "Show a bar growing from each pressed key. With a valid 3D camera pose on Standard or Ultra, release does not freeze it: the bar keeps moving along the selected note path to a fixed three-second reach, independent of Learn lookahead. In Lite or the flat fallback, it fades in place. Off by default for a cleaner stream or call. Turning bars off never disables key tint.");
+        Toggle(live, "Bar fade follows lifetime", nameof(PianoVisualSettings.ArLiveFadeByLifetime), "Let a live bar's solidity follow how far it has stretched instead of only shrinking with length: the fade walks forward while the key is held and walks back over the release. Off keeps the usual length fade.")
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails;
+        SliderRow(live, "Fade at birth", nameof(PianoVisualSettings.ArLiveFadeStart), 0, 100, "How solid a live bar is the moment the key goes down, percent of full.")
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails && _visualSettings.ArLiveFadeByLifetime;
+        SliderRow(live, "Fade at full length", nameof(PianoVisualSettings.ArLiveFadeEnd), 0, 100, "How solid a live bar stays once it has stretched to its full reach, percent of full; smaller lets long-hold bars dim into the keys.")
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails && _visualSettings.ArLiveFadeByLifetime;
+        ButtonRow(live, (_arLiveBarCoverageOpen ? "LESS · LIVE BAR COVERAGE" : "MORE · LIVE BAR COVERAGE", ArLiveBarCoverageMore_Click, null))
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails;
+        SliderRow(live, "Bar coverage on the keys", nameof(PianoVisualSettings.ArLiveBarCoverPercent), 25, 300, "How far onto the keys a live bar's leading edge may run, percent of the keys' depth. 100 is the familiar look: the bar stops where the keys start. 200 reaches the front edge of a white key — full coverage — and beyond it spills past the keys. Smaller holds the bar free of the keys.")
+            .VisibleWhen = () => _visualSettings.ArLivePressTrails && _arLiveBarCoverageOpen;
         Toggle(live, "Note width follows velocity", nameof(PianoVisualSettings.ArNoteWidthByVelocity), "Let MIDI velocity change the width of song notes and live press bars.");
         SliderRow(live, "Width on a soft strike", nameof(PianoVisualSettings.ArNoteWidthSoft), 10, 200, "Width of a very soft strike, as a percentage of the normal note width.")
             .VisibleWhen = () => _visualSettings.ArNoteWidthByVelocity;
@@ -681,8 +703,19 @@ public partial class MainWindow
             ArStatus.NeedsCalibration => Loc.F("The camera runs at {0} × {1}. The keys have not been marked yet for the {2} view on a {3}-key keyboard.", snapshot.ImageWidth, snapshot.ImageHeight, view, keys),
             ArStatus.Outdated => Loc.F("The saved key area of the {2} view was marked for another picture size or keyboard size. Mark it again for {0} × {1} and {3} keys.", snapshot.ImageWidth, snapshot.ImageHeight, view, keys),
             _ => Loc.F("AR overlay on · {0} view · {1} × {2} · {3} keys · {4}", view, snapshot.ImageWidth, snapshot.ImageHeight, keys, Loc.T(_visualSettings.ArOptionsValue.Mode))
-                + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default),
+                + CameraAgeText.Describe(_gpuLoop?.CameraAge ?? default)
+                + (_driftText.Length > 0 ? " " + _driftText : ""),
         };
+    }
+
+    private bool _arLiveBarCoverageOpen;
+
+    /// <summary>The More/Less chevron of the live-bar coverage knob: it only hides and shows the slider, whose value is stored as soon as it slides.</summary>
+    private void ArLiveBarCoverageMore_Click(object sender, RoutedEventArgs e)
+    {
+        _arLiveBarCoverageOpen = !_arLiveBarCoverageOpen;
+        if (sender is Button button) Loc.Set(button, _arLiveBarCoverageOpen ? "LESS · LIVE BAR COVERAGE" : "MORE · LIVE BAR COVERAGE");
+        RefreshDependentRows();
     }
 
     /// <summary>
@@ -692,7 +725,7 @@ public partial class MainWindow
     private void RefreshArStatus()
     {
         if (_arStatus is null) return;
-        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, _visualSettings.ArViewProfileId, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default));
+        var key = string.Join("|", _arPlan.Status, _arCalibration?.Snapshot.Version ?? 0, MeasuringArDelay ? "m" + _latency.Presses : "", _arPlan.ArLayer ? _latencyText : "", _visualSettings.KeyboardSize, _visualSettings.ArMode, _visualSettings.ArViewProfileId, CameraStatus, CameraAgeText.Rounded(_gpuLoop?.CameraAge ?? default), _driftText);
         if (key == _arStatusKey) return;
         _arStatusKey = key;
         Loc.Bind(_arStatus, ArStatusText);
@@ -888,6 +921,8 @@ public partial class MainWindow
             "Record Salamander piano audio with the video. AVI and PNG sequence recordings get a stereo WAV; MP4 embeds AAC. Without the piano, recording is video-only.");
         Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
             "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+
+        BuildArExportCard();
     }
 
     /// <summary>
@@ -1289,6 +1324,8 @@ public partial class MainWindow
         Prop(property).SetValue(_visualSettings, slider.Value);
         if (_visualValueBoxes.TryGetValue(property, out var box) && !box.IsKeyboardFocused) box.Text = FormatSetting(property, slider.Value);
         MarkModified(property);
+        // AR‑3.5: a delay tuned while a camera is open belongs to that camera; moving to another one brings its own back.
+        if (property is nameof(PianoVisualSettings.ArDelay)) ArDelays.Remember(_visualSettings.ArDelay);
         if (property is nameof(PianoVisualSettings.RecordingFrameRate)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.RecordingFormat)) UpdateRecordingInfo();
         if (property is nameof(PianoVisualSettings.HandSplitPitch) && ModeCombo.SelectedIndex is 2 or 3) { ApplyTrackFilter(); UpdateSongUi(); }

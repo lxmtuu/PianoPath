@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Numerics;
 using System.Windows;
 using System.Windows.Media;
@@ -277,7 +278,7 @@ internal static partial class VerificationSuite
         var arFrame = Render(MakeArFeed(flatInput, arInput));
         // The sounding G4 also lights its key; standard quality may add neighboring-key light spill, so count note shapes separately.
         Assert(renderer.ArShapeCount == expected.Count && renderer.ArKeyQuadCount >= 1,
-            $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArQuadCount} total).");
+            $"The renderer should draw one note quad for each note in reach ({renderer.ArShapeCount} note quads, {renderer.ArKeyQuadCount} key quads, {renderer.ArNoteLightCount} spill quads, {renderer.ArObjectQuadCount} object quads plus {renderer.ArDamperStripCount} damper strips).");
         var gemArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "Gem"));
         var crystalArFrame = Render(MakeArFeed(flatInput, arInput, noteStyle: "CrystalOutline"));
         var neonGemPixels = ChangedPixels(arFrame, gemArFrame);
@@ -315,7 +316,7 @@ internal static partial class VerificationSuite
         Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount == 0 && renderer.ArNoteLightCount == 0,
             "A paused song draws no notes or key-light spill, like the stage.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 0f)));
-        Assert(renderer.ArQuadCount == 0, "An AR layer at zero opacity draws nothing.");
+        Assert(renderer.ArObjectQuadCount == 0, "An AR layer at zero opacity draws nothing.");
         Render(MakeArFeed(flatInput, new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .6f, ShowNotes: false)));
         Assert(renderer.ArShapeCount == 0 && renderer.ArKeyQuadCount >= 1,
             "Perform mode draws no notes to come but still lights the key that sounds; standard-quality spill is a separate pass.");
@@ -335,7 +336,7 @@ internal static partial class VerificationSuite
         var litKeys = renderer.ArKeyQuadCount;
         var litNoteLights = renderer.ArNoteLightCount;
         var unlit = RenderWarm(MakeKeyFeed(null));
-        Assert(litKeys == 5 && litNoteLights > 0 && renderer.ArQuadCount == 0,
+        Assert(litKeys == 5 && litNoteLights > 0 && renderer.ArObjectQuadCount == 0,
             $"Three held keys (C4 and E4 white, C#4 black) are five rectangles plus neighboring-key spill ({litKeys} keys, {litNoteLights} spill quads).");
         int Change((double X, double Y) at)
         {
@@ -362,7 +363,7 @@ internal static partial class VerificationSuite
         foreach (var (what, at) in shouldStay)
             Assert(Change(at) <= 2, $"Only held keys light up: {what} changed by {Change(at)}.");
         RenderWarm(MakeKeyFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, 0f)));
-        Assert(renderer.ArQuadCount == 0, "A key light strength of zero draws no key.");
+        Assert(renderer.ArObjectQuadCount == 0, "A key light strength of zero draws no key.");
 
         // ---- the keys under the player's own hands: a bar leaves the key ---------------------------------------
         // No song at all: nothing plays and no notes are loaded, which is what playing freely looks like. The key
@@ -375,13 +376,16 @@ internal static partial class VerificationSuite
             feed.SetState([], 0, false, new HashSet<int>(pitches));
             feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, ShowNotes: false,
                 ShowLiveTrails: showTrails);   // Perform leaves out song notes; impact lights and optional press trails stay independent.
-            if (press) foreach (var pitch in pitches) feed.LiveNote(pitch, true, .9f);
+            // A physical note-on arrives as a pair on the same wall-clock frame — the held note and its strike
+            // impact (Ui/MainWindow.xaml.cs); the strike lights come from that explicit hit, exactly as they do
+            // for a real hand, not from the falling trail's touchdown (which stays quiet by design).
+            if (press) foreach (var pitch in pitches) { feed.LiveNote(pitch, true, .9f); feed.Impact(pitch, .9); }
             return feed;
         }
         (byte[] Pixels, int Bars, int Keys, int Impacts, int NoteLights, int Quads) Draw(GpuStageFeed feed, int frames, Action<int>? beforeFrame = null)
         {
             var pixels = GpuRenderLoop.RenderFrames(renderer, feed, width, height, frames, 1 / 60.0, false, out _, beforeFrame, 20260930);
-            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArNoteLightCount, renderer.ArQuadCount);
+            return (pixels, renderer.ArLiveBarCount, renderer.ArKeyQuadCount, renderer.ArImpactLightCount, renderer.ArNoteLightCount, renderer.ArObjectQuadCount);
         }
         int Probe(byte[] withBar, byte[] withoutBar, (double X, double Y) at)
         {
@@ -428,11 +432,12 @@ internal static partial class VerificationSuite
         Assert(afterRelease.Bars == 2 && afterRelease.Keys == 3 && afterRelease.Impacts == 0 && afterRelease.NoteLights > 0
                 && afterRelease.Quads == afterRelease.Keys + afterRelease.Bars + afterRelease.NoteLights,
             $"After Note Off the live bars keep travelling while strike lights fade and key tint plus spill remain ({afterRelease.Quads} quads: {afterRelease.Keys} keys, {afterRelease.Bars} bars, {afterRelease.NoteLights} spill).");
-        // a fifth of a second after the release the bars are still there, dimming; the key light was never part of the deal either way
+        // a moment after the release — past the strike lights' .85 s lifetime — the bars are still there, dimming;
+        // the key light was never part of the deal either way
         var fadingFeed = ArFeed([60, 61], press: true);
-        var fadingAfterRelease = Draw(fadingFeed, 25, frame =>
+        var fadingAfterRelease = Draw(fadingFeed, 60, frame =>
         {
-            if (frame != 20) return;
+            if (frame != 55) return;
             fadingFeed.LiveNote(60, false, 0); fadingFeed.LiveNote(61, false, 0);
         });
         Assert(fadingAfterRelease.Bars == 2 && fadingAfterRelease.Keys == 3 && fadingAfterRelease.Impacts == 0
@@ -442,12 +447,12 @@ internal static partial class VerificationSuite
         Results.Add("PASS ar live keys: player press bars stretch behind pressed white and black keys and fade after release; disabling the bars leaves the separately verified key tint visible in flat AR mode, while Perform can opt in to trails.");
 
         Render(MakeArFeed(flatInput, null));
-        Assert(renderer.ArQuadCount == 0, "Without an AR layer there are no AR quads.");
+        Assert(renderer.ArObjectQuadCount == 0, "Without an AR layer there are no AR quads.");
         var smallRing = new CameraFrameRing(); PublishGradient(smallRing, 160, 90);
         Render(MakeArFeed(new GpuCameraInput(smallRing, PictureFit.Fit, false, 1f), arInput));
-        Assert(renderer.ArQuadCount == 0, "A camera that is not the size the calibration was made at must hide the AR layer, not draw notes in the wrong place.");
+        Assert(renderer.ArObjectQuadCount == 0, "A camera that is not the size the calibration was made at must hide the AR layer, not draw notes in the wrong place.");
         Render(MakeArFeed(null, arInput));
-        Assert(renderer.ArQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
+        Assert(renderer.ArObjectQuadCount == 0, "The AR layer lies on the camera picture and is not drawn without it.");
 
         VerifyArOverlayCapturedFrames(renderer);
         Results.Add($"PASS ar keys: three held keys produce five tinted rectangles and separate neighboring-key spill at standard quality; distant keys and the air above the keyboard stay clear, read back against the same frame without the layer.");
@@ -1481,6 +1486,12 @@ internal static partial class VerificationSuite
                 if (Math.Max(Math.Abs(first[i] - second[i]), Math.Max(Math.Abs(first[i + 1] - second[i + 1]), Math.Abs(first[i + 2] - second[i + 2]))) > threshold) count++;
             return count;
         }
+        // BGRA readback: [i] blue, [i+1] green, [i+2] red.
+        static (int R, int G, int B) Sample(byte[] pixels, int w, (double X, double Y) at)
+        {
+            var i = ((int)Math.Floor(at.Y) * w + (int)Math.Floor(at.X)) * 4;
+            return (pixels[i + 2], pixels[i + 1], pixels[i]);
+        }
 
         var defaultInput = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
             ShowNotes: true, ProjectedNotes: true);
@@ -1496,8 +1507,8 @@ internal static partial class VerificationSuite
             $"The 3D note projection should build one patch per input note ({expected.Count} patches for {notes.Count} notes).");
         var projected = Render(MakeFeed(defaultInput));
         var projectedPixels = ColouredPixels(projected);
-        Assert(renderer.ArQuadCount == expected.Count && renderer.ArLiveBarCount == 0,
-            $"The AR quad pass should own one 3D patch per note ({renderer.ArQuadCount} quads for {expected.Count} notes), not the legacy scene-note pass.");
+        Assert(renderer.ArObjectQuadCount == expected.Count && renderer.ArLiveBarCount == 0,
+            $"The AR quad pass should own one 3D patch per note ({renderer.ArObjectQuadCount} quads for {expected.Count} notes), not the legacy scene-note pass.");
         Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
             $"The camera must suppress stage-space note bodies and falling trails (notes {renderer.StageNoteCount}, trails {renderer.StageNoteTrailCount}).");
         Assert(projectedPixels > 500,
@@ -1522,7 +1533,7 @@ internal static partial class VerificationSuite
             settings.NoteStyle = style;
             var styledNotes = Render(MakeFeed(defaultInput));
             materialChanges[style] = ChangedPixels(projected, styledNotes, threshold: 4);
-            Assert(renderer.ArQuadCount == expected.Count,
+            Assert(renderer.ArObjectQuadCount == expected.Count,
                 $"Changing the AR note material to {style} must preserve one calibrated quad per song note.");
         }
         settings.NoteStyle = "Solid";
@@ -1534,7 +1545,7 @@ internal static partial class VerificationSuite
         settings.NoteShimmerAmount = 100;
         var shimmerNotes = Render(MakeFeed(defaultInput));
         var shimmerPixels = ChangedPixels(projected, shimmerNotes, threshold: 4);
-        var shimmerQuads = renderer.ArQuadCount;
+        var shimmerQuads = renderer.ArObjectQuadCount;
         settings.NoteShimmer = false;
         settings.NoteShimmerAmount = 45;
         Assert(shimmerQuads == expected.Count * 2 && shimmerPixels > 20,
@@ -1588,7 +1599,7 @@ internal static partial class VerificationSuite
         Ar3DNoteProjection.Build(transformedCalibration, view, notes, 10, .22, transformedInput.Notes,
             transformedInput.NoteDirection, transformedInput.MinAspect, transformedShapes);
         var transformedPixels = Render(MakeFeed(transformedInput));
-        Assert(renderer.ArQuadCount == notes.Count && ColouredPixels(transformedPixels) > 500
+        Assert(renderer.ArObjectQuadCount == notes.Count && ColouredPixels(transformedPixels) > 500
                 && transformedShapes.Count == notes.Count && !transformedCorners.SequenceEqual(corners),
             "A moved, uniformly scaled and rotated calibration should still reach the live camera AR-quad pass.");
         foreach (var shape in transformedShapes)
@@ -1604,7 +1615,7 @@ internal static partial class VerificationSuite
         Ar3DNoteProjection.Build(calibration, mirroredView, notes, 10, .22, defaultInput.Notes,
             defaultInput.NoteDirection, defaultInput.MinAspect, mirroredExpected);
         var mirrored = Render(MakeFeed(defaultInput, mirror: true));
-        Assert(renderer.ArQuadCount == mirroredExpected.Count && renderer.StageNoteCount == 0,
+        Assert(renderer.ArObjectQuadCount == mirroredExpected.Count && renderer.StageNoteCount == 0,
             "Mirroring the camera must not send projected notes back through the flat stage pass.");
         foreach (var shape in mirroredExpected)
         {
@@ -1617,7 +1628,7 @@ internal static partial class VerificationSuite
         // without changing the four calibration anchors.
         var diagonalInput = defaultInput with { NoteDirection = new ArNoteDirection(72, 38) };
         var diagonal = Render(MakeFeed(diagonalInput));
-        Assert(ChangedPixels(projected, diagonal) > 100 && renderer.ArQuadCount == notes.Count,
+        Assert(ChangedPixels(projected, diagonal) > 100 && renderer.ArObjectQuadCount == notes.Count,
             "A different 3D note direction must move/rotate the note billboards, not silently reuse the keyboard's flat travel axis.");
         Assert(savedCorners.SequenceEqual(calibration.Corners),
             "Changing note travel direction must never mutate the calibrated keyboard pose.");
@@ -1625,8 +1636,8 @@ internal static partial class VerificationSuite
         // Perform is a separate mode: it drops the song notes while keeping key tint available.
         var performInput = defaultInput with { ShowNotes = false };
         var perform = Render(MakeFeed(performInput));
-        Assert(renderer.ArQuadCount == 0 && ColouredPixels(perform) == 0,
-            "Perform must omit future song-note quads instead of routing them through either note renderer.");
+        Assert(renderer.ArObjectQuadCount == 0 && renderer.ArDamperStripCount == 1,
+            "Perform must omit future song-note quads instead of routing them through either note renderer; the damper strip, a scene element tied to the pedal and not the song, stays.");
         Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
             "Perform over the camera must keep the stage-space note and trail pass empty as well.");
 
@@ -1637,7 +1648,7 @@ internal static partial class VerificationSuite
         var naturalPixels = ColouredPixels(shortNatural);
         var shortMinimum = Render(MakeFeed(shortMinimumInput, song: shortNotes));
         var minimumPixels = ColouredPixels(shortMinimum);
-        Assert(renderer.ArQuadCount == shortNotes.Count && minimumPixels > naturalPixels,
+        Assert(renderer.ArObjectQuadCount == shortNotes.Count && minimumPixels > naturalPixels,
             $"A 200% minimum length must visibly lengthen short projected notes ({naturalPixels} → {minimumPixels} pixels).");
 
         // Live press bars are independently switched from key tint and use the same 3D direction as song notes.
@@ -1653,11 +1664,13 @@ internal static partial class VerificationSuite
         liveFxLook.HoldElectricArc = true; liveFxLook.HoldArcIntensity = 100;
         liveFxLook.ShowLightBeams = true; liveFxLook.BeamIntensity = 100;
         GpuStageFeed PressFeed(bool showBars, float keyLight, ArQualityTier quality = ArQualityTier.Standard, bool addImpact = false,
-            PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null)
+            PianoVisualSettings? visualSettings = null, ArCalibration? selectedCalibration = null, int[]? activePitches = null,
+            bool sustain = false, bool alignment = false, bool showStrip = true, Vector3 guideColor = default, string? viewProfileId = null)
         {
             var pressed = new HashSet<int>(activePitches ?? new[] { 60 });
             var feed = MakeFeed(new GpuArInput(selectedCalibration ?? calibration, ArNoteStyle.Default, 1f, KeyLight: keyLight, Quality: quality,
-                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars),
+                    ShowNotes: false, ProjectedNotes: true, ShowLiveTrails: showBars, AlignmentGuides: alignment,
+                    ShowDamperStrip: showStrip, AlignmentGuideColor: guideColor, ViewProfileId: viewProfileId),
                 song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: pressed);
             if (visualSettings is not null)
                 feed.SetLook(GpuLook.From(visualSettings, (_, _) => Color.FromRgb(255, 80, 220), .205, overCamera: true));
@@ -1665,6 +1678,7 @@ internal static partial class VerificationSuite
             feed.ClearTransient();
             feed.SetDeterministicState(Array.Empty<NoteEvent>(), 0, false, pressed);
             feed.SetDeterministicBeatPulse(0);
+            feed.SetSustainLevel(sustain, 1);
             foreach (var pitch in pressed) feed.LiveNote(pitch, true, .9f);
             if (addImpact) feed.Impact(60, .9);
             return feed;
@@ -1693,7 +1707,7 @@ internal static partial class VerificationSuite
         var uncalibratedMidiFrame = RenderFrames(UncalibratedFeed(busyUncalibratedLook, triggerEffects: true), 4);
         Assert(uncalibratedIdleFrame.AsSpan().SequenceEqual(uncalibratedMidiFrame)
                 && renderer.StageKeyCount == 0 && renderer.StageSpriteCount == 0
-                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArObjectQuadCount == 0,
             "Before calibration, the camera must show physical keys only: no static virtual keyboard, Live Stage sprites, guide lanes, notes or falling trails may leak into the uncalibrated camera overlay.");
 
         // BuildAmbient also guards its scene-only lane/trail geometry itself; it must not rely on BuildNotes
@@ -1800,6 +1814,109 @@ internal static partial class VerificationSuite
                 && holdVibrationTogglePixels > 20 && holdVibrationAmountPixels > 20
                 && holdColorCycleTogglePixels > 20 && holdColorCycleSpeedPixels > 20,
             $"Projected Live Stage bars must retain all four hold toggles and their representative parameter changes (bar {holdBarTogglePixels}/{holdBarIntensityPixels}, breath {holdBreathTogglePixels}/{holdBreathRatePixels}, vibration {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, color-cycle {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} changed pixels; bars {holdBaseline.Bars}/{holdBarZero.Bars}/{holdBarFull.Bars}/{holdBreathSlow.Bars}/{holdBreathFast.Bars}/{holdVibrationOff.Bars}/{holdVibrationFull.Bars}/{holdColorCycleOff.Bars}/{holdColorCycleFull.Bars}).");
+
+        // Velocity colour (Keysight row 6): the live bar's own strength retints it through the look's velocity tint,
+        // on the same wire notes use. This shipped with 2.0.0; here it is simply measured like the other modifiers.
+        var velocityTintLook = settings.Clone(); velocityTintLook.VelocityColor = true; velocityTintLook.VelocityColorAmount = 100;
+        var velocityTinted = RenderHoldModifier(velocityTintLook);
+        var velocityTintPixels = ChangedPixels(holdBaseline.Pixels, velocityTinted.Pixels, threshold: 4);
+        Assert(velocityTinted.Bars == 1 && velocityTintPixels > 20,
+            $"A live bar must retint with the pressing strength when the look enables velocity colour ({velocityTintPixels} changed pixels, bars {velocityTinted.Bars}).");
+
+        // Catalogue Dampers (roadmap §14.3): the strip hugs the key back edge from Standard up, lifts with the
+        // sustain level 0..1 and takes the look's halo colour; Lite must never draw it.
+        var damperDown = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true), 8);
+        var damperStripCount = renderer.ArDamperStripCount;
+        var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 8);
+        var damperLiftPixels = ChangedPixels(damperUp, damperDown, threshold: 4);
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, sustain: true), 4);
+        Assert(damperStripCount == 1 && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0,
+            $"Sustain must lift the damper strip over the key back edge at Standard and the strip must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {renderer.ArDamperStripCount} strips at Lite).");
+
+        // The strip follows the player's choice too (2026-10-12): the toggle removes its quad entirely, and a Custom
+        // colour mode repaints the same strip away from the look's halo family.
+        var stripOff = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true, showStrip: false), 8);
+        Assert(renderer.ArDamperStripCount == 0, "The damper strip toggle must remove the strip quad.");
+        var damperColorLook = settings.Clone();
+        damperColorLook.ArDamperStripColorMode = "Custom";
+        damperColorLook.ArDamperStripColor = "#00C8FF";
+        var customStrip = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true, visualSettings: damperColorLook), 8);
+        var customStripPixels = ChangedPixels(damperDown, customStrip, threshold: 4);
+        Assert(renderer.ArDamperStripCount == 1 && customStripPixels > 20 && ChangedPixels(stripOff, customStrip, threshold: 4) > 20,
+            $"A custom strip colour must repaint the damper strip ({customStripPixels} changed pixels against the halo look).");
+        Assert(ArDampers.TryPatch(calibration, view, .75, out var stripPatch), "The strip patch must project for colour sampling.");
+        var stripCentre = Centre(stripPatch);
+        var haloPixel = Sample(damperDown, width, stripCentre);
+        var customPixel = Sample(customStrip, width, stripCentre);
+        Assert(customPixel.G - customPixel.R > haloPixel.G - haloPixel.R + 10,
+            $"A cyan strip pick must lean the strip pixel green where the halo purple leaned red (halo {haloPixel}, custom {customPixel}).");
+
+        // The 90° overhead view (the odyssey-style top-down look): a fronto-parallel quad is this homography's best
+        // case, and every in-plane element — bars, velocity tint, coverage, the damper strip — must project whole.
+        var overhead = ArCalibration.Create(KeyboardLayout.Standard88,
+            [(40, 150), (1240, 150), (1240, 270), (40, 270)], width, height, out var overheadProblem);
+        Assert(overhead is not null, $"A fronto-parallel keyboard rectangle must calibrate for a 90° overhead camera ({overheadProblem}).");
+        var overheadBars = RenderFrames(PressFeed(showBars: true, keyLight: .6f, selectedCalibration: overhead!), 12);
+        var overheadBarCount = renderer.ArLiveBarCount;
+        var overheadTinted = RenderFrames(PressFeed(showBars: true, keyLight: .6f,
+            visualSettings: velocityTintLook, selectedCalibration: overhead!), 12);
+        var overheadTintPixels = ChangedPixels(overheadBars, overheadTinted, threshold: 4);
+        var overheadDamperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false,
+            selectedCalibration: overhead!), 8);
+        Assert(renderer.ArDamperStripCount == 1, "A drawn damper strip must be counted at Standard, even pedal-up.");
+        var overheadDamper = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true,
+            selectedCalibration: overhead!), 8);
+        Assert(renderer.ArDamperStripCount == 1, "The sustained frame must keep drawing the damper strip.");
+        var overheadDamperPixels = ChangedPixels(overheadDamperUp, overheadDamper, threshold: 4);
+        Assert(overheadBarCount > 0 && ColouredPixels(overheadBars) > 200 && overheadTintPixels > 20
+                && overheadDamperPixels > 20,
+            $"The 90° overhead view must project live bars, the look's velocity tint and the pedal-lifted damper strip whole (bars {overheadBarCount}, tint {overheadTintPixels} pixels, damper lift {overheadDamperPixels} pixels).");
+
+        // View presets (roadmap §14.7 "Thêm 5"): the same overhead camera feeds the same ultra effect set, but the
+        // stand-up quads stay home while the flat-born lights keep drawing — the opposite of the leaned camera above.
+        var overheadUltraFx = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 }, selectedCalibration: overhead!, viewProfileId: ArCalibrationProfiles.Overhead90.Id);
+        RenderFrames(overheadUltraFx, 4);
+        Assert(renderer.ArBeamCount == 0 && renderer.ArHoldArcCount == 0
+                && renderer.ArImpactLightCount > 0 && renderer.ArPulseCount > 0 && renderer.ArParticleFxCount > 0,
+            $"A 90° overhead view must hide beams and hold arcs while keeping impact lights, pulses and particles (beams {renderer.ArBeamCount}, arcs {renderer.ArHoldArcCount}, lights {renderer.ArImpactLightCount}, pulses {renderer.ArPulseCount}, particles {renderer.ArParticleFxCount}).");
+
+        // roadmap §14.8: an AR frame over budget drops families in roadmap's sentence order — same style, same look,
+        // just the deepest adaptive tier — while the things that ARE the overlay (keys, notes, keypresses) stay put.
+        var budgetCutFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 });
+        renderer.ArBudgetTierOverride = GpuAdaptiveQualityTier.AmbientMinimal;
+        RenderFrames(budgetCutFeed, 4);
+        var cutKeyQuads = renderer.ArKeyQuadCount;
+        var cutStrip = renderer.ArDamperStripCount;
+        Assert(renderer.ArBeamCount == 0 && renderer.ArPulseCount == 0 && renderer.ArImpactLightCount == 0
+                && renderer.ArParticleFxCount == 0 && renderer.ArNoteLightCount == 0
+                && cutKeyQuads > 0 && cutStrip == 1,
+            $"A deeply over-budget AR frame must cut particles, pulses, note lights, beams and the impact glow while keys and the damper strip stay (keys {cutKeyQuads}, strip {cutStrip}, beams {renderer.ArBeamCount}, pulses {renderer.ArPulseCount}, impacts {renderer.ArImpactLightCount}, particles {renderer.ArParticleFxCount}, note lights {renderer.ArNoteLightCount}).");
+        renderer.ArBudgetTierOverride = null;
+        // A rebuilt feed: the same look and calibration, budget healthy — a fresh strike triggers the whole
+        // Ultra set again, because nothing in the look itself was touched by the cut.
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
+            activePitches: new[] { 60, 64 }), 4);
+        Assert(renderer.ArImpactLightCount > 0 && renderer.ArPulseCount > 0 && renderer.ArBeamCount > 0,
+            "The cut is strictly transient: with the budget healthy again the lights come back without touching any setting.");
+
+        // Alignment check (roadmap §14.7 "Thêm 1"): the saved key area redraws as a frame with octave lines, packed
+        // after every effect so a bumped camera reads at a glance, on any tier, only while calibrated.
+        var guidesOn = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: true), 8);
+        var guideCount = renderer.ArAlignmentGuideCount;
+        RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, alignment: true), 4);
+        var liteGuideCount = renderer.ArAlignmentGuideCount;
+        var guidesOff = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: false), 8);
+        var guidePixels = ChangedPixels(guidesOff, guidesOn, threshold: 4);
+        Assert(guideCount > 4 && liteGuideCount > 4 && renderer.ArAlignmentGuideCount == 0 && guidePixels > 100,
+            $"The alignment check must redraw the saved key area over the live frame on any tier and switch fully off ({guideCount} guides at Standard, {liteGuideCount} at Lite, {guidePixels} changed pixels).");
+
+        // The guide colour is one of five high-contrast picks; recolouring must repaint the lines, not rebuild them.
+        var cyanGuides = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, alignment: true,
+            guideColor: new Vector3(.35f, .95f, 1f)), 8);
+        Assert(renderer.ArAlignmentGuideCount == guideCount && ChangedPixels(guidesOn, cyanGuides, threshold: 4) > 20,
+            "A custom guide colour must recolour the alignment frame without changing its lines.");
 
         // AR-S5: project the same simulated impact, hold and release effects as Live Stage, not a parallel key-tint-only approximation.
         var standardFxFeed = PressFeed(false, .6f, ArQualityTier.Standard, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
@@ -1908,7 +2025,7 @@ internal static partial class VerificationSuite
         var glowSetting = Render(MakeFeed(defaultInput));
         var projectedGlowTrails = renderer.ArNoteTrailQuadCount;
         Assert(!noTrail.AsSpan().SequenceEqual(glowSetting) && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0
-                && projectedGlowTrails == notes.Count && renderer.ArQuadCount == notes.Count + projectedGlowTrails
+                && projectedGlowTrails == notes.Count && renderer.ArObjectQuadCount == notes.Count + projectedGlowTrails
                 && ChangedPixels(noTrail, glowSetting, threshold: 4) > 20,
             $"Glow trails should add calibrated AR quads while the misaligned stage-space streak stays suppressed ({projectedGlowTrails} projected trails, stage {renderer.StageNoteTrailCount}).");
         settings.FallingTrail = "None";
@@ -1916,7 +2033,7 @@ internal static partial class VerificationSuite
         settings.FallingTrail = "Glow";
         var uncalibratedCameraWithTrailSetting = Render(MakeFeed(null, overCamera: false));
         Assert(uncalibratedCamera.AsSpan().SequenceEqual(uncalibratedCameraWithTrailSetting)
-                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArQuadCount == 0,
+                && renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0 && renderer.ArObjectQuadCount == 0,
             "Even before calibration, a full-screen camera background must not receive flat scene notes or falling-note trails.");
         settings.FallingTrail = "None";
 
@@ -2021,7 +2138,454 @@ internal static partial class VerificationSuite
         Results.Add($"PASS AR note color/material/effects: magenta read back R/G {noteRed}/{noteGreen}; sampled known material branches changed [{materialChangeSummary}] pixels versus Solid; shimmer changed {shimmerPixels} pixels in {shimmerQuads} quads; Glow/Stream trails used {glowTrailQuads}/{streamTrailQuads} 3D quads; ghosts {ghostQuads}; landing glow {landingGlowCount} quads; atlas labels {noteLabelCount}/{noteLabelPixels}. Full parameter parity remains Unverified.");
         Results.Add("PASS AR uncalibrated-camera gate: synthetic camera frames remain pixel-identical with Live Stage hit/hold effects and ShowKeys enabled; virtual keys, stage sprites, guide lanes, song notes and falling trails stay suppressed until calibrated projection is available, while screen-space ambient remains independent.");
         Results.Add($"PASS AR live bars and trails: {liveBarCount} projected live bars added {barPixels} pixels only when enabled; key tint still changed {tintPixels} pixels with bars off; a released bar survived the old stage-edge cull ({barsPastStageEdge}) and retired at 3D reach ({releasePathSimulation.LivePresses.Count}); flat falling-note trails added no pixels over the camera.");
-        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
+        Results.Add($"PASS AR-S5 Live Stage effects: Standard projected {standardImpactLights} impact and {standardNoteLights} note lights; Ultra projected impact/note lights, {ultraPulses} configured pulses, {ultraParticles} particles, {ultraFlashes} flashes, {ultraHoldArcs} hold-arc segments and {ultraBeams} keyed beams; release emitted {releaseEffects} 3D effects; Plasma/Morph flashes and Shockwave/Absorb rings were pixel-checked; independent HoldBar/Breath/Vibration/ColorCycle live-bar toggles and representative parameter changes changed {holdBarTogglePixels}/{holdBarIntensityPixels}, {holdBreathTogglePixels}/{holdBreathRatePixels}, {holdVibrationTogglePixels}/{holdVibrationAmountPixels}, {holdColorCycleTogglePixels}/{holdColorCycleSpeedPixels} pixels; the look's velocity tint recoloured a bar in {velocityTintPixels} pixels at the leaned view and {overheadTintPixels} at 90° overhead; sustain lifted the damper strip in {damperLiftPixels} pixels leaned / {overheadDamperPixels} overhead (Lite drew none, overhead projected {overheadBarCount} bars); impact changed {effectPixels} pixels with bars disabled, pose motion changed {poseEffectPixels}, and note-direction-only motion stayed image-identical.");
         Results.Add($"PASS AR alpha/ambient projection: {alphaPixels} projected premultiplied note pixels; S6.2 separated {geometryPixels} geometry and {glowPixels} glow pixels ({splitLayerDifference} differed); {petalPixels} flat petal pixels and {starPixels} flat shooting-star pixels were unchanged by 3D note projection.");
+    }
+
+    private static void VerifyArDriftWatch()
+    {
+        // roadmap §14.7 "Thêm 2 — đo trôi": the pure picture-shift measurement behind the watch, checked without a camera
+        // on the same striped trapezoid stand-in the xUnit suite locks (a moved picture must measure to within a cell,
+        // lighting and hands must never raise the alarm).
+        const int w = 640, h = 360;
+        (double X, double Y)[] corners = [(35, 146), (607, 134), (618, 211), (26, 224)];
+        byte[] Paint(double shiftX, double shiftY, double brightness = 1)
+        {
+            var px = new byte[w * h * 4];
+            var rng = new Random(9);
+            for (var y = 0; y < h; y++)
+            {
+                double tBack = corners[0].Y, tFront = corners[3].Y;
+                if (y < tBack + shiftY - 1 || y > tFront + shiftY + 1) continue;
+                double tv = Math.Clamp((y - (tBack + shiftY)) / (tFront - tBack), 0, 1);
+                var xa = corners[0].X + (corners[3].X - corners[0].X) * tv + shiftX;
+                var xb = corners[1].X + (corners[2].X - corners[1].X) * tv + shiftX;
+                for (var x = (int)Math.Ceiling(xa); x < Math.Min(w, xb); x++)
+                {
+                    var u = (x - xa) / (xb - xa);
+                    var lum = (int)Math.Floor(u * 26) % 2 == 0 ? 232 : 56;   // 45 px bands: unique across the search window, so a move cannot alias onto the next stripe
+                    if (u > .3 && u < .72 && tv < .6) lum = Math.Min(lum, 44);
+                    lum = (int)Math.Clamp(lum * brightness + 6 + (rng.NextDouble() - .5) * 6, 0, 255);
+                    var i = (y * w + x) * 4;
+                    px[i] = px[i + 1] = px[i + 2] = (byte)lum; px[i + 3] = 255;
+                }
+            }
+            return px;
+        }
+        var region = MotionEnergy.KeysRegion(corners, w, h);
+        var margin = ArDriftMeter.MaxShiftPixels(w);
+        var expanded = ArDriftMeter.Expand(region, margin, w, h);
+        var reference = new byte[MotionEnergy.SampleCount(region)];
+        Assert(ArDriftMeter.SampleGrid(Paint(0, 0), w, h, region, reference), "The reference grid samples for the marked key area.");
+        ArDriftEstimate Measure(double shiftX, double shiftY, double brightness = 1)
+        {
+            var grid = new byte[MotionEnergy.SampleCount(expanded)];
+            Assert(ArDriftMeter.SampleGrid(Paint(shiftX, shiftY, brightness), w, h, expanded, grid), "Each measured frame samples the expanded area.");
+            return ArDriftMeter.Estimate(reference, region, grid, expanded, w);
+        }
+        var threshold = ArDriftMeter.ThresholdPixels(w);
+        var aligned = Measure(0, 0);
+        var moved = Measure(9, 3);
+        var bright = Measure(0, 0, 1.18);
+        Assert(aligned.Usable && aligned.Pixels <= 1.5 && !aligned.IsDrift(threshold)
+                && moved.IsDrift(threshold) && Math.Abs(moved.OffsetX - 9) <= 3 && Math.Abs(moved.OffsetY - 3) <= 3
+                && bright.Usable && !bright.IsDrift(threshold),
+            $"The drift meter must measure a real move to within a cell (got {moved.OffsetX:0.#}, {moved.OffsetY:0.#}) and never mistake a still or brighter picture for drift (aligned {aligned.Pixels:0.#} px, bright residual {bright.Residual:0.###}).");
+        // the watch's alarm rule itself: nothing before the streak, one sentence after three readings in a row
+        Assert(!moved.IsDrift(ArDriftMeter.ThresholdPixels(w * 4)) && moved.IsDrift(ArDriftMeter.ThresholdPixels(w)),
+            "The pixel threshold scales with the picture width, so the same move only flags at the matching resolution.");
+        Results.Add($"PASS AR drift watch: a 9-pixel move of the key picture was read as {moved.OffsetX:0.#}, {moved.OffsetY:0.#} pixels (threshold {threshold:0.#} px at {w} px wide) while the still picture read {aligned.Pixels:0.#} px and an 18% brightness change stayed silent; the watch nags after {ArDriftMeter.FlagHoldReadings} readings in a row and never moves the calibration itself.");
+    }
+
+    private static void VerifyCalibrationAdvice()
+    {
+        // roadmap §14.7 "Thêm 4 — hướng dẫn ngay trong cửa sổ": the calibration window's live lookout, checked on the
+        // same synthetic frames the xUnit suite locks — a palm in frame fires, quiet keys/felt/wood stay silent, and
+        // with all four corners down only what is INSIDE the quad is watched.
+        const int w = 320, h = 180;
+        var quiet = new byte[w * h * 4];
+        var rng = new Random(4);
+        for (var y = 0; y < h; y++)
+            for (var x = 0; x < w; x++)
+            {
+                var i = (y * w + x) * 4;
+                var lum = y > 120 ? (200 + rng.Next(30)) : (34 + rng.Next(18));
+                if (y > 120 && x % 40 > 32) lum = 24;
+                quiet[i] = quiet[i + 1] = quiet[i + 2] = (byte)lum; quiet[i + 3] = 255;
+            }
+        void PaintHand(byte[] px, int cx, int cy, int radius)
+        {
+            for (var y = cy - radius; y <= cy + radius; y++)
+                for (var x = cx - radius; x <= cx + radius; x++)
+                {
+                    if (x < 0 || y < 0 || x >= w || y >= h || (x - cx) * (x - cx) + (y - cy) * (y - cy) > radius * radius) continue;
+                    var i = (y * w + x) * 4;
+                    px[i] = 140; px[i + 1] = 174; px[i + 2] = 226; px[i + 3] = 255;
+                }
+        }
+        var (warnQuiet, shareQuiet) = CalibrationAdvice.CheckPicture(quiet, w, h, null);
+        Assert(!warnQuiet && shareQuiet < CalibrationAdvice.SkinWarningFraction, "White and black keys over dark wood never read as skin.");
+        var palm = (byte[])quiet.Clone();
+        PaintHand(palm, w / 2, h / 2, 42);
+        var (warnPalm, sharePalm) = CalibrationAdvice.CheckPicture(palm, w, h, null);
+        Assert(warnPalm, "A palm-sized skin blob in frame fires the hands advice before the corners are down.");
+        (double X, double Y)[] quad = [(40, 100), (280, 100), (290, 170), (30, 170)];
+        var inside = (byte[])quiet.Clone(); PaintHand(inside, 160, 135, 30);
+        var outside = (byte[])quiet.Clone(); PaintHand(outside, 30, 30, 30);
+        Assert(CalibrationAdvice.CheckPicture(inside, w, h, quad).HandsInTheWay, "Skin inside the marked quad fires.");
+        Assert(!CalibrationAdvice.CheckPicture(outside, w, h, quad).HandsInTheWay, "A waving arm beside the keys is nobody's business.");
+        Results.Add($"PASS Calibration framing advice: a quiet keyboard read {shareQuiet:0.000} skin (silent), a palm fired at {sharePalm:0.000}, and with corners down the lookout watches only the inside of the quad (inside fired, outside stayed silent; threshold {CalibrationAdvice.SkinWarningFraction:0%}).");
+    }
+
+    private static void VerifyArQualityBudget()
+    {
+        // roadmap §14.8: the drop rule in its sentence order (particles → pulses → note lights → light bars → note
+        // style → impact glow), each adaptive tier cutting a deterministic count, and the overlay's three essences
+        // — keys, notes, keypresses — untouched no matter how deep the pressure goes; the WARP half lives inside
+        // VerifyArNoteProjection, which plays one over-budget frame on the same look and counts what survives.
+        Assert(ArQualityBudget.CutOrder.Length == 6
+                && ArQualityBudget.CutOrder[0] == ArBudgetCut.Particles
+                && ArQualityBudget.CutOrder[^1] == ArBudgetCut.ImpactLights,
+            "The cut table must open with particles and close with the impact glow, as the roadmap's sentence says.");
+        Assert(ArQualityBudget.CutCountFor(GpuAdaptiveQualityTier.Full) == 0
+                && ArQualityBudget.CutCountFor(GpuAdaptiveQualityTier.BloomReduced) == 1
+                && ArQualityBudget.CutCountFor(GpuAdaptiveQualityTier.AmbientMinimal) == ArQualityBudget.CutOrder.Length
+                && ArQualityBudget.IsCut(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.NoteLights)
+                && !ArQualityBudget.IsCut(GpuAdaptiveQualityTier.AmbientReduced, ArBudgetCut.LightBars),
+            "Each adaptive step cuts exactly one more family down the order, never deeper than the table.");
+        foreach (var tier in System.Enum.GetValues<GpuAdaptiveQualityTier>())
+            Assert(ArQualityBudget.CanDraw(ArQualityTier.Lite, tier, ArElement.PianoKeys)
+                    && ArQualityBudget.CanDraw(ArQualityTier.Lite, tier, ArElement.NoteObjects)
+                    && ArQualityBudget.CanDraw(ArQualityTier.Lite, tier, ArElement.Keypresses),
+                "Keys, notes and keypresses stay drawable at any tier under any adaptive pressure.");
+        Results.Add($"PASS AR quality budget: {ArQualityBudget.CutOrder.Length} deterministic cuts in the roadmap's order across {(int)GpuAdaptiveQualityTier.AmbientMinimal + 1} adaptive steps (deeper tier ⇒ deeper cut), with keys/notes/keypresses proved outside every cut; the transient WARP half renders inside VerifyArNoteProjection.");
+    }
+
+    private static void VerifyArCalibrationArchive()
+    {
+        // roadmap §14.7 "Thêm 3 — xuất/nhập bản sao căn chỉnh": the portable backup must round-trip every field of
+        // every saved calibration of one camera, refuse what is not this archive in plain words, and put rows back
+        // only after they pass the same checks a fresh calibration passes — checked without a camera or a window,
+        // in a throwaway folder like the xUnit suite does.
+        (double X, double Y)[] cornerSet = [(70, 292), (1214, 268), (1236, 421), (52, 449)];
+        ArCalibrationArchiveRow Row(string profile, int keyCount = 88) => new(
+            profile, 1280, 720, keyCount, 71.5,
+            PositionX: .5, PositionY: -.25, PositionZ: 1.2,
+            PitchDegrees: 3, YawDegrees: -2, RollDegrees: 1, UniformScale: 1.04,
+            Corners: ArCalibrationArchive.Flat(cornerSet),
+            PoseBaseCorners: [68, 290, 1212, 266, 1234, 419, 50, 447]);
+        var json = ArCalibrationArchive.ToJson(new ArCalibrationArchiveBundle(
+            "\\\\?\\USB#VID_0ECA", "Studio Cam", AppInfo.Version, "2026-10-12T10:30:00Z",
+            true, 1280, 720, 0, [Row("tilt45"), Row("overhead90")]));
+        Assert(ArCalibrationArchive.TryRead(json, out var bundle, out var refused) && bundle!.Rows.Count == 2 && bundle.SkippedRows == 0,
+            "A backup of two calibrations reads back with both rows and nothing skipped.");
+        var overhead = bundle!.Rows.Single(row => row.Profile == "overhead90");
+        Assert(Math.Abs(overhead.CameraFovDegrees - 71.5) < 1e-6 && Math.Abs(overhead.UniformScale - 1.04) < 1e-9 && overhead.Corners.SequenceEqual(ArCalibrationArchive.Flat(cornerSet)),
+            "FOV, pose, scale and corners survive the trip exactly.");
+        Assert(!ArCalibrationArchive.TryRead("{\"preset\": 1}", out _, out var wrongKind) && wrongKind.Length > 0,
+            "A file that is not this archive is refused with a reason, never guessed at.");
+        var crossed = Row("tilt45") with { Corners = [100, 100, 900, 100, 100, 600, 900, 600] };
+        Assert(ArCalibrationArchive.TryRead(ArCalibrationArchive.ToJson(new ArCalibrationArchiveBundle("cam", "", "", "", false, 0, 0, 0, [crossed, Row("tilt45")])), out var weeded, out _)
+            && weeded!.Rows.Count == 1 && weeded.SkippedRows == 1,
+            "A row whose corners would never draw is skipped, and the good row still comes back.");
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var store = new ArCalibrationStore(directory);
+            Assert(store.Set("\\\\?\\USB#VID_0ECA", "tilt45", 1280, 720, 88, cornerSet, 71.5), "The live store keeps the calibration to export.");
+            var exported = store.ExportRows("\\\\?\\USB#VID_0ECA");
+            Assert(exported.Count == 1 && store.ExportRows("\\\\?\\USB#VID_OTHER").Count == 0, "The backup holds exactly the camera asked for.");
+            var (restored, skipped) = new ArCalibrationStore(directory).ImportRows("\\\\?\\USB#VID_0ECA", exported);
+            Assert(restored == 1 && skipped == 0, "Every exported row goes back through the store's own checks.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
+        Results.Add($"PASS AR calibration backup: 2 rows round-tripped every field (FOV 71.5°, scale 1.04, corners exact) through {ArCalibrationArchive.FormatId} v{ArCalibrationArchive.FormatVersion}, a wrong file was refused in words, 1 unusable row skipped instead of drawn, and the store exported 1 camera and restored 1/1 rows.");
+    }
+
+    /// <summary>
+    /// AR render-to-video (roadmap §14.10 AR‑S7): the profile plans the geometry and rate, the offline sweep
+    /// draws the scripted ticks at a fixed time step over the camera picture and writes them as a real AVI
+    /// and as a PNG frame folder, the take's SFZ voice lands sample-exact, with the look's watermark on the
+    /// GPU draws the «KEYFLOW» strip itself, and a real camera video file feeds the engine one frame a tick —
+    /// the Recording card's export route end to end.
+    /// </summary>
+    private static void VerifyArRenderToVideo()
+    {
+        const int cw = 640, ch = 360;
+        PianoVisualSettings QuietLook() => new()
+        {
+            BackgroundGradient = false, ShowStars = false, ShowHalo = false, ShowKeys = false, ShowNotes = false,
+            ShowEmbers = false, ShowFlame = false, ShowWisps = false, ShowImpactRings = false, ShowImpactFlash = false,
+            ShowLightBeams = false, ShowPetals = false, HorizonGlow = 0, Vignette = 0, BloomIntensity = 0
+        };
+        var quiet = QuietLook();
+        var calibration = ArCalibration.Create(KeyboardLayout.Standard88, [(40, 170), (606, 156), (620, 248), (30, 262)], cw, ch, out var problem);
+        Assert(calibration is not null, $"The take script's corners must calibrate ({problem}).");
+        var ring = new CameraFrameRing();
+        void PublishTickCamera(int tick)
+        {
+            // The camera itself steps too: a bright left stripe plus a grey that brightens with every tick.
+            var grey = 90 + tick * 8;
+            var buffer = ring.BeginWrite(cw * ch * 4, out var slot);
+            for (var pixel = 0; pixel < cw * ch; pixel++)
+            {
+                var level = pixel % cw < cw / 12 ? grey + 60 : grey;
+                var i = pixel * 4;
+                buffer[i] = (byte)level; buffer[i + 1] = (byte)level; buffer[i + 2] = (byte)level; buffer[i + 3] = 255;
+            }
+            ring.Publish(slot, cw, ch, Stopwatch.GetTimestamp());
+        }
+
+        // The script: quiet before and after; keys held through ticks 1–3; an impact flash on tick 2.
+        GpuStageFeed TickFeed(int tick, PianoVisualSettings look)
+        {
+            PublishTickCamera(tick);
+            var held = tick is >= 1 and <= 3 ? new HashSet<int> { 60, 64 } : new HashSet<int>();
+            var feed = new GpuStageFeed(); feed.SetStageHeight(360);
+            feed.SetLook(GpuLook.From(look, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+            if (look.ShowWatermark) feed.Watermark = PianoStage.GpuWatermark; // the GPU prints its own strip (kind 16)
+            feed.ClearTransient();
+            feed.SetDeterministicState([], 0, false, held);
+            feed.SetDeterministicBeatPulse(0);
+            if (tick == 2) { feed.LiveNote(60, true, .8f); feed.Impact(60, .8); }
+            if (tick == 3) feed.LiveNote(64, true, .7f);
+            feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1f);
+            feed.Ar = new GpuArInput(calibration!, ArNoteStyle.Default, 1f, KeyLight: .8f);
+            return feed;
+        }
+
+        using var renderer = GpuStageRenderer.Create(forceWarp: true);
+        var directory = Path.Combine(Path.GetTempPath(), "keyflow-arvideo-" + Guid.NewGuid().ToString("N"));
+        var view = new ArView(cw, ch, 200, 112, PictureFit.Fit, false);
+        (int X, int Y) At(int pitch, double v) { var p = calibration!.ToPicture(calibration.Layout.CenterX(pitch), v); var o = view.ToOutput(p.X, p.Y); return ((int)Math.Floor(o.X), (int)Math.Floor(o.Y)); }
+        try
+        {
+            Directory.CreateDirectory(directory);
+
+            // AVI: the sweep writes every planned frame at the planned geometry, and the file reads back as video.
+            var aviPlan = ArVideoRenderProfile.Plan(cw, ch, lengthSeconds: 10.0 / 12, frameRate: 12, downsample: 1, maxSide: 200);
+            // Ten ticks planned for six of content: the CI box's decoder keeps the file's last sample(s)
+            // to itself (one run lost one frame, its twin lost two — the camera-overlay reading of the
+            // app's own clip shows the same habit), and four quiet runway ticks make the six content
+            // ticks readable no matter how many the box keeps.
+            Assert(aviPlan.RenderWidth == 200 && aviPlan.RenderHeight == 112 && aviPlan.Width == 200 && aviPlan.Frames == 10,
+                "The take planner should cap the long side to 200 px and count ten twelfths of a second at 12 fps as ten frames.");
+            var aviPath = Path.Combine(directory, "take.avi");
+            ArVideoTake aviTake;
+            using (var recorder = new AviVideoRecorder(aviPath, aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
+                aviTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), aviPlan, recorder);
+            Assert(aviTake.FramesWritten == 10 && aviTake.Seconds is > 0.80 and <= 0.90 && File.Exists(aviPath) && new FileInfo(aviPath).Length > 2000,
+                $"The engine should write every planned frame into the AVI (frames {aviTake.FramesWritten}, seconds {aviTake.Seconds:0.##}).");
+            var reader = CameraFrameReader.OpenFile(aviPath, out var readError);
+            Assert(reader is not null, $"The take must read back as a video ({readError}); the media stack of the CI box decodes the app's own AVI as part of the recording checks.");
+            var lumaLeftStripe0 = 0; var keyLevels = new List<int>();
+            using (reader)
+            {
+                Assert(reader!.Width == 200 && reader.Height == 112, $"The AVI must come back at the plan's size (got {reader.Width}×{reader.Height}).");
+                var frame = new byte[200 * 112 * 4];
+                var frameIndex = 0;
+                // The decoder on the CI box says "no picture just yet" as an ordinary false before it says
+                // end-of-stream, so this loop reads to the real end — hollow stream ticks wind it forward.
+                var readDeadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+                while (!reader.AtEnd && Stopwatch.GetTimestamp() < readDeadline)
+                {
+                    Assert(reader.Error is null, $"The AVI readback must not fail ({reader.Error}).");
+                    if (!reader.TryReadFrame(frame, mirror: false, out var gotWidth, out var gotHeight))
+                    { System.Threading.Thread.Sleep(2); continue; }
+                    Assert(gotWidth == 200 && gotHeight == 112 && frame[3] == 255, "Every take frame is opaque and at the plan's size.");
+                    if (frameIndex == 0) lumaLeftStripe0 = frame[0];
+                    var key = At(60, .85);
+                    keyLevels.Add(frame[(key.Y * 200 + key.X) * 4]);
+                    frameIndex++;
+                }
+                Assert(frameIndex is >= 6 and <= 10, $"At least the six content ticks must be in the file (read {frameIndex}).");
+            }
+            Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
+            Assert(keyLevels.Count >= 6, $"The take must carry at least six probe readings (got {keyLevels.Count}).");
+            // Keys light the moment they are pressed (ticks 1–3) and go quiet when the take goes quiet.
+            Assert(keyLevels[0] < 160 && keyLevels[5] < 170 && keyLevels[1] > keyLevels[0] + 40 && keyLevels[2] > keyLevels[0] + 40
+                    && keyLevels[3] > keyLevels[0] + 40 && keyLevels[5] < keyLevels[2] - 40,
+                $"The C4 light must be quiet at the take's ends and lit through the pressed ticks ({string.Join("/", keyLevels)}).");
+
+            // PNG: downsample 2 boxes the 320×180 sweep into 160×90 frames — and the sweep itself replays bit-identically.
+            var pngPlan = ArVideoRenderProfile.Plan(cw, ch, 0.5, 12, downsample: 2, maxSide: 320);
+            Assert(pngPlan.RenderWidth == 320 && pngPlan.RenderHeight == 180 && pngPlan.Width == 160 && pngPlan.Height == 90,
+                "Downsample 2 should box a 320×180 render into a 160×90 output frame.");
+            var firstBuffers = new List<byte[]>();
+            var pngDir = Path.Combine(directory, "frames");
+            using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+            {
+                var pngTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), pngPlan, recorder, (i, bgra) => firstBuffers.Add(bgra));
+                Assert(pngTake.FramesWritten == 6 && pngTake.Downsample == 2, "The PNG take writes the full sweep.");
+            }
+            Assert(Directory.GetFiles(pngDir, "frame-*.png").Length == 6 && File.Exists(Path.Combine(pngDir, PngSequenceRecorder.ManifestName))
+                    && firstBuffers.All(b => b.Length == 160 * 4 * 90),
+                "The take writes one PNG per tick plus the manifest, from 160×90 BGRA readbacks.");
+            // So khung live ↔ render: tick 2 by hand, the exact call the engine made, is the same picture bit for bit.
+            var liveTick = GpuRenderLoop.RenderFrames(renderer, TickFeed(2, quiet), 320, 180, 0, pngPlan.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
+            Assert(BgraPack.Box2(liveTick, 320, 180).AsSpan().SequenceEqual(firstBuffers[2]),
+                "A live-shaped render of the same tick, same fixed time step and same seed must land on the take's third frame bit for bit.");
+            // And the whole take seconds as an export: a second sweep of the same script writes the same readbacks.
+            var secondBuffers = new List<byte[]>();
+            using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+                ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), pngPlan, recorder, (i, bgra) => secondBuffers.Add(bgra));
+            Assert(secondBuffers.Count == firstBuffers.Count && firstBuffers.Zip(secondBuffers).All(pair => pair.First.AsSpan().SequenceEqual(pair.Second)),
+                "Two offline sweeps of one script must be byte-identical — render-to-video owns no clock of its own.");
+
+            // Voice: the take's own piano track. A synthetic one-zone SFZ stands in for the real instrument —
+            // NoteOn on tick 0, NoteOff on tick 4 — and the WAV must cover exactly the take's ten ticks (six scripted, four quiet runway).
+            var sampleWav = Path.Combine(directory, "ar-video-sample.wav");
+            WriteTestWav(sampleWav, channels: 2, bits: 16, rate: 44100, frames: 22050, wave: i => Math.Sin(i * 2 * Math.PI * 440 / 44100) * .33);
+            var voiceSfz = Path.Combine(directory, "ar-video-sample.sfz");
+            File.WriteAllText(voiceSfz, "<region> sample=ar-video-sample.wav hivel=127 lovel=1 pitch_keycenter=60 ampeg_release=0.2");
+            var voiceEvents = new Dictionary<int, ArVideoNoteEvent[]>
+            {
+                [0] = [new ArVideoNoteEvent(60, 110, On: true)],
+                [4] = [new ArVideoNoteEvent(60, 0, On: false)],
+            };
+            var voiceWav = Path.ChangeExtension(aviPath, ".wav");
+            ArVideoTake voiceTake;
+            using (var recorder = new PngSequenceRecorder(Path.Combine(directory, "voice"), aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
+            using (var wav = WavWriter.TryCreate(voiceWav)!)
+                voiceTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), aviPlan, recorder,
+                    audio: new ArVideoAudio(new SfzSynthesizer(SfzReader.Read(voiceSfz), 44100), tick => voiceEvents.GetValueOrDefault(tick, []), wav!));
+            Assert(voiceTake.FramesWritten == 10 && voiceTake.AudioSeconds is > 0.80 and <= 0.85,
+                $"The voiced take should time its piano track by the ticks ({voiceTake.AudioSeconds:0.###} seconds of audio with {voiceTake.FramesWritten} frames).");
+            var voiceBytes = File.ReadAllBytes(voiceWav);
+            Assert(voiceBytes.Length == WavWriter.HeaderBytes + 36750 * 4 && BitConverter.ToInt32(voiceBytes, 40) == 36750 * 4,
+                $"Ten ticks at 12 fps are 36750 stereo samples at 44.1 kHz, patched into the header on close (file {voiceBytes.Length} bytes).");
+            var voicePcm = voiceBytes.Skip(WavWriter.HeaderBytes).ToArray();
+            short VoiceAt(long frame) => BitConverter.ToInt16(voicePcm, (int)(frame * 4));
+            var heldEnergy = Enumerable.Range(0, 60).Sum(i => Math.Abs((int)VoiceAt(10000 + i * 40)) + Math.Abs((int)VoiceAt(15000 + i * 40)));
+            Assert(Math.Abs((int)VoiceAt(100)) < 2000 && heldEnergy > 2000,
+                $"The onset's first milliseconds must stay near-silent and the held ticks must ring (onset {Math.Abs((int)VoiceAt(100))}, held {heldEnergy}).");
+
+            // Watermark: the look's toggle and the strip the UI rasterized turn into one kind-16 sprite per
+            // frame. The exact same tick renders with and without it; every differing byte must sit inside
+            // the strip's rect, and the strip itself must be visibly lit.
+            var markedLook = QuietLook(); markedLook.ShowWatermark = true;
+            var markedBuffers = new List<byte[]>();
+            using (var recorder = new PngSequenceRecorder(Path.Combine(directory, "marked"), pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+                ArRenderToVideo.Run(renderer, tick => TickFeed(tick, markedLook), pngPlan, recorder, (i, bgra) => markedBuffers.Add(bgra));
+            Assert(markedBuffers.Count == firstBuffers.Count, "The watermarked take covers the same ticks.");
+            var stripImage = PianoStage.GpuWatermark;
+            // The engine draws at scene DIPs: the render target is pngPlan.RenderWidth high-proportioned out
+            // of the 360-DIP stage height the feeds carry, and the take's output is the boxed-down version.
+            var sceneH = 360f;
+            var sceneW = sceneH * pngPlan.RenderWidth / (float)pngPlan.RenderHeight;
+            var strip = ArVideoWatermark.Place(sceneW, sceneH, sceneH - sceneH * .205f, stripImage.Width, stripImage.Height)
+                ?? throw new InvalidOperationException("The strip bitmap must place.");
+            var halfWidth = strip.HalfHeight * strip.Aspect;
+            var outScale = pngPlan.Width / sceneW;
+            var x0 = (int)Math.Floor((strip.CenterX - halfWidth) * outScale) - 1;
+            var x1 = (int)Math.Ceiling((strip.CenterX + halfWidth) * outScale) + 1;
+            var y0 = (int)Math.Floor((strip.CenterY - strip.HalfHeight) * outScale) - 1;
+            var y1 = (int)Math.Ceiling((strip.CenterY + strip.HalfHeight) * outScale) + 1;
+            var quietFrame = firstBuffers[2]; var markedFrame = markedBuffers[2];
+            static int DifferentPixels(byte[] left, byte[] right, int width, int x0, int x1, int y0, int y1, bool countInside)
+            {
+                var changed = 0;
+                for (var y = 0; y < right.Length / 4 / width; y++)
+                    for (var x = 0; x < width; x++)
+                    {
+                        var i = (y * width + x) * 4;
+                        if (left[i] == right[i] && left[i + 1] == right[i + 1] && left[i + 2] == right[i + 2] && left[i + 3] == right[i + 3]) continue;
+                        if (x >= x0 && x <= x1 && y >= y0 && y <= y1) { if (countInside) changed++; } else if (!countInside) changed++;
+                    }
+                return changed;
+            }
+            var lit = DifferentPixels(quietFrame, markedFrame, pngPlan.Width, x0, x1, y0, y1, countInside: true);
+            var outside = DifferentPixels(quietFrame, markedFrame, pngPlan.Width, x0, x1, y0, y1, countInside: false);
+            Assert(lit >= 8 && outside == 0,
+                $"The GPU watermark lights exactly its own strip and nothing else (lit {lit}, outside {outside}, rect x {x0}..{x1}, y {y0}..{y1}).");
+            // And the toggle really is the switch: a take identical in every other way never changes outside the strip.
+
+            // Export through a REAL camera video file — the fixture is pressed with the app's own MP4 writer
+            // and decoded with the app's own CameraFrameReader, the exact picks of the Recording card. The
+            // box reads the file at its own clock's pace, so the take's publishing waits out the decoder, and
+            // the take must carry the file's stripe on the left and its grey brightening exactly tick by tick.
+            var cameraMp4 = Path.Combine(directory, "camera.mp4");
+            const int vw = 320, vh = 180;
+            using (var maker = new Mp4Recorder(cameraMp4, vw, vh, 24, withAudio: false))
+                for (var tick = 0; tick < 24; tick++) maker.WriteFrame(CameraTestVideo.Picture(vw, vh, tick));
+            Assert(File.Exists(cameraMp4), "The MP4 fixture itself must land where it was written.");
+            using var fileReader = CameraFrameReader.OpenFile(cameraMp4, out var fileError)
+                ?? throw new InvalidOperationException($"The fixture the app's own writer made must read back ({fileError}).");
+            Assert(fileReader.Width == vw && fileReader.Height == vh,
+                $"The fixture must come back at its own size ({fileReader.Width}×{fileReader.Height}).");
+            var fileRing = new CameraFrameRing();
+            var videoBuffer = new byte[vw * vh * 4];
+            void PublishFileFrameToRing()
+            {
+                // The CI box decodes a finished file near real time: the six quick ticks can outrun the
+                // decoder, so an empty stream tick waits out the shortfall instead of looping the clip early.
+                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency;
+                while (true)
+                {
+                    var got = fileReader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH) && gotW == vw && gotH == vh;
+                    if (got) break;
+                    if (fileReader.AtEnd)
+                    {
+                        fileReader.Rewind();
+                        Assert(fileReader.TryReadFrame(videoBuffer, mirror: false, out gotW, out gotH) && gotW == vw && gotH == vh,
+                            "The looped fixture must start over cleanly when its end is reached.");
+                        break;
+                    }
+                    Assert(Stopwatch.GetTimestamp() < deadline, "The fixture decoder must deliver within the wait window.");
+                    System.Threading.Thread.Sleep(2);
+                }
+                var buffer = fileRing.BeginWrite(videoBuffer.Length, out var slot);
+                videoBuffer.CopyTo(buffer, 0);
+                fileRing.Publish(slot, vw, vh, Stopwatch.GetTimestamp());
+            }
+            var fileCalibration = ArCalibration.Create(KeyboardLayout.Standard88, [(20, 85), (303, 78), (310, 124), (15, 131)], vw, vh, out var fileProblem);
+            Assert(fileCalibration is not null, $"The fixture's corners must calibrate ({fileProblem}).");
+            GpuStageFeed FileFeed(int tick)
+            {
+                PublishFileFrameToRing();
+                var held = tick is >= 1 and <= 3 ? new HashSet<int> { 60, 64 } : new HashSet<int>();
+                var feed = new GpuStageFeed(); feed.SetStageHeight(360);
+                feed.SetLook(GpuLook.From(quiet, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
+                feed.ClearTransient();
+                feed.SetDeterministicState([], 0, false, held);
+                feed.SetDeterministicBeatPulse(0);
+                feed.Camera = new GpuCameraInput(fileRing, PictureFit.Fit, false, 1f);
+                feed.Ar = new GpuArInput(fileCalibration!, ArNoteStyle.Default, 1f, KeyLight: .8f);
+                return feed;
+            }
+            var exportAvi = Path.Combine(directory, "export.avi");
+            ArVideoTake exportTake;
+            using (var recorder = new AviVideoRecorder(exportAvi, aviPlan.Width, aviPlan.Height, aviPlan.FrameRate))
+                exportTake = ArRenderToVideo.Run(renderer, FileFeed, aviPlan, recorder);
+            Assert(exportTake.FramesWritten == 10 && File.Exists(exportAvi),
+                $"The camera-file take must write every planned frame ({exportTake.FramesWritten}).");
+            var exportReader = CameraFrameReader.OpenFile(exportAvi, out var exportError);
+            Assert(exportReader is not null, $"The camera-file take must read back as video ({exportError}).");
+            var stripeLevels = new List<int>();
+            using (exportReader)
+            {
+                var frame = new byte[aviPlan.Width * aviPlan.Height * 4];
+                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+                while (!exportReader!.AtEnd && Stopwatch.GetTimestamp() < deadline)
+                {
+                    Assert(exportReader.Error is null, $"The export AVI readback must not fail ({exportReader.Error}).");
+                    if (!exportReader.TryReadFrame(frame, mirror: false, out var gotW, out var gotH))
+                    { System.Threading.Thread.Sleep(2); continue; }
+                    Assert(gotW == aviPlan.Width && gotH == aviPlan.Height, "The export AVI keeps the plan's size.");
+                    var luma = 0; var count = 0;
+                    for (var y = 8; y < gotH - 8; y += 6)
+                        for (var x = 2; x < aviPlan.Width / 12; x += 5) { luma += frame[(y * gotW + x) * 4]; count++; }
+                    stripeLevels.Add(luma / count);
+                }
+            }
+            Assert(stripeLevels.Count >= 6, $"At least the six content ticks of the camera-file take must read back ({stripeLevels.Count}).");
+            var brightened = 0;
+            for (var i = 1; i < Math.Min(6, stripeLevels.Count); i++) if (stripeLevels[i] > stripeLevels[i - 1]) brightened++;
+            Assert(brightened >= 4 && stripeLevels[5] > stripeLevels[0] + 16,
+                $"The file's greys must tick through the engine in order (levels {string.Join("/", stripeLevels)}).");
+            Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 10 frames — four quiet runway ticks so the box's swallowed tail still leaves the six content ticks readable, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 22050 WAV frames — exactly the six ticks of the video — with the onset ramping gently and the held ticks loud, the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it, and a real camera video file — an MP4 pressed by the app's own writer and decoded by its reader — ticks through the engine one frame a tick, its stripe brightening in order.");
+        }
+        finally { try { Directory.Delete(directory, true); } catch { } }
     }
 }

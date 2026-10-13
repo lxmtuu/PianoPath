@@ -443,6 +443,14 @@ internal sealed class PianoVisualSettings
     public bool ArNotesInPerspective { get; set; } = false;
     /// <summary>Draw the player's growing press bars over the camera; the key tint remains independent. Off by default to avoid bright press trails in a stream or call.</summary>
     public bool ArLivePressTrails { get; set; } = false;
+    /// <summary>Live press bars fade by their own lifetime — walked forward as the bar stretches and backwards over the release (AR‑6.2 Keysight keypress parity) — instead of the always-on length fade.</summary>
+    public bool ArLiveFadeByLifetime { get; set; } = false;
+    /// <summary>Solidity of a live bar the moment the key goes down, percent of full, when the lifetime fade is on.</summary>
+    public double ArLiveFadeStart { get; set; } = 60;
+    /// <summary>Solidity of a live bar once it has stretched to its full reach, percent of full, when the lifetime fade is on.</summary>
+    public double ArLiveFadeEnd { get; set; } = 100;
+    /// <summary>How far onto the keys a live bar's leading edge may run, percent of the keys' depth (AR‑6.2 coverage): 100 keeps the legacy look — the bar stops at the keys; 200 reaches the front edge; lower holds the bar free of the keys.</summary>
+    public double ArLiveBarCoverPercent { get; set; } = 100;
     /// <summary>In Perform mode, emit an independent 3D note on each MIDI Note On. The note travels along the calibrated AR direction and continues after Note Off; held key tint remains separate.</summary>
     public bool ArRisingMidiNotes { get; set; } = true;
     /// <summary>Minimum note length, percent of the note's width: a note keeps at least this length even when struck very briefly (AR-S4, Keysight "minimum note scaling"). Zero changes nothing.</summary>
@@ -459,6 +467,42 @@ internal sealed class PianoVisualSettings
     /// a look never changes this.
     /// </summary>
     public string ArViewProfileId { get; set; } = ArCalibrationProfiles.LegacyId;
+
+    /// <summary>
+    /// Redraws the saved key area as a frame with octave lines right over the live camera picture (roadmap §14.7
+    /// "Thêm 1"), so a bumped tripod reads as lines that no longer sit on the real keys. It is a check of this
+    /// machine's own calibration, so — like the view above — applying or sharing a look never changes it.
+    /// </summary>
+    public bool ArAlignmentCheck { get; set; }
+
+    /// <summary>
+    /// The drift watch (roadmap §14.7 "Thêm 2") samples the key area's picture every few seconds and compares it
+    /// with this machine's saved calibration; once the keys have wandered past a small threshold for a few
+    /// readings in a row — a bumped tripod, a shifted piano — the AR status line nags to mark the corners again.
+    /// It never moves the calibration on its own, and like the check above it belongs to this machine's own
+    /// calibration, so applying or sharing a look never switches it on or off elsewhere.
+    /// </summary>
+    public bool ArDriftWatch { get; set; } = true;
+
+    /// <summary>
+    /// Colour of the alignment check's frame and octave lines (one of <see cref="ArAlignmentGuides.ColorIds"/>). Like
+    /// the check itself it belongs to this machine — a shared look never picks another player's diagnostic colour.
+    /// The initializer spells ArAlignmentGuides.DefaultColorId out as a literal so the preset generator can parse it.
+    /// </summary>
+    public string ArAlignmentGuideColor { get; set; } = "White";
+
+    /// <summary>
+    /// Draws the AR damper strip (roadmap §14.3, the catalogue's <c>Dampers</c> element): the glowing line hugging
+    /// the keys' back edge, lifted by sustain 0..1, from the Standard tier up. A look decision, so presets carry it.
+    /// </summary>
+    public bool ArDamperStrip { get; set; } = true;
+
+    /// <summary>"Halo" keeps the strip in the look's halo family; "Custom" tints it with <see cref="ArDamperStripColor"/>.
+    /// The initializer spells ArDampers.DefaultColorMode out as a literal so the preset generator can parse it.</summary>
+    public string ArDamperStripColorMode { get; set; } = "Halo";
+
+    /// <summary>Custom damper strip colour, used when <see cref="ArDamperStripColorMode"/> is "Custom".</summary>
+    public string ArDamperStripColor { get; set; } = "#8FE8FF";
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
@@ -515,9 +559,18 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
+    /// <summary>The lifetime fade of a live press bar, built the same way from <see cref="ArLiveFadeByLifetime"/>; null keeps the legacy length fade.</summary>
+    internal GraphVariable? ArLiveFadeGraph => ArLiveFadeByLifetime
+        ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArLiveFadeStart / 100, Max: ArLiveFadeEnd / 100)
+        : null;
+
+    /// <summary>The fraction of the keys' depth the bar coverage slider asks for as an offset in the live-bars style.</summary>
+    internal double ArLiveBarCoverPercentFraction => (ArLiveBarCoverPercent - 100) / 100;
+
     internal ArOptions ArOptionsValue => new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
         ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
-        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
+        ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes, ArLiveFadeGraph,
+        ArLiveBarCoverPercentFraction).Normalised();
 
     /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
     internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
@@ -638,11 +691,13 @@ internal sealed class PianoVisualSettings
             if (property.Name is nameof(ArEnabled) or nameof(ArMode) or nameof(ArOpacity) or nameof(ArLookahead) or nameof(ArKeyLight) or nameof(ArDelay)
                 or nameof(ArNoteWidthByVelocity) or nameof(ArNoteWidthSoft) or nameof(ArNoteWidthHard)
                 or nameof(ArNoteFadeByVelocity) or nameof(ArNoteFadeSoft) or nameof(ArNoteFadeHard) or nameof(ArQuality)
+                or nameof(ArLiveFadeByLifetime) or nameof(ArLiveFadeStart) or nameof(ArLiveFadeEnd) or nameof(ArLiveBarCoverPercent)
                 or nameof(ArNotesInPerspective) or nameof(ArNoteMinScale) or nameof(ArLivePressTrails) or nameof(ArRisingMidiNotes)
                 or nameof(ArNoteDirectionTilt) or nameof(ArNoteDirectionAzimuth)) continue;
             // The view the camera stands at is this machine's too: the marked key area is stored per view, so a look
-            // that switched views would ask the player to mark keys that are already marked.
-            if (property.Name == nameof(ArViewProfileId)) continue;
+            // that switched views would ask the player to mark keys that are already marked. The alignment check
+            // couples straight to that calibration, so it follows the view onto the machine list.
+            if (property.Name is nameof(ArViewProfileId) or nameof(ArAlignmentCheck) or nameof(ArAlignmentGuideColor) or nameof(ArDriftWatch)) continue;
             // Which camera, or which video file, is this machine's too: a look must never switch the player off the camera they
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
@@ -670,6 +725,9 @@ internal sealed class PianoVisualSettings
         CameraSourceLink = "";
         CameraVideoPath = "";
         ArViewProfileId = "";               // which view the camera stands at is this machine's; Clamp turns the empty id into the default view
+        ArAlignmentCheck = false;           // the drift check talks to this machine's own calibration, never to a shared look
+        ArAlignmentGuideColor = ArAlignmentGuides.DefaultColorId;   // the check's colour follows it onto the machine list
+        ArDriftWatch = true;                // the watch is this machine's own assistant, kept on until the player says otherwise
         PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
     }
 
@@ -763,13 +821,18 @@ internal sealed class PianoVisualSettings
         if (!KeyboardSizes.Contains(KeyboardSize)) KeyboardSize = "88";
         ArViewProfileId = ArCalibrationProfiles.Normalize(ArViewProfileId).Id;
         ArQuality = ArQualityTiers.Normalize(ArQuality);
+        if (!ArDampers.ColorModes.Contains(ArDamperStripColorMode)) ArDamperStripColorMode = ArDampers.DefaultColorMode;
+        if (!ArAlignmentGuides.ColorIds.Contains(ArAlignmentGuideColor)) ArAlignmentGuideColor = ArAlignmentGuides.DefaultColorId;
         var ar = new ArOptions(ArEnabled, ArMode, ArOpacity, ArLookahead, ArKeyLight, ArDelay,
             ArNoteWidthVelocity, ArNoteFadeVelocity, ArQualityTiers.TierOf(ArQuality), ArNotesInPerspective, ArNoteMinScale,
-            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes).Normalised();
+            ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes, ArLiveFadeGraph,
+            ArLiveBarCoverPercentFraction).Normalised();
         ArMode = ar.Mode; ArOpacity = ar.Opacity; ArLookahead = ar.Lookahead; ArKeyLight = ar.KeyLight; ArDelay = ar.Delay;
         ArNoteDirectionTilt = ar.NoteDirectionTilt; ArNoteDirectionAzimuth = ar.NoteDirectionAzimuth;
         ArNoteWidthSoft = Math.Clamp(ArNoteWidthSoft, 10, 200); ArNoteWidthHard = Math.Clamp(ArNoteWidthHard, 10, 200);
         ArNoteFadeSoft = Math.Clamp(ArNoteFadeSoft, 10, 200); ArNoteFadeHard = Math.Clamp(ArNoteFadeHard, 10, 200);
+        ArLiveFadeStart = Math.Clamp(ArLiveFadeStart, 0, 100); ArLiveFadeEnd = Math.Clamp(ArLiveFadeEnd, 0, 100);
+        ArLiveBarCoverPercent = Math.Clamp(ArLiveBarCoverPercent, 100 + ArOptions.LiveBarCoverFractionMin * 100, 100 + ArOptions.LiveBarCoverFractionMax * 100);
         ArNoteMinScale = ArOptions.Fit(ArNoteMinScale, ArOptions.NoteMinScaleMin, ArOptions.NoteMinScaleMax, ArOptions.NoteMinScaleDefault);
         if (!CameraOverlay.Corners.Contains(CameraCorner)) CameraCorner = CameraOverlay.Corners[0];
         CameraSize = Math.Clamp(CameraSize, 15, 60); CameraOpacity = Math.Clamp(CameraOpacity, 20, 100);

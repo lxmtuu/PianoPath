@@ -134,6 +134,7 @@ internal static class Ar3DNoteProjection
                 if (!double.IsFinite(press.Age) || !double.IsFinite(press.HeldSeconds) || press.HeldSeconds <= 0) continue;
                 var gone = 1.0;
                 var releaseDistance = 0.0;
+                var releaseFraction = 0.0;                      // how far the release has travelled, for the fade graph's backward walk
                 if (!press.Down)
                 {
                     var since = press.Age - press.HeldSeconds;
@@ -142,6 +143,7 @@ internal static class Ar3DNoteProjection
                     // same physical reach/speed as song notes rather than the legacy flat overlay's 350 ms fade.
                     releaseDistance = since * style.FallSpeed;
                     if (!(releaseDistance < style.Reach)) continue;
+                    releaseFraction = Math.Clamp(releaseDistance / style.Reach, 0, 1);
                     gone = .65 * Math.Clamp(1 - releaseDistance / style.Reach, 0, 1);
                 }
                 var length = Math.Min(style.Reach, press.HeldSeconds * style.FallSpeed);
@@ -151,11 +153,13 @@ internal static class Ar3DNoteProjection
                 var halfWidth = (right - left) * pose.KeyboardWidthDepthRatio * style.WidthShareFor(velocity) * .5;
                 if (!(halfWidth > 0) || !double.IsFinite(halfWidth)) continue;
                 var target = new ArVec3(layout.CenterX(press.Pitch) * pose.KeyboardWidthDepthRatio, 0, 0);
-                var headDistance = releaseDistance;
+                // One world unit is one key depth in this frame, so the style's coverage fraction places the bar's
+                // leading edge that far past the key's back edge without touching the pose.
+                var headDistance = releaseDistance - style.LiveBarCoverFraction;
                 var tailDistance = Math.Min(style.Reach, releaseDistance + length);
                 if (!(tailDistance > headDistance + 1e-7)) continue;
                 if (!TryPatch(pose, view, target, travel, headDistance, tailDistance, halfWidth, out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;
-                var fade = Math.Clamp(1 - length / style.Reach, .08, 1) * gone * style.FadeGraph.Sample(velocity);
+                var fade = ArLiveFade.Opacity(style.LiveFade, length / style.Reach, press.Down, releaseFraction) * gone * style.FadeGraph.Sample(velocity);
                 into.Add(new Ar3DLiveBar(patch, press.Pitch, fade, press.Down, press.Strength,
                     halfWidthPx, halfLengthPx, sceneY, target, travel, headDistance, tailDistance, halfWidth));
             }

@@ -299,6 +299,40 @@ public class Ar3DNoteProjectionTests
     }
 
     [Fact]
+    public void A_lifetime_fade_walks_the_graph_with_hold_and_release_in_3d_too()
+    {
+        var live = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .2, Max: 1);
+        var style = Style with { LiveFade = live };
+        var f = .5 * Style.FallSpeed / Style.Reach;
+        var held = Assert.Single(BuildLive([new ArLivePress(60, .5, .5, true, .9f)], style: style));
+        var released = Assert.Single(BuildLive([new ArLivePress(60, .8, .5, false, .9f)], style: style));
+        // held: the graph stands at the bar's stretch; released: it walked back by how far the bar has travelled toward its reach
+        var stretchBack = .3 * Style.FallSpeed / Style.Reach;
+        Assert.Equal(.2 + .8 * f, held.Fade, 9);
+        Assert.Equal((.2 + .8 * f * (1 - stretchBack)) * (.65 * .9), released.Fade, 9);
+        Assert.True(released.Fade < held.Fade);
+    }
+
+    [Fact]
+    public void A_cover_fraction_slides_the_leading_edge_onto_the_keys_in_3d_too()
+    {
+        var pose = Calibration.CameraPose!.Value;
+        var plain = Assert.Single(BuildLive([new ArLivePress(60, .5, .5, true, .9f)]));
+        var covering = Assert.Single(BuildLive([new ArLivePress(60, .5, .5, true, .9f)], style: Style with { LiveBarCoverFraction = .5 }));
+        // the bar's centre slides half a key depth onto the keys (one world unit) and its half length grows by half of that
+        var target = new ArVec3(Calibration.Layout.CenterX(60) * pose.KeyboardWidthDepthRatio, 0, 0);
+        var travelCamera = pose.DirectionToCamera(ArNoteDirection.Default.Vector);
+        var length = .5 * Style.FallSpeed;
+        Assert.True(pose.TryProject(pose.ToCamera(target) - travelCamera * ((length - .5) * .5), out var expectedImage));
+        var expected = View.ToOutput(expectedImage.X, expectedImage.Y);
+        var centre = Centre(covering.Patch);
+        Assert.InRange(Distance(centre.X - expected.X, centre.Y - expected.Y), 0, 1.0);
+        var movedTowardTheKeys = Distance(Centre(covering.Patch).X - Centre(plain.Patch).X, Centre(covering.Patch).Y - Centre(plain.Patch).Y);
+        Assert.True(movedTowardTheKeys > 5, $"Coverage must move the bar visibly onto the keys ({movedTowardTheKeys:0.0}px).");
+        Assert.True(covering.Patch.Area > plain.Patch.Area, "A bar that runs onto the keys is longer than one that stops at them.");
+    }
+
+    [Fact]
     public void Elevated_billboards_follow_the_saved_3d_pose_and_project_all_four_corners()
     {
         var baseline = Corners.Select(point => (640 + (point.X - 640) * .62, 360 + (point.Y - 360) * .62)).ToArray();

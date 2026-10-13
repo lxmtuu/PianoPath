@@ -38,6 +38,8 @@ internal sealed class GpuLook
     public bool Notes3D { get; init; } = true;
     /// <summary>Note names printed inside the bars when there is room (Style → SHAPE &amp; STYLE).</summary>
     public bool ShowNoteLabels { get; init; }
+    /// <summary>The «KEYFLOW» strip above the keys, drawn GPU-side so offline takes carry it too.</summary>
+    public bool ShowWatermark { get; init; }
     /// <summary>Song note speed in DIPs per second, identical to the software stage.</summary>
     public float SongFallSpeed { get; init; } = 258;
     /// <summary>Live trail speed in DIPs per second (the software stage uses NoteFallSpeed directly).</summary>
@@ -211,6 +213,8 @@ internal sealed class GpuLook
     // ---- colours (sRGB 0..1) ----
     public Vector3 BackgroundColor { get; init; }
     public Vector3 HaloColor { get; init; } = new(.78f, .43f, 1f);
+    /// <summary>The AR damper strip's colour: the halo colour, or the look's custom strip pick.</summary>
+    public Vector3 ArDamperColor { get; init; } = new(.78f, .43f, 1f);
     public Vector3 PressedKeyColor { get; init; } = new(.97f, .51f, 1f);
     public Vector3 KeyFeltColor { get; init; } = new(.77f, .11f, .29f);
     public Vector3 PetalColor { get; init; } = new(1f, .7f, .81f);
@@ -256,6 +260,9 @@ internal sealed class GpuLook
                 colors[pitch * TrackSlots + track] = ToVector(noteColor(pitch, track));
         static float P(double value) => (float)(value / 100);
         static float Speed(double value) => (float)(.25 + value / 100 * 1.75);
+        // The AR damper strip follows the look's halo family unless the look gives it a colour of its own.
+        var halo = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f));
+        var arDamperColor = s.ArDamperStripColorMode == "Custom" ? ParseHex(s.ArDamperStripColor, halo) : halo;
         return new GpuLook
         {
             OverCamera = overCamera,
@@ -266,6 +273,7 @@ internal sealed class GpuLook
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
             NoteEdge = P(s.NoteEdge), NoteHeadGlow = P(s.NoteHeadGlow), NoteRefraction = P(s.NoteRefraction), NoteTexture = P(s.NoteTexture),
             Notes3D = s.Notes3D, ShowNoteLabels = s.ShowNoteLabels,
+            ShowWatermark = s.ShowWatermark,
             SongFallSpeed = (float)(258 * s.NoteFallSpeed / 550), LiveFallSpeed = (float)s.NoteFallSpeed,
             Rising = s.NoteDirection == "Up",
             VelocityColor = s.VelocityColor, VelocityColorAmount = P(s.VelocityColorAmount),
@@ -327,7 +335,8 @@ internal sealed class GpuLook
             AudioReactive = s.AudioReactive, AudioReactiveAmount = P(s.AudioReactiveAmount),
 
             BackgroundColor = ParseHex(s.BackgroundColor, Vector3.Zero),
-            HaloColor = ParseHex(s.HaloColor, new Vector3(.78f, .43f, 1f)),
+            HaloColor = halo,
+            ArDamperColor = arDamperColor,
             PressedKeyColor = ParseHex(s.PressedKeyColor, new Vector3(.97f, .51f, 1f)),
             KeyFeltColor = ParseHex(s.KeyFeltColor, new Vector3(.77f, .11f, .29f)),
             // Atmospheric tints use the same colour grade as the rest of the stage.

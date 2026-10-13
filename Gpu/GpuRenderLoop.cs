@@ -396,6 +396,7 @@ internal sealed class GpuRenderLoop : IDisposable
                 }
                 gpu.UpdateAr(_feed.Ar);
                 gpu.UpdateAtlas(_feed.LabelAtlas);
+                gpu.UpdateWatermark(_feed.Watermark);
                 var now = clock.Elapsed.TotalSeconds;
                 var dt = now - last; last = now;
                 // the simulation runs in the layout of the primary output (the window when it is open)
@@ -603,6 +604,7 @@ internal sealed class GpuRenderLoop : IDisposable
             renderer.UpdateCamera(feed.Camera);
             renderer.UpdateAr(feed.Ar);
             renderer.UpdateAtlas(feed.LabelAtlas);
+            renderer.UpdateWatermark(feed.Watermark);
             renderer.Render(target, view, simulation, input, layout, notes, keys, sprites, alphaOutput: alphaOutput);
             drawn += timer.Elapsed.TotalMilliseconds - started;
         }
@@ -648,6 +650,7 @@ internal sealed class GpuRenderLoop : IDisposable
         renderer.UpdateCamera(feed.Camera);
         renderer.UpdateAr(feed.Ar);
         renderer.UpdateAtlas(feed.LabelAtlas);
+        renderer.UpdateWatermark(feed.Watermark);
         renderer.Render(target, null, simulation, input, layout, notes, keys, sprites, alphaOutput: true,
             alphaGeometryOutput: geometryView, alphaGlowOutput: glowView);
         renderer.Context.CopyResource(geometryStaging, geometryTexture);

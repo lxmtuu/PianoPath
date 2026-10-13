@@ -81,7 +81,32 @@ public partial class MainWindow
     internal void SetArDelay(int milliseconds)
     {
         if (_visualSliders.TryGetValue(nameof(PianoVisualSettings.ArDelay), out var slider)) slider.Value = Math.Clamp(milliseconds, slider.Minimum, slider.Maximum);
-        else { _visualSettings.ArDelay = milliseconds; ApplyVisualSettings("Camera delay set to {0} ms", false, milliseconds); }
+        else { _visualSettings.ArDelay = milliseconds; ArDelays.Remember(milliseconds); ApplyVisualSettings("Camera delay set to {0} ms", false, milliseconds); }
         UpdateArFeed();
+    }
+
+    /// <summary>
+    /// Brings back the delay saved for the camera that just opened (AR‑3.5): the setting, the slider and the engine all
+    /// move to it through the same apply path a drag of the slider uses. The slider is moved under the loading guard so
+    /// the restore itself is not filed again as a fresh choice of this camera's delay.
+    /// </summary>
+    private void ApplyStoredArDelay(double delay)
+    {
+        delay = ArOptions.Fit(delay, ArOptions.DelayMin, ArOptions.DelayMax, ArOptions.DelayDefault);
+        if (Math.Abs(_visualSettings.ArDelay - delay) < 0.5) return;         // the value the setting already shows: restoring it would say nothing
+        _visualSettings.ArDelay = delay;
+        if (_visualSliders.TryGetValue(nameof(PianoVisualSettings.ArDelay), out var slider))
+        {
+            var loading = _loadingVisualSettings;
+            _loadingVisualSettings = true;
+            try
+            {
+                slider.Value = Math.Clamp(delay, slider.Minimum, slider.Maximum);
+                if (_visualValueBoxes.TryGetValue(nameof(PianoVisualSettings.ArDelay), out var box) && !box.IsKeyboardFocused)
+                    box.Text = FormatSetting(nameof(PianoVisualSettings.ArDelay), slider.Value);
+            }
+            finally { _loadingVisualSettings = loading; }
+        }
+        ApplyVisualSettings("Camera delay set to {0} ms", false, delay);
     }
 }

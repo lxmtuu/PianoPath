@@ -309,19 +309,19 @@ internal sealed partial class GpuStageSimulation
     private void AddFlashSprites(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, Flash flash, float scaleX)
     {
         var t = Math.Clamp(flash.Age / flash.Life, 0, 1);
-        var strength = Math.Clamp(.5f + flash.Strength * .5f, 0, 1.2f);
+        var strength = StageLightCurves.FlashStyleStrength(flash.Strength);
         var x = flash.X * scaleX; var y = flash.Y;
         switch (flash.Style)
         {
             case 1:
             {
-                var fade = (1 - t) * flash.Intensity * strength;
+                var fade = StageLightCurves.FlashEnvelope(t) * flash.Intensity * strength;
                 AddBolt(sprites, x, Math.Max(0, y - 260 - look.RingSizeRaw * 2), y, fade);
                 break;
             }
             case 2:
             {
-                var fade = (1 - t) * (1 - t) * flash.Intensity * strength;
+                var fade = StageLightCurves.FlashEnvelope(t) * flash.Intensity * strength;
                 var radius = 12 + t * (30 + look.RingSizeRaw);
                 Glow(sprites, x, y, radius * 1.3f, radius * .8f, Rgb(150, 110, 255) * 1.8f, .8f * fade);
                 Glow(sprites, x, y, radius * .6f, radius * .4f, Rgb(220, 240, 255) * 2.2f, .9f * fade);

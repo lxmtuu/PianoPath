@@ -54,7 +54,7 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -223,6 +223,7 @@ internal static partial class VerificationSuite
     {
         var look = VisualPresets.FindBuiltIn("Ice Crystal")!.Settings.Clone();
         look.NoteGlow = 123; look.HandSplitPitch = 55; look.BackgroundImagePath = @"C:\pictures\mine.png"; look.BackgroundMode = "Image";
+        look.ArNoteWidthByVelocity = true; look.ArNoteWidthSoft = 72; look.ArNoteWidthHard = 146; look.ArLiveFadeByLifetime = true; look.ArLiveFadeStart = 33;
         var code = VisualPresetShare.Encode(look);
         Assert(code.StartsWith(VisualPresetShare.Prefix, StringComparison.Ordinal) && code.Length > 80 && !code.Contains('+') && !code.Contains('/') && !code.Contains('\n'),
             "A share code should start with the version prefix and be one line of URL-safe text.");
@@ -230,6 +231,9 @@ internal static partial class VerificationSuite
         Assert(VisualPresetShare.TryDecode(code, out var decoded, out var reason) && reason.Length == 0, "A code that was just produced must decode.");
         Assert(decoded.NoteGlow == 123 && decoded.HandSplitPitch == 55 && decoded.NoteStyle == look.NoteStyle && decoded.PresetName == look.PresetName,
             "A decoded look should carry every setting of the original, so the two machines render the same stage.");
+        Assert(decoded.ArNoteWidthByVelocity && decoded.ArNoteWidthSoft == 72 && decoded.ArNoteWidthHard == 146
+                && decoded.ArLiveFadeByLifetime && decoded.ArLiveFadeStart == 33 && decoded.ArLiveFadeEnd == look.ArLiveFadeEnd,
+            "A version-2 code should carry the AR velocity and lifetime graphs with the look, so the receiving machine draws the same graphs.");
         Assert(decoded.BackgroundImagePath == "" && decoded.BackgroundMode == "Solid",
             "A share code must not carry a local image path; a look that used an image falls back to its solid background.");
 
@@ -237,11 +241,17 @@ internal static partial class VerificationSuite
         Assert(VisualPresetShare.TryDecode(wrapped, out var unwrapped, out _) && unwrapped.NoteGlow == 123,
             "A code pasted back from a chat window, wrapped and indented, should still read.");
 
+        // Roadmap §14.9: a code an older Keyflow wrote is the same payload behind the older marker.
+        var legacy = VisualPresetShare.LegacyPrefix + code[VisualPresetShare.Prefix.Length..];
+        Assert(VisualPresetShare.TryDecode(legacy, out var fromV1, out var legacyReason) && legacyReason.Length == 0
+                && fromV1.NoteGlow == 123 && fromV1.ArNoteWidthHard == 146 && fromV1.HandSplitPitch == 55,
+            "Every version-1 code ever shared must keep opening bit for bit, so old looks still travel.");
+
         Assert(!VisualPresetShare.TryDecode("", out _, out var empty) && empty == "The code is empty."
                 && !VisualPresetShare.TryDecode(null, out _, out var missing) && missing == "The code is empty.",
             "An empty code should be refused with the reason for it.");
         Assert(!VisualPresetShare.TryDecode("hello there", out _, out var foreign) && foreign == "This does not look like a Keyflow look code."
-                && !VisualPresetShare.TryDecode("KEYFLOW-LOOK-2:AAAA", out _, out var other) && other == "The code was made by a different version of Keyflow.",
+                && !VisualPresetShare.TryDecode("KEYFLOW-LOOK-9:AAAA", out _, out var other) && other == "The code was made by a different version of Keyflow.",
             "Text that is not a Keyflow look, and a code from another format version, should be refused with different reasons.");
         Assert(!VisualPresetShare.TryDecode(VisualPresetShare.Prefix + "not base64!!", out _, out var damaged) && damaged == "The code is damaged: its text is not base64."
                 && !VisualPresetShare.TryDecode(VisualPresetShare.Prefix + "AAAA", out _, out var undecodable) && undecodable == "The code is damaged: its payload cannot be decompressed.",
@@ -258,7 +268,7 @@ internal static partial class VerificationSuite
         Assert(VisualPresetShare.TryDecode(VisualPresetShare.Encode(crazy), out var clamped, out _)
                 && clamped.NoteFallSpeed == 1000 && clamped.ParticleAmount == 120 && clamped.Palette == "Spectrum",
             "A look whose values are out of range should arrive clamped, exactly like a loaded settings file.");
-        Results.Add("PASS look share codes: version-prefixed URL-safe text, exact round trip without the local image path, wrapped codes tolerated, and empty, foreign, oversized and damaged codes refused with a reason.");
+        Results.Add("PASS look share codes: KEYFLOW-LOOK-2 text carrying the look and its AR graphs, every version-1 code still opening bit for bit, URL-safe single lines without the local image path, wrapped codes tolerated, and empty, foreign, other-version, oversized and damaged codes refused with a reason.");
     }
 
     private static void VerifyVisualSettings()
@@ -1728,9 +1738,10 @@ internal static partial class VerificationSuite
     }
 
     /// <summary>
-    /// AR-S2: the graph parameter (docs/AR-OVERLAY-ROADMAP.md §14.5) and the two velocity graphs of the
-    /// overlay's note style, wired from the settings page through <see cref="ArOptions"/> to the style the
-    /// AR layer draws with. Flat by default, so the drawings are unchanged unless the player asks.
+    /// AR-S2: the graph parameter (docs/AR-OVERLAY-ROADMAP.md §14.5), the two velocity graphs and the
+    /// live-bar lifetime fade (§14.5) of the overlay's note style, wired from the settings page through
+    /// <see cref="ArOptions"/> to the style the AR layer draws with. Flat by default, so the drawings are
+    /// unchanged unless the player asks.
     /// </summary>
     private static void VerifyArGraphVariable()
     {
@@ -1762,13 +1773,39 @@ internal static partial class VerificationSuite
         Assert(settings.ArNoteWidthSoft == 50 && settings.ArNoteFadeHard == 100, "Clamping should keep in-range graph sliders as they are.");
         settings.ArNoteWidthSoft = 1000; settings.Clamp();
         Assert(settings.ArNoteWidthSoft == 200, "Clamping should pull an out-of-range width slider back into range.");
+        // The live-bar lifetime graph (AR-6.2): off by default, and its two sliders walk from birth to full reach.
+        Assert(new PianoVisualSettings().ArOptionsValue.NoteStyle.LiveFade is null,
+            "The default overlay should keep the legacy length fade: no lifetime graph on the style.");
+        var live = new PianoVisualSettings { ArLiveFadeByLifetime = true, ArLiveFadeStart = 60, ArLiveFadeEnd = 100 };
+        var liveStyle = live.ArOptionsValue.NoteStyle;
+        var liveGraph = liveStyle.LiveFade ?? default;
+        Assert(liveStyle.LiveFade is not null
+                && Math.Abs(liveGraph.Sample(0) - .6) < 1e-9 && Math.Abs(liveGraph.Sample(1) - 1) < 1e-9,
+            "The live-bar fade graph should walk the birth slider to the full-length slider over the bar's stretch.");
+        live.ArLiveFadeStart = 300; live.Clamp();
+        Assert(live.ArLiveFadeStart == 100, "Clamping should pull an out-of-range lifetime slider back into range.");
+        Assert(Math.Abs(ArLiveFade.Opacity(liveGraph, .5, true, 0) - .8) < 1e-9
+                && Math.Abs(ArLiveFade.Opacity(liveGraph, .5, false, .5) - .7) < 1e-9,
+            "Held should walk the graph forwards and the release should walk the same graph backwards.");
+        Assert(Math.Abs(ArLiveFade.Opacity(null, .92, true, 0) - .08) < 1e-9,
+            "Without the graph the legacy floor still stands.");
+        // Coverage (AR-6.2): the slider is a percentage, 100 keeps the legacy edge and the style carries the fraction.
+        Assert(Math.Abs(new PianoVisualSettings().ArOptionsValue.NoteStyle.LiveBarCoverFraction) < 1e-12,
+            "The default overlay should keep the bar's leading edge at the keys, as it always was.");
+        var covering = new PianoVisualSettings { ArLiveBarCoverPercent = 160 };
+        Assert(Math.Abs(covering.ArOptionsValue.NoteStyle.LiveBarCoverFraction - .6) < 1e-9,
+            "The coverage slider should reach the style as a fraction along the keys' depth.");
+        covering.ArLiveBarCoverPercent = 900; covering.Clamp();
+        Assert(covering.ArLiveBarCoverPercent == 300, "Clamping should pull an out-of-range coverage slider back into range.");
+        Assert(Math.Abs(new PianoVisualSettings { ArLiveBarCoverPercent = 25 }.ArOptionsValue.NoteStyle.LiveBarCoverFraction + .75) < 1e-9,
+            "At the low end the bar floats most of a key depth away from the keys instead.");
         // A look never carries the graphs: they belong to the overlay on this camera.
-        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50 };
+        var look = new PianoVisualSettings { ArNoteWidthByVelocity = true, ArNoteWidthSoft = 50, ArLiveFadeByLifetime = true, ArLiveFadeStart = 20, ArLiveBarCoverPercent = 260 };
         var target = new PianoVisualSettings();
         target.CopyFrom(look);
-        Assert(!target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100,
-            "Applying a look should not change the overlay's velocity graphs.");
-        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade graphs wired from settings to the note style.");
+        Assert(!target.ArLiveFadeByLifetime && !target.ArNoteWidthByVelocity && target.ArNoteWidthSoft == 100 && target.ArLiveFadeStart == 60 && target.ArLiveBarCoverPercent == 100,
+            "Applying a look should not change the overlay's velocity or lifetime graphs, or its bar coverage.");
+        Results.Add("PASS AR graph parameter (AR-S2): flat/curve sampling, window clamping, curve direction, and the width/fade/lifetime graphs plus the live-bar coverage wired from settings to the note style, the lifetime fade walking both ways, all look-guarded.");
     }
 
     /// <summary>
@@ -5029,9 +5066,14 @@ internal static partial class VerificationSuite
                 "A machine with no Salamander piano loaded should record video only instead of writing an empty WAV.");
             SetField(window, "_recordingPath", hadPath);
             Invoke(window, "UpdateRecordingInfo");
+
+            // The AR render-to-video card under OUTPUT: present, and honest about what it still waits for.
+            var arExport = (TextBlock)Field(window, "_arExportStatus");
+            Assert(arExport is not null && arExport.Text.Contains(Loc.T("no song open yet"), StringComparison.Ordinal),
+                $"With no song open the AR export card must say so among the things it waits for ({arExport?.Text}).");
         }
         finally { try { Directory.Delete(folder, true); } catch { } }
-        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine without the Salamander piano.");
+        Results.Add("PASS recording audio: the canonical WAV header, frames counted and sizes patched on close, silence and oversized blocks, a file that cannot be opened and a closed writer, the track's path beside the video, the engine tapping its own rendered blocks into the writer, the dock switch and the honest line about a machine without the Salamander piano, and the AR render-to-video card reporting what it still needs.");
     }
 
     /// <summary>True when the action throws, which is how the recorders refuse bad input.</summary>

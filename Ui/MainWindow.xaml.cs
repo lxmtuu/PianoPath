@@ -1224,6 +1224,7 @@ public partial class MainWindow : Window
     private DispatcherTimer? _cameraUiTimer;
     private string _cameraSignature = "";
     private ArCalibrationSession? _arCalibration;
+    private ArDelaySession? _arDelays;
     private string _arSource = "";
     private int _arWidth, _arHeight;
     private ArPlan _arPlan = ArPlan.Off;
@@ -1270,7 +1271,9 @@ public partial class MainWindow : Window
             : new GpuArInput(calibration, options.NoteStyle, options.LayerOpacity, options.KeyLightStrength, options.ShowsNotes,
                 (float)options.DelaySeconds, options.Quality, options.NotesProjected, MinAspect: options.NoteMinAspect,
                 ShowLiveTrails: options.LivePressTrails, NoteDirection: options.NoteDirection,
-                ShowRisingMidiNotes: options.ShowsRisingMidiNotes);
+                ShowRisingMidiNotes: options.ShowsRisingMidiNotes, AlignmentGuides: _visualSettings.ArAlignmentCheck,
+                ShowDamperStrip: _visualSettings.ArDamperStrip, AlignmentGuideColor: ArGuideColor(),
+                ViewProfileId: _visualSettings.ArViewProfileId);
         RefreshHandStatus();
         RefreshArStatus();
     }
@@ -1281,6 +1284,21 @@ public partial class MainWindow : Window
     /// </summary>
     internal ArCalibrationSession ArCalibration => _arCalibration ??= new ArCalibrationSession(new ArCalibrationStore(PianoVisualSettingsStore.SettingsDirectory));
 
+    /// <summary>The alignment frame colour from the settings pick; unknown ids fall back to the off-white default.</summary>
+    private System.Numerics.Vector3 ArGuideColor()
+    {
+        var (r, g, b) = ArAlignmentGuides.ColorFor(_visualSettings.ArAlignmentGuideColor);
+        return new System.Numerics.Vector3(r, g, b);
+    }
+
+    /// <summary>
+    /// The camera delay of the camera that is open (AR‑3.5): a USB webcam and a virtual camera are late by different
+    /// amounts, so the Camera delay slider's value is kept per camera and comes back when that camera opens again.
+    /// Lazy for the same reason as the calibration: a check that points the settings folder somewhere temporary gets
+    /// a store there.
+    /// </summary>
+    internal ArDelaySession ArDelays => _arDelays ??= new ArDelaySession(new ArDelayStore(PianoVisualSettingsStore.SettingsDirectory));
+
     /// <summary>
     /// Tells the calibration which source is open (null for none) and brings it up to date with the keyboard size and the
     /// view of the camera the settings name. It is safe to call whenever anything changes; nothing happens unless the
@@ -1288,9 +1306,14 @@ public partial class MainWindow : Window
     /// </summary>
     private void ApplyArSource(string? source, int width, int height)
     {
+        // AR‑3.5: the delay belongs to the camera. Leaving one files the slider's value under its link; arriving at
+        // one whose delay was ever tuned brings that delay back, with the slider and the engine following (the same
+        // source re-applied changes nothing — SwitchTo says so with a null).
+        var stored = ArDelays.SwitchTo(source, _visualSettings.ArDelay);
         _arSource = source ?? ""; _arWidth = width; _arHeight = height;
         if (_arSource.Length == 0) _arCalibration?.Clear();       // nothing open and nothing made yet: no reason to read the file
         else ArCalibration.Use(_arSource, _arWidth, _arHeight, _visualSettings.KeyboardLayoutChoice, _visualSettings.ArViewProfileId);
+        if (stored is { } delay) ApplyStoredArDelay(delay);
     }
 
     /// <summary>
@@ -1490,6 +1513,7 @@ public partial class MainWindow : Window
     private void PumpCameraFrame()
     {
         PollLatency();
+        PollDriftWatch();
         if (_arPlan.CameraLayer)               // the engine's render thread is the ring's reader while the overlay is drawn
         {
             if (++_arStatusTicks % 30 == 0) { RefreshArStatus(); RefreshCameraOverlayStatus(announce: false); }

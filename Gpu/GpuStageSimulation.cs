@@ -99,7 +99,7 @@ internal sealed partial class GpuStageSimulation
     private readonly List<RisingMidiNote> _risingMidiNotes = [];
     private readonly List<ArLiveMidiNote> _arRisingMidiNotes = [];
     private readonly List<GpuArImpact> _arImpacts = [];
-    private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128];
+    private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128], _keyHold = new float[128];
     private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
     private readonly bool[] _active = new bool[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
@@ -275,6 +275,7 @@ internal sealed partial class GpuStageSimulation
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
             var target = _active[pitch] ? 1f : 0f;
+            _keyHold[pitch] = _active[pitch] ? _keyHold[pitch] + frameDt : 0;
             _press[pitch] += (target - _press[pitch]) * (1 - MathF.Exp(-frameDt * (target > _press[pitch] ? 38 : 16)));
             _glow[pitch] = _active[pitch] ? Math.Max(_glow[pitch], Math.Min(1, _glow[pitch] + frameDt * 12)) : Math.Max(0, _glow[pitch] - frameDt * 3.2f);
             _heat[pitch] = _active[pitch] ? Math.Min(1, _heat[pitch] + frameDt * 7) : Math.Max(0, _heat[pitch] - frameDt * 2.4f);
@@ -298,7 +299,8 @@ internal sealed partial class GpuStageSimulation
         for (var pitch = 0; pitch < 128; pitch++)
         {
             var c = ToLinear(_keyColor[pitch]);
-            KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? _glow[pitch] : 0);
+            // A held key breathes: a slow, quiet sway on its light so a long press feels alive (Live Stage key glow and AR tint share this colour buffer).
+            KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? Math.Min(1, _glow[pitch] * StageLightCurves.KeyBreathMultiplier(_keyHold[pitch], _time, pitch)) : 0);
         }
 
         // ---- continuous emitters on sounding keys ----
@@ -459,7 +461,9 @@ internal sealed partial class GpuStageSimulation
             else
             {
                 var y = 28 + trail.Age * look.LiveFallSpeed;
-                if (!trail.Hit && y >= layout.HitY) { trail.Hit = true; Impact(trail.Pitch, .8f, layout); }
+                // The finger is the only flash source: the press already lit the keys when it started, so the
+                // falling head of the trail must fade in quietly instead of striking a second impact on touchdown.
+                if (!trail.Hit && y >= layout.HitY) trail.Hit = true;
                 var tailY = y - 28 - trail.Held * look.LiveFallSpeed;
                 if (trail.Released && (reachedArLimit || arLiveReleaseSeconds <= 0 && tailY > layout.HitY + 32)) _trails.RemoveAt(i);
             }
@@ -498,9 +502,9 @@ internal sealed partial class GpuStageSimulation
         if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0 && _flashes.Count < 48)
         {
             if (look.ImpactFlashStyle == 0)
-                _flashes.Add(new Flash { X = x, Y = y, Life = .28f, Size = layout.Lane * (1.6f + strength * 1.6f) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * (.5f + strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = .38f, Size = layout.Lane * StageLightCurves.ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * StageLightCurves.ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
             else
-                _flashes.Add(new Flash { X = x, Y = y, Life = .18f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = .26f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
         }
         SpawnImpactMorph(clamped, x, y, color, strength);
         if (!look.ShowEmbers || look.ParticleAmount < 1) return;
@@ -753,7 +757,7 @@ internal sealed partial class GpuStageSimulation
         return new GpuKeyInstance
         {
             Box = new Vector4(x0, x1, length, height),
-            Emit = new Vector4(color, _glow[pitch]),
+            Emit = new Vector4(color, Math.Min(1, _glow[pitch] * StageLightCurves.KeyBreathMultiplier(_keyHold[pitch], _time, pitch))),
             Misc = new Vector4(kind, look.AnimateKeys ? _press[pitch] : 0, Math.Max(0, left), Math.Max(0, right)),
             Base = new Vector4(baseHeight, _spill[pitch], depthOffset, 0)
         };
@@ -856,7 +860,7 @@ internal sealed partial class GpuStageSimulation
         {
             var u = flash.Age / flash.Life;
             if (flash.Style != 0) { AddFlashSprites(sprites, look, flash, scaleX); continue; }
-            var c = ToLinear(flash.Color) * flash.Intensity * (1 - u) * (1 - u);
+            var c = ToLinear(flash.Color) * flash.Intensity * StageLightCurves.FlashEnvelope(u);
             sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(flash.X * scaleX, flash.Y, flash.Size * (.8f + u * .6f), 4), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 0, u) });
         }
         if (look.HoldElectricArc && look.HoldArcIntensity > .01f) AddElectricArcs(sprites, look, layout);

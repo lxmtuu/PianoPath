@@ -122,6 +122,7 @@ internal sealed class GpuStageRenderer : IDisposable
     // the layers behind the notes (lanes, petals, ambient, note trails) need their own buffer:
     // SV_InstanceID restarts at 0 for every draw, so one buffer cannot serve two sprite batches
     private readonly DynamicStructuredBuffer<GpuSpriteInstance> _ambient;
+    private const float KindWatermark = 16f;
     private readonly GpuInstanceList<GpuSpriteInstance> _ambientList = new(2048);
     private GpuNotePassQueryProfiler? _notePassProfiler;
     private GpuAdaptiveQualityController? _adaptiveQualityController;
@@ -129,6 +130,10 @@ internal sealed class GpuStageRenderer : IDisposable
     private ID3D11Texture2D? _atlasTexture;
     private ID3D11ShaderResourceView? _atlasView;
     private long _atlasVersion = -1;
+    private ID3D11Texture2D? _markTexture;
+    private ID3D11ShaderResourceView? _markView;
+    private long _markVersion = -1;
+    private int _markWidth, _markHeight;
     private ID3D11Texture2D? _backgroundTexture;
     private ID3D11ShaderResourceView? _backgroundView;
     private float _backgroundAspect = 1;
@@ -218,6 +223,12 @@ internal sealed class GpuStageRenderer : IDisposable
     }
 
     internal bool AdaptiveQualityProfilingAvailable => _adaptiveQualityProfiler is not null;
+
+    /// <summary>
+    /// Verification seam: an explicit AR budget override (roadmap §14.8) used only by <c>--verify</c>, so a WARP
+    /// rehearsal can ask for a deeper cut than the timestamp profiler would choose by itself. Null in the app.
+    /// </summary>
+    internal GpuAdaptiveQualityTier? ArBudgetTierOverride { get; set; }
 
     /// <summary>Polls completed GPU timings without waiting; disables the optional probe if the driver reports an error.</summary>
     internal bool CollectAdaptiveQualitySamples()
@@ -364,6 +375,11 @@ internal sealed class GpuStageRenderer : IDisposable
 
     /// <summary>How many quads the last frame drew into the AR layer; verification reads it.</summary>
     internal int ArQuadCount => _arList.Count;
+    /// <summary>The AR list minus the scene elements (damper strip, alignment guides): the count every per-note/per-key
+    /// assertion means by AR quads. Both counters answer the last built frame, so an idle layer must never subtract
+    /// more than the list holds.</summary>
+    internal int ArObjectQuadCount => Math.Max(0,
+        _arList.Count - Math.Min(_arList.Count, _arLayer.DamperStripCount + _arLayer.AlignmentGuideCount));
     /// <summary>How many song-note quads the AR layer built, excluding key tint and Live Stage light spill.</summary>
     internal int ArShapeCount => _arLayer.ShapeCount;
     internal int AmbientCount => _ambientList.Count;
@@ -379,6 +395,9 @@ internal sealed class GpuStageRenderer : IDisposable
     internal int ArLandingGlowCount => _arLayer.LandingGlowCount;
     internal int ArNoteLabelCount => _arLayer.NoteLabelCount;
     internal int ArImpactLightCount => _arLayer.ImpactLightCount;
+    internal int ArDamperStripCount => _arLayer.DamperStripCount;
+    /// <summary>How many alignment-check guide quads the last calibrated frame drew; verification reads it.</summary>
+    internal int ArAlignmentGuideCount => _arLayer.AlignmentGuideCount;
     internal int ArNoteLightCount => _arLayer.NoteLightCount;
     internal int ArPulseCount => _arLayer.PulseCount;
     internal int ArParticleFxCount => _arLayer.ParticleFxCount;
@@ -404,6 +423,20 @@ internal sealed class GpuStageRenderer : IDisposable
         _atlasTexture = Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)image.Width, (uint)image.Height, mipLevels: 1, bindFlags: BindFlags.ShaderResource);
         Context.UpdateSubresource(image.Pixels, _atlasTexture, 0, (uint)(image.Width * 4));
         _atlasView = Device.CreateShaderResourceView(_atlasTexture);
+    }
+
+    /// <summary>Uploads the export watermark strip once, like the atlas; sprite kind 16 samples its alpha to tint the line.</summary>
+    internal void UpdateWatermark(GpuBackgroundImage? image)
+    {
+        var version = image?.Version ?? 0;
+        if (version == _markVersion) return;
+        _markVersion = version;
+        _markView?.Dispose(); _markTexture?.Dispose(); _markView = null; _markTexture = null;
+        if (image is null || image.Width <= 0 || image.Height <= 0) { _markWidth = _markHeight = 0; return; }
+        _markWidth = image.Width; _markHeight = image.Height;
+        _markTexture = Device.CreateTexture2D(Format.B8G8R8A8_UNorm, (uint)image.Width, (uint)image.Height, mipLevels: 1, bindFlags: BindFlags.ShaderResource);
+        Context.UpdateSubresource(image.Pixels, _markTexture, 0, (uint)(image.Width * 4));
+        _markView = Device.CreateShaderResourceView(_markTexture);
     }
 
     /// <summary>Renders one frame of the stage into <paramref name="output"/> (a BGRA8 render target of the target's size).</summary>
@@ -445,6 +478,13 @@ internal sealed class GpuStageRenderer : IDisposable
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
         if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
+        // The export watermark draws on its own terms: a whole-line text sprite in front of the keys,
+        // independent of the camera gate that quietens the scene sprites.
+        if (look.ShowWatermark && _markView is not null
+                && ArVideoWatermark.Place(layout.Width, layout.Height, layout.HitY, _markWidth, _markHeight) is { } mark)
+            sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(mark.CenterX, mark.CenterY, mark.HalfHeight, KindWatermark),
+                Color = new Vector4(GpuStageSimulation.ToLinear(new Vector3(232f / 255f, 224f / 255f, 250f / 255f)), 1),
+                Dir = new Vector4(1, 0, mark.Aspect, 0) });
         StageSpriteCount = sprites.Count;
         simulation.BuildAmbient(look, layout, _ambientList, quality.AmbientDensity, cameraOverlayActive: cameraActive);
 
@@ -458,8 +498,11 @@ internal sealed class GpuStageRenderer : IDisposable
         _keyColors.Upload(context, simulation.KeyColors);
         // the AR layer draws only over the picture the calibration was made on: a camera that changed size needs a new calibration
         _arList.Clear();
+        // roadmap §14.8: every AR build hears the adaptive tier (the verify seam first, the profiler otherwise) and
+        // drops what roadmap's sentence says, never what it forbids.
+        var arBudgetTier = ArBudgetTierOverride ?? _adaptiveQualityController?.Tier ?? GpuAdaptiveQualityTier.Full;
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
@@ -492,6 +535,7 @@ internal sealed class GpuStageRenderer : IDisposable
         }
 
         if (_atlasView is not null) context.PSSetShaderResource(6, _atlasView);
+        if (_markView is not null) context.PSSetShaderResource(8, _markView);
         if (alphaOverlayActive && _ambientList.Count > 0)
         {
             // Ambient petals, meteors and other atmosphere are always emitted screen-space; the 3D note path
@@ -696,6 +740,7 @@ internal sealed class GpuStageRenderer : IDisposable
         try { Context.ClearState(); Context.Flush(); } catch { }
         _notes.Dispose(); _keys.Dispose(); _sprites.Dispose(); _keyColors.Dispose(); _arQuads.Dispose(); _ambient.Dispose();
         _atlasView?.Dispose(); _atlasTexture?.Dispose();
+        _markView?.Dispose(); _markTexture?.Dispose();
         _backgroundView?.Dispose(); _backgroundTexture?.Dispose();
         _camera?.Dispose();
         _notePassProfiler?.Dispose();

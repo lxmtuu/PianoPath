@@ -278,6 +278,44 @@ public class ArNotesTests
     }
 
     [Fact]
+    public void A_lifetime_fade_walks_forward_while_the_key_is_held_and_the_default_style_is_untouched_by_it()
+    {
+        // A legacy style (LiveFade null, the default) is pinned by the fade facts above; this one is about the graph.
+        var style = Style with { LiveFade = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .2, Max: 1) };
+        var f = .5 * style.FallSpeed / style.Reach;
+        var young = Assert.Single(BuildLive([Down(60, .5)], style: style));
+        var grown = Assert.Single(BuildLive([Down(60, 20)], style: style));                       // at full stretch
+        Near(.2 + .8 * f, young.Fade, 1e-9);
+        Near(1, grown.Fade, 1e-9);
+    }
+
+    [Fact]
+    public void A_lifetime_fade_walks_backwards_over_the_release_and_the_release_dim_still_takes_the_bar()
+    {
+        var style = Style with { LiveFade = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .2, Max: 1) };
+        var f = .5 * style.FallSpeed / style.Reach;
+        var held = Assert.Single(BuildLive([Down(60, .5)], style: style));
+        var halfGone = Assert.Single(BuildLive([LetGo(60, .5, ArNotes.ReleaseLife / 2)], style: style));
+        // the graph walked halfway back from where the finger left the bar, then the usual release dim on top
+        Near((.2 + .8 * f * .5) * (.65 * .5), halfGone.Fade, 1e-9);
+        Assert.True(halfGone.Fade < held.Fade);
+    }
+
+    [Fact]
+    public void A_cover_fraction_lets_the_bar_run_onto_the_keys_and_a_negative_one_holds_it_free()
+    {
+        var covering = Assert.Single(BuildLive([Down(60, .5)], style: Style with { LiveBarCoverFraction = .6 }));
+        Near(.6, Keys(covering.Patch.FrontLeft).V, 1e-6);    // the leading edge sits 60% of the key depth onto the keys
+        Near(.6, Keys(covering.Patch.FrontRight).V, 1e-6);
+        Near(-.75, Keys(covering.Patch.BackLeft).V, 1e-6);   // the tail keeps the stretch it always had
+        var detached = Assert.Single(BuildLive([Down(60, 2)], style: Style with { LiveBarCoverFraction = -.5 }));
+        Near(-.5, Keys(detached.Patch.FrontLeft).V, 1e-6);   // held free of the keys instead
+        // a head pulled back behind the tail makes no bar at all: coming up short is "not visible yet", not an error
+        Assert.Empty(BuildLive([Down(60, .4)], style: Style with { LiveBarCoverFraction = -.62 }));   // length .6 < .62
+        Assert.Single(BuildLive([Down(60, .42)], style: Style with { LiveBarCoverFraction = -.62 })); // length .63 ≥ .62
+    }
+
+    [Fact]
     public void Black_keys_are_drawn_after_the_white_ones_at_their_own_width()
     {
         var bars = BuildLive([Down(61, .5), Down(60, .5), Down(63, .5), Down(62, .5)]).ToList();
