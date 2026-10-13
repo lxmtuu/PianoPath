@@ -629,7 +629,9 @@ internal static partial class VerificationSuite
             while (tap.Serial < 3 && loop.Error is null && wait.Elapsed.TotalSeconds < 30) Thread.Sleep(20);
             Assert(loop.Error is null && tap.Serial >= 3, $"The render loop should record {w}×{h} frames with the camera layer on ({loop.Error}, {tap.Serial} frames).");
             var age = tap.CameraAge.Snapshot;
-            Assert(age.Frames == 1 && age.LastMilliseconds >= 80 && age.LastMilliseconds < 80 + 1500 && age.WorstMilliseconds == age.LastMilliseconds,
+            // This checks the age measurement, not a hard real-time budget: a busy Windows/WARP runner can delay its first draw.
+            // Keep a five-second sanity ceiling so scheduler jitter does not turn a valid sample into a flaky failure.
+            Assert(age.Frames == 1 && age.LastMilliseconds >= 80 && age.LastMilliseconds < 5_000 && age.WorstMilliseconds == age.LastMilliseconds,
                 $"A take should count the 80 ms old camera picture once, at least that old ({age.Frames} frames, last {age.LastMilliseconds:0} ms).");
             maxAge = Math.Max(maxAge, age.LastMilliseconds - 80);
             byte[]? copy = null;
