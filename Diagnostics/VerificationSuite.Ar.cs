@@ -2384,8 +2384,14 @@ internal static partial class VerificationSuite
                 Assert(reader!.Width == 200 && reader.Height == 112, $"The AVI must come back at the plan's size (got {reader.Width}×{reader.Height}).");
                 var frame = new byte[200 * 112 * 4];
                 var frameIndex = 0;
-                while (reader.TryReadFrame(frame, mirror: false, out var gotWidth, out var gotHeight))
+                // The decoder on the CI box says "no picture just yet" as an ordinary false before it says
+                // end-of-stream, so this loop reads to the real end — hollow stream ticks wind it forward.
+                var readDeadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+                while (!reader.AtEnd && Stopwatch.GetTimestamp() < readDeadline)
                 {
+                    Assert(reader.Error is null, $"The AVI readback must not fail ({reader.Error}).");
+                    if (!reader.TryReadFrame(frame, mirror: false, out var gotWidth, out var gotHeight))
+                    { System.Threading.Thread.Sleep(2); continue; }
                     Assert(gotWidth == 200 && gotHeight == 112 && frame[3] == 255, "Every take frame is opaque and at the plan's size.");
                     if (frameIndex == 0) lumaLeftStripe0 = frame[0];
                     var key = At(60, .85);
@@ -2559,8 +2565,12 @@ internal static partial class VerificationSuite
             using (exportReader)
             {
                 var frame = new byte[aviPlan.Width * aviPlan.Height * 4];
-                while (exportReader!.TryReadFrame(frame, mirror: false, out var gotW, out var gotH))
+                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+                while (!exportReader!.AtEnd && Stopwatch.GetTimestamp() < deadline)
                 {
+                    Assert(exportReader.Error is null, $"The export AVI readback must not fail ({exportReader.Error}).");
+                    if (!exportReader.TryReadFrame(frame, mirror: false, out var gotW, out var gotH))
+                    { System.Threading.Thread.Sleep(2); continue; }
                     Assert(gotW == aviPlan.Width && gotH == aviPlan.Height, "The export AVI keeps the plan's size.");
                     var luma = 0; var count = 0;
                     for (var y = 8; y < gotH - 8; y += 6)
