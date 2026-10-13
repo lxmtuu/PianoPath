@@ -28,9 +28,9 @@ internal sealed class ColorPickerWindow : Window
         Height = 510;
         ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        Background = new SolidColorBrush(Color.FromRgb(18, 16, 24));
-        Foreground = Brushes.White;
         FontFamily = new FontFamily("Segoe UI");
+        SetResourceReference(Control.BackgroundProperty, "WindowBrush");
+        SetResourceReference(Control.ForegroundProperty, "TextBrush");
 
         var color = ParseColor(initialColor, Color.FromRgb(67, 230, 255));
         (_hue, var saturation, var value) = ToHsv(color);
@@ -42,7 +42,8 @@ internal sealed class ColorPickerWindow : Window
         var apply = MakeButton(Loc.T("Apply color"), true); apply.Margin = new Thickness(9, 0, 0, 0); apply.Click += (_, _) => { SelectedHex = ToHex(_current); DialogResult = true; };
         footer.Children.Add(cancel); footer.Children.Add(apply); DockPanel.SetDock(footer, Dock.Bottom); root.Children.Add(footer);
 
-        var title = new TextBlock { Text = Loc.T("COLOR PICKER"), FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)), Margin = new Thickness(0, 0, 0, 14) };
+        var title = new TextBlock { Text = Loc.T("COLOR PICKER"), FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 14) };
+        title.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
         DockPanel.SetDock(title, Dock.Top); root.Children.Add(title);
 
         _field = new ColorField(_hue, saturation, value) { Height = 250, Margin = new Thickness(0, 0, 0, 12) };
@@ -51,9 +52,13 @@ internal sealed class ColorPickerWindow : Window
         root.Children.Add(_field);
 
         var hueHeader = new DockPanel { Margin = new Thickness(0, 1, 0, 4) };
-        hueHeader.Children.Add(new TextBlock { Text = "Hue", Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)), FontSize = 10 });
-        DockPanel.SetDock(hueHeader.Children[^1], Dock.Left);
-        hueHeader.Children.Add(new TextBlock { Text = Loc.T("Drag the square for saturation and brightness"), Foreground = new SolidColorBrush(Color.FromRgb(113, 105, 126)), FontSize = 9, HorizontalAlignment = HorizontalAlignment.Right });
+        var hueLabel = new TextBlock { Text = "Hue", FontSize = 10 };
+        hueLabel.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        hueHeader.Children.Add(hueLabel);
+        DockPanel.SetDock(hueLabel, Dock.Left);
+        var hueHint = new TextBlock { Text = Loc.T("Drag the square for saturation and brightness"), FontSize = 9, HorizontalAlignment = HorizontalAlignment.Right };
+        hueHint.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        hueHeader.Children.Add(hueHint);
         DockPanel.SetDock(hueHeader, Dock.Top); root.Children.Add(hueHeader);
 
         _hueSlider = new Slider { Minimum = 0, Maximum = 360, Value = _hue, Height = 27, Margin = new Thickness(0, 0, 0, 14), Background = HueBrush() };
@@ -66,7 +71,8 @@ internal sealed class ColorPickerWindow : Window
         };
         DockPanel.SetDock(_hueSlider, Dock.Top); root.Children.Add(_hueSlider);
 
-        var swatchHeader = new TextBlock { Text = Loc.T("QUICK COLORS"), FontSize = 9, Foreground = new SolidColorBrush(Color.FromRgb(156, 146, 168)), Margin = new Thickness(0, 0, 0, 7) };
+        var swatchHeader = new TextBlock { Text = Loc.T("QUICK COLORS"), FontSize = 9, Margin = new Thickness(0, 0, 0, 7) };
+        swatchHeader.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         DockPanel.SetDock(swatchHeader, Dock.Top); root.Children.Add(swatchHeader);
         var swatches = new UniformGrid { Columns = 8, Rows = 1, Margin = new Thickness(0, 0, 0, 14) };
         Color[] quickColors = [
@@ -75,7 +81,8 @@ internal sealed class ColorPickerWindow : Window
         ];
         foreach (var quickColor in quickColors)
         {
-            var button = new Button { Height = 27, Margin = new Thickness(2), Padding = new Thickness(0), Background = new SolidColorBrush(quickColor), BorderBrush = new SolidColorBrush(Color.FromRgb(66, 58, 76)), BorderThickness = new Thickness(1), ToolTip = ToHex(quickColor) };
+            var button = new Button { Height = 27, Margin = new Thickness(2), Padding = new Thickness(0), Background = new SolidColorBrush(quickColor), BorderThickness = new Thickness(1), ToolTip = ToHex(quickColor) };
+            button.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
             button.Click += (_, _) => SetColorFromRgb(quickColor);
             swatches.Children.Add(button);
         }
@@ -85,13 +92,18 @@ internal sealed class ColorPickerWindow : Window
         colorRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(46) });
         colorRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         colorRow.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(72) });
-        _preview = new Border { Height = 34, CornerRadius = new CornerRadius(6), BorderBrush = new SolidColorBrush(Color.FromRgb(83, 73, 96)), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 9, 0) };
+        _preview = new Border { Height = 34, CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Margin = new Thickness(0, 0, 9, 0) };
+        _preview.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
         Grid.SetColumn(_preview, 0); colorRow.Children.Add(_preview);
-        _hexInput = new TextBox { Text = ToHex(color), MaxLength = 7, FontSize = 12, CharacterCasing = CharacterCasing.Upper, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(9, 4, 9, 4), Background = new SolidColorBrush(Color.FromRgb(29, 25, 36)), Foreground = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(79, 65, 97)) };
+        _hexInput = new TextBox { Text = ToHex(color), MaxLength = 7, FontSize = 12, CharacterCasing = CharacterCasing.Upper, VerticalContentAlignment = VerticalAlignment.Center, Padding = new Thickness(9, 4, 9, 4) };
+        _hexInput.SetResourceReference(Control.BackgroundProperty, "ControlBrush");
+        _hexInput.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+        _hexInput.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
         _hexInput.LostFocus += (_, _) => ApplyHexInput();
         _hexInput.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyHexInput(); e.Handled = true; } };
         Grid.SetColumn(_hexInput, 1); colorRow.Children.Add(_hexInput);
-        var rgb = new TextBlock { Text = Loc.T("RGB / HEX"), Foreground = new SolidColorBrush(Color.FromRgb(130, 120, 144)), FontSize = 8, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8, 0, 0, 0) };
+        var rgb = new TextBlock { Text = Loc.T("RGB / HEX"), FontSize = 8, VerticalAlignment = VerticalAlignment.Center, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8, 0, 0, 0) };
+        rgb.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         Grid.SetColumn(rgb, 2); colorRow.Children.Add(rgb);
         DockPanel.SetDock(colorRow, Dock.Top); root.Children.Add(colorRow);
 
@@ -128,12 +140,16 @@ internal sealed class ColorPickerWindow : Window
 
     private static byte ToByte(double value) => (byte)Math.Clamp((int)Math.Round(value * 255), 0, 255);
     private static Color ParseColor(string value, Color fallback) { try { return (Color)ColorConverter.ConvertFromString(value)!; } catch { return fallback; } }
-    private static Button MakeButton(string label, bool primary) => new()
+    private Button MakeButton(string label, bool primary)
     {
-        Content = label, MinWidth = primary ? 112 : 76, Height = 36, Padding = new Thickness(13, 5, 13, 5),
-        Foreground = Brushes.White, Background = new SolidColorBrush(primary ? Color.FromRgb(125, 61, 174) : Color.FromRgb(43, 38, 51)),
-        BorderBrush = new SolidColorBrush(primary ? Color.FromRgb(184, 119, 229) : Color.FromRgb(80, 71, 91)), BorderThickness = new Thickness(1)
-    };
+        var button = new Button
+        {
+            Content = label, MinWidth = primary ? 112 : 76, Height = 36, Padding = new Thickness(13, 5, 13, 5),
+            BorderThickness = new Thickness(1)
+        };
+        if (primary) button.Style = (Style)FindResource("AccentButtonStyle");
+        return button;
+    }
 
     private static LinearGradientBrush HueBrush()
     {

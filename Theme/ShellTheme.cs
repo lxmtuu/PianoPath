@@ -182,7 +182,7 @@ internal static class ShellThemes
         "Windows high-contrast colours: system window, text, control and highlight colours replace the concert palette.",
         BackdropStyle.Obsidian,
         Accent: SystemColors.HighlightColor,
-        AccentAlt: SystemColors.HotTrackColor,
+        AccentAlt: SystemColors.HighlightColor,
         AccentSoft: Color.FromArgb(0x40, SystemColors.HighlightColor.R, SystemColors.HighlightColor.G, SystemColors.HighlightColor.B),
         Glow: SystemColors.HotTrackColor,
         Window: SystemColors.WindowColor,
@@ -257,11 +257,23 @@ internal static class ShellThemeManager
         Current = theme;
         // High contrast wins over the concert palette while it is on, but the user's choice is kept in
         // Current: turning the system setting off (and re-applying) brings the chosen theme straight back.
-        var published = IsHighContrast ? ShellThemes.HighContrast() : theme;
+        var highContrast = IsHighContrast;
+        var published = highContrast ? ShellThemes.HighContrast() : theme;
         var resources = Application.Current?.Resources;
         if (resources is not null)
         {
             Set(resources, "AccentBrush", new SolidColorBrush(published.Accent));
+            Set(resources, "AccentButtonTextBrush", new SolidColorBrush(highContrast ? SystemColors.HighlightTextColor : AccentButtonText(published)));
+            Set(resources, "TextBrush", new SolidColorBrush(highContrast ? SystemColors.WindowTextColor : UserShellThemes.DefaultText));
+            Set(resources, "MutedTextBrush", new SolidColorBrush(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(0xA5, 0xAC, 0xB9)));
+            Set(resources, "DimTextBrush", new SolidColorBrush(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(0x6E, 0x75, 0x85)));
+            Set(resources, "DangerBrush", new SolidColorBrush(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(0xFF, 0x4D, 0x6D)));
+            Set(resources, "DangerBackgroundBrush", new SolidColorBrush(highContrast ? published.Control : Color.FromRgb(0x3A, 0x14, 0x20)));
+            Set(resources, "DangerBorderBrush", new SolidColorBrush(highContrast ? published.ControlBorder : Color.FromRgb(0x7A, 0x2A, 0x44)));
+            Set(resources, "SuccessBrush", new SolidColorBrush(highContrast ? SystemColors.WindowTextColor : Color.FromRgb(0x41, 0xE0, 0xA8)));
+            Set(resources, "ScrimBrush", new SolidColorBrush(highContrast
+                ? Color.FromArgb(0xF0, published.Window.R, published.Window.G, published.Window.B)
+                : Color.FromArgb(0xA8, 0x04, 0x05, 0x09)));
             Set(resources, "Accent2Brush", new SolidColorBrush(published.AccentAlt));
             Set(resources, "AccentSoftBrush", new SolidColorBrush(published.AccentSoft));
             Set(resources, "GlowBrush", new SolidColorBrush(published.Glow));
@@ -278,8 +290,10 @@ internal static class ShellThemeManager
             Set(resources, "ControlBorderBrush", new SolidColorBrush(published.ControlBorder));
             Set(resources, "PopupBrush", new SolidColorBrush(published.Popup));
             Set(resources, "TrackBrush", new SolidColorBrush(published.Track));
-            Set(resources, "HairlineBrush", new SolidColorBrush(Color.FromArgb(published.DeepSurfaces ? (byte)0x1F : (byte)0x2E, 255, 255, 255)));
-            Set(resources, "TopSheenBrush", Sheen(published));
+            Set(resources, "HairlineBrush", highContrast
+                ? new SolidColorBrush(published.Border)
+                : new SolidColorBrush(Color.FromArgb(published.DeepSurfaces ? (byte)0x1F : (byte)0x2E, 255, 255, 255)));
+            Set(resources, "TopSheenBrush", highContrast ? new SolidColorBrush(Colors.Transparent) : Sheen(published));
             Set(resources, "BackdropTopBrush", new SolidColorBrush(published.PanelTop));
             Set(resources, "AccentColor", published.Accent);
             Set(resources, "AccentColor2", published.AccentAlt);
@@ -287,6 +301,9 @@ internal static class ShellThemeManager
         Changed?.Invoke(published);
         return theme;
     }
+
+    private static Color AccentButtonText(ShellTheme theme) =>
+        UserShellThemes.AccentButtonText(theme.Accent, theme.AccentAlt);
 
     private static void Set(ResourceDictionary resources, string key, object value) => resources[key] = value;
 

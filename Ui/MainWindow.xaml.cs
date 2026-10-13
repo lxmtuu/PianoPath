@@ -78,6 +78,8 @@ public partial class MainWindow : Window
     public MainWindow(bool loadSalamanderOnStart = true)
     {
         InitializeComponent();
+        ShellThemeManager.Changed += OnShellThemeChanged;
+        Closed += (_, _) => ShellThemeManager.Changed -= OnShellThemeChanged;
         _visualSettings = PianoVisualSettingsStore.Load();
         // The output request must be on the engine before the bundled piano loads, so the very first
         // pipeline already opens the backend the player chose last time instead of opening waveOut and
@@ -978,15 +980,48 @@ public partial class MainWindow : Window
     /// settings. Called on startup and after every settings change; only a real change does work, so
     /// dragging an unrelated slider never rebuilds the backdrop.
     /// </summary>
+    private static ShellTheme PublishedChromeTheme => ShellThemeManager.IsHighContrast
+        ? ShellThemes.HighContrast()
+        : ShellThemeManager.Current;
+
+    private string ChromeBackdropSignature(ShellTheme theme) =>
+        $"{theme.Id}|{_visualSettings.ShellTheme}|{_visualSettings.ChromeMotion}|{_visualSettings.BackdropDensity:0}|{(_chromeMotionLocked ? "locked" : "live")}";
+
     internal void ApplyChromeTheme()
     {
-        var theme = ShellThemes.Find(_visualSettings.ShellTheme);
-        var themeChanged = !string.Equals(theme.Id, _appliedShellTheme.Id, StringComparison.OrdinalIgnoreCase);
-        if (themeChanged) { ShellThemeManager.Apply(theme); _appliedShellTheme = theme; }
-        ChromeMotion.Enabled = !_chromeMotionLocked && _visualSettings.ChromeMotion != "Off";
-        var signature = $"{theme.Id}|{_visualSettings.ChromeMotion}|{_visualSettings.BackdropDensity:0}|{(_chromeMotionLocked ? "locked" : "live")}";
-        if (themeChanged || signature != _backdropSignature) ConfigureBackdrops(signature);
-        if (themeChanged) UpdateThemeChrome(theme);
+        var selectedTheme = ShellThemes.Find(_visualSettings.ShellTheme);
+        // Compare the whole record, not just its stable id: saving new colours under the same user-theme
+        // name must still replace the published brushes and redraw every dependent surface.
+        var themeChanged = selectedTheme != _appliedShellTheme;
+        if (themeChanged)
+        {
+            // Set the guard before Apply raises Changed, so the callback sees the final selection.
+            _appliedShellTheme = selectedTheme;
+            ShellThemeManager.Apply(selectedTheme);
+        }
+        ChromeMotion.Enabled = !_chromeMotionLocked && _visualSettings.ChromeMotion != "Off" && !ShellThemeManager.IsHighContrast;
+        var published = PublishedChromeTheme;
+        var signature = ChromeBackdropSignature(published);
+        var backdropChanged = signature != _backdropSignature;
+        if (backdropChanged) ConfigureBackdrops(published, signature);
+        if (backdropChanged)
+        {
+            if (_sweepStarted) UpdateChromeSweeps(published);
+            else if (ChromeMotion.Enabled) StartChromeSweeps();
+        }
+    }
+
+    private void OnShellThemeChanged(ShellTheme published)
+    {
+        void RefreshPublishedTheme()
+        {
+            ChromeMotion.Enabled = !_chromeMotionLocked && _visualSettings.ChromeMotion != "Off" && !ShellThemeManager.IsHighContrast;
+            ConfigureBackdrops(published, ChromeBackdropSignature(published));
+            UpdateThemeChrome(published);
+        }
+
+        if (Dispatcher.CheckAccess()) RefreshPublishedTheme();
+        else Dispatcher.BeginInvoke(new Action(RefreshPublishedTheme));
     }
 
     /// <summary>Freezes the chrome animation for automated captures, so screenshots are deterministic.</summary>
@@ -999,17 +1034,9 @@ public partial class MainWindow : Window
         ApplyChromeTheme();
     }
 
-    private void ConfigureBackdrops()
-    {
-        var theme = ShellThemeManager.Current;
-        var signature = $"{theme.Id}|{_visualSettings.ChromeMotion}|{_visualSettings.BackdropDensity:0}";
-        ConfigureBackdrops(signature);
-    }
-
-    private void ConfigureBackdrops(string signature)
+    private void ConfigureBackdrops(ShellTheme theme, string signature)
     {
         _backdropSignature = signature;
-        var theme = ShellThemeManager.Current;
         var motion = _chromeMotionLocked ? "Off" : _visualSettings.ChromeMotion;
         MenuBackdrop.Configure(theme, motion, _visualSettings.BackdropDensity);
         // The dock keeps a quieter version of the same backdrop so the settings text stays readable.
@@ -1022,15 +1049,25 @@ public partial class MainWindow : Window
         if (PlayDialogThemeOrb is not null) PlayDialogThemeOrb.Background = new SolidColorBrush(theme.Accent);
         RefreshMenuThemeChips();
         RefreshMenuStageLook();
-        if (_sweepStarted) StartChromeSweeps();
+        if (_sweepStarted) UpdateChromeSweeps(theme);
     }
 
     /// <summary>The header and footer carry a slow comet of the accent colour (unless motion is off).</summary>
     private void StartChromeSweeps()
     {
-        if (_sweepStarted || !ChromeMotion.Enabled) return;
+        if (_sweepStarted) return;
+        UpdateChromeSweeps(PublishedChromeTheme);
+    }
+
+    private void UpdateChromeSweeps(ShellTheme theme)
+    {
+        if (!ChromeMotion.Enabled || _chromeMotionLocked || theme.Id == ShellThemes.HighContrastId)
+        {
+            HeaderSweep.Background = null;
+            FooterSweep.Background = null;
+            return;
+        }
         _sweepStarted = true;
-        var theme = ShellThemeManager.Current;
         HeaderSweep.Background = SweepBrush(theme, 4.2);
         FooterSweep.Background = SweepBrush(theme, 5.6);
     }

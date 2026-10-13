@@ -4,7 +4,7 @@
         xmlns:local="clr-namespace:PianoPath"
         Title="Keyflow — Piano VFX" local:Loc.Localize="True" Height="920" Width="1600" MinHeight="700" MinWidth="1080"
         WindowStartupLocation="CenterScreen" Background="{DynamicResource WindowBrush}" WindowStyle="None" ResizeMode="NoResize"
-        Foreground="{StaticResource TextBrush}" FontFamily="Segoe UI" WindowState="Maximized"
+        Foreground="{DynamicResource TextBrush}" FontFamily="Segoe UI" WindowState="Maximized"
         PreviewKeyDown="Window_KeyDown" KeyUp="Window_KeyUp" MouseMove="Window_MouseMove" Deactivated="Window_Deactivated" Closed="Window_Closed" AllowDrop="True" DragOver="Window_DragOver" Drop="Window_Drop">
     <Window.Resources>
         <DropShadowEffect x:Key="DockShadow" Color="#000000" BlurRadius="38" ShadowDepth="0" Opacity=".62"/>
@@ -29,28 +29,28 @@
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="2,0,16,0">
-                    <Border Width="40" Height="40" CornerRadius="13" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#40FFFFFF" BorderThickness="1">
-                        <Path Data="{StaticResource IconLogo}" Fill="White" Width="21" Height="21" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <Border Width="40" Height="40" CornerRadius="13" Background="{DynamicResource AccentGradientBrush}" BorderBrush="{DynamicResource AccentButtonTextBrush}" BorderThickness="1">
+                        <Path Data="{StaticResource IconLogo}" Fill="{DynamicResource AccentButtonTextBrush}" Width="21" Height="21" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <StackPanel Margin="12,0,0,0" VerticalAlignment="Center">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Text="KEYFLOW" FontSize="15" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                            <TextBlock Text="KEYFLOW" FontSize="15" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
                             <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center">
-                                <TextBlock Text="PRO" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
+                                <TextBlock Text="PRO" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                             </Border>
                         </StackPanel>
                         <TextBlock Text="PIANO VFX STUDIO" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="8" Margin="0,3,0,0"/>
                     </StackPanel>
                     <Border Width="1" Height="34" Background="{DynamicResource PanelBorderBrush}" Margin="18,0,16,0"/>
                     <StackPanel VerticalAlignment="Center" MaxWidth="380">
-                        <TextBlock x:Name="SongTitle" Text="Live Piano" local:Loc.Localize="True" FontSize="13.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" TextTrimming="CharacterEllipsis"/>
-                        <TextBlock x:Name="NowPlayingLabel" Text="LIVE PLAY · PRESS A KEY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                        <TextBlock x:Name="SongTitle" Text="Live Piano" local:Loc.Localize="True" FontSize="13.5" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" TextTrimming="CharacterEllipsis"/>
+                        <TextBlock x:Name="NowPlayingLabel" Text="LIVE PLAY · PRESS A KEY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Foreground="{DynamicResource MutedTextBrush}" Margin="0,3,0,0"/>
                     </StackPanel>
                 </StackPanel>
-                <Border Grid.Column="1" Padding="12,6" CornerRadius="10" Background="#0E1017" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Border Grid.Column="1" Padding="12,6" CornerRadius="10" Background="{DynamicResource PopupBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="LOOK" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" VerticalAlignment="Center" Margin="0,0,10,0"/>
-                        <TextBlock x:Name="HeaderPresetLabel" Text="Concert Gold" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                        <TextBlock x:Name="HeaderPresetLabel" Text="Concert Gold" local:Loc.Localize="True" FontSize="11.5" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
                         <Button Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconSliders}" Margin="8,0,0,0" Click="StyleQuick_Click" ToolTip="Open the style presets" local:Loc.Localize="True"/>
                     </StackPanel>
                 </Border>
@@ -89,17 +89,17 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Margin="0,0,16,0">
                                 <StackPanel Orientation="Horizontal">
-                                    <TextBlock Text="SETTINGS" local:Loc.Localize="True" FontSize="13.5" FontWeight="Bold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"/>
+                                    <TextBlock Text="SETTINGS" local:Loc.Localize="True" FontSize="13.5" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center"/>
                                     <Border Margin="8,0,0,0" Padding="6,1" CornerRadius="4" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center">
-                                        <TextBlock Text="LIVE" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
+                                        <TextBlock Text="LIVE" FontSize="8" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                                     </Border>
                                 </StackPanel>
                                 <TextBlock x:Name="PresetNameLabel" Text="Preset · Concert Gold" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
                             </StackPanel>
                             <Grid Grid.Column="1" VerticalAlignment="Center" MaxWidth="268" HorizontalAlignment="Stretch">
                                 <TextBox x:Name="SettingsSearchBox" Height="32" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Search detailed stage, recording and app settings. Audio, MIDI, Practice and History are not included." local:Loc.Localize="True"/>
-                                <Path Data="{StaticResource IconSearch}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
-                                <TextBlock x:Name="SettingsSearchHint" Text="Search settings" local:Loc.Localize="True" Foreground="{StaticResource DimTextBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="31,0,0,0" IsHitTestVisible="False"/>
+                                <Path Data="{StaticResource IconSearch}" Fill="{DynamicResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
+                                <TextBlock x:Name="SettingsSearchHint" Text="Search settings" local:Loc.Localize="True" Foreground="{DynamicResource DimTextBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="31,0,0,0" IsHitTestVisible="False"/>
                             </Grid>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0">
                                 <Button x:Name="SettingsReturnButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconBack}" Width="28" Height="28" Click="SettingsBack_Click" ToolTip="Return to the Play dialog" AutomationProperties.Name="Return to the Play dialog" local:Loc.Localize="True" Visibility="Collapsed"/>
@@ -119,7 +119,7 @@
                                     <WrapPanel>
                                         <Button x:Name="ApplyPresetButton" Content="Apply preset" local:Loc.Localize="True" Tag="{StaticResource IconSparkle}" Style="{StaticResource AccentIconButtonStyle}" Click="ApplyPreset_Click" Padding="12,7" Margin="0,0,10,8"/>
                                         <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconSave}" Click="SavePresetAs_Click" Margin="0,0,6,8" ToolTip="Store the current look as a user preset" local:Loc.Localize="True"/>
-                                        <Button x:Name="DeletePresetButton" Style="{StaticResource GlyphButtonStyle}" Foreground="#FF9FB4" Tag="{StaticResource IconTrash}" Click="DeletePreset_Click" Margin="0,0,6,8" ToolTip="Delete the selected preset" local:Loc.Localize="True" IsEnabled="False"/>
+                                        <Button x:Name="DeletePresetButton" Style="{StaticResource GlyphButtonStyle}" Foreground="{DynamicResource DangerBrush}" Tag="{StaticResource IconTrash}" Click="DeletePreset_Click" Margin="0,0,6,8" ToolTip="Delete the selected preset" local:Loc.Localize="True" IsEnabled="False"/>
                                         <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconImport}" Click="ImportPreset_Click" Margin="0,0,6,8" ToolTip="Load a preset .json file" local:Loc.Localize="True"/>
                                         <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconExport}" Click="ExportPreset_Click" Margin="0,0,6,8" ToolTip="Save the current look as a .json file" local:Loc.Localize="True"/>
                                         <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconReset}" Click="ResetVisualSettings_Click" Margin="0,0,6,8" ToolTip="Reset to the default look" local:Loc.Localize="True"/>
@@ -161,7 +161,7 @@
                                     <TextBlock Text="One concert grand, tuned for live play" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
                                     <Border Padding="14" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
                                         <StackPanel>
-                                            <TextBlock x:Name="InstrumentStatusLabel" Text="SALAMANDER GRAND · SETUP REQUIRED" local:Loc.Localize="True" Foreground="{StaticResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
+                                            <TextBlock x:Name="InstrumentStatusLabel" Text="SALAMANDER GRAND · SETUP REQUIRED" local:Loc.Localize="True" Foreground="{DynamicResource SuccessBrush}" FontSize="10" FontWeight="Bold" TextTrimming="CharacterEllipsis"/>
                                             <TextBlock Text="Salamander Grand Piano V3 · a sampled Yamaha C5 recorded at 48 kHz / 24-bit, with 16 velocity layers, release samples and pedal noises." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,4,0,8"/>
                                             <TextBlock x:Name="InstrumentHint" Text="One-time download · about 748 MB. It is verified as it downloads; an interrupted setup can resume." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" TextWrapping="Wrap" Margin="0,0,0,12"/>
                                             <ProgressBar x:Name="SalamanderProgress" Height="6" Minimum="0" Maximum="1000" Visibility="Collapsed" Margin="0,0,0,12"/>
@@ -226,14 +226,14 @@
                                     <Grid Margin="0,18,0,0">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Text="Playback tempo" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}"/>
-                                        <TextBlock x:Name="TempoLabel" Grid.Column="1" Text="100%" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="TempoLabel" Grid.Column="1" Text="100%" Foreground="{DynamicResource TextBrush}" FontSize="11" FontWeight="SemiBold"/>
                                     </Grid>
                                     <Slider x:Name="TempoSlider" Minimum="50" Maximum="150" Value="100" ValueChanged="TempoSlider_ValueChanged" AutomationProperties.Name="Playback tempo" local:Loc.Localize="True"/>
                                     <CheckBox x:Name="AutoPracticeTempoCheck" Content="Auto practice tempo" local:Loc.Localize="True" Margin="0,14,0,0" Checked="AutoPracticeTempo_Changed" Unchecked="AutoPracticeTempo_Changed" ToolTip="Slows the song down after repeated misses and speeds it back up as you play correctly"/>
                                     <Grid Margin="0,10,0,0">
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                         <TextBlock Text="Misses before slowing down" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}"/>
-                                        <TextBlock x:Name="AutoPracticeMissLabel" Grid.Column="1" Text="3" Foreground="{DynamicResource AccentBrush}" FontSize="11" FontWeight="SemiBold"/>
+                                        <TextBlock x:Name="AutoPracticeMissLabel" Grid.Column="1" Text="3" Foreground="{DynamicResource TextBrush}" FontSize="11" FontWeight="SemiBold"/>
                                     </Grid>
                                     <Slider x:Name="AutoPracticeMissSlider" Minimum="1" Maximum="6" Value="3" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="AutoPracticeMiss_Changed" AutomationProperties.Name="Misses before slowing down" local:Loc.Localize="True"/>
                                     <TextBlock Text="LOOP RANGE" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
@@ -241,7 +241,7 @@
                                         <Button Content="A" Click="SetLoopA_Click" Width="40" ToolTip="Set the loop start at the playhead" local:Loc.Localize="True"/>
                                         <Button Content="B" Click="SetLoopB_Click" Width="40" Margin="6,0,0,0" ToolTip="Set the loop end at the playhead" local:Loc.Localize="True"/>
                                         <Button Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconClose}" Click="ClearLoop_Click" VerticalAlignment="Center" Margin="6,0,0,0" ToolTip="Clear the loop" local:Loc.Localize="True"/>
-                                        <TextBlock x:Name="LoopLabel" Text="No loop" local:Loc.Localize="True" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="11"/>
+                                        <TextBlock x:Name="LoopLabel" Text="No loop" local:Loc.Localize="True" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="12,0,0,0" FontSize="11"/>
                                     </StackPanel>
                                     <TextBlock Text="SHORTCUTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Style="{StaticResource MutedTextStyle}" Text="Keys A W S E D F T G Y H U J K play an octave from C3 · Space play/pause · Escape settings · F11 full screen · click the on-screen keyboard to play with the mouse." local:Loc.Localize="True"/>
@@ -266,7 +266,7 @@
                                     <TextBlock x:Name="HistorySummaryLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>
                                     <StackPanel Orientation="Horizontal">
                                         <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconExport}" Click="ExportHistory_Click" Margin="0,0,6,0" ToolTip="Export the practice history as an HTML file" local:Loc.Localize="True"/>
-                                        <Button Style="{StaticResource GlyphButtonStyle}" Foreground="#FF9FB4" Tag="{StaticResource IconTrash}" Click="ClearHistory_Click" ToolTip="Clear all practice history" local:Loc.Localize="True"/>
+                                        <Button Style="{StaticResource GlyphButtonStyle}" Foreground="{DynamicResource DangerBrush}" Tag="{StaticResource IconTrash}" Click="ClearHistory_Click" ToolTip="Clear all practice history" local:Loc.Localize="True"/>
                                     </StackPanel>
                                 </StackPanel>
                             </ScrollViewer>
@@ -304,11 +304,11 @@
                 <Button x:Name="RecordButton" Content="REC" Tag="{StaticResource IconRecord}" Style="{StaticResource DangerIconButtonStyle}" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="26,18,0,0" Padding="15,10" Click="RecordVideo_Click" ToolTip="Record the live piano visualizer" local:Loc.Localize="True"/>
                 <Button x:Name="LiveSettingsButton" Content="MENU" Tag="{StaticResource IconMenu}" Style="{StaticResource IconTextButtonStyle}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,18,26,0" Padding="16,10" Click="Settings_Click" ToolTip="Show visual, audio, MIDI and practice settings (Escape)" local:Loc.Localize="True"/>
             </Grid>
-            <Border x:Name="DeviceStatusBadge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="26,72,0,0" Padding="10,7" CornerRadius="10" Background="#C90A0B11" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" IsHitTestVisible="False" Panel.ZIndex="3">
+            <Border x:Name="DeviceStatusBadge" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="26,72,0,0" Padding="10,7" CornerRadius="10" Background="{DynamicResource PanelBrush}" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" IsHitTestVisible="False" Panel.ZIndex="3">
                 <StackPanel Orientation="Horizontal">
-                    <Ellipse x:Name="DeviceDot" Width="6" Height="6" Fill="#FFB45B" Margin="0,0,8,0" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="DeviceLabel" Text="Computer keyboard ready" local:Loc.Localize="True" Foreground="#B9BFCE" FontSize="9.5" VerticalAlignment="Center"/>
-                    <TextBlock Text="  ·  A0—C8" local:Loc.Localize="True" Foreground="{StaticResource DimTextBrush}" FontSize="9.5" VerticalAlignment="Center"/>
+                    <Ellipse x:Name="DeviceDot" Width="6" Height="6" Fill="{DynamicResource AccentBrush}" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="DeviceLabel" Text="Computer keyboard ready" local:Loc.Localize="True" Foreground="{DynamicResource MutedTextBrush}" FontSize="9.5" VerticalAlignment="Center"/>
+                    <TextBlock Text="  ·  A0—C8" local:Loc.Localize="True" Foreground="{DynamicResource DimTextBrush}" FontSize="9.5" VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
         </Grid>
@@ -323,8 +323,8 @@
                         <Button x:Name="PlayButton" Style="{StaticResource TransportPlayStyle}" Tag="{StaticResource IconPlay}" Click="Play_Click" IsEnabled="False" ToolTip="Open a MIDI file to start playback (Space)" local:Loc.Localize="True"/>
                         <Button x:Name="RestartButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconRestart}" Width="38" Height="38" Click="Restart_Click" Margin="8,0,0,0" IsEnabled="False" ToolTip="Back to the start" local:Loc.Localize="True"/>
                         <StackPanel VerticalAlignment="Center" Margin="15,0,0,0">
-                            <TextBlock x:Name="TimeLabel" Text="00:00 / 00:00" Foreground="{StaticResource TextBrush}" FontSize="13" FontWeight="SemiBold" FontFamily="Consolas, Segoe UI"/>
-                            <TextBlock x:Name="NoteNameLabel" Text="READY" local:Loc.Localize="True" Foreground="{DynamicResource Accent2Brush}" FontSize="9" FontWeight="Bold" Margin="0,3,0,0"/>
+                            <TextBlock x:Name="TimeLabel" Text="00:00 / 00:00" Foreground="{DynamicResource TextBrush}" FontSize="13" FontWeight="SemiBold" FontFamily="Consolas, Segoe UI"/>
+                            <TextBlock x:Name="NoteNameLabel" Text="READY" local:Loc.Localize="True" Foreground="{DynamicResource TextBrush}" FontSize="9" FontWeight="Bold" Margin="0,3,0,0"/>
                         </StackPanel>
                     </StackPanel>
                     <StackPanel Grid.Column="1" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -337,19 +337,19 @@
                         <Border Style="{StaticResource StatChipStyle}">
                             <StackPanel>
                                 <TextBlock Text="ACCURACY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                <TextBlock x:Name="AccuracyLabel" Text="—" FontSize="14" FontWeight="Bold" Foreground="{StaticResource TextBrush}" Margin="0,2,0,0"/>
+                                <TextBlock x:Name="AccuracyLabel" Text="—" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextBrush}" Margin="0,2,0,0"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource StatChipStyle}">
                             <StackPanel>
                                 <TextBlock Text="SCORE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                <TextBlock x:Name="ScoreLabel" Text="0 hits · 0 missed" Foreground="{StaticResource MutedTextBrush}" FontSize="11" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="ScoreLabel" Text="0 hits · 0 missed" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" Margin="0,3,0,0"/>
                             </StackPanel>
                         </Border>
                         <Border Style="{StaticResource StatChipStyle}" Margin="0">
                             <StackPanel>
                                 <TextBlock Text="STREAK" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                <TextBlock x:Name="StreakLabel" Text="✦ 0 streak" Foreground="{StaticResource SuccessBrush}" FontSize="11" Margin="0,3,0,0"/>
+                                <TextBlock x:Name="StreakLabel" Text="✦ 0 streak" Foreground="{DynamicResource SuccessBrush}" FontSize="11" Margin="0,3,0,0"/>
                             </StackPanel>
                         </Border>
                     </StackPanel>
@@ -363,14 +363,14 @@
         </Border>
 
         <!-- ===================== PLAY DIALOG (Embers-style pre-flight) ===================== -->
-        <Grid x:Name="PlayDialogOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="28" Background="#A8040509">
+        <Grid x:Name="PlayDialogOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="28" Background="{DynamicResource ScrimBrush}">
             <Border x:Name="PlayDialogCard" Width="660" MaxHeight="820" VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" CornerRadius="18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource DockShadow}" KeyboardNavigation.TabNavigation="Cycle">
                 <Grid Margin="28,22,28,24">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <Button x:Name="PlayDialogBackButton" Content="Back" Tag="{StaticResource IconBack}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogBack_Click" Padding="9,7" FontSize="10" ToolTip="Back to the live stage" local:Loc.Localize="True"/>
-                        <TextBlock Grid.Column="1" Text="Play" local:Loc.Localize="True" FontSize="26" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                        <TextBlock Grid.Column="1" Text="Play" local:Loc.Localize="True" FontSize="26" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="12,0,0,0"/>
                         <Button Grid.Column="2" x:Name="PlayDialogQuickAdjustButton" Content="QUICK ADJUST" Tag="{StaticResource IconSliders}" Style="{StaticResource IconTextButtonStyle}" Click="PlayDialogQuickAdjust_Click" Padding="10,8" FontSize="9.5" Margin="0,0,8,0" ToolTip="Quickly adjust the stage while you set up a session." local:Loc.Localize="True"/>
                         <Button Grid.Column="3" Style="{StaticResource RoundGlyphButtonStyle}" Tag="{StaticResource IconClose}" VerticalAlignment="Center" Click="PlayDialogClose_Click" ToolTip="Close" local:Loc.Localize="True"/>
                     </Grid>
@@ -378,7 +378,7 @@
                         <StackPanel>
                             <TextBlock Text="START A SESSION" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,0,0,3"/>
                             <TextBlock Text="Choose a score or begin a live performance." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
-                            <Border Padding="12" CornerRadius="12" Background="{StaticResource ControlBrush}" BorderBrush="{StaticResource ControlBorderBrush}" BorderThickness="1">
+                            <Border Padding="12" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
                                 <StackPanel>
                                     <Grid>
                                         <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
@@ -395,7 +395,7 @@
                                             <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
                                             <Path Data="{StaticResource IconNotes}" Fill="{DynamicResource Accent2Brush}" Width="14" Height="14" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,9,0"/>
                                             <StackPanel Grid.Column="1">
-                                                <TextBlock x:Name="PlayDialogLoadedSongTitle" Foreground="{StaticResource TextBrush}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                                <TextBlock x:Name="PlayDialogLoadedSongTitle" Foreground="{DynamicResource TextBrush}" FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
                                                 <TextBlock x:Name="PlayDialogLoadedSongDetails" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,2,0,0"/>
                                             </StackPanel>
                                         </Grid>
@@ -422,16 +422,16 @@
                             <TextBlock Text="STYLES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" Margin="0,20,0,6"/>
                             <Grid>
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-                                <Button x:Name="LeftStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="#10131B" Margin="0,0,6,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="0" ToolTip="Choose a color preset for the left hand" AutomationProperties.Name="Choose a color preset for the left hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
+                                <Button x:Name="LeftStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="{DynamicResource ControlBrush}" Margin="0,0,6,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="0" ToolTip="Choose a color preset for the left hand" AutomationProperties.Name="Choose a color preset for the left hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
                                     <StackPanel>
-                                        <TextBlock Text="Left Hand" local:Loc.Localize="True" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                                        <TextBlock x:Name="LeftStyleLabel" Text="Ocean Blue" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                                        <TextBlock Text="Left Hand" local:Loc.Localize="True" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
+                                        <TextBlock x:Name="LeftStyleLabel" Text="Ocean Blue" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Button>
-                                <Button Grid.Column="1" x:Name="RightStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="#10131B" Margin="6,0,0,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="1" ToolTip="Choose a color preset for the right hand" AutomationProperties.Name="Choose a color preset for the right hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
+                                <Button Grid.Column="1" x:Name="RightStyleCard" Style="{StaticResource GhostButtonStyle}" BorderThickness="2" Background="{DynamicResource ControlBrush}" Margin="6,0,0,0" Padding="14,10" Cursor="Hand" Click="PlayDialogStyleCard_Click" Tag="1" ToolTip="Choose a color preset for the right hand" AutomationProperties.Name="Choose a color preset for the right hand" local:Loc.Localize="True" HorizontalContentAlignment="Stretch" VerticalContentAlignment="Center">
                                     <StackPanel>
-                                        <TextBlock Text="Right Hand" local:Loc.Localize="True" FontSize="12.5" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
-                                        <TextBlock x:Name="RightStyleLabel" Text="Rose Neon" FontSize="10" Foreground="{StaticResource MutedTextBrush}" Margin="0,3,0,0"/>
+                                        <TextBlock Text="Right Hand" local:Loc.Localize="True" FontSize="12.5" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
+                                        <TextBlock x:Name="RightStyleLabel" Text="Rose Neon" FontSize="10" Foreground="{DynamicResource MutedTextBrush}" Margin="0,3,0,0"/>
                                     </StackPanel>
                                 </Button>
                             </Grid>
@@ -454,9 +454,9 @@
                             <Grid Margin="0,6,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                                 <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                                <Path Data="{StaticResource IconNotes}" Fill="{StaticResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0"/>
+                                <Path Data="{StaticResource IconNotes}" Fill="{DynamicResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" VerticalAlignment="Center" Margin="0,0,10,0"/>
                                 <TextBlock Grid.Column="1" Text="Speed" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" VerticalAlignment="Center"/>
-                                <TextBlock x:Name="PlaySpeedLabel" Grid.Column="2" Text="550" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                                <TextBlock x:Name="PlaySpeedLabel" Grid.Column="2" Text="550" FontSize="11" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" VerticalAlignment="Center" Margin="0,0,8,0"/>
                                 <Button Grid.Column="3" Style="{StaticResource SmallGlyphButtonStyle}" Tag="{StaticResource IconReset}" Click="PlaySpeedReset_Click" ToolTip="Reset fall speed" local:Loc.Localize="True"/>
                                 <Slider Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="4" x:Name="PlaySpeedSlider" AutomationProperties.Name="Fall speed" local:Loc.Localize="True" Minimum="100" Maximum="1000" Value="550" Margin="0,6,0,0" ValueChanged="PlaySpeed_Changed"/>
                             </Grid>
@@ -526,7 +526,7 @@
                     </ScrollViewer>
                     <Button x:Name="PlayDialogLiveButton" Grid.Row="2" Margin="0,18,0,0" Height="58" Style="{StaticResource AccentButtonStyle}" FontSize="18" Click="PlayDialogLive_Click" ToolTip="Skip playback and perform live right away" AutomationProperties.Name="Live Play" local:Loc.Localize="True">
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <Path Data="{StaticResource IconKeyboard}" Fill="White" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center"/>
+                            <Path Data="{StaticResource IconKeyboard}" Fill="{Binding Foreground, RelativeSource={RelativeSource AncestorType=Button}}" Width="18" Height="18" Stretch="Uniform" VerticalAlignment="Center"/>
                             <TextBlock Text="Live Play" local:Loc.Localize="True" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Button>
@@ -538,7 +538,7 @@
              The shell hides every toolbar after a few idle seconds, so the shortcuts are documented
              inside the application instead of only in the README. The three columns are generated in
              MainWindow.Shortcuts.cs; F1 toggles this card and Escape closes it. -->
-        <Grid x:Name="ShortcutOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="32" Background="#A8040509" MouseLeftButtonDown="ShortcutOverlay_Click">
+        <Grid x:Name="ShortcutOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="32" Background="{DynamicResource ScrimBrush}" MouseLeftButtonDown="ShortcutOverlay_Click">
             <Border x:Name="ShortcutCard" Width="944" VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" CornerRadius="18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource DockShadow}" MouseLeftButtonDown="ShortcutCard_Click">
                 <StackPanel Margin="28,22,28,26">
                     <Grid>
@@ -575,14 +575,14 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel x:Name="MenuActionStack" Width="388" VerticalAlignment="Center">
                     <StackPanel x:Name="MenuBrand" Orientation="Horizontal" Margin="8,0,0,26">
-                        <Border Width="62" Height="62" CornerRadius="18" Background="{DynamicResource AccentGradientBrush}" BorderBrush="#55FFFFFF" BorderThickness="1.5">
-                            <Path Data="{StaticResource IconLogo}" Fill="White" Width="32" Height="32" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        <Border Width="62" Height="62" CornerRadius="18" Background="{DynamicResource AccentGradientBrush}" BorderBrush="{DynamicResource AccentButtonTextBrush}" BorderThickness="1.5">
+                            <Path Data="{StaticResource IconLogo}" Fill="{DynamicResource AccentButtonTextBrush}" Width="32" Height="32" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
                         </Border>
                         <StackPanel Margin="18,0,0,0" VerticalAlignment="Center">
                             <StackPanel Orientation="Horizontal">
-                                <TextBlock Text="Keyflow" FontSize="36" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                                <TextBlock Text="Keyflow" FontSize="36" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                                 <Border Margin="10,0,0,0" Padding="7,2" CornerRadius="5" Background="{DynamicResource AccentSoftBrush}" VerticalAlignment="Center">
-                                    <TextBlock Text="CONCERT GRAND" local:Loc.Localize="True" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource Accent2Brush}"/>
+                                    <TextBlock Text="CONCERT GRAND" local:Loc.Localize="True" FontSize="9" FontWeight="Bold" Foreground="{DynamicResource TextBrush}"/>
                                 </Border>
                             </StackPanel>
                             <StackPanel Orientation="Horizontal" Margin="2,5,0,0">
@@ -639,14 +639,14 @@
 
         <!-- Shared contextual controls: opened from both the startup menu and the Play dialog.
              Every control writes through the same settings handlers as the Design dock. -->
-        <Grid x:Name="QuickAdjustOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="31" Background="#A8040509" MouseDown="QuickAdjustOverlay_MouseDown">
+        <Grid x:Name="QuickAdjustOverlay" Grid.Row="0" Grid.RowSpan="3" Visibility="Collapsed" Panel.ZIndex="31" Background="{DynamicResource ScrimBrush}" MouseDown="QuickAdjustOverlay_MouseDown">
             <Border x:Name="QuickAdjustCard" Width="620" MaxHeight="700" VerticalAlignment="Center" Background="{DynamicResource PanelBrush}" CornerRadius="18" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="1" Effect="{StaticResource DockShadow}" KeyboardNavigation.TabNavigation="Cycle" MouseDown="QuickAdjustCard_MouseDown">
                 <Grid Margin="26,22,26,22">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <Grid>
                         <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                         <StackPanel>
-                            <TextBlock x:Name="QuickAdjustTitle" Text="Quick adjustments" local:Loc.Localize="True" FontSize="23" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}"/>
+                            <TextBlock x:Name="QuickAdjustTitle" Text="Quick adjustments" local:Loc.Localize="True" FontSize="23" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}"/>
                             <TextBlock x:Name="QuickAdjustSubtitle" Text="Common controls apply immediately and stay in sync across Play and Design." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,12,0" TextWrapping="Wrap"/>
                         </StackPanel>
                         <Button Grid.Column="1" Style="{StaticResource RoundGlyphButtonStyle}" Tag="{StaticResource IconClose}" VerticalAlignment="Top" Click="QuickAdjustClose_Click" ToolTip="Close" local:Loc.Localize="True"/>

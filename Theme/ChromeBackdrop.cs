@@ -53,7 +53,7 @@ internal sealed class ChromeBackdrop : FrameworkElement
     internal void Configure(ShellTheme theme, string? motion, double density)
     {
         _theme = theme;
-        _motion = motion switch { "Calm" => .5, "Off" => 0, _ => 1 };
+        _motion = theme.Id == ShellThemes.HighContrastId ? 0 : (motion switch { "Calm" => .5, "Off" => 0, _ => 1 });
         _density = Math.Clamp(density, 0, 200) / 100;
         _skyKey = ""; _vignette = null;
         SyncFrameDemand();
@@ -155,8 +155,22 @@ internal sealed class ChromeBackdrop : FrameworkElement
     {
         var width = ActualWidth; var height = ActualHeight;
         if (width < 2 || height < 2) return;
+
+        // High contrast is a system palette, not a concert look: keep the whole backdrop a solid system
+        // window colour and omit decorative light that could lower text contrast.
+        if (_theme.Id == ShellThemes.HighContrastId)
+        {
+            dc.DrawRectangle(Brush(_theme.Window), null, new Rect(0, 0, width, height));
+            return;
+        }
+
         dc.DrawDrawing(Sky(width, height));
-        DrawAcousticWaves(dc, width, height);
+        switch (_theme.Backdrop)
+        {
+            case BackdropStyle.Obsidian: DrawObsidianAurora(dc, width, height); break;
+            case BackdropStyle.Imperial: DrawImperialVelvet(dc, width, height); break;
+            default: DrawAcousticWaves(dc, width, height); break;
+        }
         DrawMotes(dc, width, height);
         dc.DrawRectangle(Vignette(width, height), null, new Rect(0, 0, width, height));
     }
@@ -219,6 +233,82 @@ internal sealed class ChromeBackdrop : FrameworkElement
             };
             pen.Freeze();
             dc.DrawGeometry(null, pen, geometry);
+        }
+    }
+
+    /// <summary>Broad, slow aurora curtains sweep down the obsidian backdrop.</summary>
+    private void DrawObsidianAurora(DrawingContext dc, double width, double height)
+    {
+        var count = _motion > 0 ? 4 : 3;
+        for (var i = 0; i < count; i++)
+        {
+            var phase = _time * (.08 + i * .025) + i * 1.7;
+            var x = width * (.12 + i * .25) + Math.Sin(phase) * width * .025;
+            var geometry = new StreamGeometry();
+            using (var ctx = geometry.Open())
+            {
+                ctx.BeginFigure(new Point(x, -height * .08), false, false);
+                ctx.BezierTo(
+                    new Point(x - width * (.13 + i * .006), height * .18 + Math.Sin(phase * 1.2) * height * .07),
+                    new Point(x + width * .12, height * .38 + Math.Cos(phase) * height * .08),
+                    new Point(x - width * .025, height * .70), true, false);
+            }
+            geometry.Freeze();
+            var color = i % 2 == 0 ? _theme.Accent : _theme.AccentAlt;
+            var pen = new Pen(Brush(WithAlpha(color, (byte)(18 + i * 4))), width * (.075 + i * .006))
+            {
+                StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round
+            };
+            pen.Freeze();
+            dc.DrawGeometry(null, pen, geometry);
+        }
+    }
+
+    /// <summary>Soft, vertical velvet folds in the warm light of an imperial recital hall.</summary>
+    private void DrawImperialVelvet(DrawingContext dc, double width, double height)
+    {
+        const int folds = 8;
+        var foldWidth = width / folds;
+        for (var i = 0; i < folds; i++)
+        {
+            var x = (i + .5) * foldWidth;
+            var phase = _time * (.07 + i * .002) + i * .85;
+            var sway = Math.Sin(phase) * foldWidth * .12;
+            var geometry = new StreamGeometry();
+            using (var ctx = geometry.Open())
+            {
+                ctx.BeginFigure(new Point(x - foldWidth * .42, -12), true, true);
+                ctx.BezierTo(
+                    new Point(x - foldWidth * .30 + sway, height * .24),
+                    new Point(x - foldWidth * .08 + sway, height * .70),
+                    new Point(x + sway, height + 12), true, true);
+                ctx.LineTo(new Point(x + foldWidth * .43 + sway, height + 12), true, true);
+                ctx.BezierTo(
+                    new Point(x + foldWidth * .24 + sway, height * .68),
+                    new Point(x + foldWidth * .10, height * .25),
+                    new Point(x + foldWidth * .42, -12), true, true);
+            }
+            geometry.Freeze();
+            var tint = i % 2 == 0 ? _theme.Accent : _theme.Glow;
+            var cloth = Blend(_theme.Window, tint, .24);
+            dc.DrawGeometry(Brush(WithAlpha(cloth, (byte)(30 + i % 3 * 4))), null, geometry);
+
+            var highlight = new StreamGeometry();
+            using (var ctx = highlight.Open())
+            {
+                ctx.BeginFigure(new Point(x + foldWidth * .07, -12), false, false);
+                ctx.BezierTo(
+                    new Point(x - foldWidth * .08 + sway, height * .28),
+                    new Point(x + foldWidth * .20 + sway, height * .70),
+                    new Point(x + foldWidth * .15 + sway, height + 12), true, false);
+            }
+            highlight.Freeze();
+            var pen = new Pen(Brush(WithAlpha(_theme.AccentAlt, (byte)(12 + i % 3 * 3))), height * .014)
+            {
+                StartLineCap = PenLineCap.Round, EndLineCap = PenLineCap.Round
+            };
+            pen.Freeze();
+            dc.DrawGeometry(null, pen, highlight);
         }
     }
 

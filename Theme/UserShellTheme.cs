@@ -56,10 +56,17 @@ internal static class UserShellThemes
 
     /// <summary>The darkest and lightest base surface a user theme may have.</summary>
     internal const int MinSurface = 0x06;
-    internal const int MaxSurface = 0x60;
+    // The brightest derived text surface is ControlHover, which lightens the base by 30%. Keeping the
+    // base at or below 0x34 keeps the default near-white text above WCAG's 4.5:1 normal-text threshold.
+    internal const int MaxSurface = 0x34;
 
-    /// <summary>How much the accent must stand out from the surface it sits on (sum of channel gaps).</summary>
-    internal const int MinAccentContrast = 120;
+    /// <summary>Minimum contrast for a non-text accent mark against its surface.</summary>
+    internal const double MinAccentContrastRatio = 3.0;
+    /// <summary>Minimum contrast for normal-size text on a derived surface.</summary>
+    internal const double MinTextContrastRatio = 4.5;
+
+    internal static readonly Color DefaultAccent = Color.FromRgb(0xD4, 0xAF, 0x37);
+    internal static readonly Color DefaultText = Color.FromRgb(0xF4, 0xF5, 0xF9);
 
     /// <summary>True when a theme id belongs to a theme the user made.</summary>
     internal static bool IsUserTheme(string? id) => id?.TrimStart().StartsWith(IdPrefix, StringComparison.OrdinalIgnoreCase) == true;
@@ -75,7 +82,9 @@ internal static class UserShellThemes
 
     /// <summary>The backdrop family of a stored value, defaulting to acoustic for anything unknown.</summary>
     internal static BackdropStyle Backdrop(string? stored) =>
-        Enum.TryParse<BackdropStyle>(stored?.Trim(), ignoreCase: true, out var parsed) ? parsed : BackdropStyle.Acoustic;
+        Enum.TryParse<BackdropStyle>(stored?.Trim(), ignoreCase: true, out var parsed) && Enum.IsDefined(parsed)
+            ? parsed
+            : BackdropStyle.Acoustic;
 
     /// <summary>The tooltip of a user theme: a key, so it translates like the built-in blurbs do.</summary>
     internal static string BlurbKey(BackdropStyle backdrop) => backdrop switch
@@ -91,11 +100,16 @@ internal static class UserShellThemes
     /// </summary>
     internal static ShellTheme Build(UserShellTheme theme)
     {
-        var accent = ReadColour(theme.Accent, Color.FromRgb(0xD4, 0xAF, 0x37));
+        var surface = ClampSurface(ReadColour(theme.Surface, Color.FromRgb(0x0B, 0x0D, 0x12)));
+        var accent = ReadColour(theme.Accent, DefaultAccent);
+        if (!HasContrast(accent, surface)) accent = DefaultAccent;
         var accentAlt = ReadColour(theme.AccentAlt, Lighten(accent, .35));
+        if (!HasContrast(accentAlt, surface)) accentAlt = Lighten(accent, .35);
+        // A single foreground is drawn over the whole accent gradient. If black and white both lose
+        // 4.5:1 somewhere along it, keep the accent readable by collapsing the companion back to it.
+        if (!HasReadableAccentText(accent, accentAlt)) accentAlt = accent;
         var glow = ReadColour(theme.Glow, accentAlt);
         var mote = ReadColour(theme.Mote, accentAlt);
-        var surface = ClampSurface(ReadColour(theme.Surface, Color.FromRgb(0x0B, 0x0D, 0x12)));
         var backdrop = Backdrop(theme.Backdrop);
         var name = string.IsNullOrWhiteSpace(theme.Name) ? "Custom theme" : theme.Name.Trim();
         return new ShellTheme(
@@ -135,16 +149,64 @@ internal static class UserShellThemes
     internal static Color ReadColour(string? hex, Color fallback)
     {
         if (string.IsNullOrWhiteSpace(hex)) return fallback;
-        try { return (Color)ColorConverter.ConvertFromString(hex.Trim())!; }
+        try
+        {
+            var parsed = (Color)ColorConverter.ConvertFromString(hex.Trim())!;
+            // Theme seeds are opaque RGB values. Hand-edited #AARRGGBB values are accepted for recovery,
+            // but their alpha is discarded so a transparent accent cannot make the chrome disappear.
+            return Color.FromRgb(parsed.R, parsed.G, parsed.B);
+        }
         catch { return fallback; }
     }
 
     /// <summary>The <c>#RRGGBB</c> text of a colour, which is what a theme file stores.</summary>
     internal static string Hex(Color colour) => $"#{colour.R:X2}{colour.G:X2}{colour.B:X2}";
 
-    /// <summary>True when the accent stands out enough from the surface for a selection or a ring to read.</summary>
+    /// <summary>True when an accent has the 3:1 contrast needed for a non-text visual cue.</summary>
     internal static bool HasContrast(Color accent, Color surface) =>
-        Math.Abs(accent.R - surface.R) + Math.Abs(accent.G - surface.G) + Math.Abs(accent.B - surface.B) >= MinAccentContrast;
+        ContrastRatio(accent, surface) >= MinAccentContrastRatio;
+
+    /// <summary>True when the fixed near-white chrome text remains readable on a derived surface.</summary>
+    internal static bool HasReadableText(Color surface) =>
+        ContrastRatio(DefaultText, surface) >= MinTextContrastRatio;
+
+    /// <summary>True when one black-or-white foreground stays readable across the full accent gradient.</summary>
+    internal static bool HasReadableAccentText(Color accent, Color accentAlt)
+    {
+        var middle = Blend(accent, accentAlt, .55);
+        var black = Math.Min(ContrastRatio(Colors.Black, accent), Math.Min(ContrastRatio(Colors.Black, middle), ContrastRatio(Colors.Black, accentAlt)));
+        var white = Math.Min(ContrastRatio(Colors.White, accent), Math.Min(ContrastRatio(Colors.White, middle), ContrastRatio(Colors.White, accentAlt)));
+        return Math.Max(black, white) >= MinTextContrastRatio;
+    }
+
+    /// <summary>Best black-or-white foreground for the full accent gradient.</summary>
+    internal static Color AccentButtonText(Color accent, Color accentAlt)
+    {
+        var middle = Blend(accent, accentAlt, .55);
+        var white = Math.Min(ContrastRatio(Colors.White, accent), Math.Min(ContrastRatio(Colors.White, middle), ContrastRatio(Colors.White, accentAlt)));
+        var black = Math.Min(ContrastRatio(Colors.Black, accent), Math.Min(ContrastRatio(Colors.Black, middle), ContrastRatio(Colors.Black, accentAlt)));
+        return black >= white ? Colors.Black : Colors.White;
+    }
+
+    /// <summary>WCAG relative-luminance contrast ratio for two opaque sRGB colours.</summary>
+    internal static double ContrastRatio(Color foreground, Color background)
+    {
+        static double Luminance(Color colour)
+        {
+            static double Linear(byte channel)
+            {
+                var value = channel / 255.0;
+                return value <= .04045 ? value / 12.92 : Math.Pow((value + .055) / 1.055, 2.4);
+            }
+            return .2126 * Linear(colour.R) + .7152 * Linear(colour.G) + .0722 * Linear(colour.B);
+        }
+
+        var first = Luminance(foreground);
+        var second = Luminance(background);
+        var lighter = Math.Max(first, second);
+        var darker = Math.Min(first, second);
+        return (lighter + .05) / (darker + .05);
+    }
 
     private static Color ClampSurface(Color colour)
     {
@@ -164,6 +226,11 @@ internal static class UserShellThemes
         }
         return colour;
     }
+
+    private static Color Blend(Color first, Color second, double amount) => Color.FromRgb(
+        (byte)(first.R + (second.R - first.R) * amount),
+        (byte)(first.G + (second.G - first.G) * amount),
+        (byte)(first.B + (second.B - first.B) * amount));
 
     private static Color Lighten(Color colour, double amount) => Color.FromRgb(
         (byte)(colour.R + (255 - colour.R) * amount),
