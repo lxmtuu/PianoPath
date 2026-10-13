@@ -54,7 +54,7 @@ public partial class MainWindow
         // ConfigureBackdrops does. Configuring it with the setting alone started it moving again right after
         // DisableChromeMotion had stopped it, so the menu screenshot differed from run to run: the one
         // picture whose chrome, and not only the GPU stage, was not reproducible.
-        MenuBackdrop.Configure(ShellThemeManager.Current, _chromeMotionLocked ? "Off" : _visualSettings.ChromeMotion, _visualSettings.BackdropDensity);
+        MenuBackdrop.Configure(PublishedChromeTheme, _chromeMotionLocked ? "Off" : _visualSettings.ChromeMotion, _visualSettings.BackdropDensity);
         MenuPlayButton.Focus();
         // Choreography: the two primary actions arrive first, then the links and the side card.
         ChromeMotion.FadeIn(MainMenuOverlay, 260);
@@ -135,16 +135,13 @@ public partial class MainWindow
         if (MenuThemeBlurb is not null) Loc.Set(MenuThemeBlurb, ShellThemeManager.Current.Blurb);
     }
 
-    /// <summary>A small palette sphere for a theme chip: the accent turning into its companion colour.</summary>
-    /// <summary>Frozen corner-to-corner gradients of each theme's two accents, shared by both chip rows.</summary>
-    private static readonly Dictionary<string, Brush> ThemeOrbs = [];
-
+    /// <summary>A frozen corner-to-corner accent gradient for a theme chip.</summary>
     private static Brush ThemeOrb(ShellTheme theme)
     {
-        if (ThemeOrbs.TryGetValue(theme.Id, out var cached)) return cached;
+        // A user can save new colours under the same stable theme id. Build from the current palette each
+        // time instead of caching by id, or a refreshed chip would keep showing the old gradient.
         var gradient = new LinearGradientBrush(theme.Accent, theme.AccentAlt, new Point(0, 0), new Point(1, 1));
         if (gradient.CanFreeze) gradient.Freeze();
-        ThemeOrbs[theme.Id] = gradient;
         return gradient;
     }
 

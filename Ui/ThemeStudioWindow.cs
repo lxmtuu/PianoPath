@@ -50,19 +50,24 @@ internal sealed class ThemeStudioWindow : Window
         Title = Loc.T(titleKey);
         Width = 430; SizeToContent = SizeToContent.Height; ResizeMode = ResizeMode.NoResize;
         WindowStartupLocation = WindowStartupLocation.CenterOwner; WindowStyle = WindowStyle.ToolWindow; ShowInTaskbar = false;
-        Background = new SolidColorBrush(Color.FromRgb(18, 16, 24)); Foreground = Brushes.White; FontFamily = new FontFamily("Segoe UI");
+        FontFamily = new FontFamily("Segoe UI");
+        SetResourceReference(Control.BackgroundProperty, "WindowBrush");
+        SetResourceReference(Control.ForegroundProperty, "TextBrush");
 
         var root = new StackPanel { Margin = new Thickness(18, 16, 18, 16) };
-        var heading = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, Foreground = new SolidColorBrush(Color.FromRgb(231, 218, 244)), Margin = new Thickness(0, 0, 0, 12) };
+        var heading = new TextBlock { FontSize = 13, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 12) };
+        heading.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
         Loc.Set(heading, "THEME STUDIO");
         root.Children.Add(heading);
 
         _nameBox = new TextBox
         {
             Text = seed.Name, FontSize = 12, MaxLength = 32, Height = 30, Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(0, 0, 0, 10),
-            VerticalContentAlignment = VerticalAlignment.Center, Background = new SolidColorBrush(Color.FromRgb(29, 25, 36)), Foreground = Brushes.White,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(79, 65, 97))
+            VerticalContentAlignment = VerticalAlignment.Center
         };
+        _nameBox.SetResourceReference(Control.BackgroundProperty, "ControlBrush");
+        _nameBox.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+        _nameBox.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
         Loc.Set(_nameBox, "Name", AutomationProperties.NameProperty);
         root.Children.Add(Row("Name", _nameBox));
 
@@ -75,17 +80,21 @@ internal sealed class ThemeStudioWindow : Window
 
         foreach (var (property, label, tooltip) in Fields) root.Children.Add(ColourRow(property, label, tooltip, SeedValue(seed, property)));
 
-        var previewCaption = new TextBlock { FontSize = 10, Foreground = new SolidColorBrush(Color.FromRgb(178, 168, 190)), Margin = new Thickness(0, 4, 0, 4) };
+        var previewCaption = new TextBlock { FontSize = 10, Margin = new Thickness(0, 4, 0, 4) };
+        previewCaption.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         Loc.Set(previewCaption, "PREVIEW");
         root.Children.Add(previewCaption);
-        root.Children.Add(new Border
+        var previewBorder = new Border
         {
             CornerRadius = new CornerRadius(8), Padding = new Thickness(8), Margin = new Thickness(0, 0, 0, 6),
-            Background = new SolidColorBrush(Color.FromRgb(12, 11, 16)), BorderBrush = new SolidColorBrush(Color.FromRgb(60, 52, 74)), BorderThickness = new Thickness(1),
-            Child = _preview
-        });
+            BorderThickness = new Thickness(1), Child = _preview
+        };
+        previewBorder.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        previewBorder.SetResourceReference(Border.BorderBrushProperty, "PanelBorderBrush");
+        root.Children.Add(previewBorder);
 
-        _message = new TextBlock { FontSize = 10.5, TextWrapping = TextWrapping.Wrap, Foreground = new SolidColorBrush(Color.FromRgb(233, 160, 160)), Margin = new Thickness(0, 2, 0, 0) };
+        _message = new TextBlock { FontSize = 10.5, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0) };
+        _message.SetResourceReference(TextBlock.ForegroundProperty, "DangerBrush");
         root.Children.Add(_message);
 
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
@@ -115,7 +124,7 @@ internal sealed class ThemeStudioWindow : Window
             if (!IsHex(text)) { errorKey = "One of the colours is not a hex value like #1A2B3C."; return false; }
             seeds[property] = text;
         }
-        theme = new UserShellTheme
+        var candidate = new UserShellTheme
         {
             Name = name,
             Backdrop = (_backdropBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? nameof(BackdropStyle.Acoustic),
@@ -125,6 +134,20 @@ internal sealed class ThemeStudioWindow : Window
             Surface = seeds[nameof(UserShellTheme.Surface)],
             Mote = seeds[nameof(UserShellTheme.Mote)]
         };
+        var palette = UserShellThemes.Build(candidate);
+        var accent = UserShellThemes.ReadColour(candidate.Accent, UserShellThemes.DefaultAccent);
+        var accentAlt = UserShellThemes.ReadColour(candidate.AccentAlt, UserShellThemes.DefaultAccent);
+        if (!UserShellThemes.HasContrast(accent, palette.Control) || !UserShellThemes.HasContrast(accentAlt, palette.Control))
+        {
+            errorKey = "Accent colours need at least 3:1 contrast against the surface.";
+            return false;
+        }
+        if (!UserShellThemes.HasReadableAccentText(accent, accentAlt))
+        {
+            errorKey = "The accent gradient needs at least 4.5:1 contrast with either black or white text.";
+            return false;
+        }
+        theme = candidate;
         return true;
     }
 
@@ -171,8 +194,9 @@ internal sealed class ThemeStudioWindow : Window
             var swatch = new Border
             {
                 Width = 30, Height = 22, CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 0, 4, 0),
-                Background = new SolidColorBrush(colour), BorderBrush = new SolidColorBrush(Color.FromRgb(70, 62, 86)), BorderThickness = new Thickness(1)
+                Background = new SolidColorBrush(colour), BorderThickness = new Thickness(1)
             };
+            swatch.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
             // The token name travels as a key, so the strip is translated with the rest of the studio.
             Loc.Set(swatch, label, FrameworkElement.ToolTipProperty);
             AutomationProperties.SetName(swatch, Loc.T(label));
@@ -195,7 +219,7 @@ internal sealed class ThemeStudioWindow : Window
     {
         if (string.IsNullOrWhiteSpace(text) || text[0] != '#') return false;
         var digits = text[1..];
-        return digits.Length is 6 or 8 && digits.All(Uri.IsHexDigit);
+        return digits.Length == 6 && digits.All(Uri.IsHexDigit);
     }
 
     private FrameworkElement Row(string label, FrameworkElement control)
@@ -203,7 +227,8 @@ internal sealed class ThemeStudioWindow : Window
         var grid = new Grid { Margin = new Thickness(0, 0, 0, 6) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(120) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        var text = new TextBlock { Text = Loc.T(label), FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Foreground = new SolidColorBrush(Color.FromRgb(200, 190, 215)) };
+        var text = new TextBlock { Text = Loc.T(label), FontSize = 11, VerticalAlignment = VerticalAlignment.Center };
+        text.SetResourceReference(TextBlock.ForegroundProperty, "TextBrush");
         Grid.SetColumn(control, 1);
         grid.Children.Add(text); grid.Children.Add(control);
         return grid;
@@ -215,17 +240,21 @@ internal sealed class ThemeStudioWindow : Window
         var swatch = new Border
         {
             Width = 30, Height = 26, CornerRadius = new CornerRadius(4), Margin = new Thickness(0, 0, 6, 0), VerticalAlignment = VerticalAlignment.Center,
-            Background = new SolidColorBrush(UserShellThemes.ReadColour(initial, Colors.Gray)), BorderBrush = new SolidColorBrush(Color.FromRgb(120, 110, 140)), BorderThickness = new Thickness(1)
+            Background = new SolidColorBrush(UserShellThemes.ReadColour(initial, Colors.Gray)), BorderThickness = new Thickness(1)
         };
-        var button = new Button { Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)), Tag = property };
+        swatch.SetResourceReference(Border.BorderBrushProperty, "ControlBorderBrush");
+        var button = new Button { Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), Tag = property };
+        button.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
         Loc.Set(button, "Open color picker", FrameworkElement.ToolTipProperty);
         Loc.Set(button, label, AutomationProperties.NameProperty);
         var box = new TextBox
         {
-            Text = initial, Width = 96, Height = 26, FontSize = 10.5, MaxLength = 9, Tag = property,
-            CharacterCasing = CharacterCasing.Upper, VerticalContentAlignment = VerticalAlignment.Center,
-            Background = new SolidColorBrush(Color.FromRgb(29, 25, 36)), Foreground = Brushes.White, BorderBrush = new SolidColorBrush(Color.FromRgb(79, 65, 97))
+            Text = initial, Width = 96, Height = 26, FontSize = 10.5, MaxLength = 7, Tag = property,
+            CharacterCasing = CharacterCasing.Upper, VerticalContentAlignment = VerticalAlignment.Center
         };
+        box.SetResourceReference(Control.BackgroundProperty, "ControlBrush");
+        box.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+        box.SetResourceReference(Control.BorderBrushProperty, "ControlBorderBrush");
         Loc.Set(box, label, AutomationProperties.NameProperty);
         button.Click += (_, _) =>
         {
@@ -246,12 +275,14 @@ internal sealed class ThemeStudioWindow : Window
         RefreshPreview();
     }
 
-    private static Button MakeButton(string label, bool primary) => new()
+    private Button MakeButton(string label, bool primary)
     {
-        Content = Loc.T(label), Height = 30, MinWidth = 96, Padding = new Thickness(12, 0, 12, 0),
-        Foreground = Brushes.White,
-        Background = new SolidColorBrush(primary ? Color.FromRgb(125, 61, 174) : Color.FromRgb(43, 38, 51)),
-        BorderBrush = new SolidColorBrush(primary ? Color.FromRgb(184, 119, 229) : Color.FromRgb(80, 71, 91)),
-        BorderThickness = new Thickness(1)
-    };
+        var button = new Button
+        {
+            Content = Loc.T(label), Height = 30, MinWidth = 96, Padding = new Thickness(12, 0, 12, 0),
+            BorderThickness = new Thickness(1)
+        };
+        if (primary) button.Style = (Style)FindResource("AccentButtonStyle");
+        return button;
+    }
 }

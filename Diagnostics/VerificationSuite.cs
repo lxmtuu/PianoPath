@@ -2977,10 +2977,27 @@ internal static partial class VerificationSuite
             ShellThemeManager.ForceHighContrast = true;
             ShellThemeManager.OnSystemParametersChanged(nameof(SystemParameters.HighContrast));
             var windowBrush = Application.Current.Resources["WindowBrush"] as SolidColorBrush;
+            var textBrush = Application.Current.Resources["TextBrush"] as SolidColorBrush;
+            var accentTextBrush = Application.Current.Resources["AccentButtonTextBrush"] as SolidColorBrush;
+            var dangerBrush = Application.Current.Resources["DangerBrush"] as SolidColorBrush;
+            var scrimBrush = Application.Current.Resources["ScrimBrush"] as SolidColorBrush;
+            var liveAccentButton = (Button)window.FindName("PlayDialogLiveButton");
+            var liveAccentGradient = liveAccentButton.Background as LinearGradientBrush;
+            var liveAccentText = liveAccentButton.Foreground as SolidColorBrush;
+            var expectedLiveAccentText = liveAccentButton.IsMouseOver || liveAccentButton.IsPressed
+                ? SystemColors.WindowTextColor : SystemColors.HighlightTextColor;
+            var menuBackdrop = (ChromeBackdrop)window.FindName("MenuBackdrop");
             Assert(ShellThemeManager.IsHighContrast
                     && (Color)Application.Current.Resources["AccentColor"] == SystemColors.HighlightColor
-                    && windowBrush is not null && windowBrush.Color == SystemColors.WindowColor,
-                "Switching high contrast on must repaint the chrome from the Windows system colours by itself, without a second Apply call.");
+                    && windowBrush is not null && windowBrush.Color == SystemColors.WindowColor
+                    && textBrush?.Color == SystemColors.WindowTextColor
+                    && accentTextBrush?.Color == SystemColors.HighlightTextColor
+                    && dangerBrush?.Color == SystemColors.WindowTextColor
+                    && scrimBrush?.Color == Color.FromArgb(0xF0, SystemColors.WindowColor.R, SystemColors.WindowColor.G, SystemColors.WindowColor.B)
+                    && liveAccentGradient is not null && liveAccentGradient.GradientStops[0].Color == SystemColors.HighlightColor
+                    && liveAccentText?.Color == expectedLiveAccentText
+                    && menuBackdrop.Theme.Id == ShellThemes.HighContrastId,
+                "High contrast must update the existing button, readable system text and solid system-colour backdrop, not just resource-dictionary values.");
             Assert(ShellThemeManager.Current.Id == ShellThemes.Find(chosen).Id,
                 "High contrast must not overwrite the theme the user chose.");
             // An unrelated system parameter must leave the palette alone: only the contrast switch repaints.
@@ -2993,9 +3010,12 @@ internal static partial class VerificationSuite
             ShellThemeManager.ForceHighContrast = false;
             ShellThemeManager.OnSystemParametersChanged(nameof(SystemParameters.HighContrast));
         }
+        var restoredTextBrush = Application.Current.Resources["TextBrush"] as SolidColorBrush;
+        var restoredBackdrop = (ChromeBackdrop)window.FindName("MenuBackdrop");
         Assert(!ShellThemeManager.IsHighContrast && ShellThemeManager.Current.Id == ShellThemes.Find(chosen).Id
-                && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.Find(chosen).Accent,
-            "Turning high contrast off should republish the chosen concert theme through the same hook.");
+                && (Color)Application.Current.Resources["AccentColor"] == ShellThemes.Find(chosen).Accent
+                && restoredTextBrush?.Color == UserShellThemes.DefaultText && restoredBackdrop.Theme.Id == chosen,
+            "Turning high contrast off should restore the chosen theme, its live text palette and its backdrop through the same hook.");
         Results.Add("PASS accessibility: every interactive control carries a readable, localized name (glyph buttons through their tooltip, generated rows through their caption), the dock keeps Tab inside its page, and high contrast repaints the chrome from the Windows system colours the moment Windows reports the switch, without changing the chosen theme.");
     }
 
@@ -5103,6 +5123,20 @@ internal static partial class VerificationSuite
         // Lightening raises every channel, so the brightness of the whole colour is what stacks; comparing the
         // single brightest channel would call two colours equal once one of them already sits at 255.
         static int Brightness(Color colour) => colour.R + colour.G + colour.B;
+        static byte[] RenderChromeBackdrop(ShellTheme theme)
+        {
+            const int width = 320, height = 180;
+            var backdrop = new ChromeBackdrop();
+            backdrop.Configure(theme, "Off", 0);
+            backdrop.Measure(new Size(width, height));
+            backdrop.Arrange(new Rect(0, 0, width, height));
+            backdrop.UpdateLayout();
+            var bitmap = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(backdrop);
+            var pixels = new byte[width * height * 4];
+            bitmap.CopyPixels(pixels, width * 4, 0);
+            return pixels;
+        }
         Assert(Peak(built.Control) <= UserShellThemes.MaxSurface && Peak(built.Control) >= UserShellThemes.MinSurface,
             $"A user theme keeps its base surface inside the dark band ({UserShellThemes.MinSurface:X2}-{UserShellThemes.MaxSurface:X2}) so the light chrome text stays readable.");
         Assert(UserShellThemes.HasContrast(built.Accent, built.Control) && Brightness(built.ControlHover) > Brightness(built.Control)
@@ -5112,11 +5146,42 @@ internal static partial class VerificationSuite
             "The derived chrome should keep the accent visible and stack the surfaces: window below control, hover, border and track above it.");
         var clampedLight = UserShellThemes.Build(new UserShellTheme { Name = "Too Light", Surface = "#FFFFFF" });
         var clampedDark = UserShellThemes.Build(new UserShellTheme { Name = "Too Dark", Surface = "#000000" });
-        Assert(Peak(clampedLight.Control) == UserShellThemes.MaxSurface && Peak(clampedDark.Control) == UserShellThemes.MinSurface,
-            "A surface outside the readable band should be clamped, not accepted as typed.");
+        Assert(Peak(clampedLight.Control) == UserShellThemes.MaxSurface && Peak(clampedDark.Control) == UserShellThemes.MinSurface
+                && UserShellThemes.HasReadableText(clampedLight.ControlHover),
+            "A surface outside the readable band should be clamped, and even the lightest derived hover surface must keep 4.5:1 text contrast.");
         var repaired = UserShellThemes.Build(new UserShellTheme { Name = "Edited by hand", Accent = "not a colour", Surface = "", Mote = null! });
         Assert(Peak(repaired.Control) >= UserShellThemes.MinSurface && UserShellThemes.HasContrast(repaired.Accent, repaired.Control),
             "A theme file edited by hand should be repaired into a readable palette instead of failing to load.");
+        var repairedAccent = UserShellThemes.Build(new UserShellTheme
+        {
+            Name = "Invisible accent", Accent = "#141019", AccentAlt = "#141019", Surface = "#141019"
+        });
+        var opaqueArgb = UserShellThemes.ReadColour("#00112233", Colors.White);
+        Assert(UserShellThemes.HasContrast(repairedAccent.Accent, repairedAccent.Control)
+                && UserShellThemes.HasContrast(repairedAccent.AccentAlt, repairedAccent.Control)
+                && UserShellThemes.HasReadableAccentText(repairedAccent.Accent, repairedAccent.AccentAlt)
+                && opaqueArgb.A == 255 && opaqueArgb.R == 0x11 && UserShellThemes.Backdrop("999") == BackdropStyle.Acoustic,
+            "Hand-edited low-contrast or alpha colours and undefined numeric backdrop values must be repaired safely.");
+        var repairedGradient = UserShellThemes.Build(new UserShellTheme
+        {
+            Name = "Unreadable gradient", Accent = "#6D6D6D", AccentAlt = "#EED24B", Surface = "#060606"
+        });
+        Assert(repairedGradient.Accent == repairedGradient.AccentAlt
+                && UserShellThemes.HasReadableAccentText(repairedGradient.Accent, repairedGradient.AccentAlt),
+            "A hand-edited accent gradient without a common readable foreground should be repaired to a safe solid accent.");
+        var acousticFrame = RenderChromeBackdrop(built with { Backdrop = BackdropStyle.Acoustic });
+        var obsidianFrame = RenderChromeBackdrop(built with { Backdrop = BackdropStyle.Obsidian });
+        var imperialFrame = RenderChromeBackdrop(built with { Backdrop = BackdropStyle.Imperial });
+        var highContrastTheme = ShellThemes.HighContrast();
+        var highContrastFrame = RenderChromeBackdrop(highContrastTheme);
+        var highContrastIsSolid = Enumerable.Range(0, highContrastFrame.Length / 4).All(pixel =>
+            highContrastFrame[pixel * 4] == highContrastTheme.Window.B
+            && highContrastFrame[pixel * 4 + 1] == highContrastTheme.Window.G
+            && highContrastFrame[pixel * 4 + 2] == highContrastTheme.Window.R
+            && highContrastFrame[pixel * 4 + 3] == 255);
+        Assert(!acousticFrame.SequenceEqual(obsidianFrame) && !obsidianFrame.SequenceEqual(imperialFrame)
+                && !acousticFrame.SequenceEqual(imperialFrame) && highContrastIsSolid,
+            "Acoustic, obsidian and imperial must render distinct backdrop families, while high contrast stays a solid system window colour.");
         Assert(UserShellThemes.Id("Sunset Glow!") == "user-sunset-glow" && UserShellThemes.Id("  ") == "user-custom"
                 && UserShellThemes.IsUserTheme("user-sunset-glow") && !UserShellThemes.IsUserTheme(ShellThemes.ConcertNoirId),
             "Theme ids should be stable slugs carrying the user prefix, so the pickers can tell them from the built-in looks.");
@@ -5139,8 +5204,16 @@ internal static partial class VerificationSuite
             var survivors = store.Load();
             Assert(survivors.Count == 2 && survivors.Any(theme => theme.Name == "Renamed" && theme.Accent == Color.FromRgb(0x7C, 0xFF, 0x6B)),
                 "A corrupt theme file should be skipped, and a renamed file should arrive under its new name.");
-            Assert(store.Delete("user-renamed") && store.Load().Count == 1 && !store.Delete(ShellThemes.ConcertNoirId),
-                "Deleting a theme removes its file, while a built-in theme cannot be deleted.");
+            Assert(store.Delete("Renamed") && store.Load().Count == 1 && !store.Delete(ShellThemes.ConcertNoirId),
+                "Deleting a user theme by display name removes its file, while a built-in theme cannot be deleted.");
+            var callerTheme = new UserShellTheme { Name = "  Caller Theme  " };
+            var callerSaved = store.Save(callerTheme);
+            Assert(callerTheme.Name == "  Caller Theme  " && callerSaved.Name == "Caller Theme" && store.Delete(callerSaved.Id),
+                "Saving a trimmed filename must not mutate the caller's theme object, and deletion by id must remain supported.");
+            Assert(UserThemeStore.NameValidationError("CON") is not null
+                    && UserThemeStore.NameValidationError("NUL.json") is not null
+                    && UserThemeStore.NameValidationError("Concert") is null,
+                "Windows device basenames, including names with extensions, must be refused before file I/O.");
             var keep = store.Save(new UserShellTheme { Name = "Keep This Theme" });
             Assert(Throws(() => store.Save(new UserShellTheme { Name = "../library" }, keep.Id))
                     && store.Load().Any(theme => theme.Id == keep.Id),
@@ -5158,6 +5231,8 @@ internal static partial class VerificationSuite
         // The pickers: a theme saved in the settings folder resolves by id, applies, and shows up as a chip.
         var originalDirectory = PianoVisualSettingsStore.SettingsDirectory;
         var originalTheme = ShellThemeManager.Current;
+        var windowSettings = (PianoVisualSettings)Field(window, "_visualSettings");
+        var originalWindowTheme = windowSettings.ShellTheme;
         var hadHighContrast = ShellThemeManager.ForceHighContrast;
         var folder = Path.Combine(Path.GetTempPath(), "keyflow-verify-themes-live-" + Guid.NewGuid().ToString("N"));
         try
@@ -5168,17 +5243,41 @@ internal static partial class VerificationSuite
             var resolved = ShellThemes.Find("user-sunset-glow");
             Assert(resolved.Id == "user-sunset-glow" && resolved.Accent == built.Accent && ShellThemes.Everything.Any(theme => theme.Id == resolved.Id),
                 "A theme in the settings folder should resolve by id through the same lookup the pickers and the settings file use.");
-            ShellThemeManager.Apply(resolved);
+            windowSettings.ShellTheme = resolved.Id;
+            Invoke(window, "ApplyChromeTheme");
             var accentBrush = Application.Current.Resources["AccentBrush"] as SolidColorBrush;
-            Assert(ShellThemeManager.Current.Id == resolved.Id && accentBrush is not null && accentBrush.Color == built.Accent,
-                "Applying a theme the user made should publish its accent to the chrome.");
+            var accentButton = (Button)window.FindName("PlayDialogLiveButton");
+            var accentGradient = accentButton.Background as LinearGradientBrush;
+            var accentButtonText = accentButton.Foreground as SolidColorBrush;
+            var expectedButtonText = accentButton.IsMouseOver || accentButton.IsPressed ? UserShellThemes.DefaultText : Colors.Black;
+            Assert(ShellThemeManager.Current.Id == resolved.Id && accentBrush is not null && accentBrush.Color == built.Accent
+                    && accentGradient is not null && accentGradient.GradientStops[0].Color == built.Accent
+                    && accentButtonText?.Color == expectedButtonText,
+                "Applying a custom theme should restyle an already-created accent button and choose a readable foreground through DynamicResource.");
             Invoke(window, "RefreshThemeChips");
             var chips = (WrapPanel?)Field(window, "themeChipHost");
             Assert(chips is not null && chips.Children.Count == ShellThemes.Everything.Count()
                     && chips.Children.OfType<Button>().Any(chip => (chip.DataContext as string) == resolved.Id),
                 "Both theme chip rows should offer the themes the user made next to the built-in looks.");
+            var refreshedSeeds = new UserShellTheme
+            {
+                Name = "Sunset Glow", Backdrop = nameof(BackdropStyle.Imperial),
+                Accent = "#44CC88", AccentAlt = "#A0FFCC", Glow = "#74E8AD", Surface = "#0E2018", Mote = "#C8FFE0"
+            };
+            UserThemeStore.Default.Save(refreshedSeeds);
+            var refreshedTheme = ShellThemes.Find(resolved.Id);
+            Invoke(window, "ApplyChromeTheme");
+            Invoke(window, "RefreshThemeChips");
+            chips = (WrapPanel?)Field(window, "themeChipHost");
+            var updatedChip = chips?.Children.OfType<Button>().FirstOrDefault(chip => (chip.DataContext as string) == resolved.Id);
+            var updatedOrb = updatedChip?.Tag as LinearGradientBrush;
+            var updatedAccentBrush = Application.Current.Resources["AccentBrush"] as SolidColorBrush;
+            Assert(updatedOrb is not null && updatedOrb.GradientStops[0].Color == refreshedTheme.Accent
+                    && updatedAccentBrush?.Color == refreshedTheme.Accent && ShellThemeManager.Current.Accent == refreshedTheme.Accent,
+                "Saving new colours under the same theme id must republish the palette and refresh the menu chip gradient.");
             Assert(UserThemeStore.NameConflict("Concert Noir") is not null && UserThemeStore.NameConflict("Sunset Glow") is null
-                    && UserThemeStore.NameConflict("sunset-glow") is not null && UserThemeStore.NameConflict("../library") is not null,
+                    && UserThemeStore.NameConflict("sunset-glow") is not null && UserThemeStore.NameConflict("../library") is not null
+                    && UserThemeStore.NameConflict("CON") is not null,
                 "Built-in names, path-like names and normalized-id collisions should be refused, while the existing theme name stays editable.");
             PianoVisualSettingsStore.UseDirectory(originalDirectory);
             Invoke(window, "RefreshThemeChips");
@@ -5190,8 +5289,10 @@ internal static partial class VerificationSuite
         finally
         {
             ShellThemeManager.ForceHighContrast = hadHighContrast;
-            ShellThemeManager.Apply(originalTheme);
             PianoVisualSettingsStore.UseDirectory(originalDirectory);
+            windowSettings.ShellTheme = originalWindowTheme;
+            ShellThemeManager.Apply(originalTheme);
+            Invoke(window, "ApplyChromeTheme");
             Invoke(window, "RefreshThemeChips");
             try { Directory.Delete(folder, true); } catch { }
         }
@@ -5208,16 +5309,36 @@ internal static partial class VerificationSuite
             "The studio should refuse to save a theme without a name.");
         studio.NameBox.Text = "../library";
         Assert(!studio.TryBuild(out _, out var unsafeName)
-                && unsafeName == "Theme names must be 1–32 characters and cannot contain path separators or reserved filename characters.",
+                && unsafeName == "Theme names must be 1–32 characters and cannot contain path separators, reserved characters or Windows device names.",
             "The studio should refuse a path-like theme name before it reaches the store.");
         studio.NameBox.Text = "Sunset Glow"; studio.ColourBox(nameof(UserShellTheme.Glow)).Text = "purple";
         Assert(!studio.TryBuild(out _, out var hexError) && hexError == "One of the colours is not a hex value like #1A2B3C.",
             "The studio should refuse to save a colour that is not a hex value.");
-        studio.ColourBox(nameof(UserShellTheme.Glow)).Text = "#FFB86B"; studio.BackdropBox.SelectedIndex = 1;
+        studio.ColourBox(nameof(UserShellTheme.Glow)).Text = "#FFB86B";
+        studio.ColourBox(nameof(UserShellTheme.Mote)).Text = "#00FFE3B0";
+        Assert(!studio.TryBuild(out _, out var alphaError) && alphaError == "One of the colours is not a hex value like #1A2B3C.",
+            "The studio should reject 8-digit ARGB inputs rather than allowing transparent theme seeds.");
+        studio.ColourBox(nameof(UserShellTheme.Mote)).Text = seeds.Mote;
+        studio.ColourBox(nameof(UserShellTheme.Accent)).Text = "#141019";
+        studio.ColourBox(nameof(UserShellTheme.AccentAlt)).Text = "#141019";
+        studio.ColourBox(nameof(UserShellTheme.Surface)).Text = "#141019";
+        Assert(!studio.TryBuild(out _, out var contrastError)
+                && contrastError == "Accent colours need at least 3:1 contrast against the surface.",
+            "The studio should refuse accent and companion colours that disappear into the surface.");
+        studio.ColourBox(nameof(UserShellTheme.Accent)).Text = "#6D6D6D";
+        studio.ColourBox(nameof(UserShellTheme.AccentAlt)).Text = "#EED24B";
+        studio.ColourBox(nameof(UserShellTheme.Surface)).Text = "#060606";
+        Assert(!studio.TryBuild(out _, out var gradientError)
+                && gradientError == "The accent gradient needs at least 4.5:1 contrast with either black or white text.",
+            "The studio should reject an accent gradient that no single foreground can label accessibly.");
+        studio.ColourBox(nameof(UserShellTheme.Accent)).Text = seeds.Accent;
+        studio.ColourBox(nameof(UserShellTheme.AccentAlt)).Text = seeds.AccentAlt;
+        studio.ColourBox(nameof(UserShellTheme.Surface)).Text = seeds.Surface;
+        studio.BackdropBox.SelectedIndex = 1;
         Assert(studio.TryBuild(out var result, out var noError) && noError is null && result is not null
                 && result.Backdrop == nameof(BackdropStyle.Obsidian) && UserShellThemes.Build(result).Backdrop == BackdropStyle.Obsidian,
             "A filled-in studio should hand back the theme the fields describe, backdrop family included.");
-        Results.Add("PASS user themes: five seeds derive a readable twenty-token chrome, files round-trip and are repaired or skipped when damaged, unsafe names and normalized-id collisions are refused without losing a theme during replacement, an id resolves and applies through the pickers, and the studio refuses a nameless or non-hex theme.");
+        Results.Add("PASS user themes: five seeds derive readable surfaces and accent text, each backdrop family renders distinctly, files round-trip and are repaired or skipped when damaged, unsafe names and normalized-id collisions are refused without losing a theme during replacement, same-id palette edits refresh the chrome and chips, and the studio refuses unsafe, transparent or low-contrast input.");
     }
 
     /// <summary>

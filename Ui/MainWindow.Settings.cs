@@ -1542,10 +1542,10 @@ public partial class MainWindow
             else caption.Target.SetValue(caption.Property, text);
             return;
         }
-        var accent = (Brush)FindResource("Accent2Brush");
+        var readableText = (Brush)FindResource("TextBrush");
         var piece = new TextBlock { TextWrapping = TextWrapping.Wrap };
         if (index > 0) piece.Inlines.Add(new Run(text[..index]));
-        piece.Inlines.Add(new Run(text.Substring(index, match!.Length)) { Foreground = accent, FontWeight = FontWeights.SemiBold });
+        piece.Inlines.Add(new Run(text.Substring(index, match!.Length)) { Foreground = readableText, FontWeight = FontWeights.SemiBold });
         if (index + match.Length < text.Length) piece.Inlines.Add(new Run(text[(index + match.Length)..]));
         if (caption.Target is TextBlock block) { block.Inlines.Clear(); foreach (var inline in piece.Inlines.ToList()) block.Inlines.Add(inline); }
         else caption.Target.SetValue(caption.Property, piece);

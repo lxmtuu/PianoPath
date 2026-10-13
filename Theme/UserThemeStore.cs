@@ -14,6 +14,13 @@ internal sealed class UserThemeStore(string directory)
 
     private static readonly JsonSerializerOptions Options = new() { WriteIndented = true };
     private static readonly char[] InvalidNameCharacters = "<>:\"/\\|?*".Concat(Path.GetInvalidFileNameChars()).Distinct().ToArray();
+    private static readonly HashSet<string> ReservedWindowsDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL", "CONIN$", "CONOUT$",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+        "COM¹", "COM²", "COM³", "LPT¹", "LPT²", "LPT³"
+    };
     private static UserThemeStore? _default;
 
     /// <summary>The store inside the current settings folder; rebuilt when that folder is redirected.</summary>
@@ -73,8 +80,17 @@ internal sealed class UserThemeStore(string directory)
         var path = PathFor(name);
         var oldPath = old is null ? null : PathFor(old.Name);
         var temp = path + ".tmp";
-        var stored = theme;
-        stored.Name = name;
+        // Do not normalize the caller's in-memory object as a side effect of persisting it.
+        var stored = new UserShellTheme
+        {
+            Name = name,
+            Backdrop = theme.Backdrop,
+            Accent = theme.Accent,
+            AccentAlt = theme.AccentAlt,
+            Glow = theme.Glow,
+            Surface = theme.Surface,
+            Mote = theme.Mote
+        };
         try
         {
             System.IO.Directory.CreateDirectory(Directory);
@@ -107,12 +123,15 @@ internal sealed class UserThemeStore(string directory)
     /// </summary>
     internal bool Delete(string nameOrId)
     {
-        if (!UserShellThemes.IsUserTheme(nameOrId)) return false;
+        var value = nameOrId?.Trim();
+        if (string.IsNullOrEmpty(value)) return false;
         try
         {
-            var theme = Load().FirstOrDefault(candidate => string.Equals(candidate.Id, nameOrId, StringComparison.OrdinalIgnoreCase));
-            var name = theme?.Name ?? Path.GetFileNameWithoutExtension(nameOrId);
-            var path = PathFor(name);
+            var theme = Load().FirstOrDefault(candidate =>
+                string.Equals(candidate.Id, value, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(candidate.Name, value, StringComparison.OrdinalIgnoreCase));
+            if (theme is null) return false;
+            var path = PathFor(theme.Name);
             if (!File.Exists(path)) return false;
             File.Delete(path);
             return true;
@@ -126,9 +145,18 @@ internal sealed class UserThemeStore(string directory)
         var clean = name?.Trim() ?? "";
         if (clean.Length == 0) return "A theme needs a name.";
         if (clean.Length > 32 || clean is "." or ".." || clean[^1] is '.' or ' '
-            || clean.Any(character => char.IsControl(character) || InvalidNameCharacters.Contains(character)))
-            return "Theme names must be 1–32 characters and cannot contain path separators or reserved filename characters.";
+            || clean.Any(character => char.IsControl(character) || InvalidNameCharacters.Contains(character))
+            || IsReservedWindowsDeviceName(clean))
+            return "Theme names must be 1–32 characters and cannot contain path separators, reserved characters or Windows device names.";
         return null;
+    }
+
+    private static bool IsReservedWindowsDeviceName(string name)
+    {
+        // Windows reserves a device basename even when a user adds an extension (e.g. NUL.json). A space or
+        // dot immediately before the extension is normalized by Win32 too, so trim it before the lookup.
+        var basename = name.Split('.', 2)[0].TrimEnd(' ', '.');
+        return ReservedWindowsDeviceNames.Contains(basename);
     }
 
     /// <summary>
