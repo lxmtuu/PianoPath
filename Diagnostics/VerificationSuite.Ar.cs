@@ -2453,8 +2453,8 @@ internal static partial class VerificationSuite
             Assert(voiceTake.FramesWritten == 10 && voiceTake.AudioSeconds is > 0.80 and <= 0.85,
                 $"The voiced take should time its piano track by the ticks ({voiceTake.AudioSeconds:0.###} seconds of audio with {voiceTake.FramesWritten} frames).");
             var voiceBytes = File.ReadAllBytes(voiceWav);
-            Assert(voiceBytes.Length == WavWriter.HeaderBytes + 33075 * 4 && BitConverter.ToInt32(voiceBytes, 40) == 33075 * 4,
-                $"Ten ticks at 12 fps are 33075 stereo samples at 44.1 kHz, patched into the header on close (file {voiceBytes.Length} bytes).");
+            Assert(voiceBytes.Length == WavWriter.HeaderBytes + 36750 * 4 && BitConverter.ToInt32(voiceBytes, 40) == 36750 * 4,
+                $"Ten ticks at 12 fps are 36750 stereo samples at 44.1 kHz, patched into the header on close (file {voiceBytes.Length} bytes).");
             var voicePcm = voiceBytes.Skip(WavWriter.HeaderBytes).ToArray();
             short VoiceAt(long frame) => BitConverter.ToInt16(voicePcm, (int)(frame * 4));
             var heldEnergy = Enumerable.Range(0, 60).Sum(i => Math.Abs((int)VoiceAt(10000 + i * 40)) + Math.Abs((int)VoiceAt(15000 + i * 40)));
