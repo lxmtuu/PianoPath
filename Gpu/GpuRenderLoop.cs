@@ -406,10 +406,11 @@ internal sealed class GpuRenderLoop : IDisposable
                     : alphaLayersTap!.Width / (float)alphaLayersTap.Height;
                 var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
                 simulation.Step(dt, input, _feed, sceneHeight * primaryAspect);
+                sceneHeight = (float)Math.Max(120, input.StageHeightDip); // epoch refresh can change the viewport snapshot
                 // the AR layer lights the keys as they were lit a camera-delay ago, which is what the camera's picture shows
                 if (_feed.Ar is { DelaySeconds: > 0 } delayed)
                 {
-                    keyHistory.Record(now, simulation.KeyColors);
+                    keyHistory.Record(now, simulation.KeyColors, input.Generation);
                     keyHistory.Sample(now - delayed.DelaySeconds, delayedKeys);
                     gpu.SetArKeyColors(delayedKeys);
                 }
@@ -595,6 +596,8 @@ internal sealed class GpuRenderLoop : IDisposable
             var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
             var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
             simulation.Step(frameSeconds, input, feed, layout.Width);
+            sceneHeight = (float)Math.Max(120, input.StageHeightDip);
+            layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
             simulated += timer.Elapsed.TotalMilliseconds - started;
             // Every frame is drawn from scratch out of the simulation and the input, so the frames before the last
             // only matter through the simulation, which the step above already advanced.
@@ -646,6 +649,8 @@ internal sealed class GpuRenderLoop : IDisposable
         var sceneHeight = (float)Math.Max(120, input.StageHeightDip);
         var layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
         simulation.Step(frameSeconds, input, feed, layout.Width);
+        sceneHeight = (float)Math.Max(120, input.StageHeightDip);
+        layout = new GpuSceneLayout(sceneHeight * width / (float)height, sceneHeight, input.Look.KeyboardFraction);
         renderer.UpdateBackground(feed.Background);
         renderer.UpdateCamera(feed.Camera);
         renderer.UpdateAr(feed.Ar);

@@ -12,6 +12,8 @@ internal readonly record struct GpuLiveEvent(int Pitch, bool Down, float Strengt
 /// <summary>What the render thread reads at the start of one frame.</summary>
 internal sealed class GpuFrameInput
 {
+    /// <summary>Transient epoch at Capture. Manufactured diagnostic inputs start in epoch zero.</summary>
+    public long Generation;
     public IReadOnlyList<NoteEvent> Notes = [];
     public double MaxNoteDuration;
     public double Position;
@@ -42,7 +44,9 @@ internal sealed class GpuFrameInput
 internal sealed class GpuStageFeed
 {
     private const double MaxExtrapolation = .05;
-    private readonly object _gate = new();
+    private readonly TransientFrameEpoch _epoch = new();
+    private readonly object _gate;
+    internal GpuStageFeed() => _gate = _epoch.Gate;
     private readonly ConcurrentQueue<GpuHit> _hits = new();
     private readonly ConcurrentQueue<GpuLiveEvent> _live = new();
     private readonly bool[] _pressed = new bool[128];
@@ -51,6 +55,7 @@ internal sealed class GpuStageFeed
     private double _position, _rate;
     private long _positionStamp;
     private bool _playing, _fixedPosition, _fixedBeatPulse;
+    private bool _awaitingState; // clear cannot re-arm the old song between clear and the next owner publication
     private GpuLook _look = new();
     private float _beatPulse;
     private bool _sustain;
@@ -58,8 +63,7 @@ internal sealed class GpuStageFeed
     private long _beatStamp;
     private float _pointerX = .5f, _pointerY = .5f;
     private double _stageHeightDip = 720;
-    private int _clearRequests;
-    private long _eventGeneration;
+
 
     internal static long Now => Stopwatch.GetTimestamp();
     internal static double Seconds(long ticks) => ticks / (double)Stopwatch.Frequency;
@@ -129,6 +133,7 @@ internal sealed class GpuStageFeed
         var now = Now;
         lock (_gate)
         {
+            _awaitingState = false;
             _fixedPosition = false;
             _fixedBeatPulse = false;
             if (!ReferenceEquals(notes, _notes))
@@ -179,8 +184,8 @@ internal sealed class GpuStageFeed
         }
     }
 
-    internal void Impact(int pitch, double strength) => _hits.Enqueue(new GpuHit(pitch, (float)strength, Now, Volatile.Read(ref _eventGeneration)));
-    internal void LiveNote(int pitch, bool down, double strength) => _live.Enqueue(new GpuLiveEvent(pitch, down, (float)strength, Now, Volatile.Read(ref _eventGeneration)));
+    internal void Impact(int pitch, double strength) => _hits.Enqueue(new GpuHit(pitch, (float)strength, Now, _epoch.Generation));
+    internal void LiveNote(int pitch, bool down, double strength) => _live.Enqueue(new GpuLiveEvent(pitch, down, (float)strength, Now, _epoch.Generation));
 
     internal void PulseBeat(double strength)
     {
@@ -189,57 +194,87 @@ internal sealed class GpuStageFeed
 
     private float BeatDecay() => _beatStamp == 0 ? 0 : (float)Math.Exp(-6 * Seconds(Now - _beatStamp));
 
-    /// <summary>Drops every transient effect (stop, seek, song change).</summary>
+    /// <summary>Drops transients for stop/seek/song change, not the song/pedal owners' steady state.
+    /// Queue clearing precedes epoch publication: a producer tagged with the NEW epoch is never wiped.
+    /// A producer delayed across the boundary may enqueue the old epoch; dequeue filters it.
+    /// Song-active emission waits for the next SetState publication, avoiding the clear→seek-state gap.
+    /// Post-clear Note On queues remain deliverable even while that snapshot is pending.</summary>
     internal void ClearTransient()
-    {
-        Interlocked.Increment(ref _eventGeneration);
-        _hits.Clear();
-        _live.Clear();
-        Interlocked.Increment(ref _clearRequests);
-        lock (_gate) Array.Clear(_pressed);
-    }
-
-    /// <summary>True once per <see cref="ClearTransient"/> call; read by the render thread.</summary>
-    internal bool TakeClearRequest()
-    {
-        if (Volatile.Read(ref _clearRequests) == 0) return false;
-        Interlocked.Exchange(ref _clearRequests, 0);
-        return true;
-    }
-
-    internal bool TryDequeueHit(out GpuHit hit)
-    {
-        while (_hits.TryDequeue(out hit))
-            if (hit.Generation == Volatile.Read(ref _eventGeneration)) return true;
-        hit = default;
-        return false;
-    }
-
-    internal bool TryDequeueLive(out GpuLiveEvent live)
-    {
-        while (_live.TryDequeue(out live))
-            if (live.Generation == Volatile.Read(ref _eventGeneration)) return true;
-        live = default;
-        return false;
-    }
-
-    /// <summary>Fills <paramref name="input"/> with the state for a frame presented at <paramref name="now"/>.</summary>
-    internal void Capture(GpuFrameInput input, long now)
     {
         lock (_gate)
         {
-            input.Notes = _notes;
-            input.MaxNoteDuration = _maxNoteDuration;
-            var ahead = _fixedPosition ? 0 : Math.Clamp(Seconds(now - _positionStamp), 0, MaxExtrapolation);
-            input.Position = _playing && !_fixedPosition ? _position + ahead * _rate : _position;
-            input.Playing = _playing;
-            Array.Copy(_pressed, input.Pressed, 128);
-            input.BeatPulse = _fixedBeatPulse ? _beatPulse : _beatPulse * BeatDecay();
-            input.Sustain = _sustain;
-            input.SustainLevel = (float)_sustainLevel;
-            input.PointerX = _pointerX; input.PointerY = _pointerY;
-            input.StageHeightDip = _stageHeightDip;
+            _hits.Clear();
+            _live.Clear();
+            Array.Clear(_pressed);
+            _awaitingState = true;
+            _epoch.Advance();
         }
+    }
+
+    /// <summary>Consume the coalesced clear flag. Old captured generations remain invalid afterward.</summary>
+    internal bool TakeClearRequest() => _epoch.TakeClearRequest();
+
+    internal bool TryDequeueHit(out GpuHit hit) => TryDequeueHit(_epoch.Generation, out hit);
+    internal bool TryDequeueLive(out GpuLiveEvent live) => TryDequeueLive(_epoch.Generation, out live);
+
+    /// <summary>The currently stepping frame may not steal events posted for a later clear epoch.
+    /// Lock only the short dequeue, never physics/render work; UI producers keep lock-free pushes.</summary>
+    internal bool TryDequeueHit(long generation, out GpuHit hit)
+    {
+        lock (_gate)
+        {
+            if (_epoch.IsCurrent(generation))
+                while (_hits.TryDequeue(out hit))
+                    if (hit.Generation == generation) return true;
+            hit = default;
+            return false;
+        }
+    }
+
+    internal bool TryDequeueLive(long generation, out GpuLiveEvent live)
+    {
+        lock (_gate)
+        {
+            if (_epoch.IsCurrent(generation))
+                while (_live.TryDequeue(out live))
+                    if (live.Generation == generation) return true;
+            live = default;
+            return false;
+        }
+    }
+
+    /// <summary>Linearise frame acceptance with clear. If clear landed after Capture, refresh the
+    /// WHOLE input before simulation, including song position/playing, keys, pedal and look.
+    /// A clear after this boundary is handled next frame; its new events cannot be consumed by this one.</summary>
+    internal bool PrepareFrame(GpuFrameInput input)
+    {
+        lock (_gate)
+        {
+            if (!_epoch.IsCurrent(input.Generation)) CaptureLocked(input, Now);
+            return _epoch.TakeClearRequest();
+        }
+    }
+
+    /// <summary>Fills a frame snapshot and its epoch under the same lock as transient clear.</summary>
+    internal void Capture(GpuFrameInput input, long now)
+    {
+        lock (_gate) CaptureLocked(input, now);
+    }
+
+    private void CaptureLocked(GpuFrameInput input, long now)
+    {
+        input.Generation = _epoch.Generation;
+        input.Notes = _notes;
+        input.MaxNoteDuration = _maxNoteDuration;
+        var ahead = _fixedPosition ? 0 : Math.Clamp(Seconds(now - _positionStamp), 0, MaxExtrapolation);
+        input.Position = _playing && !_fixedPosition ? _position + ahead * _rate : _position;
+        input.Playing = _playing && !_awaitingState;
+        Array.Copy(_pressed, input.Pressed, 128);
+        input.BeatPulse = _fixedBeatPulse ? _beatPulse : _beatPulse * BeatDecay();
+        input.Sustain = _sustain;
+        input.SustainLevel = (float)_sustainLevel;
+        input.PointerX = _pointerX; input.PointerY = _pointerY;
+        input.StageHeightDip = _stageHeightDip;
         input.Look = Look;
     }
 

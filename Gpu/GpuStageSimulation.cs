@@ -105,6 +105,7 @@ internal sealed partial class GpuStageSimulation
     private readonly Vector3[] _keyColor = new Vector3[128];
     private readonly Random _random;
     private double _time;
+    private long _frameGeneration;
 
     internal GpuStageSimulation() : this(20260930) { }
     internal GpuStageSimulation(int seed) => _random = new Random(seed);
@@ -208,6 +209,13 @@ internal sealed partial class GpuStageSimulation
     /// <summary>Advances the simulation by one rendered frame.</summary>
     internal void Step(double seconds, GpuFrameInput input, GpuStageFeed feed, float sceneWidth)
     {
+        var previousGeneration = input.Generation;
+        var previousHeight = Math.Max(120, input.StageHeightDip);
+        var clear = feed.PrepareFrame(input);
+        if (clear || input.Generation != _frameGeneration) Clear();
+        _frameGeneration = input.Generation;
+        if (input.Generation != previousGeneration)
+            sceneWidth *= (float)(Math.Max(120, input.StageHeightDip) / previousHeight);
         var look = _look = input.Look;
         // A 2D trail is culled at the stage edge; a calibrated 3D bar stays in simulation until its own AR reach is consumed.
         var arLiveReleaseSeconds = feed.Ar is { ShowLiveTrails: true } ar
@@ -216,7 +224,6 @@ internal sealed partial class GpuStageSimulation
                 : 0;
         var risingMidiStyle = feed.Ar is { ShowRisingMidiNotes: true } midiAr
             && midiAr.Calibration.CameraPose is not null && midiAr.Notes.IsUsable ? midiAr.RisingMidiNoteStyle : null;
-        if (feed.TakeClearRequest()) Clear();
         var frameDt = double.IsFinite(seconds) ? (float)Math.Clamp(seconds, 0, .05) : 0;
         if (risingMidiStyle is null) { _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); }
         for (var i = _arImpacts.Count - 1; i >= 0; i--)
@@ -260,7 +267,7 @@ internal sealed partial class GpuStageSimulation
         }
 
         // ---- live events and hits from the UI thread ----
-        while (feed.TryDequeueLive(out var live))
+        while (feed.TryDequeueLive(input.Generation, out var live))
         {
             if (live.Down)
             {
@@ -281,7 +288,7 @@ internal sealed partial class GpuStageSimulation
                     }
             }
         }
-        while (feed.TryDequeueHit(out var hit)) Impact(hit.Pitch, hit.Strength, layout);
+        while (feed.TryDequeueHit(input.Generation, out var hit)) Impact(hit.Pitch, hit.Strength, layout);
         ScanReleaseFx(input, layout);
 
         // ---- keys: press animation, glow, heat, spill ----

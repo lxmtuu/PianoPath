@@ -98,7 +98,10 @@ internal static partial class VerificationSuite
         burstSimulation.BuildSprites(burstLook, new GpuSceneLayout(640, 360, .205f), burstSprites);
         var hasImpactConfetti = false;
         foreach (var sprite in burstSprites.Span) if (sprite.PosSize.W == 3) { hasImpactConfetti = true; break; }
-        burstFeed.ClearTransient(); burstInput.Pressed[60] = true;
+        burstFeed.ClearTransient();
+        burstFeed.SetLook(burstLook); burstFeed.SetStageHeight(360);
+        burstFeed.SetDeterministicState([], 0, false, new HashSet<int> { 60 });
+        burstFeed.Capture(burstInput, GpuStageFeed.Now);
         burstSimulation.Step(.04, burstInput, burstFeed, 640);
         var sustainedSprites = new GpuInstanceList<GpuSpriteInstance>(64);
         burstSimulation.BuildSprites(burstLook, new GpuSceneLayout(640, 360, .205f), sustainedSprites);

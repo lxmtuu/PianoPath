@@ -64,6 +64,7 @@ internal static partial class VerificationSuite
                 VerifyParticleDrawIndependence(fixture, layer, ar, view, sprites, quads);
             }
             VerifyEmitterClockAndClear();
+            VerifyTransientFrameEpoch();
             Results.Add("PASS P3a lifecycle: five burst/held families, both Zone routes, white/black keys, physical-release vs pedal, real 24000-particle cap recovery, soft clear and read-only Stage/AR builds. Not full MIDI routing, nonzero delay, motion parity or a family art upgrade.");
         }
         finally { KeyboardLayout.Use(previousLayout); }
@@ -167,6 +168,7 @@ internal static partial class VerificationSuite
         var stale = new GpuStageFeed(); stale.Impact(60, 1); stale.LiveNote(60, true, 1); stale.ClearTransient();
         stale.Impact(64, 1); stale.LiveNote(64, true, 1);
         var frameInput = new GpuFrameInput { Look = ParticleLook(KeyParticleFixtures.Settings(KeyParticleFixtures.All[0])) };
+        stale.SetLook(frameInput.Look); stale.Capture(frameInput, GpuStageFeed.Now);
         var fresh = new GpuStageSimulation(KeyParticleFixtures.Seed); fresh.Step(.01, frameInput, stale, 1280);
         Assert(fresh.ArImpacts.Count == 1 && fresh.ArImpacts[0].Pitch == 64 && fresh.LivePresses.Count == 1 && fresh.LivePresses[0].Pitch == 64,
             "A consumed soft-clear request must drop old queued hits/presses but retain events posted afterward.");
