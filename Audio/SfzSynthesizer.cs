@@ -351,7 +351,11 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
                 left[i] += sampleL * gain * voice.PanLeft; right[i] += sampleR * gain * voice.PanRight;
                 voice.Position += voice.Step; voice.Age += sampleSeconds; if (voice.ReleaseAge >= 0) voice.ReleaseAge += sampleSeconds;
             }
-            if (envelope < .001 || voice.Position >= lastFrame || voice.ReleaseAge >= 0 && voice.ReleaseAge > voice.Release * voice.ReleaseScale * 1.1) _voices.RemoveAt(v);
+            // Quietness only ends a voice that is releasing: during a slow attack the envelope sits
+            // below .001 for whole blocks at low-latency sizes, and culling there silences the note
+            // before it ever sounds.
+            var rungOut = voice.ReleaseAge >= 0 && (envelope < .001 || voice.ReleaseAge > voice.Release * voice.ReleaseScale * 1.1);
+            if (rungOut || voice.Position >= lastFrame) _voices.RemoveAt(v);
         }
     }
 

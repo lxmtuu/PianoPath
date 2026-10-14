@@ -37,7 +37,7 @@ public sealed class WebmEncoderPlanTests
     public void Bitrate_follows_the_mp4_rule_floor_and_ceiling()
     {
         Assert.Equal(2_000_000, WebmEncoderPlan.BitrateFor(320, 240, 15));
-        Assert.Equal(24_000_000, WebmEncoderPlan.BitrateFor(1920, 1080, 60));
+        Assert.Equal(24_000_000, WebmEncoderPlan.BitrateFor(3840, 2160, 60));
         Assert.InRange(WebmEncoderPlan.BitrateFor(1280, 720, 30), 2_000_000, 24_000_000);
     }
 
