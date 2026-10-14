@@ -1,6 +1,6 @@
 # Prism Flow Preview — P1 palette / P2 satin prototype
 
-**Trạng thái:** đã viết bản thử opt-in; đang chờ Windows CI/capture, chưa visual sign-off. Đây không phải hoàn tất roadmap hoặc phát hành một look ổn định.
+**Trạng thái:** bản thử opt-in đã PASS Windows CI/capture ở run `38601052995`; đã review sáu ảnh đại diện, chưa user sign-off. Đây không phải hoàn tất roadmap hoặc phát hành một look ổn định.
 
 ## Thử trong ứng dụng
 
@@ -23,7 +23,7 @@ Chỉ thêm bindings cần thiết vào menu hiện có, có nhãn/tooltip Anh�
 
 ## Kiểm chứng được thêm
 
-- Portable xUnit: sáu stop, midpoint linear-light, clamp, invalid range/position và continuity/gamut. Sandbox không có .NET SDK; kết quả C# thực phải lấy từ CI.
+- Portable xUnit: sáu stop, midpoint linear-light, clamp, invalid range/position và continuity/gamut. 14 case mới đã PASS trong portable job của CI; sandbox vẫn không có .NET SDK.
 - Windows product checks: settings default/legacy, JSON/apply/share, range clamp, nhập tên nốt, shared colour table cho 128 pitch × 8 track, snapshot opt-in và constant-buffer alignment. Giữ nguyên thứ tự material ID cũ.
 - Capture riêng vẫn giữ **78 ảnh P0**. Thêm **30 ảnh P1/P2**: 12 checkpoint × hai mode = 24 candidate, thêm sáu control surface-off / texture-off / bloom-off ở dense chord.
 - Control texture đo số pixel khác trên 1 mức kênh; surface/bloom dùng trên 8. Đây là effect-presence/readback check, không phải đo thẩm mỹ hoặc FPS.
@@ -38,6 +38,6 @@ dotnet build PianoPath.csproj -c Release
 
 ## Evidence và review
 
-Chưa có kết quả capture của bản thử ở thời điểm ghi phần triển khai. Bổ sung run/source commit và ảnh sau CI; không dùng ảnh AI/mockup làm bằng chứng renderer.
+[Review ảnh và evidence thực](PRISM-FLOW-P1-REVIEW.md): run [38601052995](https://github.com/lxmtuu/PianoPath/actions/runs/38601052995), source `28bcab5`, preview commit `3b199cc`. 78 baseline + 30 candidate/control PASS; full suite 4926 assertions và 1 nhóm skip. Sáu ảnh P1 đã xem, hash pixel khớp CI; sáu control P0 đại diện giữ nguyên hash so với trước thay đổi. Không dùng ảnh AI/mockup làm evidence renderer. Không suy ra hardware FPS, lifecycle hoặc full style parity từ PASS này.
 
 Đối chứng trước thay đổi: [P0 review](PRISM-FLOW-P0-REVIEW.md). Phạm vi lớn hơn và các gate còn mở: [roadmap](PRISM-FLOW-DESIGN-ROADMAP.md), [P0 audit](PRISM-FLOW-P0-AUDIT.md).

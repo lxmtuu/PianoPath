@@ -1,11 +1,11 @@
 # Prism Flow — Lộ trình thiết kế nốt, texture và dòng hạt
 
-> Ngày lập: 2026-10-14. Trạng thái: **đang làm P0: 78 baseline capture WARP và full Windows verification PASS; chưa visual sign-off/chưa đóng toàn bộ P0**.
-> Tiến độ và bằng chứng P0: [Inventory, baseline inputs và khoảng trống Live Stage–AR](PRISM-FLOW-P0-AUDIT.md). P0 chưa đóng; chưa có capture/benchmark mới.
-> **Bản thử P1/P2:** [Prism Flow Preview](PRISM-FLOW-P1-PREVIEW.md) thêm palette 6 stop và bề mặt satin opt-in trên Solid/Glass. Không thay default/preset cũ; chưa có flow particles hoặc visual sign-off.
+> Ngày lập: 2026-10-14. Trạng thái: **P0 có baseline PASS; bản thử P1/P2 palette/satin đã PASS CI và review sáu ảnh; chưa user sign-off/chưa đóng các gate P0 rộng hơn**.
+> Tiến độ và bằng chứng P0: [Inventory, baseline inputs và khoảng trống Live Stage–AR](PRISM-FLOW-P0-AUDIT.md). P0 chưa đóng các gate lifecycle/delay/reset/full coverage. Có capture WARP; chưa có hardware benchmark mới.
+> **Bản thử P1/P2:** [Prism Flow Preview](PRISM-FLOW-P1-PREVIEW.md) thêm palette 6 stop và bề mặt satin opt-in trên Solid/Glass. Không thay default/preset cũ; [ảnh/evidence](PRISM-FLOW-P1-REVIEW.md) ở run `38601052995`. Chưa có flow particles hoặc user sign-off.
 >
 > Phạm vi cập nhật: Prism Flow là mẫu thiết kế đầu tiên; chương trình bao gồm đồng bộ **Live Stage + AR mode**, thiết kế/nâng cấp toàn bộ hiệu ứng hạt khi nhấn/giữ phím, và cuối cùng tái thiết kế menu cài đặt dùng chung cho hai chế độ. Không sao chép asset, shader hoặc nhận diện của SeeMusic.
-> Cập nhật yêu cầu: 2026-10-14. Đây là mở rộng kế hoạch, không phải tuyên bố đã triển khai hoặc đã xác minh AR.
+> Cập nhật yêu cầu: 2026-10-14. Đây là phạm vi kế hoạch toàn chương trình, không phải tuyên bố đã triển khai hoặc xác minh toàn bộ AR; evidence theo từng lát dọc được link ở trên.
 > Tài liệu này là một lát dọc bổ sung cho [Visual Effects Master Roadmap](VISUAL-EFFECTS-MASTER-ROADMAP.md), không thay thế các gate, audit hay trạng thái capability hiện có.
 
 ## 1. Quyết định thiết kế

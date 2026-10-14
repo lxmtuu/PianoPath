@@ -156,6 +156,8 @@ Tách hai đường kiểm thử:
 
 Thêm mode **`--verify-prism-only`**, dùng cùng `--verify --verify-review-out=<dir>`: chỉ kiểm input/cursor P0 và 78 capture trong thư mục con `prism-flow-p0`. Không chạy/chứng nhận full suite. CI chạy mode này trước, rồi vẫn chạy full `--verify` và 48 ảnh Phase 1 độc lập; lỗi bất kỳ mode nào vẫn làm build đỏ. Ordinary `--verify` không bị thêm yêu cầu fixture P0 trong source checkout. Workflow build đang có đã upload toàn bộ thư mục review nên cũng bao gồm output mới này khi chạy thành công.
 
+**Cập nhật từ commit `28bcab5`:** mode này còn kiểm product look/palette và tạo riêng **30 ảnh candidate P1/P2** trong `prism-flow-p1`, bên cạnh 78 baseline P0 không đổi. [Run `38601052995`](https://github.com/lxmtuu/PianoPath/actions/runs/38601052995) PASS toàn bộ; full suite 4926 assertions và 1 nhóm skip. Sáu control P0 đại diện có pixel hash giống run trước. Xem [review P1/P2](PRISM-FLOW-P1-REVIEW.md); không gộp candidate vào con số 78 hoặc gọi P0 đã hoàn tất.
+
 ```powershell
 # Từ repository root, .NET 10 và Windows:
 dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release
