@@ -392,6 +392,15 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     return o;
 }
 
+// Pixel-box integration of a thin signed-distance band. Unlike smoothstep(width +/- fwidth(abs(d))),
+// a subpixel stroke loses coverage with its width instead of staying a half-opaque card at any scale.
+float HeldStrokeCoverage(float signedDistance, float halfWidth, float pixelHalfWidth)
+{
+    float pixel = max(pixelHalfWidth, 0.0001);
+    float overlap = min(signedDistance + pixel, halfWidth) - max(signedDistance - pixel, -halfWidth);
+    return saturate(overlap / (2.0 * pixel));
+}
+
 // Experimental held surfaces. Both Stage and AR use the same premultiplied material;
 // world anchoring/projection happens in the builders, not in this shading function.
 float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape, float phase)
@@ -399,28 +408,34 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
     float h = saturate(uv.y);
     float x = uv.x * 2.0 - 1.0;
     float coverage, core;
-    if (shape < 5.0) // heat parcel: broad root, curved tongue, fine warm core
+    float3 bodyColor = color.rgb;
+    if (shape < 5.0) // translucent heat veil around a narrower, curved luminous core
     {
-        float centre = sin(h * 5.5 + phase + progress * 2.0) * 0.18 * h;
-        float width = lerp(0.88, 0.055, pow(h, 0.8));
-        float d = abs(x - centre);
-        float aa = max(fwidth(d), 0.025);
-        coverage = (1.0 - smoothstep(width - aa, width + aa, d))
-            * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.86, 1.0, h));
-        core = exp(-pow(d / max(width * 0.3, 0.025), 2.0)) * coverage * (1.0 - h) * 0.32;
+        float centre = sin(h * 5.5 + phase + progress * 2.0) * 0.22 * h;
+        float width = lerp(0.78, 0.035, pow(h, 0.8));
+        float signedDistance = x - centre;
+        float pixelHalf = max(fwidth(signedDistance) * 0.5, 0.0125);
+        float veil = HeldStrokeCoverage(signedDistance, width, pixelHalf);
+        float spine = HeldStrokeCoverage(signedDistance, width * 0.28 + 0.015, pixelHalf);
+        float ends = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.86, 1.0, h));
+        coverage = (veil * 0.28 + spine * 0.60) * ends;
+        core = spine * ends * (1.0 - h) * 0.16;
+        bodyColor *= lerp(1.0, 0.65, h); // depth along the parcel, not another lifetime fade
     }
-    else // luminous thread, not a smoke billboard or white-hot dot
+    else // fine, partly transparent thread: dense births must not become an opaque AR patch
     {
         float centre = sin(h * 6.0 + phase + progress * 4.0) * 0.34;
-        float width = 0.12 + sin(h * 3.14159) * 0.1;
-        float d = abs(x - centre);
-        float aa = max(fwidth(d), 0.035);
-        coverage = (1.0 - smoothstep(width - aa, width + aa, d))
-            * smoothstep(0.0, 0.16, h) * (1.0 - smoothstep(0.8, 1.0, h));
-        core = coverage * exp(-d * d * 90.0) * 0.12;
+        float width = 0.08 + sin(h * 3.14159) * 0.08;
+        float signedDistance = x - centre;
+        float pixelHalf = max(fwidth(signedDistance) * 0.5, 0.0175);
+        float ends = smoothstep(0.0, 0.16, h) * (1.0 - smoothstep(0.8, 1.0, h));
+        float variation = 0.78 + 0.22 * (0.5 + 0.5 * cos(phase)); // fixed birth phase, no RNG/time mutation
+        coverage = HeldStrokeCoverage(signedDistance, width, pixelHalf) * ends * 0.52 * variation;
+        core = coverage * exp(-signedDistance * signedDistance * 90.0) * 0.08;
     }
     float a = saturate(coverage) * color.a;
-    float3 rgb = color.rgb * coverage + lerp(color.rgb, float3(1.0, 1.0, 1.0), 0.2) * core;
+    float3 warmCore = lerp(color.rgb, float3(1.0, 0.94, 0.70), 0.18);
+    float3 rgb = bodyColor * coverage + warmCore * core;
     return float4(rgb * color.a, a);
 }
 

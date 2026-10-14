@@ -1,6 +1,6 @@
 # P3b — Wisps + Flames, art thử dùng chung Stage / AR
 
-**2026-10-15: prototype đã PASS full CI; ảnh/clip đã được đưa về repo. Chưa review/nghiệm thu artwork.**
+**2026-10-15: prototype đã PASS full CI; ảnh/clip đã được đưa về repo. Đã review v1 theo mẫu; đang chỉnh material v2, chưa nghiệm thu artwork.**
 
 Tiếp nối [baseline auxiliary](KEY-PARTICLES-AUX-BASELINE.md) và [routing đã PASS](KEY-PARTICLES-RING-CHANNELS.md). Đây là hai họ held đầu tiên, không phải hoàn tất toàn bộ press/held hoặc thay mọi họ bằng Prism Flow.
 
@@ -40,3 +40,7 @@ Nhận xét before–after thật, cân độ sáng/độ dày/density, full-vie
 After fetching `b17a691`, a fresh local source check exposed the image-only preview rule: the two generated JSON manifests must not live in `docs/previews`. They are moved to `docs/evidence/held-particle-art`, and the workflow stages that evidence directory explicitly. The C#/shader code is unchanged from successful run `38637127055`; **[Run `38640821342`](https://github.com/lxmtuu/PianoPath/actions/runs/38640821342), source `29aefb7`, completed SUCCESS** with the storage correction: static/portable/Windows build/full verification (**6,047 assertions / 1 skipped group**), captures/APNG assembly, WARP benchmark, installer, galleries and distributable publication all passed. This prevents the preview auto-commit itself from breaking the next static check.
 
 Independent local artifact integrity check: decoded all **480 APNG frames** (8 × 60) and all **8 committed active images** using Pillow, converted to raw BGRA and compared SHA-256 against the capture manifests; every hash matched. This proves lossless frame/image preservation, not visual artwork approval. After the final CI run, a fresh checkout/source check also passes with JSON evidence outside the image-only directory.
+
+## Review và vòng material kế tiếp
+
+[Xem nhận xét v1, giới hạn temporal sampling, chỉnh shader v2 và player frame-locked](KEY-PARTICLES-HELD-ART-REVIEW.md). V2 chưa được build/render/review lại; CI xanh của v1 không chứng nhận v2.

@@ -237,6 +237,8 @@ jobs:
           foreach ($clip in $clips) {
             Copy-Item $clip.FullName (Join-Path $target "$($clip.BaseName)-motion.png") -Force
           }
+          python tools/review_held_particle_art.py --output (Join-Path $review 'review-player.html') --label $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Frame-locked review player failed' }
           "::notice title=Held particle art::32 static captures, 8 active representatives, 8 lossless 60-frame 30-FPS APNG crops staged. Prototype only, no visual/hardware acceptance."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
