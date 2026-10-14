@@ -86,9 +86,9 @@ h1{font-size:26px}p{line-height:1.6;color:#aebdd0}button,select{font:inherit;bor
 const clips=__DATA__,cache=new Map();const $=id=>document.getElementById(id);
 let index=10,playing=false,generation=0,timer=null;
 function stop(){playing=false;clearTimeout(timer);$('play').textContent='Phát';}
-function image(url){if(!cache.has(url)){let img=new Image();let ready=new Promise((resolve,reject)=>{img.onload=()=>resolve(img);img.onerror=reject;});img.src=url;cache.set(url,ready);}return cache.get(url);}
+function image(url){if(!cache.has(url)){let img=new Image();let ready=new Promise((resolve,reject)=>{img.onload=()=>img.decode().then(()=>resolve(img),reject);img.onerror=reject;});img.src=url;cache.set(url,ready);}return cache.get(url);}
 async function show(){const token=++generation,n=index,prefix=$('family').value+'-'+$('mode').value;
-$('frame').value=n;const [a,b]=await Promise.all([image(clips[prefix+'-classic'][n]),image(clips[prefix+'-art'][n])]);
+$('frame').value=n;let a,b;try{[a,b]=await Promise.all([image(clips[prefix+'-classic'][n]),image(clips[prefix+'-art'][n])]);}catch(error){if(token===generation){stop();$('status').textContent='Không giải mã được cặp ảnh; thử tải lại trang.';}return false;}
 if(token!==generation)return false;$('before').src=a.src;$('after').src=b.src;
 $('status').textContent=`Frame ${n}/59 · t=${((n+1)/30).toFixed(3)} s · ${n<11?'Giữ phím · pedal off':'Đã thả phím · pedal on'}`;return true;}
 async function tick(){const shown=await show();if(playing && shown)timer=setTimeout(()=>{index=(index+1)%60;tick();},1000/30/Number($('speed').value));}
