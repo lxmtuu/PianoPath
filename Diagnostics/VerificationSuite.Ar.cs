@@ -2388,7 +2388,14 @@ internal static partial class VerificationSuite
                 var frameIndex = 0;
                 // The decoder on the CI box says "no picture just yet" as an ordinary false before it says
                 // end-of-stream, so this loop reads to the real end — hollow stream ticks wind it forward.
-                var readDeadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+                // Sixty seconds is a ceiling on waiting, not a lower bar for what has to be in the file. The box
+                // decodes near real time from a media stack it shares with a WARP render, and the ten seconds
+                // this used to allow ran out on run 38565642183 — the very same line failed six minutes earlier
+                // on the branch point's own code, so the file was not the variable. Which of the two stopped
+                // that readback (a busy box, or a stream that said it was over early) could not be told from the
+                // message, so the failure now says it. Nothing is relaxed: the six content ticks are still
+                // required, and the next red run names its own cause.
+                var readDeadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 60;
                 while (!reader.AtEnd && Stopwatch.GetTimestamp() < readDeadline)
                 {
                     Assert(reader.Error is null, $"The AVI readback must not fail ({reader.Error}).");
@@ -2401,7 +2408,8 @@ internal static partial class VerificationSuite
                     frameIndex++;
                 }
                 Assert(frameIndex >= 6 && frameIndex <= aviPlan.Frames,
-                    $"At least the six content ticks must be in the file (read {frameIndex} of {aviPlan.Frames}).");
+                    $"At least the six content ticks must be in the file (read {frameIndex} of {aviPlan.Frames}; "
+                    + (reader.AtEnd ? "the stream reported its end" : "the readback was still waiting after sixty seconds") + ").");
             }
             Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
             Assert(keyLevels.Count >= 6, $"The take must carry at least six probe readings (got {keyLevels.Count}).");
@@ -2565,10 +2573,13 @@ internal static partial class VerificationSuite
             var exportReader = CameraFrameReader.OpenFile(exportAvi, out var exportError);
             Assert(exportReader is not null, $"The camera-file take must read back as video ({exportError}).");
             var stripeLevels = new List<int>();
+            var exportStreamEnded = false;
             using (exportReader)
             {
                 var frame = new byte[aviPlan.Width * aviPlan.Height * 4];
-                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 10;
+                // The same sixty-second ceiling as the take above, for the same reason: it bounds the wait,
+                // it does not lower the bar — six content ticks are still required below.
+                var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 60;
                 while (!exportReader!.AtEnd && Stopwatch.GetTimestamp() < deadline)
                 {
                     Assert(exportReader.Error is null, $"The export AVI readback must not fail ({exportReader.Error}).");
@@ -2580,8 +2591,11 @@ internal static partial class VerificationSuite
                         for (var x = 2; x < aviPlan.Width / 12; x += 5) { luma += frame[(y * gotW + x) * 4]; count++; }
                     stripeLevels.Add(luma / count);
                 }
+                exportStreamEnded = exportReader.AtEnd;
             }
-            Assert(stripeLevels.Count >= 6, $"At least the six content ticks of the camera-file take must read back ({stripeLevels.Count}).");
+            Assert(stripeLevels.Count >= 6,
+                $"At least the six content ticks of the camera-file take must read back ({stripeLevels.Count}; "
+                + (exportStreamEnded ? "the stream reported its end" : "the readback was still waiting after sixty seconds") + ").");
             var brightened = 0;
             for (var i = 1; i < Math.Min(6, stripeLevels.Count); i++) if (stripeLevels[i] > stripeLevels[i - 1]) brightened++;
             Assert(brightened >= 4 && stripeLevels[5] > stripeLevels[0] + 16,
