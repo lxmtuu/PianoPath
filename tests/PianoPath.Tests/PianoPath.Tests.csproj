@@ -37,6 +37,7 @@
     <Compile Include="..\..\Stage\PianoSimulation.cs" Link="Product\Stage\PianoSimulation.cs" />
     <Compile Include="..\..\Gpu\StageLightCurves.cs" Link="Product\Gpu\StageLightCurves.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
+    <Compile Include="..\..\Gpu\KeyRingChannelGain.cs" Link="Product\Gpu\KeyRingChannelGain.cs" />
     <Compile Include="..\..\Diagnostics\AuxParticleTimeline.cs" Link="Product\Diagnostics\AuxParticleTimeline.cs" />
     <Compile Include="..\..\Gpu\TransientFrameEpoch.cs" Link="Product\Gpu\TransientFrameEpoch.cs" />
     <Compile Include="..\..\Stage\KeyEmissionBudget.cs" Link="Product\Stage\KeyEmissionBudget.cs" />

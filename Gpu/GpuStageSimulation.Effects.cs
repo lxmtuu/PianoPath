@@ -252,7 +252,7 @@ internal sealed partial class GpuStageSimulation
     /// <summary>Impact waves lie flat on the key plane (radius × 0.32), exactly like the software rings.</summary>
     private static void AddRingSprites(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, Ring ring, float scaleX)
     {
-        var intensity = look.ImpactWaveIntensity;
+        var intensity = KeyRingChannelGain.Resolve(ring.Channel, look.ImpactWaveIntensity, look.ImpactMorphIntensity);
         if (intensity <= 0) return;
         var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
         var strength = Math.Clamp(.5f + ring.Strength * .5f, 0, 1.2f);

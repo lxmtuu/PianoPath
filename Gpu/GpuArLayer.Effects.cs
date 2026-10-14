@@ -285,14 +285,7 @@ internal sealed partial class GpuArLayer
         {
             var ring = simulation.ArRingAt(i);
             if (!layout.Contains(ring.Pitch) || !(ring.Life > 0) || ring.Age < 0 || ring.Age >= ring.Life) continue;
-            var channelIntensity = ring.Channel switch
-            {
-                0 => look.ImpactWaveIntensity,
-                1 => look.ImpactMorphIntensity,
-                // Release rings already carry ReleaseIntensity in their simulated strength.
-                2 => 1f,
-                _ => 0
-            };
+            var channelIntensity = KeyRingChannelGain.Resolve(ring.Channel, look.ImpactWaveIntensity, look.ImpactMorphIntensity);
             if (channelIntensity <= 0) continue;
             var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
             var strength = Math.Clamp(.5f + ring.Strength * .5f, 0, 1.2f);

@@ -50,7 +50,7 @@ Links dưới đây pin vào preview commit `34dd559`, để evidence baseline k
 - Flames ở Stage là cụm sáng tròn, AR đọc như mảng/tip thuôn. Source xác nhận Stage dùng dot sprite còn AR có tapered-flame mask; không chỉ là khác perspective.
 - Shatter đọc được mảnh ở Stage nhưng rất nhỏ trong AR. Float Up/Dissolve/Smoke trên AR cũng khó phân biệt ở sample sớm này; Smoke ở Stage còn giống điểm sáng mềm hơn là bụi/khói có chất liệu.
 - Melt chỉ lộ rất ít ở Stage; không được dùng 24 sprite instances/Δ>0 để gọi là một bead silhouette dễ đọc. Stage depth/keyboard và vị trí spawn dưới hit line cần kiểm trước khi chỉ tăng gain.
-- Bounce: AR có ring rõ, Stage thiếu ring vì builder đang lấy gain của impact-wave cho **mọi** ring. Đây là lỗi routing kênh, không nên che bằng art/density tuning. Sửa riêng trước khi đổi optics; không suy ra ring/flash channels khác đã được review.
+- Bounce: AR có ring rõ, Stage thiếu ring vì builder đang lấy gain của impact-wave cho **mọi** ring. Đây là lỗi routing kênh, không nên che bằng art/density tuning. [Follow-up sửa routing](KEY-PARTICLES-RING-CHANNELS.md) đã triển khai, chờ CI mới; không suy ra ring/flash channels khác đã được review.
 
 Mục tiêu art tiếp theo: thống nhất intrinsic appearance/shading và parameter meaning Stage–AR theo từng material, giữ phân biệt sparks/water/confetti/dust/flame/shards/wisps; sau đó mới chỉnh flow/motion và mật độ. Không ép mọi họ thành cùng một chấm neon.
 
