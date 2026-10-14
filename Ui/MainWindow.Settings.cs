@@ -962,6 +962,9 @@ public partial class MainWindow
         _updateStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
         Register(updates, _updateStatusLabel, null, "update updates version release check github newer new");
         RefreshUpdateStatus();
+        // The menu's notice is hidden until a newer release is known, but it is an interactive control from the
+        // start: it needs its own readable caption, or the accessibility check reads it as an unnamed button.
+        Loc.Set(MainMenuUpdateButton, "Open the newest Keyflow release page", ContentControl.ContentProperty);
 
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));

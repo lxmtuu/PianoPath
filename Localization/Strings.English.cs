@@ -940,6 +940,7 @@ internal static class StringsEnglish
         ["Open the camera or a video on the Camera page first — the backup belongs to the camera in use."] = "Open the camera or a video on the Camera page first — the backup belongs to the camera in use.",
         ["Open the detailed controls for this layer"] = "Open the detailed controls for this layer",
         ["Open the full stage settings dock"] = "Open the full stage settings dock",
+        ["Open the newest Keyflow release page"] = "Open the newest Keyflow release page",
         ["Open the style presets"] = "Open the style presets",
         ["Open this song from the library folder"] = "Open this song from the library folder",
         ["Output · {0}"] = "Output · {0}",

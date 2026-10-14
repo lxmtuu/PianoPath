@@ -940,6 +940,7 @@ internal static class StringsVietnamese
         ["Open the camera or a video on the Camera page first — the backup belongs to the camera in use."] = "Hãy mở camera hoặc một video ở trang Camera trước — bản sao thuộc về camera đang dùng.",
         ["Open the detailed controls for this layer"] = "Mở các tùy chỉnh chi tiết của lớp này",
         ["Open the full stage settings dock"] = "Mở đầy đủ dock cài đặt sân khấu",
+        ["Open the newest Keyflow release page"] = "Mở trang phát hành Keyflow mới nhất",
         ["Open the style presets"] = "Mở danh sách preset",
         ["Open this song from the library folder"] = "Mở bài này từ thư mục thư viện",
         ["Output · {0}"] = "Đầu ra · {0}",
