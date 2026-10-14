@@ -2679,6 +2679,9 @@ internal static partial class VerificationSuite
         };
         var nonControlProperties = new HashSet<string>(StringComparer.Ordinal)
         {
+            // P3b is a JSON-only prototype gate, not a released menu setting. Remove this exact
+            // exception when the shared particle controls ship in P6; do not hide future settings by pattern.
+            nameof(PianoVisualSettings.HeldParticleArt),
             nameof(PianoVisualSettings.BackgroundAppearanceVersion), // JSON compatibility migration
             nameof(PianoVisualSettings.PresetName),                 // preset workflow metadata
             nameof(PianoVisualSettings.PresetModified),             // preset workflow metadata
@@ -2706,7 +2709,10 @@ internal static partial class VerificationSuite
         Assert(unclassifiedProperties.Length == 0 && unexpectedClassifications.Length == 0
                 && classificationCount == classifiedProperties.Count && workflowControlsMissing.Length == 0
                 && missingRows.Length == 0 && unexpectedRows.Length == 0,
-            $"Every public visual setting should be a generated row, a mapped static XAML control, a mapped workflow control, or explicitly classified metadata; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing workflow controls={string.Join(",", workflowControlsMissing)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+            $"Every public visual setting should be a generated row, a mapped static XAML control, a mapped workflow control, or explicitly classified metadata/JSON-only prototype gate; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing workflow controls={string.Join(",", workflowControlsMissing)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+        Assert(!rowSettingProperties.Contains(nameof(PianoVisualSettings.HeldParticleArt))
+                && !new PianoVisualSettings().HeldParticleArt,
+            "Held art must remain an explicitly classified, default-off JSON-only prototype until the P6 settings pass.");
         foreach (var (property, controlName) in staticSettingControls)
             Assert(publicSettings.Contains(property) && window.FindName(controlName) is FrameworkElement,
                 $"Static setting {property} should have its XAML control {controlName}.");

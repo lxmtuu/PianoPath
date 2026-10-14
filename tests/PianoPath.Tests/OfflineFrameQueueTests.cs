@@ -5,7 +5,7 @@ namespace PianoPath.Tests;
 public sealed class OfflineFrameQueueTests
 {
     [Fact]
-    public void FullQueueWaitsThenRetainsEveryImageInOrder()
+    public async Task FullQueueWaitsThenRetainsEveryImageInOrder()
     {
         var gate = new object(); var queue = new Queue<int>(); var read = new List<int>();
         using var full = new ManualResetEventSlim();
@@ -25,12 +25,12 @@ public sealed class OfflineFrameQueueTests
             OfflineFrameQueue.WaitForSpace(gate, () => queue.Count==0 ? 1 : 0, 1, () => { }, TimeSpan.FromSeconds(5));
             read.Add(queue.Dequeue()); Monitor.PulseAll(gate);
         }
-        Assert.True(writer.Wait(TimeSpan.FromSeconds(5)));
+        await writer.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(Enumerable.Range(0,12),read);
     }
 
     [Fact]
-    public void WriterFailureIsObservedAfterWakeup()
+    public async Task WriterFailureIsObservedAfterWakeup()
     {
         var gate=new object(); bool failed=false;
         using var waiting=new ManualResetEventSlim();
@@ -41,7 +41,7 @@ public sealed class OfflineFrameQueueTests
         });
         Assert.True(waiting.Wait(TimeSpan.FromSeconds(5)));
         lock(gate) { failed=true; Monitor.PulseAll(gate); }
-        Assert.True(task.Wait(TimeSpan.FromSeconds(5)));
+        await task.WaitAsync(TimeSpan.FromSeconds(5));
     }
 
     [Fact]

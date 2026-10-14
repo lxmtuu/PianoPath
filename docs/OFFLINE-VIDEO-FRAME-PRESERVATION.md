@@ -1,6 +1,6 @@
 # Offline video — preserve images, not only timeline slots
 
-2026-10-15. Fix implemented; Windows build/runtime rerun pending.
+2026-10-15. Fix implemented; first rerun passes AVI and reaches a later settings-classification failure. Full rerun pending.
 
 ## Failure and bounded diagnosis
 
@@ -24,4 +24,4 @@ A concrete production defect is visible in code: `ArRenderToVideo.Run` submitted
 - `AviFrameInventory` is a small structural diagnostic for the app's single-stream RIFF AVI output, not a replacement for Media Foundation decoding.
 - If AR readback still fails, preserve `keyflow-arvideo-failure-*.avi` with the CI verification-log artifact and include payload inventory in the failure. This distinguishes truncated/missing content from decoder delivery before another targeted fix.
 
-Local static/Python/diff checks pass. Windows/.NET tests run in CI; update source/run/verdict after the rerun. The fix addresses the proven offline/live policy mismatch; it does **not yet prove** the root cause of the previous binary's 5-frame result, or accept the held-particle artwork.
+Local static/Python/diff checks pass. [Run `38636257464`](https://github.com/lxmtuu/PianoPath/actions/runs/38636257464), source `21e8f25`, passed static/portable/Windows build/isolated render; its full suite passed the rapid AVI and AR recording checks, reporting **12 samples / 12 nonempty / 12 distinct payloads**. It then failed later at `VerifySettingsDock`: the JSON-only `HeldParticleArt` flag had not been explicitly classified. Follow-up adds exactly that prototype exception (default-off/no-row assertions retained; remove at P6) and replaces blocking task waits in the new tests with async awaits. Full verification/benchmark/packaging still require a fresh successful run. The fix addresses the proven offline/live policy mismatch; it does **not yet prove** the root cause of the previous binary's 5-frame result, or accept the held-particle artwork.
