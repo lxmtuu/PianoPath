@@ -1,6 +1,6 @@
 # P3b — Wisps + Flames, art thử dùng chung Stage / AR
 
-**2026-10-15: prototype đã build/render được; AVI readback đã qua ở lần chạy sửa; full CI còn vướng khai báo JSON-only của prototype. Đang chạy lại; chưa nghiệm thu artwork.**
+**2026-10-15: prototype đã PASS full CI; ảnh/clip đã được đưa về repo. Chưa review/nghiệm thu artwork.**
 
 Tiếp nối [baseline auxiliary](KEY-PARTICLES-AUX-BASELINE.md) và [routing đã PASS](KEY-PARTICLES-RING-CHANNELS.md). Đây là hai họ held đầu tiên, không phải hoàn tất toàn bộ press/held hoặc thay mọi họ bằng Prism Flow.
 
@@ -25,10 +25,16 @@ Phạm vi prototype là **GPU Live Stage + GPU AR**. WPF fallback chưa có mate
 - Static: 32 captures = 2 họ × 2 pitch (60/61) × 2 mode × 4 phase. So với classic **cùng run, cùng input/time/seed**: active phải khác; effect-off và expired phải bằng; pedal-tail có thể đã hết lifetime nên không ép khác.
 - Motion: 8 sequence = 2 họ × 2 mode × classic/art; pitch 60, 60 frame ở 30 FPS, 2 giây. Nhấn/giữ 11 step; step đầu sau thả kết thúc ở t=0,4 s, pedal bật khi thả. Replay seeded prefix cho từng frame, không dùng async recorder nên không rơi/lặp frame do queue. Không phải test audio hoặc MIDI device thật.
 - Clip là **APNG lossless**, giữ nguyên PNG frame data, full-frame SOURCE blend, không quantize palette. Crop cố định 140×160 từ output 640×360: Stage (240,180), AR (235,90). Crop giúp review material/tail và giữ Git nhỏ; không dùng clip để chứng nhận composition/full-scene hoặc rằng mọi particle luôn nằm trong crop. Full static 1280×720 và chuỗi PNG nằm trong CI artifact.
-- CI giữ 8 active ảnh, 8 APNG crop và manifests ở `docs/previews/held-particle-art`; bộ 32/static + nguồn clip đầy đủ ở artifact. Chỉ được review khi CI đã sinh chúng, không dùng baseline cũ thay bằng chứng material mới.
+- CI giữ 8 active ảnh, 8 APNG crop ở `docs/previews/held-particle-art`, manifests ở `docs/evidence/held-particle-art`; bộ 32/static + nguồn clip đầy đủ ở artifact. Chỉ được review khi CI đã sinh chúng, không dùng baseline cũ thay bằng chứng material mới.
 
-Local Python/static/diff checks PASS; máy này không có .NET/Windows. Source `892f1d0`, [run `38634465675`](https://github.com/lxmtuu/PianoPath/actions/runs/38634465675): static/portable/Windows build/isolated capture và APNG assembly PASS. Full verification FAIL ở AR AVI readback (5/12 decoded frames, cần ≥6); benchmark/packaging và preview auto-commit không chạy. Artifacts đã giữ 32 ảnh và 8 clip, nhưng **chưa review hình/motion thật**. Lần sửa [offline recording](OFFLINE-VIDEO-FRAME-PRESERVATION.md), run `38636257464`/source `21e8f25`, đã qua AVI với 12 nonempty/distinct payloads, sau đó fail ở kiểm tra độ phủ settings do flag prototype chưa phân loại JSON-only. Đã bổ sung phân loại chính xác flag đó, giữ default-off và không thêm menu; full CI mới vẫn phải PASS trước khi chốt lát này.
+Local Python/static/diff checks PASS; máy này không có .NET/Windows. Source `892f1d0`, [run `38634465675`](https://github.com/lxmtuu/PianoPath/actions/runs/38634465675): static/portable/Windows build/isolated capture và APNG assembly PASS. Full verification FAIL ở AR AVI readback (5/12 decoded frames, cần ≥6); benchmark/packaging và preview auto-commit không chạy. Artifacts đã giữ 32 ảnh và 8 clip, nhưng **chưa review hình/motion thật**. Lần sửa [offline recording](OFFLINE-VIDEO-FRAME-PRESERVATION.md), run `38636257464`/source `21e8f25`, đã qua AVI với 12 nonempty/distinct payloads, sau đó fail ở kiểm tra độ phủ settings do flag prototype chưa phân loại JSON-only. Đã bổ sung phân loại chính xác flag đó, giữ default-off và không thêm menu.
+
+**Full rerun PASS:** [run `38637127055`](https://github.com/lxmtuu/PianoPath/actions/runs/38637127055), source `87ca500`, **6.047 assertions / 1 skipped group**, preview `b17a691`. Static/portable/Windows build/isolated captures/full verification/WARP benchmark/installer/publication đều thành công. 8 active images + 8 APNG crops đã có tại `docs/previews/held-particle-art`; manifests tại `docs/evidence/held-particle-art`; 32 static captures và nguồn clip đầy đủ ở artifact. Đây là bằng chứng build/runtime, **không phải human art sign-off hoặc hardware performance pass**.
 
 ## Gate còn mở
 
 Nhận xét before–after thật, cân độ sáng/độ dày/density, full-view press/hold/release/pedal motion, prototype ở oblique/overhead camera thật, nonzero delay, all AR tiers, GPU recording/alpha, WPF fallback và hardware/performance. Tiếp tục mọi burst/held/morph/release family và accents; **menu cuối cùng**, theo [roadmap](PRISM-FLOW-DESIGN-ROADMAP.md).
+
+### Evidence storage follow-up
+
+After fetching `b17a691`, a fresh local source check exposed the image-only preview rule: the two generated JSON manifests must not live in `docs/previews`. They are moved to `docs/evidence/held-particle-art`, and the workflow stages that evidence directory explicitly. The C#/shader code is unchanged from successful run `38637127055`; another workflow run checks the storage correction. This prevents the preview auto-commit itself from breaking the next static check.

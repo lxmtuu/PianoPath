@@ -222,8 +222,11 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Motion assembly failed' }
           $target = 'docs/previews/held-particle-art'
           New-Item -ItemType Directory -Force -Path $target | Out-Null
-          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $target 'manifest.json') -Force
-          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $target 'motion-manifest.json') -Force
+          # docs/previews is image-only. Stable capture evidence belongs outside that directory.
+          $evidence = 'docs/evidence/held-particle-art'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $evidence 'motion-manifest.json') -Force
           $active = @($manifest.captures | Where-Object { $_.Phase -eq 'active' })
           if ($active.Count -ne 8) { throw 'Missing paired held material images' }
           foreach ($sample in $active) {
@@ -677,7 +680,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews
+          git add docs/previews docs/evidence/held-particle-art
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

@@ -1,6 +1,6 @@
 # Offline video — preserve images, not only timeline slots
 
-2026-10-15. Fix implemented; first rerun passes AVI and reaches a later settings-classification failure. Full rerun pending.
+2026-10-15. Fix verified: full build/test/benchmark/installer pipeline PASS. Artwork review remains separate.
 
 ## Failure and bounded diagnosis
 
@@ -24,4 +24,18 @@ A concrete production defect is visible in code: `ArRenderToVideo.Run` submitted
 - `AviFrameInventory` is a small structural diagnostic for the app's single-stream RIFF AVI output, not a replacement for Media Foundation decoding.
 - If AR readback still fails, preserve `keyflow-arvideo-failure-*.avi` with the CI verification-log artifact and include payload inventory in the failure. This distinguishes truncated/missing content from decoder delivery before another targeted fix.
 
-Local static/Python/diff checks pass. [Run `38636257464`](https://github.com/lxmtuu/PianoPath/actions/runs/38636257464), source `21e8f25`, passed static/portable/Windows build/isolated render; its full suite passed the rapid AVI and AR recording checks, reporting **12 samples / 12 nonempty / 12 distinct payloads**. It then failed later at `VerifySettingsDock`: the JSON-only `HeldParticleArt` flag had not been explicitly classified. Follow-up adds exactly that prototype exception (default-off/no-row assertions retained; remove at P6) and replaces blocking task waits in the new tests with async awaits. Full verification/benchmark/packaging still require a fresh successful run. The fix addresses the proven offline/live policy mismatch; it does **not yet prove** the root cause of the previous binary's 5-frame result, or accept the held-particle artwork.
+Local static/Python/diff checks pass. [Run `38636257464`](https://github.com/lxmtuu/PianoPath/actions/runs/38636257464), source `21e8f25`, passed static/portable/Windows build/isolated render; its full suite passed the rapid AVI and AR recording checks, reporting **12 samples / 12 nonempty / 12 distinct payloads**. It then failed later at `VerifySettingsDock`: the JSON-only `HeldParticleArt` flag had not been explicitly classified. Follow-up adds exactly that prototype exception (default-off/no-row assertions retained; remove at P6) and replaces blocking task waits in the new tests with async awaits. The complete successful follow-up is recorded below. The fix addresses the proven offline/live policy mismatch. The original failed AVI was not retained, so its precise missing-frame history is not independently established; this does not accept the held-particle artwork.
+
+## Successful full rerun
+
+- [Run `38637127055`](https://github.com/lxmtuu/PianoPath/actions/runs/38637127055), source **`87ca500`**, finished **SUCCESS**; preview auto-commit **`b17a691`**.
+- Static/Python checks, portable tests, Windows build, isolated render/capture + APNG assembly, full verification, frame-budget measurement, installer build, galleries/previews and distributable publication steps all passed.
+- Full verification: **6,047 assertions / 1 skipped check group**, exit code 0. Both offline AVI payload and retained minimum-six decoder/content checks passed, as did the explicit JSON-only settings classification.
+- The new tests' blocking task waits were replaced with async waits; their previous xUnit1031 annotations are absent in this run.
+- The benchmark is on **Microsoft Basic Render Driver (software/WARP)**, not a hardware-performance certificate. Shader compilation reported 1,536.64 ms; no new hardware claim.
+- Held-art evidence is now available in `docs/previews/held-particle-art`: 8 active images, 8 lossless APNG crops; static/motion manifests are in `docs/evidence/held-particle-art`. Full source capture set remains in the `phase1-visual-review` artifact. Human art/motion review is still open.
+
+
+### Evidence storage follow-up
+
+After fetching `b17a691`, a fresh local source check exposed the image-only preview rule: the two generated JSON manifests must not live in `docs/previews`. They are moved to `docs/evidence/held-particle-art`, and the workflow stages that evidence directory explicitly. The C#/shader code is unchanged from successful run `38637127055`; another workflow run checks the storage correction. This prevents the preview auto-commit itself from breaking the next static check.
