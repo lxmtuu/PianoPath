@@ -76,10 +76,12 @@ internal sealed class AsioAudioSink : IAudioSink
     private AsioMessageHandler? _asioMessage;
     private BufferSwitchTimeInfoHandler? _bufferSwitchTimeInfo;
     private volatile bool _stopping;
+    private volatile string? _streamFailure;
     private bool _buffersCreateAttempted, _started, _disposed;
 
     public string Description => Loc.F("ASIO · {0} · {1:0.#} ms · {2} frames", _driverName, _outputLatencyMs, _bufferFrames);
     public double BufferMilliseconds => _outputLatencyMs;
+    public string? StreamFailure => _streamFailure;
 
     private readonly double _targetLatencyMilliseconds;
     private readonly IntPtr _systemHandle;
@@ -249,13 +251,20 @@ internal sealed class AsioAudioSink : IAudioSink
 
     private void OnSampleRateChanged(double sampleRate) { /* the engine stays at 44.1 kHz; a rate change ends in Dispose/reopen via the settings page */ }
 
-    private int OnAsioMessage(int selector, int value, IntPtr message, IntPtr opt) => selector switch
+    private int OnAsioMessage(int selector, int value, IntPtr message, IntPtr opt)
     {
-        SelectorSupported => value is EngineVersion or ResetRequest ? 1 : 0,
-        EngineVersion => 2,
-        ResetRequest => 1, // acknowledged; the user re-picks the output to rebuild after a driver reset
-        _ => 0,
-    };
+        // A driver reset ends this stream as surely as an unplugged device ends a WASAPI one: report it
+        // the same way, so the engine can surface it and hand the recording to its own clock.
+        if (selector == ResetRequest)
+            _streamFailure = Loc.T("The audio output device stopped answering; pick the output again to restart it.");
+        return selector switch
+        {
+            SelectorSupported => value is EngineVersion or ResetRequest ? 1 : 0,
+            EngineVersion => 2,
+            ResetRequest => 1, // acknowledged; the user re-picks the output to rebuild after a driver reset
+            _ => 0,
+        };
+    }
 
     private IntPtr OnBufferSwitchTimeInfo(IntPtr timeInfo, int doubleBufferIndex, int directProcess)
     {

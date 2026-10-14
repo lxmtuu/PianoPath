@@ -63,13 +63,17 @@ internal sealed class PianoAudioEngine : IDisposable
 
     public bool HasInstrument => Volatile.Read(ref _pipeline) is not null;
     public string? InstrumentName => Volatile.Read(ref _pipeline)?.Synth.Name;
-    public bool HasAudioOutput => Volatile.Read(ref _pipeline)?.Sink is not null;
-    public string? PlaybackError => Volatile.Read(ref _pipeline)?.OutputError ?? (Volatile.Read(ref _pipeline) is null ? Volatile.Read(ref _rebuildError) : null);
-    public string? OutputDescription => Volatile.Read(ref _pipeline)?.Sink?.Description;
+    public bool HasAudioOutput => Volatile.Read(ref _pipeline)?.HasAudioOutput == true;
+    public string? PlaybackError => Volatile.Read(ref _pipeline) is { } pipeline
+        ? pipeline.OutputError ?? pipeline.StreamFailure
+        : Volatile.Read(ref _rebuildError);
+    public string? OutputDescription => Volatile.Read(ref _pipeline) is { StreamFailure: null } pipeline
+        ? pipeline.Sink?.Description
+        : null;
     public string? OutputFallbackNotice => Volatile.Read(ref _pipeline) is { Sink: not null } pipeline
         ? pipeline.FallbackNotice ?? Volatile.Read(ref _rebuildError)
         : Volatile.Read(ref _rebuildError);
-    public bool IsAsioOutput => Volatile.Read(ref _pipeline)?.Sink is AsioAudioSink;
+    public bool IsAsioOutput => Volatile.Read(ref _pipeline) is { StreamFailure: null, Sink: AsioAudioSink };
 
     /// <summary>Post-mix gain; a soft limiter catches peaks so raising a quiet hardware keyboard stays clean.</summary>
     public double MasterGain
@@ -188,6 +192,25 @@ internal sealed class PianoAudioEngine : IDisposable
         lock (_configurationGate) return _instrument is not null;
     }
 
+    /// <summary>The pipeline whose dead stream the watchdog has already announced, so it announces once.</summary>
+    private Pipeline? _streamFailureReportedFor;
+
+    /// <summary>
+    /// A sink whose stream died mid-take cannot say so itself — it only stops calling back. This thread is
+    /// already awake every 50 ms, so it watches for the first dead stream of each pipeline and raises
+    /// <see cref="OutputChanged"/> once: the settings page redraws its status line, and because a dead
+    /// stream no longer counts as output, the tap clock below starts rendering the recording's sound.
+    /// Nothing rebuilds here: reopening a device that just vanished could loop on a dying driver, and
+    /// picking the output again is the rebuild the app already offers.
+    /// </summary>
+    private void ReportStreamFailureIfNew()
+    {
+        var pipeline = Volatile.Read(ref _pipeline);
+        if (pipeline?.StreamFailure is null || ReferenceEquals(_streamFailureReportedFor, pipeline)) return;
+        _streamFailureReportedFor = pipeline;
+        try { OutputChanged?.Invoke(); } catch { }
+    }
+
     /// <summary>
     /// Keeps a recording's audio clock off the WPF frame loop when no output device is available. A 512-frame
     /// block is rendered every 11.6 ms; the tap writer remains a separate, bounded worker.
@@ -198,6 +221,7 @@ internal sealed class PianoAudioEngine : IDisposable
         var periodTicks = Math.Max(1, (long)Math.Round(Stopwatch.Frequency * (double)frames / SampleRate));
         while (Volatile.Read(ref _disposed) == 0)
         {
+            ReportStreamFailureIfNew();
             if (Volatile.Read(ref _tapClockEnabled) == 0 || !HasTap || HasAudioOutput)
             {
                 _tapClockWake.WaitOne(50);
@@ -441,7 +465,9 @@ internal sealed class PianoAudioEngine : IDisposable
         public IAudioSink? Sink { get; private set; }
         public string? OutputError { get; private set; }
         public string? FallbackNotice { get; private set; }
-        internal bool HasAudioOutput => Sink is not null;
+        /// <summary>Why the sink's stream died after starting, if it did; a dead stream is no output at all.</summary>
+        public string? StreamFailure => Sink?.StreamFailure;
+        internal bool HasAudioOutput => Sink is not null && Sink.StreamFailure is null;
 
         public Pipeline(PianoAudioEngine owner, IPianoSynthesizer synth, bool reverbEnabled,
             PianoReverbStyle reverbStyle, WavData? customImpulse, bool resonanceEnabled)

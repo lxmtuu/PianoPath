@@ -34,6 +34,7 @@ internal sealed class WasapiAudioSink : IAudioSink
     private Thread? _thread;
     private volatile bool _stopping;
     private volatile string? _initError;
+    private volatile string? _streamFailure;
     private double _bufferMilliseconds;
     private int _disposed, _eventsDisposed;
 
@@ -41,6 +42,7 @@ internal sealed class WasapiAudioSink : IAudioSink
         ? Loc.F("WASAPI exclusive · {0:0.#} ms", _bufferMilliseconds)
         : Loc.F("WASAPI shared · {0:0.#} ms", _bufferMilliseconds);
     public double BufferMilliseconds => _bufferMilliseconds;
+    public string? StreamFailure => _streamFailure;
 
     private WasapiAudioSink(bool exclusive, double latencyMilliseconds, string? endpointId, AudioRenderCallback render)
     {
@@ -139,6 +141,7 @@ internal sealed class WasapiAudioSink : IAudioSink
             avrtHandle = EnterProAudioPriority();
             _started.Set();
 
+            var failed = false;
             while (!_stopping)
             {
                 if (!_deviceEvent.WaitOne(2000)) continue; // a silent device event only means "nothing due yet"
@@ -147,15 +150,23 @@ internal sealed class WasapiAudioSink : IAudioSink
                 if (_exclusive) due = (int)bufferFrames;
                 else
                 {
-                    if (client.GetCurrentPadding(out var padding) != 0) break;
+                    if (client.GetCurrentPadding(out var padding) != 0) { failed = true; break; }
                     due = (int)bufferFrames - (int)padding;
                 }
                 if (due <= 0) continue;
-                if (!FillDeviceBuffer(renderClient, samples, pcm16, due)) break;
+                if (!FillDeviceBuffer(renderClient, samples, pcm16, due)) { failed = true; break; }
             }
             client.Stop();
+            // The stream was running and the device walked away (unplugged, claimed exclusively, driver
+            // reset): say so on the sink, because nobody re-opens it from here — the engine surfaces this
+            // and the recorder's own clock takes over until the user picks the output again.
+            if (failed && !_stopping) _streamFailure = Loc.T("The audio output device stopped answering; pick the output again to restart it.");
         }
-        catch (Exception ex) { _initError ??= Loc.F("WASAPI could not start the audio stream (0x{0:X8}).", ex.HResult); }
+        catch (Exception ex)
+        {
+            _initError ??= Loc.F("WASAPI could not start the audio stream (0x{0:X8}).", ex.HResult);
+            if (!_stopping && _started.IsSet) _streamFailure ??= Loc.T("The audio output device stopped answering; pick the output again to restart it.");
+        }
         finally
         {
             _started.Set();
