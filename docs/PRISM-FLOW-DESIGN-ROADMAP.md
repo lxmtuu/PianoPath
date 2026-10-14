@@ -1,6 +1,6 @@
 # Prism Flow — Lộ trình thiết kế nốt, texture và dòng hạt
 
-> Ngày lập: 2026-10-14. Trạng thái: **đang làm P0: audit, fixture, product-reader tests và Windows capture harness; chưa chạy capture/chưa duyệt hình**.
+> Ngày lập: 2026-10-14. Trạng thái: **đang làm P0: 78 baseline capture WARP và full Windows verification PASS; chưa visual sign-off/chưa đóng toàn bộ P0**.
 > Tiến độ và bằng chứng P0: [Inventory, baseline inputs và khoảng trống Live Stage–AR](PRISM-FLOW-P0-AUDIT.md). P0 chưa đóng; chưa có capture/benchmark mới.
 > Phạm vi cập nhật: Prism Flow là mẫu thiết kế đầu tiên; chương trình bao gồm đồng bộ **Live Stage + AR mode**, thiết kế/nâng cấp toàn bộ hiệu ứng hạt khi nhấn/giữ phím, và cuối cùng tái thiết kế menu cài đặt dùng chung cho hai chế độ. Không sao chép asset, shader hoặc nhận diện của SeeMusic.
 > Cập nhật yêu cầu: 2026-10-14. Đây là mở rộng kế hoạch, không phải tuyên bố đã triển khai hoặc đã xác minh AR.

@@ -1,6 +1,6 @@
 # PianoPath — Visual Effects Master Roadmap
 
-> **Lộ trình bổ sung (2026-10-14):** [Prism Flow — nốt kính màu, texture và dòng hạt](PRISM-FLOW-DESIGN-ROADMAP.md). Phạm vi mở rộng gồm đồng bộ Live Stage–AR từ đầu, review/thiết kế/nâng cấp toàn bộ hiệu ứng hạt nhấn/giữ phím và cuối cùng tái thiết kế menu cài đặt thống nhất hai mode (P6). Prism Flow là mẫu thiết kế đầu tiên, không phải toàn bộ phạm vi. Đang làm P0 với [audit, fixture, product-reader tests và Windows capture harness](PRISM-FLOW-P0-AUDIT.md); chưa thay renderer/chưa duyệt hình, chưa chạy capture/benchmark mới. Không thay đổi trạng thái kiểm chứng của roadmap này.
+> **Lộ trình bổ sung (2026-10-14):** [Prism Flow — nốt kính màu, texture và dòng hạt](PRISM-FLOW-DESIGN-ROADMAP.md). Phạm vi mở rộng gồm đồng bộ Live Stage–AR từ đầu, review/thiết kế/nâng cấp toàn bộ hiệu ứng hạt nhấn/giữ phím và cuối cùng tái thiết kế menu cài đặt thống nhất hai mode (P6). Prism Flow là mẫu thiết kế đầu tiên, không phải toàn bộ phạm vi. Đang làm P0 với [audit, fixture, product-reader tests và Windows capture harness](PRISM-FLOW-P0-AUDIT.md); 78 baseline capture WARP và full Windows verification PASS ở run `38595904297`; chưa thay renderer/chưa duyệt hình và chưa có hardware benchmark mới. Không thay đổi trạng thái kiểm chứng của roadmap này.
 
 > **Mục đích:** lộ trình tái thiết kế art direction, chức năng và đường render của toàn bộ hiệu ứng PianoPath; chuẩn bị để cùng một effect chạy trên sân khấu GPU, bản ghi và AR overlay đàn thật.<br>
 > **Ngày lập:** 2026-10-06<br>
