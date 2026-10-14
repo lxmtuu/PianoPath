@@ -310,10 +310,12 @@ public partial class MainWindow
         Choice(color, "Color mode", nameof(PianoVisualSettings.ColorMode), "Gradient across the keyboard, one color per hand, per MIDI track, or animated rainbows.",
             ("Gradient", "Gradient by pitch"), ("PerHand", "Left / right hand"), ("PerTrack", "Per MIDI track"), ("RainbowPitch", "Rainbow by pitch"), ("RainbowTime", "Rainbow cycling in time"));
         Choice(color, "Palette", nameof(PianoVisualSettings.Palette), "Built-in gradient families. Editing the start/end colors switches to Custom.",
-            ("Spectrum", "Spectrum"), ("Aurora", "Aurora"), ("Fire", "Fire"), ("Ocean", "Ocean"), ("Violet", "Violet"), ("Custom", "Custom"))
+            ("Spectrum", "Spectrum"), ("Aurora", "Aurora"), ("Fire", "Fire"), ("Ocean", "Ocean"), ("Violet", "Violet"), ("Custom", "Custom"), ("Prism Flow", "Prism Flow"))
             .VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Gradient start (low keys)", nameof(PianoVisualSettings.NoteColorStart), "Color of the lowest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Gradient end (high keys)", nameof(PianoVisualSettings.NoteColorEnd), "Color of the highest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        SliderRow(color, "Palette low pitch", nameof(PianoVisualSettings.PaletteLowPitch), 0, 126, "Fixed MIDI range for Prism Flow. Notes outside it keep the nearest endpoint color.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette == "Prism Flow";
+        SliderRow(color, "Palette high pitch", nameof(PianoVisualSettings.PaletteHighPitch), 1, 127, "Upper MIDI pitch for Prism Flow; always higher than the low pitch.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette == "Prism Flow";
+        ColorRow(color, "Gradient start (low keys)", nameof(PianoVisualSettings.NoteColorStart), "Color of the lowest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette != "Prism Flow";
+        ColorRow(color, "Gradient end (high keys)", nameof(PianoVisualSettings.NoteColorEnd), "Color of the highest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette != "Prism Flow";
         ColorRow(color, "Left hand", nameof(PianoVisualSettings.LeftHandColor), "Notes below the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
         ColorRow(color, "Right hand", nameof(PianoVisualSettings.RightHandColor), "Notes at or above the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
         SliderRow(color, "Hand split point", nameof(PianoVisualSettings.HandSplitPitch), 21, 108, "MIDI note where the right hand begins (C4 = 60). Type a note name such as C4 or F#3.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
@@ -329,7 +331,8 @@ public partial class MainWindow
         SliderRow(shape, "Corner roundness", nameof(PianoVisualSettings.NoteRoundness), 0, 100, "Rounded corners of every bar.");
         SliderRow(shape, "Minimum length", nameof(PianoVisualSettings.NoteMinLength), 4, 60, "Very short notes are stretched to at least this many pixels.");
         SliderRow(shape, "Gap between notes", nameof(PianoVisualSettings.NoteGap), 0, 12, "Space carved between consecutive notes of the same key.");
-        SliderRow(shape, "Fire texture", nameof(PianoVisualSettings.NoteTexture), 0, 100, "Strength of the animated ember holes in the Fire style.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire";
+        SliderRow(shape, "Material texture", nameof(PianoVisualSettings.NoteTexture), 0, 100, "Fire: animated ember holes. Satin: subtle static grain inside each note; zero removes only grain.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire" || (_visualSettings.NoteSatin && _visualSettings.NoteStyle is "Solid" or "Glass");
+        Toggle(shape, "Satin surface", nameof(PianoVisualSettings.NoteSatin), "Pigment-first satin on Solid or Glass. GPU Stage and AR share the material; software rendering uses an approximation.").VisibleWhen = () => _visualSettings.NoteStyle is "Solid" or "Glass";
         Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Adds a subtle bevel to Solid and Glass, and stronger faceted depth to Gem. Off is the flatter 2D treatment; Crystal Outline stays intentionally flat.");
         Toggle(shape, "Note names on bars", nameof(PianoVisualSettings.ShowNoteLabels), "Print the note name inside each bar when there is room.");
 
@@ -1333,7 +1336,7 @@ public partial class MainWindow
         nameof(PianoVisualSettings.NoteMinLength) or nameof(PianoVisualSettings.NoteGap) => $"{value:0} px",
         nameof(PianoVisualSettings.NoteFallSpeed) or nameof(PianoVisualSettings.WispSpeed) => $"{value:0} px/s",
         nameof(PianoVisualSettings.ParticleAmount) or nameof(PianoVisualSettings.ParticleVelocity) or nameof(PianoVisualSettings.Gravity) or nameof(PianoVisualSettings.VectorField) or nameof(PianoVisualSettings.WispAmount) => $"{value:0}",
-        nameof(PianoVisualSettings.HandSplitPitch) => $"{NoteLabel((int)Math.Round(value))} ({value:0})",
+        nameof(PianoVisualSettings.HandSplitPitch) or nameof(PianoVisualSettings.PaletteLowPitch) or nameof(PianoVisualSettings.PaletteHighPitch) => $"{NoteLabel((int)Math.Round(value))} ({value:0})",
         nameof(PianoVisualSettings.RecordingFrameRate) => $"{value:0} fps",
         nameof(PianoVisualSettings.ArLookahead) => $"{value:0.0} s",
         nameof(PianoVisualSettings.ArDelay) => $"{value:0} ms",
@@ -1344,7 +1347,7 @@ public partial class MainWindow
     internal static bool TryParseSettingValue(string property, string text, out double value)
     {
         value = 0;
-        if (property == nameof(PianoVisualSettings.HandSplitPitch) && NoteNamePattern.Match(text) is { Success: true } note)
+        if ((property is nameof(PianoVisualSettings.HandSplitPitch) or nameof(PianoVisualSettings.PaletteLowPitch) or nameof(PianoVisualSettings.PaletteHighPitch)) && NoteNamePattern.Match(text) is { Success: true } note)
         {
             var letter = char.ToUpperInvariant(note.Groups[1].Value[0]); var accidental = note.Groups[2].Value; var octave = int.Parse(note.Groups[3].Value, CultureInfo.InvariantCulture);
             var semitone = letter switch { 'C' => 0, 'D' => 2, 'E' => 4, 'F' => 5, 'G' => 7, 'A' => 9, _ => 11 };
@@ -1391,6 +1394,11 @@ public partial class MainWindow
     {
         if (!_uiReady || _loadingVisualSettings || sender is not Slider slider || slider.Tag is not string property) return;
         Prop(property).SetValue(_visualSettings, slider.Value);
+        if (property is nameof(PianoVisualSettings.PaletteLowPitch) or nameof(PianoVisualSettings.PaletteHighPitch))
+        {
+            _visualSettings.Clamp();
+            RefreshSettingControls(); // show both corrected bounds when a crossed range is normalised
+        }
         if (_visualValueBoxes.TryGetValue(property, out var box) && !box.IsKeyboardFocused) box.Text = FormatSetting(property, slider.Value);
         MarkModified(property);
         // AR‑3.5: a delay tuned while a camera is open belongs to that camera; moving to another one brings its own back.

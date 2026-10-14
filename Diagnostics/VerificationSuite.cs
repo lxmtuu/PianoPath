@@ -60,14 +60,14 @@ internal static partial class VerificationSuite
             {
                 if (string.IsNullOrWhiteSpace(reviewOutput))
                     throw new ArgumentException("Prism-only verification requires --verify-review-out=<directory>.");
-                Results.Add("NOTE Isolated Prism Flow P0 verification; this does not run or certify the full regression suite.");
+                Results.Add("NOTE Isolated Prism Flow baseline and palette/satin preview verification; this does not run or certify the full regression suite.");
                 VerifyPrismFlowReview(reviewOutput);
                 Finish(app, args, null);
             }
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6664,6 +6664,7 @@ internal static partial class VerificationSuite
     private static void VerifyPrismFlowReview(string outputDirectory)
     {
         VerifyPrismFlowInputs();
+        VerifyPrismFlowLook();
         Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
         var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
         var prismCaptures = PrismFlowVisualReview.Render(prismOutput);
@@ -6673,6 +6674,14 @@ internal static partial class VerificationSuite
                 if (image.GetProperty("Checkpoint").GetString() == "dense-chord" && image.GetProperty("Variant").GetString() == "baseline")
                     Results.Add($"NOTE P0 baseline sample {image.GetProperty("Preset").GetString()}/{image.GetProperty("Mode").GetString()}: stage notes={image.GetProperty("StageNotes").GetInt32()}, AR quads={image.GetProperty("ArQuads").GetInt32()}, AR particles={image.GetProperty("ArParticles").GetInt32()}, pixel SHA256={image.GetProperty("PixelSha256").GetString()}.");
         Results.Add($"PASS Prism Flow P0 captures: {prismCaptures} GPU-WARP frames, three control presets, 12 checkpoints, stage/AR Ultra and six effect-off controls in {Path.GetFullPath(prismOutput)}. No hardware, latency, WPF parity or full style coverage claim.");
+        var candidateOutput = Path.Combine(outputDirectory, "prism-flow-p1");
+        var candidates = PrismFlowVisualReview.RenderPrototype(candidateOutput);
+        Assert(candidates == 30, "Prism Flow preview requires 24 frames and six separate surface/texture/bloom-off controls.");
+        using (var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(candidateOutput, "manifest.json"))))
+            foreach (var image in manifest.RootElement.GetProperty("captures").EnumerateArray())
+                if (image.GetProperty("Checkpoint").GetString() == "dense-chord")
+                    Results.Add($"NOTE P1 sample {image.GetProperty("Mode").GetString()}/{image.GetProperty("Variant").GetString()}: changed pixels={image.GetProperty("ChangedPixels")}, pixel SHA256={image.GetProperty("PixelSha256").GetString()}.");
+        Results.Add($"PASS Prism Flow preview captures: {candidates} GPU-WARP frames, 12 checkpoints in Stage/AR Ultra with surface/texture/bloom-off controls. Experimental palette/material only, no new flow particles; {Path.GetFullPath(candidateOutput)}.");
     }
 
     private static void VerifyPrismFlowInputs()

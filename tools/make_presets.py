@@ -37,6 +37,28 @@ TARGET = ROOT / "presets"
 # ---------------------------------------------------------------------------------------------------
 PRESETS: list[dict] = [
     {
+        "name": "Prism Flow Preview",
+        "description": "Experimental cyan-to-coral satin bars with quiet lighting. Palette/material preview; flow particles are not implemented yet.",
+        "settings": {
+            "Palette": "Prism Flow", "PaletteLowPitch": 36, "PaletteHighPitch": 84,
+            "NoteStyle": "Solid", "NoteSatin": True, "NoteTint": 92, "NoteTexture": 32,
+            "NoteEdge": 42, "NoteEdgeWidth": 16, "NoteRefraction": 28, "NoteRoundness": 26,
+            "NoteGlow": 30, "NoteHeadGlow": 12, "NoteMinLength": 10, "NoteWidth": 84,
+            "BackgroundColor": "#030509", "BackgroundDim": 0, "BackgroundMotion": "None",
+            "HaloColor": "#00CFE8", "HaloIntensity": 16, "HaloPulse": False, "HorizonGlow": 4,
+            "BloomIntensity": 22, "BloomSize": 32, "Vignette": 12,
+            "KeyLighting": 20, "KeyGlowRadius": 22, "KeyLabels": "C", "ShowKeyFelt": False,
+            "ShaderKeyLight": 70, "ShaderGloss": 28, "ShaderEmissive": 38, "ShaderExposure": 100,
+            "ShaderRimLight": 22, "ShaderCameraTilt": 38, "ShaderShadows": 58, "ShaderAmbientOcclusion": 44,
+            "VelocityColor": False, "OctaveColor": False, "ZoneSplit": False, "HoldColorCycle": False,
+            "TempoSync": False, "AudioReactive": False, "PedalGlow": False,
+            "NoteLandingGlow": False, "NoteShimmer": False, "HoldBar": False,
+            "ShowEmbers": False, "ShowWisps": False, "ShowFlame": False,
+            "AmbientEnergy": "None", "AmbientNature": "None", "AmbientLight": "None", "AmbientCosmic": "None",
+            "ShowStars": False, "ShowPetals": False, "ShootingStars": False,
+        },
+    },
+    {
         "name": "Ember Rain",
         "description": "A restrained dual-element look: molten notes, sparse rain and small water-ripple impacts.",
         "settings": {

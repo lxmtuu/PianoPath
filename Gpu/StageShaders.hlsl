@@ -48,6 +48,7 @@ cbuffer Frame : register(b0)
     float4 ArMatrix1;
     float4 ArMatrix2;
     float4 ArMatrixFlags; // legacy shader-branch flags; the active renderer keeps all four lanes zero
+    float4 NoteD;         // x = opt-in satin surface (Solid/Glass only); remaining lanes reserved
 };
 
 cbuffer PassConstants : register(b1)
@@ -778,7 +779,30 @@ float4 ShadeNoteMaterial(NoteMaterialInput v)
     float head = pow(along, 10.0) * NoteB.z;
     float xN = p.x / hb.x;
 
-    if (style < 0.5)
+    bool satin = NoteD.x > 0.5 && (style < 0.5 || (style > 1.5 && style < 2.5));
+    if (satin)
+    {
+        // Pigment-first satin, not another material ID. Local normalised UVs are shared with AR;
+        // static per-note phase avoids screen-space swimming and time/seek-dependent flicker.
+        float2 uv = p / hb;
+        float phase = frac(v.Misc.y * 0.6180339) * 6.2831853;
+        float bevel = saturate(-d / max(1.5, hb.x * 0.55));
+        float shade = lerp(1.0, 0.72 + 0.28 * bevel, NoteC.y);
+        float grain = sin(uv.y * 47.0 + sin(uv.x * 7.0 + phase) * 1.6 + phase);
+        // Attenuate grain on short/distant bars before it aliases. No texture sample or extra pass.
+        float frequency = length(fwidth(uv * float2(7.0, 47.0)));
+        float filtered = 1.0 - smoothstep(0.65, 2.0, frequency);
+        float grainDelta = grain * 0.085 * NoteC.x * filtered;
+        float sheen = exp(-pow((uv.x + uv.y * 0.16 + 0.32) * 5.5, 2.0)) * NoteB.w;
+        float rim = exp(-abs(d + edgeW * 0.4) / max(0.5, edgeW * 0.4));
+        float3 pigment = col * (0.62 + 0.38 * NoteB.x) * shade * (1.0 + grainDelta);
+        float3 highlight = lerp(col, 1.0, 0.18);
+        emit += (pigment + highlight * (sheen * 0.12 + rim * NoteB.y * 0.26)
+                 + col * sounding * 0.10) * inside;
+        // Filled and readable without bloom, including on bright camera pictures.
+        alpha = inside;
+    }
+    else if (style < 0.5)
     {
         // Solid: a lacquered bar with a rounded bevel, a bright rim and a cool reflection
         float bevel = saturate(-d / max(2.0, min(hb.x, hb.y) * 0.9));
@@ -889,7 +913,7 @@ float4 ShadeNoteMaterial(NoteMaterialInput v)
         alpha = inside;
     }
 
-    emit += lerp(col, 1.0, 0.65) * head * inside * 2.2;
+    emit += lerp(col, 1.0, satin ? 0.18 : 0.65) * head * inside * (satin ? 0.35 : 2.2);
 
     // Hold Bar: a white-hot outline just outside a sounding bar plus a tinted halo around it
     float holdBar = v.Misc.w;

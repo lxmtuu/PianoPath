@@ -30,7 +30,10 @@ internal static class PrismFlowVisualReview
         throw new FileNotFoundException("Run the Prism Flow P0 diagnostics from the repository checkout.");
     }
 
-    internal static int Render(string output)
+    internal static int Render(string output) => RenderCore(output, prototype: false);
+    internal static int RenderPrototype(string output) => RenderCore(output, prototype: true);
+
+    private static int RenderCore(string output, bool prototype)
     {
         var samples = FindSamples();
         var scene = PrismFlowBaseline.Load(Path.Combine(samples, "prism-flow-p0"));
@@ -47,19 +50,31 @@ internal static class PrismFlowVisualReview
             var cameraPixels = ReadSyntheticCamera(Path.Combine(samples, "ar-keyboard-topdown.png"));
             using var renderer = GpuStageRenderer.Create(forceWarp: true);
             if (!renderer.IsWarp) throw new InvalidOperationException("Prism Flow baseline requires WARP.");
-            foreach (var presetName in new[] { "Concert Gold", "Ice Crystal", "Neon Violet" })
+            var presetNames = prototype ? new[] { "Prism Flow Preview" } : new[] { "Concert Gold", "Ice Crystal", "Neon Violet" };
+            foreach (var presetName in presetNames)
             foreach (var overCamera in new[] { false, true })
             {
-                var settings = (VisualPresets.FindBuiltIn(presetName)
-                    ?? throw new InvalidDataException($"Missing control preset: {presetName}")).Settings.Clone();
+                var settings = (prototype ? CommunityPresets.Find(presetName) : VisualPresets.FindBuiltIn(presetName))
+                    ?.Settings.Clone()
+                    ?? throw new InvalidDataException($"Missing review preset: {presetName}");
                 settings.KeyboardSize = "88";
                 settings.Clamp();
                 foreach (var checkpoint in scene.Manifest.Checkpoints)
                 {
-                    var pixels = CaptureFrame(settings, presetName, overCamera, checkpoint, "baseline", null);
+                    var pixels = CaptureFrame(settings, presetName, overCamera, checkpoint, prototype ? "candidate" : "baseline", null);
                     // One paired effect-off frame per preset/mode. This is presence evidence only,
                     // not an assertion of individual style/binding completeness or cross-mode parity.
                     if (checkpoint.Id != "dense-chord") continue;
+                    if (prototype)
+                    {
+                        var plain = settings.Clone(); plain.NoteSatin = false;
+                        CaptureFrame(plain, presetName, overCamera, checkpoint, "surface-off", pixels);
+                        var clean = settings.Clone(); clean.NoteTexture = 0;
+                        CaptureFrame(clean, presetName, overCamera, checkpoint, "texture-off", pixels);
+                        var unlit = settings.Clone(); unlit.BloomIntensity = 0;
+                        CaptureFrame(unlit, presetName, overCamera, checkpoint, "bloom-off", pixels);
+                        continue;
+                    }
                     var neutral = settings.Clone();
                     neutral.ShowEmbers = neutral.ShowWisps = neutral.ShowFlame = false;
                     neutral.ShowImpactRings = neutral.ShowImpactFlash = false;
@@ -68,10 +83,12 @@ internal static class PrismFlowVisualReview
                     CaptureFrame(neutral, presetName, overCamera, checkpoint, "phase-fx-off", pixels);
                 }
             }
-            if (captures.Count != 78) throw new InvalidDataException("Prism Flow must capture 72 baseline and six phase-FX-off frames.");
+            var expected = prototype ? 30 : 78;
+            if (captures.Count != expected) throw new InvalidDataException($"Expected {expected} Prism Flow captures, got {captures.Count}.");
             File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serialize(new
             {
-                schemaVersion = 1, status = "warp-baseline-captures-not-parity-or-performance-certification",
+                schemaVersion = 1, status = prototype ? "experimental-palette-and-satin-not-flow-particles" : "warp-baseline-captures-not-parity-or-performance-certification",
+                prototypeSettings = prototype ? JsonSerializer.Deserialize<JsonElement>(CommunityPresets.Find("Prism Flow Preview")!.Settings.ToJson()) : (JsonElement?)null,
                 adapter = renderer.AdapterName, width = Width, height = Height, fps = Fps,
                 seed = scene.Manifest.RenderSeedProposal, fixtureMidiSha256 = scene.Manifest.MidiSha256,
                 timeline = "song notes from shipping MidiReader; CC64 explicitly injected from manifest",
@@ -84,6 +101,7 @@ internal static class PrismFlowVisualReview
                 captureCount = captures.Count, captures,
             }, new JsonSerializerOptions { WriteIndented = true }));
             var html = new StringBuilder("<!doctype html><meta charset=\"utf-8\"><title>Prism Flow P0 baseline</title><style>body{background:#111;color:#eee;font:16px sans-serif}img{max-width:100%;width:640px}figure{display:inline-block;margin:12px;max-width:640px}figcaption{padding:8px}</style><h1>Prism Flow P0 — WARP baseline</h1><p>Song-state replay, explicit pedal injection, synthetic camera, zero AR delay. Not live MIDI / parity / FPS certification. Ice Crystal is the existing Glass-material control preset.</p>");
+            if (prototype) html.Append("<h2>P1/P2 opt-in palette and satin preview</h2><p>24 candidate frames + six surface-off / texture-off / bloom-off controls. No new flow particles. Full settings in manifest.</p>");
             foreach (var capture in captures)
                 html.Append($"<figure><figcaption>{WebUtility.HtmlEncode(capture.Preset + " / " + capture.Mode + " / " + capture.Checkpoint + " / " + capture.Variant)} · {capture.ActualTime:0.000}s</figcaption><img loading=\"lazy\" src=\"{capture.File}\"></figure>");
             File.WriteAllText(Path.Combine(output, "index.html"), html.ToString());
@@ -138,8 +156,8 @@ internal static class PrismFlowVisualReview
                     changed = 0;
                     for (var i = 0; i < pixels.Length; i += 4)
                         if (Math.Max(Math.Abs(pixels[i] - comparison[i]), Math.Max(Math.Abs(pixels[i + 1] - comparison[i + 1]),
-                            Math.Abs(pixels[i + 2] - comparison[i + 2]))) > 8) changed++;
-                    if (changed == 0) throw new InvalidDataException("Phase-FX-off control did not change the dense-chord capture.");
+                            Math.Abs(pixels[i + 2] - comparison[i + 2]))) > (variant == "texture-off" ? 1 : 8)) changed++;
+                    if (changed == 0) throw new InvalidDataException($"{presetName}/{overCamera}/{variant} did not change the dense-chord capture.");
                 }
                 var mode = overCamera ? "ar" : "live-stage";
                 var file = $"{presetName.ToLowerInvariant().Replace(' ', '-')}/{mode}/{checkpoint.Id}-{variant}.png";

@@ -2,6 +2,8 @@
 
 > Ngày lập: 2026-10-14. Trạng thái: **đang làm P0: 78 baseline capture WARP và full Windows verification PASS; chưa visual sign-off/chưa đóng toàn bộ P0**.
 > Tiến độ và bằng chứng P0: [Inventory, baseline inputs và khoảng trống Live Stage–AR](PRISM-FLOW-P0-AUDIT.md). P0 chưa đóng; chưa có capture/benchmark mới.
+> **Bản thử P1/P2:** [Prism Flow Preview](PRISM-FLOW-P1-PREVIEW.md) thêm palette 6 stop và bề mặt satin opt-in trên Solid/Glass. Không thay default/preset cũ; chưa có flow particles hoặc visual sign-off.
+>
 > Phạm vi cập nhật: Prism Flow là mẫu thiết kế đầu tiên; chương trình bao gồm đồng bộ **Live Stage + AR mode**, thiết kế/nâng cấp toàn bộ hiệu ứng hạt khi nhấn/giữ phím, và cuối cùng tái thiết kế menu cài đặt dùng chung cho hai chế độ. Không sao chép asset, shader hoặc nhận diện của SeeMusic.
 > Cập nhật yêu cầu: 2026-10-14. Đây là mở rộng kế hoạch, không phải tuyên bố đã triển khai hoặc đã xác minh AR.
 > Tài liệu này là một lát dọc bổ sung cho [Visual Effects Master Roadmap](VISUAL-EFFECTS-MASTER-ROADMAP.md), không thay thế các gate, audit hay trạng thái capability hiện có.

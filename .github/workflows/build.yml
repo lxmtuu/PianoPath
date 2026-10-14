@@ -115,7 +115,7 @@ jobs:
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
-      - name: Prism Flow P0 capture verification
+      - name: Prism Flow baseline and candidate verification
         id: prism-review
         shell: pwsh
         run: |
@@ -146,6 +146,25 @@ jobs:
               $source = Join-Path $review "$preset/$mode/dense-chord-baseline.png"
               if (-not (Test-Path $source)) { throw "Missing baseline: $source" }
               Copy-Item $source (Join-Path $target "$preset-$mode.png") -Force
+            }
+          }
+
+      - name: Stage Prism Flow palette and satin previews
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/prism-flow-p1'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 30) { throw 'Incomplete Prism Flow candidate artifact' }
+          foreach ($image in $manifest.captures | Where-Object { $_.Checkpoint -eq 'dense-chord' }) {
+            "::notice title=Prism Flow candidate::NOTE P1 sample $($image.Mode)/$($image.Variant): changed pixels=$($image.ChangedPixels), pixel SHA256=$($image.PixelSha256)."
+          }
+          $target = 'docs/previews/prism-flow-p1'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($mode in @('live-stage', 'ar')) {
+            foreach ($variant in @('candidate', 'texture-off', 'bloom-off')) {
+              $source = Join-Path $review "prism-flow-preview/$mode/dense-chord-$variant.png"
+              if (-not (Test-Path $source)) { throw "Missing candidate: $source" }
+              Copy-Item $source (Join-Path $target "$mode-$variant.png") -Force
             }
           }
 
@@ -439,7 +458,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
-          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive')
+          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive', 'PrismFlowPreview')
           $work = Join-Path $env:TEMP 'keyflow-gallery'
           Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $work | Out-Null
