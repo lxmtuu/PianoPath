@@ -1,6 +1,6 @@
 # P3b — Wisps + Flames, art thử dùng chung Stage / AR
 
-**2026-10-15: triển khai opt-in; chờ Windows CI và review ảnh/clip thật. Chưa nghiệm thu artwork.**
+**2026-10-15: prototype đã build/render được; full CI đỏ ở AR AVI readback. Đang sửa và chạy lại; chưa nghiệm thu artwork.**
 
 Tiếp nối [baseline auxiliary](KEY-PARTICLES-AUX-BASELINE.md) và [routing đã PASS](KEY-PARTICLES-RING-CHANNELS.md). Đây là hai họ held đầu tiên, không phải hoàn tất toàn bộ press/held hoặc thay mọi họ bằng Prism Flow.
 
@@ -27,7 +27,7 @@ Phạm vi prototype là **GPU Live Stage + GPU AR**. WPF fallback chưa có mate
 - Clip là **APNG lossless**, giữ nguyên PNG frame data, full-frame SOURCE blend, không quantize palette. Crop cố định 140×160 từ output 640×360: Stage (240,180), AR (235,90). Crop giúp review material/tail và giữ Git nhỏ; không dùng clip để chứng nhận composition/full-scene hoặc rằng mọi particle luôn nằm trong crop. Full static 1280×720 và chuỗi PNG nằm trong CI artifact.
 - CI giữ 8 active ảnh, 8 APNG crop và manifests ở `docs/previews/held-particle-art`; bộ 32/static + nguồn clip đầy đủ ở artifact. Chỉ được review khi CI đã sinh chúng, không dùng baseline cũ thay bằng chứng material mới.
 
-Local Python/static/diff checks PASS; máy này không có .NET/Windows. **Source mới chưa có build/runtime proof hoặc ảnh đã xem.** Cập nhật run/source/hash và nhận xét hình/motion sau CI; chưa gọi thay shader là art thành công.
+Local Python/static/diff checks PASS; máy này không có .NET/Windows. Source `892f1d0`, [run `38634465675`](https://github.com/lxmtuu/PianoPath/actions/runs/38634465675): static/portable/Windows build/isolated capture và APNG assembly PASS. Full verification FAIL ở AR AVI readback (5/12 decoded frames, cần ≥6); benchmark/packaging và preview auto-commit không chạy. Artifacts đã giữ 32 ảnh và 8 clip, nhưng **chưa review hình/motion thật**. Xem [sửa offline recording](OFFLINE-VIDEO-FRAME-PRESERVATION.md); full CI mới vẫn phải PASS trước khi chốt lát này.
 
 ## Gate còn mở
 

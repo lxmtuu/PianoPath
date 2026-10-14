@@ -1230,6 +1230,22 @@ internal static partial class VerificationSuite
             var frameChunks = movi < 0 ? 0 : CountToken(text[(movi + 4)..], "00dc") + CountToken(text[(movi + 4)..], "00db");
             Assert(frameChunks >= 4, "The AVI should contain all four submitted video frames.");
             Results.Add($"PASS video recording: 4 frames finalized into AVI ({(mjpeg ? "MJPEG" : "uncompressed RGB")}).");
+            // Burst faster than the bounded live queue: an offline writer must backpressure, never coalesce.
+            using (var recorder = new AviVideoRecorder(path,64,48,12))
+            {
+                IFrameRecorder offline = recorder;
+                var frame = new byte[recorder.FrameBytes];
+                for (var i=0;i<32;i++)
+                {
+                    Array.Fill(frame,(byte)(50+i*5));
+                    offline.WriteOfflineFrame(frame);
+                }
+                Assert(offline.FrameCount == 32,"Every rapid offline input must get its own timeline slot.");
+            }
+            var inventory = AviFrameInventory.Read(File.ReadAllBytes(path));
+            Assert(inventory == new AviFrameInventory(32,32,32),
+                $"Rapid offline writes must retain 32 distinct nonempty payloads after finalization ({inventory}).");
+            Results.Add("PASS offline AVI backpressure: 32 rapid changing frames finalized as 32 nonempty, distinct video payloads; no live-queue coalescing.");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }

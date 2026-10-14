@@ -49,7 +49,7 @@ internal static class ArRenderToVideo
             if (profile.Downsample >= 2) bgra = BgraPack.Box2(bgra, profile.RenderWidth, profile.RenderHeight);
             if (profile.Downsample == 4) bgra = BgraPack.Box2(bgra, profile.RenderWidth / 2, profile.RenderHeight / 2);
             onFrame?.Invoke(i, bgra);
-            recorder.WriteFrame(recorder.HasAlpha ? bgra : BgraPack.ToBottomUpBgr(bgra, profile.Width, profile.Height));
+            recorder.WriteOfflineFrame(recorder.HasAlpha ? bgra : BgraPack.ToBottomUpBgr(bgra, profile.Width, profile.Height));
             written++;
         }
         return new ArVideoTake(written, profile.Seconds, recorder.OutputPath, profile.Width, profile.Height, profile.Downsample,

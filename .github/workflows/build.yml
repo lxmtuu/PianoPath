@@ -298,6 +298,7 @@ jobs:
           path: |
             ${{ runner.temp }}/keyflow-verification.log
             ${{ runner.temp }}/keyflow-prism-verification.log
+            ${{ runner.temp }}/keyflow-arvideo-failure-*.avi
           if-no-files-found: warn
 
       # Human review gate: the fixture is rendered through the real WPF stage and the app's GPU renderer

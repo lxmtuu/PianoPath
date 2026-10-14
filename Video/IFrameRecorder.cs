@@ -45,4 +45,9 @@ internal interface IFrameRecorder : IDisposable
 
     /// <summary>Writes one frame, or <paramref name="repeat"/> copies of it to catch up with the clock.</summary>
     void WriteFrame(byte[] frame, int repeat = 1);
+
+    /// <summary>Retains one exact input image for offline export. Synchronous writers can use this default;
+    /// asynchronous writers must apply bounded backpressure rather than live-mode coalescing.</summary>
+    void WriteOfflineFrame(byte[] frame) => WriteFrame(frame);
+
 }

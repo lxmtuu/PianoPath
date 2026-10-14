@@ -100,16 +100,26 @@ internal sealed class AviVideoRecorder : IFrameRecorder
     /// one as repeats, which keeps the file in step with the clock. A failure on the writer thread is raised
     /// from the next call here.
     /// </remarks>
-    public void WriteFrame(byte[] frame, int repeat = 1)
+    public void WriteFrame(byte[] frame, int repeat = 1) => EnqueueFrame(frame, repeat, offline: false);
+
+    public void WriteOfflineFrame(byte[] frame) => EnqueueFrame(frame, 1, offline: true);
+
+    private void EnqueueFrame(byte[] frame, int repeat, bool offline)
     {
         ObjectDisposedException.ThrowIf(_disposed, this);
         if (frame.Length != FrameBytes) throw new ArgumentException(Loc.F("Expected a {0}×{1} BGR frame ({2} bytes).", _width, _height, FrameBytes), nameof(frame));
         if (repeat < 1) return;
         lock (_queueGate)
         {
+            if (offline)
+                OfflineFrameQueue.WaitForSpace(_queueGate, () => _queue.Count, MaxQueuedFrames, () =>
+                {
+                    if (_workerError is { } offlineError) throw new IOException(offlineError.Message, offlineError);
+                    if (_disposed || _closing) throw new InvalidOperationException("The offline video recorder is closing.");
+                });
             if (_workerError is { } error) throw new IOException(error.Message, error);
             if (_closing) return;
-            if (_queue.Count >= MaxQueuedFrames && _tail is not null)
+            if (!offline && _queue.Count >= MaxQueuedFrames && _tail is not null)
             {
                 _tail.Repeat += repeat;
             }
@@ -139,6 +149,7 @@ internal sealed class AviVideoRecorder : IFrameRecorder
                     Monitor.Wait(_queueGate);
                 }
                 item = _queue.Dequeue();
+                Monitor.PulseAll(_queueGate);
             }
             try
             {
@@ -147,7 +158,7 @@ internal sealed class AviVideoRecorder : IFrameRecorder
             }
             catch (Exception ex)
             {
-                lock (_queueGate) { _workerError = ex; _queue.Clear(); _tail = null; }
+                lock (_queueGate) { _workerError = ex; _queue.Clear(); _tail = null; Monitor.PulseAll(_queueGate); }
                 return;
             }
             lock (_queueGate) _spare.Push(item.Pixels);
@@ -206,13 +217,15 @@ internal sealed class AviVideoRecorder : IFrameRecorder
         // The frames still queued are written first, so the take ends where the recording did; a codec that
         // wedges is given a few seconds, not forever.
         lock (_queueGate) { _closing = true; Monitor.PulseAll(_queueGate); }
-        if (_worker is not null && !_worker.Join(TimeSpan.FromSeconds(10))) { _disposed = true; return; }
+        if (_worker is not null && !_worker.Join(TimeSpan.FromSeconds(10)))
+            throw new TimeoutException("The AVI writer did not finish its queued frames within ten seconds.");
         _disposed = true;
         if (_compressedStream != IntPtr.Zero) { AVIStreamRelease(_compressedStream); _compressedStream = IntPtr.Zero; }
         if (_rawStream != IntPtr.Zero) { AVIStreamRelease(_rawStream); _rawStream = IntPtr.Zero; }
         _writeStream = IntPtr.Zero;
         if (_file != IntPtr.Zero) { AVIFileRelease(_file); _file = IntPtr.Zero; }
         if (_initialized) { AVIFileExit(); _initialized = false; }
+        if (_workerError is { } error) throw new IOException("The AVI writer failed before finalizing the take.", error);
     }
 
     [StructLayout(LayoutKind.Sequential)] private struct AviRect { public int Left, Top, Right, Bottom; }

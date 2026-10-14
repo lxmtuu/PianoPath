@@ -2378,6 +2378,11 @@ internal static partial class VerificationSuite
                 aviTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), aviPlan, recorder);
             Assert(aviTake.FramesWritten == 12 && aviTake.Seconds is > 0.96 and <= 1.05 && File.Exists(aviPath) && new FileInfo(aviPath).Length > 2000,
                 $"The engine should write every planned frame into the AVI (frames {aviTake.FramesWritten}, seconds {aviTake.Seconds:0.##}).");
+            var inventory = AviFrameInventory.Read(File.ReadAllBytes(aviPath));
+            Results.Add($"NOTE offline AVI: {inventory.Samples} samples, {inventory.NonEmptySamples} nonempty, {inventory.DistinctPayloads} distinct payloads for {aviPlan.Frames} scripted camera ticks.");
+            Assert(inventory.Samples == aviPlan.Frames && inventory.NonEmptySamples == aviPlan.Frames
+                    && inventory.DistinctPayloads == aviPlan.Frames,
+                $"Offline AVI must preserve all {aviPlan.Frames} changing images, not coalesce them into live-mode repeats ({inventory}).");
             var reader = CameraFrameReader.OpenFile(aviPath, out var readError);
             Assert(reader is not null, $"The take must read back as a video ({readError}); the media stack of the CI box decodes the app's own AVI as part of the recording checks.");
             var lumaLeftStripe0 = 0; var keyLevels = new List<int>();
@@ -2408,7 +2413,7 @@ internal static partial class VerificationSuite
                     frameIndex++;
                 }
                 Assert(frameIndex >= 6 && frameIndex <= aviPlan.Frames,
-                    $"At least the six content ticks must be in the file (read {frameIndex} of {aviPlan.Frames}; "
+                    $"At least the six content ticks must be in the file (read {frameIndex} of {aviPlan.Frames}; AVI payloads {inventory}; "
                     + (reader.AtEnd ? "the stream reported its end" : "the readback was still waiting after sixty seconds") + ").");
             }
             Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
@@ -2570,6 +2575,9 @@ internal static partial class VerificationSuite
                 exportTake = ArRenderToVideo.Run(renderer, FileFeed, aviPlan, recorder);
             Assert(exportTake.FramesWritten == 12 && File.Exists(exportAvi),
                 $"The camera-file take must write every planned frame ({exportTake.FramesWritten}).");
+            var exportInventory = AviFrameInventory.Read(File.ReadAllBytes(exportAvi));
+            Assert(exportInventory.Samples == aviPlan.Frames && exportInventory.NonEmptySamples == aviPlan.Frames,
+                $"The camera-file offline export must retain every planned image ({exportInventory}).");
             var exportReader = CameraFrameReader.OpenFile(exportAvi, out var exportError);
             Assert(exportReader is not null, $"The camera-file take must read back as video ({exportError}).");
             var stripeLevels = new List<int>();
@@ -2601,6 +2609,17 @@ internal static partial class VerificationSuite
             Assert(brightened >= 4 && stripeLevels[5] > stripeLevels[0] + 16,
                 $"The file's greys must tick through the engine in order (levels {string.Join("/", stripeLevels)}).");
             Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 12 frames — six quiet runway ticks so the box's swallowed tail still leaves the six content ticks readable, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 44100 WAV frames — exactly the twelve ticks of the video — with the onset ramping gently and the held ticks loud, the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it, and a real camera video file — an MP4 pressed by the app's own writer and decoded by its reader — ticks through the engine one frame a tick, its stripe brightening in order.");
+        }
+        catch
+        {
+            // Keep the failed media, not merely a count. CI uploads these with the verification log.
+            try
+            {
+                foreach (var file in Directory.GetFiles(directory,"*.avi"))
+                    File.Copy(file,Path.Combine(Path.GetTempPath(),"keyflow-arvideo-failure-"+Path.GetFileName(file)),true);
+            }
+            catch (Exception ex) { Results.Add($"NOTE could not preserve the failed AVI: {ex.Message}"); }
+            throw;
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }

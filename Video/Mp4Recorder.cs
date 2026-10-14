@@ -229,15 +229,25 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     /// the window never waits for the codec and the file still keeps time. A failure on the encoder thread is
     /// raised from the next call here.
     /// </summary>
-    public void WriteFrame(byte[] frame, int repeat = 1)
+    public void WriteFrame(byte[] frame, int repeat = 1) => EnqueueFrame(frame, repeat, offline: false);
+
+    public void WriteOfflineFrame(byte[] frame) => EnqueueFrame(frame, 1, offline: true);
+
+    private void EnqueueFrame(byte[] frame, int repeat, bool offline)
     {
         if (frame.Length != FrameBytes) throw new ArgumentException(Loc.F("Expected a {0}×{1} BGRA frame ({2} bytes).", Width, Height, FrameBytes), nameof(frame));
         if (repeat < 1) return;
         lock (_queueGate)
         {
+            if (offline)
+                OfflineFrameQueue.WaitForSpace(_queueGate, () => _queue.Count, MaxQueuedFrames, () =>
+                {
+                    if (_workerError is { } offlineError) throw new InvalidOperationException(offlineError.Message, offlineError);
+                    if (_finalized || _closing) throw new InvalidOperationException("The offline video recorder is closing.");
+                });
             if (_workerError is { } error) throw new InvalidOperationException(error.Message, error);
             if (_finalized || _closing) return;
-            if (_queue.Count >= MaxQueuedFrames && _tail is not null)
+            if (!offline && _queue.Count >= MaxQueuedFrames && _tail is not null)
             {
                 _tail.Repeat += repeat;
             }
@@ -267,6 +277,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
                     Monitor.Wait(_queueGate);
                 }
                 item = _queue.Dequeue();
+                Monitor.PulseAll(_queueGate);
             }
             try
             {
@@ -284,7 +295,7 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
             }
             catch (Exception ex)
             {
-                lock (_queueGate) { _workerError = ex; _queue.Clear(); _tail = null; }
+                lock (_queueGate) { _workerError = ex; _queue.Clear(); _tail = null; Monitor.PulseAll(_queueGate); }
                 return;
             }
             lock (_queueGate) _spare.Push(item.Bgra);
