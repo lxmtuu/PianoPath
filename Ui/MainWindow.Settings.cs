@@ -974,11 +974,27 @@ public partial class MainWindow
 
     private void CheckUpdatesNow_Click(object sender, RoutedEventArgs e) => _ = RunUpdateCheckAsync();
 
-    private void OpenReleasePage_Click(object sender, RoutedEventArgs e)
+    private void OpenReleasePage_Click(object sender, RoutedEventArgs e) => OpenUpdatePage();
+
+    private void MainMenuUpdate_Click(object sender, RoutedEventArgs e) => OpenUpdatePage();
+
+    private void OpenUpdatePage()
     {
         var url = _updateResult is { State: UpdateState.Available } found ? found.Url : UpdateRelease.ReleasesPage;
         // Only ever a Keyflow release page: UpdateRelease.TrustedPage has already checked what the reply named.
         System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(UpdateRelease.TrustedPage(url)) { UseShellExecute = true });
+    }
+
+    /// <summary>The startup menu's notice: shown only when a newer release is known, and it opens that release's page.</summary>
+    private void RefreshMenuUpdateNotice()
+    {
+        if (_updateResult is not { State: UpdateState.Available } found)
+        {
+            MainMenuUpdateButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        Loc.Bind(MainMenuUpdateButton, () => Loc.F("Keyflow {0} is available — open release page", found.Latest), ContentControl.ContentProperty);
+        MainMenuUpdateButton.Visibility = Visibility.Visible;
     }
 
     /// <summary>Asks GitHub once and shows the answer on the General page. A failure is shown quietly, never as an error box.</summary>
@@ -992,6 +1008,7 @@ public partial class MainWindow
         if (_closing) return;
         _updateResult = result;
         RefreshUpdateStatus();
+        RefreshMenuUpdateNotice();
     }
 
     private void RefreshUpdateStatus()

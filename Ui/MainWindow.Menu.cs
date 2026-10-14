@@ -49,6 +49,7 @@ public partial class MainWindow
         Loc.Format(MainMenuVersionLabel, "Keyflow {0} · Concert Grand Edition", AppInfo.Version);
         RefreshMenuThemeChips();
         RefreshMenuStageLook();
+        RefreshMenuUpdateNotice();
         MainMenuOverlay.Visibility = Visibility.Visible;
         // A locked chrome (automated captures) keeps the backdrop parked on its one static frame, exactly as
         // ConfigureBackdrops does. Configuring it with the setting alone started it moving again right after

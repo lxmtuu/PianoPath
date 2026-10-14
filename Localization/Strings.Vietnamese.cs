@@ -691,6 +691,7 @@ internal static class StringsVietnamese
         ["Keyflow profile (*.json)|*.json|All files (*.*)|*.*"] = "Hồ sơ Keyflow (*.json)|*.json|Mọi tệp (*.*)|*.*",
         ["Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another."] = "Keyflow lưu mã ngôn ngữ chứ không lưu chữ đã dịch: tệp cài đặt, preset, mã giao diện và tệp MIDI đều giữ nguyên định danh tiếng Anh, nên tệp tạo ở ngôn ngữ này mở ra vẫn nguyên vẹn ở ngôn ngữ khác.",
         ["Keyflow watermark"] = "Watermark Keyflow",
+        ["Keyflow {0} is available — open release page"] = "Đã có Keyflow {0} — mở trang phát hành",
         ["Keyflow {0} is available. You are running {1}."] = "Đã có Keyflow {0}. Bạn đang chạy {1}.",
         ["Keyflow {0} is the newest release."] = "Keyflow {0} là bản phát hành mới nhất.",
         ["Keyflow {0} · Concert Grand Edition"] = "Keyflow {0} · Bản Concert Grand",

@@ -691,6 +691,7 @@ internal static class StringsEnglish
         ["Keyflow profile (*.json)|*.json|All files (*.*)|*.*"] = "Keyflow profile (*.json)|*.json|All files (*.*)|*.*",
         ["Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another."] = "Keyflow stores the language id, not the translated text: settings files, presets, theme ids and MIDI files all keep the same English identifiers, so a file written in one language opens unchanged in another.",
         ["Keyflow watermark"] = "Keyflow watermark",
+        ["Keyflow {0} is available — open release page"] = "Keyflow {0} is available — open release page",
         ["Keyflow {0} is available. You are running {1}."] = "Keyflow {0} is available. You are running {1}.",
         ["Keyflow {0} is the newest release."] = "Keyflow {0} is the newest release.",
         ["Keyflow {0} · Concert Grand Edition"] = "Keyflow {0} · Concert Grand Edition",

@@ -566,6 +566,7 @@
             <local:ChromeBackdrop x:Name="MenuBackdrop"/>
             <Border Background="{StaticResource ConcertVeilBrush}"/>
             <TextBlock x:Name="MainMenuVersionLabel" Text="Keyflow 0.4 · Concert Grand Edition" Style="{StaticResource EyebrowTextStyle}" FontSize="10" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,42"/>
+            <Button x:Name="MainMenuUpdateButton" Visibility="Collapsed" Tag="{StaticResource IconRefresh}" Style="{StaticResource MenuLinkButtonStyle}" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="30,0,0,66" Click="MainMenuUpdate_Click" ToolTip="Opens the release page of the newest Keyflow. Nothing is downloaded."/>
             <TextBlock x:Name="MainMenuCopyrightLabel" Text="© 2026 Yami · Neyu — Contributor: Jin" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}" FontSize="9.5" Opacity=".85" HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="34,0,0,26"/>
             <Grid HorizontalAlignment="Left" VerticalAlignment="Center" Margin="96,0,40,0">
                 <Grid.ColumnDefinitions>
