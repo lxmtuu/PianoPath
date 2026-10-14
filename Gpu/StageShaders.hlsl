@@ -392,9 +392,43 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     return o;
 }
 
+// Experimental held surfaces. Both Stage and AR use the same premultiplied material;
+// world anchoring/projection happens in the builders, not in this shading function.
+float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape, float phase)
+{
+    float h = saturate(uv.y);
+    float x = uv.x * 2.0 - 1.0;
+    float coverage, core;
+    if (shape < 5.0) // heat parcel: broad root, curved tongue, fine warm core
+    {
+        float centre = sin(h * 5.5 + phase + progress * 2.0) * 0.18 * h;
+        float width = lerp(0.88, 0.055, pow(h, 0.8));
+        float d = abs(x - centre);
+        float aa = max(fwidth(d), 0.025);
+        coverage = (1.0 - smoothstep(width - aa, width + aa, d))
+            * smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.86, 1.0, h));
+        core = exp(-pow(d / max(width * 0.3, 0.025), 2.0)) * coverage * (1.0 - h) * 0.32;
+    }
+    else // luminous thread, not a smoke billboard or white-hot dot
+    {
+        float centre = sin(h * 6.0 + phase + progress * 4.0) * 0.34;
+        float width = 0.12 + sin(h * 3.14159) * 0.1;
+        float d = abs(x - centre);
+        float aa = max(fwidth(d), 0.035);
+        coverage = (1.0 - smoothstep(width - aa, width + aa, d))
+            * smoothstep(0.0, 0.16, h) * (1.0 - smoothstep(0.8, 1.0, h));
+        core = coverage * exp(-d * d * 90.0) * 0.12;
+    }
+    float a = saturate(coverage) * color.a;
+    float3 rgb = color.rgb * coverage + lerp(color.rgb, float3(1.0, 1.0, 1.0), 0.2) * core;
+    return float4(rgb * color.a, a);
+}
+
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if (kind > 16.5 && kind < 17.5)
+        return ShadeHeldParticleArt(i.Uv, i.Color, i.Misc.x, i.Misc.y, i.Misc.w);
     if (kind < 0.5)
     {
         // Reuse the exact Live Stage material in linear light. UV derivatives recover the projected body's
@@ -1174,7 +1208,13 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if (kind > 6.5)
+    if (kind > 16.5 && kind < 17.5)
+    {
+        axis = float2(1.0, 0.0); normal = float2(0.0, -1.0);
+        extent = float2(size, s.Dir.x);
+        extra = float4(s.Dir.y, s.Dir.z, s.Dir.w, 0.0); // progress, surface shape, birth phase
+    }
+    else if (kind > 6.5)
     {
         // shapes (kind 7+): Dir.xy is a rotation (the whole segment for lines), Dir.zw per-kind values
         float2 along = s.Dir.xy;
@@ -1375,6 +1415,8 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if (kind > 16.5 && kind < 17.5)
+        return ShadeHeldParticleArt(v.Local * 0.5 + 0.5, v.Color, v.Extra.x, v.Extra.y, v.Extra.z);
     if (kind > 6.5) return SpriteShape(v);
     float2 p = v.Local;
     float3 c = v.Color.rgb;

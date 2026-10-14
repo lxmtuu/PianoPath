@@ -821,6 +821,26 @@ internal sealed partial class GpuStageSimulation
             var fade = 1 - u;
             var x = p.X * scaleX;
             var c = ToLinear(p.Color);
+            if (look.HeldParticleArt && (p.Wisp || p.Shape == Shape.Flame))
+            {
+                if (HeldParticleAppearance.TryResolve(p.Wisp, p.Size, p.Age, p.Life, p.Phase, p.Glow,
+                    p.Color, look.WispWidth, look.FlameNoteColor, out var surface) && surface.Color.W > .003f)
+                {
+                    var px = x;
+                    if (p.Wisp)
+                    {
+                        var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * MathF.Min(1, p.Age * 1.6f);
+                        px += MathF.Sin(p.Age * (3 + look.WispTurbulence * 5) + p.Phase) * amp;
+                    }
+                    sprites.Add(new GpuSpriteInstance
+                    {
+                        PosSize = new Vector4(px, p.Y - (surface.BaseAnchored ? surface.HalfHeight : 0), surface.HalfWidth, 17),
+                        Color = surface.Color,
+                        Dir = new Vector4(surface.HalfHeight, surface.Progress, surface.Shape, surface.Phase)
+                    });
+                }
+                continue;
+            }
             switch (p.Shape)
             {
                 case Shape.Streak:

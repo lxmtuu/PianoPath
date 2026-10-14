@@ -86,6 +86,7 @@ internal sealed class GpuLook
 
     // ---- particles ----
     public bool ShowEmbers { get; init; } = true;
+    public bool HeldParticleArt { get; init; }
     public bool ShowWisps { get; init; }
     public bool ShowFlame { get; init; } = true;
     public bool ShowImpactRings { get; init; } = true;
@@ -308,6 +309,7 @@ internal sealed class GpuLook
             ParticleSizeRandomness = P(s.ParticleSizeRandomness), ParticleGlow = P(s.ParticleGlow), EmitterSize = P(s.EmitterSize), Spiral = P(s.Spiral),
             Gravity = (float)s.Gravity, Drag = P(s.Drag), VectorField = P(s.VectorField), FieldScale = (float)Math.Max(1, s.FieldScale),
             EvolutionSpeed = P(s.EvolutionSpeed), PhysicsTimeFactor = P(s.PhysicsTimeFactor),
+            HeldParticleArt = s.HeldParticleArt,
             WispAmount = (float)s.WispAmount, WispSpeed = (float)s.WispSpeed, WispHeight = P(s.WispHeight), WispWidth = P(s.WispWidth),
             WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",

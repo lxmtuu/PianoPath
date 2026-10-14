@@ -6692,6 +6692,8 @@ internal static partial class VerificationSuite
         var auxiliaryCaptures = AuxParticleVisualReview.Render(auxiliaryOutput);
         Assert(auxiliaryCaptures == 128, "Auxiliary channels need white/black keys and four phases in both modes.");
         Results.Add($"PASS P3a auxiliary captures: {auxiliaryCaptures} WARP frames; 8 channels × white/black × 4 phases × Stage/AR Ultra. Same-input effect-off controls, active visibility, expired tails, PNG round trips and no Stage-space leak; not art sign-off. {Path.GetFullPath(auxiliaryOutput)}.");
+        HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
+        Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }
 
     private static void VerifyPrismFlowInputs()

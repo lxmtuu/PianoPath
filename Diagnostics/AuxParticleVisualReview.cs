@@ -16,7 +16,7 @@ internal static class AuxParticleVisualReview
         double RequestedTime, double ActualTime, string File, string PixelSha256,
         int StageSprites, int ArParticles, int ArReleaseEffects, int? ChangedPixels);
 
-    internal static int Render(string output)
+    internal static int Render(string output, bool heldArt = false, bool heldOnly = false)
     {
         var previousLayout = KeyboardLayout.Active;
         KeyboardLayout.Use(KeyboardLayout.Standard88);
@@ -30,7 +30,7 @@ internal static class AuxParticleVisualReview
             using var renderer = GpuStageRenderer.Create(forceWarp: true);
             if (!renderer.IsWarp) throw new InvalidOperationException("P3a captures require WARP.");
             var captures = new List<Capture>();
-            foreach (var fixture in AuxParticleTimeline.Routes)
+            foreach (var fixture in AuxParticleTimeline.Routes.Where(r => !heldOnly || r.Source == AuxParticleTimeline.Channel.Held))
             foreach (var pitch in new[] { 60, 61 })
             foreach (var overCamera in new[] { false, true })
             {
@@ -38,6 +38,7 @@ internal static class AuxParticleVisualReview
                 foreach (var phase in AuxParticleTimeline.Phases)
                 {
                     var settings = AuxParticleFixtures.Settings(fixture, phase != "off");
+                    settings.HeldParticleArt = heldArt;
                     var stage = new PianoStage { Width = Width, Height = Height };
                     stage.SetVisualSettings(settings);
                     stage.Measure(new Size(Width, Height)); stage.Arrange(new Rect(0, 0, Width, Height)); stage.UpdateLayout();
@@ -88,10 +89,11 @@ internal static class AuxParticleVisualReview
                         renderer.ArParticleFxCount, renderer.ArReleaseEffectCount, changed));
                 }
             }
-            if (captures.Count != 128) throw new InvalidDataException("Auxiliary inventory requires 8 channels × 2 pitches × 4 phases × 2 modes = 128 captures.");
+            if (captures.Count != (heldOnly ? 32 : 128)) throw new InvalidDataException("Auxiliary inventory requires 8 channels × 2 pitches × 4 phases × 2 modes = 128 captures.");
             File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serialize(new
             {
-                schemaVersion = 1, status = "p3a-auxiliary-baselines-not-art-signoff",
+                schemaVersion = 1, status = heldArt ? "p3b-held-art-prototype-not-signoff" : "p3a-auxiliary-baselines-not-art-signoff",
+                heldArt, heldOnly,
                 adapter = renderer.AdapterName, width = Width, height = Height, fps = Fps, seed = KeyParticleFixtures.Seed,
                 input = "explicit single-key feed states; no OS MIDI callback/controller import",
                 releaseAfterHeldFrames = AuxParticleTimeline.ReleaseFrame, ar = "Ultra / synthetic keyboard / Fit / no mirror / delay=0",

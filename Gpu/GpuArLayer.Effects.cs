@@ -416,6 +416,21 @@ internal sealed partial class GpuArLayer
             x += Math.Sin(particle.Age * (3 + look.WispTurbulence * 5) + particle.Phase) * amp * unit;
         }
         var center = new ArVec3(x, .12, -y);
+        if (look.HeldParticleArt && (particle.Wisp || particle.Shape == ParticleFlame))
+        {
+            if (!HeldParticleAppearance.TryResolve(particle.Wisp, particle.Size, particle.Age, particle.Life,
+                particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface)
+                || !ArParticleBillboard.TryFacing(pose, center, out var faceX, out var faceY)) return false;
+            var halfWidth = surface.HalfWidth * unit; var halfHeight = surface.HalfHeight * unit;
+            var surfaceCenter = center + faceY * (surface.BaseAnchored ? halfHeight : 0);
+            if (surface.Color.W * opacity <= .003f
+                || !Ar3DNoteProjection.TryProjectBillboard(pose, view, surfaceCenter, faceX, faceY,
+                    halfWidth, halfHeight, out var facePatch)) return false;
+            quads.Add(Pack(facePatch, new Vector3(surface.Color.X, surface.Color.Y, surface.Color.Z),
+                Math.Clamp(surface.Color.W * opacity, 0, 1),
+                new Vector4(surface.Progress, surface.Shape, 17, surface.Phase)));
+            return true;
+        }
         var progress = Math.Clamp(particle.Age / particle.Life, 0, 1);
         var fade = 1 - progress;
         var stageShape = particle.Wisp ? ParticleWisp : particle.Shape;

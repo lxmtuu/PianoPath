@@ -70,6 +70,8 @@ internal sealed class PianoVisualSettings
     public string BackgroundMotionColor { get; set; } = "#7B5CFF";
     public bool ShowStars { get; set; }
     public bool ShowWisps { get; set; } = false;
+    /// <summary>Experimental shared wisps/flames surfaces. GPU Stage/AR only; legacy false, no menu control yet.</summary>
+    public bool HeldParticleArt { get; set; } = false;
     public bool ShowImpactRings { get; set; } = true;
     public bool ShowLightBeams { get; set; } = false;
     public bool ShowNoteLabels { get; set; } = false;

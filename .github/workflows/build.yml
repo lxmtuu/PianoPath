@@ -126,7 +126,7 @@ jobs:
             Get-Content $log | ForEach-Object {
               Write-Output $_
               if ($_ -like 'FAIL*') { "::error title=Prism Flow P0::$_" }
-              elseif ($_ -like 'NOTE P0 baseline sample*' -or $_ -like 'PASS Prism Flow*' -or $_ -like 'PASS P3a*') { "::notice title=Prism Flow P0::$_" }
+              elseif ($_ -like 'NOTE P0 baseline sample*' -or $_ -like 'PASS Prism Flow*' -or $_ -like 'PASS P3a*' -or $_ -like 'PASS P3b*') { "::notice title=Prism Flow P0::$_" }
             }
           } else { "::error title=Prism Flow P0::No verification log was written" }
           exit $proc.ExitCode
@@ -211,6 +211,30 @@ jobs:
               Copy-Item $source (Join-Path $target "$($route.Id)-$($sample.Pitch)-$($sample.Mode)-active.png") -Force
             }
           }
+
+      - name: Assemble and stage experimental held particle review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/held-particle-art'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 32 -or -not $manifest.heldArt) { throw 'Incomplete held art prototype' }
+          python tools/make_held_particle_clips.py (Join-Path $review 'motion')
+          if ($LASTEXITCODE -ne 0) { throw 'Motion assembly failed' }
+          $target = 'docs/previews/held-particle-art'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $target 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $target 'motion-manifest.json') -Force
+          $active = @($manifest.captures | Where-Object { $_.Phase -eq 'active' })
+          if ($active.Count -ne 8) { throw 'Missing paired held material images' }
+          foreach ($sample in $active) {
+            Copy-Item (Join-Path $review $sample.File) (Join-Path $target "$($sample.Route)-$($sample.Pitch)-$($sample.Mode)-art.png") -Force
+          }
+          $clips = @(Get-ChildItem (Join-Path $review 'motion') -Filter *.png)
+          if ($clips.Count -ne 8) { throw 'Missing lossless APNG comparisons' }
+          foreach ($clip in $clips) {
+            Copy-Item $clip.FullName (Join-Path $target "$($clip.BaseName)-motion.png") -Force
+          }
+          "::notice title=Held particle art::32 static captures, 8 active representatives, 8 lossless 60-frame 30-FPS APNG crops staged. Prototype only, no visual/hardware acceptance."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as

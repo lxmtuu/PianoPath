@@ -63,6 +63,7 @@ internal static partial class VerificationSuite
                 VerifyParticleCapRecovery(fixture);
                 VerifyParticleDrawIndependence(fixture, layer, ar, view, sprites, quads);
             }
+            VerifyHeldParticleArt(layer, ar, view, sprites, quads);
             VerifyRingChannelRouting(layer, ar, view, sprites, quads);
             VerifyAuxParticleLifecycle(layer, ar, view, sprites, quads);
             VerifyEmitterClockAndClear();

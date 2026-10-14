@@ -1,6 +1,6 @@
 # P3a follow-up — ring channel gain Stage / AR
 
-**Trạng thái (2026-10-15): đã sửa và qua static check; chờ CI mới.** Đây là sửa đồng bộ knob ownership phát hiện khi review baseline, không phải art pass hoặc nghiệm thu particle roadmap.
+**Trạng thái (2026-10-15): đã sửa và PASS CI.** Đây là sửa đồng bộ knob ownership phát hiện khi review baseline, không phải art pass hoặc nghiệm thu particle roadmap.
 
 ## Lỗi có bằng chứng
 
@@ -25,7 +25,7 @@ ReleaseIntensity = 0 ở **lúc phát** vẫn không tạo ring. Đổi release 
 - Shipping simulation + hai builders: Ring/Shockwave/Ripple, Absorb/Bounce, Snap Back/Echo Rings, cả 60/61. Kiểm real births có channel/pitch/origin đúng; Stage ring sprites và AR pulse bands đều hiện; thay knob không liên quan không đổi ring output; chỉ đúng wave/morph live gain được mute; release giữ birth strength; build không tiến time/đổi ring state; tail hết tuổi thọ.
 - Giữ full verification và cả isolated 306-frame suite. Preview Bounce Stage có thể thay đổi do ring được khôi phục; không gọi pixel change này là nâng cấp tất cả artwork.
 
-Local static checker PASS (291 C# / 2 XAML), 7 fixture Python tests PASS, diff check PASS. Chưa có local Windows/.NET; baseline CI ở trên **không** chứng nhận source sửa gain. Source/run/count/captures mới cần bổ sung sau CI.
+Local static checker PASS (291 C# / 2 XAML), 7 fixture Python tests PASS, diff check PASS. Không có local Windows/.NET. Source sửa gain `f57d4ad` đã PASS [run `38628000809`](https://github.com/lxmtuu/PianoPath/actions/runs/38628000809): **5.635 assertions / 1 skipped group**, portable/build/isolated captures/full verification/benchmark/packaging thành công. Preview commit `5d11c91` khôi phục hai Stage Bounce active ảnh: 14 sprites, delta 1.257/994 (60/61), thay vì 11 sprites và delta 1.076/795. AR không đổi. Đây là bằng chứng routing, không phải chứng nhận art hoặc hardware budget.
 
 ## Việc còn mở
 

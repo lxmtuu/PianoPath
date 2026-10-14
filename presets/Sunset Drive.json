@@ -34,6 +34,7 @@
     "BackgroundMotionColor": "#7E526F",
     "ShowStars": false,
     "ShowWisps": false,
+    "HeldParticleArt": false,
     "ShowImpactRings": true,
     "ShowLightBeams": false,
     "ShowNoteLabels": false,
