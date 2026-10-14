@@ -331,7 +331,7 @@ public class MusicXmlReaderTests
     /// <summary>
     /// A tied pair across the bar line, a second voice holding a whole-measure rest that omits its
     /// duration, and that voice entering on the next bar line: at 60 bpm a quarter is a second, so the
-    /// tied C4 sounds 0–3, and the second voice's C3 lands exactly on measure 2.
+    /// tied C4 sounds 1–6, and the second voice's C3 lands exactly on measure 2.
     /// </summary>
     private const string TiesAndVoices = """
 <score-partwise version="4.0">
@@ -340,8 +340,8 @@ public class MusicXmlReaderTests
     <measure number="1">
       <attributes><divisions>1</divisions><staves>2</staves><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
       <direction><sound tempo="60"/></direction>
-      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff><tie type="start"/></note>
       <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>3</duration><voice>1</voice><staff>1</staff><tie type="start"/></note>
       <backup><duration>4</duration></backup>
       <note><rest measure="yes"/><voice>2</voice><staff>2</staff></note>
     </measure>
@@ -361,7 +361,7 @@ public class MusicXmlReaderTests
         var score = MusicXmlReader.Parse(TiesAndVoices);
         var heard = score.Notes.OrderBy(note => note.Start).ThenBy(note => note.Pitch).Select(Describe).ToList();
 
-        Assert.Equal(["60@0+3/t0", "62@1+1/t0", "48@4+1/t0", "64@6+1/t0"], heard);
+        Assert.Equal(["62@0+1/t0", "60@1+5/t0", "48@4+1/t0", "64@6+1/t0"], heard);
     }
 
     [Fact]
