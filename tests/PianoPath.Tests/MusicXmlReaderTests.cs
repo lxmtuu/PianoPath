@@ -78,6 +78,27 @@ public class MusicXmlReaderTests
     }
 
     [Fact]
+    public void Adjacent_hands_split_above_the_left_hands_highest_note()
+    {
+        // The left hand's highest note is B3 (59) and the right hand's lowest is C4 (60): the split is
+        // the first right-hand pitch, so it must be 60 — the bare midpoint (59 + 60) / 2 rounds down
+        // onto the B itself and would hand that note to the right hand.
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>1</divisions><staves>2</staves></attributes>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><staff>1</staff></note>
+    <backup><duration>1</duration></backup>
+    <note><pitch><step>B</step><octave>3</octave></pitch><duration>1</duration><staff>2</staff></note>
+  </measure></part>
+</score-partwise>
+""");
+
+        Assert.Equal(60, score.HandSplitPitch);
+    }
+
+    [Fact]
     public void The_beat_grid_follows_the_time_signature_and_the_tempo_of_each_measure()
     {
         var score = MusicXmlReader.Parse(TwoHands);

@@ -24,6 +24,10 @@ internal static class Nv12Frame
     internal static void FromBgra(byte[] source, int width, int height, byte[] target)
     {
         if (width < 2 || height < 2) throw new ArgumentOutOfRangeException(nameof(width));
+        // NV12 shares one colour pair over each 2×2 block, so an odd side has no layout at all: walking it
+        // would read past the last row and write the colour plane out of step. Refuse it up front instead.
+        if ((width & 1) != 0) throw new ArgumentOutOfRangeException(nameof(width), Loc.T("An NV12 frame needs an even width."));
+        if ((height & 1) != 0) throw new ArgumentOutOfRangeException(nameof(height), Loc.T("An NV12 frame needs an even height."));
         if (source.Length < width * height * 4) throw new ArgumentException(Loc.F("Expected a {0}×{1} BGRA frame ({2} bytes).", width, height, width * height * 4), nameof(source));
         if (target.Length < Size(width, height)) throw new ArgumentException(Loc.F("Expected room for a {0}×{1} NV12 frame ({2} bytes).", width, height, Size(width, height)), nameof(target));
         for (var y = 0; y < height; y++)

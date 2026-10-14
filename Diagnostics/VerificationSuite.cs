@@ -4025,6 +4025,9 @@ internal static partial class VerificationSuite
             $"Pure red should land on the brightness and colour pairs a player expects of BT.601 (Y {red[0]}, U {red[4]}, V {red[5]}).");
         Assert(Throws(() => Nv12Frame.FromBgra(new byte[4], 4, 4, new byte[Nv12Frame.Size(4, 4)])),
             "A frame that is not as long as the size it is converted at should be refused, not read past its end.");
+        Assert(Throws(() => Nv12Frame.FromBgra(new byte[3 * 2 * 4], 3, 2, new byte[64]))
+            && Throws(() => Nv12Frame.FromBgra(new byte[2 * 3 * 4], 2, 3, new byte[64])),
+            "An odd-sided frame has no NV12 layout and should be refused, not walked past the end of its last row.");
 
         var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".mp4");
         try { VerifyMp4Take(path); }
@@ -6538,6 +6541,14 @@ internal static partial class VerificationSuite
         SetField(window, "_position", 3.0); Invoke(window, "SetLoopB_Click", window, new RoutedEventArgs());
         Assert(((TextBlock)window.FindName("LoopLabel")).Text == "00:01–00:03", "A/B loop should retain its selected times.");
         SetField(window, "_position", 3.1); Invoke(window, "Tick", .016); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
+        // Only the notes inside the loop are a fresh attempt on the next pass: a note past B that was
+        // already judged keeps its flag, or switching the loop off would judge it a second time.
+        var loopNotes = ((IEnumerable<NoteEvent>)Field(window, "_notes")).ToList();
+        var insideLoop = loopNotes.First(n => n.Start >= 1.0 && n.Start < 3.0);
+        var pastLoop = loopNotes.First(n => n.Start >= 3.0);
+        insideLoop.Played = true; pastLoop.Played = true;
+        SetField(window, "_position", 3.1); Invoke(window, "Tick", .016);
+        Assert(!insideLoop.Played && pastLoop.Played, "A loop pass should clear the scoring flags inside the loop and leave the notes past B as they were judged.");
 
         mode.SelectedIndex = 1;
         foreach (var note in ((IEnumerable<NoteEvent>)Field(window, "_notes")).Where(n => n.Start < .99)) note.Played = true;

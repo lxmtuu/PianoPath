@@ -453,7 +453,10 @@ internal static class MusicXmlReader
         if (left == 0 || right == 0) return null;
         if (left < notes.Count * MinimumHandShare || right < notes.Count * MinimumHandShare) return null;
         if (leftTop is not { } top || rightBottom is not { } bottom || top >= bottom) return null;
-        return (top + bottom) / 2;
+        // The split is the first pitch of the right hand, so it must sit above the left hand's highest
+        // note: the bare midpoint rounds down onto that note itself when the hands are a semitone apart
+        // (left B3, right C4 would split at 59 and hand the B to the right hand).
+        return Math.Clamp((top + bottom) / 2, top + 1, bottom);
     }
 
     private static int? Pitch(XElement note)

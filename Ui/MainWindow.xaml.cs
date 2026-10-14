@@ -371,7 +371,13 @@ public partial class MainWindow : Window
             {
                 _position = _loopA; previous = _loopA; forceOnset = true; _outputFinished.Clear(); ReleasePlaybackNotes();
                 // Every pass through the loop is a fresh attempt: clear the scoring flags inside the loop so the notes can be played and judged again.
-                for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _loopA); i < _notes.Count; i++) { _notes[i].Played = false; _notes[i].Missed = false; _notes[i].Timing = 0; }
+                // Notes at or past B keep the flags they earned: clearing them too would let a later pass
+                // (once the loop is switched off) judge them a second time and count them twice.
+                for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _loopA); i < _notes.Count; i++)
+                {
+                    if (_notes[i].Start >= _loopB) break;
+                    _notes[i].Played = false; _notes[i].Missed = false; _notes[i].Timing = 0;
+                }
                 SyncPlayhead();
             }
             if (ModeCombo.SelectedIndex == 1)
