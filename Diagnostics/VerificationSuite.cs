@@ -54,6 +54,19 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
+        if (args.Contains("--verify-prism-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Prism-only verification requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated Prism Flow P0 verification; this does not run or certify the full regression suite.");
+                VerifyPrismFlowReview(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
             try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
@@ -6646,6 +6659,10 @@ internal static partial class VerificationSuite
         var captures = Phase1VisualReview.Render(outputDirectory);
         Assert(captures == 48, "Phase 1 visual review must write 48 images across three looks, four checkpoints, two renderers and two sizes.");
         Results.Add($"PASS Phase 1 visual review: {captures} WPF/GPU-WARP images at 1920×1080 and 960×540, with manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyPrismFlowReview(string outputDirectory)
+    {
         VerifyPrismFlowInputs();
         Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
         var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");

@@ -2,7 +2,7 @@
 
 > Ngày: 2026-10-14. Trạng thái: **đã có audit, input fixture, product consumer/tests và Windows capture harness; chưa hoàn tất P0**.
 > Kế hoạch: [Prism Flow Design Roadmap](PRISM-FLOW-DESIGN-ROADMAP.md).
-> Chưa thay renderer, shader, preset, schema settings, capability hay menu UI. Không có ảnh baseline mới hoặc số đo FPS/GPU ở lượt này.
+> Chưa thay renderer, shader, preset, schema settings, capability hay menu UI. Chưa có bộ baseline P0 hoàn chỉnh hoặc số đo FPS/GPU phần cứng mới; xem lịch sử chạy CI ở §9.
 
 ## 1. Đầu ra đã thực hiện
 
@@ -10,8 +10,8 @@
 - Inventory các lựa chọn nhấn/giữ/thả và FX liên kết từ `PianoVisualSettings`, `GpuLook` và simulation runtime.
 - Generator không dependency: `tools/make_prism_flow_fixture.py`, xuất MIDI format 1 và manifest 28 giây; dữ liệu đầu ra nằm trong `tools/out/` đã được Git ignore.
 - Bảy Python tests kiểm tra input fixture và pin hai file nhỏ trong `docs/samples/prism-flow-p0` theo generator. Đây **không** phải test parser hoặc renderer của ứng dụng.
-- `Diagnostics/PrismFlowBaseline.cs` consume manifest, xác minh hash và đối chiếu mọi note với **MidiReader của sản phẩm**; cursor pedal tách khỏi note duration. Portable xUnit có 10 case mới cho reader/cursor/invalid input; chưa chạy được tại sandbox.
-- `Diagnostics/PrismFlowVisualReview.cs` chuẩn bị 78 ảnh WARP stage/AR (3 control presets × 12 checkpoint × 2 mode, thêm 6 phase-FX-off controls), PNG readback/round-trip, manifest và HTML. Chưa chạy Windows nên chưa có ảnh hoặc PASS renderer mới.
+- `Diagnostics/PrismFlowBaseline.cs` consume manifest, xác minh hash và đối chiếu mọi note với **MidiReader của sản phẩm**; cursor pedal tách khỏi note duration. Portable xUnit có 10 case mới cho reader/cursor/invalid input; đã pass trong portable test job của Windows-CI workflow (job chạy Linux); sandbox vẫn không có SDK.
+- `Diagnostics/PrismFlowVisualReview.cs` chuẩn bị 78 ảnh WARP stage/AR (3 control presets × 12 checkpoint × 2 mode, thêm 6 phase-FX-off controls), PNG readback/round-trip, manifest và HTML. Đã build trên Windows; lần capture đầu dừng ở lỗi camera input của harness, đã sửa và đang chạy lại; chưa có bộ ảnh hoàn chỉnh được chứng nhận.
 - Đưa tests/generate/check vào static CI; không cần Windows để kiểm input. Không thay thế portable xUnit hay Windows `--verify` đang có.
 
 ## 2. Sơ đồ đường dữ liệu hiện tại
@@ -110,7 +110,7 @@ python3 tools/make_prism_flow_fixture.py --check
 python3 tools/check_sources.py
 ```
 
-File được tạo mặc định: `tools/out/prism-flow-p0/baseline.mid` và `manifest.json`. Hai input nhỏ (~4.9 KB tổng) được lưu ở `docs/samples/prism-flow-p0` để xUnit/Windows diagnostics consume cùng dữ liệu mà không phụ thuộc Python lúc chạy; Python tests giữ chúng khớp generator. Cùng generator sinh cùng bytes; manifest có SHA-256 MIDI, notes, CC64, checkpoint, FPS cần thử và seed đề xuất. Capture harness mới truyền seed vào `GpuRenderLoop.RenderFrames`. Consumer và harness đã viết nhưng **chưa chạy trong lượt này**; không coi đây là evidence app/renderer đã pass như Phase 1 hiện hữu.
+File được tạo mặc định: `tools/out/prism-flow-p0/baseline.mid` và `manifest.json`. Hai input nhỏ (~4.9 KB tổng) được lưu ở `docs/samples/prism-flow-p0` để xUnit/Windows diagnostics consume cùng dữ liệu mà không phụ thuộc Python lúc chạy; Python tests giữ chúng khớp generator. Cùng generator sinh cùng bytes; manifest có SHA-256 MIDI, notes, CC64, checkpoint, FPS cần thử và seed đề xuất. Capture harness mới truyền seed vào `GpuRenderLoop.RenderFrames`. Consumer/product-reader tests đã pass trong CI. Capture harness đang được xác minh; chưa coi một lần build thành công là evidence renderer pass.
 
 | Khoảng thời gian (s) | Cảnh / mục đích |
 |---|---|
@@ -136,8 +136,8 @@ Tách hai đường kiểm thử:
 - Python fixture tests: 7/7 pass tại sandbox (thêm case kiểm committed fixtures ở lượt tiếp theo).
 - Generate → `--check`: bytes và manifest khớp.
 - `tools/check_sources.py`: pass (C#/XAML/resources/bindings/docs hiện có).
-- Không có .NET SDK ở sandbox; chưa chạy xUnit, Windows build hoặc `--verify` trong lượt này.
-- Chưa chạy D3D/WARP/hardware, webcam, OBS, codec hoặc capture fixture mới; chưa có cơ sở công bố visual parity/FPS/capability mới.
+- Không có .NET SDK ở sandbox. Portable xUnit và Windows Release build đã pass trong hai run CI §9; full `--verify` chưa pass ở commit sửa mới nhất.
+- Đã thử D3D/WARP capture trên Windows: run đầu phát hiện lỗi harness; chưa có bộ P0 hoàn chỉnh. Chưa có hardware/webcam/OBS evidence mới; không công bố parity/FPS/capability mới.
 
 ## 7. Checklist còn lại để đóng P0
 
@@ -153,13 +153,13 @@ Tách hai đường kiểm thử:
 
 ## 8. Chạy phần mới trên Windows và cách đọc artifact
 
-Không thêm switch CLI mới: khi có option capture hiện hữu `--verify-review-out` đi với `--verify`, suite giữ 48 ảnh Phase 1, kiểm input/cursor P0 rồi tạo thêm thư mục con `prism-flow-p0`. `--verify` không có option capture không bị thêm yêu cầu phải tìm fixture P0 trong source checkout. Workflow build đang có đã upload toàn bộ thư mục review nên cũng bao gồm output mới này khi chạy thành công.
+Thêm mode **`--verify-prism-only`**, dùng cùng `--verify --verify-review-out=<dir>`: chỉ kiểm input/cursor P0 và 78 capture trong thư mục con `prism-flow-p0`. Không chạy/chứng nhận full suite. CI chạy mode này trước, rồi vẫn chạy full `--verify` và 48 ảnh Phase 1 độc lập; lỗi bất kỳ mode nào vẫn làm build đỏ. Ordinary `--verify` không bị thêm yêu cầu fixture P0 trong source checkout. Workflow build đang có đã upload toàn bộ thư mục review nên cũng bao gồm output mới này khi chạy thành công.
 
 ```powershell
 # Từ repository root, .NET 10 và Windows:
 dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release
 dotnet build PianoPath.csproj --configuration Release
-.\bin\Release\net10.0-windows\PianoPath.exe --verify "--verify-review-out=$env:TEMP\keyflow-review" "--verify-log=$env:TEMP\keyflow-prism-verify.log"
+.\bin\Release\net10.0-windows\PianoPath.exe --verify --verify-prism-only "--verify-review-out=$env:TEMP\keyflow-review" "--verify-log=$env:TEMP\keyflow-prism-verify.log"
 ```
 
 Mở `$env:TEMP\keyflow-review\prism-flow-p0\index.html`. Manifest ghi thời điểm yêu cầu và thời điểm thực tế làm tròn lên cuối frame 60 FPS, raw-pixel SHA256, counters stage/AR, số pixel đổi ở control và giới hạn bằng chứng. Chọn `Ice Crystal` làm control **vật liệu Glass hiện có**, không đổi tên preset hoặc giả vờ có preset “Glass” độc lập.
@@ -170,5 +170,14 @@ Mở `$env:TEMP\keyflow-review\prism-flow-p0\index.html`. Manifest ghi thời đ
 - Mỗi capture kiểm PNG decode pixel round-trip và không rỗng; AR kiểm stage-space notes/keys không lọt vào camera. 6 control frame chỉ kiểm nhóm phase FX làm đổi ảnh, không chứng minh từng style/control.
 - Captures dùng song-state path (cùng `GpuStageSimulation`/renderer), chưa mô phỏng callback live MIDI. Nâng cấp live-routing/physical-held/sounding cần lát dọc riêng.
 - Captures chưa có threshold “đẹp”, chưa visual sign-off, chưa hardware/FPS evidence. Không đổi support contracts hoặc chuẩn hóa mất chênh lệch hiện tại.
+
+## 9. Lịch sử CI và lỗi đã tìm thấy
+
+- [Run 38592847576](https://github.com/lxmtuu/PianoPath/actions/runs/38592847576), commit `366ba13`: static, portable tests và Windows build pass. P0 capture fail ở guard thiếu note geometry. Audit tìm thấy harness dùng lại một `CameraFrameRing` đã bị consume; sau khi capture Stage tháo camera texture, preset AR tiếp theo không có frame mới để upload.
+- Commit `23b8b41`: mỗi AR capture có ring mới và frame synthetic mới publish, giữ guard hình học (không xóa assertion); lỗi được thêm preset/mode/counter/camera upload context.
+- [Run 38593677798](https://github.com/lxmtuu/PianoPath/actions/runs/38593677798), commit `23b8b41`: static, portable tests và Windows build pass. Suite dừng **trước P0** ở kiểm tra có sẵn `VerifyArRecording`: ảnh camera tuổi 10064 ms vượt ceiling 5000 ms trên runner chậm. Đây không phải bằng chứng fix P0 đã pass/fail; không nới ceiling hoặc đánh dấu pass.
+- Tách `--verify-prism-only` để thu baseline độc lập với các kiểm tra device/realtime. Giữ full suite chạy riêng và vẫn fail build nếu có lỗi. Kết quả lần kế tiếp cần bổ sung sau khi CI hoàn tất.
+- API rerun của kết nối GitHub trả permission 403; chạy lại bằng một commit thay đổi thực trên đúng nhánh session, không yêu cầu credential.
+- GitHub artifact downloads redirect sang storage host ngoài allowlist sandbox nên chưa tải được ảnh/log thô bằng `gh run download`. Bổ sung sáu ảnh baseline đại diện vào cơ chế preview commit hiện có; toàn bộ 78 ảnh/manifest vẫn ở artifact, không đưa gallery lớn vào Git. Preview chỉ là baseline do app render, không phải Prism Flow look mới hoặc visual sign-off.
 
 P0 còn mở. Bước tiếp theo là **chạy tests/Windows capture, review artifact thật**, rồi giải quyết state/timing và bổ sung coverage từng style. Không bắt đầu chỉnh shader trước khi các rủi ro có đường kiểm chứng.

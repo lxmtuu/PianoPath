@@ -114,6 +114,41 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
+      # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
+      - name: Prism Flow P0 capture verification
+        id: prism-review
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-prism-verification.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-prism-only","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=Prism Flow P0::$_" }
+              elseif ($_ -like 'NOTE P0 baseline sample*' -or $_ -like 'PASS Prism Flow*') { "::notice title=Prism Flow P0::$_" }
+            }
+          } else { "::error title=Prism Flow P0::No verification log was written" }
+          exit $proc.ExitCode
+
+      # Keep only six representative, app-rendered baseline images with the existing preview commit.
+      # The complete 78-frame review and manifest stay in artifacts, not in Git.
+      - name: Stage representative Prism Flow baseline previews
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/prism-flow-p0'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 78) { throw 'Incomplete Prism Flow baseline artifact' }
+          $target = 'docs/previews/prism-flow-p0'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($preset in @('concert-gold', 'ice-crystal', 'neon-violet')) {
+            foreach ($mode in @('live-stage', 'ar')) {
+              $source = Join-Path $review "$preset/$mode/dense-chord-baseline.png"
+              if (-not (Test-Path $source)) { throw "Missing baseline: $source" }
+              Copy-Item $source (Join-Path $target "$preset-$mode.png") -Force
+            }
+          }
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -173,7 +208,9 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: keyflow-verification-log
-          path: ${{ runner.temp }}/keyflow-verification.log
+          path: |
+            ${{ runner.temp }}/keyflow-verification.log
+            ${{ runner.temp }}/keyflow-prism-verification.log
           if-no-files-found: warn
 
       # Human review gate: the fixture is rendered through the real WPF stage and the app's GPU renderer
@@ -186,24 +223,6 @@ jobs:
           path: ${{ runner.temp }}/phase1-visual-review
           if-no-files-found: warn
           retention-days: 14
-
-      # Keep only six representative, app-rendered baseline images with the existing preview commit.
-      # The complete 78-frame review and manifest stay in artifacts, not in Git.
-      - name: Stage representative Prism Flow baseline previews
-        shell: pwsh
-        run: |
-          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/prism-flow-p0'
-          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
-          if ($manifest.captureCount -ne 78) { throw 'Incomplete Prism Flow baseline artifact' }
-          $target = 'docs/previews/prism-flow-p0'
-          New-Item -ItemType Directory -Force -Path $target | Out-Null
-          foreach ($preset in @('concert-gold', 'ice-crystal', 'neon-violet')) {
-            foreach ($mode in @('live-stage', 'ar')) {
-              $source = Join-Path $review "$preset/$mode/dense-chord-baseline.png"
-              if (-not (Test-Path $source)) { throw "Missing baseline: $source" }
-              Copy-Item $source (Join-Path $target "$preset-$mode.png") -Force
-            }
-          }
 
       # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes (and, with --bench-ar,
       # a third: the AR overlay over a synthetic 60 fps camera) and
