@@ -34,6 +34,13 @@ jobs:
       - name: Static source check
         run: python3 tools/check_sources.py
 
+      # Input-fixture validation only; does not claim Windows/GPU/AR render evidence.
+      - name: Prism Flow baseline input checks
+        run: |
+          python3 -m unittest discover -s tools/tests -v
+          python3 tools/make_prism_flow_fixture.py
+          python3 tools/make_prism_flow_fixture.py --check
+
   # Second lane: the checks that used to live only inside `--verify`, which means they could only run on
   # a Windows runner and could not be run one at a time. tests/PianoPath.Tests links the sources that
   # need neither WPF nor WinMM (MIDI, MusicXML, the hand-split guess, the meter table, the WAV writer,

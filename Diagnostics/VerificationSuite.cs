@@ -6646,6 +6646,28 @@ internal static partial class VerificationSuite
         var captures = Phase1VisualReview.Render(outputDirectory);
         Assert(captures == 48, "Phase 1 visual review must write 48 images across three looks, four checkpoints, two renderers and two sizes.");
         Results.Add($"PASS Phase 1 visual review: {captures} WPF/GPU-WARP images at 1920×1080 and 960×540, with manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+        VerifyPrismFlowInputs();
+        Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
+        var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
+        var prismCaptures = PrismFlowVisualReview.Render(prismOutput);
+        Assert(prismCaptures == 78, "Prism Flow P0 requires 72 baseline frames and six phase-FX-off controls.");
+        Results.Add($"PASS Prism Flow P0 captures: {prismCaptures} GPU-WARP frames, three control presets, 12 checkpoints, stage/AR Ultra and six effect-off controls in {Path.GetFullPath(prismOutput)}. No hardware, latency, WPF parity or full style coverage claim.");
+    }
+
+    private static void VerifyPrismFlowInputs()
+    {
+        var scene = PrismFlowBaseline.Load(Path.Combine(PrismFlowVisualReview.FindSamples(), "prism-flow-p0"));
+        Assert(scene.Notes.Count == 26 && scene.Manifest.DurationSeconds == 28,
+            "The shipping MIDI reader must match all 26 P0 notes while the capture clock preserves the 28-second review tail.");
+        var count = 0;
+        var pedal = false;
+        var cursor = scene.CreateCursor();
+        cursor.AdvanceTo(13.5, _ => count++, (down, _) => pedal = down);
+        Assert(pedal && !scene.Notes.Any(n => n.Start <= 13.5 && n.End > 13.5),
+            "P0 distinguishes pedal-down from physical-held: no keys remain down at 13.5 seconds.");
+        cursor.AdvanceTo(28, _ => count++, (down, _) => pedal = down);
+        Assert(!pedal && count == 26, "P0 dispatches each onset once and releases its explicit pedal by the final rest.");
+        Results.Add("PASS Prism Flow P0 inputs: product MIDI reader agrees with checksum-pinned manifest; explicit pedal cursor and trailing rest are independent of MidiSong note durations. Capture and hardware evidence are separate.");
     }
 
     private static void Finish(App app, string[] args, Exception? failure)

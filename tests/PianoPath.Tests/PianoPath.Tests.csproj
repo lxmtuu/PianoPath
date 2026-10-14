@@ -76,6 +76,7 @@
     <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />
     <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
+    <Compile Include="..\..\Diagnostics\PrismFlowBaseline.cs" Link="Product\Diagnostics\PrismFlowBaseline.cs" />
     <Compile Include="..\..\Gpu\GpuAdaptiveQuality.cs" Link="Product\Gpu\GpuAdaptiveQuality.cs" />
     <Compile Include="..\..\Gpu\GpuArMap.cs" Link="Product\Gpu\GpuArMap.cs" />
     <Compile Include="..\..\Gpu\GpuInstanceList.cs" Link="Product\Gpu\GpuInstanceList.cs" />
@@ -124,6 +125,7 @@
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->
   <ItemGroup>
     <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\samples\prism-flow-p0\*" Link="Fixtures\prism-flow-p0\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The synthetic camera picture of a keyboard and its ground truth, written by tools/make_ar_sample.py. The tests hold the
