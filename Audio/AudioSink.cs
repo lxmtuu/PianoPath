@@ -26,6 +26,13 @@ internal interface IAudioSink : IDisposable
 
     /// <summary>Total device-side buffering in milliseconds — the floor of what the player can feel.</summary>
     double BufferMilliseconds { get; }
+
+    /// <summary>
+    /// Why the stream stopped after it had already started (device unplugged, driver reset), in words the
+    /// settings page can print; null while the stream is running. Opening failures are not reported here —
+    /// a sink that could not open does not exist at all (see <see cref="AudioSinkFactory"/>).
+    /// </summary>
+    string? StreamFailure { get; }
 }
 
 /// <summary>

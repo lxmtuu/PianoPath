@@ -27,10 +27,12 @@ internal sealed class WaveOutAudioSink : IAudioSink
     private Thread? _thread;
     private IntPtr _device;
     private volatile bool _stopping;
+    private volatile string? _streamFailure;
     private bool _disposed;
 
     public string Description => Loc.F("waveOut · {0:0.#} ms", BufferCount * FramesPerBuffer * 1000.0 / PianoAudioEngine.SampleRate);
     public double BufferMilliseconds => BufferCount * FramesPerBuffer * 1000.0 / PianoAudioEngine.SampleRate;
+    public string? StreamFailure => _streamFailure;
 
     private WaveOutAudioSink(AudioRenderCallback render) => _render = render;
 
@@ -97,7 +99,11 @@ internal sealed class WaveOutAudioSink : IAudioSink
                     Check(WaveOutWrite(_device, buffer.Header, (uint)Marshal.SizeOf<WaveHeader>()), "queue audio buffer");
                 }
                 // A device yanked mid-stream goes quiet; picking an output again rebuilds the sink.
-                catch (Exception) { _stopping = true; break; }
+                catch (Exception ex)
+                {
+                    if (!_stopping) _streamFailure = Loc.F("Windows could not keep the audio output running: {0}", ex.Message);
+                    _stopping = true; break;
+                }
             }
         }
     }

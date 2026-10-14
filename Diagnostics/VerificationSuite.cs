@@ -2338,6 +2338,7 @@ internal static partial class VerificationSuite
         Run(nameof(VerifyEffectFamilyWpfRecordingCaptures), () => VerifyEffectFamilyWpfRecordingCaptures(window, stage));
         Run(nameof(VerifyRecordingAudioTrack), () => VerifyRecordingAudioTrack(window));
         Run(nameof(VerifyMp4Recorder), () => VerifyMp4Recorder(window));
+        Run(nameof(VerifyWebmRecorder), () => VerifyWebmRecorder(window));
         Run(nameof(VerifyCameraOverlayDock), () => VerifyCameraOverlayDock(window, stage, visualSettings));
         Run(nameof(VerifyCalibrationWindow), () => VerifyCalibrationWindow(window, visualSettings));
         Run(nameof(VerifyHandTrackingDock), () => VerifyHandTrackingDock(window, stage, visualSettings));
@@ -3985,8 +3986,8 @@ internal static partial class VerificationSuite
         var formats = options[nameof(PianoVisualSettings.RecordingFormat)];
         Assert(choices.ContainsKey(nameof(PianoVisualSettings.RecordingFormat))
                 && formats.Select(option => option.Value).SequenceEqual(PianoVisualSettings.RecordingFormats)
-                && formats.Length == 3,
-            "The recording format picker should offer the MP4 take beside the AVI file and the PNG sequence.");
+                && formats.Length == 4,
+            "The recording format picker should offer the MP4 and WebM takes beside the AVI file and the PNG sequence.");
 
         // The bitrate asked of the encoder: seven per cent of the frame size times the frame rate, floored so a
         // small stage is not mush and capped so a 4K take is not enormous.
@@ -4025,6 +4026,9 @@ internal static partial class VerificationSuite
             $"Pure red should land on the brightness and colour pairs a player expects of BT.601 (Y {red[0]}, U {red[4]}, V {red[5]}).");
         Assert(Throws(() => Nv12Frame.FromBgra(new byte[4], 4, 4, new byte[Nv12Frame.Size(4, 4)])),
             "A frame that is not as long as the size it is converted at should be refused, not read past its end.");
+        Assert(Throws(() => Nv12Frame.FromBgra(new byte[3 * 2 * 4], 3, 2, new byte[64]))
+            && Throws(() => Nv12Frame.FromBgra(new byte[2 * 3 * 4], 2, 3, new byte[64])),
+            "An odd-sided frame has no NV12 layout and should be refused, not walked past the end of its last row.");
 
         var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".mp4");
         try { VerifyMp4Take(path); }
@@ -4033,6 +4037,59 @@ internal static partial class VerificationSuite
             try { if (File.Exists(path)) File.Delete(path); } catch { }
             try { File.Delete(Mp4TakeAttempt.TracePath(path)); } catch { }
         }
+    }
+
+    /// <summary>
+    /// The WebM take: VP9 picture and Opus sound from the machine's ffmpeg. The command lines are checked
+    /// everywhere; a real take is encoded only where ffmpeg exists, and a machine without one reports a
+    /// SKIP — the format is offered, the missing tool is named, and nothing pretends to have recorded.
+    /// </summary>
+    private static void VerifyWebmRecorder(MainWindow window)
+    {
+        Assert(WebmEncoderPlan.BitrateFor(320, 240, 15) == 2_000_000 && WebmEncoderPlan.BitrateFor(3840, 2160, 60) == 24_000_000,
+            "The WebM bitrate should follow the same floor and ceiling as the MP4 take's.");
+        var video = WebmEncoderPlan.VideoPassArguments(640, 360, 30, "take.video.webm", alpha: false);
+        var alphaVideo = WebmEncoderPlan.VideoPassArguments(640, 360, 30, "take.video.webm", alpha: true);
+        Assert(alphaVideo[Array.LastIndexOf(alphaVideo, "-pix_fmt") + 1] == "yuva420p" && alphaVideo[Array.IndexOf(alphaVideo, "-auto-alt-ref") + 1] == "0",
+            "The alpha WebM pass should keep the alpha channel (yuva420p) with alt-ref frames off.");
+        Assert(video[Array.IndexOf(video, "-pix_fmt") + 1] == "bgra" && video[Array.IndexOf(video, "-c:v") + 1] == "libvpx-vp9",
+            "The live pass should be fed raw BGRA and encode VP9.");
+        var mux = WebmEncoderPlan.MuxPassArguments("take.video.webm", "take.audio.wav", "take.webm");
+        Assert(mux[Array.IndexOf(mux, "-c:v") + 1] == "copy" && mux[Array.IndexOf(mux, "-c:a") + 1] == "libopus",
+            "The mux pass should copy the picture and encode the piano track as Opus.");
+
+        if (WebmEncoderPlan.FindFfmpeg(AppContext.BaseDirectory, Environment.GetEnvironmentVariable("PATH")) is null)
+        {
+            Results.Add("SKIP WebM recorder: no ffmpeg beside the app or on the PATH here, so only the encoder's command lines were checked.");
+            return;
+        }
+        var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".webm");
+        try
+        {
+            using (var recorder = new WebmRecorder(path, 64, 48, 15, withAudio: true, alpha: false))
+            {
+                var frame = new byte[recorder.FrameBytes];
+                for (var pixel = 0; pixel < 64 * 48; pixel++) { frame[pixel * 4] = 32; frame[pixel * 4 + 1] = 96; frame[pixel * 4 + 2] = 192; frame[pixel * 4 + 3] = 255; }
+                for (var index = 0; index < 15; index++) recorder.WriteFrame(frame);
+                var samples = new short[4410 * 2];
+                for (var index = 0; index < 4410; index++)
+                {
+                    var tone = (short)(Math.Sin(index * 2 * Math.PI * 440 / 44100) * 8000);
+                    samples[index * 2] = tone; samples[index * 2 + 1] = tone;
+                }
+                recorder.Append(samples, samples.Length);
+                recorder.AppendSilence(441);
+                Assert(recorder.Seconds > 0.1, "The WebM track should hold the audio handed to it.");
+            }
+            Assert(File.Exists(path) && new FileInfo(path).Length > 0, "A WebM take should leave a non-empty file where the user pointed it.");
+            var head = new byte[4];
+            using (var stream = File.OpenRead(path)) Assert(stream.Read(head, 0, 4) == 4, "The WebM file should have a header to read.");
+            Assert(head is [0x1A, 0x45, 0xDF, 0xA3], "The WebM file should start with the EBML header every WebM starts with.");
+            Assert(!File.Exists(path + ".video.webm") && !File.Exists(path + ".audio.wav"),
+                "The take's temporary picture and track should be gone once the file is muxed.");
+            Results.Add("PASS WebM recorder: a real VP9 + Opus take was encoded by this machine's ffmpeg and starts with the EBML header.");
+        }
+        finally { try { File.Delete(path); } catch { } try { File.Delete(path + ".video.webm"); } catch { } try { File.Delete(path + ".audio.wav"); } catch { } }
     }
 
     /// <summary>
@@ -6538,6 +6595,14 @@ internal static partial class VerificationSuite
         SetField(window, "_position", 3.0); Invoke(window, "SetLoopB_Click", window, new RoutedEventArgs());
         Assert(((TextBlock)window.FindName("LoopLabel")).Text == "00:01–00:03", "A/B loop should retain its selected times.");
         SetField(window, "_position", 3.1); Invoke(window, "Tick", .016); Assert((double)Field(window, "_position") < 1.1, "Playback should wrap from B to A.");
+        // Only the notes inside the loop are a fresh attempt on the next pass: a note past B that was
+        // already judged keeps its flag, or switching the loop off would judge it a second time.
+        var loopNotes = ((IEnumerable<NoteEvent>)Field(window, "_notes")).ToList();
+        var insideLoop = loopNotes.First(n => n.Start >= 1.0 && n.Start < 3.0);
+        var pastLoop = loopNotes.First(n => n.Start >= 3.0);
+        insideLoop.Played = true; pastLoop.Played = true;
+        SetField(window, "_position", 3.1); Invoke(window, "Tick", .016);
+        Assert(!insideLoop.Played && pastLoop.Played, "A loop pass should clear the scoring flags inside the loop and leave the notes past B as they were judged.");
 
         mode.SelectedIndex = 1;
         foreach (var note in ((IEnumerable<NoteEvent>)Field(window, "_notes")).Where(n => n.Start < .99)) note.Played = true;

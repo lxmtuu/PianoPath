@@ -91,7 +91,7 @@ public partial class App : Application
         var automated = soak || snapshotIndex >= 0 || e.Args.Contains("--show-settings") || e.Args.Contains("--play-dialog") || e.Args.Contains("--shortcuts");
         // Automated captures wait for an already-installed Salamander piano to load and must not animate:
         // a frozen chrome keeps every screenshot identical and the run inexpensive.
-        if (automated) { window.AutoHideChrome = false; window.DisableChromeMotion(); }
+        if (automated) { window.AutoHideChrome = false; window.DisableChromeMotion(); window.AllowUpdateCheck = false; }
         // Normal launches open on the concert main menu; automated captures go straight to the stage
         // unless the capture asks for the shell with --menu (used to refresh the README screenshots).
         if (!automated || e.Args.Contains("--menu")) window.ShowStartupMenu();

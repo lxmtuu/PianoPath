@@ -42,6 +42,8 @@
     <Compile Include="..\..\Video\IFrameRecorder.cs" Link="Product\Video\IFrameRecorder.cs" />
     <Compile Include="..\..\Video\ArVideoRenderProfile.cs" Link="Product\Video\ArVideoRenderProfile.cs" />
     <Compile Include="..\..\Video\BgraPack.cs" Link="Product\Video\BgraPack.cs" />
+    <Compile Include="..\..\Video\WebmEncoderPlan.cs" Link="Product\Video\WebmEncoderPlan.cs" />
+    <Compile Include="..\..\Update\UpdateRelease.cs" Link="Product\Update\UpdateRelease.cs" />
     <Compile Include="..\..\Video\ArVideoAudio.cs" Link="Product\Video\ArVideoAudio.cs" />
     <Compile Include="..\..\Video\ArVideoWatermark.cs" Link="Product\Video\ArVideoWatermark.cs" />
     <Compile Include="..\..\Video\ArVideoExportScript.cs" Link="Product\Video\ArVideoExportScript.cs" />
@@ -67,6 +69,7 @@
     <Compile Include="..\..\Audio\WavReader.cs" Link="Product\Audio\WavReader.cs" />
     <Compile Include="..\..\Audio\FlacReader.cs" Link="Product\Audio\FlacReader.cs" />
     <Compile Include="..\..\Audio\SfzReader.cs" Link="Product\Audio\SfzReader.cs" />
+    <Compile Include="..\..\Audio\SfzSynthesizer.cs" Link="Product\Audio\SfzSynthesizer.cs" />
     <Compile Include="..\..\Audio\SalamanderPiano.cs" Link="Product\Audio\SalamanderPiano.cs" />
     <Compile Include="..\..\Audio\Fft.cs" Link="Product\Audio\Fft.cs" />
     <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />

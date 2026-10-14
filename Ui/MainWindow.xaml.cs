@@ -70,6 +70,9 @@ public partial class MainWindow : Window
     private static readonly TimeSpan ChromeIdleDelay = TimeSpan.FromSeconds(2.8);
     /// <summary>Set to false for automated snapshots so the toolbar and settings never disappear while a capture is pending.</summary>
     internal bool AutoHideChrome { get; set; } = true;
+
+    /// <summary>False for automated captures and verification runs, which must never touch the network.</summary>
+    internal bool AllowUpdateCheck { get; set; } = true;
     /// <summary>Set by the verification suite so a problem lands in the log instead of a modal dialog nobody can dismiss.</summary>
     internal bool SuppressErrorDialogs { get; set; }
     private static readonly int[] ComputerMap = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
@@ -142,6 +145,8 @@ public partial class MainWindow : Window
         SyncCameraOverlay();
         UpdateInstrumentUi();
         if (loadSalamanderOnStart) Loaded += MainWindow_Loaded;
+        // Off unless the person turned it on in General: a fresh install makes no request at all.
+        Loaded += (_, _) => { if (AllowUpdateCheck && _visualSettings.CheckForUpdates) _ = RunUpdateCheckAsync(); };
     }
     internal bool HasInstrument => _audio.HasInstrument;
 
@@ -371,7 +376,13 @@ public partial class MainWindow : Window
             {
                 _position = _loopA; previous = _loopA; forceOnset = true; _outputFinished.Clear(); ReleasePlaybackNotes();
                 // Every pass through the loop is a fresh attempt: clear the scoring flags inside the loop so the notes can be played and judged again.
-                for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _loopA); i < _notes.Count; i++) { _notes[i].Played = false; _notes[i].Missed = false; _notes[i].Timing = 0; }
+                // Notes at or past B keep the flags they earned: clearing them too would let a later pass
+                // (once the loop is switched off) judge them a second time and count them twice.
+                for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _loopA); i < _notes.Count; i++)
+                {
+                    if (_notes[i].Start >= _loopB) break;
+                    _notes[i].Played = false; _notes[i].Missed = false; _notes[i].Timing = 0;
+                }
                 SyncPlayhead();
             }
             if (ModeCombo.SelectedIndex == 1)
@@ -1103,10 +1114,11 @@ public partial class MainWindow : Window
         if (_videoRecorder is not null) { StopVideoRecording(showMessage: true); return; }
         var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
         var mp4 = _visualSettings.RecordingFormat == RecordingFormatIds.Mp4;
+        var webm = _visualSettings.RecordingFormat == RecordingFormatIds.Webm;
         var (width, height) = RecordingSize();
         var frameRate = (int)Math.Clamp(_visualSettings.RecordingFrameRate, 15, 60);
         // A folder for the frames, or a file for the video: one choice in the dock decides which recorder runs.
-        var target = DiagnosticRecordTarget ?? (sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile(mp4));
+        var target = DiagnosticRecordTarget ?? (sequence ? ChooseFrameFolder(width, height, frameRate) : ChooseVideoFile(mp4, webm));
         if (target is null) return;
         try
         {
@@ -1118,6 +1130,12 @@ public partial class MainWindow : Window
             if (target.Length > 0 && sequence)
             {
                 _videoRecorder = new PngSequenceRecorder(path, width, height, frameRate);
+            }
+            else if (webm)
+            {
+                // ffmpeg does this encoding (Windows has no VP9 encoder of its own), so the constructor
+                // says so in one sentence when the machine has none; the take never starts half-open.
+                _videoRecorder = new WebmRecorder(path, width, height, frameRate, withAudio, _visualSettings.RecordingTransparent);
             }
             else if (mp4)
             {
@@ -1155,9 +1173,9 @@ public partial class MainWindow : Window
                 }
             }
             _recordingPath = path;
-            // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
-            // the switch is the user's and is only honoured for that format.
-            Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;
+            // The PNG sequence and an alpha WebM carry the alpha channel, so the stage draws without its
+            // opaque background while either runs; the switch is the user's and honoured only there.
+            Stage.TransparentBackdrop = (sequence || webm) && _visualSettings.RecordingTransparent;
             StartGpuRecording(_videoRecorder);
             _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
@@ -1168,6 +1186,13 @@ public partial class MainWindow : Window
             {
                 Loc.Set(RecordButton, "Recording PNG frames · click to stop", FrameworkElement.ToolTipProperty);
                 Loc.Set(SettingsSaveLabel, "Recording a PNG sequence with alpha");
+            }
+            else if (_videoRecorder is WebmRecorder webmRecorder)
+            {
+                Loc.Set(RecordButton, "Recording WebM · click to stop", FrameworkElement.ToolTipProperty);
+                Loc.Set(SettingsSaveLabel, webmRecorder.HasAudio
+                    ? webmRecorder.Alpha ? "Recording WebM (VP9 + Opus, with alpha)" : "Recording WebM (VP9 + Opus)"
+                    : "Recording WebM (VP9, the sound stayed out)");
             }
             else if (_videoRecorder is Mp4Recorder mp4Recorder)
             {
@@ -1195,14 +1220,14 @@ public partial class MainWindow : Window
     }
 
     /// <summary>The video file the next recording goes into, or null when the user cancels.</summary>
-    private string? ChooseVideoFile(bool mp4)
+    private string? ChooseVideoFile(bool mp4, bool webm)
     {
         var dialog = new SaveFileDialog
         {
-            Filter = mp4 ? Loc.T("MP4 video (*.mp4)|*.mp4") : Loc.T("AVI video (*.avi)|*.avi"),
-            DefaultExt = mp4 ? ".mp4" : ".avi",
+            Filter = webm ? Loc.T("WebM video (*.webm)|*.webm") : mp4 ? Loc.T("MP4 video (*.mp4)|*.mp4") : Loc.T("AVI video (*.avi)|*.avi"),
+            DefaultExt = webm ? ".webm" : mp4 ? ".mp4" : ".avi",
             AddExtension = true,
-            FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}{(mp4 ? ".mp4" : ".avi")}",
+            FileName = $"Keyflow-{DateTime.Now:yyyyMMdd-HHmmss}{(webm ? ".webm" : mp4 ? ".mp4" : ".avi")}",
             Title = Loc.T("Record piano visualizer")
         };
         return dialog.ShowDialog(this) == true ? dialog.FileName : null;
@@ -1624,7 +1649,9 @@ public partial class MainWindow : Window
         // every other format gets a WAV beside the video to mux afterwards.
         IAudioTrack? track = _videoRecorder is Mp4Recorder { HasAudio: true } mp4
             ? mp4
-            : WavWriter.TryCreate(AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder));
+            : _videoRecorder is WebmRecorder { HasAudio: true } webmTrack
+                ? webmTrack
+                : WavWriter.TryCreate(AudioTrackPath(_recordingPath, _videoRecorder is PngSequenceRecorder));
         if (track is null) return false;
         _audioTrack = track; _audioTrackSeconds = 0;
         // A take with the camera in it starts its sound as late as the camera's picture is, so the finger and the sound of a press
@@ -1649,9 +1676,9 @@ public partial class MainWindow : Window
         lock (_audioTrackLock) { track = _audioTrack; _audioTrack = null; }
         if (track is null) return null;
         _audioTrackSeconds = track.Seconds;
-        // The MP4's track is the recorder itself: it is closed with the file, not here, and there is no
-        // second file left to mux.
-        if (track is Mp4Recorder) return null;
+        // A recorder that carries its own track (the MP4's, the WebM's) is closed with its file, not
+        // here, and there is no second file left behind to mux.
+        if (track is not WavWriter) return null;
         var path = ((WavWriter)track).Path;
         track.Dispose();
         return path;
@@ -1750,11 +1777,19 @@ public partial class MainWindow : Window
                 ? take.AudioDropped
                     ? Loc.T(" The AAC encoder on this machine refused the audio stream, so this take has no sound.")
                     : Loc.F("\n\nAudio: {0:0.#} s of 16-bit stereo AAC, written inside the file.", _audioTrackSeconds)
-                : audioPath is null
+                : recorder is WebmRecorder webmTake
+                    ? audioPath is not null
+                        ? Loc.F("\n\nAudio: {0} ({1:0.#} s, 16-bit stereo WAV) beside the WebM; the take itself kept no sound.", audioPath, _audioTrackSeconds)
+                        : webmTake.HasAudio
+                            ? Loc.F("\n\nAudio: {0:0.#} s of Opus, written inside the file.", _audioTrackSeconds)
+                            : Loc.T(" No audio track was written for this take.")
+                    : audioPath is null
                     ? Loc.T(" No audio track was written for this take.")
                     : Loc.F("\n\nAudio: {0} ({1:0.#} s, 16-bit stereo WAV) — mux it with\nffmpeg -i \"{2}\" -i \"{0}\" -c:v copy -c:a aac \"{3}\"", audioPath, _audioTrackSeconds, audioPath, path, MuxedName(path));
             if (recorder is Mp4Recorder)
                 ShowMessage(Loc.F("Video saved with its audio inside.\n{0}\n\n{1}This MP4 holds the piano visuals and the samples the engine played, encoded as H.264 and AAC, so it is ready to upload as it is.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
+            else if (recorder is WebmRecorder)
+                ShowMessage(Loc.F("Video saved.\n{0}\n\n{1}This WebM holds the piano visuals encoded as VP9 by ffmpeg.", path, noteText) + audio, "Recording complete", MessageBoxImage.Information);
             else if (recorder is PngSequenceRecorder)
                 ShowMessage(Loc.F("Frames saved.\n{0}\n\n{1}{2} PNG frames with an alpha channel. Import them at the frame rate you chose, or follow the ffmpeg line in sequence.json to turn them into alpha video; system audio is not mixed in.", path, noteText, frames) + audio, "Recording complete", MessageBoxImage.Information);
             else

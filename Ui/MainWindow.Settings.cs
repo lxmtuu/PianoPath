@@ -913,14 +913,14 @@ public partial class MainWindow
     private void BuildRecordingPage()
     {
         var output = Card(RecordingSettingsHost, "OUTPUT", "Applied when the next recording starts.");
-        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage, or an MP4 with the take's own audio written inside it as it records.",
-            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"), (RecordingFormatIds.Mp4, "MP4 (H.264 + AAC)"));
+        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage, an MP4 with the take's own audio written inside it as it records, or a WebM (VP9 + Opus) encoded by the ffmpeg on this machine.",
+            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"), (RecordingFormatIds.Mp4, "MP4 (H.264 + AAC)"), (RecordingFormatIds.Webm, "WebM (VP9 + Opus)"));
         Choice(output, "Resolution", nameof(PianoVisualSettings.RecordingResolution), "Match the window, or render to a fixed 16:9 size.", ("Window", "Match window"), ("720p", "1280 × 720"), ("1080p", "1920 × 1080"));
         SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the recording.");
         Toggle(output, "Record audio", nameof(PianoVisualSettings.RecordAudio),
             "Record Salamander piano audio with the video. AVI and PNG sequence recordings get a stereo WAV; MP4 embeds AAC. Without the piano, recording is video-only.");
         Toggle(output, "Transparent background", nameof(PianoVisualSettings.RecordingTransparent),
-            "PNG sequence only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
+            "PNG sequence and WebM only: skip the fills that would hide the alpha channel — the background colour, the image, the gradient and the vignette. Every layer your look enables is still drawn, so turn the Background layer off for a piano-only export.").VisibleWhen = () => _visualSettings.RecordingFormat is RecordingFormatIds.PngSequence or RecordingFormatIds.Webm;
 
         BuildArExportCard();
     }
@@ -956,9 +956,78 @@ public partial class MainWindow
         Toggle(access, "Reduce flashes", nameof(PianoVisualSettings.ReduceFlashes), "Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay.");
         Toggle(access, "High contrast", nameof(PianoVisualSettings.HighContrast), "Give every note a strong bright outline so its shape carries the information, not its colour alone. Looks that already draw a stronger outline keep theirs.");
 
+        var updates = Card(GeneralSettingsHost, "UPDATES", "Keyflow looks for a newer release only if you switch the check on below or press CHECK NOW. Nothing is downloaded or installed: it tells you a newer version exists and opens its release page.");
+        Toggle(updates, "Check for updates when Keyflow starts", nameof(PianoVisualSettings.CheckForUpdates), "Ask GitHub's public releases page once at start-up whether a newer Keyflow exists. Only the version number is compared: no account, no identifier and no usage data. Off means no network request at all.");
+        ButtonRow(updates, ("CHECK NOW", CheckUpdatesNow_Click, null), ("OPEN RELEASE PAGE", OpenReleasePage_Click, null));
+        _updateStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
+        Register(updates, _updateStatusLabel, null, "update updates version release check github newer new");
+        RefreshUpdateStatus();
+        // The menu's notice is hidden until a newer release is known, but it is an interactive control from the
+        // start: it needs its own readable caption, or the accessibility check reads it as an unnamed button.
+        Loc.Set(MainMenuUpdateButton, "Open the newest Keyflow release page", ContentControl.ContentProperty);
+
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));
         Note(profile, "A profile is plain JSON: dropping one on the window applies it, a dropped MIDI file opens the song and a dropped image becomes the stage background.");
+    }
+
+    private TextBlock? _updateStatusLabel;
+    private UpdateCheckResult? _updateResult;
+    private bool _updateChecking;
+
+    private void CheckUpdatesNow_Click(object sender, RoutedEventArgs e) => _ = RunUpdateCheckAsync();
+
+    private void OpenReleasePage_Click(object sender, RoutedEventArgs e) => OpenUpdatePage();
+
+    private void MainMenuUpdate_Click(object sender, RoutedEventArgs e) => OpenUpdatePage();
+
+    private void OpenUpdatePage()
+    {
+        var url = _updateResult is { State: UpdateState.Available } found ? found.Url : UpdateRelease.ReleasesPage;
+        // Only ever a Keyflow release page: UpdateRelease.TrustedPage has already checked what the reply named.
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(UpdateRelease.TrustedPage(url)) { UseShellExecute = true });
+    }
+
+    /// <summary>The startup menu's notice: shown only when a newer release is known, and it opens that release's page.</summary>
+    private void RefreshMenuUpdateNotice()
+    {
+        if (_updateResult is not { State: UpdateState.Available } found)
+        {
+            MainMenuUpdateButton.Visibility = Visibility.Collapsed;
+            return;
+        }
+        Loc.Bind(MainMenuUpdateButton, () => Loc.F("Keyflow {0} is available — open release page", found.Latest), ContentControl.ContentProperty);
+        MainMenuUpdateButton.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Asks GitHub once and shows the answer on the General page. A failure is shown quietly, never as an error box.</summary>
+    private async Task RunUpdateCheckAsync()
+    {
+        if (_updateChecking) return;
+        _updateChecking = true;
+        RefreshUpdateStatus();
+        var result = await UpdateCheck.QueryAsync();
+        _updateChecking = false;
+        if (_closing) return;
+        _updateResult = result;
+        RefreshUpdateStatus();
+        RefreshMenuUpdateNotice();
+    }
+
+    private void RefreshUpdateStatus()
+    {
+        if (_updateStatusLabel is null) return;
+        Loc.Bind(_updateStatusLabel, () =>
+        {
+            if (_updateChecking) return Loc.T("Checking GitHub…");
+            return _updateResult switch
+            {
+                null => Loc.T("Not checked yet in this session."),
+                { State: UpdateState.Available } found => Loc.F("Keyflow {0} is available. You are running {1}.", found.Latest, AppInfo.Version),
+                { State: UpdateState.UpToDate } found => Loc.F("Keyflow {0} is the newest release.", found.Latest),
+                _ => Loc.T("GitHub could not be reached, so nothing was checked. Keyflow works the same without it."),
+            };
+        });
     }
 
     /// <summary>
@@ -2056,23 +2125,28 @@ public partial class MainWindow
         var (width, height) = RecordingSize();
         var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
         var mp4 = _visualSettings.RecordingFormat == RecordingFormatIds.Mp4;
+        var webm = _visualSettings.RecordingFormat == RecordingFormatIds.Webm;
         var format = sequence
             ? (_visualSettings.RecordingTransparent ? Loc.T("PNG frames (32-bit alpha)") : Loc.T("PNG frames (opaque)"))
             : mp4
                 ? Loc.T("MP4 (H.264 + AAC)")
-                : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
+                : webm
+                    ? (_visualSettings.RecordingTransparent ? Loc.T("WebM (VP9 + Opus, with alpha)") : Loc.T("WebM (VP9 + Opus, encoded by ffmpeg)"))
+                    : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
         var audio = _visualSettings.RecordAudio
             ? _audio.HasInstrument
                 ? mp4
                     ? Loc.T("audio is written inside the file as AAC")
-                    : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
+                    : webm
+                        ? Loc.T("audio is written inside the file as Opus")
+                        : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
                 : Loc.T("Salamander Grand is not loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
         // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
-        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null || HasGpuArOutputWindow) && !(sequence && _visualSettings.RecordingTransparent);
+        var gpuTake = _gpuLoop is { Error: null } && (Stage.UsesGpuFrame || _gpuWindow is not null || HasGpuArOutputWindow) && !((sequence || webm) && _visualSettings.RecordingTransparent);
         var engine = gpuTake
             ? Loc.T("Frames are rendered by the GPU stage at exactly this size.")
-            : sequence && _visualSettings.RecordingTransparent && _gpuLoop is not null
+            : (sequence || webm) && _visualSettings.RecordingTransparent && _gpuLoop is not null
                 ? Loc.T("Transparent frames are drawn by the software stage (the GPU frame is opaque).")
                 : Loc.T("Frames are drawn by the software stage.");
         Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}. {5}", width, height, _visualSettings.RecordingFrameRate, format, audio, engine);

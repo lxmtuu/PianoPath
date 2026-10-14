@@ -74,8 +74,8 @@ internal sealed class Mp4Recorder : IFrameRecorder, IAudioTrack
     {
         _step = step;
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException(Loc.T("An MP4 recording needs a file to go into."), nameof(path));
-        if (width < 2) throw new ArgumentOutOfRangeException(nameof(width));
-        if (height < 2) throw new ArgumentOutOfRangeException(nameof(height));
+        if (width < 2 || (width & 1) != 0) throw new ArgumentOutOfRangeException(nameof(width), Loc.T("An MP4 frame needs an even width of at least 2."));
+        if (height < 2 || (height & 1) != 0) throw new ArgumentOutOfRangeException(nameof(height), Loc.T("An MP4 frame needs an even height of at least 2."));
         if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
         Width = width; Height = height; FrameRate = frameRate; OutputPath = path;
         _nv12 = new byte[Nv12Frame.Size(width, height)];
