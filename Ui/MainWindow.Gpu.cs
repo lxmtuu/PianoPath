@@ -377,9 +377,11 @@ public partial class MainWindow
     private byte[]? _gpuOverlayPixels;
 
     /// <summary>
-    /// Rasterizes the stage's WPF overlays (sheet, camera, hand marker, watermark, counter) at the
-    /// recording size and blends them over the GPU frame. The overlay is stretched with the frame, so the
-    /// sheet and the hand marker stay over the keys they belong to at any recording aspect.
+    /// Rasterizes the stage's WPF overlays (sheet, hand marker, camera picture, counter) at the recording
+    /// size and blends them over the GPU frame. The overlay is stretched with the frame, so the sheet and
+    /// the hand marker stay over the keys they belong to at any recording aspect. The watermark is not in
+    /// that list on purpose: the engine prints it inside the frame (sprite kind 16), so the two agree by
+    /// construction instead of being drawn twice.
     /// </summary>
     private void BlendStageOverlays(byte[] frame, int width, int height)
     {

@@ -274,9 +274,18 @@ internal sealed partial class PianoStage
         DrawGpuOverlayLayers(dc, width, height, keyTop, lane);
     }
 
-    /// <summary>True when WPF layers sit on top of the GPU frame (sheet, hand marker, camera, watermark, counter).</summary>
-    internal bool HasGpuOverlays => _visual.ShowSheet || _visual.ShowWatermark || _visual.ShowCounter || _visual.ShowFps
-        || _visual.ShowHandTracking && _hand is not null || _visual.ShowCameraOverlay && _cameraFrame is not null;
+    /// <summary>
+    /// True when a WPF layer would really be drawn on top of the GPU frame: the sheet, the hand marker, the
+    /// camera picture and the counter / FPS readout. The watermark is deliberately absent, and asking the
+    /// engine is what makes that safe — the strip is sprite kind 16 inside the frame now, so a take that has
+    /// only the watermark on needs no overlay pass at all (<c>Ui/MainWindow.Gpu.cs</c> blends one only when
+    /// this says yes). The <c>_gpu is not null</c> gate is the other half: with no feed there is no frame to
+    /// lay anything over, which is also the branch where <see cref="DrawGpuOverlayLayers"/> draws the
+    /// watermark itself.
+    /// </summary>
+    internal bool HasGpuOverlays => _gpu is not null
+        && (_visual.ShowSheet || _visual.ShowCounter || _visual.ShowFps
+            || _visual.ShowHandTracking && _hand is not null || _visual.ShowCameraOverlay && _cameraFrame is not null);
 
     /// <summary>
     /// Draws only the layers that sit on top of the GPU frame, in stage DIPs, onto a transparent context:
