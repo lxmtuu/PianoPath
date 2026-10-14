@@ -51,7 +51,7 @@ internal sealed class MusicXmlScore
 /// <para>
 /// Only the part of the format a piano-roll player needs is read: parts, measures, divisions, time and key
 /// context, directions that carry a tempo, backups and forwards (which move the cursor inside a measure),
-/// chord members (which share the previous note's onset) and per-note staff. Everything else in the file is
+/// chord members (which share the previous note's onset), ties (folded into the one note they sound as) and per-note staff. Everything else in the file is
 /// ignored on purpose — a score is allowed to carry engraving detail this application does not draw.
 /// </para>
 ///
@@ -78,7 +78,7 @@ internal static class MusicXmlReader
     internal const double MinimumHandShare = .10;
 
     private readonly record struct MeasureInfo(double StartQuarter, double LengthQuarter, int Beats, int BeatType);
-    private readonly record struct RawNote(double StartQuarter, double DurationQuarter, int Pitch, int Track, int Hand);
+    private readonly record struct RawNote(double StartQuarter, double DurationQuarter, int Pitch, int Track, int Hand, int Voice, bool TieStart, bool TieStop);
     private readonly record struct TempoEvent(double Quarter, double QuarterBpm, int Track, int Order);
 
     /// <summary>Reads a score from disk, refusing files that exceed the import size limit before parsing them.</summary>
@@ -205,13 +205,23 @@ internal static class MusicXmlReader
                         case "note":
                             var isChord = element.Element(element.Name.Namespace + "chord") is not null;
                             var isGrace = element.Element(element.Name.Namespace + "grace") is not null;
+                            var rest = element.Element(element.Name.Namespace + "rest");
                             var duration = DurationQuarters(element, divisions);
                             var staff = Math.Max(1, Int(element.Element(element.Name.Namespace + "staff"), 1));
                             var start = isChord ? lastStart : cursor;
-                            if (!isGrace && element.Element(element.Name.Namespace + "rest") is null && Pitch(element) is { } pitch && duration > 0)
+                            if (!isGrace && rest is null && Pitch(element) is { } pitch && duration > 0)
+                            {
+                                var (tieStart, tieStop) = TieOf(element);
                                 rawNotes.Add(new RawNote(measureStart + start, duration, pitch, track,
-                                    twoStaves ? (staff >= 2 ? 1 : 0) : (track == 0 ? 0 : 1)));
-                            if (!isChord) { cursor = start + duration; lastStart = start; }
+                                    twoStaves ? (staff >= 2 ? 1 : 0) : (track == 0 ? 0 : 1),
+                                    Math.Max(1, Int(element.Element(element.Name.Namespace + "voice"), 1)), tieStart, tieStop));
+                            }
+                            // A whole-measure rest is allowed to omit its <duration>; it still fills the
+                            // measure, so the cursor goes to the bar line or the notes after a backup in
+                            // another voice would crowd into the space the rest was holding open.
+                            if (rest is not null && duration <= 0 && string.Equals(rest.Attribute("measure")?.Value, "yes", StringComparison.OrdinalIgnoreCase))
+                                cursor = measureMap[measureIndex].LengthQuarter;
+                            else if (!isChord) { cursor = start + duration; lastStart = start; }
                             break;
                     }
                 }
@@ -220,6 +230,7 @@ internal static class MusicXmlReader
         }
 
         if (rawNotes.Count == 0) throw new InvalidDataException(Loc.T("No notes were found in this MusicXML file."));
+        rawNotes = MergeTiedNotes(rawNotes);
         var tempoMap = new TempoTimeline(tempoEvents);
         var converted = rawNotes.Select(raw =>
         {
@@ -322,6 +333,10 @@ internal static class MusicXmlReader
                         var chord = element.Element(element.Name.Namespace + "chord") is not null;
                         var duration = DurationQuarters(element, divisions);
                         var start = chord ? lastStart : cursor;
+                        // A whole-measure rest may omit its duration and still fills the bar.
+                        var restElement = element.Element(element.Name.Namespace + "rest");
+                        if (restElement is not null && duration <= 0 && string.Equals(restElement.Attribute("measure")?.Value, "yes", StringComparison.OrdinalIgnoreCase))
+                            furthest = Math.Max(furthest, beats * 4.0 / Math.Max(1, beatType));
                         furthest = Math.Max(furthest, start + duration);
                         if (!chord) { cursor = start + duration; lastStart = start; }
                         break;
@@ -335,6 +350,59 @@ internal static class MusicXmlReader
             measureStart += length;
         }
         return result;
+    }
+
+    /// <summary>
+    /// Folds tied notes into the single sounding note they are: a note carrying a tie stop continues the
+    /// open chain of the same pitch in the same part and voice, and the chain's head grows to cover it
+    /// instead of a second note starting. A tie stop with no open chain, or one arriving after the chain
+    /// has already ended (a rest in between), stands alone — the markup says the string was struck again.
+    /// </summary>
+    private static List<RawNote> MergeTiedNotes(List<RawNote> notes)
+    {
+        var merged = new List<RawNote>(notes.Count);
+        var open = new Dictionary<(int Track, int Pitch, int Voice), int>();
+        foreach (var note in notes)
+        {
+            var key = (note.Track, note.Pitch, note.Voice);
+            var index = -1;
+            if (note.TieStop && open.TryGetValue(key, out var headIndex))
+            {
+                var head = merged[headIndex];
+                var headEnd = head.StartQuarter + head.DurationQuarter;
+                if (note.StartQuarter <= headEnd + 1e-6)
+                {
+                    merged[headIndex] = head with { DurationQuarter = Math.Max(headEnd, note.StartQuarter + note.DurationQuarter) - head.StartQuarter };
+                    index = headIndex;
+                }
+            }
+            if (index < 0) { merged.Add(note); index = merged.Count - 1; }
+            // A note that starts (or continues) a tie keeps the chain open; any other note of that pitch
+            // closes it, so a later tie stop cannot reach back across a fresh attack.
+            if (note.TieStart) open[key] = index; else open.Remove(key);
+        }
+        return merged;
+    }
+
+    /// <summary>
+    /// The tie ends a note carries. The sounding markup is <c>&lt;tie&gt;</c>; the engraved
+    /// <c>&lt;tied&gt;</c> inside <c>&lt;notations&gt;</c> is accepted when a file carries only that.
+    /// </summary>
+    private static (bool Start, bool Stop) TieOf(XElement note)
+    {
+        var start = false; var stop = false;
+        foreach (var tie in note.Elements().Where(element => element.Name.LocalName == "tie"))
+        {
+            if (tie.Attribute("type")?.Value == "start") start = true;
+            if (tie.Attribute("type")?.Value == "stop") stop = true;
+        }
+        if (start || stop) return (start, stop);
+        foreach (var tied in note.Descendants().Where(element => element.Name.LocalName == "tied"))
+        {
+            if (tied.Attribute("type")?.Value == "start") start = true;
+            if (tied.Attribute("type")?.Value == "stop") stop = true;
+        }
+        return (start, stop);
     }
 
     /// <summary>Converts the current divisions-based duration to quarter notes.</summary>

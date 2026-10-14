@@ -328,5 +328,109 @@ public class MusicXmlReaderTests
 """));
     }
 
+    /// <summary>
+    /// A tied pair across the bar line, a second voice holding a whole-measure rest that omits its
+    /// duration, and that voice entering on the next bar line: at 60 bpm a quarter is a second, so the
+    /// tied C4 sounds 0–3, and the second voice's C3 lands exactly on measure 2.
+    /// </summary>
+    private const string TiesAndVoices = """
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions><staves>2</staves><time><beats>4</beats><beat-type>4</beat-type></time></attributes>
+      <direction><sound tempo="60"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff><tie type="start"/></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <backup><duration>4</duration></backup>
+      <note><rest measure="yes"/><voice>2</voice><staff>2</staff></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><voice>1</voice><staff>1</staff><tie type="stop"/></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><voice>1</voice><staff>1</staff></note>
+      <backup><duration>3</duration></backup>
+      <note><pitch><step>C</step><octave>3</octave></pitch><duration>1</duration><voice>2</voice><staff>2</staff></note>
+    </measure>
+  </part>
+</score-partwise>
+""";
+
+    [Fact]
+    public void A_tie_across_the_bar_line_sounds_as_one_note_and_the_resting_voice_keeps_its_place()
+    {
+        var score = MusicXmlReader.Parse(TiesAndVoices);
+        var heard = score.Notes.OrderBy(note => note.Start).ThenBy(note => note.Pitch).Select(Describe).ToList();
+
+        Assert.Equal(["60@0+3/t0", "62@1+1/t0", "48@4+1/t0", "64@6+1/t0"], heard);
+    }
+
+    [Fact]
+    public void A_three_note_tie_chain_is_one_note_and_an_orphan_tie_stop_still_sounds()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>1</divisions></attributes>
+    <direction><sound tempo="60"/></direction>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><tie type="start"/></note>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><tie type="stop"/><tie type="start"/></note>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><tie type="stop"/></note>
+    <note><pitch><step>D</step><octave>4</octave></pitch><duration>1</duration><tie type="stop"/></note>
+  </measure></part>
+</score-partwise>
+""");
+        var heard = score.Notes.OrderBy(note => note.Start).Select(Describe).ToList();
+
+        Assert.Equal(["60@0+3/t0", "62@3+1/t0"], heard);
+    }
+
+    [Fact]
+    public void A_tie_stop_after_a_rest_is_a_fresh_attack_not_a_continuation()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1"><measure number="1">
+    <attributes><divisions>1</divisions></attributes>
+    <direction><sound tempo="60"/></direction>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><tie type="start"/></note>
+    <note><rest/><duration>1</duration></note>
+    <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><tie type="stop"/></note>
+  </measure></part>
+</score-partwise>
+""");
+        var heard = score.Notes.OrderBy(note => note.Start).Select(Describe).ToList();
+
+        Assert.Equal(["60@0+1/t0", "60@2+1/t0"], heard);
+    }
+
+    [Fact]
+    public void Tied_chord_members_merge_together_and_engraved_tied_markup_counts_on_its_own()
+    {
+        var score = MusicXmlReader.Parse("""
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Piano</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>1</divisions><time><beats>2</beats><beat-type>4</beat-type></time></attributes>
+      <direction><sound tempo="60"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration><tie type="start"/></note>
+      <note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration><tie type="start"/></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>1</duration><tie type="stop"/></note>
+      <note><chord/><pitch><step>E</step><octave>4</octave></pitch><duration>1</duration><tie type="stop"/></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><notations><tied type="start"/></notations></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>1</duration><notations><tied type="stop"/></notations></note>
+    </measure>
+  </part>
+</score-partwise>
+""");
+        var heard = score.Notes.OrderBy(note => note.Start).ThenBy(note => note.Pitch).Select(Describe).ToList();
+
+        Assert.Equal(["60@0+3/t0", "64@0+3/t0", "67@3+2/t0"], heard);
+    }
+
     private static string Describe(NoteEvent note) => $"{note.Pitch}@{note.Start:0.###}+{note.Duration:0.###}/t{note.Track}";
 }
