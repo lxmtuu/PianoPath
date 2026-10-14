@@ -42,7 +42,7 @@ internal static class AuxParticleVisualReview
                     stage.SetVisualSettings(settings);
                     stage.Measure(new Size(Width, Height)); stage.Arrange(new Rect(0, 0, Width, Height)); stage.UpdateLayout();
                     var feed = new GpuStageFeed { LabelAtlas = PianoStage.GpuGlyphAtlas };
-                    feed.SetLook(GpuLook.From(settings, (pitch, track) => stage.AdjustColor(stage.NoteColor(pitch, track)),
+                    feed.SetLook(GpuLook.From(settings, (keyPitch, track) => stage.AdjustColor(stage.NoteColor(keyPitch, track)),
                         stage.KeyboardHeight / stage.ActualHeight, stage.AdjustColor, overCamera));
                     feed.SetStageHeight(Height);
                     if (overCamera)

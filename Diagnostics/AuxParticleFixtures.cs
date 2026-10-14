@@ -9,7 +9,7 @@ internal static class AuxParticleFixtures
         s.ShowWisps = enabled && route.Effect == "Wisps";
         s.ShowFlame = enabled && route.Effect == "Flames";
         s.WispAmount = 32; s.WispHeight = 35; s.WispSpeed = 100;
-        s.FlameIntensity = 70; s.FlameHeight = 45; s.FlameNoteColor = true;
+        s.FlameIntensity = 70; s.FlameHeight = 45; s.FlameColorMode = "Note";
         s.ImpactMorph = enabled && route.Source == AuxParticleTimeline.Channel.Impact ? route.Effect : "None";
         s.ImpactMorphIntensity = 70;
         s.ReleaseEffect = enabled && route.Source == AuxParticleTimeline.Channel.Release ? route.Effect : "Fade";
