@@ -229,6 +229,7 @@
     "RenderBackend": "Gpu",
     "GpuFrameRate": "144",
     "GpuVSync": true,
+    "CheckForUpdates": false,
     "KeyboardSize": "88",
     "ArEnabled": false,
     "ArMode": "Learn",

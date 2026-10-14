@@ -956,9 +956,58 @@ public partial class MainWindow
         Toggle(access, "Reduce flashes", nameof(PianoVisualSettings.ReduceFlashes), "Silence the bright impact flash when notes land and hold back the flickering spark burst while its strobe analysis is pending. The impact wave and everything else about the hit stay.");
         Toggle(access, "High contrast", nameof(PianoVisualSettings.HighContrast), "Give every note a strong bright outline so its shape carries the information, not its colour alone. Looks that already draw a stronger outline keep theirs.");
 
+        var updates = Card(GeneralSettingsHost, "UPDATES", "Keyflow looks for a newer release only if you switch the check on below or press CHECK NOW. Nothing is downloaded or installed: it tells you a newer version exists and opens its release page.");
+        Toggle(updates, "Check for updates when Keyflow starts", nameof(PianoVisualSettings.CheckForUpdates), "Ask GitHub's public releases page once at start-up whether a newer Keyflow exists. Only the version number is compared: no account, no identifier and no usage data. Off means no network request at all.");
+        ButtonRow(updates, ("CHECK NOW", CheckUpdatesNow_Click, null), ("OPEN RELEASE PAGE", OpenReleasePage_Click, null));
+        _updateStatusLabel = new TextBlock { Style = (Style)FindResource("MutedTextStyle"), Margin = new Thickness(0, 2, 0, 4), TextWrapping = TextWrapping.Wrap };
+        Register(updates, _updateStatusLabel, null, "update updates version release check github newer new");
+        RefreshUpdateStatus();
+
         var profile = Card(GeneralSettingsHost, "SETTINGS PROFILE", "One file with the whole setup: the stage settings, the interface language and the face of the shell. Keep it beside your presets, hand it to another machine, or drop it onto the window.");
         ButtonRow(profile, ("EXPORT PROFILE…", ExportProfile_Click, "IconExport"), ("IMPORT PROFILE…", ImportProfile_Click, "IconImport"));
         Note(profile, "A profile is plain JSON: dropping one on the window applies it, a dropped MIDI file opens the song and a dropped image becomes the stage background.");
+    }
+
+    private TextBlock? _updateStatusLabel;
+    private UpdateCheckResult? _updateResult;
+    private bool _updateChecking;
+
+    private void CheckUpdatesNow_Click(object sender, RoutedEventArgs e) => _ = RunUpdateCheckAsync();
+
+    private void OpenReleasePage_Click(object sender, RoutedEventArgs e)
+    {
+        var url = _updateResult is { State: UpdateState.Available } found ? found.Url : UpdateRelease.ReleasesPage;
+        // Only ever a Keyflow release page: UpdateRelease.TrustedPage has already checked what the reply named.
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(UpdateRelease.TrustedPage(url)) { UseShellExecute = true });
+    }
+
+    /// <summary>Asks GitHub once and shows the answer on the General page. A failure is shown quietly, never as an error box.</summary>
+    private async Task RunUpdateCheckAsync()
+    {
+        if (_updateChecking) return;
+        _updateChecking = true;
+        RefreshUpdateStatus();
+        var result = await UpdateCheck.QueryAsync();
+        _updateChecking = false;
+        if (_closing) return;
+        _updateResult = result;
+        RefreshUpdateStatus();
+    }
+
+    private void RefreshUpdateStatus()
+    {
+        if (_updateStatusLabel is null) return;
+        Loc.Bind(_updateStatusLabel, () =>
+        {
+            if (_updateChecking) return Loc.T("Checking GitHub…");
+            return _updateResult switch
+            {
+                null => Loc.T("Not checked yet in this session."),
+                { State: UpdateState.Available } found => Loc.F("Keyflow {0} is available. You are running {1}.", found.Latest, AppInfo.Version),
+                { State: UpdateState.UpToDate } found => Loc.F("Keyflow {0} is the newest release.", found.Latest),
+                _ => Loc.T("GitHub could not be reached, so nothing was checked. Keyflow works the same without it."),
+            };
+        });
     }
 
     /// <summary>

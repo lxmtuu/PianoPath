@@ -70,6 +70,9 @@ public partial class MainWindow : Window
     private static readonly TimeSpan ChromeIdleDelay = TimeSpan.FromSeconds(2.8);
     /// <summary>Set to false for automated snapshots so the toolbar and settings never disappear while a capture is pending.</summary>
     internal bool AutoHideChrome { get; set; } = true;
+
+    /// <summary>False for automated captures and verification runs, which must never touch the network.</summary>
+    internal bool AllowUpdateCheck { get; set; } = true;
     /// <summary>Set by the verification suite so a problem lands in the log instead of a modal dialog nobody can dismiss.</summary>
     internal bool SuppressErrorDialogs { get; set; }
     private static readonly int[] ComputerMap = [0, 2, 4, 5, 7, 9, 11, 12, 14, 16, 17, 19, 21];
@@ -142,6 +145,8 @@ public partial class MainWindow : Window
         SyncCameraOverlay();
         UpdateInstrumentUi();
         if (loadSalamanderOnStart) Loaded += MainWindow_Loaded;
+        // Off unless the person turned it on in General: a fresh install makes no request at all.
+        Loaded += (_, _) => { if (AllowUpdateCheck && _visualSettings.CheckForUpdates) _ = RunUpdateCheckAsync(); };
     }
     internal bool HasInstrument => _audio.HasInstrument;
 

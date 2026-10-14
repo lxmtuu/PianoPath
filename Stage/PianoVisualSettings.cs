@@ -403,6 +403,12 @@ internal sealed class PianoVisualSettings
     /// <summary>GPU stage window: present on the display's vertical blank (off allows tearing for the lowest latency).</summary>
     public bool GpuVSync { get; set; } = true;
     /// <summary>
+    /// Ask GitHub's public releases page once at start-up whether a newer Keyflow exists. Off by default: with it
+    /// off Keyflow makes no network request at all. It belongs to this computer, not to a look, so applying a
+    /// preset keeps it.
+    /// </summary>
+    public bool CheckForUpdates { get; set; } = false;
+    /// <summary>
     /// How many keys the player's keyboard has: <c>88</c>, <c>76</c>, <c>61</c> or <c>49</c> (see <see cref="KeyboardSizes"/>).
     /// The stage, the GPU engine and the shaded keys all draw that keyboard (<see cref="KeyboardLayout.Active"/>), and a
     /// song's notes outside it are not drawn. It belongs to the instrument on this computer, not to a look, so
@@ -686,6 +692,8 @@ internal sealed class PianoVisualSettings
             if (property.Name == nameof(Language)) continue;
             // So does the graphics engine: it depends on the machine's GPU, not on the look.
             if (property.Name is nameof(RenderBackend) or nameof(GpuFrameRate) or nameof(GpuVSync)) continue;
+            // Whether this computer may reach GitHub is a decision of the person at this machine, not of a look.
+            if (property.Name == nameof(CheckForUpdates)) continue;
             // The keyboard size is the player's instrument: a look must never turn their 61 keys into 88.
             if (property.Name == nameof(KeyboardSize)) continue;
             // The overlay is set up for this camera and this instrument, so a look neither turns it on nor tunes it.
