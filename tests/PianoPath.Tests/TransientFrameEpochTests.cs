@@ -43,7 +43,7 @@ public sealed class TransientFrameEpochTests
     }
 
     [Fact]
-    public void SharedGateMakesSnapshotAndClearDecisionOneBoundary()
+    public async Task SharedGateMakesSnapshotAndClearDecisionOneBoundary()
     {
         var epoch = new TransientFrameEpoch();
         using var started = new ManualResetEventSlim();
@@ -56,8 +56,7 @@ public sealed class TransientFrameEpochTests
             Assert.False(worker.IsCompleted); // writer cannot publish through a caller's snapshot boundary
             Assert.False(epoch.TakeClearRequest()); // the shared lock is reentrant
         }
-        Assert.True(worker.Wait(TimeSpan.FromSeconds(5)));
-        Assert.Equal(1, worker.GetAwaiter().GetResult());
+        Assert.Equal(1, await worker.WaitAsync(TimeSpan.FromSeconds(5)));
         Assert.True(epoch.TakeClearRequest());
     }
 
