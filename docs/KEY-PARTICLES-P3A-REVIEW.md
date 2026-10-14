@@ -56,7 +56,7 @@ Các delta dưới đây là số pixel khác emitter-off hơn 4 mức ở ít n
 
 - Art pass cho **tất cả hiệu ứng nhấn/giữ**, không chỉ Prism Flow: năm họ trên, wisps/flames, các morph có phát hạt và các accent liên kết; sau đó review motion/clip ở cả hai mode.
 - Cân gain/size/glow giữa Stage và AR. Hiện vẫn có khác biệt, nhất là Dust và cách dùng per-particle `Glow`; dùng cùng simulation **chưa chứng minh thị giác tương đương**.
-- Race giữa soft-clear và pressed snapshot đã capture trước đó vẫn mở. WPF, recording, các quality tier, AR delay khác 0 và camera/đàn thật cần bằng chứng riêng.
+- Ở mốc review này race giữa soft-clear và pressed snapshot đã capture còn mở; [follow-up frame epoch](KEY-PARTICLES-FRAME-EPOCH.md) sau đó đã PASS CI sửa boundary này. Full restart/particle history vẫn chưa được chứng nhận. WPF, recording, các quality tier, AR delay khác 0 và camera/đàn thật cần bằng chứng riêng.
 - P4 ánh sáng/hit line và P5 hiệu năng trên GPU thật chưa đóng. **P6 làm lại menu cài đặt vẫn để cuối**, nhất quán, gọn và dễ đọc ở Live Stage lẫn AR.
 
 Chi tiết chính sách và source/test map: [P3a baseline](KEY-PARTICLES-P3A-BASELINE.md). Lộ trình đầy đủ: [Prism Flow / toàn bộ hiệu ứng](PRISM-FLOW-DESIGN-ROADMAP.md).
