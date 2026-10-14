@@ -7,6 +7,24 @@ internal static partial class VerificationSuite
     private static void VerifyHeldParticleArt(GpuArLayer layer, GpuArInput ar, ArView view,
         GpuInstanceList<GpuSpriteInstance> sprites, GpuInstanceList<GpuArQuad> quads)
     {
+        GpuKeyInstance[] lightControls = [
+            new() { Box=new(1,2,3,4), Emit=new(.2f,.3f,.4f,.7f), Misc=new(0,.4f,.2f,.1f), Base=new(1,.8f,2,3) },
+            new() { Box=new(2,3,4,5), Emit=new(.8f,.4f,.2f,.9f), Misc=new(1,.7f,.2f,.1f), Base=new(2,.5f,3,4) },
+            new() { Box=new(3,4,5,6), Emit=new(.3f,.2f,.1f,.6f), Misc=new(2,0,0,0), Base=new(3,.2f,4,5) }
+        ];
+        var beforeMask = lightControls.ToArray();
+        GpuStageRenderer.MaskPressedKeyLightForReview(lightControls);
+        for (var k=0;k<lightControls.Length;k++)
+        {
+            var before=beforeMask[k]; var after=lightControls[k];
+            Assert(after.Box==before.Box && after.Misc==before.Misc && after.Base.X==before.Base.X
+                && after.Base.Z==before.Base.Z && after.Base.W==before.Base.W,
+                "The review light-off mask must preserve key geometry, depression and shadows.");
+            Assert(after.Emit.X==before.Emit.X && after.Emit.Y==before.Emit.Y && after.Emit.Z==before.Emit.Z,
+                "The review light-off mask must not replace note colour.");
+            Assert(k==2 ? after.Emit.W==before.Emit.W && after.Base.Y==before.Base.Y : after.Emit.W==0 && after.Base.Y==0,
+                "Only real-key tint/emission/spill are muted; the felt is unchanged.");
+        }
         Assert(!new PianoVisualSettings().HeldParticleArt && !CommunityPresets.Find("Prism Flow Preview")!.Settings.HeldParticleArt,
             "Legacy defaults and the particle-off palette control must not enable experimental art.");
         foreach (var route in AuxParticleTimeline.Routes.Where(r => r.Source == AuxParticleTimeline.Channel.Held))

@@ -44,3 +44,5 @@ Independent local artifact integrity check: decoded all **480 APNG frames** (8 �
 ## Review và vòng material kế tiếp
 
 [Xem nhận xét v1/v2, giới hạn temporal sampling và player frame-locked](KEY-PARTICLES-HELD-ART-REVIEW.md). V2 source `74941f0` PASS full run `38645329801` (6.047 assertions / 1 skipped group), preview `e4c9dd6`; đã kiểm 480 frame/8 active hashes, controls/classic không đổi và xem static/temporal samples. Wisps mảnh nhưng tối hơn; Flames bớt thân đặc. AR key contrast và các gate rộng hơn vẫn mở; không user art sign-off.
+
+Tiếp tục bằng [bộ đối chứng lighting/palette/chord/pose](KEY-PARTICLES-HELD-CONTROLS.md): 72 cảnh, 4 tổ hợp light/particles mỗi cảnh, giữ nguyên shader v2. Implementation đã nối CI; kết quả render và nhận xét mới còn chờ run mới, không dùng run v2 cũ làm bằng chứng.

@@ -81,3 +81,7 @@ Giảm delta phù hợp với material mảnh/trong hơn; bản thân việc gi�
 Giữ **v2 làm bản thử tiếp tục**, không bật mặc định, không chỉnh shader v3 ngay chỉ vì vùng key còn sáng. Classic đã có key tint trong composition; ảnh composite hiện tại chưa tách được phần key light và phần particle. Bước nhỏ nên làm tiếp: cùng input nhưng có control key-light=0, các palette tương phản, chord, pose oblique/near-overhead; phân biệt material contrast và ánh sáng nền trước khi thay emitter/độ sáng tiếp.
 
 Player ngoài Git đã được làm mới bằng capture v2: trang chính so **art v1 (`b17a691`) ↔ art v2 (`e4c9dd6`)** cùng frame; trang phụ `classic-v2.html` so classic ↔ v2. Không đổi source player hay shader trong lượt kiểm tra này. HTML tự chứa và crop sheets là deliverable review; không commit thêm 480 PNG hoặc HTML base64 lớn vào Git.
+
+## Follow-up: bộ đối chứng được triển khai
+
+[Lighting × particle controls](KEY-PARTICLES-HELD-CONTROLS.md) bổ sung 72 cảnh / 288 ảnh: Prism–amber–indigo, phím trắng/đen/hợp âm, Stage và ba góc AR. Giữ shader v2; Stage dùng mask render-only cho tint/emission/spill thay vì hạ đèn nền ivory, AR dùng KeyLight=0. Các góc mới có ảnh synthetic warp khớp calibration. Đây mới là implementation/validation harness; CI mới và review ảnh mới còn chờ, không sửa lại kết luận v2 hoặc coi hypothesis chói chân phím đã được chứng minh.

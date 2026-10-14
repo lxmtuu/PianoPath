@@ -320,3 +320,5 @@ Golden image so trong cùng backend/adapter khi phù hợp, dùng tolerance có 
 Thực hiện **P0 → P1 → review ảnh hai mode**, rồi **P2 → review texture hai mode**, tiếp đến **P3a/P3b/P3c → review toàn bộ hiệu ứng nhấn/giữ bằng clip Live Stage + AR**, **P4 → cân ánh sáng**, **P5 → kiểm chứng output/hiệu năng**, và cuối cùng **P6 → tái thiết kế, kiểm thử menu cài đặt hai mode và nghiệm thu phát hành**. Tách các thay đổi để có thể quy lỗi và rollback theo từng thành phần. Không tăng texture, particle density và bloom cùng lúc rồi đánh giá bằng cảm giác.
 
 Tiêu chuẩn cuối: **nhìn đẹp ngay khi đứng yên, chuyển động đẹp khi chơi, vẫn đọc được nốt khi nhạc dày và vẫn sạch sau khi nén video**.
+
+Follow-up P3b: [held lighting/palette/chord/pose controls](KEY-PARTICLES-HELD-CONTROLS.md) đã có harness 72 cảnh × 4 tổ hợp, shader v2 không đổi. Fresh CI/render/review còn chờ; không đổi acceptance, opt-in hoặc thứ tự menu cuối cùng.

@@ -241,6 +241,24 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Frame-locked review player failed' }
           "::notice title=Held particle art::32 static captures, 8 active representatives, 8 lossless 60-frame 30-FPS APNG crops staged. Prototype only, no visual/hardware acceptance."
 
+      - name: Validate and stage held particle lighting controls
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/held-particle-controls'
+          # Review-only PNG decoding; no application/runtime dependency.
+          python -m pip install Pillow==11.3.0
+          if ($LASTEXITCODE -ne 0) { throw 'Review image decoder install failed' }
+          python tools/review_held_particle_controls.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Held control pixel/source validation failed' }
+          $evidence = 'docs/evidence/held-particle-controls'
+          $target = 'docs/previews/held-particle-controls'
+          New-Item -ItemType Directory -Force -Path $evidence,$target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter *.png)
+          if ($sheets.Count -ne 72) { throw 'Incomplete held control quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          "::notice title=Held lighting controls::288 WARP frame hashes, 72 native quartet hashes/crop reconstructions and source hashes verified. Synthetic static controls only, not visual acceptance."
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -682,7 +700,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

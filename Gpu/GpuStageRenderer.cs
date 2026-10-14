@@ -365,6 +365,16 @@ internal sealed class GpuStageRenderer : IDisposable
     /// </summary>
     internal void SetArKeyColors(Vector4[]? colors) => _arKeyColors = colors;
 
+    /// <summary>Verification-only render seam: removes pressed-key tint/emission/spill, not static
+    /// ivory lighting, press geometry, simulation glow, emitter input or particle colour. Default off.</summary>
+    internal bool SuppressStageKeyLightingForReview { get; set; }
+
+    internal static void MaskPressedKeyLightForReview(Span<GpuKeyInstance> keys)
+    {
+        foreach (ref var key in keys)
+            if (key.Misc.X < 1.5f) { key.Emit.W = 0; key.Base.Y = 0; }
+    }
+
     /// <summary>How many instances the stage-space note pass built in the last frame; camera regressions ensure it is zero over camera.</summary>
     internal int StageNoteCount { get; private set; }
     /// <summary>How many stage-space falling-note trails were built in the last frame.</summary>
@@ -475,6 +485,7 @@ internal sealed class GpuStageRenderer : IDisposable
         StageNoteTrailCount = simulation.NoteTrailCount;
         simulation.BuildKeys(look, layout, keys, cameraActive,
             out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
+        if (SuppressStageKeyLightingForReview && !cameraActive) MaskPressedKeyLightForReview(keys.Writable);
         StageKeyCount = keys.Count;
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
