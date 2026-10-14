@@ -16,6 +16,11 @@ checks that do not need a compiler:
     nothing prints is a sentence a translator carries for nothing (see ``docs/LOCALIZATION.md``);
   * the command line: every switch the app parses is in the README table and vice versa, and every
     switch and path the preview workflow passes to the executable really exists;
+  * every Markdown table in the repository: a run of pipe rows whose second line is not a delimiter row
+    (``|---|``) is not a table anywhere but in the head of whoever wrote it, so it is reported before a
+    reader meets it as a paragraph of raw pipes;
+  * the sentence in both READMEs that says what is still a WPF layer drawn over a GPU frame, checked
+    against the engine that draws the watermark (see ``scan_gpu_overlay_evidence``);
   * the installer: every message name the Vietnamese wizard text overrides exists in the Inno Setup
     the script claims to support, keeps the placeholders of the English message, and is reachable
     from the ``[Languages]``/``[LangOptions]`` sections that Inno Setup reads (see
@@ -783,6 +788,177 @@ def scan_readme():
 # and so guarantees a fresh commit forever, which is exactly what happened once with ``*.report.txt``. The
 # folder may hold pictures only; diagnostics go outside the repository (see ``App.ReportPreview``).
 PREVIEW_PICTURES = {".png", ".jpg", ".jpeg"}
+
+
+def scan_markdown_tables():
+    """Every Markdown table in the repository has to be a table.
+
+    A row of pipes is a table in GitHub's renderer only when the *second* line is the delimiter row
+    (``|---|---|``); without it the whole block is printed as one paragraph of raw pipes. That is not a
+    style question — it is the difference between a plan somebody can read and a wall of text — and it
+    fails silently, because the source file looks exactly like a table to whoever edits it. Two real
+    cases went unnoticed through several review rounds for that reason: the P1 table of
+    ``docs/ROADMAP.md`` was cut in two by a pair of blank lines between rows 9 and 10, and a single row
+    of ``docs/REPO-AUDIT.md`` §7.2 was left standing alone between two blank lines.
+
+    A block is judged by its own shape, so the rule needs no list of files: a run of pipe rows whose
+    second line is not a delimiter row is reported once, with the line the run starts on.
+
+    What is *not* judged is anything Markdown renders as code: a fenced block (```` ``` ````/``~~~``) or a
+    line indented four spaces. A snippet that prints a table is text, not a table — this repository
+    already carries one such snippet in ``docs/VISUAL-EFFECTS-MASTER-ROADMAP.md`` — and reporting it
+    would be a false alarm that turns the job red for a document that is perfectly correct.
+    """
+    def cells(line: str):
+        stripped = line.strip()
+        if not (stripped.startswith("|") and stripped.endswith("|")):
+            return None
+        return stripped[1:-1].split("|")
+
+    def is_row(line: str) -> bool:
+        found = cells(line)
+        # Two pipes at least — ``| |`` is a valid one-cell row, but a stray ``|`` is not a row.
+        return found is not None and len(found) >= 1 and line.count("|") >= 2
+
+    def is_delimiter(line: str) -> bool:
+        found = cells(line)
+        return bool(found) and all(re.fullmatch(r"\s*:?-{2,}:?\s*", cell) for cell in found)
+
+    def rendered_as_code(lines):
+        """One flag per line: inside a fenced block, or indented far enough to be a code block."""
+        fence, flags = None, []
+        for line in lines:
+            stripped = line.strip()
+            if fence is not None:
+                flags.append(True)
+                if stripped.startswith(fence):
+                    fence = None
+                continue
+            if stripped.startswith("```") or stripped.startswith("~~~"):
+                fence = stripped[:3]
+                flags.append(True)
+                continue
+            flags.append(line.startswith("    ") or line.startswith("\t"))
+        return flags
+
+    errors = []
+    for path in sorted(ROOT.glob("**/*.md")):
+        if "obj" in path.parts or "bin" in path.parts:
+            continue
+        lines = path.read_text(encoding="utf-8").split("\n")
+        code = rendered_as_code(lines)
+        index = 0
+        while index < len(lines):
+            if code[index] or not is_row(lines[index]):
+                index += 1
+                continue
+            end = index
+            while end < len(lines) and not code[end] and is_row(lines[end]):
+                end += 1
+            rows = end - index
+            if rows < 2 or not is_delimiter(lines[index + 1]):
+                relative = path.relative_to(ROOT).as_posix()
+                errors.append(
+                    f"{relative}:{index + 1}: {rows} line(s) of pipe rows without a delimiter row "
+                    f"(|---|) beneath the header, so Markdown renders them as text and not as a table")
+            index = end
+    return errors
+
+
+# The sentence in each README that claims what is still a WPF layer over a GPU frame, plus the wording that
+# says the engine draws the watermark itself. scan_gpu_overlay_evidence reads the list between the marker and
+# the end of the clause, so the two halves are one check: the list may not name the watermark, and the
+# sentence has to say where it went instead.
+GPU_OVERLAY_CLAIMS = {
+    "README.md": ("Trên sân khấu GPU,", "vẫn là lớp vector WPF",
+                  "riêng **watermark do chính engine in vào khung hình**"),
+    "README.en.md": ("On the GPU stage the", "are still WPF vector layers",
+                     "the engine prints it inside the frame itself"),
+}
+
+
+def scan_gpu_overlay_evidence():
+    """Where the watermark is drawn is a fact about the renderer, and both READMEs said it wrong for a release.
+
+    The limitation bullet in each README listed the watermark among the WPF vector layers still drawn over the
+    GPU frame, while the engine had been printing the strip *inside* the frame since the render-to-video work
+    (sprite kind 16, ``Gpu/GpuStageRenderer.cs``). Nothing goes red when a sentence like that goes stale — the
+    engine, the changelog and the README simply disagree, and the reader is the one who finds out. So the claim
+    is derived from the engine here and compared with the prose, in the same spirit as the Media Foundation
+    GUIDs above: the sentence is only correct while the code says so.
+
+    Four places have to agree, and each one fails differently:
+      * ``GpuStageRenderer`` pushes the strip as a sprite -> the engine draws it;
+      * ``PianoStage.HasGpuOverlays`` -> a take with only the watermark on must not blend an empty overlay pass;
+      * ``MainWindow.BlendStageOverlays`` -> the summary names the layers it rasterizes;
+      * both READMEs' GPU limitation bullet -> what is still a WPF layer, and what is not.
+    """
+    errors = []
+    renderer_path = ROOT / "Gpu" / "GpuStageRenderer.cs"
+    stage_path = ROOT / "Stage" / "PianoStage.Gpu.cs"
+    blend_path = ROOT / "Ui" / "MainWindow.Gpu.cs"
+    for path in (renderer_path, stage_path, blend_path):
+        if not path.exists():
+            return [f"{path.relative_to(ROOT).as_posix()} is missing; it is one of the files that decide where the watermark is drawn"]
+
+    renderer = renderer_path.read_text(encoding="utf-8")
+    # The strip is drawn by the engine when the renderer pushes it as a sprite of its own kind.
+    engine_draws = re.search(r"GpuSpriteInstance\s*\{[^}]*KindWatermark", renderer, re.S) is not None
+
+    stage = stage_path.read_text(encoding="utf-8")
+    overlay = re.search(r"internal bool HasGpuOverlays\s*=>(.*?);", stage, re.S)
+    if not overlay:
+        errors.append("Stage/PianoStage.Gpu.cs no longer declares HasGpuOverlays, so nothing decides whether a "
+                      "GPU take needs a WPF overlay pass; update scan_gpu_overlay_evidence with the new shape")
+    elif engine_draws and "ShowWatermark" in overlay.group(1):
+        errors.append("Stage/PianoStage.Gpu.cs: HasGpuOverlays still asks for the watermark, but "
+                      "Gpu/GpuStageRenderer.cs draws it inside the frame (sprite kind 16) — a take with only the "
+                      "watermark on would blend an overlay pass that draws nothing")
+    elif not engine_draws and "ShowWatermark" not in overlay.group(1):
+        errors.append("Stage/PianoStage.Gpu.cs: the engine no longer draws the watermark itself, so HasGpuOverlays "
+                      "has to include ShowWatermark or the watermark is drawn nowhere")
+
+    blend = blend_path.read_text(encoding="utf-8")
+    layers = re.search(r"Rasterizes the stage's WPF overlays \(([^)]*)\)", blend)
+    if not layers:
+        errors.append("Ui/MainWindow.Gpu.cs: the BlendStageOverlays summary no longer names the layers it "
+                      "rasterizes; update scan_gpu_overlay_evidence with the new wording")
+    elif engine_draws and "watermark" in layers.group(1).lower():
+        errors.append("Ui/MainWindow.Gpu.cs: BlendStageOverlays lists the watermark among the layers it blends, "
+                      "while the engine draws it inside the frame")
+
+    for name, (start_marker, list_end_marker, engine_wording) in GPU_OVERLAY_CLAIMS.items():
+        text = (ROOT / name).read_text(encoding="utf-8")
+        # Both READMEs mention the phrase more than once (the keyboard row says «On the GPU stage the
+        # shading sliders…»), so the bullet is the occurrence whose own item carries the clause being read.
+        # The item runs from the marker to the next bullet, heading or blank line, and its lines are joined:
+        # wrapping a long sentence over two lines is a normal edit that this check must not call a lie.
+        def item_from(index: int) -> str:
+            body = [text[index:].split("\n", 1)[0]]
+            for line in text[index:].split("\n")[1:]:
+                if not line.strip() or line.startswith(("-", "#", "*", "+", "|", ">")) or line[0].isspace():
+                    break
+                body.append(line.strip())
+            return " ".join(body)
+
+        sentence = next((item_from(found.start()) for found in re.finditer(re.escape(start_marker), text)
+                         if list_end_marker in item_from(found.start())), None)
+        if sentence is None:
+            errors.append(f"{name}: no item starting with {start_marker!r} also says {list_end_marker!r}, so the "
+                          f"list of layers a GPU frame still takes from WPF cannot be read; update "
+                          f"scan_gpu_overlay_evidence with the new wording")
+            continue
+        listed = sentence[:sentence.index(list_end_marker)]
+        if engine_draws and "watermark" in listed.lower():
+            errors.append(f"{name}: the GPU limitation bullet still lists the watermark among the WPF layers drawn "
+                          f"over the frame, while Gpu/GpuStageRenderer.cs draws it inside the frame")
+        if not engine_draws and "watermark" not in listed.lower():
+            errors.append(f"{name}: the engine no longer draws the watermark inside the frame, so the GPU "
+                          f"limitation bullet has to list it as a WPF layer again")
+        if engine_draws and engine_wording not in sentence:
+            errors.append(f"{name}: the GPU limitation bullet no longer says the engine draws the watermark "
+                          f"itself (expected {engine_wording!r})")
+    return errors
 
 
 def scan_previews_folder():
@@ -1798,6 +1974,8 @@ def main():
     errors.extend(scan_theme_tokens())
     errors.extend(scan_installer())
     errors.extend(scan_readme())
+    errors.extend(scan_markdown_tables())
+    errors.extend(scan_gpu_overlay_evidence())
     errors.extend(scan_previews_folder())
     errors.extend(scan_cli_and_samples())
     errors.extend(scan_generated_assets())
@@ -1818,6 +1996,7 @@ def main():
     print("checked the installer language file against the generated Inno Setup message list, the language metadata and the {cm:...} captions")
     print(f"checked the string tables against one another, against the {keys_used} keys the sources print ({keys_inventory} in the inventory) and against the sources that hold them")
     print("checked the release version of PianoPath.csproj against the installer, both READMEs, both changelogs and every source that prints it")
+    print("checked every Markdown table's delimiter row, and the claim about what is still a WPF layer over a GPU frame against the engine that draws it")
     print("parsed every MSBuild file (project, test project, publish profiles) the way MSBuild itself would")
     print("checked the public release documents against their generator, their links, the token that "
           "publishes them, and the guards that keep a release run out of main of the source repository")

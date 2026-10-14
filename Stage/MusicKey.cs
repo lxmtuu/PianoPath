@@ -14,8 +14,11 @@ namespace PianoPath;
 /// <para>
 /// The key of a song is <em>inferred</em> from how long each pitch class sounds, by correlating those weights
 /// with the classic Krumhansl–Kessler major and minor profiles over all twelve tonics. A song that fits no key
-/// well enough (a chromatic cluster, a drum-like loop of one note) keeps the plain C major spelling instead of
-/// inventing a signature.
+/// well enough — every pitch class in equal measure, which is what a chromatic run sounds like — keeps the plain
+/// C major spelling instead of inventing a signature. A loop of a <em>single</em> note is not that case: both
+/// profiles peak on their own tonic, so the one sounding pitch class carries the correlation past
+/// <see cref="FitThreshold"/> and the loop is written in the key of that note (C, whose signature is empty, is
+/// the one where that is invisible).
 /// </para>
 /// </summary>
 internal readonly record struct MusicKey(int TonicPitchClass, bool IsMinor, int Accidentals)
