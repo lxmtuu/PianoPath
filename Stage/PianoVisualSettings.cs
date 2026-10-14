@@ -10,6 +10,7 @@ internal static class RecordingFormatIds
     internal const string Avi = "Avi";
     internal const string PngSequence = "PngSequence";
     internal const string Mp4 = "Mp4";
+    internal const string Webm = "Webm";
 }
 
 /// <summary>Serializable, user-editable live-stage and note rendering controls.</summary>
@@ -533,7 +534,7 @@ internal sealed class PianoVisualSettings
     /// <summary>The keyboard sizes the app draws, widest first; they are <see cref="KeyboardLayout.All"/> as text.</summary>
     internal static readonly string[] KeyboardSizes = ["88", "76", "61", "49"];
     internal static readonly string[] ArModeNames = ArModes.All;
-    internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4];
+    internal static readonly string[] RecordingFormats = [RecordingFormatIds.Avi, RecordingFormatIds.PngSequence, RecordingFormatIds.Mp4, RecordingFormatIds.Webm];
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true, DefaultIgnoreCondition = JsonIgnoreCondition.Never };
 

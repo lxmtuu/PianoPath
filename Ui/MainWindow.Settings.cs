@@ -913,8 +913,8 @@ public partial class MainWindow
     private void BuildRecordingPage()
     {
         var output = Card(RecordingSettingsHost, "OUTPUT", "Applied when the next recording starts.");
-        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage, or an MP4 with the take's own audio written inside it as it records.",
-            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"), (RecordingFormatIds.Mp4, "MP4 (H.264 + AAC)"));
+        Choice(output, "Format", nameof(PianoVisualSettings.RecordingFormat), "What REC writes: one AVI video file, a folder of 32-bit PNG frames whose alpha channel lets you layer the piano over your own footage, an MP4 with the take's own audio written inside it as it records, or a WebM (VP9 + Opus) encoded by the ffmpeg on this machine.",
+            (RecordingFormatIds.Avi, "AVI video"), (RecordingFormatIds.PngSequence, "PNG sequence (32-bit alpha)"), (RecordingFormatIds.Mp4, "MP4 (H.264 + AAC)"), (RecordingFormatIds.Webm, "WebM (VP9 + Opus)"));
         Choice(output, "Resolution", nameof(PianoVisualSettings.RecordingResolution), "Match the window, or render to a fixed 16:9 size.", ("Window", "Match window"), ("720p", "1280 × 720"), ("1080p", "1920 × 1080"));
         SliderRow(output, "Frame rate", nameof(PianoVisualSettings.RecordingFrameRate), 15, 60, "Frames per second of the recording.");
         Toggle(output, "Record audio", nameof(PianoVisualSettings.RecordAudio),
@@ -2056,16 +2056,21 @@ public partial class MainWindow
         var (width, height) = RecordingSize();
         var sequence = _visualSettings.RecordingFormat == RecordingFormatIds.PngSequence;
         var mp4 = _visualSettings.RecordingFormat == RecordingFormatIds.Mp4;
+        var webm = _visualSettings.RecordingFormat == RecordingFormatIds.Webm;
         var format = sequence
             ? (_visualSettings.RecordingTransparent ? Loc.T("PNG frames (32-bit alpha)") : Loc.T("PNG frames (opaque)"))
             : mp4
                 ? Loc.T("MP4 (H.264 + AAC)")
-                : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
+                : webm
+                    ? Loc.T("WebM (VP9 + Opus, encoded by ffmpeg)")
+                    : Loc.T("AVI (MJPEG when a codec is installed, raw BGR otherwise)");
         var audio = _visualSettings.RecordAudio
             ? _audio.HasInstrument
                 ? mp4
                     ? Loc.T("audio is written inside the file as AAC")
-                    : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
+                    : webm
+                        ? Loc.T("audio is written inside the file as Opus")
+                        : Loc.T("audio is written to a WAV beside it (mux it with the ffmpeg line below)")
                 : Loc.T("Salamander Grand is not loaded, so this recording will have no audio")
             : Loc.T("audio is not captured");
         // which engine renders the take: the GPU stage renders it at exactly this size when it is on screen
