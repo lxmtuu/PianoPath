@@ -57,19 +57,23 @@ internal static class WebmEncoderPlan
     /// libvpx keep up with a live capture on an ordinary machine; quality passes belong to offline renders,
     /// not to a clock that cannot wait.
     /// </summary>
-    internal static string[] VideoPassArguments(int width, int height, int frameRate, string tempVideo)
+    internal static string[] VideoPassArguments(int width, int height, int frameRate, string tempVideo, bool alpha)
     {
-        return
-        [
+        // With an alpha channel the pixel format becomes yuva420p and alt-ref frames must go off: an
+        // alt-ref frame is invisible, so a codec that hides frames would hide pieces of the alpha too.
+        var pass = new List<string>
+        {
             "-y", "-hide_banner", "-loglevel", "error",
             "-f", "rawvideo", "-pix_fmt", "bgra",
             "-s:v", $"{width}x{height}", "-r", frameRate.ToString(),
             "-i", "pipe:0", "-an",
-            "-c:v", "libvpx-vp9", "-pix_fmt", "yuv420p",
+            "-c:v", "libvpx-vp9", "-pix_fmt", alpha ? "yuva420p" : "yuv420p",
             "-b:v", BitrateFor(width, height, frameRate).ToString(),
             "-deadline", "realtime", "-cpu-used", "5", "-row-mt", "1",
-            "-f", "webm", tempVideo,
-        ];
+        };
+        if (alpha) { pass.Add("-auto-alt-ref"); pass.Add("0"); }
+        pass.Add("-f"); pass.Add("webm"); pass.Add(tempVideo);
+        return pass.ToArray();
     }
 
     /// <summary>

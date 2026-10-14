@@ -4048,7 +4048,10 @@ internal static partial class VerificationSuite
     {
         Assert(WebmEncoderPlan.BitrateFor(320, 240, 15) == 2_000_000 && WebmEncoderPlan.BitrateFor(3840, 2160, 60) == 24_000_000,
             "The WebM bitrate should follow the same floor and ceiling as the MP4 take's.");
-        var video = WebmEncoderPlan.VideoPassArguments(640, 360, 30, "take.video.webm");
+        var video = WebmEncoderPlan.VideoPassArguments(640, 360, 30, "take.video.webm", alpha: false);
+        var alphaVideo = WebmEncoderPlan.VideoPassArguments(640, 360, 30, "take.video.webm", alpha: true);
+        Assert(alphaVideo[Array.LastIndexOf(alphaVideo, "-pix_fmt") + 1] == "yuva420p" && alphaVideo[Array.IndexOf(alphaVideo, "-auto-alt-ref") + 1] == "0",
+            "The alpha WebM pass should keep the alpha channel (yuva420p) with alt-ref frames off.");
         Assert(video[Array.IndexOf(video, "-pix_fmt") + 1] == "bgra" && video[Array.IndexOf(video, "-c:v") + 1] == "libvpx-vp9",
             "The live pass should be fed raw BGRA and encode VP9.");
         var mux = WebmEncoderPlan.MuxPassArguments("take.video.webm", "take.audio.wav", "take.webm");
@@ -4063,7 +4066,7 @@ internal static partial class VerificationSuite
         var path = Path.Combine(Path.GetTempPath(), "keyflow-verify-" + Guid.NewGuid().ToString("N") + ".webm");
         try
         {
-            using (var recorder = new WebmRecorder(path, 64, 48, 15, withAudio: true))
+            using (var recorder = new WebmRecorder(path, 64, 48, 15, withAudio: true, alpha: false))
             {
                 var frame = new byte[recorder.FrameBytes];
                 for (var pixel = 0; pixel < 64 * 48; pixel++) { frame[pixel * 4] = 32; frame[pixel * 4 + 1] = 96; frame[pixel * 4 + 2] = 192; frame[pixel * 4 + 3] = 255; }

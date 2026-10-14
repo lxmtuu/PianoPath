@@ -53,18 +53,20 @@ internal sealed class WebmRecorder : IFrameRecorder, IAudioTrack
     /// machine has no ffmpeg to encode with — the sentence is the one the recording dialog shows — or when
     /// ffmpeg refuses the take in its first moments.
     /// </summary>
-    internal WebmRecorder(string path, int width, int height, int frameRate, bool withAudio)
+    /// <param name="alpha">Keep the frames' alpha channel (the stage draws without its opaque fills): the
+    /// picture is encoded as yuva420p, the WebM-with-alpha the PNG sequence's manifest used to promise.</param>
+    internal WebmRecorder(string path, int width, int height, int frameRate, bool withAudio, bool alpha)
     {
         if (string.IsNullOrWhiteSpace(path)) throw new ArgumentException(Loc.T("A WebM recording needs a file to go into."), nameof(path));
         if (width < 2 || (width & 1) != 0) throw new ArgumentOutOfRangeException(nameof(width), Loc.T("A WebM frame needs an even width of at least 2."));
         if (height < 2 || (height & 1) != 0) throw new ArgumentOutOfRangeException(nameof(height), Loc.T("A WebM frame needs an even height of at least 2."));
         if (frameRate is < 1 or > 60) throw new ArgumentOutOfRangeException(nameof(frameRate));
-        Width = width; Height = height; FrameRate = frameRate; OutputPath = path;
+        Width = width; Height = height; FrameRate = frameRate; OutputPath = path; Alpha = alpha;
 
         var ffmpeg = WebmEncoderPlan.FindFfmpeg(AppContext.BaseDirectory, Environment.GetEnvironmentVariable("PATH"))
             ?? throw new InvalidOperationException(Loc.T("WebM recording needs ffmpeg, and none was found beside the app or on the PATH. Install ffmpeg (or put ffmpeg.exe next to Keyflow) and try again — AVI, MP4 and the PNG sequence need nothing extra."));
         _tempVideo = path + ".video.webm";
-        _ffmpeg = StartPass(ffmpeg, WebmEncoderPlan.VideoPassArguments(width, height, frameRate, _tempVideo));
+        _ffmpeg = StartPass(ffmpeg, WebmEncoderPlan.VideoPassArguments(width, height, frameRate, _tempVideo, alpha));
         if (withAudio)
         {
             _tempAudio = path + ".audio.wav";
@@ -100,11 +102,17 @@ internal sealed class WebmRecorder : IFrameRecorder, IAudioTrack
     /// </summary>
     public int FrameBytes => Width * Height * 4;
 
-    /// <summary>True because the stage hands over its own pixels, alpha byte and all; the WebM keeps no alpha.</summary>
+    /// <summary>
+    /// True because the stage hands over its own pixels, alpha byte and all; whether the WebM keeps the
+    /// alpha (<see cref="Alpha"/>) or drops it in the yuv420p conversion is the take's own choice.
+    /// </summary>
     public bool HasAlpha => true;
 
     /// <summary>True when the take carries a piano track that will be muxed in as Opus on stop.</summary>
     internal bool HasAudio => _audio is not null;
+
+    /// <summary>True when the picture keeps the stage's alpha channel (yuva420p) instead of flattening it.</summary>
+    internal bool Alpha { get; }
 
     /// <summary>Seconds of audio handed to the track so far; part of <see cref="IAudioTrack"/>.</summary>
     public double Seconds { get { lock (_audioLock) return _audio?.Seconds ?? 0; } }

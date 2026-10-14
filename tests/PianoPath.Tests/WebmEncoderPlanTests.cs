@@ -14,7 +14,7 @@ public sealed class WebmEncoderPlanTests
     [Fact]
     public void Video_pass_feeds_raw_bgra_and_asks_for_vp9()
     {
-        var args = WebmEncoderPlan.VideoPassArguments(1280, 720, 30, "take.video.webm");
+        var args = WebmEncoderPlan.VideoPassArguments(1280, 720, 30, "take.video.webm", alpha: false);
         Assert.Equal("pipe:0", args[Array.IndexOf(args, "-i") + 1]);
         Assert.Equal("bgra", args[Array.IndexOf(args, "-pix_fmt") + 1]);
         Assert.Equal("1280x720", args[Array.IndexOf(args, "-s:v") + 1]);
@@ -22,6 +22,15 @@ public sealed class WebmEncoderPlanTests
         Assert.Contains("yuv420p", args);
         Assert.Contains("-an", args);
         Assert.Equal("take.video.webm", args[^1]);
+    }
+
+    [Fact]
+    public void Alpha_pass_keeps_the_alpha_channel_and_disables_alt_ref()
+    {
+        var args = WebmEncoderPlan.VideoPassArguments(1280, 720, 30, "take.video.webm", alpha: true);
+        Assert.Equal("yuva420p", args[Array.LastIndexOf(args, "-pix_fmt") + 1]);
+        Assert.Equal("0", args[Array.IndexOf(args, "-auto-alt-ref") + 1]);
+        Assert.DoesNotContain("yuv420p", args);
     }
 
     [Fact]

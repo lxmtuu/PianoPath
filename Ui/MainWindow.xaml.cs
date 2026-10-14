@@ -1130,7 +1130,7 @@ public partial class MainWindow : Window
             {
                 // ffmpeg does this encoding (Windows has no VP9 encoder of its own), so the constructor
                 // says so in one sentence when the machine has none; the take never starts half-open.
-                _videoRecorder = new WebmRecorder(path, width, height, frameRate, withAudio);
+                _videoRecorder = new WebmRecorder(path, width, height, frameRate, withAudio, _visualSettings.RecordingTransparent);
             }
             else if (mp4)
             {
@@ -1168,9 +1168,9 @@ public partial class MainWindow : Window
                 }
             }
             _recordingPath = path;
-            // The PNG sequence carries alpha, so the stage draws without its opaque background while it runs;
-            // the switch is the user's and is only honoured for that format.
-            Stage.TransparentBackdrop = sequence && _visualSettings.RecordingTransparent;
+            // The PNG sequence and an alpha WebM carry the alpha channel, so the stage draws without its
+            // opaque background while either runs; the switch is the user's and honoured only there.
+            Stage.TransparentBackdrop = (sequence || webm) && _visualSettings.RecordingTransparent;
             StartGpuRecording(_videoRecorder);
             _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
@@ -1185,7 +1185,9 @@ public partial class MainWindow : Window
             else if (_videoRecorder is WebmRecorder webmRecorder)
             {
                 Loc.Set(RecordButton, "Recording WebM · click to stop", FrameworkElement.ToolTipProperty);
-                Loc.Set(SettingsSaveLabel, webmRecorder.HasAudio ? "Recording WebM (VP9 + Opus)" : "Recording WebM (VP9, the sound stayed out)");
+                Loc.Set(SettingsSaveLabel, webmRecorder.HasAudio
+                    ? webmRecorder.Alpha ? "Recording WebM (VP9 + Opus, with alpha)" : "Recording WebM (VP9 + Opus)"
+                    : "Recording WebM (VP9, the sound stayed out)");
             }
             else if (_videoRecorder is Mp4Recorder mp4Recorder)
             {
