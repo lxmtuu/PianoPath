@@ -285,6 +285,8 @@ internal sealed partial class PianoStage : FrameworkElement
     public void ClearTransient()
     {
         _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
+        Array.Clear(_wispBudget);
+        _beatPulse = _energyLevel = 0;
         _simulation.Reset();
         _gpu?.ClearTransient();
         InvalidateVisual();
@@ -612,6 +614,7 @@ internal sealed partial class PianoStage : FrameworkElement
             _keyHeat[pitch] = heat;
             if (heat > .01) _anyHeat = true;
             if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, dt, hitY, lane);
+            else _wispBudget[pitch] = 0;
         }
         for (var i = _sparks.Count - 1; i >= 0; i--)
         {

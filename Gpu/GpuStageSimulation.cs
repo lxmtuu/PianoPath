@@ -100,7 +100,7 @@ internal sealed partial class GpuStageSimulation
     private readonly List<ArLiveMidiNote> _arRisingMidiNotes = [];
     private readonly List<GpuArImpact> _arImpacts = [];
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128], _keyHold = new float[128];
-    private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
+    private readonly double[] _sparkBudget = new double[128], _wispBudget = new double[128], _flameBudget = new double[128];
     private readonly bool[] _active = new bool[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
     private readonly Random _random;
@@ -113,6 +113,10 @@ internal sealed partial class GpuStageSimulation
 
     internal double Time => _time;
     internal int ParticleCount => _count;
+    /// <summary>Successful births since soft clear, including impact/morph/release particles.</summary>
+    internal long ParticlesBorn { get; private set; }
+    /// <summary>Origin=2 births (sparks/wisps plus heat-tail flames), not an audio-sounding count.</summary>
+    internal long EmitterParticlesBorn { get; private set; }
     internal int LiveTrailCount => _trails.Count;
     internal int NoteTrailCount => _noteTrails.Count;
 
@@ -145,6 +149,8 @@ internal sealed partial class GpuStageSimulation
         var f = _flashes[index];
         return new GpuArFlash(f.Pitch, f.X, f.Y, f.Age, f.Life, f.Size, f.Strength, f.Style, f.Color, f.Intensity, f.Channel, f.Origin);
     }
+    internal (double Sparks, double Wisps, double Flames) EmissionCredits(int pitch)
+        => (_sparkBudget[pitch], _wispBudget[pitch], _flameBudget[pitch]);
     internal bool IsActive(int pitch) => pitch is >= 0 and < 128 && _active[pitch];
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
@@ -184,11 +190,19 @@ internal sealed partial class GpuStageSimulation
 
     private float Rand() => (float)_random.NextDouble();
 
+    /// <summary>Soft clear for stop/seek/song change: discard musical transients and emission credit.
+    /// Keep animation time and session RNG/ambient continuity. Exact replay requires a fresh seeded instance.</summary>
     internal void Clear()
     {
         _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear(); _arImpacts.Clear();
         _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); _livePresses.Clear();
         Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_active);
+        Array.Clear(_spill); Array.Clear(_keyHold); Array.Clear(_keyColor); Array.Clear(KeyColors);
+        Array.Clear(_sparkBudget); Array.Clear(_wispBudget); Array.Clear(_flameBudget);
+        _noteTrails.Clear(); _noteLabels.Clear(); _shimmerBars.Clear(); _landings.Clear();
+        _releaseNotes = null; _releaseScanPos = 0; _releaseScanIndex = 0;
+        _activity = _energy = _beatPulse = 0; _pedalBoost = 1; HorizonColor = Vector3.Zero;
+        ParticlesBorn = EmitterParticlesBorn = 0;
     }
 
     /// <summary>Advances the simulation by one rendered frame.</summary>
@@ -203,7 +217,7 @@ internal sealed partial class GpuStageSimulation
         var risingMidiStyle = feed.Ar is { ShowRisingMidiNotes: true } midiAr
             && midiAr.Calibration.CameraPose is not null && midiAr.Notes.IsUsable ? midiAr.RisingMidiNoteStyle : null;
         if (feed.TakeClearRequest()) Clear();
-        var frameDt = (float)Math.Clamp(seconds, 0, .05);
+        var frameDt = double.IsFinite(seconds) ? (float)Math.Clamp(seconds, 0, .05) : 0;
         if (risingMidiStyle is null) { _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); }
         for (var i = _arImpacts.Count - 1; i >= 0; i--)
         {
@@ -299,6 +313,11 @@ internal sealed partial class GpuStageSimulation
         for (var pitch = 0; pitch < 128; pitch++)
         {
             var c = ToLinear(_keyColor[pitch]);
+            // Active means the pressed snapshot OR the current song interval; pedal alone does not
+            // own an emitter. Off-layout/disabled/released sources cannot carry credit into a new epoch.
+            if (!OnKeyboard(pitch) || !_active[pitch] || !look.ShowEmbers || !(look.ParticleAmount > 0)) _sparkBudget[pitch] = 0;
+            if (!OnKeyboard(pitch) || !_active[pitch] || !look.ShowWisps || !(look.WispAmount > 0)) _wispBudget[pitch] = 0;
+            if (!OnKeyboard(pitch) || !look.ShowFlame || _heat[pitch] <= .01f) _flameBudget[pitch] = 0;
             // A held key breathes: a slow, quiet sway on its light so a long press feels alive (Live Stage key glow and AR tint share this colour buffer).
             KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? Math.Min(1, _glow[pitch] * StageLightCurves.KeyBreathMultiplier(_keyHold[pitch], _time, pitch)) : 0);
         }
@@ -306,6 +325,7 @@ internal sealed partial class GpuStageSimulation
         // ---- continuous emitters on sounding keys ----
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
+            // Flames intentionally continue emitting from cooling heat after key-active state ends.
             if (!_active[pitch] && _heat[pitch] <= .01f) continue;
             var x = layout.X(pitch);
             var color = _keyColor[pitch];
@@ -313,13 +333,13 @@ internal sealed partial class GpuStageSimulation
             {
                 // The held-key emitter follows the selected burst family, so a water or confetti preset
                 // stays coherent between the initial hit and the note's sustain.
-                _sparkBudget[pitch] += look.ParticleAmount * 1.3f * frameDt;
+                var sparkCount = KeyEmissionBudget.Take(ref _sparkBudget[pitch], look.ParticleAmount * 1.3f,
+                    frameDt, MaxParticles - _count);
                 var emitterStyle = look.ImpactBurst == "Zone"
                     ? pitch < look.ZoneSplitPitch ? "Embers" : "Splash"
                     : look.ImpactBurst;
-                while (_sparkBudget[pitch] >= 1 && _count < MaxParticles)
+                for (var birth = 0; birth < sparkCount; birth++)
                 {
-                    _sparkBudget[pitch] -= 1;
                     var angle = -MathF.PI / 2 + (Rand() - .5f) * look.ParticleSpread * MathF.PI;
                     var speedScale = 1f; var lifeScale = 1f; var sizeScale = 1f;
                     var grav = .55f; var drag = 1.2f; var glow = 1f;
@@ -365,11 +385,11 @@ internal sealed partial class GpuStageSimulation
             if (_active[pitch] && look.ShowWisps && look.WispAmount > 0)
             {
                 // two strands per key that twist around each other as they climb (the rainbow capture's smoke ribbons)
-                _wispBudget[pitch] += look.WispAmount * 4f * frameDt;
+                var wispCount = KeyEmissionBudget.Take(ref _wispBudget[pitch], look.WispAmount * 4f,
+                    frameDt, MaxParticles - _count);
                 var life = .35f + look.WispHeight * 1.9f;
-                while (_wispBudget[pitch] >= 1 && _count < MaxParticles)
+                for (var birth = 0; birth < wispCount; birth++)
                 {
-                    _wispBudget[pitch] -= 1;
                     var strand = _random.Next(2);
                     Spawn(new Particle
                     {
@@ -383,10 +403,10 @@ internal sealed partial class GpuStageSimulation
             }
             if (look.ShowFlame && _heat[pitch] > .01f)
             {
-                _flameBudget[pitch] += 70 * look.FlameIntensity * _heat[pitch] * frameDt;
-                while (_flameBudget[pitch] >= 1 && _count < MaxParticles)
+                var flameCount = KeyEmissionBudget.Take(ref _flameBudget[pitch], 70 * look.FlameIntensity * _heat[pitch],
+                    frameDt, MaxParticles - _count);
+                for (var birth = 0; birth < flameCount; birth++)
                 {
-                    _flameBudget[pitch] -= 1;
                     Spawn(new Particle
                     {
                         X = x + (Rand() - .5f) * layout.Lane * .7f, Y = layout.HitY - 1,
@@ -480,6 +500,8 @@ internal sealed partial class GpuStageSimulation
         tagged.Pitch = pitch;
         tagged.Origin = origin;
         _particles[_count++] = tagged;
+        ParticlesBorn++;
+        if (origin == 2) EmitterParticlesBorn++;
     }
 
     /// <summary>A note reached the keys: wave, flash, morph and burst, styled like the software stage.</summary>

@@ -67,7 +67,7 @@ internal static partial class VerificationSuite
             catch (Exception ex) { Finish(app, args, ex); }
             return;
         }
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -6665,6 +6665,7 @@ internal static partial class VerificationSuite
     {
         VerifyPrismFlowInputs();
         VerifyPrismFlowLook();
+        VerifyKeyParticleLifecycle();
         Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
         var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
         var prismCaptures = PrismFlowVisualReview.Render(prismOutput);
@@ -6682,6 +6683,11 @@ internal static partial class VerificationSuite
                 if (image.GetProperty("Checkpoint").GetString() == "dense-chord")
                     Results.Add($"NOTE P1 sample {image.GetProperty("Mode").GetString()}/{image.GetProperty("Variant").GetString()}: changed pixels={image.GetProperty("ChangedPixels")}, pixel SHA256={image.GetProperty("PixelSha256").GetString()}.");
         Results.Add($"PASS Prism Flow preview captures: {candidates} GPU-WARP frames, 12 checkpoints in Stage/AR Ultra with surface/texture/bloom-off controls. Experimental palette/material only, no new flow particles; {Path.GetFullPath(candidateOutput)}.");
+        var particleOutput = Path.Combine(outputDirectory, "key-particles-p3a");
+        Results.Add("NOTE Starting P3a current particle-family inventory: one explicit impact or held input, Stage/AR Ultra, synthetic camera, zero delay. Not the finished particle redesign.");
+        var particleCaptures = KeyParticleVisualReview.Render(particleOutput);
+        Assert(particleCaptures == 70, "P3a must capture all five families and both Zone routes in both modes, with burst/held/released/tail/emitter-off controls.");
+        Results.Add($"PASS P3a particle inventory: {particleCaptures} GPU-WARP captures; 7 routes × 5 phases × Stage/AR Ultra. PNG round trips, visible held-vs-off deltas, no Stage-space leak and expired tails. {Path.GetFullPath(particleOutput)}.");
     }
 
     private static void VerifyPrismFlowInputs()

@@ -171,7 +171,7 @@ internal static class PrismFlowVisualReview
         finally { KeyboardLayout.Use(previousLayout); }
     }
 
-    private static byte[] ReadSyntheticCamera(string path)
+    internal static byte[] ReadSyntheticCamera(string path)
     {
         using var stream = File.OpenRead(path);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
@@ -183,7 +183,7 @@ internal static class PrismFlowVisualReview
         return pixels;
     }
 
-    private static void WriteAndVerifyPng(string path, byte[] pixels)
+    internal static void WriteAndVerifyPng(string path, byte[] pixels)
     {
         Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var bitmap = BitmapSource.Create(Width, Height, 96, 96, PixelFormats.Bgra32, null, pixels, Width * 4);
