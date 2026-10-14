@@ -264,12 +264,20 @@ internal sealed class SfzSynthesizer : IPianoSynthesizer
             {
                 foreach (var voice in _voices.Where(v => v.Channel == channel && v.KeyHeld)) voice.SostenutoHeld = true;
             }
-            else foreach (var voice in _voices.Where(v => v.Channel == channel && v.SostenutoHeld))
+            else
             {
-                voice.SostenutoHeld = false;
-                if (voice.KeyHeld || voice.SustainHeld) continue;
-                if (_damper[channel] >= DamperCatch) { voice.SustainHeld = true; continue; }
-                voice.ReleaseScale = ReleaseScaleFor(_damper[channel]); voice.ReleaseKey();
+                var dampedPitches = new List<int>();
+                foreach (var voice in _voices.Where(v => v.Channel == channel && v.SostenutoHeld))
+                {
+                    voice.SostenutoHeld = false;
+                    if (voice.KeyHeld || voice.SustainHeld) continue;
+                    if (_damper[channel] >= DamperCatch) { voice.SustainHeld = true; continue; }
+                    voice.ReleaseScale = ReleaseScaleFor(_damper[channel]); voice.ReleaseKey();
+                    if (!dampedPitches.Contains(voice.Pitch)) dampedPitches.Add(voice.Pitch);
+                }
+                // Lifting the sostenuto drops those dampers just as lifting the sustain pedal does,
+                // so the strings it lets go thump once each (after the loop: a release voice joins it).
+                foreach (var pitch in dampedPitches) TriggerReleaseSamples(channel, pitch);
             }
         }
     }

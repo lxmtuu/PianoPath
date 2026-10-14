@@ -67,6 +67,7 @@
     <Compile Include="..\..\Audio\WavReader.cs" Link="Product\Audio\WavReader.cs" />
     <Compile Include="..\..\Audio\FlacReader.cs" Link="Product\Audio\FlacReader.cs" />
     <Compile Include="..\..\Audio\SfzReader.cs" Link="Product\Audio\SfzReader.cs" />
+    <Compile Include="..\..\Audio\SfzSynthesizer.cs" Link="Product\Audio\SfzSynthesizer.cs" />
     <Compile Include="..\..\Audio\SalamanderPiano.cs" Link="Product\Audio\SalamanderPiano.cs" />
     <Compile Include="..\..\Audio\Fft.cs" Link="Product\Audio\Fft.cs" />
     <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />
