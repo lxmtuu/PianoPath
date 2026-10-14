@@ -1,0 +1,108 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-10-15",
+  "productImplementationCommit": "e8979ee5ebd8e310e982f71f21114911625ac1ab",
+  "verifiedSourceCommit": "1b6ac51d33d7497a5f2f4d4c083cd41fe7158d3f",
+  "run": "https://github.com/lxmtuu/PianoPath/actions/runs/38617785565",
+  "workflowConclusion": "success",
+  "jobs": {
+    "static": "success",
+    "portable": "success",
+    "windows": "success"
+  },
+  "newPortableCases": 9,
+  "fullSuiteAssertions": 5245,
+  "skippedGroups": 1,
+  "skippedGroupIdentity": "Unavailable in the 50 retained check annotations; full verification log artifact must be consulted.",
+  "processExitCode": 0,
+  "verificationLogLines": 224,
+  "shippingFrameEpochVerdict": "PASS P3a frame epoch: Capture/clear/Step race, stale song/pressed snapshots, post-clear hits, repeated/coalesced clears, viewport refresh and generation-aware AR key history. Soft clear only; no particle-delay history, RNG rewind or art redesign claim.",
+  "isolatedCaptures": {
+    "p0": 78,
+    "paletteSatin": 30,
+    "particleFamilies": 70,
+    "total": 178
+  },
+  "hashScope": "12 tracked P0/P1 PNGs independently match this run CI raw-BGRA annotations. 20 tracked P3a representatives match the earlier review evidence; their new manifest hashes were not independently retrieved. The preview step succeeded without a new branch commit. This is static regression evidence, not motion or a new art review.",
+  "currentCiHeldCounters": [
+    "dust / live-stage:StageSprites=14,ARParticles=0,delta=1098; ar:StageSprites=0,ARParticles=14,delta=175",
+    "confetti / live-stage:StageSprites=14,ARParticles=0,delta=356; ar:StageSprites=0,ARParticles=14,delta=86",
+    "fireworks / live-stage:StageSprites=14,ARParticles=0,delta=330; ar:StageSprites=0,ARParticles=14,delta=66",
+    "splash / live-stage:StageSprites=42,ARParticles=0,delta=588; ar:StageSprites=0,ARParticles=14,delta=42",
+    "embers / live-stage:StageSprites=14,ARParticles=0,delta=715; ar:StageSprites=0,ARParticles=14,delta=81"
+  ],
+  "controls": [
+    {
+      "file": "docs/previews/prism-flow-p0/concert-gold-ar.png",
+      "pixelSha256": "CB54BFEE8F4BE6FAB249D5D7B2560F6801ED93116C15AEE125F1C9FED3BAE83F",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p0/concert-gold-live-stage.png",
+      "pixelSha256": "64C5C8D9980CFC912D5D836ADCAC03230C33C5507103BD80B0DE38DB981C0C4A",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p0/ice-crystal-ar.png",
+      "pixelSha256": "6C77227D24D0E45966B30A9729EB567A821F15F1A2DA251FF7AC4BBF8CD0A933",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p0/ice-crystal-live-stage.png",
+      "pixelSha256": "E72B107EBF5AA507AFA74E80D8457D6AF13612847650751F723BDF29F06E0665",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p0/neon-violet-ar.png",
+      "pixelSha256": "29A945069ECD2449D10DE8788AAE71FD52DF1DE17388E15CF585B2EAAB094CED",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p0/neon-violet-live-stage.png",
+      "pixelSha256": "429790415F50968441D9F3B8D93C30AA97A3431C7D03F3ED342CA8926A063C72",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p1/ar-bloom-off.png",
+      "pixelSha256": "7D3B44B381733C15429B3DEDE64F90B30F87B9B6CC1E74104060EB02C58D4F55",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p1/ar-candidate.png",
+      "pixelSha256": "072E73A02D3E2625B71A70583E39FD8C69E0E8CB99FF1DDAC0D49BFB65505405",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p1/ar-texture-off.png",
+      "pixelSha256": "7AAABD460217C16C2F712DFE990F421EACDBDBCD1CA7D6872ADB77CE0555294C",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p1/live-stage-bloom-off.png",
+      "pixelSha256": "1EF48D06AE2D400135ACCB46FCC7DD846C6CB7BE0AFB112FF35F708D42196253",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p1/live-stage-candidate.png",
+      "pixelSha256": "7A07D2EFFE6559AEAA08D94CB550C08A4CD7FFDD239E320D8DF601341C98243F",
+      "matchesCurrentCiAnnotation": true
+    },
+    {
+      "file": "docs/previews/prism-flow-p1/live-stage-texture-off.png",
+      "pixelSha256": "C8A72A9A3C86DF3935C831CACA8C21F2D6DA363C3E32C1D832199A2C028156B2",
+      "matchesCurrentCiAnnotation": true
+    }
+  ],
+  "artifacts": {
+    "verificationLog": 11919384948,
+    "phase1VisualReview": 11920951631,
+    "previews": 11921702430,
+    "benchmark": 11919974568
+  },
+  "softwareP95Ms": {
+    "default": 2630.74,
+    "heavy": 700.03,
+    "ar": 266.01
+  },
+  "performanceLimit": "Microsoft Basic Render Driver / WARP; hardware FPS budgets were not applied. No optimization or hardware no-regression claim."
+}

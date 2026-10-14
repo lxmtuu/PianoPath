@@ -1,6 +1,6 @@
 # P3a follow-up — clear/seek frame epochs
 
-**Trạng thái:** đã triển khai và qua static check; chờ portable/Windows CI trước khi chứng nhận. Đây là sửa vòng đời/đồng bộ, chưa phải art pass hoặc hoàn tất particle roadmap.
+**Trạng thái (2026-10-15): PASS CI** ở source `1b6ac51` (implementation `e8979ee`), [run 38617785565](https://github.com/lxmtuu/PianoPath/actions/runs/38617785565). Static, portable, Windows build, kiểm thử frame epoch, full regression và packaging đều xanh. Đây là sửa vòng đời/đồng bộ, chưa phải art pass hoặc hoàn tất particle roadmap.
 
 ## Lỗi cần ngăn
 
@@ -35,4 +35,16 @@ Một race khác: frame đang chạy trước clear có thể dequeue Note On **
 
 ## Evidence
 
-Bổ sung source/run/assertion count sau CI. [P3a baseline đã có](KEY-PARTICLES-P3A-REVIEW.md) là mốc trước thay đổi này; không gọi baseline cũ là evidence của fix mới.
+[Evidence có version/source/hash](KEY-PARTICLES-FRAME-EPOCH-EVIDENCE.json) ghi riêng kết quả của bản sửa này; [P3a baseline đã có](KEY-PARTICLES-P3A-REVIEW.md) vẫn là mốc trước thay đổi.
+
+- **Windows:** annotation `PASS P3a frame epoch` xác nhận shipping feed/simulation regression. Full suite **5.245 assertions / 1 skipped check group**, process exit **0**, 224 log lines. Tên nhóm skip không có trong 50 annotations được giữ lại; chưa đọc được full log qua sandbox, nên không suy đoán nhóm đó.
+- **Portable:** job PASS, bao gồm **9 case mới**. Test shared-gate dùng async completion để bỏ cảnh báo blocking Task của xUnit; không đổi assertions hoặc nới kiểm tra.
+- **Capture:** isolated suite và staging PASS **178 frames = 78 P0 + 30 palette/satin + 70 particle-family**. Năm cặp held counters Stage/AR khớp baseline P3a trước sửa.
+- **Hash:** 12 PNG control P0/P1 được decode BGRA và đối chiếu độc lập với hash trong annotations của **run mới**, tất cả khớp. 20 PNG P3a đang tracked vẫn khớp evidence review trước; manifest hash mới của 70 frames chưa tải/đối chiếu độc lập. Workflow preview PASS và không tạo commit preview mới. Không dùng static hashes để chứng nhận motion hay art mới.
+- **Artifacts:** verification log `11919384948`, visual review `11920951631`, previews `11921702430`, benchmark `11919974568`. Link truy cập trong [run](https://github.com/lxmtuu/PianoPath/actions/runs/38617785565); artifact/log download đi qua host ngoài allowlist của sandbox nên chưa đọc trực tiếp toàn bộ.
+- **Perf:** Microsoft Basic Render Driver/WARP, p95 default/heavy/AR **2.630,74 / 700,03 / 266,01 ms**. Hardware budgets không được áp dụng; không tuyên bố tối ưu hoặc đạt FPS trên thiết bị thật.
+- **Local:** source checker PASS (283 C# / 2 XAML), 7 fixture Python tests PASS, `git diff --check` PASS. Không có local Windows/.NET build; chứng nhận product dựa trên CI ở source nêu trên.
+
+## Bước kế tiếp — chưa triển khai
+
+Bổ sung baseline hình/counter cho wisps/flames và các morph/release có sinh hạt ở cả Stage/AR trước art pass toàn bộ press/held families. Delay/motion/physical-camera và hardware budget vẫn là gate riêng. P6 menu làm cuối cùng; không coi fix epoch là nghiệm thu những hạng mục này.

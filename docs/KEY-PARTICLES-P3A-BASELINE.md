@@ -29,7 +29,7 @@ The capture manifest records the exact settings, seed, raw-BGRA pixel hashes, re
 
 1. **Art pass across every press/held particle channel:** five burst families, wisps/flames, particle-producing impact morphs, then their shared Stage/AR presentation. This baseline does not complete that work or create a new flow emitter.
 2. Stage/AR size/gain/glow formulas still differ, notably Dust and handling of per-particle `Glow`. A common birth stream is not a visual-parity certificate.
-3. [Frame-epoch follow-up](KEY-PARTICLES-FRAME-EPOCH.md) adds stamped snapshots, frame-fenced dequeues and an AR-key history boundary; implementation is awaiting fresh CI evidence. This does not create a full restart policy or solve OS MIDI/sounding ownership.
+3. [Frame-epoch follow-up](KEY-PARTICLES-FRAME-EPOCH.md) adds stamped snapshots, frame-fenced dequeues and an AR-key history boundary; [fresh CI 38617785565](https://github.com/lxmtuu/PianoPath/actions/runs/38617785565) passed at source `1b6ac51` (5,245 full-suite assertions / one skipped group). This does not create a full restart policy or solve OS MIDI/sounding ownership.
 4. WPF has different physics/time semantics; descending live-trail touchdown deserves a separate audit. Recording, all quality tiers, nonzero AR delay, density/motion clips and physical-camera checks are not certified here.
 5. P4 hit line, P5 real-device budgets and **P6 settings-menu redesign last**, consistent/readable/compact in both modes, remain required.
 
