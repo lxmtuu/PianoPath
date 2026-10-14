@@ -3,6 +3,8 @@
 > **Bản thử opt-in, chưa phải look hoàn thiện.** Ảnh render bằng ứng dụng trên Windows/D3D11 WARP, không phải mockup hoặc ảnh AI.
 > [CI run 38601052995](https://github.com/lxmtuu/PianoPath/actions/runs/38601052995) — source `28bcab5`, preview commit `3b199cc`.
 
+> **Cập nhật P3a (2026-10-15):** sáu ảnh palette/satin của tài liệu này vẫn giữ nguyên từng pixel ở run `38609015755`; sáu ảnh P0 có hạt được auto-refresh và đã thay đổi. Kết quả P0 “giữ nguyên” bên dưới chỉ áp dụng ở run P1 lịch sử, không áp dụng sau sửa lifecycle. Xem [review P3a](KEY-PARTICLES-P3A-REVIEW.md).
+
 ## Live Stage
 
 ![Prism Flow Preview — Live Stage](previews/prism-flow-p1/live-stage-candidate.png)

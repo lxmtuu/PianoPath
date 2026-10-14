@@ -1,6 +1,8 @@
 # P3a — bounded emission and current-family inventory
 
-Status (2026-10-15): implementation ready for CI, **not yet verified on Windows**. This is a lifecycle foundation and current-shape baseline, **not the completed particle redesign**.
+Status (2026-10-15): source `08c83b5`, [CI 38609015755](https://github.com/lxmtuu/PianoPath/actions/runs/38609015755) **SUCCESS** (static, portable tests, Windows build, lifecycle diagnostics, 70 inventory captures, full suite **5,120 assertions / one skipped group**, previews and packaging). This is a lifecycle foundation and current-shape baseline, **not the completed particle redesign**.
+
+[Vietnamese visual review and image links](KEY-PARTICLES-P3A-REVIEW.md) · [Dated pixel/counter evidence](KEY-PARTICLES-P3A-EVIDENCE.json).
 
 ## What changes
 

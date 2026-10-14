@@ -1,0 +1,272 @@
+{
+  "schemaVersion": 1,
+  "reviewDate": "2026-10-15",
+  "sourceCommit": "08c83b560e026dd758f1f68aba8e842ee2290992",
+  "previewCommit": "78d2d24",
+  "run": "https://github.com/lxmtuu/PianoPath/actions/runs/38609015755",
+  "fullWorkflow": "success",
+  "fullSuiteAssertions": 5120,
+  "skippedGroups": 1,
+  "captureCount": 70,
+  "representativeImages": 20,
+  "pixelFormat": "BGRA32; file hashes and decoded pixel hashes are different",
+  "reviewScope": "20 representative press/held PNGs reviewed as unscaled original-pixel crops, plus full Embers held pair; not all 70 frames or motion",
+  "hashScope": "20 decoded hashes recorded locally; 12 P0/P1 control hashes independently match CI annotations. P3 manifest hashes not independently downloaded.",
+  "heldCounters": [
+    {
+      "family": "confetti",
+      "stageSprites": 14,
+      "stageChangedPixels": 356,
+      "arParticleFx": 14,
+      "arChangedPixels": 86
+    },
+    {
+      "family": "dust",
+      "stageSprites": 14,
+      "stageChangedPixels": 1098,
+      "arParticleFx": 14,
+      "arChangedPixels": 175
+    },
+    {
+      "family": "embers",
+      "stageSprites": 14,
+      "stageChangedPixels": 715,
+      "arParticleFx": 14,
+      "arChangedPixels": 81
+    },
+    {
+      "family": "fireworks",
+      "stageSprites": 14,
+      "stageChangedPixels": 330,
+      "arParticleFx": 14,
+      "arChangedPixels": 66
+    },
+    {
+      "family": "splash",
+      "stageSprites": 42,
+      "stageChangedPixels": 588,
+      "arParticleFx": 14,
+      "arChangedPixels": 42
+    }
+  ],
+  "photos": [
+    {
+      "file": "previews/prism-flow-p3a/confetti-ar-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "FE6BCBFD99C9944D00F9F7A8B8F8BF00AB2CDFF1466B88D9AD470C0497D7DAFE",
+      "pngSha256": "734BDF8F5CDE7E6D873EF8D908224C2BF286CE5EC88A664051D9655E9C53875D"
+    },
+    {
+      "file": "previews/prism-flow-p3a/confetti-ar-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "DC784ACE5562D7AB959B28425D856B9BFCED5AD083D8EF0707A66BDB2953834A",
+      "pngSha256": "8E6F3F9EDEF0A78858A21498F299648C58E489B5CF47225AA03EEF26BFEEC334"
+    },
+    {
+      "file": "previews/prism-flow-p3a/confetti-live-stage-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "76804CEF20467B7A0A590EE97ADBAFA0E61170CE49D8A5F6186EB3D990DA7E75",
+      "pngSha256": "4461BAA26667E9EB4CBE9022F1D6EB982AE330079311DC80F0B03D445A1594BC"
+    },
+    {
+      "file": "previews/prism-flow-p3a/confetti-live-stage-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "7FD961C82A32C7401E8158153D6E2D4D255F00E3F317942B632F4E8AA613ED40",
+      "pngSha256": "5AD5514BEE30707C0BC8A197A56A727EB500170308FDC60D53223101C0CB0F2F"
+    },
+    {
+      "file": "previews/prism-flow-p3a/dust-ar-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "99BC664407D29AFFD993FFC6E9AF216BF242C61694CDE3BFF6242C2B47696B1A",
+      "pngSha256": "421EEC2EB48D2ED406BEF4506ABC0409DFFA1A1BD34BA533D8B4BF102A364639"
+    },
+    {
+      "file": "previews/prism-flow-p3a/dust-ar-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "F19D54AB644627D368ECACEA522AAC4051A4C7DD8018FD04B87BBEF62631F916",
+      "pngSha256": "416DD16E109B52DB6CB646828CEE8587956B6F94B076B9F92A4E09D6B44547C6"
+    },
+    {
+      "file": "previews/prism-flow-p3a/dust-live-stage-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "A3785F0B9473BCF06AAA9144CB77D3E01D645F0AB84A27963E14F260F4D5E234",
+      "pngSha256": "5B20995A4FA7C7C054C41EEB442452FA68855974E69C83CB02B2AE14D0D417A7"
+    },
+    {
+      "file": "previews/prism-flow-p3a/dust-live-stage-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "4E5AB3977BC06CB7E79BA7411E91E5D332BF5359F48542942391319B56EEBB88",
+      "pngSha256": "F38C7A932B35E5D068EED31FE4776A63645A6E03A8ABCBDCD1B69127A96B1F7B"
+    },
+    {
+      "file": "previews/prism-flow-p3a/embers-ar-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "8F8A212BD454358837C78AAB4B8D10045CA84B07227C8AAF0C5595C7EF9E0CAA",
+      "pngSha256": "EC9090F4C71B0ED7101114CADF7070A9DEC984A3605EB32E77E4DC929FE92B3D"
+    },
+    {
+      "file": "previews/prism-flow-p3a/embers-ar-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "2D2CC026F4A1F25C8AFABD25796F5ED07ABDAF6BAD6B3FAF3588B481ECF1A261",
+      "pngSha256": "BE8B8EFE173BE955EE6AC9A589D70F5A0B38CD55AEE6A7ACB9672CA8EEA39BC7"
+    },
+    {
+      "file": "previews/prism-flow-p3a/embers-live-stage-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "55E7F21D1F284584106B54DB7F19C4F4512688B67E50B2E2A4D2D03A182D66E0",
+      "pngSha256": "1AA5F6DD18E18F97F00F1CCE9BDD35C13F075E85C1EE50101928E0E739668FC6"
+    },
+    {
+      "file": "previews/prism-flow-p3a/embers-live-stage-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "C81C39D1D2A27FEA4CF3A3496135CF79793DB35B120C22C841D78877CD24A865",
+      "pngSha256": "2FAD82DEF078538AAA8CC6B887DE946194E8E06089CB36C4EF53A3DCA16983E8"
+    },
+    {
+      "file": "previews/prism-flow-p3a/fireworks-ar-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "8B188FDCB0B75FB195366C2317999A4B923B20E9DED9D30F4FDBB144522A5AB9",
+      "pngSha256": "92469AFB06643FECCE62856D885BF917147B3C56CF300DE8E1DB94BB699340CE"
+    },
+    {
+      "file": "previews/prism-flow-p3a/fireworks-ar-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "69E025D44353F1F47317C4F6C5D35B8F3AC8DB77003A106313C2E63A93DF18F5",
+      "pngSha256": "C6CDC6576F40E58049AC296295ECEACEFF636AF42459D13EDB7DD225BCDC7960"
+    },
+    {
+      "file": "previews/prism-flow-p3a/fireworks-live-stage-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "4668DBD9011CB943D0A68EF88423FE3445C55DE60C47D7B67C71944F762F5C75",
+      "pngSha256": "2C2F0759AA0ED15B0F07D0BF254EC8CBE6DEF61B1186B55E786C76A184A9D676"
+    },
+    {
+      "file": "previews/prism-flow-p3a/fireworks-live-stage-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "2221A17C64FE17DA47D9D783F82A3C8A292954865ACCF9F1AC64BC49769E9E06",
+      "pngSha256": "9DDE079E967B461FA60241743E74127AF4CA1C7C2652B4AFBEA62FBC5D6D6557"
+    },
+    {
+      "file": "previews/prism-flow-p3a/splash-ar-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "0C28AB6C05ACF21ADB6B0ECDF1FE278F25A1A934725FCB62C478116992055F02",
+      "pngSha256": "074437F047B1DD25128DD4090773F50DF537BC0E82C1B7F4BC0AC737D1212423"
+    },
+    {
+      "file": "previews/prism-flow-p3a/splash-ar-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "2A014218849B53ED26EF5F2B789785D54251A0E863E62B298DB0F1344D2BE090",
+      "pngSha256": "714852E5535292A030866DE26183E05607DB84CC675D35DE31B83A791CCFFAAD"
+    },
+    {
+      "file": "previews/prism-flow-p3a/splash-live-stage-burst.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "9BEEEEF0E497B30F847374376F2F9B1955F0B5D7560D9E3FBCC696BA82F15FD9",
+      "pngSha256": "935BBC27C664E6B5CE3B59497D9497C7AD4F49DB3B7DA383909AEDF93FE6E0A5"
+    },
+    {
+      "file": "previews/prism-flow-p3a/splash-live-stage-held.png",
+      "width": 1280,
+      "height": 720,
+      "pixelSha256": "77A5586D35B8B3F6CF57B2E7CAC1A2446283445D68DB5A77FE5CE4AF37D2B319",
+      "pngSha256": "115F4103E81D6C4A46D869FC484E7B9F25DD1A17CC502CB1768A9DFC07B7C34E"
+    }
+  ],
+  "controls": {
+    "p0": [
+      {
+        "file": "concert-gold-ar.png",
+        "pixelSha256": "CB54BFEE8F4BE6FAB249D5D7B2560F6801ED93116C15AEE125F1C9FED3BAE83F",
+        "same": false
+      },
+      {
+        "file": "concert-gold-live-stage.png",
+        "pixelSha256": "64C5C8D9980CFC912D5D836ADCAC03230C33C5507103BD80B0DE38DB981C0C4A",
+        "same": false
+      },
+      {
+        "file": "ice-crystal-ar.png",
+        "pixelSha256": "6C77227D24D0E45966B30A9729EB567A821F15F1A2DA251FF7AC4BBF8CD0A933",
+        "same": false
+      },
+      {
+        "file": "ice-crystal-live-stage.png",
+        "pixelSha256": "E72B107EBF5AA507AFA74E80D8457D6AF13612847650751F723BDF29F06E0665",
+        "same": false
+      },
+      {
+        "file": "neon-violet-ar.png",
+        "pixelSha256": "29A945069ECD2449D10DE8788AAE71FD52DF1DE17388E15CF585B2EAAB094CED",
+        "same": false
+      },
+      {
+        "file": "neon-violet-live-stage.png",
+        "pixelSha256": "429790415F50968441D9F3B8D93C30AA97A3431C7D03F3ED342CA8926A063C72",
+        "same": false
+      }
+    ],
+    "p1": [
+      {
+        "file": "ar-bloom-off.png",
+        "pixelSha256": "7D3B44B381733C15429B3DEDE64F90B30F87B9B6CC1E74104060EB02C58D4F55",
+        "same": true
+      },
+      {
+        "file": "ar-candidate.png",
+        "pixelSha256": "072E73A02D3E2625B71A70583E39FD8C69E0E8CB99FF1DDAC0D49BFB65505405",
+        "same": true
+      },
+      {
+        "file": "ar-texture-off.png",
+        "pixelSha256": "7AAABD460217C16C2F712DFE990F421EACDBDBCD1CA7D6872ADB77CE0555294C",
+        "same": true
+      },
+      {
+        "file": "live-stage-bloom-off.png",
+        "pixelSha256": "1EF48D06AE2D400135ACCB46FCC7DD846C6CB7BE0AFB112FF35F708D42196253",
+        "same": true
+      },
+      {
+        "file": "live-stage-candidate.png",
+        "pixelSha256": "7A07D2EFFE6559AEAA08D94CB550C08A4CD7FFDD239E320D8DF601341C98243F",
+        "same": true
+      },
+      {
+        "file": "live-stage-texture-off.png",
+        "pixelSha256": "C8A72A9A3C86DF3935C831CACA8C21F2D6DA363C3E32C1D832199A2C028156B2",
+        "same": true
+      }
+    ]
+  },
+  "softwarePerfP95Ms": {
+    "default": 2590.15,
+    "heavy": 762.68,
+    "ar": 277.74
+  },
+  "limitations": [
+    "not finished particle art",
+    "shared births are not equal projected shading",
+    "input capture/clear race remains",
+    "no WPF/recording/full-tier/nonzero-delay parity certificate",
+    "no physical camera/hardware FPS certificate"
+  ]
+}

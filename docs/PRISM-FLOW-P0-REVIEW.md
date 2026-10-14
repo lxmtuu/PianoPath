@@ -4,6 +4,8 @@
 > Nguồn: [CI run 38595904297](https://github.com/lxmtuu/PianoPath/actions/runs/38595904297), source commit `4478f93`; sáu ảnh đại diện được CI lưu ở preview commit `6138271`.
 > Checkpoint `dense-chord`, 9.5 giây, 1280×720; cùng MIDI/seed. AR Ultra, camera bàn phím synthetic, delay=0, không mirror. Không phải test webcam/đàn thật.
 
+> **Lưu ý ảnh tự cập nhật (2026-10-15):** các đường dẫn preview bên dưới hiện được render lại ở P3a, source `08c83b5` / ảnh `78d2d24`; sáu ảnh có hạt đã thay đổi sau sửa lịch phát/tín dụng. Các kết quả của run P0 trong tài liệu này là lịch sử; ảnh gốc nằm ở commit `6138271`. Xem [review P3a](KEY-PARTICLES-P3A-REVIEW.md) cho bằng chứng mới, không dùng ảnh hiện tại để xác nhận pixel hash cũ.
+
 ## Kết quả kiểm chứng
 
 - Static checks, portable xUnit và Windows Release build: **PASS**.
