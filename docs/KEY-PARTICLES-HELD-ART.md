@@ -1,6 +1,6 @@
 # P3b — Wisps + Flames, art thử dùng chung Stage / AR
 
-**2026-10-15: prototype đã PASS full CI; ảnh/clip đã được đưa về repo. Đã review v1 theo mẫu; đang chỉnh material v2, chưa nghiệm thu artwork.**
+**2026-10-15: prototype đã PASS full CI; ảnh/clip đã được đưa về repo. V2 đã PASS full CI và review theo mẫu so với v1; chưa user sign-off/nghiệm thu artwork.**
 
 Tiếp nối [baseline auxiliary](KEY-PARTICLES-AUX-BASELINE.md) và [routing đã PASS](KEY-PARTICLES-RING-CHANNELS.md). Đây là hai họ held đầu tiên, không phải hoàn tất toàn bộ press/held hoặc thay mọi họ bằng Prism Flow.
 
@@ -43,4 +43,4 @@ Independent local artifact integrity check: decoded all **480 APNG frames** (8 �
 
 ## Review và vòng material kế tiếp
 
-[Xem nhận xét v1, giới hạn temporal sampling, chỉnh shader v2 và player frame-locked](KEY-PARTICLES-HELD-ART-REVIEW.md). V2 chưa được build/render/review lại; CI xanh của v1 không chứng nhận v2.
+[Xem nhận xét v1/v2, giới hạn temporal sampling và player frame-locked](KEY-PARTICLES-HELD-ART-REVIEW.md). V2 source `74941f0` PASS full run `38645329801` (6.047 assertions / 1 skipped group), preview `e4c9dd6`; đã kiểm 480 frame/8 active hashes, controls/classic không đổi và xem static/temporal samples. Wisps mảnh nhưng tối hơn; Flames bớt thân đặc. AR key contrast và các gate rộng hơn vẫn mở; không user art sign-off.
