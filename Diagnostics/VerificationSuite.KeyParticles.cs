@@ -63,6 +63,7 @@ internal static partial class VerificationSuite
                 VerifyParticleCapRecovery(fixture);
                 VerifyParticleDrawIndependence(fixture, layer, ar, view, sprites, quads);
             }
+            VerifyAuxParticleLifecycle(layer, ar, view, sprites, quads);
             VerifyEmitterClockAndClear();
             VerifyTransientFrameEpoch();
             Results.Add("PASS P3a lifecycle: five burst/held families, both Zone routes, white/black keys, physical-release vs pedal, real 24000-particle cap recovery, soft clear and read-only Stage/AR builds. Not full MIDI routing, nonzero delay, motion parity or a family art upgrade.");

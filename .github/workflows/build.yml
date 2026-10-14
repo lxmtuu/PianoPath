@@ -192,6 +192,26 @@ jobs:
             }
           }
 
+      - name: Stage auxiliary particle baselines
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/key-particles-aux'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 128) { throw 'Incomplete auxiliary particle inventory' }
+          $target = 'docs/previews/prism-flow-p3a-aux'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($route in $manifest.settings) {
+            $samples = @($manifest.captures | Where-Object { $_.Route -eq $route.Id -and $_.Phase -eq 'active' })
+            if ($samples.Count -ne 4) { throw "Missing white/black Stage/AR auxiliary pair: $($route.Id)" }
+            $counts = ($samples | ForEach-Object { "$($_.Pitch)/$($_.Mode):sprites=$($_.StageSprites),particles=$($_.ArParticles),release=$($_.ArReleaseEffects),delta=$($_.ChangedPixels),sha=$($_.PixelSha256)" }) -join '; '
+            "::notice title=Auxiliary particle baseline::$($route.Id) / $counts"
+            foreach ($sample in $samples) {
+              $source = Join-Path $review $sample.File
+              if (-not (Test-Path $source)) { throw "Missing auxiliary baseline: $source" }
+              Copy-Item $source (Join-Path $target "$($route.Id)-$($sample.Pitch)-$($sample.Mode)-active.png") -Force
+            }
+          }
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.

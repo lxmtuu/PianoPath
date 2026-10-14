@@ -6688,6 +6688,10 @@ internal static partial class VerificationSuite
         var particleCaptures = KeyParticleVisualReview.Render(particleOutput);
         Assert(particleCaptures == 70, "P3a must capture all five families and both Zone routes in both modes, with burst/held/released/tail/emitter-off controls.");
         Results.Add($"PASS P3a particle inventory: {particleCaptures} GPU-WARP captures; 7 routes × 5 phases × Stage/AR Ultra. PNG round trips, visible held-vs-off deltas, no Stage-space leak and expired tails. {Path.GetFullPath(particleOutput)}.");
+        var auxiliaryOutput = Path.Combine(outputDirectory, "key-particles-aux");
+        var auxiliaryCaptures = AuxParticleVisualReview.Render(auxiliaryOutput);
+        Assert(auxiliaryCaptures == 128, "Auxiliary channels need white/black keys and four phases in both modes.");
+        Results.Add($"PASS P3a auxiliary captures: {auxiliaryCaptures} WARP frames; 8 channels × white/black × 4 phases × Stage/AR Ultra. Same-input effect-off controls, active visibility, expired tails, PNG round trips and no Stage-space leak; not art sign-off. {Path.GetFullPath(auxiliaryOutput)}.");
     }
 
     private static void VerifyPrismFlowInputs()
