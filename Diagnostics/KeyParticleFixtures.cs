@@ -25,7 +25,7 @@ internal static class KeyParticleFixtures
     internal static PianoVisualSettings Settings(Case fixture, bool enabled = true)
     {
         var s = CommunityPresets.Find("Prism Flow Preview")!.Settings.Clone();
-        s.ShowNotes = false; s.ShowHalo = false; s.HorizonGlow = 0;
+        s.ShowNotes = false; s.ShowHalo = false; s.HorizonGlow = 0; s.KeyLabels = "None";
         s.ShowEmbers = enabled; s.ShowWisps = s.ShowFlame = s.ShowLightBeams = false;
         s.ImpactBurst = fixture.Style; s.ZoneSplit = fixture.Zone; s.ZoneSplitPitch = 60; s.ZoneSplitAmount = 0;
         s.ParticleAmount = 18; s.ParticleResponse = 55; s.ParticleVelocity = 170;
