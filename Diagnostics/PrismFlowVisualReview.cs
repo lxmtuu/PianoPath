@@ -44,7 +44,7 @@ internal static class PrismFlowVisualReview
                 [(70, 292), (1214, 268), (1236, 421), (52, 449)], Width, Height, out var problem, 70)
                 ?? throw new InvalidDataException($"Prism Flow synthetic calibration failed: {problem}");
             if (calibration.CameraPose is null) throw new InvalidDataException("Prism Flow requires a calibrated 3D pose.");
-            var ring = ReadSyntheticCamera(Path.Combine(samples, "ar-keyboard-topdown.png"));
+            var cameraPixels = ReadSyntheticCamera(Path.Combine(samples, "ar-keyboard-topdown.png"));
             using var renderer = GpuStageRenderer.Create(forceWarp: true);
             if (!renderer.IsWarp) throw new InvalidOperationException("Prism Flow baseline requires WARP.");
             foreach (var presetName in new[] { "Concert Gold", "Ice Crystal", "Neon Violet" })
@@ -104,6 +104,12 @@ internal static class PrismFlowVisualReview
                 feed.SetStageHeight(Height);
                 if (overCamera)
                 {
+                    // UpdateCamera(null) disposes the texture when another capture uses Stage.
+                    // A ring is consumable: every independent AR capture needs a NEW published frame,
+                    // not the already-taken ring from an earlier preset/capture.
+                    var ring = new CameraFrameRing();
+                    cameraPixels.CopyTo(ring.BeginWrite(cameraPixels.Length, out var slot), 0);
+                    ring.Publish(slot, Width, Height, Stopwatch.GetTimestamp());
                     feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1);
                     feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1,
                         Quality: ArQualityTier.Ultra, ProjectedNotes: true);
@@ -125,7 +131,7 @@ internal static class PrismFlowVisualReview
                     throw new InvalidDataException("Unprojected stage geometry leaked onto the AR camera.");
                 if (checkpoint.Id == "white-black-hold"
                     && (overCamera ? renderer.ArShapeCount == 0 : renderer.StageNoteCount == 0))
-                    throw new InvalidDataException("Held-note baseline is missing its visible note geometry.");
+                    throw new InvalidDataException($"Held-note baseline has no note geometry: {presetName}, AR={overCamera}, stage={renderer.StageNoteCount}, AR shapes={renderer.ArShapeCount}, AR quads={renderer.ArQuadCount}, camera uploads={renderer.CameraTexture?.Uploads ?? 0}.");
                 int? changed = null;
                 if (comparison is not null)
                 {
@@ -147,18 +153,16 @@ internal static class PrismFlowVisualReview
         finally { KeyboardLayout.Use(previousLayout); }
     }
 
-    private static CameraFrameRing ReadSyntheticCamera(string path)
+    private static byte[] ReadSyntheticCamera(string path)
     {
         using var stream = File.OpenRead(path);
         var decoder = BitmapDecoder.Create(stream, BitmapCreateOptions.PreservePixelFormat, BitmapCacheOption.OnLoad);
         var bitmap = new FormatConvertedBitmap(decoder.Frames[0], PixelFormats.Bgra32, null, 0);
         if (bitmap.PixelWidth != Width || bitmap.PixelHeight != Height)
             throw new InvalidDataException("Prism Flow camera fixture must be 1280x720.");
-        var ring = new CameraFrameRing();
-        var pixels = ring.BeginWrite(Width * Height * 4, out var slot);
+        var pixels = new byte[Width * Height * 4];
         bitmap.CopyPixels(pixels, Width * 4, 0);
-        ring.Publish(slot, Width, Height, Stopwatch.GetTimestamp());
-        return ring;
+        return pixels;
     }
 
     private static void WriteAndVerifyPng(string path, byte[] pixels)

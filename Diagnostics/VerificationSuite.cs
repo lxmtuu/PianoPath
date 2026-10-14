@@ -6651,6 +6651,10 @@ internal static partial class VerificationSuite
         var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
         var prismCaptures = PrismFlowVisualReview.Render(prismOutput);
         Assert(prismCaptures == 78, "Prism Flow P0 requires 72 baseline frames and six phase-FX-off controls.");
+        using (var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(prismOutput, "manifest.json"))))
+            foreach (var image in manifest.RootElement.GetProperty("captures").EnumerateArray())
+                if (image.GetProperty("Checkpoint").GetString() == "dense-chord" && image.GetProperty("Variant").GetString() == "baseline")
+                    Results.Add($"NOTE P0 baseline sample {image.GetProperty("Preset").GetString()}/{image.GetProperty("Mode").GetString()}: stage notes={image.GetProperty("StageNotes").GetInt32()}, AR quads={image.GetProperty("ArQuads").GetInt32()}, AR particles={image.GetProperty("ArParticles").GetInt32()}, pixel SHA256={image.GetProperty("PixelSha256").GetString()}.");
         Results.Add($"PASS Prism Flow P0 captures: {prismCaptures} GPU-WARP frames, three control presets, 12 checkpoints, stage/AR Ultra and six effect-off controls in {Path.GetFullPath(prismOutput)}. No hardware, latency, WPF parity or full style coverage claim.");
     }
 
