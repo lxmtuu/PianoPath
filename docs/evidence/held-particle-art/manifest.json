@@ -2224,11 +2224,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "wisps/60/live-stage/active.png",
-      "PixelSha256": "1DD8869B94694A1195D8D19C9DBB38A4333081C96052BA840544BF2C82B9672E",
+      "PixelSha256": "DF9E41876511D19F3DF3FB8A4481D0EC14052DD9D87EC97B1638F3C03188A0CA",
       "StageSprites": 76,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 804
+      "ChangedPixels": 637
     },
     {
       "Route": "wisps",
@@ -2240,7 +2240,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "wisps/60/live-stage/pedal-tail.png",
-      "PixelSha256": "C50DDA9EA14E5013A83C8EBA3EC037F3EAB7E12DB93955BC63CE7C6E740082E4",
+      "PixelSha256": "FDDD0B8D8A5C6503B60FDA4AFC82B0028C738CE00D5B6B5AF220652C5098BAED",
       "StageSprites": 44,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
@@ -2288,11 +2288,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "wisps/60/ar/active.png",
-      "PixelSha256": "E7251B424309EFC88F4B61D4D91F1914B2F5DE36F00AD9AD4135E6ED9696F73E",
+      "PixelSha256": "C311A2C0AA93433F8C61E668DD9210C2BC24ABE4485882FED77FEE4A12064B7D",
       "StageSprites": 0,
       "ArParticles": 76,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 386
+      "ChangedPixels": 310
     },
     {
       "Route": "wisps",
@@ -2304,7 +2304,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "wisps/60/ar/pedal-tail.png",
-      "PixelSha256": "6BBDA9AE38BD46ED4E91D6C2B6CAE91E2374CA07987868B65F21784A06733CE5",
+      "PixelSha256": "7E6AB7128E88F71B5D2D2AD9ADF9016F347C323598A0783E4CB0651594155570",
       "StageSprites": 0,
       "ArParticles": 44,
       "ArReleaseEffects": 0,
@@ -2352,11 +2352,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "wisps/61/live-stage/active.png",
-      "PixelSha256": "70127708F853DB16A9BC371BF3254EAD6E1CFF96536E4E26305E47258AC599A8",
+      "PixelSha256": "B13823D5F4404EA49319CD5279C661E6B5F9D136BA688DF64E2A3FCEEC774CA0",
       "StageSprites": 76,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 811
+      "ChangedPixels": 635
     },
     {
       "Route": "wisps",
@@ -2368,7 +2368,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "wisps/61/live-stage/pedal-tail.png",
-      "PixelSha256": "5718C3904E64C57286F0ED218E42F67B7D8BDE6316D9A132CFA2A69967BAEAF6",
+      "PixelSha256": "2A77178CDFA3E8B2E587FE35400170C613D8EF75497D7FD4F7E03DD594067A74",
       "StageSprites": 44,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
@@ -2416,11 +2416,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "wisps/61/ar/active.png",
-      "PixelSha256": "31453AF8AAB4E920C787F6DCB28161C403F8159747D21C8A4625B83716010240",
+      "PixelSha256": "ADE8D4F2F2E3C8C19B49A1DF5A43B406D8C087A0DA769D5C03BE0AF145EB079F",
       "StageSprites": 0,
       "ArParticles": 76,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 391
+      "ChangedPixels": 339
     },
     {
       "Route": "wisps",
@@ -2432,7 +2432,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "wisps/61/ar/pedal-tail.png",
-      "PixelSha256": "78B401AB9D3B9AE5E4D13C543ED866AA9A607A7EBB59DF0B68DF11EA3460CA27",
+      "PixelSha256": "383B80D7D418A7508573B149928B88B6193DC7EDBFD215693B4AAC79400DBC69",
       "StageSprites": 0,
       "ArParticles": 44,
       "ArReleaseEffects": 0,
@@ -2480,11 +2480,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "flames/60/live-stage/active.png",
-      "PixelSha256": "C8A25227E5470068E8199A81772A16154CCE04145567C60E7317DFB0F1710CFE",
+      "PixelSha256": "86D233591FA941E3E93A002359907B7D417958A9DC61DFDAE085D704E221731C",
       "StageSprites": 19,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 744
+      "ChangedPixels": 651
     },
     {
       "Route": "flames",
@@ -2496,7 +2496,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "flames/60/live-stage/pedal-tail.png",
-      "PixelSha256": "62DB1C81AAB829A8C77396C2043136E925BD445BE17CCEEB465E69AF861A22C7",
+      "PixelSha256": "B3C3D8BA17803CB4F16E4F32A02E65C354EF748FCF94D710315A884E01DF5C7D",
       "StageSprites": 16,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
@@ -2544,11 +2544,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "flames/60/ar/active.png",
-      "PixelSha256": "5A3B8A2BFF55A88CD67FB2A9EEDA33AB7D03C3EBC56D2BA0AE2218FA01063AA2",
+      "PixelSha256": "A6DA85046E4B31307618CDEB1C23B9DA3F154AE8B3F5A1EC2FAFFC4F7C97AEA0",
       "StageSprites": 0,
       "ArParticles": 19,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 515
+      "ChangedPixels": 426
     },
     {
       "Route": "flames",
@@ -2560,7 +2560,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "flames/60/ar/pedal-tail.png",
-      "PixelSha256": "DF53CA1B0FA14632B021AA6BE5A6148D236886A8C3482C691DDECCE5934F7028",
+      "PixelSha256": "85235BEDDFA20D0272D3CE88EF44356FB2B8C14E9135915815BD2D9A540F63A8",
       "StageSprites": 0,
       "ArParticles": 16,
       "ArReleaseEffects": 0,
@@ -2608,11 +2608,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "flames/61/live-stage/active.png",
-      "PixelSha256": "AF6A4DA030409F4C5DE1093B001262ADCAB1D4020DB786AC0BA5D11C1F983922",
+      "PixelSha256": "74F75881055994842A392659BE7331EDA48B7DDF398546B9F9DABCDB01A73D6A",
       "StageSprites": 19,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 761
+      "ChangedPixels": 647
     },
     {
       "Route": "flames",
@@ -2624,7 +2624,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "flames/61/live-stage/pedal-tail.png",
-      "PixelSha256": "DDF4AFEC2026A793A8B424EE0D5C35C22F2325A958A6659BD406038975076A77",
+      "PixelSha256": "A8B6609B14D3DE0C267C14C154912AE96159DF7A65D229690FF4A8C888123CA2",
       "StageSprites": 16,
       "ArParticles": 0,
       "ArReleaseEffects": 0,
@@ -2672,11 +2672,11 @@
       "RequestedTime": 0.6,
       "ActualTime": 0.6,
       "File": "flames/61/ar/active.png",
-      "PixelSha256": "C1DD75044D9486E467C9943A3EA15DB7EA321C920007DE07D82DAAF078D749AE",
+      "PixelSha256": "EEE272C15665D58A7B100FE61737AD7AFE47ECEBDB2ED93A2A5459CBAC131C7B",
       "StageSprites": 0,
       "ArParticles": 19,
       "ArReleaseEffects": 0,
-      "ChangedPixels": 516
+      "ChangedPixels": 427
     },
     {
       "Route": "flames",
@@ -2688,7 +2688,7 @@
       "RequestedTime": 0.65,
       "ActualTime": 0.65,
       "File": "flames/61/ar/pedal-tail.png",
-      "PixelSha256": "15BA576BA92321F849262231F9FEB3787030433EAF83F3C4CDFBD025977A0B52",
+      "PixelSha256": "1C0C637C1781BCCEC293B42BA9410E40C600689399DC27CAC53194997E398F17",
       "StageSprites": 0,
       "ArParticles": 16,
       "ArReleaseEffects": 0,
