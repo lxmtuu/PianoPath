@@ -495,6 +495,17 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
 // Review-only sparks: coloured faceted ember + velocity-aligned tapered sliver.
 // Shared by Stage and calibrated AR; CPU already owns the lifetime envelope.
 // No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
+// Physical raw-size coordinates, shared despite old Stage 4.32x / AR 2.4x quad extents.
+// Soft pigment mote: no white core, temporal noise, additional fade or added geometry.
+float4 ShadeDustArt(float2 q,float4 color)
+{
+    float r=length(q);
+    float edge=1.0-smoothstep(1.6,2.2,r);
+    float coverage=exp(-dot(q,q)*0.9)*edge;
+    float alpha=coverage*color.a;
+    return float4(color.rgb*alpha,alpha);
+}
+
 // Paper coordinates in units of raw particle size. Clipped corners fit inside the narrow AR quad
 // at every rotation; shared physical aspect, no new geometry or age/brightness oscillation.
 float4 ShadeConfettiArt(float2 q,float4 color)
@@ -606,6 +617,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind>28.5 && kind<29.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
     if(kind>27.5 && kind<28.5)
     {
         float2 p=(i.Uv*2.0-1.0)*float2(1.6,1.0);
@@ -1399,7 +1411,11 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>27.5 && kind<28.5)
+    if(kind>28.5 && kind<29.5)
+    {
+        // Exact old dust kind-0 square extent, axis and depth; no geometry enlargement.
+    }
+    else if(kind>27.5 && kind<28.5)
     {
         // Exact old kind-3 square extent and age/phase axis; material alone supplies the paper shape.
     }
@@ -1626,6 +1642,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>28.5 && kind<29.5) return ShadeDustArt(v.Local*4.32,v.Color);
     if(kind>27.5 && kind<28.5) return ShadeConfettiArt(v.Local*1.6,v.Color);
     if(kind>25.5 && kind<27.5) return ShadeFireworkArt(v.Local*0.5+0.5,v.Color,kind<26.5);
     if(kind>21.5 && kind<24.5) return ShadeSplashArt(v.Local*0.5+0.5,v.Color,kind);

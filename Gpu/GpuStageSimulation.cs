@@ -926,7 +926,13 @@ internal sealed partial class GpuStageSimulation
                         fade = MathF.Min(1, u * 6) * (1 - u);
                     }
                     if (p.Shape == Shape.Dust) { size *= 1.8f; gain *= .35f; }
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, FireworkParticleAppearance.StageKind(look.FireworkArtForReview && look.ImpactBurst=="Fireworks", (int)p.Shape, p.Wisp, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 0, look.SparkArtV2ForReview))), Color = SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * gain * p.Glow * fade, 1)), Dir = new Vector4(0, -1, 0, u) });
+                    var kind=FireworkParticleAppearance.StageKind(look.FireworkArtForReview && look.ImpactBurst=="Fireworks", (int)p.Shape, p.Wisp,
+                        SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 0, look.SparkArtV2ForReview));
+                    var color=SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * gain * p.Glow * fade, 1));
+                    if(DustParticleAppearance.Eligible(look.DustArtForReview && look.ImpactBurst=="Dust",(int)p.Shape,p.Wisp)
+                        && DustParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var dust))
+                    {kind=DustParticleAppearance.Kind;color=dust;}
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, kind), Color = color, Dir = new Vector4(0, -1, 0, u) });
                     break;
                 }
             }

@@ -88,6 +88,11 @@ internal sealed class GpuLook
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
+    internal bool DustArtForReview { get; private set; }
+    internal GpuLook WithDustArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.DustArtForReview=enabled;return copy;
+    }
     internal bool ConfettiArtForReview { get; private set; }
     internal GpuLook WithConfettiArtForReview(bool enabled)
     {
