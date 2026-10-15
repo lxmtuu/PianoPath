@@ -53,7 +53,7 @@ internal static class AuxParticleVisualReview
                         ring.Publish(slot, Width, Height, Stopwatch.GetTimestamp());
                         feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, false, 1);
                         feed.Ar = new GpuArInput(calibration, ArNoteStyle.Default, 1, Quality: ArQualityTier.Ultra,
-                            ProjectedNotes: true, ShowDamperStrip: false);
+                            ProjectedNotes: true, ShowDamperStrip: false) { LegacyParticleAxesForReview=true };
                     }
                     var requestedTime = AuxParticleTimeline.SampleTime(fixture, phase);
                     var frames = (int)Math.Ceiling(requestedTime * Fps);

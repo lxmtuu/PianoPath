@@ -349,6 +349,21 @@ jobs:
           }
           "::notice title=Flames v3 candidate::64 full-frame hashes, 16 native quartets, paired geometry/population, 240 motion hashes and 120 lossless paired APNG frames verified. Accepted Wisps and retained v2 pixels unchanged; no art/hardware acceptance."
 
+      - name: Validate and stage production AR particle alignment
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/ar-particle-alignment'
+          python tools/review_ar_particle_alignment.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Production particle alignment failed' }
+          $target = 'docs/previews/ar-particle-alignment'
+          $evidence = 'docs/evidence/ar-particle-alignment'
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          foreach ($name in @('default','diagonal-release')) {
+            Copy-Item (Join-Path $review "$name.png") (Join-Path $target "$name.png") -Force
+          }
+          "::notice title=AR particle direction alignment::96 native frames, 48 same-state/intrinsic/count pairs, actual packed long-axis error <=1 degree; 8 published panes are native full-frame pixels. Historical artwork intentionally keeps legacy geometry, production defaults to note-aligned geometry."
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -790,7 +805,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

@@ -120,7 +120,7 @@ internal static class HeldParticleControlReview
                         feed.Camera = new GpuCameraInput(ring,PictureFit.Fit,false,1);
                         // AR's native control gates both key patches and projected neighbouring-key spill.
                         feed.Ar = new GpuArInput(calibration,ArNoteStyle.Default,1,KeyLight:(variant.Tint || variant.Spill) ? .6f : 0,
-                            Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowDamperStrip:false);
+                            Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowDamperStrip:false) { LegacyParticleAxesForReview=true };
                     }
                     var pressed = scene.Pattern.Pitches.ToHashSet();
                     void BeforeFrame(int frame)
@@ -271,7 +271,7 @@ internal static class HeldParticleControlReview
                 "docs/samples/ar-keyboard-topdown.png","Diagnostics/HeldLightIsolationPlan.cs"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new
             {
-                schema=candidateV3 ? 3 : isolateLight ? 2 : 1, wispV3ForReview=wispV3, flameV3ForReview=flameV3, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
+                schema=candidateV3 ? 3 : isolateLight ? 2 : 1, legacyParticleAxesForReview=true, wispV3ForReview=wispV3, flameV3ForReview=flameV3, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
                 sourceHashMethod="SHA256; UTF-8 text without BOM, CRLF normalized to LF; PNG bytes unchanged",
                 sourceHashes=sourceFiles.ToDictionary(p => p,p => Hash(p.EndsWith(".png",StringComparison.Ordinal)
                     ? File.ReadAllBytes(Path.Combine(root,p))

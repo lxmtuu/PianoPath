@@ -60,7 +60,7 @@ internal static class HeldParticleArtReview
                 var ring=new CameraFrameRing(); camera.CopyTo(ring.BeginWrite(camera.Length,out var slot),0);
                 ring.Publish(slot,1280,720,Stopwatch.GetTimestamp());
                 feed.Camera=new GpuCameraInput(ring,PictureFit.Fit,false,1);
-                feed.Ar=new GpuArInput(calibration,ArNoteStyle.Default,1,Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowDamperStrip:false);
+                feed.Ar=new GpuArInput(calibration,ArNoteStyle.Default,1,Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowDamperStrip:false) { LegacyParticleAxesForReview=true };
             }
             var name=$"{route.Id}-{(ar ? "ar" : "live-stage")}-{(candidateV3 ? (refined ? "v3" : "v2") : (refined ? "art" : "classic"))}";
             var folder=Path.Combine(output,name); Directory.CreateDirectory(folder);
@@ -100,7 +100,7 @@ internal static class HeldParticleArtReview
         {sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
             sourceHashes=motionSources.ToDictionary(p=>p,p=>Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
                 File.ReadAllText(Path.Combine(sourceRoot,p)).Replace("\r\n","\n"))))),
-            seed=KeyParticleFixtures.Seed,wispV3ForReview=wispV3,flameV3ForReview=flameV3,flameIntensity=70,pitches=candidateV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
+            seed=KeyParticleFixtures.Seed,legacyParticleAxesForReview=true,wispV3ForReview=wispV3,flameV3ForReview=flameV3,flameIntensity=70,pitches=candidateV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
     }
 
     private static void WritePng(string path,byte[] pixels,int width,int height)

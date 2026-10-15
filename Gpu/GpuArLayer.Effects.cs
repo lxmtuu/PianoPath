@@ -247,7 +247,7 @@ internal sealed partial class GpuArLayer
             BuildStageRings(view, simulation, quads, opacity, look, layout, pose, preset);
         if (!ArQualityBudget.CanDraw(ar.Quality, adaptiveTier, ArElement.Particles)) return;
 
-        BuildStageParticles(view, simulation, quads, opacity, look, layout, pose);
+        BuildStageParticles(view, simulation, quads, opacity, look, layout, pose, ar.NoteDirection, ar.LegacyParticleAxesForReview);
         BuildStageFlashes(view, simulation, quads, opacity, look, layout, pose);
         if (!preset.TallEffectsVisible) return;
         BuildHoldArcs(view, simulation, quads, opacity, look, layout, pose);
@@ -384,8 +384,10 @@ internal sealed partial class GpuArLayer
     }
 
     private void BuildStageParticles(ArView view, GpuStageSimulation simulation,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose,
+        ArNoteDirection direction, bool legacyAxes)
     {
+        var frame = legacyAxes ? ArParticleFrame.Legacy : ArParticleFrame.ForNotes(direction);
         var emitted = 0;
         // Draw impact and release bursts before continuous emitters when the AR tier's per-frame fill cap is reached.
         for (var originPass = 0; originPass < 2 && emitted < MaxProjectedParticles; originPass++)
@@ -395,7 +397,7 @@ internal sealed partial class GpuArLayer
                 var particle = simulation.ArParticleAt(i);
                 if ((originPass == 0 && particle.Origin == 2) || (originPass == 1 && particle.Origin != 2)) continue;
                 if (!layout.Contains(particle.Pitch) || !(particle.Life > 0) || particle.Age < 0 || particle.Age >= particle.Life) continue;
-                if (!TryAddProjectedParticle(view, simulation, particle, quads, opacity, look, layout, pose)) continue;
+                if (!TryAddProjectedParticle(view, simulation, particle, quads, opacity, look, layout, pose, frame, legacyAxes)) continue;
                 emitted++;
                 ParticleFxCount++;
                 ObservePackedParticleForReview?.Invoke(particle);
@@ -405,7 +407,8 @@ internal sealed partial class GpuArLayer
     }
 
     private bool TryAddProjectedParticle(ArView view, GpuStageSimulation simulation, GpuArParticle particle,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose,
+        ArParticleFrame frame, bool legacyAxes)
     {
         var unit = pose.KeyboardWidthDepthRatio / Math.Max(1, simulation.SimulationWidth);
         var xPixels = particle.X;
@@ -418,12 +421,15 @@ internal sealed partial class GpuArLayer
             var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * Math.Min(1, particle.Age * 1.6f);
             x += Math.Sin(particle.Age * (3 + look.WispTurbulence * 5) + particle.Phase) * amp * unit;
         }
-        var center = new ArVec3(x, .12, -y);
+        var anchorX = layout.CenterX(particle.Pitch) * pose.KeyboardWidthDepthRatio;
+        var center = legacyAxes ? new ArVec3(x, .12, -y) : frame.Point(new(anchorX, .12, 0), x - anchorX, y);
+        ArVec3 faceX = default, faceY = default;
+        if (!legacyAxes && !ArParticleBillboard.TryAligned(pose, view, center, frame.Up, out faceX, out faceY)) return false;
         if (look.HeldParticleArt && (particle.Wisp || particle.Shape == ParticleFlame))
         {
             if (!HeldParticleAppearance.TryResolve(particle.Wisp, particle.Size, particle.Age, particle.Life,
                 particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.WispArtV3ForReview, look.FlameArtV3ForReview)
-                || !ArParticleBillboard.TryFacing(pose, center, out var faceX, out var faceY)) return false;
+                || (legacyAxes && !ArParticleBillboard.TryFacing(pose, center, out faceX, out faceY))) return false;
             var halfWidth = surface.HalfWidth * unit; var halfHeight = surface.HalfHeight * unit;
             var surfaceCenter = center + faceY * (surface.BaseAnchored ? halfHeight : 0);
             if (surface.Color.W * opacity <= .003f
@@ -440,17 +446,17 @@ internal sealed partial class GpuArLayer
         var size = Math.Clamp(particle.Size * unit, .0015, .16);
         var alpha = opacity * look.ParticleGlow;
         var color = GpuStageSimulation.ToLinear(particle.Color);
-        ArVec3 axisX = Across, axisY = Normal;
+        ArVec3 axisX = legacyAxes ? Across : faceX, axisY = legacyAxes ? Normal : faceY * -1;
         double halfX = size, halfY = size;
 
         switch (stageShape)
         {
             case ParticleStreak:
             {
-                var velocity = new ArVec3(particle.Vx * unit, 0, particle.Vy * unit);
+                var velocity = legacyAxes ? new ArVec3(particle.Vx * unit, 0, particle.Vy * unit) : frame.Velocity(particle.Vx * unit, particle.Vy * unit);
                 var speed = Math.Sqrt(particle.Vx * particle.Vx + particle.Vy * particle.Vy);
-                axisX = velocity.Length > 1e-8 ? velocity.Normalized : Normal;
-                axisY = ArVec3.Cross(axisX, Depth).Normalized;
+                axisX = velocity.Length > 1e-8 ? velocity.Normalized : frame.Up * -1;
+                axisY = ArVec3.Cross(axisX, frame.Depth).Normalized;
                 if (axisY.Length < .9) axisY = Across;
                 var stretch = Math.Clamp(speed * .018, .5, 7);
                 halfX = size * 1.4 * (1 + stretch);
@@ -477,7 +483,7 @@ internal sealed partial class GpuArLayer
             case ParticleFlame:
             {
                 // UV y increases away from the key so the flame's broad base attaches to the surface and its tip rises.
-                axisY = Normal * -1;
+                axisY = legacyAxes ? Normal * -1 : faceY;
                 var t = progress;
                 var fire = t < .25 ? Vector3.Lerp(new Vector3(1f, .95f, .8f), new Vector3(1f, .78f, .3f), (float)(t / .25))
                     : t < .6 ? Vector3.Lerp(new Vector3(1f, .78f, .3f), new Vector3(1f, .38f, .08f), (float)((t - .25) / .35))
@@ -502,11 +508,12 @@ internal sealed partial class GpuArLayer
             case ParticleShard:
             {
                 var angle = particle.Phase + particle.Age * 7.3;
-                var baseAxis = new ArVec3(Math.Cos(angle), 0, Math.Sin(angle));
-                var velocity = new ArVec3(particle.Vx * unit, 0, particle.Vy * unit);
+                var baseAxis = legacyAxes ? new ArVec3(Math.Cos(angle), 0, Math.Sin(angle))
+                    : frame.Across * Math.Cos(angle) - frame.Up * Math.Sin(angle);
+                var velocity = legacyAxes ? new ArVec3(particle.Vx * unit, 0, particle.Vy * unit) : frame.Velocity(particle.Vx * unit, particle.Vy * unit);
                 axisX = velocity.Length > 1e-8 ? velocity.Normalized : baseAxis;
-                axisY = ArVec3.Cross(axisX, Depth).Normalized;
-                if (axisY.Length < .9) axisY = new ArVec3(-baseAxis.Z, 0, baseAxis.X);
+                axisY = ArVec3.Cross(axisX, frame.Depth).Normalized;
+                if (axisY.Length < .9) axisY = legacyAxes ? new ArVec3(-baseAxis.Z, 0, baseAxis.X) : frame.Depth;
                 halfX = size * 1.2;
                 halfY = size * .42;
                 color *= 1.4f;

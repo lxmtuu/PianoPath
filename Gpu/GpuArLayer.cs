@@ -38,6 +38,9 @@ internal struct GpuArQuad
 /// <param name="ViewProfileId">The view the camera is at (roadmap §14.7 "Thêm 5"): the layer retunes the effect heights and hides the stand-up quads for the 90° overhead view; the default keeps the leaned look at every call site.</param>
 internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false, bool ShowDamperStrip = true, Vector3 AlignmentGuideColor = default, string? ViewProfileId = null)
 {
+    // Historical artwork fixtures ONLY. Not persisted or exposed by the app; production always follows NoteDirection.
+    internal bool LegacyParticleAxesForReview { get; init; }
+
     /// <summary>Live press bars keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
     internal ArNoteStyle LivePressStyle => ArOptions.LivePressNoteStyle(Notes);
 

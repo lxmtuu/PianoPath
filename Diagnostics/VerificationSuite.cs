@@ -6730,6 +6730,9 @@ internal static partial class VerificationSuite
         Assert(flameV3==64,"Flames v3 needs eight scenes × eight independent factors.");
         HeldParticleArtReview.RenderFlameV3Motion(Path.Combine(outputDirectory,"flames-v3","motion"));
         Results.Add("PASS P3b Flames v3: 64 WARP captures and four 60-frame motion sequences; unchanged v2 populations, geometry and off controls. Candidate material only; not art/hardware acceptance.");
+        var alignment=ArParticleAlignmentReview.Render(Path.Combine(outputDirectory,"ar-particle-alignment"));
+        Assert(alignment==96,"AR particle alignment needs three poses × four directions × two families × two phases × two axes.");
+        Results.Add("PASS AR particle alignment: 96 WARP frames, same raw state/intrinsic surfaces and note counts, actual packed long-axis error below one degree. Historical material fixtures explicitly retain legacy axes; production follows NoteDirection. Not real-camera acceptance.");
         HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
         Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }
