@@ -786,7 +786,8 @@ def scan_readme():
 # docs/previews belongs to CI: the build runs ``git add docs/previews`` and commits whatever is there. A
 # diagnostic written into it (a capture report with a measured duration, a hash, a log) changes on every run
 # and so guarantees a fresh commit forever, which is exactly what happened once with ``*.report.txt``. The
-# folder may hold pictures only; diagnostics go outside the repository (see ``App.ReportPreview``).
+# folder holds pictures and explicitly allowlisted native frame bundles; diagnostics go outside the
+# repository (see ``App.ReportPreview``).
 PREVIEW_PICTURES = {".png", ".jpg", ".jpeg"}
 
 

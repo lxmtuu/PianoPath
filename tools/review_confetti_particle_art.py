@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Native Confetti material pairs. Full validation in CI; publish bounded lossless static crops/APNG pairs."""
+"""Native Confetti material pairs. Full validation in CI; publish bounded native static crops/lossless BGRA frame bundles."""
 import argparse
 import gzip
 import hashlib
