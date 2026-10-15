@@ -35,7 +35,9 @@ internal static class HeldLightIsolationPlan
                 throw new ArgumentException("Invalid live-particle coverage sample.");
         return pitches.Select(p =>
         {
-            var group=samples.Where(s => s.Pitch==p).ToArray();
+            // Canonical order also makes floating-point mean progress reproducible across the
+            // Stage's forward and AR's reverse packing traversal (even below the cap).
+            var group=samples.Where(s => s.Pitch==p).OrderBy(s=>s.Age).ThenBy(s=>s.Life).ToArray();
             return new Row(p,group.Length,group.Count(s=>s.Age<.2f),group.Count(s=>s.Age>=.2f && s.Age<.4f),
                 group.Count(s=>s.Age>=.4f),group.Length==0 ? null : group.Min(s=>(double)s.Age),
                 group.Length==0 ? null : group.Max(s=>(double)s.Age),

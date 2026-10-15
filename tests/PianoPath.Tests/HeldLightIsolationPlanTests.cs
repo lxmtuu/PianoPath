@@ -38,6 +38,14 @@ public sealed class HeldLightIsolationPlanTests
         Assert.All(HeldLightIsolationPlan.Summarize([60,61],[]),r=>Assert.Equal(0,r.Count));
     }
 
+    [Fact]
+    public void MeanProgressIsCanonicalAcrossOppositePackingTraversal()
+    {
+        var samples=Enumerable.Range(1,150).Select(i=>new HeldLightIsolationPlan.Sample(60,i/300f,1+(i%17)/19f)).ToArray();
+        Assert.Equal(HeldLightIsolationPlan.Summarize([60],samples),
+            HeldLightIsolationPlan.Summarize([60],samples.Reverse().ToArray()));
+    }
+
     [Theory]
     [InlineData(float.NaN,1f)] [InlineData(-.1f,1f)] [InlineData(1f,1f)]
     [InlineData(0f,0f)] [InlineData(.1f,float.PositiveInfinity)]
