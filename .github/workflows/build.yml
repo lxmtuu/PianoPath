@@ -509,7 +509,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
           Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
-          "::notice title=Melt v1 material::192 native statics / 720 native motion crops; 48 active pairs (no blank exemptions), 16 expired pairs; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains halo/body/glint, AR one physical body quad; firm and soft single presses only; mixed primary Splash route explicitly unchanged. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+          "::notice title=Melt v1 material::192 native statics + 16 Stage material-only depth controls / 720 native motion crops; explicit candidate-only Stage front-layer trial; 48 active pairs (no blank exemptions), 16 expired pairs; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains halo/body/glint, AR one physical body quad; firm and soft single presses only; mixed primary Splash route explicitly unchanged. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
 
       - name: Validate and stage Shatter v1 material review
         shell: pwsh

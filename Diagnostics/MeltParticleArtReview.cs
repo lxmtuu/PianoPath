@@ -31,7 +31,7 @@ internal static class MeltParticleArtReview
             renderer.SuppressStageKeyLightingForReview=true;
             renderer.SuppressArKeyTintForReview=renderer.SuppressArKeySpillForReview=true;
             var camera=PrismFlowVisualReview.ReadSyntheticCamera(Path.Combine(PrismFlowVisualReview.FindSamples(),"ar-keyboard-topdown.png"));
-            var captures=new List<Shot>();var motions=new List<object>();
+            var captures=new List<Shot>();var motions=new List<object>();var stageDepthControls=new List<Shot>();
             foreach(var palette in new[]{"prism","indigo"})
             foreach(var view in HeldParticleControlPlan.Views)
             foreach(var pitch in new[]{60,61})
@@ -59,6 +59,22 @@ internal static class MeltParticleArtReview
                     }
                     else if(variant=="classic")baseline=f with {Shot=shot};
                     else GuardPair(baseline!.Shot,shot,phase!="expired");
+                    if(variant=="art" && !view.OverCamera)
+                    {
+                        var flat=Draw(renderer,view,camera,palette,pitch,phase,"art",phase=="burst"?2:phase=="held"?10:phase=="released"?26:89,60,v2:v2,frontLayer:false);
+                        long flatSignal=0;var flatVisible=0;
+                        for(var i=0;i<flat.Pixels.Length;i+=4)
+                        {
+                            var b=Math.Abs(flat.Pixels[i]-offPixels![i]);var g=Math.Abs(flat.Pixels[i+1]-offPixels[i+1]);var r=Math.Abs(flat.Pixels[i+2]-offPixels[i+2]);
+                            flatSignal+=b+g+r;if(Math.Max(b,Math.Max(g,r))>4)flatVisible++;
+                        }
+                        var control=flat.Shot with {Id=id,Variant="material-only",File=id+"-material-only.png",Signal=flatSignal,VisiblePixels=flatVisible};
+                        if(control.RawHash!=shot.RawHash || control.PacketHash!=shot.PacketHash || control.ColourHash!=shot.ColourHash || control.PackedParticles!=shot.PackedParticles)
+                            throw new InvalidDataException("Melt front-layer trial changed more than explicit shader depth/tag.");
+                        if(phase=="expired" && control.PixelSha256!=shot.PixelSha256)
+                            throw new InvalidDataException("Melt front-layer trial changed an expired output.");
+                        WritePng(Path.Combine(output,control.File),flat.Pixels,Width,Height);stageDepthControls.Add(control);
+                    }
                     captures.Add(shot);
                 }
             }
@@ -123,7 +139,7 @@ internal static class MeltParticleArtReview
                 "Camera/ArCameraPose.cs","Stage/PianoStage.cs","Diagnostics/KeyParticleFixtures.cs","Diagnostics/HeldParticleControlPlan.cs",
                 "Diagnostics/MeltParticleArtReview.cs","Diagnostics/AuxParticleFixtures.cs","Diagnostics/AuxParticleTimeline.cs","docs/samples/ar-keyboard-topdown.png"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new{
-                schema=2,family="melt",staticSampleFrames=new[]{2,10,26,89},motionPressVelocities=new[]{.9,.45},storageLaneMeaning="burst=early/firm; held=mid/soft; released=late; expired=empty; no held or release emitter",reviewOnly=true,legacyParticleAxesForReview=false,sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
+                schema=2,family="melt",stageDepthControls,stageDepthTrial="candidate Stage depth .01; material-only control depth .6; AR unchanged",staticSampleFrames=new[]{2,10,26,89},motionPressVelocities=new[]{.9,.45},storageLaneMeaning="burst=early/firm; held=mid/soft; released=late; expired=empty; no held or release emitter",reviewOnly=true,legacyParticleAxesForReview=false,sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
                 adapter=renderer.AdapterName,width=Width,height=Height,seed=KeyParticleFixtures.Seed,staticFps=60,staticReleaseFrame=21,
                 lighting="tint/spill masked; bloom off, isolated material review",captureCount=captures.Count,
                 sourceHashes=sources.ToDictionary(p=>p,p=>Hash(p.EndsWith(".png",StringComparison.Ordinal)?File.ReadAllBytes(Path.Combine(root,p)):
@@ -134,7 +150,7 @@ internal static class MeltParticleArtReview
     }
 
     private static Frame Draw(GpuStageRenderer renderer,HeldParticleControlPlan.View view,byte[] sourceCamera,
-        string palette,int pitch,string phase,string variant,int sample,int fps,bool motion=false,bool v2=true)
+        string palette,int pitch,string phase,string variant,int sample,int fps,bool motion=false,bool v2=true,bool frontLayer=true)
     {
         var settings=AuxParticleFixtures.Settings(AuxParticleTimeline.Routes.Single(r=>r.Id=="morph-melt"),variant!="off");
         settings.BloomIntensity=0;
@@ -143,7 +159,7 @@ internal static class MeltParticleArtReview
         stage.Measure(new Size(1280,720));stage.Arrange(new Rect(0,0,1280,720));stage.UpdateLayout();
         var feed=new GpuStageFeed();feed.SetStageHeight(720);
         var look=GpuLook.From(settings,(p,t)=>stage.AdjustColor(stage.NoteColor(p,t)),stage.KeyboardHeight/stage.ActualHeight,
-            stage.AdjustColor,view.OverCamera).WithMeltArtForReview(variant=="art");feed.SetLook(look);
+            stage.AdjustColor,view.OverCamera).WithMeltArtForReview(variant=="art").WithMeltFrontLayerForReview(variant=="art" && frontLayer);feed.SetLook(look);
         var direction=(view.Id=="ar-oblique"?new ArNoteDirection(45,-45):view.Id=="ar-near-overhead"?new ArNoteDirection(90,90):new ArNoteDirection());
         if(view.OverCamera)
         {
@@ -162,7 +178,7 @@ internal static class MeltParticleArtReview
         renderer.ObserveArParticleForReview=p=>selected.Add(p);
         renderer.ObserveStageSpriteForReview=q=>
         {
-            var p=q.PosSize;if(p.W==33 || p.W==35)p.W=8;else if(p.W==34)p.W=9;
+            var p=q.PosSize;if(p.W is 33 or 35 or 36 or 38)p.W=8;else if(p.W is 34 or 37)p.W=9;
             var colour=q.Color;
             if(p.W==8 && q.Dir.W==.15f){packed++;colours.Add(colour);}if(v2 && p.W is 8 or 9)colour=default;
             packets.Add(new{PosSize=p,Color=colour,q.Dir});

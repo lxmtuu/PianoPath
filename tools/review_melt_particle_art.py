@@ -112,6 +112,16 @@ def validate(m,revision=None):
         if (a['Phase']=='expired') != (a['PixelSha256']==b['PixelSha256']):raise ValueError('Wrong Melt material delta')
         if a['Phase']!='expired' and b['PixelSha256']==group['off']['PixelSha256']:raise ValueError('Active Melt candidate contributes no native off-delta')
         if a['Phase']=='expired' and a['PixelSha256']!=group['off']['PixelSha256']:raise ValueError('Expired output differs from off')
+    if m.get('stageDepthTrial')!='candidate Stage depth .01; material-only control depth .6; AR unchanged':raise ValueError('Missing explicit Melt depth experiment')
+    controls=m.get('stageDepthControls',[])
+    expected={c['Id'] for c in m['captures'] if c['View']=='live-stage' and c['Variant']=='art'}
+    if len(controls)!=16 or {c['Id'] for c in controls}!=expected:raise ValueError('Incomplete material-only Stage controls')
+    for c in controls:
+        if c['Variant']!='material-only' or c['View']!='live-stage' or c['File']!=c['Id']+'-material-only.png':raise ValueError('Wrong Stage depth control')
+        a=groups[c['Id']]['art'];check_counts(c)
+        for key in ('RawHash','PacketHash','ColourHash','PixelSha256'):check_digest(c[key])
+        if any(c[key]!=a[key] for key in ('RawHash','PacketHash','ColourHash','RawParticles','PackedParticles')):raise ValueError('Front-layer changed more than depth/tag')
+        if c['Phase']=='expired' and c['PixelSha256']!=a['PixelSha256']:raise ValueError('Depth changed expired output')
     if len(m['motions'])!=4 or {x['Id'] for x in m['motions']}!={v+'-'+p for v in VIEWS[:2] for p in ('burst','held')}:raise ValueError('Missing melt motion')
     for track in m['motions']:
         if track['Id']!=track['view']+'-'+track['phase'] or (track['fps'],track['count'],track['releaseFrame'])!=(30,60,12):raise ValueError('Bad melt timeline')
@@ -138,6 +148,9 @@ def verify(directory,source_root=None,revision=None,published_only=False):
     manifest=directory/'manifest.json'
     if not manifest.exists():manifest=directory/'manifest.json.gz'
     m=read(manifest);groups=validate(m,revision)
+    if not published_only:
+        for c in m['stageDepthControls']:
+            if digest(Image.open(directory/c['File']))!=c['PixelSha256']:raise ValueError('Stage material-only native pixels changed')
     if source_root:
         for name,expected in m['sourceHashes'].items():
             raw=(source_root/name).read_bytes()

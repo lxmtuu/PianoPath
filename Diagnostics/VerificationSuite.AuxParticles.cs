@@ -86,8 +86,8 @@ internal static partial class VerificationSuite
     {
         var settings=AuxParticleFixtures.Settings(AuxParticleTimeline.Routes.Single(r=>r.Id=="morph-melt"));
         settings.ShowEmbers=true;settings.ImpactBurst="Splash";settings.ParticleAmount=18;
-        var classic=ParticleLook(settings);var art=classic.WithMeltArtForReview(true);
-        Assert(!classic.MeltArtForReview,"Melt material must remain default-off.");
+        var classic=ParticleLook(settings);var art=classic.WithMeltArtForReview(true).WithMeltFrontLayerForReview(true);
+        Assert(!classic.MeltArtForReview && !classic.MeltFrontLayerForReview,"Melt material must remain default-off.");
         var feed=new GpuStageFeed();feed.SetLook(classic);feed.SetStageHeight(720);
         feed.SetDeterministicState([],1.0/60,false,new HashSet<int>());feed.Impact(60,.9);
         var input=new GpuFrameInput();feed.Capture(input,GpuStageFeed.Now);
@@ -106,7 +106,7 @@ internal static partial class VerificationSuite
             if(raw[i].MaterialRoute==0)Assert(a.Equals(b),"Melt candidate cannot recolour primary Splash.");
             else
             {
-                Assert(b.PosSize.W==(c==0?34:c==1?33:35),"Melt keeps halo/body/glint component order.");
+                Assert(b.PosSize.W==(c==0?37:c==1?36:38),"Melt keeps halo/body/glint component order.");
                 b.PosSize.W=a.PosSize.W;b.Color=a.Color;
                 Assert(a.Equals(b),"Melt candidate cannot alter actual Stage position, axes, extents or softness.");
             }

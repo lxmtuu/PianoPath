@@ -24,7 +24,8 @@ def plan():
             tracks.append(dict(variant=variant,hashes=[('A' if variant=='off' else 'B' if variant=='classic' else 'C')*64]*60,
                 frames=[dict(ColourHash='1'*64,RawHash='D'*64,PacketHash='E'*64,RawParticles=int(variant!='off'),PackedParticles=int(variant!='off'),fullPixelSha256='F'*64) for _ in range(60)]))
         motions.append(dict(Id=f'{view}-{phase}',view=view,phase=phase,fps=30,count=60,releaseFrame=12,crop=dict(X=1,Y=1,Width=10,Height=12),tracks=tracks))
-    return dict(schema=2,staticSampleFrames=[2,10,26,89],motionPressVelocities=[.9,.45],family='melt',reviewOnly=True,legacyParticleAxesForReview=False,sourceRevision='synthetic',width=640,height=360,
+    controls=[dict(c,Variant='material-only',File=c['Id']+'-material-only.png') for c in captures if c['View']=='live-stage' and c['Variant']=='art']
+    return dict(stageDepthControls=controls,stageDepthTrial='candidate Stage depth .01; material-only control depth .6; AR unchanged',schema=2,staticSampleFrames=[2,10,26,89],motionPressVelocities=[.9,.45],family='melt',reviewOnly=True,legacyParticleAxesForReview=False,sourceRevision='synthetic',width=640,height=360,
         seed=20261014,captureCount=192,staticFps=60,staticReleaseFrame=21,sourceHashes=dict.fromkeys(r.SOURCES,'A'*64),captures=captures,motions=motions)
 
 
@@ -56,14 +57,14 @@ class MeltArtTests(unittest.TestCase):
         self.assertIn('r.Id=="morph-melt"',producer)
         self.assertIn('.WithMeltArtForReview(variant=="art")',producer)
         self.assertNotIn('WithFireworkArtForReview',producer)
-        self.assertIn('if(p.W==33 || p.W==35)p.W=8;else if(p.W==34)p.W=9;',producer)
+        self.assertIn('if(p.W is 33 or 35 or 36 or 38)p.W=8;else if(p.W is 34 or 37)p.W=9;',producer)
         self.assertIn('if(misc.Z==33)misc.Z=2;',producer)
         for file in ('Gpu/GpuStageSimulation.cs','Gpu/GpuArLayer.Effects.cs'):
             source=(root/file).read_text()
             self.assertIn('look.MeltArtForReview && look.ImpactMorph=="Melt"',source)
             self.assertIn('MeltParticleAppearance.TryColor',source)
         shader=(root/'Gpu/StageShaders.hlsl').read_text()
-        self.assertIn('ShadeMeltArt(v.Local,v.Color,kind)',shader)
+        self.assertIn('ShadeMeltArt(v.Local,v.Color,kind>35.5?kind-3:kind)',shader)
         self.assertIn('ShadeMeltArt(i.Uv*2.0-1.0,i.Color,33)',shader)
         self.assertEqual(22,len(r.SOURCES))
 
@@ -74,7 +75,7 @@ class MeltArtTests(unittest.TestCase):
             lambda m:m['captures'][2].__setitem__('File','../bad.png'),lambda m:m['captures'][0].__setitem__('PackedParticles',1),
             lambda m:m['motions'][0].__setitem__('releaseFrame',13),lambda m:m['motions'][0]['tracks'][2]['frames'][3].__setitem__('RawHash','F'*64),
             lambda m:m['captures'][2].__setitem__('RawParticles',float('nan')),lambda m:m['motions'][0]['tracks'][1]['frames'][0].__setitem__('PackedParticles',-1),
-            lambda m:m['sourceHashes'].clear(),lambda m:m.__setitem__('legacyParticleAxesForReview',True)):
+            lambda m:m['stageDepthControls'].pop(),lambda m:m['stageDepthControls'][0].__setitem__('ColourHash','2'*64),lambda m:m['sourceHashes'].clear(),lambda m:m.__setitem__('legacyParticleAxesForReview',True)):
             m=plan();change(m)
             with self.assertRaises(ValueError):r.validate(m)
         with self.assertRaises(ValueError):r.validate(plan(),'other')
@@ -103,6 +104,9 @@ class MeltArtTests(unittest.TestCase):
                 if c['PackedParticles']:
                     im.putpixel((295,140),(150 if c['Variant']=='classic' else 110,70,30,255))
                 im.save(root/c['File']);c['PixelSha256']=r.digest(im)
+            for c in m['stageDepthControls']:
+                a=next(x for x in m['captures'] if x['Id']==c['Id'] and x['Variant']=='art')
+                (root/c['File']).write_bytes((root/a['File']).read_bytes());c['PixelSha256']=a['PixelSha256']
             for t in m['motions']:
                 for v in t['tracks']:
                     for f in range(60):

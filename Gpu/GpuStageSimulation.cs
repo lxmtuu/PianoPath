@@ -888,7 +888,9 @@ internal sealed partial class GpuStageSimulation
                         {
                             ref var q=ref sprites.Writable[j];
                             var halo=q.PosSize.W is 9 or SplashParticleAppearance.HaloKind;var body=!halo && q.Dir.W==.15f;
-                            q.PosSize.W=halo?MeltParticleAppearance.HaloKind:body?MeltParticleAppearance.BodyKind:MeltParticleAppearance.GlintKind;
+                            q.PosSize.W=look.MeltFrontLayerForReview
+                                ? halo?MeltParticleAppearance.FrontHaloKind:body?MeltParticleAppearance.FrontBodyKind:MeltParticleAppearance.FrontGlintKind
+                                : halo?MeltParticleAppearance.HaloKind:body?MeltParticleAppearance.BodyKind:MeltParticleAppearance.GlintKind;
                             q.Color=halo?MeltParticleAppearance.Halo(melt):body?melt:MeltParticleAppearance.Glint(melt);
                         }
                     break;

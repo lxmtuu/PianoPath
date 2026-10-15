@@ -1443,9 +1443,10 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>32.5 && kind<35.5)
+    if(kind>32.5 && kind<38.5)
     {
-        // Exact legacy ellipse/glow extents, rotation, depth and softness; three Stage components retained.
+        // Exact legacy XY extents/rotation/softness; the separate default-off front-layer trial only changes depth.
+        if(kind>35.5)depth=0.01;
         extent=float2(size,size*max(s.Dir.z,0.02));
         extra=float4(extent,1.0,s.Dir.w);
     }
@@ -1695,7 +1696,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
-    if(kind>32.5 && kind<35.5) return ShadeMeltArt(v.Local,v.Color,kind);
+    if(kind>32.5 && kind<38.5) return ShadeMeltArt(v.Local,v.Color,kind>35.5?kind-3:kind);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(v.Local,v.Color);
     if(kind>31.5 && kind<32.5)
     {

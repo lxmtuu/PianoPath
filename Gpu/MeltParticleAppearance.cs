@@ -6,6 +6,7 @@ internal static class MeltParticleAppearance
 {
     internal const byte Route=1;
     internal const float BodyKind=33,HaloKind=34,GlintKind=35;
+    internal const float FrontBodyKind=36,FrontHaloKind=37,FrontGlintKind=38;
     internal static bool Eligible(bool enabled,int shape,bool wisp,int origin,int route)
         =>enabled && shape==5 && !wisp && origin==0 && route==Route;
     internal static bool TryColor(Vector3 birth,float age,float life,float glow,float gain,out Vector4 color)
