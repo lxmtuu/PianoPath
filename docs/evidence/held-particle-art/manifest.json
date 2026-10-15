@@ -3,6 +3,7 @@
   "status": "p3b-held-art-prototype-not-signoff",
   "heldArt": true,
   "heldOnly": true,
+  "legacyParticleAxesForReview": true,
   "adapter": "Microsoft Basic Render Driver",
   "width": 1280,
   "height": 720,

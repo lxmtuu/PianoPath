@@ -1,11 +1,12 @@
 {
-  "sourceRevision": "75845d68de2ae01a7aef2ef25d57565aa5db3bac",
+  "sourceRevision": "a537b7ff60552e42c35505a33d53f9c5ea51b37c",
   "sourceHashes": {
-    "Diagnostics/HeldParticleArtReview.cs": "9F3E4750DD46B5EF7045F5B48F1B8F2DDCDA97B8D93403147AC0BF0458787AE5",
+    "Diagnostics/HeldParticleArtReview.cs": "72B5CC419D49DAF656BBFDF2B527967CA1E2E4AD21FEED80A6ABDB7FEC3F4CEC",
     "Diagnostics/AuxParticleTimeline.cs": "CAE18C9D3D243593BF0A8AFAFCEBA09B51FA2017DC3A618EA06C34D0B03370AC",
     "Gpu/GpuRenderLoop.cs": "21B9187DFB87C6967585DE768736C8B07352C74A17C839C16376F287A4ED6757"
   },
   "seed": 20261014,
+  "legacyParticleAxesForReview": true,
   "wispV3ForReview": false,
   "flameV3ForReview": true,
   "flameIntensity": 70,
