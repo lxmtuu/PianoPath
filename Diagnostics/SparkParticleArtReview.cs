@@ -111,7 +111,7 @@ internal static class SparkParticleArtReview
                 motions.Add(new{Id=$"{view.Id}-{phase}",view=view.Id,phase,fps=30,count=60,crop,releaseFrame=12,
                     emission=phase=="burst"?"single impact, no held emitter":"physical held f<12; no impact; pedal on after release",tracks=records});
             }
-            renderer.ObserveParticleStateForReview=null;renderer.ObserveStageSpriteForReview=null;renderer.ObserveArQuadForReview=null;
+            renderer.ObserveParticleStateForReview=null;renderer.ObserveStageSpriteForReview=null;renderer.ObserveArQuadForReview=null;renderer.ObserveArParticleForReview=null;
             var root=Path.GetFullPath(Path.Combine(PrismFlowVisualReview.FindSamples(),"..",".."));
             string[] sources=["Gpu/StageShaders.hlsl","Gpu/SparkParticleAppearance.cs","Gpu/GpuLook.cs","Gpu/GpuStageSimulation.cs",
                 "Gpu/GpuStageSimulation.Effects.cs","Gpu/GpuStageRenderer.cs","Gpu/GpuArLayer.cs","Gpu/GpuArLayer.Effects.cs",
@@ -149,8 +149,13 @@ internal static class SparkParticleArtReview
             feed.Camera=new GpuCameraInput(ring,PictureFit.Fit,false,1);
             feed.Ar=new GpuArInput(calibration,ArNoteStyle.Default,1,Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowNotes:false,ShowDamperStrip:false,NoteDirection:direction);
         }
-        var raw="";var count=0;var packets=new List<object>();var colours=new List<Vector4>();var packed=0;
-        renderer.ObserveParticleStateForReview=(sim,_)=>{count=sim.ArParticleCount;raw=Hash(JsonSerializer.SerializeToUtf8Bytes(Enumerable.Range(0,count).Select(sim.ArParticleAt).ToArray(),Json));};
+        var raw="";var count=0;var packets=new List<object>();var colours=new List<Vector4>();var selected=new List<GpuArParticle>();GpuArParticle[] rawParticles=[];var packed=0;
+        renderer.ObserveParticleStateForReview=(sim,_)=>
+        {
+            count=sim.ArParticleCount;rawParticles=Enumerable.Range(0,count).Select(sim.ArParticleAt).ToArray();
+            raw=Hash(JsonSerializer.SerializeToUtf8Bytes(rawParticles,Json));
+        };
+        renderer.ObserveArParticleForReview=p=>selected.Add(p);
         renderer.ObserveStageSpriteForReview=q=>
         {
             var p=q.PosSize;if(p.W is 18 or 19 or 20 or 21)p.W=p.W is 18 or 20?1:0;
@@ -175,7 +180,19 @@ internal static class SparkParticleArtReview
         },KeyParticleFixtures.Seed);
         if(view.OverCamera && (renderer.StageSpriteCount!=0 || renderer.StageKeyCount!=0 || renderer.StageNoteCount!=0))
             throw new InvalidDataException("Stage geometry leaked onto AR spark review.");
-        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,v2?Hash(JsonSerializer.SerializeToUtf8Bytes(colours,Json)):null));
+        string? colourHash=null;
+        if(v2)
+        {
+            // Stage emits ascending simulation slots; AR intentionally emits newest-first / origin priority.
+            // Join actual material payload to the actual selected raw particle, then canonicalise identity.
+            // Do NOT reorder production packets or erase per-particle colour identity to make outputs match.
+            var identities=view.OverCamera?selected.ToArray():rawParticles;
+            if(identities.Length!=colours.Count)throw new InvalidDataException("Cannot link spark colours to actual particles.");
+            var linked=identities.Select((particle,i)=>new{Id=Hash(JsonSerializer.SerializeToUtf8Bytes(particle,Json)),Color=colours[i]})
+                .OrderBy(p=>p.Id,StringComparer.Ordinal).ToArray();
+            colourHash=Hash(JsonSerializer.SerializeToUtf8Bytes(linked,Json));
+        }
+        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,colourHash));
     }
     private static void GuardPair(Shot a,Shot b,bool active,bool requireSignal=true)
     {

@@ -155,7 +155,7 @@ def verify(directory,source_root=None,revision=None,published_only=False):
             name=t['Id']+'.png';t['pairedFile']=name
             # Lossless delta rectangles; no palette quantisation or frame dropping.
             (directory/name).write_bytes(assemble_delta(frames))
-        (directory/'manifest.json').write_text(json.dumps(m,ensure_ascii=False,indent=2)+'\n')
+        (directory/'manifest.json').write_text(json.dumps(m,ensure_ascii=False,separators=(',',':'))+'\n')
     if len(m['sheets'])!=2:raise ValueError('Wrong spark published sheets')
     for s,phase in zip(m['sheets'],('burst','held')):
         if s['file']!=phase+'.png' or len(s['panes'])!=4:raise ValueError('Wrong spark sheet plan')

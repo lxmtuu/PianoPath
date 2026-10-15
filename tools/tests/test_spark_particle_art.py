@@ -77,6 +77,15 @@ class SparkArtTests(unittest.TestCase):
             t=published['motions'][0]
             with Image.open(root/t['pairedFile']) as im:
                 self.assertEqual(60,im.n_frames);im.seek(59);self.assertAlmostEqual(1000/30,im.info['duration'],places=5)
+            # Exercise schema-2 geometry/colour split and published gzip loading too.
+            published['schema']=2
+            for c in published['captures']:c['ColourHash']='1'*64
+            for track in published['motions']:
+                for variant in track['tracks']:
+                    for f in variant['frames']:f['ColourHash']='1'*64
+            (root/'manifest.json').write_text(json.dumps(published));r.verify(root,revision='synthetic')
+            (root/'manifest.json').unlink();published=r.verify(root,published_only=True)
+            self.assertEqual(2,published['schema'])
             sheet=published['sheets'][0];im=Image.open(root/sheet['file']).convert('RGBA');im.putpixel((8,8),(255,0,0,255));im.save(root/sheet['file'])
             sheet['hash']=r.digest(im);(root/'manifest.json').write_text(json.dumps(published))
             with self.assertRaisesRegex(ValueError,'pane changed'):r.verify(root,published_only=True)

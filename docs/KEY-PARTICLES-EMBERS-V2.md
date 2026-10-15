@@ -23,3 +23,9 @@ Native signal metrics (RGB absolute off-difference and >4-level footprint) are r
 Full original statics and motion crops stay in the CI artifact. Commit only two native ROI quartets, four paired APNGs and gzip-compressed metadata (lossless JSON, not lossy pixels), at most 0.7 MiB. Opaque APNG frames may encode RGB rather than RGBA; decoded native BGRA hashes must remain identical, including repeated tail frames at exact 1/30 s. V1 and all approved deliverables remain present; no deletion to make room.
 
 Full CI, published-pixel checks, manual native inspection and hardware/real-camera acceptance remain pending at this point.
+
+## First native run / comparison-order correction
+
+Run `38689015067` for source `c9d0a09` passed static checks, portable tests and Windows compilation; native v2 static generation passed within-output raw/geometry/population guards, then failed the cross-output colour hash at `prism-ar-reference-p60-burst`. The initial verifier incorrectly compared ordered colour lists: Stage uses ascending simulation slots, AR intentionally packs newest-first / origin priority. It is **not overall CI success**.
+
+The replacement joins each actual packed colour/alpha to its actual raw particle identity, then canonicalises those identity–colour pairs only inside diagnostics. The full ordered packet geometry test between v1/v2 remains strict; production ordering/cap/selection is not touched. This preserves per-particle identity rather than merely comparing an unlabelled colour histogram. A fresh full native run is required.

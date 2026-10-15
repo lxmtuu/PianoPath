@@ -3,6 +3,7 @@
 import argparse
 import html
 import io
+import gzip
 from functools import partial
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -13,17 +14,33 @@ ROOT=Path(__file__).resolve().parents[1]
 NAMES=('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
 
 
-def build(repo,output):
+def build(repo,output,version=1):
     from PIL import Image
     output.mkdir(parents=True,exist_ok=True)
-    for name in ('manifest.json',)+NAMES:
-        source=repo/('docs/evidence/embers-art-v1' if name=='manifest.json' else 'docs/previews/embers-art-v1')/name
+    if version not in (1,2):raise ValueError('Unknown Embers version')
+    if version==2:
+        if (output/'manifest.json').is_symlink():raise ValueError('Use a separate v2 output directory; refusing to overwrite a manifest symlink')
+        source=repo/'docs/evidence/embers-art-v2/manifest.json.gz'
+        (output/'manifest.json').write_bytes(gzip.decompress(source.read_bytes()))
+    for name in (('manifest.json',) if version==1 else ())+NAMES:
+        source=repo/(f'docs/evidence/embers-art-v{version}' if name=='manifest.json' else f'docs/previews/embers-art-v{version}')/name
         target=output/name
         if not target.is_symlink():target.symlink_to(source)
         elif target.resolve()!=source.resolve():raise ValueError('Wrong Embers symlink: '+name)
     m=review.verify(output,source_root=repo,published_only=True)
-    (output/'index.html').write_text(TEMPLATE.replace('__SOURCE__',html.escape(m['sourceRevision'])),encoding='utf-8')
-    (output/'motion-review.html').write_text(PLAYER,encoding='utf-8')
+    if m['schema']!=version:raise ValueError('Viewer/schema mismatch')
+    page=TEMPLATE;player=PLAYER
+    if version==2:
+        page=page.replace('Embers v1','Embers v2').replace('Trái classic · phải candidate','Trái v1 · phải v2').replace('<span>Classic</span>','<span>V1 baseline</span>')
+        page=page.replace('v1 giảm lõi trắng nhưng AR reference còn quá nhẹ/tối ở một số samples. Đây là đối chứng cho lượt cân contrast tiếp theo, không phải bản đã nghiệm thu.', 'v2 dùng chung màu/alpha giữa hai mode và tăng material coverage trong quad cũ. Cần xem native để chốt độ rõ; không phải camera thật/hardware acceptance.')
+        page=page.replace('chỉ đổi shader material','v2 đổi shared intrinsic colour/alpha và shader coverage, không đổi geometry')
+        rows=[c for c in m['captures'] if c['Palette']=='prism' and c['View']=='ar-reference' and c['Pitch']==60 and c['Phase']=='held' and c['Variant']!='off']
+        metrics=' · '.join(f"{('V1' if c['Variant']=='classic' else 'V2')}: {c['VisiblePixels']} px ΔRGB>4; RGB L1={c['Signal']}" for c in rows)
+        page=page.replace('<h2>Giữ phím', '<p>AR reference / held / cùng camera và phase: '+metrics+'. Đây là signal metric, không phải điểm chất lượng hoặc phép so ngang Stage/AR.</p><h2>Giữ phím')
+        player=player.replace('classic ↔ v1','v1 ↔ v2').replace('classic trái / v1 phải','v1 trái / v2 phải').replace('<span>Classic</span>','<span>V1 baseline</span>').replace('Embers v1 · review only','Embers v2 · review only')
+        player=player.replace('Embers classic bên trái và v1 bên phải','Embers v1 bên trái và v2 bên phải')
+    (output/'index.html').write_text(page.replace('__SOURCE__',html.escape(m['sourceRevision'])),encoding='utf-8')
+    (output/'motion-review.html').write_text(player,encoding='utf-8')
     frames={}
     for t in m['motions']:
         decoded=[]
@@ -55,8 +72,8 @@ PLAYER=PLAYER.replace("$('pair').hidden=false;$('status')", "$('pair').hidden=fa
 
 
 def main():
-    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',type=Path,default=ROOT);p.add_argument('--output',type=Path,required=True);p.add_argument('--port',type=int,default=8770);p.add_argument('--verify-only',action='store_true');a=p.parse_args()
-    Handler.frames=build(a.repo.resolve(),a.output.resolve())
+    p=argparse.ArgumentParser(description=__doc__);p.add_argument('--repo',type=Path,default=ROOT);p.add_argument('--output',type=Path,required=True);p.add_argument('--port',type=int,default=8770);p.add_argument('--version',type=int,choices=(1,2),default=1);p.add_argument('--verify-only',action='store_true');a=p.parse_args()
+    Handler.frames=build(a.repo.resolve(),a.output.resolve(),a.version)
     if not a.verify_only:
         print(f'Serving native Embers comparison on 0.0.0.0:{a.port}',flush=True)
         ThreadingHTTPServer(('0.0.0.0',a.port),partial(Handler,directory=str(a.output.resolve()))).serve_forever()
