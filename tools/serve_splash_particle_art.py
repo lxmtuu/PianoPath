@@ -26,12 +26,13 @@ def build(repo,output):
 <style>body{font:16px system-ui;background:#10141b;color:#dde6f4;max-width:1000px;margin:24px auto;padding:16px}p{line-height:1.7}a{color:#9bcfff}img{display:block;image-rendering:pixelated;width:640px;max-width:100%;margin:auto}figure{margin:24px 0;padding:12px;border:1px solid #354055;border-radius:12px}figcaption{text-align:center;padding:12px}code{word-break:break-all}</style>
 <h1>Splash · thân giọt có màu</h1><p><b>Prototype review-only, chưa nghiệm thu.</b> Trái classic · phải V1 candidate; Stage trên, AR reference dưới. Cùng seed và raw state; không tăng size, số hạt hay lifetime. Stage giữ nguyên ba quad halo/body/glint mỗi giọt; AR giữ một quad composited. Chỉ intrinsic màu/alpha của thân giọt được đối chiếu ngang mode, không phải toàn bộ compositing/độ sáng.</p>
 <p><a href="motion-review.html">→ Player nhấn / giữ–thả, cùng frame</a> · <a href="manifest.json">Manifest</a></p>
-<h2>Nhấn · 0,05 s</h2><figure><figcaption>Classic trái · Splash V1 phải</figcaption><img src="burst.png"></figure>
-<h2>Giữ · 0,60 s</h2><figure><figcaption>Classic trái · Splash V1 phải</figcaption><img src="held.png"></figure>
+<h2>Nhấn · 0,05 s</h2><figure><figcaption>Classic trái · Splash V1 phải</figcaption><img src="burst.png" alt="Native Splash burst: Stage trên, AR dưới; classic trái, candidate phải"></figure>
+<h2>Giữ · 0,60 s</h2><figure><figcaption>Classic trái · Splash V1 phải</figcaption><img src="held.png" alt="Native Splash held: Stage trên, AR dưới; classic trái, candidate phải"></figure>
 <p>__METRICS__. Signal trong cùng cảnh, không phải luminance hay điểm chất lượng.</p>
 <p>Crop native phóng nearest-neighbour; không chỉnh exposure/màu. Native CI kiểm 192 static / 720 motion; subset này kiểm 8 pane và 480 APNG halves. Không có đủ original fulls/off frames ở đây để kiểm lại toàn bộ dataset. Browser playback, mọi palette/tier, camera/GPU thật vẫn cần kiểm. Settings menu để cuối.</p><p>Source <code>__SOURCE__</code>.</p></html>'''
     (output/'index.html').write_text(page.replace('__SOURCE__',html.escape(m['sourceRevision'])).replace('__METRICS__',html.escape(metrics)),encoding='utf-8')
-    player=PLAYER.replace('Embers','Splash')
+    player=PLAYER.replace('Embers','Splash').replace('emitter sparks','emitter giọt')
+    player=player.replace("$('pair').hidden=true;$('frame').value=n;", "$('release').textContent=mode.endsWith('burst')?'Pedal on: frame 12':'Thả phím: frame 12';$('pair').hidden=true;$('frame').value=n;")
     (output/'motion-review.html').write_text(player,encoding='utf-8')
     frames={}
     for t in m['motions']:

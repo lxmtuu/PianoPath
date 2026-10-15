@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation complete enough for native CI; **native/visual results pending**, default-off/review-only. Embers V2 remains unaccepted; accepted Wisps/Flames are not reopened. Settings remains last.
+Native candidate verified in full Windows CI and real headless Chromium; **default-off/review-only, not user art acceptance**. Embers V2 remains unaccepted; accepted Wisps/Flames are not reopened. Settings remains last.
 
 ## Material / boundaries
 
@@ -20,11 +20,51 @@ Stage deliberately retains three draws per physical bead, AR one. `PackedParticl
 
 Published subset limited to 0.8 MiB (two ROI quartets, four lossless 60-frame APNGs, gzip metadata); original static/off-motion images remain CI-artifact-only. Existing approved JSON manifests are compacted without changing parsed data to make room below the cumulative snapshot limit; no frames or accepted deliverables deleted.
 
-## Pending gates
+## Verification scope / open acceptance
 
-- Windows build, portable C# tests, full native generation/geometry/body-colour checks and bounded publication.
-- Verify 19 source hashes, 8 published panes and 480 native motion halves after publication; inspect native burst/held and motion before any art verdict.
-- Compare saved historical Wisps/Flames/Embers digest manifests; no claim of frozen pixels until checked.
+- Windows build, portable C# tests, full native generation/geometry/body-colour checks and bounded publication: **PASS**, run below.
+- Published verification of 19 source hashes, 8 panes and 480 native motion halves: **PASS**. Native static and 60-frame contact-sheet inspection complete; no automatic art verdict.
+- Saved historical Wisps/Flames/Embers digest comparison: **PASS**, unchanged digests below.
 - Real camera, hardware/perf, live MIDI, arbitrary palettes/tiers/delay, bloom/tint/spill and recording remain unverified. HTTP/JavaScript checks cannot certify browser playback.
 
 Local Python validator tests use explicitly synthetic contract pixels, never claimed as native evidence. No local .NET SDK/Windows renderer is available; C# and HLSL require CI.
+
+
+## Browser QA method
+
+`tools/check_burst_particle_review_browser.cjs` uses **real headless Chromium**, not a mock DOM: decodes all 240 paired PNGs into canvas and compares 480 native BGRA hashes, then operates four modes, release/next/previous/seek and play/pause, checks page errors and a 390px mobile layout. Optional screenshot. Install browser dependencies outside the checkout; no generated binaries belong in Git. A system Chrome can be selected via `CHROME_BIN`; otherwise `@sparticuz/chromium` is supported (its bundled native libraries may require `LD_LIBRARY_PATH`). This is browser decoding/control QA, **not** realtime FPS, live camera, physical GPU or art acceptance. Passed on the published Splash page (and smoke-tested first on Embers V2).
+
+
+## Native evidence and observed result
+
+- [CI **38694214635**](https://github.com/lxmtuu/PianoPath/actions/runs/38694214635) **SUCCESS**, renderer source `ba78d827998a46696a7bec4ad16cb5a4091b8742`; preview publication `e53da10`. Static/portable tests, Windows build, full native suite, bounded Splash publisher, frame budget, galleries and package passed.
+- **59 Python tests**, source checker (313 C# / 2 XAML), Python/JavaScript syntax and diff checks passed locally. C# and HLSL execution were checked on Windows CI, not simulated locally.
+- Native matrix **192 statics / 720 motion crops** passed raw state, actual ordered component-packet geometry, population and identity-linked body-colour guards. Local subset verification passes **19 source hashes / 8 published static panes / 480 motion halves**. Full originals remain artifact-only; this subset cannot independently reverify every original/off frame.
+- **Real headless Chromium** passed all 480 decoded native BGRA halves, release/step/seek controls for four modes, play/pause, no page errors, and 390px mobile overflow. This tests actual browser decoding/controller behaviour, not guaranteed 30-FPS playback or native WPF GUI interaction.
+- Against saved pre-Splash manifests, unchanged SHA256 digest leaves: **342 static + 240 motion each for Wisps/Flames**, **3,466 Embers V1**, **4,378 Embers V2** (pixel/state/packet digests, excluding source provenance). Approved artwork was not reopened. Existing metadata compaction saved **1,145,572 bytes**, with parsed JSON unchanged before renderer provenance refresh.
+- Splash committed subset **0.369 MiB**, below 0.8 MiB. Cumulative session changed-file payload approximately **127.11 MiB**, below 128 MiB. No accepted frames removed.
+
+### Matched native signal · Prism / pitch 60
+
+| View / phase | Body packets classic / candidate | RGB L1 off-delta classic → candidate | Pixels max ΔRGB > 4 classic → candidate |
+|---|---|---|---|
+| Stage / burst | 35 / 35 | 19,964 → 9,631 | 39 → 17 |
+| Stage / held | 14 / 14 | 22,529 → 14,636 | 147 → 49 |
+| AR reference / burst | 35 / 35 | 1,357 → 1,310 | 10 → 12 |
+| AR reference / held | 14 / 14 | 6,500 → 6,501 | 30 → 38 |
+
+Do **not** read this as a universal brightness/contrast increase. Stage deliberately loses much of its broad halo and white glint; its off-delta footprint/energy falls. Reference AR held has nearly unchanged absolute RGB delta but a larger thresholded footprint. L1 includes darkening, not just luminance; compare versions within the same scene only, never normalise Stage against AR with this table.
+
+Inspected burst/held quartets at nearest-neighbour enlargement and all 60-frame contact sheets for all four published tracks, plus a real Chromium player screenshot/control run. Candidate Stage shows more discrete coloured bodies rather than diffuse glow; reference AR remains small and pixel-limited. Fine liquid meniscus/shoulder detail is not reliably readable in every subpixel drop; early burst still overlaps near the key. These remain **open art/readability limitations**, not test failures silently relabelled as final polish. Geometry/orientation and emitter timing were intentionally retained; no new velocity rotation or motion dynamics claimed.
+
+Evidence: [burst](previews/splash-art-v1/burst.png), [held](previews/splash-art-v1/held.png), [gzip manifest](evidence/splash-art-v1/manifest.json.gz). **Classic left / candidate right; Stage above / AR below.**
+
+```bash
+# Requires Pillow. Native subset is verified before serving on 0.0.0.0.
+python3 tools/serve_splash_particle_art.py --output /tmp/splash-review --port 8772
+# Real browser QA, using externally installed puppeteer-core and Chrome:
+CHROME_BIN=/path/to/chrome NODE_PATH=/path/to/deps/node_modules \
+  node tools/check_burst_particle_review_browser.cjs http://127.0.0.1:8772
+```
+
+Next families: Fireworks, Confetti, Dust, then remaining auxiliary morph/release art. Embers V2/Splash V1 remain review-only; menu redesign remains last, consistent between Stage and AR.

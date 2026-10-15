@@ -413,7 +413,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
           Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
-          "::notice title=Splash v1 material::192 native statics / 720 native motion crops; unchanged raw state, geometry and selection; identical actual v2 colour/alpha payloads across Stage and three AR poses. Paired classic/candidate native crops/APNGs, review only."
+          "::notice title=Splash v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains three component draws per bead, AR one. Paired classic/candidate native crops/APNGs, review only."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
