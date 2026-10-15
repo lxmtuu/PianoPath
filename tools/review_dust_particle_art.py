@@ -109,6 +109,7 @@ def validate(m,revision=None):
         a,b=group['classic'],group['art']
         if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Dust state/actual packet changed')
         if (a['Phase']=='expired') != (a['PixelSha256']==b['PixelSha256']):raise ValueError('Wrong dust material delta')
+        if a['Phase']!='expired' and b['PixelSha256']==group['off']['PixelSha256']:raise ValueError('Active dust candidate contributes no native off-delta')
         if a['Phase']=='expired' and a['PixelSha256']!=group['off']['PixelSha256']:raise ValueError('Expired output differs from off')
     if len(m['motions'])!=4 or {x['Id'] for x in m['motions']}!={v+'-'+p for v in VIEWS[:2] for p in ('burst','held')}:raise ValueError('Missing dust motion')
     for track in m['motions']:
@@ -127,6 +128,7 @@ def validate(m,revision=None):
         for a,b in zip(versions['classic']['frames'],versions['art']['frames']):
             if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Motion state/packet changed')
         if sum(a!=b for a,b in zip(versions['classic']['hashes'],versions['art']['hashes']))<6:raise ValueError('Invisible dust motion candidate')
+        if sum(a!=b for a,b in zip(versions['off']['hashes'],versions['art']['hashes']))<6:raise ValueError('Blank dust motion candidate')
     return groups
 
 

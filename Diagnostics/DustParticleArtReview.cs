@@ -50,6 +50,8 @@ internal static class DustParticleArtReview
                         signal+=b+g+r;if(Math.Max(b,Math.Max(g,r))>4)visible++;
                     }
                     var shot=f.Shot with {Id=id,File=id+"-"+variant+".png",Signal=signal,VisiblePixels=visible};
+                    if(variant=="art" && phase!="expired" && signal==0)
+                        throw new InvalidDataException("Active dust candidate contributes no native off-delta.");
                     WritePng(Path.Combine(output,shot.File),f.Pixels,Width,Height);
                     if(variant=="off")
                     {
@@ -93,6 +95,8 @@ internal static class DustParticleArtReview
                 }
                 if(Enumerable.Range(0,60).Count(f=>tracks["classic"][f].Shot.PixelSha256!=tracks["art"][f].Shot.PixelSha256)<6)
                     throw new InvalidDataException("Dust motion has too few changed frames.");
+                if(Enumerable.Range(0,60).Count(f=>tracks["art"][f].Shot.PixelSha256!=tracks["off"][f].Shot.PixelSha256)<6)
+                    throw new InvalidDataException("Dust candidate motion contributes too few nonblank frames.");
                 if(x1<x0 || y1<y0)throw new InvalidDataException("Motion has no particle signal.");
                 x0=Math.Max(0,x0-4);y0=Math.Max(0,y0-4);x1=Math.Min(Width-1,x1+4);y1=Math.Min(Height-1,y1+4);
                 var crop=new Crop(x0,y0,x1-x0+1,y1-y0+1);var records=new List<object>();

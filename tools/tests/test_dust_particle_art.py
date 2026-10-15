@@ -31,6 +31,12 @@ def plan():
 class DustArtTests(unittest.TestCase):
     def test_matrix(self):self.assertEqual(64,len(r.validate(plan(),'synthetic')))
 
+    def test_removed_candidate_is_not_accepted_as_a_material_change(self):
+        m=plan();m['captures'][2]['PixelSha256']=m['captures'][0]['PixelSha256']
+        with self.assertRaisesRegex(ValueError,'off-delta'):r.validate(m)
+        m=plan();m['motions'][0]['tracks'][2]['hashes']=m['motions'][0]['tracks'][0]['hashes'][:]
+        with self.assertRaisesRegex(ValueError,'Blank dust'):r.validate(m)
+
     def test_native_producer_and_material_routes_are_dust_specific(self):
         root=Path(__file__).resolve().parents[2]
         producer=(root/'Diagnostics/DustParticleArtReview.cs').read_text()

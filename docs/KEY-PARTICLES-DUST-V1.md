@@ -14,7 +14,7 @@ Native CI and visual review pending. **Default-off, review-only.** Previous cand
 
 ## Verification plan
 
-192 native statics (off/classic/candidate × two palettes × two pitches × four views × burst/held/released/expired), 64 paired raw/ordered geometry/count guards; 720 original motion crops (Stage/reference AR × burst/held-release × 60 frames × off/classic/candidate). Candidate actual particle RGBA parity is checked against Stage at all static AR poses. Motion preserves physical release before step 12; pedal must not keep the emitter running.
+192 native statics (off/classic/candidate × two palettes × two pitches × four views × burst/held/released/expired), 64 paired raw/ordered geometry/count guards; 720 original motion crops (Stage/reference AR × burst/held-release × 60 frames × off/classic/candidate). Candidate actual particle RGBA parity is checked against Stage at all static AR poses. Active candidate statics must contribute a nonzero native off-delta; motion must contribute at least six nonblank candidate frames, not merely differ from classic by disappearing. This is a nonblank guard, not proof of good visibility. Motion preserves physical release before step 12; pedal must not keep the emitter running.
 
 Publication cap **2.5 MiB**: two exact native ROI quartets, four lossless BGRA XOR+gzip 60-frame bundles, gzip metadata. No quantisation, resampling or frame dropping. Full original/off frames stay artifact-only. No new PNG compaction is planned: existing snapshot headroom must be measured again after publication under the cumulative 128 MiB cap.
 
