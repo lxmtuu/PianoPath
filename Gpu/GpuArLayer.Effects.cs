@@ -422,7 +422,7 @@ internal sealed partial class GpuArLayer
         if (look.HeldParticleArt && (particle.Wisp || particle.Shape == ParticleFlame))
         {
             if (!HeldParticleAppearance.TryResolve(particle.Wisp, particle.Size, particle.Age, particle.Life,
-                particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface)
+                particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.WispArtV3ForReview)
                 || !ArParticleBillboard.TryFacing(pose, center, out var faceX, out var faceY)) return false;
             var halfWidth = surface.HalfWidth * unit; var halfHeight = surface.HalfHeight * unit;
             var surfaceCenter = center + faceY * (surface.BaseAnchored ? halfHeight : 0);

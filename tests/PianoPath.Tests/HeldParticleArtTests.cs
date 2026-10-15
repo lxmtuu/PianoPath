@@ -21,6 +21,16 @@ public sealed class HeldParticleArtTests
     }
 
     [Theory]
+    [InlineData(true)] [InlineData(false)]
+    public void V3OnlyChangesTheWispMaterialDiscriminator(bool wisp)
+    {
+        Assert.True(HeldParticleAppearance.TryResolve(wisp,1.3f,.3f,1,.7f,.8f,new(.2f,.4f,1),.4f,true,out var v2));
+        Assert.True(HeldParticleAppearance.TryResolve(wisp,1.3f,.3f,1,.7f,.8f,new(.2f,.4f,1),.4f,true,out var v3,true));
+        Assert.Equal(v2 with { Shape=wisp?8:4 },v3);
+        Assert.Equal(wisp?7:4,v2.Shape);
+    }
+
+    [Theory]
     [InlineData(float.NaN)] [InlineData(float.PositiveInfinity)] [InlineData(-1f)]
     public void InvalidInputsCannotMakeGeometry(float invalid)
     {

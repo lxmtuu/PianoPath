@@ -10,7 +10,7 @@ internal readonly record struct HeldParticleSurface(float HalfWidth, float HalfH
 internal static class HeldParticleAppearance
 {
     internal static bool TryResolve(bool wisp, float size, float age, float life, float phase, float glow,
-        Vector3 birthColor, float wispWidth, bool flameNoteColor, out HeldParticleSurface surface)
+        Vector3 birthColor, float wispWidth, bool flameNoteColor, out HeldParticleSurface surface, bool wispV3ForReview = false)
     {
         surface = default;
         if (!float.IsFinite(size) || size <= 0 || !float.IsFinite(age) || age < 0
@@ -37,7 +37,7 @@ internal static class HeldParticleAppearance
             alpha = fade;
         }
         if (!float.IsFinite(halfX) || !float.IsFinite(halfY) || !Finite(color)) return false;
-        surface = new(halfX, halfY, new Vector4(color, alpha), u, wisp ? 7 : 4, phase, !wisp);
+        surface = new(halfX, halfY, new Vector4(color, alpha), u, wisp ? (wispV3ForReview ? 8 : 7) : 4, phase, !wisp);
         return true;
     }
 

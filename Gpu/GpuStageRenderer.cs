@@ -375,6 +375,8 @@ internal sealed class GpuStageRenderer : IDisposable
     internal Action<GpuStageSimulation, GpuLook>? ObserveParticleStateForReview { get; set; }
     internal Action<GpuArParticle>? ObserveStageParticleForReview { get; set; }
     internal Action<GpuArParticle>? ObserveArParticleForReview { get; set; }
+    internal Action<GpuSpriteInstance>? ObserveHeldSpriteGeometryForReview { get; set; }
+    internal Action<GpuArQuad>? ObserveHeldQuadGeometryForReview { get; set; }
 
 
     internal static void MaskPressedKeyLightForReview(Span<GpuKeyInstance> keys, bool suppressTint = true, bool suppressSpill = true)
@@ -504,6 +506,9 @@ internal sealed class GpuStageRenderer : IDisposable
         simulation.ObservePackedHeldParticleForReview = ObserveStageParticleForReview;
         StageKeyCount = keys.Count;
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
+        if (ObserveHeldSpriteGeometryForReview is { } observeSprite)
+            foreach (var sprite in sprites.Span)
+                if (sprite.PosSize.W == 17) observeSprite(sprite);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
         if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
         // The export watermark draws on its own terms: a whole-line text sprite in front of the keys,
@@ -533,6 +538,9 @@ internal sealed class GpuStageRenderer : IDisposable
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
             _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier,
                 SuppressArKeyTintForReview, SuppressArKeySpillForReview);
+        if (ObserveHeldQuadGeometryForReview is { } observeQuad)
+            foreach (var quad in _arList.Span)
+                if (quad.Misc.Z == 17) observeQuad(quad);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();

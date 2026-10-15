@@ -422,6 +422,33 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
         core = spine * ends * (1.0 - h) * 0.16;
         bodyColor *= lerp(1.0, 0.65, h); // depth along the parcel, not another lifetime fade
     }
+    else if (shape > 7.5) // Wisps v3 review candidate; v2 shape 7 and flames stay byte-for-byte below/above
+    {
+        // A tapered ribbon with a coloured shoulder and narrow ridge, not an emissive white hair.
+        // Same UV extent, birth phase and lifetime envelope as v2; no screen-space size floor.
+        float centre = sin(h * 5.2 + phase + progress * 3.0) * 0.30;
+        float taper = pow(max(sin(h * 3.14159), 0.0), 0.7);
+        float width = 0.055 + 0.22 * taper;
+        float signedDistance = x - centre;
+        float pixelHalf = max(fwidth(signedDistance) * 0.5, 0.0175);
+        float shoulder = HeldStrokeCoverage(signedDistance, width, pixelHalf);
+        float ridge = HeldStrokeCoverage(signedDistance + width * 0.20, width * 0.26, pixelHalf);
+        float ends = smoothstep(0.0, 0.13, h) * (1.0 - smoothstep(0.82, 1.0, h));
+        float variation = 0.85 + 0.15 * (0.5 + 0.5 * cos(phase));
+        float body = shoulder * ends * variation;
+        float crest = ridge * ends * variation;
+        float peak = max(max(color.r, color.g), color.b);
+        // Bound the straight colour, not the shared alpha/lifetime. HDR gain in v2 could bleach
+        // accumulated parcels against ivory; this shoulder remains chromatic over a bright key.
+        float3 hue = pow(saturate(color.rgb / max(peak, 0.0001)), 1.35);
+        float3 shoulderColor = hue * min(peak, 0.78);
+        float3 ridgeColor = hue * min(peak, 0.95);
+        float shoulderAlpha = body * 0.64;
+        float ridgeAlpha = crest * 0.18;
+        float a = saturate(shoulderAlpha + ridgeAlpha) * color.a;
+        float3 rgb = (shoulderColor * shoulderAlpha + ridgeColor * ridgeAlpha) * color.a;
+        return float4(rgb, a); // premultiplied, no warm/white core or second fade
+    }
     else // fine, partly transparent thread: dense births must not become an opaque AR patch
     {
         float centre = sin(h * 6.0 + phase + progress * 4.0) * 0.34;

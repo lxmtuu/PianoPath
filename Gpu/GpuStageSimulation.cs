@@ -826,7 +826,7 @@ internal sealed partial class GpuStageSimulation
             if (look.HeldParticleArt && (p.Wisp || p.Shape == Shape.Flame))
             {
                 if (HeldParticleAppearance.TryResolve(p.Wisp, p.Size, p.Age, p.Life, p.Phase, p.Glow,
-                    p.Color, look.WispWidth, look.FlameNoteColor, out var surface) && surface.Color.W > .003f)
+                    p.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.WispArtV3ForReview) && surface.Color.W > .003f)
                 {
                     var px = x;
                     if (p.Wisp)

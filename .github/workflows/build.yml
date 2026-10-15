@@ -121,6 +121,8 @@ jobs:
         run: |
           $log = Join-Path $env:RUNNER_TEMP 'keyflow-prism-verification.log'
           $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          Copy-Item 'docs/evidence/held-light-isolation/manifest.json' (Join-Path $review 'prior-light-isolation.json')
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-prism-only","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
           if (Test-Path $log) {
             Get-Content $log | ForEach-Object {
@@ -294,6 +296,30 @@ jobs:
             Copy-Item (Join-Path $review $combined[0].File) (Join-Path $target "$($scene.Id)-full.png") -Force
           }
           "::notice title=Tint spill coverage::192 WARP frames, 48 native quartet hashes/crops, per-pitch/age packing invariants and source guards verified. No art/performance acceptance."
+
+      - name: Validate and stage paired Wisps v3 candidate
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $review = Join-Path $root 'wisps-v3'
+          python tools/review_wisps_v3.py $review --baseline (Join-Path $root 'held-light-isolation') --source-root . --expected-revision $env:GITHUB_SHA --historical (Join-Path $root 'prior-light-isolation.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Paired Wisps v3 validation failed' }
+          $evidence = 'docs/evidence/wisps-v3'
+          $target = 'docs/previews/wisps-v3'
+          New-Item -ItemType Directory -Force -Path $evidence,$target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $evidence 'motion-manifest.json') -Force
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter '*.png')
+          if ($sheets.Count -ne 16) { throw 'Missing v3 quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          $clips = @(Get-ChildItem (Join-Path $review 'motion') -Filter '*.png')
+          if ($clips.Count -ne 4) { throw 'Missing paired v2/v3 motion clips' }
+          foreach ($clip in $clips) { Copy-Item $clip.FullName (Join-Path $target $clip.Name) -Force }
+          foreach ($view in @('live-stage','ar-reference')) {
+            $id = "wisps-low-prism-$view"
+            Copy-Item (Join-Path $review "frames/$id/on-both.png") (Join-Path $target "$id-full.png") -Force
+          }
+          "::notice title=Wisps v3 candidate::64 full-frame hashes, 16 native quartets, unchanged v2 history, paired population/actual geometry and 240 lossless APNG frames verified. Review-only, no art/projection/hardware acceptance."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
@@ -736,7 +762,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

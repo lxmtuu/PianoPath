@@ -17,14 +17,17 @@ internal static class HeldParticleControlReview
     private sealed record Crop(int X, int Y, int Width, int Height);
     private sealed record Capture(string Variant, bool Particles, bool KeyLight, string File, string PixelSha256,
         int StageKeys, int StageSprites, int ArKeys, int ArLights, int ArParticles,
-        bool Tint, bool Spill, Coverage? Coverage);
+        bool Tint, bool Spill, Coverage? Coverage, Geometry? Geometry);
+    private sealed record Geometry(int Count, double? MinWidth, double? MaxWidth, double? MeanWidth,
+        double? MinHeight, double? MaxHeight, double? MeanHeight, double? CenterYMin, double? CenterYMax, string Hash);
     private sealed record Coverage(IReadOnlyList<HeldLightIsolationPlan.Row> Raw,
         IReadOnlyList<HeldLightIsolationPlan.Row> Eligible, IReadOnlyList<HeldLightIsolationPlan.Row> Packed,
         string RawHash, string EligibleHash, string PackedHash);
     private sealed record Delta(int ChangedPixels, int OverFourPixels, int MaxChannelDelta, double MeanAbsoluteRgbDelta);
 
-    internal static int Render(string output, bool isolateLight = false)
+    internal static int Render(string output, bool isolateLight = false, bool wispV3 = false)
     {
+        if (wispV3 && !isolateLight) throw new ArgumentException("Wisps v3 requires independent light controls.");
         var previousLayout = KeyboardLayout.Active;
         KeyboardLayout.Use(KeyboardLayout.Standard88);
         try
@@ -39,9 +42,10 @@ internal static class HeldParticleControlReview
             if (!renderer.IsWarp) throw new InvalidOperationException("Held controls require WARP.");
             var scenes = new List<object>(); var count = 0;
             var effectOffHashes = new Dictionary<string,string>();
-            using var baseline = isolateLight ? JsonDocument.Parse(File.ReadAllText(Path.Combine(output,"..","held-particle-controls","manifest.json"))) : null;
+            using var baseline = isolateLight ? JsonDocument.Parse(File.ReadAllText(Path.Combine(output,"..",wispV3 ? "held-light-isolation" : "held-particle-controls","manifest.json"))) : null;
             var entries = isolateLight ? HeldLightIsolationPlan.Entries
                 : HeldParticleControlPlan.Scenes.Select(s => new HeldLightIsolationPlan.Entry(s.Id,s,"normal",32));
+            if (wispV3) entries=entries.Where(e=>e.Scene.Family=="wisps" && e.Load=="low");
             var variants = isolateLight ? HeldLightIsolationPlan.Variants
                 : HeldParticleControlPlan.Variants.Select(v => new HeldLightIsolationPlan.Variant(v.Id,v.Particles,v.KeyLight,v.KeyLight)).ToArray();
             var populations = new Dictionary<string,string>();
@@ -68,6 +72,7 @@ internal static class HeldParticleControlReview
                     var feed = new GpuStageFeed(); feed.SetStageHeight(Height);
                     var look = GpuLook.From(s, (pitch,track) => stage.AdjustColor(stage.NoteColor(pitch,track)),
                         stage.KeyboardHeight / stage.ActualHeight, stage.AdjustColor, overCamera);
+                    look=look with { WispArtV3ForReview=wispV3 };
                     feed.SetLook(look);
                     // KeyLighting=0 only mutes spill; ShaderKeyLight changes static ivory illumination.
                     // Neither is an honest Stage "key light off" control. Remove packed tint/emission/spill
@@ -87,12 +92,20 @@ internal static class HeldParticleControlReview
                         {
                             var p=simulation.ArParticleAt(i); raw.Add(Sample(p));
                             if (HeldParticleAppearance.TryResolve(p.Wisp,p.Size,p.Age,p.Life,p.Phase,p.Glow,p.Color,
-                                currentLook.WispWidth,currentLook.FlameNoteColor,out var surface) && surface.Color.W>.003f)
+                                currentLook.WispWidth,currentLook.FlameNoteColor,out var surface,currentLook.WispArtV3ForReview) && surface.Color.W>.003f)
                                 eligible.Add(Sample(p));
                         }
                     } : null;
                     renderer.ObserveStageParticleForReview = isolateLight && !overCamera ? p => packed.Add(Sample(p)) : null;
                     renderer.ObserveArParticleForReview = isolateLight && overCamera ? p => packed.Add(Sample(p)) : null;
+                    var corners=new List<float[]>();
+                    renderer.ObserveHeldSpriteGeometryForReview=isolateLight && !overCamera ? s=>
+                    {
+                        var x=s.PosSize.X;var y=s.PosSize.Y;var w=s.PosSize.Z;var h=s.Dir.X;
+                        corners.Add([x-w,y-h,x+w,y-h,x+w,y+h,x-w,y+h]);
+                    } : null;
+                    renderer.ObserveHeldQuadGeometryForReview=isolateLight && overCamera ? q=>
+                        corners.Add([q.A.X,q.A.Y,q.A.Z,q.A.W,q.B.X,q.B.Y,q.B.Z,q.B.W]) : null;
                     if (overCamera)
                     {
                         var calibration = ArCalibration.Create(KeyboardLayout.Standard88, scene.View.Corners!,
@@ -162,12 +175,35 @@ internal static class HeldParticleControlReview
                             throw new InvalidDataException($"Lighting/output altered simulated population: {id}");
                         populations[populationKey]=coverage.RawHash;
                     }
+                    Geometry? geometry=null;
+                    if (isolateLight)
+                    {
+                        if(corners.Count!=particles) throw new InvalidDataException("Geometry observer/count mismatch.");
+                        double Distance(float[] c,int a,int b)=>Math.Sqrt(Math.Pow(c[a]-c[b],2)+Math.Pow(c[a+1]-c[b+1],2));
+                        var widths=corners.Select(c=>(Distance(c,0,2)+Distance(c,6,4))*.5).ToArray();
+                        var heights=corners.Select(c=>(Distance(c,0,6)+Distance(c,2,4))*.5).ToArray();
+                        var centres=corners.Select(c=>(c[1]+c[3]+c[5]+c[7])/4d).ToArray();
+                        geometry=new(corners.Count,widths.Length==0?null:widths.Min(),widths.Length==0?null:widths.Max(),widths.Length==0?null:widths.Average(),
+                            heights.Length==0?null:heights.Min(),heights.Length==0?null:heights.Max(),heights.Length==0?null:heights.Average(),
+                            centres.Length==0?null:centres.Min(),centres.Length==0?null:centres.Max(),Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(corners))));
+                    }
+                    if(wispV3)
+                    {
+                        var prior=baseline!.RootElement.GetProperty("scenes").EnumerateArray().Single(x=>x.GetProperty("Id").GetString()==id)
+                            .GetProperty("captures").EnumerateArray().Single(c=>c.GetProperty("Variant").GetString()==variant.Id);
+                        var canonical=JsonSerializer.Serialize(JsonSerializer.Deserialize<Coverage>(prior.GetProperty("Coverage").GetRawText()));
+                        if(JsonSerializer.Serialize(coverage)!=canonical) throw new InvalidDataException("V3 changed simulation/eligible/packed samples.");
+                        if(geometry!.Hash!=prior.GetProperty("Geometry").GetProperty("Hash").GetString())
+                            throw new InvalidDataException("V3 changed packed geometry.");
+                        if((!variant.Particles)!=(hash==prior.GetProperty("PixelSha256").GetString()))
+                            throw new InvalidDataException("V3 must change active pixels and preserve particle-off controls.");
+                    }
                     // GpuArLayer counters describe its last Build and remain cached while Stage is active.
                     // Record the active output only, not the previous AR scene's stale diagnostics.
                     captures.Add(new Capture(variant.Id,variant.Particles,variant.Tint || variant.Spill,file,hash,renderer.StageKeyCount,
                         renderer.StageSpriteCount,overCamera ? renderer.ArKeyQuadCount : 0,
                         overCamera ? renderer.ArNoteLightCount : 0,overCamera ? renderer.ArParticleFxCount : 0,
-                        variant.Tint,variant.Spill,coverage));
+                        variant.Tint,variant.Spill,coverage,geometry));
                     pixels.Add(image); count++;
                     crop ??= CropFor(scene,look.KeyboardFraction);
                 }
@@ -232,7 +268,7 @@ internal static class HeldParticleControlReview
                 "docs/samples/ar-keyboard-topdown.png","Diagnostics/HeldLightIsolationPlan.cs"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new
             {
-                schema=isolateLight ? 2 : 1, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
+                schema=wispV3 ? 3 : isolateLight ? 2 : 1, wispV3ForReview=wispV3, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
                 sourceHashMethod="SHA256; UTF-8 text without BOM, CRLF normalized to LF; PNG bytes unchanged",
                 sourceHashes=sourceFiles.ToDictionary(p => p,p => Hash(p.EndsWith(".png",StringComparison.Ordinal)
                     ? File.ReadAllBytes(Path.Combine(root,p))
@@ -249,6 +285,7 @@ internal static class HeldParticleControlReview
                     : "top-left neither; top-right light-only; bottom-left particles-only; bottom-right combined; native pixels, no resizing",
                 coverageMethod=isolateLight ? "Raw live pool; Stage-eligible alpha >.003 surface candidates; actually packed Stage/AR callbacks. Absolute-age bins 0/.2/.4 seconds; not screen-space visibility. Sorted sample hashes (pitch,age,life); AR cap unchanged at 192." : null,
                 metric="8-bit display RGB differences only; >4 footprint is not brightness, quality or an additive decomposition.",
+                geometryMethod=isolateLight ? "Actual packed corners in output pixels; edge lengths and center-Y range, not visible shader area. Candidate preserves geometry hash exactly." : null,
                 captureCount=count,sceneCount=scenes.Count,scenes
             },new JsonSerializerOptions {WriteIndented=true}));
             return count;

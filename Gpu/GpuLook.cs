@@ -87,6 +87,8 @@ internal sealed class GpuLook
     // ---- particles ----
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
+    /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
+    internal bool WispArtV3ForReview { get; init; }
     public bool ShowWisps { get; init; }
     public bool ShowFlame { get; init; } = true;
     public bool ShowImpactRings { get; init; } = true;

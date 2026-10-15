@@ -66,6 +66,21 @@ internal static partial class VerificationSuite
             input.Look = art; layer.Build(input, ar, view, sim.KeyColors, sim, quads, projectedNotes: true);
             var projected = quads.Span.ToArray().Where(q => q.Misc.Z == 17).ToArray();
             Assert(projected.Length == stage.Length, $"{route.Id}/{pitch}: camera-facing held particles must survive this calibration.");
+            Assert(!art.WispArtV3ForReview,"Ordinary settings cannot enable the review-only v3 material.");
+            var candidate=art with { WispArtV3ForReview=true };
+            sim.BuildSprites(candidate,layout,sprites);
+            var candidateStage=sprites.Span.ToArray().Where(s=>s.PosSize.W==17).ToArray();
+            Assert(candidateStage.Length==stage.Length && candidateStage.Zip(stage).All(p=>
+                p.First.PosSize==p.Second.PosSize && p.First.Color==p.Second.Color
+                && p.First.Dir.X==p.Second.Dir.X && p.First.Dir.Y==p.Second.Dir.Y && p.First.Dir.W==p.Second.Dir.W
+                && p.First.Dir.Z==(route.Wisp?8:4)),"V3 only changes the Stage Wisp material tag, never geometry/envelope.");
+            input.Look=candidate;layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);
+            var candidateAr=quads.Span.ToArray().Where(q=>q.Misc.Z==17).ToArray();
+            Assert(candidateAr.Length==projected.Length && candidateAr.Zip(projected).All(p=>
+                p.First.A==p.Second.A && p.First.B==p.Second.B && p.First.W==p.Second.W && p.First.Color==p.Second.Color
+                && p.First.Misc.X==p.Second.Misc.X && p.First.Misc.Z==p.Second.Misc.Z && p.First.Misc.W==p.Second.Misc.W
+                && p.First.Misc.Y==(route.Wisp?8:4)),"V3 preserves actual AR corners, weights, alpha, progress and selection.");
+            input.Look=art;
             foreach (var tint in new[] {false,true})
             foreach (var spill in new[] {false,true})
             {
