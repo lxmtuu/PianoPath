@@ -1,5 +1,16 @@
 {
+  "sourceRevision": "93e2a755cbf81fc0b15dcc0b1e73473f34a48e7e",
+  "sourceHashes": {
+    "Diagnostics/HeldParticleArtReview.cs": "9B230386620DBB823A23C9F0BCAD4D18D1299EA98C3F0569CAD8BD3C24EB2B51",
+    "Diagnostics/AuxParticleTimeline.cs": "CAE18C9D3D243593BF0A8AFAFCEBA09B51FA2017DC3A618EA06C34D0B03370AC",
+    "Gpu/GpuRenderLoop.cs": "21B9187DFB87C6967585DE768736C8B07352C74A17C839C16376F287A4ED6757"
+  },
   "seed": 20261014,
+  "wispV3ForReview": false,
+  "pitches": [
+    60
+  ],
+  "wispAmount": 32,
   "format": "lossless cropped PNG frames; APNG assembled in CI",
   "captures": [
     {
@@ -13,6 +24,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -89,6 +102,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -165,6 +180,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -241,6 +258,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -317,6 +336,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -393,6 +414,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -469,6 +492,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
@@ -545,6 +570,8 @@
       "cropWidth": 140,
       "cropHeight": 160,
       "heldFrames": 11,
+      "releaseFrame": null,
+      "firstReleasedSampleSeconds": null,
       "releaseFirstStepSeconds": 0.4,
       "pedal": true,
       "hashes": [
