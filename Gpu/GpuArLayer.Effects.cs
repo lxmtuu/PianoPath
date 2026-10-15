@@ -514,6 +514,8 @@ internal sealed partial class GpuArLayer
                 axisX = velocity.Length > 1e-8 ? velocity.Normalized : baseAxis;
                 axisY = ArVec3.Cross(axisX, frame.Depth).Normalized;
                 if (axisY.Length < .9) axisY = legacyAxes ? new ArVec3(-baseAxis.Z, 0, baseAxis.X) : frame.Depth;
+                if(!legacyAxes && ShatterParticleAppearance.Eligible(look.ShatterBillboardForReview && look.ImpactMorph=="Shatter",particle.Shape,particle.Wisp,particle.Origin))
+                    ShatterParticleAppearance.BillboardAxes(faceX,faceY,particle.Age,particle.Phase,out axisX,out axisY);
                 halfX = size * 1.2;
                 halfY = size * .42;
                 color *= 1.4f;

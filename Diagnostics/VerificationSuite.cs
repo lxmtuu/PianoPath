@@ -6688,6 +6688,9 @@ internal static partial class VerificationSuite
         VerifyPrismFlowInputs();
         VerifyPrismFlowLook();
         VerifyKeyParticleLifecycle();
+        var shatterBillboard=ShatterBillboardReview.Render(Path.Combine(outputDirectory,"shatter-billboard-v1"));
+        Assert(shatterBillboard==624,"Shatter billboard needs 624 statics across four directions, three AR poses and Stage controls.");
+        Results.Add("PASS Shatter billboard trial: 624 statics, 720 motion crops, 64 frozen V1 pixel controls; shared Stage age/phase tumble, independent actual AR corner/weight checks, unchanged state/ordered identities/material/size. Active candidate statics cannot be raster-empty. Default-off geometry experiment, not art or hardware approval.");
         // Fail fast on the newest native candidate before regenerating historical reviews.
         var shatter=ShatterParticleArtReview.Render(Path.Combine(outputDirectory,"shatter-art-v1"));
         Assert(shatter==192,"Shatter requires paired native impact facets, unchanged state/geometry/components and actual body RGBA parity.");

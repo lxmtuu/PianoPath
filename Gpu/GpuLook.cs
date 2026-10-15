@@ -93,6 +93,12 @@ internal sealed class GpuLook
     {
         var copy=(GpuLook)MemberwiseClone();copy.ShatterArtForReview=enabled;return copy;
     }
+    // Separate, default-off geometry experiment; material approval does not enable it.
+    internal bool ShatterBillboardForReview { get; private set; }
+    internal GpuLook WithShatterBillboardForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.ShatterBillboardForReview=enabled;return copy;
+    }
     internal bool DustArtForReview { get; private set; }
     internal bool DustArtV2ForReview { get; private set; }
     internal GpuLook WithDustArtForReview(bool enabled,bool v2=false)

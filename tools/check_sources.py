@@ -971,6 +971,8 @@ def scan_previews_folder():
     native_bundles = {f"{family}/{view}-{phase}.bgra.gz"
                       for family in ("fireworks-art-v1", "confetti-art-v1", "dust-art-v1", "dust-art-v2", "shatter-art-v1")
                       for view in ("live-stage", "ar-reference") for phase in ("burst", "held")}
+    native_bundles.update(f"shatter-billboard-v1/{view}-{phase}.bgra.gz"
+                          for view in ("ar-reference","ar-near-overhead") for phase in ("burst","held"))
     return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures or explicitly named native frame bundles only; "
             "write diagnostics outside the repository (see App.ReportPreview)"
             for path in sorted(folder.rglob("*")) if path.is_file()

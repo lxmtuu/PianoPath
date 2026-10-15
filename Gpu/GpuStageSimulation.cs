@@ -885,7 +885,7 @@ internal sealed partial class GpuStageSimulation
                 {
                     // a tumbling glass shard: a thin bright wedge with a white glint along it
                     var alpha = fade * look.ParticleGlow;
-                    var angle = p.Phase + p.Age * 7.3f;
+                    var angle = ShatterParticleAppearance.Angle(p.Age,p.Phase);
                     var len = p.Size * 2.4f;
                     var firstShardSprite=sprites.Count;
                     Ellipse(sprites, x, p.Y, len * .5f, p.Size * .4f, angle, c * 1.4f, alpha, .1f);

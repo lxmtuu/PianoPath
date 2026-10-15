@@ -18,10 +18,12 @@ internal static class ShatterParticleArtReview
     // but rasterises no pixels. Material-only review must expose, not "fix" or hide, that hole.
     private static readonly string[] RasterEmptyPairs=["prism-ar-near-overhead-p61-held","indigo-ar-near-overhead-p61-held"];
     private static readonly JsonSerializerOptions Json=new(){IncludeFields=true,WriteIndented=true};
-    private sealed record Shot(string Id,string Palette,string View,int Pitch,string Phase,string Variant,string File,
+    internal sealed record Shot(string Id,string Palette,string View,int Pitch,string Phase,string Variant,string File,
         string PixelSha256,string RawHash,string PacketHash,int RawParticles,int PackedParticles,string? ColourHash=null,long Signal=0,int VisiblePixels=0);
     private sealed record Crop(int X,int Y,int Width,int Height);
-    private sealed record Frame(byte[] Pixels, Shot Shot);
+    internal sealed record Audit(GpuArParticle[] Raw,GpuArParticle[] Selected,GpuArQuad[] Quads,GpuSpriteInstance[] Sprites,
+        float Width,float HitY,GpuLook Look,ArCameraPose? Pose,ArNoteDirection Direction);
+    internal sealed record Frame(byte[] Pixels, Shot Shot,Audit Audit);
 
     internal static int Render(string output,bool v2=true)
     {
@@ -144,8 +146,8 @@ internal static class ShatterParticleArtReview
         finally{KeyboardLayout.Use(previous);}
     }
 
-    private static Frame Draw(GpuStageRenderer renderer,HeldParticleControlPlan.View view,byte[] sourceCamera,
-        string palette,int pitch,string phase,string variant,int sample,int fps,bool motion=false,bool v2=true)
+    internal static Frame Draw(GpuStageRenderer renderer,HeldParticleControlPlan.View view,byte[] sourceCamera,
+        string palette,int pitch,string phase,string variant,int sample,int fps,bool motion=false,bool v2=true,bool billboard=false,ArNoteDirection? directionOverride=null)
     {
         var settings=AuxParticleFixtures.Settings(AuxParticleTimeline.Routes.Single(r=>r.Id=="morph-shatter"),variant!="off");
         settings.BloomIntensity=0;
@@ -154,25 +156,29 @@ internal static class ShatterParticleArtReview
         stage.Measure(new Size(1280,720));stage.Arrange(new Rect(0,0,1280,720));stage.UpdateLayout();
         var feed=new GpuStageFeed();feed.SetStageHeight(720);
         var look=GpuLook.From(settings,(p,t)=>stage.AdjustColor(stage.NoteColor(p,t)),stage.KeyboardHeight/stage.ActualHeight,
-            stage.AdjustColor,view.OverCamera).WithShatterArtForReview(variant=="art");feed.SetLook(look);
+            stage.AdjustColor,view.OverCamera).WithShatterArtForReview(variant=="art").WithShatterBillboardForReview(billboard);feed.SetLook(look);
+        ArCameraPose? pose=null;var direction=directionOverride??(view.Id=="ar-oblique"?new ArNoteDirection(45,-45):view.Id=="ar-near-overhead"?new ArNoteDirection(90,90):new ArNoteDirection());
         if(view.OverCamera)
         {
             var calibration=ArCalibration.Create(KeyboardLayout.Standard88,view.Corners!,1280,720,out _,70)!;
             var camera=HeldParticleControlPlan.CameraFor(view,sourceCamera);var ring=new CameraFrameRing();
             camera.CopyTo(ring.BeginWrite(camera.Length,out var slot),0);ring.Publish(slot,1280,720,Stopwatch.GetTimestamp());
-            var direction=view.Id=="ar-oblique"?new ArNoteDirection(45,-45):view.Id=="ar-near-overhead"?new ArNoteDirection(90,90):new ArNoteDirection();
+            pose=calibration.CameraPose;
             feed.Camera=new GpuCameraInput(ring,PictureFit.Fit,false,1);
             feed.Ar=new GpuArInput(calibration,ArNoteStyle.Default,1,Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowNotes:false,ShowDamperStrip:false,NoteDirection:direction);
         }
+        var actualQuads=new List<GpuArQuad>();var actualSprites=new List<GpuSpriteInstance>();float simulationWidth=0,hitY=0;
         var raw="";var count=0;var packets=new List<object>();var colours=new List<Vector4>();var selected=new List<GpuArParticle>();GpuArParticle[] rawParticles=[];var packed=0;
         renderer.ObserveParticleStateForReview=(sim,_)=>
         {
+            simulationWidth=sim.SimulationWidth;hitY=sim.SimulationHitY;
             count=sim.ArParticleCount;rawParticles=Enumerable.Range(0,count).Select(sim.ArParticleAt).ToArray();
             raw=Hash(JsonSerializer.SerializeToUtf8Bytes(rawParticles,Json));
         };
         renderer.ObserveArParticleForReview=p=>selected.Add(p);
         renderer.ObserveStageSpriteForReview=q=>
         {
+            actualSprites.Add(q);
             var p=q.PosSize;if(p.W==31)p.W=8;else if(p.W==32)p.W=7;
             var colour=q.Color;
             if(p.W==8){packed++;colours.Add(colour);}if(v2 && p.W is 7 or 8)colour=default;
@@ -180,6 +186,7 @@ internal static class ShatterParticleArtReview
         };
         renderer.ObserveArQuadForReview=q=>
         {
+            actualQuads.Add(q);
             var misc=q.Misc;if(misc.Z==31)misc.Z=2;
             var colour=q.Color;
             if(misc.Z==2){packed++;colours.Add(colour);if(v2)colour=default;}
@@ -207,7 +214,7 @@ internal static class ShatterParticleArtReview
                 .OrderBy(p=>p.Id,StringComparer.Ordinal).ToArray();
             colourHash=Hash(JsonSerializer.SerializeToUtf8Bytes(linked,Json));
         }
-        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,colourHash));
+        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,colourHash),new(rawParticles,selected.ToArray(),actualQuads.ToArray(),actualSprites.ToArray(),simulationWidth,hitY,look,pose,direction));
     }
     private static void GuardPair(Shot a,Shot b,bool active,bool requireSignal=true,bool rasterEmpty=false)
     {
