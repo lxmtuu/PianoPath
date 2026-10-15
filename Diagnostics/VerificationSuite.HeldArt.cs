@@ -67,7 +67,7 @@ internal static partial class VerificationSuite
             var projected = quads.Span.ToArray().Where(q => q.Misc.Z == 17).ToArray();
             Assert(projected.Length == stage.Length, $"{route.Id}/{pitch}: camera-facing held particles must survive this calibration.");
             Assert(!art.WispArtV3ForReview,"Ordinary settings cannot enable the review-only v3 material.");
-            var candidate=art with { WispArtV3ForReview=true };
+            var candidate=art.WithWispV3ForReview(true);
             sim.BuildSprites(candidate,layout,sprites);
             var candidateStage=sprites.Span.ToArray().Where(s=>s.PosSize.W==17).ToArray();
             Assert(candidateStage.Length==stage.Length && candidateStage.Zip(stage).All(p=>

@@ -48,7 +48,7 @@ internal static class HeldParticleArtReview
             stage.Measure(new Size(1280,720)); stage.Arrange(new Rect(0,0,1280,720)); stage.UpdateLayout();
             var feed = new GpuStageFeed(); feed.SetStageHeight(720);
             feed.SetLook(GpuLook.From(settings,(pitch,track)=>stage.AdjustColor(stage.NoteColor(pitch,track)),
-                stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,ar) with { WispArtV3ForReview=wispV3 && refined });
+                stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,ar).WithWispV3ForReview(wispV3 && refined));
             if (ar)
             {
                 var calibration=ArCalibration.Create(KeyboardLayout.Standard88,

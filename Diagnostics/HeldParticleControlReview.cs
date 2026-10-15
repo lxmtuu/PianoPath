@@ -72,7 +72,7 @@ internal static class HeldParticleControlReview
                     var feed = new GpuStageFeed(); feed.SetStageHeight(Height);
                     var look = GpuLook.From(s, (pitch,track) => stage.AdjustColor(stage.NoteColor(pitch,track)),
                         stage.KeyboardHeight / stage.ActualHeight, stage.AdjustColor, overCamera);
-                    look=look with { WispArtV3ForReview=wispV3 };
+                    look=look.WithWispV3ForReview(wispV3);
                     feed.SetLook(look);
                     // KeyLighting=0 only mutes spill; ShaderKeyLight changes static ivory illumination.
                     // Neither is an honest Stage "key light off" control. Remove packed tint/emission/spill

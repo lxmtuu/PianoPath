@@ -88,7 +88,13 @@ internal sealed class GpuLook
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
-    internal bool WispArtV3ForReview { get; init; }
+    internal bool WispArtV3ForReview { get; private set; }
+    internal GpuLook WithWispV3ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.WispArtV3ForReview=enabled;
+        return copy;
+    }
     public bool ShowWisps { get; init; }
     public bool ShowFlame { get; init; } = true;
     public bool ShowImpactRings { get; init; } = true;
