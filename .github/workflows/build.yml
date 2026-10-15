@@ -257,6 +257,18 @@ jobs:
           $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter *.png)
           if ($sheets.Count -ne 72) { throw 'Incomplete held control quartets' }
           foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          # Keep 16 actual full frames for local full-scene review, not reconstructed backgrounds.
+          # All 288 originals still stay in the artifact; no HTML/base64 in the image-only tree.
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          $fullTarget = 'docs/previews/held-particle-controls-scenes'
+          New-Item -ItemType Directory -Force -Path $fullTarget | Out-Null
+          $fullScenes = @($manifest.scenes | Where-Object { $_.pattern -eq 'chord' -and ($_.palette -eq 'prism' -or $_.view -in @('live-stage','ar-reference')) })
+          if ($fullScenes.Count -ne 16) { throw 'Missing representative full scenes' }
+          foreach ($scene in $fullScenes) {
+            $combined = @($scene.captures | Where-Object { $_.Variant -eq 'combined' })
+            if ($combined.Count -ne 1) { throw "Missing combined full frame: $($scene.Id)" }
+            Copy-Item (Join-Path $review $combined[0].File) (Join-Path $fullTarget "$($scene.Id).png") -Force
+          }
           "::notice title=Held lighting controls::288 WARP frame hashes, 72 native quartet hashes/crop reconstructions and source hashes verified. Synthetic static controls only, not visual acceptance."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing

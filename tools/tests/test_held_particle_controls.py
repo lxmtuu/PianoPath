@@ -23,7 +23,7 @@ def plan():
         scenes.append({'Id':name,'Family':family,'palette':palette,'pattern':pattern,'view':view,
             'pitches':review.PATTERNS[pattern][:],'crop':{'X':0,'Y':0,'Width':384,'Height':360},
             'sheetFile':f'sheets/{name}.png','cameraSha256':None if view=='live-stage' else 'A'*64,
-            'captures':[{'Variant':v,'Particles':p,'KeyLight':k,'File':f'frames/{name}/{v}.png','PixelSha256':'A'*64}
+            'captures':[{'Variant':v,'Particles':p,'KeyLight':k,'File':f'frames/{name}/{v}.png','PixelSha256':'A'*64, 'ArKeys':0,'ArLights':0,'ArParticles':0,'StageKeys':0,'StageSprites':0}
                         for v,p,k in review.VARIANTS],
             'comparisons':[{'id':i,'after':a,'before':b} for i,a,b in review.COMPARISONS]})
     return dict(schema=1,captureCount=288,sceneCount=72,width=1280,height=720,seed=20261014,fps=60,frames=36,
@@ -52,6 +52,12 @@ class HeldControlTests(unittest.TestCase):
         data=plan();data['scenes'][0]['comparisons'][0]['before']='light-only'
         with self.assertRaises(ValueError):review.validate_plan(data)
         data=plan();data['scenes'][36]['captures'][0]['PixelSha256']='B'*64
+        with self.assertRaises(ValueError):review.validate_plan(data)
+
+    def test_inactive_mode_counters_cannot_inherit_the_previous_output(self):
+        data=plan();data['scenes'][0]['captures'][0]['ArParticles']=76
+        with self.assertRaises(ValueError):review.validate_plan(data)
+        data=plan();data['scenes'][1]['captures'][0]['StageKeys']=88
         with self.assertRaises(ValueError):review.validate_plan(data)
 
     def test_out_of_bounds_crop_and_unexpected_paths_fail(self):

@@ -101,8 +101,11 @@ internal static class HeldParticleControlReview
                             throw new InvalidDataException($"Family changed its particle-off control: {key}");
                         effectOffHashes[key] = hash;
                     }
+                    // GpuArLayer counters describe its last Build and remain cached while Stage is active.
+                    // Record the active output only, not the previous AR scene's stale diagnostics.
                     captures.Add(new Capture(variant.Id,variant.Particles,variant.KeyLight,file,hash,renderer.StageKeyCount,
-                        renderer.StageSpriteCount,renderer.ArKeyQuadCount,renderer.ArNoteLightCount,renderer.ArParticleFxCount));
+                        renderer.StageSpriteCount,overCamera ? renderer.ArKeyQuadCount : 0,
+                        overCamera ? renderer.ArNoteLightCount : 0,overCamera ? renderer.ArParticleFxCount : 0));
                     pixels.Add(image); count++;
                     crop ??= CropFor(scene,look.KeyboardFraction);
                 }
