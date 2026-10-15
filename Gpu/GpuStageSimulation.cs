@@ -893,8 +893,14 @@ internal sealed partial class GpuStageSimulation
                     break;
                 }
                 case Shape.Confetti:
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.6f, 3), Color = new Vector4(c * 1.1f, Math.Min(1, fade * 1.5f)), Dir = new Vector4(MathF.Cos(p.Age * 7 + p.Phase), MathF.Sin(p.Age * 7 + p.Phase), 0, u) });
+                {
+                    var kind=3f;var color=new Vector4(c*1.1f,Math.Min(1,fade*1.5f));
+                    if(ConfettiParticleAppearance.Eligible(look.ConfettiArtForReview && look.ImpactBurst=="Confetti",(int)p.Shape,p.Wisp)
+                        && ConfettiParticleAppearance.TryColor(p.Color,p.Age,p.Life,out var paper))
+                    {kind=ConfettiParticleAppearance.Kind;color=paper;}
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.6f, kind), Color = color, Dir = new Vector4(MathF.Cos(p.Age * 7 + p.Phase), MathF.Sin(p.Age * 7 + p.Phase), 0, u) });
                     break;
+                }
                 case Shape.Flame:
                 {
                     // white core -> yellow -> orange -> deep red, swelling then shrinking

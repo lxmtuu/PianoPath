@@ -11,7 +11,24 @@ TARGETS=(
  'held-particle-controls-scenes/flames-prism-chord-ar-reference.png',
  'flames-v3/flames-normal-prism-ar-reference-full.png',
  'held-particle-controls-scenes/wisps-indigo-chord-ar-reference.png',
- 'held-particle-controls-scenes/wisps-amber-chord-ar-reference.png')
+ 'held-particle-controls-scenes/wisps-amber-chord-ar-reference.png',
+ 'prism-flow-p3a/embers-ar-burst.png',
+ 'prism-flow-p3a/embers-ar-held.png',
+ 'prism-flow-p3a/splash-ar-burst.png',
+ 'prism-flow-p3a/splash-ar-held.png',
+ 'prism-flow-p3a/fireworks-ar-burst.png',
+ 'prism-flow-p3a/fireworks-ar-held.png',
+ 'prism-flow-p3a/confetti-ar-burst.png',
+ 'prism-flow-p3a/confetti-ar-held.png',
+ 'prism-flow-p3a/dust-ar-burst.png',
+ 'prism-flow-p3a/dust-ar-held.png',
+ 'prism-flow-p3a-aux/morph-bounce-60-ar-active.png',
+ 'prism-flow-p3a-aux/morph-bounce-61-ar-active.png',
+ 'prism-flow-p3a-aux/morph-melt-60-ar-active.png',
+ 'prism-flow-p3a-aux/morph-melt-61-ar-active.png',
+ 'prism-flow-p3a-aux/morph-shatter-60-ar-active.png',
+ 'prism-flow-p3a-aux/morph-shatter-61-ar-active.png',
+)
 
 def display_chunks(data):
     """Preserve original colour-management and physical-resolution chunks, including their CRCs."""

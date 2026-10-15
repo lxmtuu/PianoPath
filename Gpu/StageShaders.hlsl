@@ -495,6 +495,18 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
 // Review-only sparks: coloured faceted ember + velocity-aligned tapered sliver.
 // Shared by Stage and calibrated AR; CPU already owns the lifetime envelope.
 // No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
+// Paper coordinates in units of raw particle size. Clipped corners fit inside the narrow AR quad
+// at every rotation; shared physical aspect, no new geometry or age/brightness oscillation.
+float4 ShadeConfettiArt(float2 q,float4 color)
+{
+    float2 a=abs(q);
+    float d=max(max(a.x-0.94,a.y-0.55),a.x+a.y-1.21);
+    float coverage=saturate(0.5-d/max(fwidth(d),0.001));
+    float fold=smoothstep(-0.14,0.14,q.x+q.y*0.32);
+    float3 tint=color.rgb*lerp(0.80,1.0,fold);
+    return float4(tint*coverage*color.a,coverage*color.a);
+}
+
 // Tapered multicolour radial spark; shared body for Stage and AR, no age fade or white core.
 float4 ShadeFireworkArt(float2 uv,float4 color,bool streak)
 {
@@ -594,6 +606,12 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind>27.5 && kind<28.5)
+    {
+        float2 p=(i.Uv*2.0-1.0)*float2(1.6,1.0);
+        float2 q=float2(p.x*i.Misc.x+p.y*i.Misc.y,-p.x*i.Misc.y+p.y*i.Misc.x);
+        return ShadeConfettiArt(q,i.Color);
+    }
     if(kind>25.5 && kind<27.5) return ShadeFireworkArt(i.Uv,i.Color,kind<26.5);
     if (kind > 24.5 && kind < 25.5) return ShadeSplashArt(i.Uv,i.Color,23);
     if (kind > 19.5 && kind < 21.5)
@@ -1381,7 +1399,11 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>25.5 && kind<27.5)
+    if(kind>27.5 && kind<28.5)
+    {
+        // Exact old kind-3 square extent and age/phase axis; material alone supplies the paper shape.
+    }
+    else if(kind>25.5 && kind<27.5)
     {
         // Exact old dot/streak geometry, not the unrelated auxiliary glass shard primitive.
         if(kind<26.5)extent=float2(size*(1.0+s.Dir.z),size);
@@ -1604,6 +1626,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>27.5 && kind<28.5) return ShadeConfettiArt(v.Local*1.6,v.Color);
     if(kind>25.5 && kind<27.5) return ShadeFireworkArt(v.Local*0.5+0.5,v.Color,kind<26.5);
     if(kind>21.5 && kind<24.5) return ShadeSplashArt(v.Local*0.5+0.5,v.Color,kind);
     if (kind > 19.5 && kind < 21.5)

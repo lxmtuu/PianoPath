@@ -6745,6 +6745,9 @@ internal static partial class VerificationSuite
         var fireworks=FireworkParticleArtReview.Render(Path.Combine(outputDirectory,"fireworks-art-v1"));
         Assert(fireworks==192,"Fireworks requires paired native material captures and identity-linked radial spark colours.");
         Results.Add("PASS Fireworks art v1: 192 statics / 720 motion crops; unchanged raw state, ordered component geometry and physical-body counts. Stage and AR each retain one packet per physical dot/streak. Review-only, not art/hardware acceptance.");
+        var confetti=ConfettiParticleArtReview.Render(Path.Combine(outputDirectory,"confetti-art-v1"));
+        Assert(confetti==192,"Confetti requires native material captures, unchanged geometry/counts and actual intrinsic colour/orientation parity.");
+        Results.Add("PASS Confetti art v1: 192 static / 720 motion captures; unchanged raw state, physical geometry/order/counts; identity-linked actual RGB/alpha and orientation match Stage and three AR poses. Paper material only, default-off; not art/hardware acceptance.");
         HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
         Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }
