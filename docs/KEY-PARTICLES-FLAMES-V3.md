@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-**Đã triển khai, có native capture và viewer để người dùng review; chưa có chấp thuận artwork Flames hoặc default enablement.** Run [38676096695](https://github.com/lxmtuu/PianoPath/actions/runs/38676096695), source **`75845d68de2ae01a7aef2ef25d57565aa5db3bac`**, hoàn tất **SUCCESS**: static, portable .NET tests, Windows build, paired Wisps/Flames validation, full verification suite, benchmark, installer, galleries và distributable. Native renderer: Microsoft Basic Render Driver (WARP). Evidence/12 PNG/APNGs publish ở **`66aaf91`**.
+**Đã triển khai và capture candidate; người dùng đã chấp thuận hướng hình ảnh Flames ở phần review hiện tại. Chưa promote/default enablement hoặc nghiệm thu toàn bộ điều kiện sử dụng.** Run [38676096695](https://github.com/lxmtuu/PianoPath/actions/runs/38676096695), source **`75845d68de2ae01a7aef2ef25d57565aa5db3bac`**, hoàn tất **SUCCESS**: static, portable .NET tests, Windows build, paired Wisps/Flames validation, full verification suite, benchmark, installer, galleries và distributable. Native renderer: Microsoft Basic Render Driver (WARP). Evidence/12 PNG/APNGs publish ở **`66aaf91`**.
 
 Tiếp nối [Wisps v3](KEY-PARTICLES-WISPS-V3.md) đã được người dùng chấp thuận về hướng hình ảnh. Không mở lại Wisps làm điều kiện chặn Flames. Candidate Flames vẫn review-only/default-off, không binding settings/preset/menu.
 
@@ -86,4 +86,11 @@ python tools/review_flames_v3.py <review>/flames-v3 \
 
 Git chỉ thêm tám active quartets, hai candidate fulls, hai paired APNGs (~5,9 MiB) và hai manifests. Full original dataset/bốn APNGs/standalone artifact viewer không commit; off quartets tái dùng retained v2 sau khi kiểm hash, không xóa deliverable đã duyệt.
 
-**Gate còn mở:** người dùng review hướng Flames, motion/poses/palettes rộng hơn và thiết bị/camera thật; chưa promote/default enablement. Age-representative packing experiment vẫn tách riêng. Tiếp tục các press/held families còn lại; **settings menu là bước cuối**, đồng bộ và gọn/dễ đọc ở Stage + AR.
+**Gate còn mở:** motion/poses/palettes rộng hơn và thiết bị/camera thật; chưa promote/default enablement. Age-representative packing experiment vẫn tách riêng. Tiếp tục các press/held families còn lại; **settings menu là bước cuối**, đồng bộ và gọn/dễ đọc ở Stage + AR.
+
+
+## Chấp thuận hướng hình ảnh
+
+Ngày 2026-10-15, sau khi nhận viewer Flames v2/v3 Stage/AR và mô tả phạm vi kiểm chứng, người dùng xác nhận: **“tớ thấy ổn rồi”**. Ghi nhận chấp thuận hướng hình ảnh Flames v3 trong phần review hiện tại, tương tự Wisps v3; không tiếp tục polish Flames như điều kiện chặn các families còn lại.
+
+Chấp thuận này không tự động bật candidate mặc định, không thay nghiệm thu motion ở mọi pose/palette hoặc camera/GPU thật, và không đóng toàn bộ roadmap press/held particles. Tiếp tục các families còn lại với đối chứng Stage/AR; settings menu vẫn làm cuối cùng.
