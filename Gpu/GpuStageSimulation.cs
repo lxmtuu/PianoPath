@@ -887,9 +887,19 @@ internal sealed partial class GpuStageSimulation
                     var alpha = fade * look.ParticleGlow;
                     var angle = p.Phase + p.Age * 7.3f;
                     var len = p.Size * 2.4f;
+                    var firstShardSprite=sprites.Count;
                     Ellipse(sprites, x, p.Y, len * .5f, p.Size * .4f, angle, c * 1.4f, alpha, .1f);
                     var dx = MathF.Cos(angle) * len * .5f; var dy = MathF.Sin(angle) * len * .5f;
                     Line(sprites, x - dx, p.Y - dy, x + dx, p.Y + dy, .5f, Vector3.One, alpha * .9f, 1);
+                    if(ShatterParticleAppearance.Eligible(look.ShatterArtForReview && look.ImpactMorph=="Shatter",(int)p.Shape,p.Wisp,p.Origin)
+                        && ShatterParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var shard))
+                        for(var j=firstShardSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            var body=q.PosSize.W==KindEllipse;
+                            q.PosSize.W=body?ShatterParticleAppearance.BodyKind:ShatterParticleAppearance.GlintKind;
+                            q.Color=body?shard:ShatterParticleAppearance.Glint(shard);
+                        }
                     break;
                 }
                 case Shape.Confetti:

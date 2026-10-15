@@ -497,6 +497,18 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
 // No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
 // Physical raw-size coordinates, shared despite old Stage 4.32x / AR 2.4x quad extents.
 // Soft pigment mote: no white core, temporal noise, additional fade or added geometry.
+// Review-only coloured shard facet. No temporal glint, white core or extra age fade.
+float4 ShadeShatterArt(float2 p,float4 color)
+{
+    float t=saturate((p.x+1.0)*0.5);
+    float width=lerp(0.12,0.68,t);
+    float d=max(abs(p.x)-0.92,abs(p.y)-width);
+    float coverage=saturate(0.5-d/max(fwidth(d),0.001));
+    float plane=smoothstep(-0.08,0.08,p.y+p.x*0.22);
+    float3 tint=color.rgb*lerp(0.78,1.0,plane);
+    return float4(tint*coverage*color.a,coverage*color.a);
+}
+
 float4 ShadeDustArt(float2 q,float4 color)
 {
     float r=length(q);
@@ -617,6 +629,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind>30.5 && kind<31.5) return ShadeShatterArt(i.Uv*2.0-1.0,i.Color);
     if(kind>28.5 && kind<30.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
     if(kind>27.5 && kind<28.5)
     {
@@ -1411,7 +1424,22 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>28.5 && kind<30.5)
+    if(kind>30.5 && kind<31.5)
+    {
+        // Exact old kind-8 ellipse extents/axis/softness; only surface material changes.
+        extent=float2(size,size*max(s.Dir.z,0.02));
+        extra=float4(extent,1.0,s.Dir.w);
+    }
+    else if(kind>31.5 && kind<32.5)
+    {
+        // Exact old kind-7 line padding, offset, extent and depth.
+        float halfLength=length(s.Dir.xy)*0.5;
+        float pad=size*3.0+1.0;
+        offset=s.Dir.xy*0.5;
+        extent=float2(halfLength+pad,pad);
+        extra=float4(extent,halfLength,max(size,0.35));
+    }
+    else if(kind>28.5 && kind<30.5)
     {
         // Exact old dust kind-0 square extent, axis and depth; no geometry enlargement.
     }
@@ -1642,6 +1670,14 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>30.5 && kind<31.5) return ShadeShatterArt(v.Local,v.Color);
+    if(kind>31.5 && kind<32.5)
+    {
+        float2 px=v.Local*v.Extra.xy;
+        float d=length(float2(max(abs(px.x)-v.Extra.z,0.0),px.y))/v.Extra.w;
+        float coverage=exp(-d*d*0.7);
+        return float4(v.Color.rgb*coverage*v.Color.a,coverage*v.Color.a);
+    }
     if(kind>28.5 && kind<30.5) return ShadeDustArt(v.Local*4.32,v.Color);
     if(kind>27.5 && kind<28.5) return ShadeConfettiArt(v.Local*1.6,v.Color);
     if(kind>25.5 && kind<27.5) return ShadeFireworkArt(v.Local*0.5+0.5,v.Color,kind<26.5);

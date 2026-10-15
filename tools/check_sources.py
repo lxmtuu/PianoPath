@@ -969,7 +969,7 @@ def scan_previews_folder():
     # Bounded native animation assets: exact BGRA frames, not arbitrary diagnostics/archives.
     # The family validators verify frame count, decoded length, hashes and publication budgets.
     native_bundles = {f"{family}/{view}-{phase}.bgra.gz"
-                      for family in ("fireworks-art-v1", "confetti-art-v1", "dust-art-v1", "dust-art-v2")
+                      for family in ("fireworks-art-v1", "confetti-art-v1", "dust-art-v1", "dust-art-v2", "shatter-art-v1")
                       for view in ("live-stage", "ar-reference") for phase in ("burst", "held")}
     return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures or explicitly named native frame bundles only; "
             "write diagnostics outside the repository (see App.ReportPreview)"
