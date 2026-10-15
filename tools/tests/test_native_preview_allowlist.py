@@ -9,10 +9,15 @@ class NativePreviewAllowlistTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);folder=root/'docs/previews'
             for name in ('confetti-art-v1/live-stage-held.bgra.gz','dust-art-v1/live-stage-burst.bgra.gz','dust-art-v2/ar-reference-held.bgra.gz','shatter-art-v1/live-stage-burst.bgra.gz','fireworks-art-v1/ar-reference-burst.bgra.gz','ok.png',
-                         'shatter-billboard-v1/ar-near-overhead-held.bgra.gz','random.gz','confetti-art-v1/manifest.json.gz','unknown/live-stage-held.bgra.gz'):
+                         'shatter-billboard-v1/ar-near-overhead-held.bgra.gz',
+                         'melt-art-v1/live-stage-burst.bgra.gz','melt-art-v1/live-stage-held.bgra.gz',
+                         'melt-art-v1/ar-reference-burst.bgra.gz','melt-art-v1/ar-reference-held.bgra.gz',
+                         'melt-art-v1/ar-near-overhead-held.bgra.gz','melt-art-v1/manifest.json.gz','random.gz','confetti-art-v1/manifest.json.gz','unknown/live-stage-held.bgra.gz'):
                 p=folder/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'contract-fixture')
             with patch.object(check,'ROOT',root):errors=check.scan_previews_folder()
-            self.assertEqual(3,len(errors))
+            self.assertEqual(5,len(errors))
+            self.assertTrue(any('melt-art-v1/ar-near-overhead-held.bgra.gz' in e for e in errors))
+            self.assertTrue(any('melt-art-v1/manifest.json.gz' in e for e in errors))
             self.assertTrue(any('random.gz' in e for e in errors))
             self.assertTrue(any('manifest.json.gz' in e for e in errors))
             self.assertTrue(any('unknown/' in e for e in errors))
