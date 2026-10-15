@@ -511,6 +511,30 @@ jobs:
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
           "::notice title=Melt v1 material::192 native statics + 16 Stage material-only depth controls / 720 native motion crops; explicit candidate-only Stage front-layer trial; 48 active pairs (no blank exemptions), 16 expired pairs; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains halo/body/glint, AR one physical body quad; firm and soft single presses only; mixed primary Splash route explicitly unchanged. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
 
+      - name: Validate and stage Bounce v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/bounce-art-v1'
+          $validation = (& python tools/review_bounce_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Bounce native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/bounce-art-v1'
+          $evidence = 'docs/evidence/bounce-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Bounce publication size::$bytes bytes"
+          if ($bytes -gt 0.9MB) { Write-Output "::error title=Bounce publication budget::$bytes bytes exceeds 0.9 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Bounce v1 material::192 native statics + 64 body-off controls, 720 native motion crops; 48 active body-only deltas, 16 expired. Unchanged raw state, ordered geometry/counts/depth, non-body companion ring and selection. Shared body RGBA; explicit material provenance excludes primary Ember/Firework streaks. Default-off, review only."
+
       - name: Validate and stage Shatter v1 material review
         shell: pwsh
         run: |
@@ -1027,7 +1051,7 @@ jobs:
           if [ "$?" -ne 0 ]; then exit 1; fi
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2 docs/evidence/splash-art-v1 docs/evidence/fireworks-art-v1 docs/evidence/confetti-art-v1 docs/evidence/dust-art-v1 docs/evidence/dust-art-v2 docs/evidence/shatter-art-v1 docs/evidence/shatter-billboard-v1 docs/evidence/melt-art-v1
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2 docs/evidence/splash-art-v1 docs/evidence/fireworks-art-v1 docs/evidence/confetti-art-v1 docs/evidence/dust-art-v1 docs/evidence/dust-art-v2 docs/evidence/shatter-art-v1 docs/evidence/shatter-billboard-v1 docs/evidence/melt-art-v1 docs/evidence/bounce-art-v1
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

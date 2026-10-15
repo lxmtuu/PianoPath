@@ -516,6 +516,19 @@ float4 ShadeMeltArt(float2 p,float4 color,float component)
     return float4(pigment*coverage*color.a,coverage*color.a);
 }
 
+// Rounded directional Bounce stroke: a broad shoulder at the leading end and a quiet tapered tail.
+// Same local pigment in both outputs; CPU alpha is the only lifetime fade. No phase noise or white core.
+float4 ShadeBounceArt(float2 p,float4 color)
+{
+    float t=saturate((p.x+1.0)*0.5);
+    float width=lerp(0.12,0.62,smoothstep(0.0,0.65,t));
+    float d=length(float2(p.x,p.y/max(width,0.01)));
+    float coverage=saturate(0.5+(0.96-d)/max(fwidth(d),0.001));
+    float pigment=lerp(0.72,0.96,smoothstep(0.0,0.8,t));
+    float alpha=coverage*color.a;
+    return float4(color.rgb*pigment*alpha,alpha);
+}
+
 float4 ShadeShatterArt(float2 p,float4 color)
 {
     float t=saturate((p.x+1.0)*0.5);
@@ -647,6 +660,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind>38.5 && kind<39.5) return ShadeBounceArt(i.Uv*2.0-1.0,i.Color);
     if(kind>32.5 && kind<33.5) return ShadeMeltArt(i.Uv*2.0-1.0,i.Color,33);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(i.Uv*2.0-1.0,i.Color);
     if(kind>28.5 && kind<30.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
@@ -1443,7 +1457,12 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>32.5 && kind<38.5)
+    if(kind>38.5 && kind<39.5)
+    {
+        // Exact legacy kind-1 streak axis, stretch and depth (.6), not a billboard or size change.
+        extent=float2(size*(1.0+s.Dir.z),size);
+    }
+    else if(kind>32.5 && kind<38.5)
     {
         // Exact legacy XY extents/rotation/softness; the separate default-off front-layer trial only changes depth.
         if(kind>35.5)depth=0.01;
@@ -1696,6 +1715,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>38.5 && kind<39.5) return ShadeBounceArt(v.Local,v.Color);
     if(kind>32.5 && kind<38.5) return ShadeMeltArt(v.Local,v.Color,kind>35.5?kind-3:kind);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(v.Local,v.Color);
     if(kind>31.5 && kind<32.5)

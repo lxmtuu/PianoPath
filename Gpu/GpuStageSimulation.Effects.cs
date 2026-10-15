@@ -150,7 +150,7 @@ internal sealed partial class GpuStageSimulation
                 for (var i = 0; i < count; i++)
                 {
                     var speed = 220 + Rand() * 320;
-                    Spawn(new Particle { Shape = Shape.Streak, X = x + (Rand() - .5f) * 10, Y = y, Vx = (Rand() - .5f) * 60, Vy = -speed, Life = .4f + Rand() * .3f, Mass = .6f, Phase = Rand() * MathF.Tau, Size = look.ParticleSize * (.5f + Rand() * .5f), Grav = 1, DragK = 1, Glow = 1, Color = i % 3 == 0 ? Vector3.One : color }, pitch, origin: 0);
+                    Spawn(new Particle { Shape = Shape.Streak, MaterialRoute = BounceParticleAppearance.Route, X = x + (Rand() - .5f) * 10, Y = y, Vx = (Rand() - .5f) * 60, Vy = -speed, Life = .4f + Rand() * .3f, Mass = .6f, Phase = Rand() * MathF.Tau, Size = look.ParticleSize * (.5f + Rand() * .5f), Grav = 1, DragK = 1, Glow = 1, Color = i % 3 == 0 ? Vector3.One : color }, pitch, origin: 0);
                 }
                 if (_rings.Count < 96) _rings.Add(new Ring { X = x, Y = y, Life = .3f, Strength = .6f * strength, Color = Vector3.One, Pitch = pitch, Channel = 1, Origin = 0 });
                 break;

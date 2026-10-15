@@ -860,6 +860,12 @@ internal sealed partial class GpuStageSimulation
                     var speed = MathF.Sqrt(p.Vx * p.Vx + p.Vy * p.Vy);
                     var dir = speed > 1e-3f ? new Vector2(p.Vx / speed, p.Vy / speed) : new Vector2(0, -1);
                     sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.4f, FireworkParticleAppearance.StageKind(look.FireworkArtForReview && look.ImpactBurst=="Fireworks", (int)p.Shape, p.Wisp, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 1, look.SparkArtV2ForReview))), Color = SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * glowGain * p.Glow * fade * 1.3f, 1)), Dir = new Vector4(dir, Math.Clamp(speed * .018f, .5f, 7), u) });
+                    if(BounceParticleAppearance.Eligible(look.BounceArtForReview && look.ImpactMorph=="Bounce",(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && BounceParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var bounce))
+                    {
+                        ref var q=ref sprites.Writable[sprites.Count-1];
+                        q.PosSize.W=BounceParticleAppearance.Kind;q.Color=bounce;
+                    }
                     break;
                 }
                 case Shape.Droplet:

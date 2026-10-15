@@ -378,6 +378,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal Action<GpuSpriteInstance>? ObserveHeldSpriteGeometryForReview { get; set; }
     internal Action<GpuArQuad>? ObserveHeldQuadGeometryForReview { get; set; }
     // Null in production; regression checks partition actual key-anchored and particle packets.
+    internal bool SuppressBounceBodyForReview { get; set; }
     internal Action<GpuSpriteInstance>? ObserveStageSpriteForReview { get; set; }
     internal Action<GpuArQuad>? ObserveArQuadForReview { get; set; }
 
@@ -509,6 +510,9 @@ internal sealed class GpuStageRenderer : IDisposable
         simulation.ObservePackedHeldParticleForReview = ObserveStageParticleForReview;
         StageKeyCount = keys.Count;
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
+        if(SuppressBounceBodyForReview)
+            for(var i=0;i<sprites.Count;i++)
+                if(sprites.Writable[i].PosSize.W==BounceParticleAppearance.Kind)sprites.Writable[i].Color=default;
         if (ObserveStageSpriteForReview is { } observeAllSprites)
             foreach (var sprite in sprites.Span) observeAllSprites(sprite);
         if (ObserveHeldSpriteGeometryForReview is { } observeSprite)
@@ -543,6 +547,9 @@ internal sealed class GpuStageRenderer : IDisposable
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
             _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier,
                 SuppressArKeyTintForReview, SuppressArKeySpillForReview);
+        if(SuppressBounceBodyForReview)
+            for(var i=0;i<_arList.Count;i++)
+                if(_arList.Writable[i].Misc.Z==BounceParticleAppearance.Kind)_arList.Writable[i].Color=default;
         if (ObserveArQuadForReview is { } observeArQuad)
             foreach (var quad in _arList.Span) observeArQuad(quad);
         if (ObserveHeldQuadGeometryForReview is { } observeQuad)

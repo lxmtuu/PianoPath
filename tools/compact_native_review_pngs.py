@@ -46,6 +46,21 @@ TARGETS=(
  'flames-v3/flames-normal-prism-ar-near-overhead-on.png',
  'flames-v3/flames-normal-indigo-ar-near-overhead-on.png',
  'wisps-v3/wisps-low-prism-ar-reference-off.png',
+ 'wisps-v3/wisps-low-prism-ar-near-overhead-off.png',
+ 'flames-v3/flames-normal-indigo-ar-oblique-on.png',
+ 'flames-v3/flames-normal-prism-ar-oblique-on.png',
+ 'wisps-v3/wisps-low-indigo-ar-oblique-on.png',
+ 'wisps-v3/wisps-low-prism-ar-oblique-on.png',
+ 'wisps-v3/wisps-low-indigo-ar-oblique-off.png',
+ 'wisps-v3/wisps-low-prism-ar-oblique-off.png',
+ 'flames-v3/flames-normal-prism-live-stage-full.png',
+ 'wisps-v3/wisps-low-prism-live-stage-full.png',
+ 'flames-v3/flames-normal-indigo-live-stage-on.png',
+ 'flames-v3/flames-normal-prism-live-stage-on.png',
+ 'wisps-v3/wisps-low-prism-live-stage-on.png',
+ 'wisps-v3/wisps-low-indigo-live-stage-on.png',
+ 'wisps-v3/wisps-low-indigo-live-stage-off.png',
+ 'wisps-v3/wisps-low-prism-live-stage-off.png',
 )
 
 def display_chunks(data):

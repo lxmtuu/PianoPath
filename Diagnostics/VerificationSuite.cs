@@ -6688,6 +6688,9 @@ internal static partial class VerificationSuite
         VerifyPrismFlowInputs();
         VerifyPrismFlowLook();
         VerifyKeyParticleLifecycle();
+        var bounce=BounceParticleArtReview.Render(Path.Combine(outputDirectory,"bounce-art-v1"));
+        Assert(bounce==192,"Bounce needs 192 main statics, 64 body-off controls and 720 motion crops without body-empty exemptions.");
+        Results.Add("PASS Bounce material trial: 192 statics + 64 body-off controls / 720 motion crops; body-only signal cannot be substituted by its unchanged companion ring. Shared actual body RGBA across Stage/three AR poses; unchanged raw state, ordered geometry, counts, depth and selection. Default-off, not new rebound physics or art/hardware acceptance.");
         var melt=MeltParticleArtReview.Render(Path.Combine(outputDirectory,"melt-art-v1"));
         Assert(melt==192,"Melt requires 192 native single-impact statics plus 16 Stage depth controls and 720 motion crops with no blank active candidate.");
         Results.Add("PASS Melt material/front-layer trial: 192 statics + 16 material-only Stage depth controls / 720 motion crops; single firm/soft impacts only, unchanged state, ordered component geometry/counts, identity-linked body RGBA across Stage and three AR poses. Stage retains three components, AR one body; default-off, not held/release or art acceptance.");

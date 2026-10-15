@@ -12,6 +12,7 @@ class NativePreviewAllowlistTests(unittest.TestCase):
                          'shatter-billboard-v1/ar-near-overhead-held.bgra.gz',
                          'melt-art-v1/live-stage-burst.bgra.gz','melt-art-v1/live-stage-held.bgra.gz',
                          'melt-art-v1/ar-reference-burst.bgra.gz','melt-art-v1/ar-reference-held.bgra.gz',
+                         'bounce-art-v1/live-stage-held.bgra.gz','bounce-art-v1/ar-reference-burst.bgra.gz',
                          'melt-art-v1/ar-near-overhead-held.bgra.gz','melt-art-v1/manifest.json.gz','random.gz','confetti-art-v1/manifest.json.gz','unknown/live-stage-held.bgra.gz'):
                 p=folder/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'contract-fixture')
             with patch.object(check,'ROOT',root):errors=check.scan_previews_folder()

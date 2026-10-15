@@ -31,8 +31,8 @@ internal static partial class VerificationSuite
             var origin = route.Source switch { AuxParticleTimeline.Channel.Held => 2, AuxParticleTimeline.Channel.Release => 1, _ => 0 };
             Assert(snapshot.Length > 0 && snapshot.All(p => p.Pitch == pitch && p.Shape == route.Shape && p.Wisp == route.Wisp && p.Origin == origin),
                 $"{route.Id}/{pitch}: production births retain channel, source pitch and material shape tags.");
-            Assert(snapshot.All(p=>p.MaterialRoute==(route.Id=="morph-melt"?MeltParticleAppearance.Route:0)),
-                $"{route.Id}/{pitch}: only Melt births carry Melt material provenance; not a shape/origin heuristic.");
+            Assert(snapshot.All(p=>p.MaterialRoute==(route.Id=="morph-melt"?MeltParticleAppearance.Route:route.Id=="morph-bounce"?BounceParticleAppearance.Route:0)),
+                $"{route.Id}/{pitch}: Melt/Bounce births alone carry their distinct material provenance; not a shape/origin heuristic.");
             Assert(snapshot.All(p => p.Age >= 0 && p.Age < p.Life && float.IsFinite(p.X) && float.IsFinite(p.Y)),
                 $"{route.Id}/{pitch}: active baseline must contain finite living particles.");
             Assert(route.Source == AuxParticleTimeline.Channel.Held ? sim.EmitterParticlesBorn == born : sim.EmitterParticlesBorn == 0,
@@ -78,6 +78,7 @@ internal static partial class VerificationSuite
                 $"{route.Id}/{pitch}: same-input effect-off control cannot borrow another particle family.");
         }
         VerifyMeltMixedRoutes(layer,ar,view,sprites,quads);
+        VerifyBounceMixedRoutes(layer,ar,view,sprites,quads);
         Results.Add("PASS P3a auxiliary lifecycle: wisps/flames, Shatter/Melt/Bounce and Float Up/Dissolve/Smoke; white/black keys, tagged births, read-only Stage/AR builds, physical-release/heat/pedal policy, duplicate Note Off, song release cursor, disabled controls and expired tails. Baseline only, not new art or nonzero camera delay.");
     }
 
@@ -125,6 +126,51 @@ internal static partial class VerificationSuite
         Assert(sim.Time==time && sim.ParticlesBorn==born && raw.SequenceEqual(ParticleSnapshot(sim)),
             "Mixed repeated builds are read-only including material provenance.");
         Results.Add("PASS Melt mixed-route isolation: same-shape/origin primary Splash unchanged, actual Stage/AR geometry/order/count unchanged; only tagged Melt material changes; read-only builds and default-off.");
+    }
+
+    private static void VerifyBounceMixedRoutes(GpuArLayer layer,GpuArInput ar,ArView view,
+        GpuInstanceList<GpuSpriteInstance> sprites,GpuInstanceList<GpuArQuad> quads)
+    {
+        foreach(var family in new[]{"Embers","Fireworks"})
+        {
+            var settings=AuxParticleFixtures.Settings(AuxParticleTimeline.Routes.Single(r=>r.Id=="morph-bounce"));
+            settings.ShowEmbers=true;settings.ImpactBurst=family;settings.ParticleAmount=18;
+            var classic=ParticleLook(settings);var art=classic.WithBounceArtForReview(true);
+            Assert(!classic.BounceArtForReview,"Bounce must remain default-off.");
+            var feed=new GpuStageFeed();feed.SetLook(classic);feed.SetStageHeight(720);
+            feed.SetDeterministicState([],1.0/60,false,new HashSet<int>());feed.Impact(60,.9);
+            var input=new GpuFrameInput();feed.Capture(input,GpuStageFeed.Now);
+            var sim=new GpuStageSimulation(KeyParticleFixtures.Seed);sim.Step(1.0/60,input,feed,1280);
+            var raw=ParticleSnapshot(sim);var born=sim.ParticlesBorn;var time=sim.Time;
+            var bounce=raw.Count(p=>p.MaterialRoute==BounceParticleAppearance.Route);
+            Assert(bounce>0 && raw.Any(p=>p.MaterialRoute==0 && p.Shape==1 && p.Origin==0),
+                $"Mixed Bounce+{family} must actually include colliding streak shape/origin with distinct provenance.");
+            var layout=new GpuSceneLayout(1280,720,classic.KeyboardFraction);
+            sim.BuildSprites(classic,layout,sprites);var before=sprites.Span.ToArray();
+            sim.BuildSprites(art,layout,sprites);var after=sprites.Span.ToArray();
+            Assert(before.Length==after.Length && after.Count(q=>q.PosSize.W==39)==bounce,
+                "Mixed Stage retains the companion ring and one body per selected Bounce particle.");
+            for(var i=0;i<before.Length;i++)
+            {
+                var a=before[i];var b=after[i];
+                if(b.PosSize.W==39){Assert(a.PosSize.W==1,"Bounce body was a streak.");b.PosSize.W=a.PosSize.W;b.Color=a.Color;}
+                Assert(a.Equals(b),"Bounce cannot change non-body/ring/primary packets or Stage geometry/order.");
+            }
+            layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var arBefore=quads.Span.ToArray();
+            feed.SetLook(art);feed.Capture(input,GpuStageFeed.Now);
+            layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var arAfter=quads.Span.ToArray();
+            Assert(arBefore.Length==arAfter.Length && arAfter.Count(q=>q.Misc.Z==39)==bounce,
+                "Mixed AR changes only Bounce source bodies, preserving count/order.");
+            for(var i=0;i<arBefore.Length;i++)
+            {
+                var a=arBefore[i];var b=arAfter[i];
+                if(b.Misc.Z==39){Assert(a.Misc.Z==2,"Bounce body was a particle quad.");b.Misc.Z=a.Misc.Z;b.Color=a.Color;}
+                Assert(a.Equals(b),"Bounce cannot alter primary/ring AR packets or body corners/weights.");
+            }
+            Assert(sim.Time==time && sim.ParticlesBorn==born && raw.SequenceEqual(ParticleSnapshot(sim)),
+                "Mixed Bounce builds are read-only including material provenance.");
+        }
+        Results.Add("PASS Bounce mixed-route isolation: same-shape/origin Ember/Firework streaks unchanged, companion ring unchanged, Stage/AR geometry/order/counts unchanged; only tagged Bounce body material changes, read-only and default-off.");
     }
 
     private static void VerifyAuxSongRelease(AuxParticleTimeline.Route route, int pitch)
