@@ -6,7 +6,8 @@ from functools import partial
 from http.server import ThreadingHTTPServer
 import review_firework_particle_art as review
 from serve_flames_v3_review import Handler
-from serve_spark_particle_art import PLAYER,NAMES
+from serve_spark_particle_art import PLAYER
+NAMES=('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
 
 ROOT=Path(__file__).resolve().parents[1]
 def build(repo,output):
@@ -29,7 +30,7 @@ def build(repo,output):
 <h2>Nhấn · 0,05 s</h2><figure><figcaption>Classic trái · Fireworks V1 phải</figcaption><img src="burst.png" alt="Native Fireworks burst: Stage trên, AR dưới; classic trái, candidate phải"></figure>
 <h2>Giữ · 0,60 s</h2><figure><figcaption>Classic trái · Fireworks V1 phải</figcaption><img src="held.png" alt="Native Fireworks held: Stage trên, AR dưới; classic trái, candidate phải"></figure>
 <p>__METRICS__. Signal trong cùng cảnh, không phải luminance hay điểm chất lượng.</p>
-<p>Crop native phóng nearest-neighbour; không chỉnh exposure/màu. Native CI kiểm 192 static / 720 motion; subset này kiểm 8 pane và 480 APNG halves. Không có đủ original fulls/off frames ở đây để kiểm lại toàn bộ dataset. Browser playback, mọi palette/tier, camera/GPU thật vẫn cần kiểm. Settings menu để cuối.</p><p>Source <code>__SOURCE__</code>.</p></html>'''
+<p>Crop native phóng nearest-neighbour; không chỉnh exposure/màu. Native CI kiểm 192 static / 720 motion; subset này kiểm 8 pane và 480 nửa frame lossless. Không có đủ original fulls/off frames ở đây để kiểm lại toàn bộ dataset. Browser playback, mọi palette/tier, camera/GPU thật vẫn cần kiểm. Settings menu để cuối.</p><p>Source <code>__SOURCE__</code>.</p></html>'''
     (output/'index.html').write_text(page.replace('__SOURCE__',html.escape(m['sourceRevision'])).replace('__METRICS__',html.escape(metrics)),encoding='utf-8')
     player=PLAYER.replace('Embers','Fireworks').replace('emitter sparks','emitter tia')
     player=player.replace("$('pair').hidden=true;$('frame').value=n;", "$('release').textContent=mode.endsWith('burst')?'Pedal on: frame 12':'Thả phím: frame 12';$('pair').hidden=true;$('frame').value=n;")
@@ -37,9 +38,8 @@ def build(repo,output):
     frames={}
     for t in m['motions']:
         decoded=[]
-        with Image.open(output/t['pairedFile']) as im:
-            for f in range(60):
-                im.seek(f);b=io.BytesIO();im.convert('RGBA').save(b,format='PNG');decoded.append(b.getvalue())
+        for im in review.paired_frames(output,t):
+            b=io.BytesIO();im.save(b,format='PNG');decoded.append(b.getvalue())
         frames[t['Id']]=decoded
     print('PASS native Fireworks published subset: source hashes, 8 panes, 480 motion halves; full originals checked in CI, not locally.',flush=True)
     return frames

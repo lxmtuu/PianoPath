@@ -44,6 +44,31 @@ def assemble_delta(frames):
     return bytes(result+chunk(b'IEND',b''))
 
 
+def pack_frames(frames):
+    """Lossless full-frame XOR + gzip. Frame count/rate live in the guarded manifest, never dropped."""
+    raw=bytearray();previous=None
+    for frame in frames:
+        pixels=frame.convert('RGBA').tobytes('raw','BGRA')
+        raw.extend(pixels if previous is None else bytes(a^b for a,b in zip(pixels,previous)))
+        previous=pixels
+    return gzip.compress(raw,compresslevel=9,mtime=0)
+
+
+def paired_frames(directory,track):
+    from PIL import Image
+    if track.get('pairedEncoding')!='xor-bgra-gzip-v1' or track['pairedFile']!=track['Id']+'.bgra.gz':raise ValueError('Wrong Fireworks frame encoding')
+    w=track['crop']['Width']*2;h=track['crop']['Height'];size=w*h*4;expected=size*60
+    # Bound decompression before allocating untrusted frame data.
+    with gzip.open(directory/track['pairedFile'],'rb') as stream:raw=stream.read(expected+1)
+    if len(raw)!=expected:raise ValueError('Wrong Fireworks frame bundle length')
+    previous=None
+    for i in range(60):
+        delta=raw[i*size:(i+1)*size]
+        pixels=delta if previous is None else bytes(a^b for a,b in zip(delta,previous))
+        yield Image.frombytes('RGBA',(w,h),pixels,'raw','BGRA')
+        previous=pixels
+
+
 def read(p):
     if p.suffix=='.gz':return json.loads(gzip.decompress(p.read_bytes()))
     return json.loads(p.read_text(encoding='utf-8-sig'))
@@ -152,9 +177,9 @@ def verify(directory,source_root=None,revision=None,published_only=False):
                 for i,variant in enumerate(('classic','art')):
                     with Image.open(directory/'motion'/t['Id']/variant/f'{f:03}.png') as im:pair.paste(im.convert('RGBA'),(i*t['crop']['Width'],0))
                 frames.append(pair)
-            name=t['Id']+'.png';t['pairedFile']=name
+            name=t['Id']+'.bgra.gz';t['pairedFile']=name;t['pairedEncoding']='xor-bgra-gzip-v1'
             # Lossless delta rectangles; no palette quantisation or frame dropping.
-            (directory/name).write_bytes(assemble_delta(frames))
+            (directory/name).write_bytes(pack_frames(frames))
         (directory/'manifest.json').write_text(json.dumps(m,ensure_ascii=False,separators=(',',':'))+'\n')
     if len(m['sheets'])!=2:raise ValueError('Wrong spark published sheets')
     for s,phase in zip(m['sheets'],('burst','held')):
@@ -172,15 +197,10 @@ def verify(directory,source_root=None,revision=None,published_only=False):
                 with Image.open(directory/c['File']) as full:
                     if digest(full.crop(p['box']))!=p['hash']:raise ValueError('Spark crop differs from native frame')
     for t in m['motions']:
-        if t['pairedFile']!=t['Id']+'.png':raise ValueError('Wrong motion file')
         versions={v['variant']:v for v in t['tracks']};w=t['crop']['Width'];h=t['crop']['Height']
-        with Image.open(directory/t['pairedFile']) as im:
-            if im.size!=(w*2,h) or im.n_frames!=60:raise ValueError('Wrong APNG dimensions/count')
-            for f in range(60):
-                im.seek(f)
-                if abs(im.info.get('duration',0)-1000/30)>.002:raise ValueError('Wrong APNG timing')
-                for i,v in enumerate(('classic','art')):
-                    if digest(im.convert('RGBA').crop((i*w,0,(i+1)*w,h)))!=versions[v]['hashes'][f]:raise ValueError('APNG half differs from native frame')
+        for f,im in enumerate(paired_frames(directory,t)):
+            for i,v in enumerate(('classic','art')):
+                if digest(im.crop((i*w,0,(i+1)*w,h)))!=versions[v]['hashes'][f]:raise ValueError('Frame half differs from native frame')
     if not published_only and m['schema']==2:
         (directory/'manifest.json.gz').write_bytes(gzip.compress(json.dumps(m,separators=(',',':')).encode(),mtime=0))
     return m
@@ -189,4 +209,4 @@ def verify(directory,source_root=None,revision=None,published_only=False):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('directory',type=Path);p.add_argument('--source-root',type=Path);p.add_argument('--expected-revision');p.add_argument('--published-only',action='store_true');a=p.parse_args()
     verify(a.directory,a.source_root,a.expected_revision,a.published_only)
-    print('PASS Fireworks: 192 static records, 64 paired raw/actual-packet guards, 720 motion records; 8 published native crops and 480 synchronized APNG halves. '+('Full originals NOT checked locally.' if a.published_only else 'All original static/motion pixels verified.'))
+    print('PASS Fireworks: 192 static records, 64 paired raw/actual-packet guards, 720 motion records; 8 published native crops and 480 lossless synchronized frame halves. '+('Full originals NOT checked locally.' if a.published_only else 'All original static/motion pixels verified.'))

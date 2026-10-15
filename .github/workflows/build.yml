@@ -419,18 +419,25 @@ jobs:
         shell: pwsh
         run: |
           $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/fireworks-art-v1'
-          python tools/review_firework_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA
-          if ($LASTEXITCODE -ne 0) { throw 'Fireworks v1 validation failed' }
+          $validation = (& python tools/review_firework_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Fireworks native validation::$escaped"
+            exit 1
+          }
           $target = 'docs/previews/fireworks-art-v1'
           $evidence = 'docs/evidence/fireworks-art-v1'
-          $names = @('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
           $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
           foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
-          if ($bytes -gt 0.8MB) { throw "Bounded Fireworks v1 subset exceeds 0.8 MiB: $bytes" }
+          Write-Output "::notice title=Fireworks publication size::$bytes bytes"
+          if ($bytes -gt 0.8MB) { Write-Output "::error title=Fireworks publication budget::$bytes bytes exceeds 0.8 MiB"; exit 1 }
           New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
           Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
-          "::notice title=Fireworks v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage and AR each retain one packet per physical dot/streak. Paired classic/candidate native crops/APNGs, review only."
+          "::notice title=Fireworks v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage and AR each retain one packet per physical dot/streak. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as

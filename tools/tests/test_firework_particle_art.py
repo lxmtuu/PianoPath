@@ -55,7 +55,7 @@ class FireworkArtTests(unittest.TestCase):
             c[field]='2'*64 if field!='PackedParticles' else 0
             with self.assertRaises(ValueError):r.validate(bad)
 
-    def test_native_crop_and_apng_round_trip_then_tamper(self):
+    def test_native_crop_and_lossless_frame_bundle_round_trip_then_tamper(self):
         try:from PIL import Image
         except ImportError:self.skipTest('Pillow is review-only')
         # Synthetic contract pixels, never render evidence.
@@ -75,8 +75,15 @@ class FireworkArtTests(unittest.TestCase):
             (root/'manifest.json').write_text(json.dumps(m));r.verify(root,revision='synthetic')
             published=r.verify(root,published_only=True);self.assertEqual(4,len(published['motions']))
             t=published['motions'][0]
-            with Image.open(root/t['pairedFile']) as im:
-                self.assertEqual(60,im.n_frames);im.seek(59);self.assertAlmostEqual(1000/30,im.info['duration'],places=5)
+            decoded=list(r.paired_frames(root,t));self.assertEqual(60,len(decoded))
+            self.assertEqual((20,12),decoded[59].size)
+            self.assertEqual((30,60),(t['fps'],t['count']))
+            import gzip
+            bundle=root/t['pairedFile'];original=bundle.read_bytes()
+            for broken in (gzip.compress(b''),gzip.compress(gzip.decompress(original)+b'x')):
+                bundle.write_bytes(broken)
+                with self.assertRaisesRegex(ValueError,'bundle length'):list(r.paired_frames(root,t))
+            bundle.write_bytes(original)
             # Exercise schema-2 geometry/colour split and published gzip loading too.
             published['schema']=2
             for c in published['captures']:c['ColourHash']='1'*64
