@@ -22,7 +22,7 @@ internal static class ShatterParticleArtReview
         string PixelSha256,string RawHash,string PacketHash,int RawParticles,int PackedParticles,string? ColourHash=null,long Signal=0,int VisiblePixels=0);
     private sealed record Crop(int X,int Y,int Width,int Height);
     internal sealed record Audit(GpuArParticle[] Raw,GpuArParticle[] Selected,GpuArQuad[] Quads,GpuSpriteInstance[] Sprites,
-        float Width,float HitY,GpuLook Look,ArCameraPose? Pose,ArNoteDirection Direction);
+        float Width,float HitY,ArCameraPose? Pose,ArNoteDirection Direction);
     internal sealed record Frame(byte[] Pixels, Shot Shot,Audit Audit);
 
     internal static int Render(string output,bool v2=true)
@@ -214,7 +214,7 @@ internal static class ShatterParticleArtReview
                 .OrderBy(p=>p.Id,StringComparer.Ordinal).ToArray();
             colourHash=Hash(JsonSerializer.SerializeToUtf8Bytes(linked,Json));
         }
-        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,colourHash),new(rawParticles,selected.ToArray(),actualQuads.ToArray(),actualSprites.ToArray(),simulationWidth,hitY,look,pose,direction));
+        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,colourHash),new(rawParticles,selected.ToArray(),actualQuads.ToArray(),actualSprites.ToArray(),simulationWidth,hitY,pose,direction));
     }
     private static void GuardPair(Shot a,Shot b,bool active,bool requireSignal=true,bool rasterEmpty=false)
     {

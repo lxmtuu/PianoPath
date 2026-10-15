@@ -1,5 +1,6 @@
 // Real Chromium QA for native four-track burst/held review pages. Not a DOM mock.
 // Dependencies: puppeteer-core and either CHROME_BIN or @sparticuz/chromium.
+// Billboard review: REVIEW_SHATTER_BILLBOARD=1 switches track/variant/recipe checks.
 // Shatter single-impact label/metadata checks: add REVIEW_SINGLE_IMPACT=1.
 // Usage: NODE_PATH=/path/to/deps/node_modules node tools/check_burst_particle_review_browser.cjs URL [screenshot.png]
 const puppeteer=require('puppeteer-core');
@@ -7,14 +8,16 @@ const assert=require('node:assert/strict');
 (async()=>{
  let executablePath=process.env.CHROME_BIN,args=['--no-sandbox'];
  if(!executablePath){const mod=require('@sparticuz/chromium'),chromium=mod.default||mod;executablePath=await chromium.executablePath();args=chromium.args;}
- const singleImpact=process.env.REVIEW_SINGLE_IMPACT==='1';
+ const billboard=process.env.REVIEW_SHATTER_BILLBOARD==='1';
+ const singleImpact=billboard||process.env.REVIEW_SINGLE_IMPACT==='1';
+ const modes=billboard?['ar-near-overhead-held','ar-reference-held','ar-near-overhead-burst','ar-reference-burst']:['live-stage-held','ar-reference-held','live-stage-burst','ar-reference-burst'];
  const browser=await puppeteer.launch({args,executablePath,headless:true});
  try {
   const page=await browser.newPage();const errors=[];page.on('pageerror',e=>errors.push(String(e)));
   const base=process.argv[2]||'http://127.0.0.1:8771';
   await page.setViewport({width:1100,height:1000});await page.goto(base,{waitUntil:'networkidle0'});
   assert.equal(await page.$$eval('img',xs=>xs.every(x=>x.complete&&x.naturalWidth>0)),true);
-  const halves=await page.evaluate(async()=>{
+  const halves=await page.evaluate(async(billboard)=>{
    const m=await(await fetch('manifest.json')).json();let checked=0;
    for(const t of m.motions)for(let f=0;f<60;f++){
     const im=new Image();im.src=`motion/${t.Id}/${f}.png`;await im.decode();
@@ -24,12 +27,12 @@ const assert=require('node:assert/strict');
      const pixels=ctx.getImageData(i*w,0,w,h).data;
      for(let j=0;j<pixels.length;j+=4){const r=pixels[j];pixels[j]=pixels[j+2];pixels[j+2]=r;}
      const hash=Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',pixels))).map(x=>x.toString(16).padStart(2,'0')).join('').toUpperCase();
-     if(hash!==t.tracks.find(x=>x.variant===(i?'art':'classic')).hashes[f])throw Error(`Browser pixels changed ${t.Id}/${f}/${i}`);
+     if(hash!==t.tracks.find(x=>x.variant===(billboard?(i?'after':'before'):(i?'art':'classic'))).hashes[f])throw Error(`Browser pixels changed ${t.Id}/${f}/${i}`);
      checked++;
     }
    }
    return checked;
-  });assert.equal(halves,480);
+  },billboard);assert.equal(halves,480);
   await page.goto(base+'/motion-review.html',{waitUntil:'networkidle0'});
   const ready=async(mode,n)=>{
    await page.waitForFunction((mode,n)=>!document.getElementById('pair').hidden&&document.getElementById('status').textContent.includes(`${mode} · Frame ${n}/59`),{},mode,n);
@@ -43,12 +46,17 @@ const assert=require('node:assert/strict');
   };
   if(singleImpact){
    assert.equal(await page.$eval('#release',x=>x.textContent),'Pedal on: frame 12');
-   assert.deepEqual(await page.$$eval('#mode option',xs=>xs.map(x=>x.textContent)),['Stage · nhấn nhẹ','AR · nhấn nhẹ','Stage · nhấn mạnh','AR · nhấn mạnh']);
+   assert.deepEqual(await page.$$eval('#mode option',xs=>xs.map(x=>x.textContent)),billboard?['AR near-overhead · nhấn nhẹ','AR reference · nhấn nhẹ','AR near-overhead · nhấn mạnh','AR reference · nhấn mạnh']:['Stage · nhấn nhẹ','AR · nhấn nhẹ','Stage · nhấn mạnh','AR · nhấn mạnh']);
    const m=await page.evaluate(async()=>await(await fetch('manifest.json')).json());
-   assert.equal(m.family,'shatter');assert.deepEqual(m.rasterEmptyPairs.slice().sort(),['indigo-ar-near-overhead-p61-held','prism-ar-near-overhead-p61-held']);assert.deepEqual(m.staticSampleFrames,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.45]);
-   assert(m.motions.every(x=>x.emission.includes('single ')&&x.emission.includes('no held emitter; pedal f12')));
+   if(billboard){
+    assert.equal(m.family,'shatter-billboard');assert.equal(m.staticCount,624);assert.equal(m.lineage,64);assert.deepEqual(m.samples,[2,10,26,89]);
+    assert(m.motions.every(x=>x.velocity===(x.phase==='held'?.45:.9)&&x.pedalFrame===12));
+   }else{
+    assert.equal(m.family,'shatter');assert.deepEqual(m.rasterEmptyPairs.slice().sort(),['indigo-ar-near-overhead-p61-held','prism-ar-near-overhead-p61-held']);assert.deepEqual(m.staticSampleFrames,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.45]);
+    assert(m.motions.every(x=>x.emission.includes('single ')&&x.emission.includes('no held emitter; pedal f12')));
+   }
   }
-  for(const mode of ['live-stage-held','ar-reference-held','live-stage-burst','ar-reference-burst']){
+  for(const mode of modes){
    await page.select('#mode',mode);
    if(singleImpact){
     for(const n of [0,11]){
