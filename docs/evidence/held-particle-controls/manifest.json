@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "sourceRevision": "a3877763cf154b8ecebba1f91f4c7590133d7edc",
+  "sourceRevision": "edce79d21a433c7cc3e54455df0ba4b78ce97a88",
   "sourceHashMethod": "SHA256; UTF-8 text without BOM, CRLF normalized to LF; PNG bytes unchanged",
   "sourceHashes": {
     "Gpu/StageShaders.hlsl": "00F510EAB56C54C75D9AB56F57E83764D60471DD24BC38999379620C16F582E7",
@@ -17,7 +17,7 @@
     "Stage/PianoStage.cs": "BD4DDFAD71C562B542CA52AF9603C426440147257420279D6CFBF19DCCA9E0DE",
     "Stage/PrismFlowPalette.cs": "FCE9E74A066FD553164D564DC076E871838C237E26D9678EC02FFE1A049FFE58",
     "Diagnostics/HeldParticleControlPlan.cs": "E8BF16485588801BE69D6BC68365DEB89F1455E7C43E2531713646E8248897DB",
-    "Diagnostics/HeldParticleControlReview.cs": "D8406963FD519FD194CCBA595614DD02495FBFF3A0E61DEEC2CCA8C5608412EA",
+    "Diagnostics/HeldParticleControlReview.cs": "D80AB3935F443E037CFB0EC7A38DC78560FFC1CFCD3E9E8117307EB39BDF5261",
     "Diagnostics/AuxParticleFixtures.cs": "05ED1F236D54B439C35D6378E39F8D45500EBBF9AAE3ED6CFF144EC19E1DE37F",
     "Diagnostics/KeyParticleFixtures.cs": "DE14718A0B733D4105F67143FFC12CD4F7E862675FD96DA311142D4C358A9D05",
     "docs/samples/ar-keyboard-topdown.png": "44A37C11C43CC2295B4E81391BE18C3792722351CE833BFC6F11FEC802ACEAE0"
@@ -723,9 +723,9 @@
           "PixelSha256": "7104B56B9AA3BF04135F50E903758B936C5A8BB7F7B30F7D15FDD525BF703C08",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -735,9 +735,9 @@
           "PixelSha256": "CC557A127434902ADD597D17508A23B76CE0F268B9DB042E4931CEB8DD336FF9",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -747,9 +747,9 @@
           "PixelSha256": "B8DB1E845CF5294D99A0DB2B0C1394ED117DB9064620781C27E6F398769C4267",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -759,9 +759,9 @@
           "PixelSha256": "B13823D5F4404EA49319CD5279C661E6B5F9D136BA688DF64E2A3FCEEC774CA0",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -1286,9 +1286,9 @@
           "PixelSha256": "A22648AB7B6DA36E9D56B0380DE466AA4A8A80E8E15814A4491F2B2425960D81",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -1298,9 +1298,9 @@
           "PixelSha256": "2EB258A900E9313C8611A273D13BD6F1A670FEB5BC6311C8018314BB67E4AD87",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -1310,9 +1310,9 @@
           "PixelSha256": "D067E792DCF9F866F8E0A2A58B5AC6EA46995E44633CF3BCCD69478268A0D399",
           "StageKeys": 88,
           "StageSprites": 304,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -1322,9 +1322,9 @@
           "PixelSha256": "CE7D8108683D39887B3E92DCDA506B4C8AB6AF45B9B26A0FDD272EEA8349706C",
           "StageKeys": 88,
           "StageSprites": 304,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -1855,9 +1855,9 @@
           "PixelSha256": "3A35BF1E4060984B122F2DDCC2023C230288FB5397BB67A0F5C7F12968B5F254",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -1867,9 +1867,9 @@
           "PixelSha256": "5359BAFD04604D5E4B4CEC40726615FEA35FA9EDA243D72E449345F74A2B0A07",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -1879,9 +1879,9 @@
           "PixelSha256": "7C0B6EE1DDB0E6320ED4B6DCC47F257717BAB3CD84465B084D61B57162884EB6",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -1891,9 +1891,9 @@
           "PixelSha256": "883091BF265008BFCB0D4C8353BD2AA316B7FCA51EE0D0CA48F6210F6339E487",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -2415,9 +2415,9 @@
           "PixelSha256": "7104B56B9AA3BF04135F50E903758B936C5A8BB7F7B30F7D15FDD525BF703C08",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -2427,9 +2427,9 @@
           "PixelSha256": "10ACF7332BC25834D27C161FD7532DBBA06D4B83B9DE9B5F7CC391ED0F807742",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -2439,9 +2439,9 @@
           "PixelSha256": "4BB1B1E7F3E6F123C9BD862F5E65A4621A9702E15016AAE6C433BB65FC4A09FE",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -2451,9 +2451,9 @@
           "PixelSha256": "56241D21348B062AF919BF6ADAFA78F027BE72D51B5AD54F643235AC2EE84376",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -2978,9 +2978,9 @@
           "PixelSha256": "A22648AB7B6DA36E9D56B0380DE466AA4A8A80E8E15814A4491F2B2425960D81",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -2990,9 +2990,9 @@
           "PixelSha256": "02932DFB9545C89881732E08ADFFE2B122D005A7CDDCA54340822DA3C462C6CA",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -3002,9 +3002,9 @@
           "PixelSha256": "5643F2E8F1E17949A7E4250B2ADBAD9664D562FF68E15655773EDADD969FA412",
           "StageKeys": 88,
           "StageSprites": 304,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -3014,9 +3014,9 @@
           "PixelSha256": "898151CEE9A71A7F9C3643850F3666EAB762D61883DB100B7C6E749E83FEDA3B",
           "StageKeys": 88,
           "StageSprites": 304,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -3547,9 +3547,9 @@
           "PixelSha256": "3A35BF1E4060984B122F2DDCC2023C230288FB5397BB67A0F5C7F12968B5F254",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -3559,9 +3559,9 @@
           "PixelSha256": "70C3F670F9B3682EA470D8FDFC7B126235E1B7B93A21CC4772E2989D752B7DD3",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -3571,9 +3571,9 @@
           "PixelSha256": "49285436BA1DD463357EBA861B4ABEF29E4691C5DB41D4761D08486A92541F1E",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -3583,9 +3583,9 @@
           "PixelSha256": "E7E491B9EFD2E5E42A4F0274623858DF709AC4B4573A83FD30AC4A71A4D24BC7",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -4107,9 +4107,9 @@
           "PixelSha256": "7104B56B9AA3BF04135F50E903758B936C5A8BB7F7B30F7D15FDD525BF703C08",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -4119,9 +4119,9 @@
           "PixelSha256": "A307DEDBB38979C1CE0FB7D43B285CFA13103FD3DF7D7AF95A4442887B6F82D5",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -4131,9 +4131,9 @@
           "PixelSha256": "93F17A8820880728908BB953198204B86C41F8E7F158B767F8309B5F88CC48D4",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -4143,9 +4143,9 @@
           "PixelSha256": "BD8491E4785ED6933ED6D743762E593CFD3C2CC66D70C0F83F97A839E1DF5804",
           "StageKeys": 88,
           "StageSprites": 76,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -4670,9 +4670,9 @@
           "PixelSha256": "A22648AB7B6DA36E9D56B0380DE466AA4A8A80E8E15814A4491F2B2425960D81",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -4682,9 +4682,9 @@
           "PixelSha256": "A921C418974B428716CDC57BC3A4ADF2598C9848302EA2978441F72DB7CAB370",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -4694,9 +4694,9 @@
           "PixelSha256": "C226F4C89A1C548339DAC46FAF57A1C2360A06D485D3226529069DE3B2767057",
           "StageKeys": 88,
           "StageSprites": 304,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -4706,9 +4706,9 @@
           "PixelSha256": "BB9D2532BE2CFCB33ED4A2082B649AC2E7B44F4C44F80495981D7AC067F2A8ED",
           "StageKeys": 88,
           "StageSprites": 304,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 76
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -5239,9 +5239,9 @@
           "PixelSha256": "3A35BF1E4060984B122F2DDCC2023C230288FB5397BB67A0F5C7F12968B5F254",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -5251,9 +5251,9 @@
           "PixelSha256": "E23C9BC8EE2344B07441898ABBB685CB180B5790E26D4A6951AC9FBCB06AEAA0",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -5263,9 +5263,9 @@
           "PixelSha256": "0193FEBEBC7D6EDD69548E6D76F941DABA54A5985AF7038778F3E0DE1B00B336",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -5275,9 +5275,9 @@
           "PixelSha256": "86D233591FA941E3E93A002359907B7D417958A9DC61DFDAE085D704E221731C",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 192
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -5799,9 +5799,9 @@
           "PixelSha256": "7104B56B9AA3BF04135F50E903758B936C5A8BB7F7B30F7D15FDD525BF703C08",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -5811,9 +5811,9 @@
           "PixelSha256": "CC557A127434902ADD597D17508A23B76CE0F268B9DB042E4931CEB8DD336FF9",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -5823,9 +5823,9 @@
           "PixelSha256": "DDB30A139B5CFDBEC34AD65289C1FA5654BBFB6600ECF21F4A27AA41C35DCC43",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -5835,9 +5835,9 @@
           "PixelSha256": "74F75881055994842A392659BE7331EDA48B7DDF398546B9F9DABCDB01A73D6A",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -6362,9 +6362,9 @@
           "PixelSha256": "A22648AB7B6DA36E9D56B0380DE466AA4A8A80E8E15814A4491F2B2425960D81",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -6374,9 +6374,9 @@
           "PixelSha256": "2EB258A900E9313C8611A273D13BD6F1A670FEB5BC6311C8018314BB67E4AD87",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -6386,9 +6386,9 @@
           "PixelSha256": "6C45DCA0E6F5D608F56AE0DE2AA0C4E04249B545DA8928C94754340E2B71D080",
           "StageKeys": 88,
           "StageSprites": 83,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -6398,9 +6398,9 @@
           "PixelSha256": "101CF770193616546EA8EBB1FB7C9A516E7BDD51F3A9B28F233B576B5E517A90",
           "StageKeys": 88,
           "StageSprites": 83,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -6931,9 +6931,9 @@
           "PixelSha256": "3A35BF1E4060984B122F2DDCC2023C230288FB5397BB67A0F5C7F12968B5F254",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -6943,9 +6943,9 @@
           "PixelSha256": "5359BAFD04604D5E4B4CEC40726615FEA35FA9EDA243D72E449345F74A2B0A07",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -6955,9 +6955,9 @@
           "PixelSha256": "5C61BCFD3587132CDDD8258158E52B5E4D3D41DC7D868E309544FC290FFE2C76",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -6967,9 +6967,9 @@
           "PixelSha256": "A77096461B8356EB22C1517E619593B04BDB69EDE9BDD4D23C3A6279F53F60AC",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -7491,9 +7491,9 @@
           "PixelSha256": "7104B56B9AA3BF04135F50E903758B936C5A8BB7F7B30F7D15FDD525BF703C08",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -7503,9 +7503,9 @@
           "PixelSha256": "10ACF7332BC25834D27C161FD7532DBBA06D4B83B9DE9B5F7CC391ED0F807742",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -7515,9 +7515,9 @@
           "PixelSha256": "143B7769698F336A7B45985D0A4C8A3361EE4FEC181CDFD461C182C482A0BE52",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -7527,9 +7527,9 @@
           "PixelSha256": "C1E9D6B466A41C3F7B552ED7DC500E3EC66458E7534B6FD2555A702A4510FB5B",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -8054,9 +8054,9 @@
           "PixelSha256": "A22648AB7B6DA36E9D56B0380DE466AA4A8A80E8E15814A4491F2B2425960D81",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -8066,9 +8066,9 @@
           "PixelSha256": "02932DFB9545C89881732E08ADFFE2B122D005A7CDDCA54340822DA3C462C6CA",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -8078,9 +8078,9 @@
           "PixelSha256": "4F6C8E5506E0422D00BE6DE163E0A29125B60143EDC243E6AD26A80BB7F227CC",
           "StageKeys": 88,
           "StageSprites": 83,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -8090,9 +8090,9 @@
           "PixelSha256": "A62A7479BC2912CF63A64EE850599F909CF1DCB7824917A63DD30DCFEE1C5CB0",
           "StageKeys": 88,
           "StageSprites": 83,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -8623,9 +8623,9 @@
           "PixelSha256": "3A35BF1E4060984B122F2DDCC2023C230288FB5397BB67A0F5C7F12968B5F254",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -8635,9 +8635,9 @@
           "PixelSha256": "70C3F670F9B3682EA470D8FDFC7B126235E1B7B93A21CC4772E2989D752B7DD3",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -8647,9 +8647,9 @@
           "PixelSha256": "443DA795DB2991478DC33B6EE9361BFC8C32F2D18E2D1130F2F0AC69E85E3B14",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -8659,9 +8659,9 @@
           "PixelSha256": "5C3B970C67F9C83D802B31CF6A28621100A391AA142F25A06E567DEE4D70D8F5",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 7,
-          "ArLights": 22,
-          "ArParticles": 83
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -9183,9 +9183,9 @@
           "PixelSha256": "7104B56B9AA3BF04135F50E903758B936C5A8BB7F7B30F7D15FDD525BF703C08",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -9195,9 +9195,9 @@
           "PixelSha256": "A307DEDBB38979C1CE0FB7D43B285CFA13103FD3DF7D7AF95A4442887B6F82D5",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -9207,9 +9207,9 @@
           "PixelSha256": "54037B249BEB228C274D613B5AED5A294EB0244BBC2847552F5A5300F9107254",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -9219,9 +9219,9 @@
           "PixelSha256": "6ECE5A92C2273B9D3D3CDD5597C348BE55C4B08DD7C47BB1A274CA7524202007",
           "StageKeys": 88,
           "StageSprites": 19,
-          "ArKeys": 2,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
@@ -9746,9 +9746,9 @@
           "PixelSha256": "A22648AB7B6DA36E9D56B0380DE466AA4A8A80E8E15814A4491F2B2425960D81",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "light-only",
@@ -9758,9 +9758,9 @@
           "PixelSha256": "A921C418974B428716CDC57BC3A4ADF2598C9848302EA2978441F72DB7CAB370",
           "StageKeys": 88,
           "StageSprites": 0,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "particles-only",
@@ -9770,9 +9770,9 @@
           "PixelSha256": "5EDEEAD24764E062C2362B81DE3C3DC6EEDDA7903269F8AADB42A0A3630DA53E",
           "StageKeys": 88,
           "StageSprites": 83,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         },
         {
           "Variant": "combined",
@@ -9782,9 +9782,9 @@
           "PixelSha256": "70968416E04AC926813A22E7BBC9C7B09E4C10B3E7B69FC7EAF20A410BFAE367",
           "StageKeys": 88,
           "StageSprites": 83,
-          "ArKeys": 1,
-          "ArLights": 14,
-          "ArParticles": 19
+          "ArKeys": 0,
+          "ArLights": 0,
+          "ArParticles": 0
         }
       ],
       "comparisons": [
