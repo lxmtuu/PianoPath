@@ -99,3 +99,8 @@ Ví dụ full-frame particle-factor footprint RGB >4, **Prism / AR reference**:
 - Mọi artwork candidate tiếp theo phải đối chiếu **Stage + AR từ đầu**, gồm normal/low, tint/spill controls và motion; không chỉ làm đẹp một crop.
 - Các press/held family khác còn mở trong roadmap; không coi harness này là nâng cấp toàn bộ effects. Settings/menu redesign vẫn **cuối cùng**.
 - Synthetic planar camera, static 0,6 s và WARP không thay được temporal, real-camera/hand occlusion/exposure, delay/tier, recording/alpha/WPF hoặc hardware tests.
+
+
+## Follow-up Wisps v3
+
+[Candidate material v3 dưới cap](KEY-PARTICLES-WISPS-V3.md) đã có 64 paired captures và 240 motion frames, source `93e2a75`, CI `38672193965` SUCCESS (6.108 assertions / 1 skipped group). V2 192-frame hashes giữ nguyên. V3 đổi silhouette/colour, không đổi simulation/geometry/cap; màu cải thiện nhẹ nhưng AR tổng thể chưa đủ rõ, chưa promote/default enablement. Geometry audit tách rõ kích thước từng quad với global centre-Y spread; xem báo cáo để không quy mọi vấn đề cho billboard collapse.
