@@ -93,7 +93,7 @@ internal static class AuxParticleVisualReview
             File.WriteAllText(Path.Combine(output, "manifest.json"), JsonSerializer.Serialize(new
             {
                 schemaVersion = 1, status = heldArt ? "p3b-held-art-prototype-not-signoff" : "p3a-auxiliary-baselines-not-art-signoff",
-                heldArt, heldOnly,
+                heldArt, heldOnly, legacyParticleAxesForReview=true,
                 adapter = renderer.AdapterName, width = Width, height = Height, fps = Fps, seed = KeyParticleFixtures.Seed,
                 input = "explicit single-key feed states; no OS MIDI callback/controller import",
                 releaseAfterHeldFrames = AuxParticleTimeline.ReleaseFrame, ar = "Ultra / synthetic keyboard / Fit / no mirror / delay=0",

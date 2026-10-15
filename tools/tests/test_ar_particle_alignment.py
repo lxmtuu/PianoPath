@@ -1,5 +1,9 @@
 import copy
 import itertools
+import hashlib
+import json
+import tempfile
+import shutil
 import sys
 import unittest
 from pathlib import Path
@@ -34,6 +38,26 @@ class ArParticleAlignmentTests(unittest.TestCase):
                             ('IntrinsicHash','E'*64),('Particles',0),('Notes',0),('PixelSha256','C'*64),('File','../bad.png')]:
             m=plan();m['captures'][1][field]=value
             with self.assertRaises(ValueError):r.validate(m)
+
+    def test_lossless_publication_rejects_tampered_pane_even_if_sheet_hash_is_refreshed(self):
+        try:from PIL import Image
+        except ImportError:self.skipTest('Pillow decoder is review-only')
+        with tempfile.TemporaryDirectory() as d:
+            root=Path(d);m=plan()
+            templates={}
+            for legacy in (True,False):
+                im=Image.new('RGBA',(640,360),(20 if legacy else 40,50,80,255))
+                path=root/f'template-{legacy}.png';im.save(path)
+                templates[legacy]=(path,hashlib.sha256(im.tobytes('raw','BGRA')).hexdigest().upper())
+            for c in m['captures']:
+                path,digest=templates[c['Legacy']];shutil.copyfile(path,root/c['File']);c['PixelSha256']=digest
+            (root/'manifest.json').write_text(json.dumps(m));r.verify(root,revision='contract')
+            published=r.verify(root,revision='contract',published_only=True)
+            self.assertEqual(2,len(published['sheets']))
+            sheet=published['sheets'][0];im=Image.open(root/sheet['file']).convert('RGBA');im.putpixel((5,5),(0,0,0,255));im.save(root/sheet['file'])
+            sheet['hash']=hashlib.sha256(im.tobytes('raw','BGRA')).hexdigest().upper()
+            (root/'manifest.json').write_text(json.dumps(published))
+            with self.assertRaisesRegex(ValueError,'differs from native'):r.verify(root,published_only=True)
 
 
 if __name__=='__main__':unittest.main()

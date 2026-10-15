@@ -60,15 +60,15 @@ internal readonly record struct ArParticleFrame(ArVec3 Across, ArVec3 Depth, ArV
 
     internal static ArParticleFrame ForNotes(ArNoteDirection direction)
     {
-        var up = direction.Vector * -1;
-        var cosine = Math.Clamp(-up.Z, -1, 1);
-        var cross = ArVec3.Cross(Legacy.Up, up);
-        var sine = cross.Length;
-        var axis = sine > 1e-12 ? cross / sine : Legacy.Across;
-        // Axis-angle avoids the unstable 1/(1+cosine) form close to a 180° turn.
-        ArVec3 Rotate(ArVec3 v) => v * cosine + ArVec3.Cross(axis, v) * sine
-            + axis * (ArVec3.Dot(axis, v) * (1 - cosine));
-        return new(Rotate(Legacy.Across).Normalized, Rotate(Legacy.Depth).Normalized, up);
+        var d = direction.Normalised();
+        var tilt = d.TiltDegrees * Math.PI / 180;
+        var azimuth = d.AzimuthDegrees * Math.PI / 180;
+        // Ry(-azimuth) * Rx(-90°-tilt), not a shortest-arc rotation from -Z.
+        // Shortest-arc frames have a roll singularity when outward reaches +Z (tilt=90, azimuth=0).
+        // This parameterised frame remains continuous through that direction and through azimuth ±180°.
+        var across = new ArVec3(Math.Cos(azimuth), 0, Math.Sin(azimuth));
+        var depth = new ArVec3(Math.Sin(azimuth) * Math.Cos(tilt), -Math.Sin(tilt), -Math.Cos(azimuth) * Math.Cos(tilt));
+        return new(across, depth, d.Vector * -1);
     }
 
     internal ArVec3 Point(ArVec3 anchor, double lateral, double rise) => anchor + Across * lateral + Up * rise;

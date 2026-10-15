@@ -42,7 +42,11 @@ def verify(directory,source_root=None,revision=None,published_only=False):
             if not name.endswith('.png'):raw=raw.decode('utf-8-sig').replace('\r\n','\n').encode()
             if hashlib.sha256(raw).hexdigest().upper()!=digest:raise ValueError('Alignment source differs: '+name)
     if published_only:
-        for sheet in m['sheets']:
+        expected_sheets=[('default.png','ar-reference',0,0,11),('diagonal-release.png','ar-oblique',45,-45,18)]
+        if len(m['sheets'])!=2:raise ValueError('Missing published alignment quartets')
+        for sheet,(name,view,tilt,azi,frame) in zip(m['sheets'],expected_sheets):
+            ids=[f'{family}-{view}-t{tilt}-a{azi}-f{frame}' for family in ('wisps','flames') for _ in range(2)]
+            if sheet['file']!=name or sheet['ids']!=ids:raise ValueError('Wrong published quartet order/provenance')
             im=image_pixels(directory/sheet['file'],(1280,720),sheet['hash'])
             for pane,id_ in enumerate(sheet['ids']):
                 pixels=im.crop((pane%2*640,pane//2*360,pane%2*640+640,pane//2*360+360)).tobytes('raw','BGRA')

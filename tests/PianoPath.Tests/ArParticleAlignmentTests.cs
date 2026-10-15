@@ -64,6 +64,21 @@ public sealed class ArParticleAlignmentTests
     }
 
     [Fact]
+    public void Lateral_frame_does_not_flip_while_crossing_the_old_antipodal_singularity_or_azimuth_wrap()
+    {
+        var middle=ArParticleFrame.ForNotes(new(90,0));
+        foreach(var direction in new[]{new ArNoteDirection(89.999999,0),new ArNoteDirection(90.000001,0),
+            new ArNoteDirection(90,-.000001),new ArNoteDirection(90,.000001)})
+        {
+            var frame=ArParticleFrame.ForNotes(direction);
+            Assert.InRange((frame.Across-middle.Across).Length,0,1e-6);
+            Assert.InRange((frame.Depth-middle.Depth).Length,0,1e-6);
+        }
+        var a=ArParticleFrame.ForNotes(new(45,-180));var b=ArParticleFrame.ForNotes(new(45,180));
+        Assert.InRange((a.Across-b.Across).Length+(a.Up-b.Up).Length+(a.Depth-b.Depth).Length,0,1e-9);
+    }
+
+    [Fact]
     public void Ray_aligned_travel_uses_a_visible_finite_fallback_and_rejects_bad_inputs()
     {
         var calibration = ArCalibration.Create(KeyboardLayout.Standard88,HeldParticleControlPlan.Views[1].Corners!,1280,720,out _,70)!;
