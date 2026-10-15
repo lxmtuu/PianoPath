@@ -6691,7 +6691,7 @@ internal static partial class VerificationSuite
         // Fail fast on the newest native candidate before regenerating historical reviews.
         var shatter=ShatterParticleArtReview.Render(Path.Combine(outputDirectory,"shatter-art-v1"));
         Assert(shatter==192,"Shatter requires paired native impact facets, unchanged state/geometry/components and actual body RGBA parity.");
-        Results.Add("PASS Shatter art v1: 192 statics / 720 motion crops; two single-press velocities, unchanged raw state and ordered geometry/counts. Stage retains body+glint, AR one body quad; actual body RGBA matches three AR poses. Review-only, not release/held redesign or art approval.");
+        Results.Add("PASS Shatter art v1: 192 statics / 720 motion crops; 46 visible active pairs, two pinned legacy near-overhead raster-empty pairs and 16 expired pairs; two single-press velocities, unchanged raw state and ordered geometry/counts. Stage retains body+glint, AR one body quad; actual body RGBA matches three AR poses. Review-only, not release/held redesign or art approval.");
         Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
         var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
         var prismCaptures = PrismFlowVisualReview.Render(prismOutput);

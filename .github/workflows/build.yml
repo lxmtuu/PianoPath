@@ -485,7 +485,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
           Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
-          "::notice title=Shatter v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains a body and glint, AR one physical body quad; firm and soft single presses only. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+          "::notice title=Shatter v1 material::192 native statics / 720 native motion crops; 46 visible active pairs, two explicitly pinned legacy near-overhead raster-empty pairs, 16 expired pairs (not whole-pose visual approval); unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains a body and glint, AR one physical body quad; firm and soft single presses only. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
 
       - name: Validate and stage Dust v2 material review
         shell: pwsh

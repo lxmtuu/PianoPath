@@ -12,6 +12,7 @@ from review_held_particle_controls import image_pixels
 
 VIEWS=('live-stage','ar-reference','ar-oblique','ar-near-overhead')
 PHASES=('burst','held','released','expired')
+RASTER_EMPTY={'prism-ar-near-overhead-p61-held','indigo-ar-near-overhead-p61-held'}
 SOURCES={'Gpu/StageShaders.hlsl','Gpu/SparkParticleAppearance.cs','Gpu/ShatterParticleAppearance.cs','Gpu/GpuLook.cs','Gpu/GpuStageSimulation.cs',
  'Gpu/GpuStageSimulation.Effects.cs','Gpu/GpuStageRenderer.cs','Gpu/GpuArLayer.cs','Gpu/GpuArLayer.Effects.cs',
  'Gpu/GpuStageFeed.cs','Gpu/GpuRenderLoop.cs','Camera/ArParticleBillboard.cs','Camera/Ar3DNoteProjection.cs',
@@ -86,6 +87,7 @@ def validate(m,revision=None):
     if m['schema']!=2:raise ValueError('Unknown shatter schema')
     if (m['family'],m['reviewOnly'],m['legacyParticleAxesForReview'],m['width'],m['height'],m['seed'],m['captureCount'],m['staticFps'],m['staticReleaseFrame'])!=('shatter',True,False,640,360,20261014,192,60,21):raise ValueError('Wrong shatter recipe')
     if m.get('staticSampleFrames')!=[2,10,26,89] or m.get('motionPressVelocities')!=[.9,.45]:raise ValueError('Wrong Shatter input timeline')
+    if type(m.get('rasterEmptyPairs')) is not list or len(m['rasterEmptyPairs'])!=2 or set(m['rasterEmptyPairs'])!=RASTER_EMPTY:raise ValueError('Missing pinned legacy Shatter raster-empty disclosure')
     if set(m['sourceHashes'])!=SOURCES:raise ValueError('Missing shatter source guards')
     expected=set(itertools.product(('prism','indigo'),VIEWS,(60,61),PHASES,('off','classic','art')))
     keys=[(c['Palette'],c['View'],c['Pitch'],c['Phase'],c['Variant']) for c in m['captures']]
@@ -109,8 +111,10 @@ def validate(m,revision=None):
     for group in groups.values():
         a,b=group['classic'],group['art']
         if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Shatter state/actual packet changed')
-        if (a['Phase']=='expired') != (a['PixelSha256']==b['PixelSha256']):raise ValueError('Wrong shatter material delta')
-        if a['Phase']!='expired' and b['PixelSha256']==group['off']['PixelSha256']:raise ValueError('Active shatter candidate contributes no native off-delta')
+        empty=a['Id'] in RASTER_EMPTY
+        if empty and not (a['PixelSha256']==b['PixelSha256']==group['off']['PixelSha256']):raise ValueError('Pinned legacy raster-empty pair changed')
+        if (a['Phase']=='expired' or empty) != (a['PixelSha256']==b['PixelSha256']):raise ValueError('Wrong shatter material delta')
+        if a['Phase']!='expired' and not empty and b['PixelSha256']==group['off']['PixelSha256']:raise ValueError('Active shatter candidate contributes no native off-delta')
         if a['Phase']=='expired' and a['PixelSha256']!=group['off']['PixelSha256']:raise ValueError('Expired output differs from off')
     if len(m['motions'])!=4 or {x['Id'] for x in m['motions']}!={v+'-'+p for v in VIEWS[:2] for p in ('burst','held')}:raise ValueError('Missing shatter motion')
     for track in m['motions']:
@@ -212,4 +216,4 @@ def verify(directory,source_root=None,revision=None,published_only=False):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('directory',type=Path);p.add_argument('--source-root',type=Path);p.add_argument('--expected-revision');p.add_argument('--published-only',action='store_true');a=p.parse_args()
     verify(a.directory,a.source_root,a.expected_revision,a.published_only)
-    print('PASS Shatter: 192 static records, 64 paired raw/actual-packet guards, 720 motion records; 8 published native crops and 480 lossless synchronized frame halves. '+('Full originals NOT checked locally.' if a.published_only else 'All original static/motion pixels verified.'))
+    print('PASS Shatter: 192 static records, 64 paired raw/actual-packet guards (46 visible active pairs, 2 pinned legacy raster-empty pairs, 16 expired), 720 motion records; 8 published native crops and 480 lossless synchronized frame halves. '+('Full originals NOT checked locally.' if a.published_only else 'All original static/motion pixels verified.'))

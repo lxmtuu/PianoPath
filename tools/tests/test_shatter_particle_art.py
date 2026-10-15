@@ -13,9 +13,9 @@ import review_shatter_particle_art as r
 def plan():
     captures=[]
     for palette,view,pitch,phase,variant in itertools.product(('prism','indigo'),r.VIEWS,(60,61),r.PHASES,('off','classic','art')):
-        active=variant!='off' and phase!='expired';id_=f'{palette}-{view}-p{pitch}-{phase}'
+        id_=f'{palette}-{view}-p{pitch}-{phase}';active=variant!='off' and phase!='expired';visible=active and id_ not in r.RASTER_EMPTY
         captures.append(dict(Id=id_,Palette=palette,View=view,Pitch=pitch,Phase=phase,Variant=variant,File=f'{id_}-{variant}.png',
-            ColourHash='1'*64,PixelSha256=('A' if not active else 'B' if variant=='classic' else 'C')*64,RawHash='D'*64,PacketHash='E'*64,
+            ColourHash='1'*64,PixelSha256=('A' if not visible else 'B' if variant=='classic' else 'C')*64,RawHash='D'*64,PacketHash='E'*64,
             RawParticles=int(active),PackedParticles=int(active)))
     motions=[]
     for view,phase in itertools.product(r.VIEWS[:2],('burst','held')):
@@ -24,7 +24,7 @@ def plan():
             tracks.append(dict(variant=variant,hashes=[('A' if variant=='off' else 'B' if variant=='classic' else 'C')*64]*60,
                 frames=[dict(ColourHash='1'*64,RawHash='D'*64,PacketHash='E'*64,RawParticles=int(variant!='off'),PackedParticles=int(variant!='off'),fullPixelSha256='F'*64) for _ in range(60)]))
         motions.append(dict(Id=f'{view}-{phase}',view=view,phase=phase,fps=30,count=60,releaseFrame=12,crop=dict(X=1,Y=1,Width=10,Height=12),tracks=tracks))
-    return dict(schema=2,staticSampleFrames=[2,10,26,89],motionPressVelocities=[.9,.45],family='shatter',reviewOnly=True,legacyParticleAxesForReview=False,sourceRevision='synthetic',width=640,height=360,
+    return dict(schema=2,rasterEmptyPairs=sorted(r.RASTER_EMPTY),staticSampleFrames=[2,10,26,89],motionPressVelocities=[.9,.45],family='shatter',reviewOnly=True,legacyParticleAxesForReview=False,sourceRevision='synthetic',width=640,height=360,
         seed=20261014,captureCount=192,staticFps=60,staticReleaseFrame=21,sourceHashes=dict.fromkeys(r.SOURCES,'A'*64),captures=captures,motions=motions)
 
 
@@ -35,6 +35,16 @@ class ShatterArtTests(unittest.TestCase):
             with self.assertRaises(ValueError):r.validate(m)
 
     def test_matrix(self):self.assertEqual(64,len(r.validate(plan(),'synthetic')))
+
+    def test_legacy_raster_empty_is_pinned_not_a_general_blank_exception(self):
+        m=plan();self.assertEqual(64,len(r.validate(m)))
+        for change in (lambda m:m.pop('rasterEmptyPairs'),
+            lambda m:m['rasterEmptyPairs'].append('prism-ar-reference-p60-held'),
+            lambda m:next(c for c in m['captures'] if c['Id'] in r.RASTER_EMPTY and c['Variant']=='classic').__setitem__('PixelSha256','B'*64),
+            lambda m:next(c for c in m['captures'] if c['Id'] in r.RASTER_EMPTY and c['Variant']=='art').__setitem__('PixelSha256','C'*64),
+            lambda m:next(c for c in m['captures'] if c['Id'] not in r.RASTER_EMPTY and c['Variant']=='art' and c['Phase']=='held').__setitem__('PixelSha256','A'*64)):
+            bad=copy.deepcopy(m);change(bad)
+            with self.assertRaises(ValueError):r.validate(bad)
 
     def test_removed_candidate_is_not_accepted_as_a_material_change(self):
         m=plan();m['captures'][2]['PixelSha256']=m['captures'][0]['PixelSha256']
@@ -92,7 +102,7 @@ class ShatterArtTests(unittest.TestCase):
             root=Path(folder);m=plan()
             for c in m['captures']:
                 im=Image.new('RGBA',(640,360),(20,30,40,255))
-                if c['PackedParticles']:
+                if c['PackedParticles'] and c['Id'] not in r.RASTER_EMPTY:
                     im.putpixel((295,140),(150 if c['Variant']=='classic' else 110,70,30,255))
                 im.save(root/c['File']);c['PixelSha256']=r.digest(im)
             for t in m['motions']:

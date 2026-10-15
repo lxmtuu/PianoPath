@@ -14,6 +14,9 @@ namespace PianoPath;
 internal static class ShatterParticleArtReview
 {
     private const int Width=640, Height=360;
+    // Native diagnosis 38787357450: legacy near-overhead black-key mid-sample packs bodies
+    // but rasterises no pixels. Material-only review must expose, not "fix" or hide, that hole.
+    private static readonly string[] RasterEmptyPairs=["prism-ar-near-overhead-p61-held","indigo-ar-near-overhead-p61-held"];
     private static readonly JsonSerializerOptions Json=new(){IncludeFields=true,WriteIndented=true};
     private sealed record Shot(string Id,string Palette,string View,int Pitch,string Phase,string Variant,string File,
         string PixelSha256,string RawHash,string PacketHash,int RawParticles,int PackedParticles,string? ColourHash=null,long Signal=0,int VisiblePixels=0);
@@ -31,7 +34,7 @@ internal static class ShatterParticleArtReview
             renderer.SuppressStageKeyLightingForReview=true;
             renderer.SuppressArKeyTintForReview=renderer.SuppressArKeySpillForReview=true;
             var camera=PrismFlowVisualReview.ReadSyntheticCamera(Path.Combine(PrismFlowVisualReview.FindSamples(),"ar-keyboard-topdown.png"));
-            var captures=new List<Shot>();var motions=new List<object>();
+            var captures=new List<Shot>();var motions=new List<object>();var rasterEmptyPairs=new List<string>();
             foreach(var palette in new[]{"prism","indigo"})
             foreach(var view in HeldParticleControlPlan.Views)
             foreach(var pitch in new[]{60,61})
@@ -50,18 +53,26 @@ internal static class ShatterParticleArtReview
                         signal+=b+g+r;if(Math.Max(b,Math.Max(g,r))>4)visible++;
                     }
                     var shot=f.Shot with {Id=id,File=id+"-"+variant+".png",Signal=signal,VisiblePixels=visible};
-                    if(variant=="art" && phase!="expired" && signal==0)
-                        throw new InvalidDataException($"Active shatter candidate contributes no native off-delta: {id}, raw={shot.RawParticles}, bodies={shot.PackedParticles}, classic signal={baseline?.Shot.Signal}, classic/off same={baseline?.Shot.PixelSha256==Hash(offPixels!)}.");
+                    var rasterEmpty=variant=="art" && phase!="expired" && signal==0 && baseline?.Shot.PixelSha256==Hash(offPixels!);
+                    if(rasterEmpty)
+                    {
+                        if(!RasterEmptyPairs.Contains(id))throw new InvalidDataException($"Unexpected legacy raster-empty Shatter pair: {id}.");
+                        rasterEmptyPairs.Add(id);
+                    }
+                    if(variant=="art" && phase!="expired" && signal==0 && !rasterEmpty)
+                        throw new InvalidDataException($"Shatter visibility regression: {id}, raw={shot.RawParticles}, bodies={shot.PackedParticles}, classic signal={baseline?.Shot.Signal}.");
                     WritePng(Path.Combine(output,shot.File),f.Pixels,Width,Height);
                     if(variant=="off")
                     {
                         if(shot.RawParticles!=0 || shot.PackedParticles!=0)throw new InvalidDataException("Shatter off control emitted particles.");
                     }
                     else if(variant=="classic")baseline=f with {Shot=shot};
-                    else GuardPair(baseline!.Shot,shot,phase!="expired");
+                    else GuardPair(baseline!.Shot,shot,phase!="expired",rasterEmpty:rasterEmpty);
                     captures.Add(shot);
                 }
             }
+            if(!rasterEmptyPairs.OrderBy(x=>x).SequenceEqual(RasterEmptyPairs.OrderBy(x=>x)))
+                throw new InvalidDataException("The pinned legacy Shatter raster-empty cases changed; investigate geometry/visibility explicitly.");
             if(v2)
                 foreach(var shot in captures.Where(c=>c.Variant=="art"))
                 {
@@ -123,7 +134,7 @@ internal static class ShatterParticleArtReview
                 "Camera/ArCameraPose.cs","Stage/PianoStage.cs","Diagnostics/KeyParticleFixtures.cs","Diagnostics/HeldParticleControlPlan.cs",
                 "Diagnostics/ShatterParticleArtReview.cs","Diagnostics/AuxParticleFixtures.cs","Diagnostics/AuxParticleTimeline.cs","docs/samples/ar-keyboard-topdown.png"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new{
-                schema=2,family="shatter",staticSampleFrames=new[]{2,10,26,89},motionPressVelocities=new[]{.9,.45},storageLaneMeaning="burst=early/firm; held=mid/soft; released=late; expired=empty; no held or release emitter",reviewOnly=true,legacyParticleAxesForReview=false,sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
+                schema=2,family="shatter",rasterEmptyPairs,staticSampleFrames=new[]{2,10,26,89},motionPressVelocities=new[]{.9,.45},storageLaneMeaning="burst=early/firm; held=mid/soft; released=late; expired=empty; no held or release emitter",reviewOnly=true,legacyParticleAxesForReview=false,sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
                 adapter=renderer.AdapterName,width=Width,height=Height,seed=KeyParticleFixtures.Seed,staticFps=60,staticReleaseFrame=21,
                 lighting="tint/spill masked; bloom off, isolated material review",captureCount=captures.Count,
                 sourceHashes=sources.ToDictionary(p=>p,p=>Hash(p.EndsWith(".png",StringComparison.Ordinal)?File.ReadAllBytes(Path.Combine(root,p)):
@@ -198,12 +209,12 @@ internal static class ShatterParticleArtReview
         }
         return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,colourHash));
     }
-    private static void GuardPair(Shot a,Shot b,bool active,bool requireSignal=true)
+    private static void GuardPair(Shot a,Shot b,bool active,bool requireSignal=true,bool rasterEmpty=false)
     {
         if(a.RawHash!=b.RawHash || a.PacketHash!=b.PacketHash || a.RawParticles!=b.RawParticles || a.PackedParticles!=b.PackedParticles)
             throw new InvalidDataException("Shatter candidate changed state, population or normalized actual packets.");
-        if(active && requireSignal && (b.PackedParticles==0 || a.PixelSha256==b.PixelSha256))throw new InvalidDataException("Shatter material has no visible signal.");
-        if(!active && a.PixelSha256!=b.PixelSha256)throw new InvalidDataException("Shatter candidate changed an empty output.");
+        if(active && requireSignal && (b.PackedParticles==0 || (!rasterEmpty && a.PixelSha256==b.PixelSha256)))throw new InvalidDataException("Shatter material has no visible signal.");
+        if((!active || rasterEmpty) && a.PixelSha256!=b.PixelSha256)throw new InvalidDataException("Shatter candidate changed an empty output.");
     }
     private static byte[] Extract(byte[] pixels,Crop c)
     {
