@@ -43,6 +43,11 @@ def assemble_delta(frames):
 
 
 def read(p):return json.loads(p.read_text(encoding='utf-8-sig'))
+def check_counts(record):
+    if any(type(record[k]) is not int or record[k]<0 for k in ('RawParticles','PackedParticles')) or record['PackedParticles']>record['RawParticles']:
+        raise ValueError('Bad spark counts')
+
+
 def check_digest(value):
     if not isinstance(value,str) or len(value)!=64 or any(c not in '0123456789ABCDEF' for c in value):raise ValueError('Bad spark digest')
 
@@ -59,7 +64,7 @@ def validate(m,revision=None):
         id_=f"{c['Palette']}-{c['View']}-p{c['Pitch']}-{c['Phase']}"
         if c['Id']!=id_ or c['File']!=id_+'-'+c['Variant']+'.png':raise ValueError('Bad static spark provenance')
         for k in ('PixelSha256','RawHash','PacketHash'):check_digest(c[k])
-        if c['RawParticles']<0 or c['PackedParticles']<0 or c['PackedParticles']>c['RawParticles']:raise ValueError('Bad spark counts')
+        check_counts(c)
         if c['Variant']=='off' or c['Phase']=='expired':
             if c['RawParticles'] or c['PackedParticles']:raise ValueError('Off/expired spark particles')
         elif not c['PackedParticles']:raise ValueError('Missing active sparks')
@@ -68,6 +73,7 @@ def validate(m,revision=None):
         a,b=group['classic'],group['art']
         if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Spark state/actual packet changed')
         if (a['Phase']=='expired') != (a['PixelSha256']==b['PixelSha256']):raise ValueError('Wrong spark material delta')
+        if a['Phase']=='expired' and a['PixelSha256']!=group['off']['PixelSha256']:raise ValueError('Expired output differs from off')
     if len(m['motions'])!=4 or {x['Id'] for x in m['motions']}!={v+'-'+p for v in VIEWS[:2] for p in ('burst','held')}:raise ValueError('Missing spark motion')
     for track in m['motions']:
         if track['Id']!=track['view']+'-'+track['phase'] or (track['fps'],track['count'],track['releaseFrame'])!=(30,60,12):raise ValueError('Bad spark timeline')
@@ -78,7 +84,7 @@ def validate(m,revision=None):
         for variant,t in versions.items():
             if len(t['hashes'])!=60 or len(t['frames'])!=60:raise ValueError('Missing spark frames')
             for h,f in zip(t['hashes'],t['frames']):
-                check_digest(h)
+                check_digest(h);check_counts(f)
                 for k in ('RawHash','PacketHash','fullPixelSha256'):check_digest(f[k])
                 if variant=='off' and (f['RawParticles'] or f['PackedParticles']):raise ValueError('Motion off emitted sparks')
         for a,b in zip(versions['classic']['frames'],versions['art']['frames']):
@@ -142,6 +148,9 @@ def verify(directory,source_root=None,revision=None,published_only=False):
         im=image_pixels(directory/s['file'],(s['width'],s['height']),s['hash'])
         for i,p in enumerate(s['panes']):
             if p['id']!=f'prism-{VIEWS[i//2]}-p60-{phase}' or p['variant']!=('classic','art')[i%2]:raise ValueError('Wrong spark pane provenance')
+            if (len(p['box'])!=4 or any(type(v) is not int for v in p['box'])
+                or not (0<=p['box'][0]<p['box'][2]<=640 and 0<=p['box'][1]<p['box'][3]<=360)):
+                raise ValueError('Invalid native crop coordinates')
             if p['box'][2]-p['box'][0]!=p['width'] or p['box'][3]-p['box'][1]!=p['height']:raise ValueError('Wrong spark crop size')
             if digest(im.crop((p['x'],p['y'],p['x']+p['width'],p['y']+p['height'])))!=p['hash']:raise ValueError('Spark native pane changed')
             if not published_only:

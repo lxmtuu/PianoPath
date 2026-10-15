@@ -36,6 +36,7 @@ class SparkArtTests(unittest.TestCase):
             lambda m:m['captures'][2].__setitem__('PacketHash','F'*64),lambda m:m['captures'][2].__setitem__('RawHash','F'*64),
             lambda m:m['captures'][2].__setitem__('File','../bad.png'),lambda m:m['captures'][0].__setitem__('PackedParticles',1),
             lambda m:m['motions'][0].__setitem__('releaseFrame',13),lambda m:m['motions'][0]['tracks'][2]['frames'][3].__setitem__('RawHash','F'*64),
+            lambda m:m['captures'][2].__setitem__('RawParticles',float('nan')),lambda m:m['motions'][0]['tracks'][1]['frames'][0].__setitem__('PackedParticles',-1),
             lambda m:m['sourceHashes'].clear(),lambda m:m.__setitem__('legacyParticleAxesForReview',True)):
             m=plan();change(m)
             with self.assertRaises(ValueError):r.validate(m)
