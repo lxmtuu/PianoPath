@@ -13,6 +13,26 @@ TARGETS=(
  'held-particle-controls-scenes/wisps-indigo-chord-ar-reference.png',
  'held-particle-controls-scenes/wisps-amber-chord-ar-reference.png')
 
+def display_chunks(data):
+    """Preserve original colour-management and physical-resolution chunks, including their CRCs."""
+    chunks=[];offset=8
+    while offset<len(data):
+        length=int.from_bytes(data[offset:offset+4],'big');kind=data[offset+4:offset+8]
+        if kind in (b'sRGB',b'gAMA',b'cHRM',b'iCCP',b'pHYs'):chunks.append(data[offset:offset+12+length])
+        offset+=12+length
+    return b''.join(chunks)
+
+
+def with_display_chunks(encoded,original):
+    # Strip encoder-propagated copies (e.g. ICC), then restore original chunks verbatim exactly once.
+    clean=bytearray(encoded[:8]);offset=8
+    while offset<len(encoded):
+        length=int.from_bytes(encoded[offset:offset+4],'big');kind=encoded[offset+4:offset+8]
+        if kind not in (b'sRGB',b'gAMA',b'cHRM',b'iCCP',b'pHYs'):clean.extend(encoded[offset:offset+12+length])
+        offset+=12+length
+    return bytes(clean[:33])+display_chunks(original)+bytes(clean[33:])
+
+
 def compact(path):
     from PIL import Image
     original=path.read_bytes()
@@ -21,7 +41,7 @@ def compact(path):
         before=im.convert('RGBA').tobytes('raw','BGRA');size=im.size
         if im.convert('RGBA').getchannel('A').getextrema()!=(255,255):raise ValueError('Nonopaque image: '+str(path))
         out=io.BytesIO();im.convert('RGB').save(out,format='PNG',compress_level=9,optimize=True)
-    result=out.getvalue()
+    result=with_display_chunks(out.getvalue(),original)
     with Image.open(io.BytesIO(result)) as im:
         if im.size!=size or im.convert('RGBA').tobytes('raw','BGRA')!=before:raise ValueError('Native pixels changed')
     saved=max(0,len(original)-len(result))

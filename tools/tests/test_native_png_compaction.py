@@ -1,7 +1,7 @@
 import io,tempfile,unittest,sys
 from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
-from compact_native_review_pngs import compact
+from compact_native_review_pngs import compact,display_chunks
 class NativePngCompactionTests(unittest.TestCase):
     def test_opaque_pixels_and_second_run_are_identical(self):
         try:from PIL import Image
@@ -21,3 +21,15 @@ class NativePngCompactionTests(unittest.TestCase):
             a=Image.new('RGBA',(3,3),(40,50,60,255));b=Image.new('RGBA',(3,3),(90,50,60,255));a.save(p,save_all=True,append_images=[b],duration=33);original=p.read_bytes()
             with self.assertRaisesRegex(ValueError,'animation'):compact(p)
             self.assertEqual(original,p.read_bytes())
+
+    def test_colour_management_and_resolution_are_preserved(self):
+        try:
+            from PIL import Image,PngImagePlugin
+        except ImportError:self.skipTest('Pillow unavailable')
+        import struct
+        with tempfile.TemporaryDirectory() as d:
+            p=Path(d)/'native.png';metadata=PngImagePlugin.PngInfo();metadata.add(b'sRGB',b'\0');metadata.add(b'gAMA',struct.pack('>I',45455))
+            Image.new('RGBA',(21,17),(40,50,60,255)).save(p,pnginfo=metadata,dpi=(96,96),compress_level=0)
+            original=display_chunks(p.read_bytes());self.assertTrue(original)
+            compact(p);self.assertEqual(original,display_chunks(p.read_bytes()))
+            self.assertEqual(0,compact(p)['saved'])
