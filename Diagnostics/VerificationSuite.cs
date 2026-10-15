@@ -6726,6 +6726,10 @@ internal static partial class VerificationSuite
         Assert(v3==64,"Wisps v3 needs eight sub-cap scenes × eight independent factors.");
         HeldParticleArtReview.RenderWispV3Motion(Path.Combine(outputDirectory,"wisps-v3","motion"));
         Results.Add("PASS P3b Wisps v3: 64 sub-cap WARP captures; same v2 simulation, eligibility, actual packing and geometry hashes; particle-off pixels unchanged. Four paired 60-frame Stage/reference AR motion sequences. Review-only candidate, not art acceptance or a projection/cap fix.");
+        var flameV3=HeldParticleControlReview.Render(Path.Combine(outputDirectory,"flames-v3"),isolateLight:true,flameV3:true);
+        Assert(flameV3==64,"Flames v3 needs eight scenes × eight independent factors.");
+        HeldParticleArtReview.RenderFlameV3Motion(Path.Combine(outputDirectory,"flames-v3","motion"));
+        Results.Add("PASS P3b Flames v3: 64 WARP captures and four 60-frame motion sequences; unchanged v2 populations, geometry and off controls. Candidate material only; not art/hardware acceptance.");
         HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
         Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }

@@ -32,23 +32,26 @@ internal static class HeldParticleArtReview
 
     internal static void RenderWispV3Motion(string output) => RenderMotion(output,wispV3:true);
 
-    private static void RenderMotion(string output, bool wispV3 = false)
+    internal static void RenderFlameV3Motion(string output) => RenderMotion(output,flameV3:true);
+
+    private static void RenderMotion(string output, bool wispV3 = false, bool flameV3 = false)
     {
         const int width=640,height=360,fps=30,frames=60;
+        var candidateV3=wispV3 || flameV3;
         Directory.CreateDirectory(output);
         using var renderer = GpuStageRenderer.Create(forceWarp:true);
         var captures = new List<object>();
-        foreach (var route in AuxParticleTimeline.Routes.Where(r => r.Source == AuxParticleTimeline.Channel.Held && (!wispV3 || r.Wisp)))
+        foreach (var route in AuxParticleTimeline.Routes.Where(r => r.Source == AuxParticleTimeline.Channel.Held && (!wispV3 || r.Wisp) && (!flameV3 || !r.Wisp)))
         foreach (var ar in new[] { false,true })
         foreach (var refined in new[] { false,true })
         {
-            var settings = AuxParticleFixtures.Settings(route); settings.HeldParticleArt=wispV3 || refined;
+            var settings = AuxParticleFixtures.Settings(route); settings.HeldParticleArt=candidateV3 || refined;
             if(wispV3) settings.WispAmount=8;
             var stage = new PianoStage { Width=1280,Height=720 }; stage.SetVisualSettings(settings);
             stage.Measure(new Size(1280,720)); stage.Arrange(new Rect(0,0,1280,720)); stage.UpdateLayout();
             var feed = new GpuStageFeed(); feed.SetStageHeight(720);
             feed.SetLook(GpuLook.From(settings,(pitch,track)=>stage.AdjustColor(stage.NoteColor(pitch,track)),
-                stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,ar).WithWispV3ForReview(wispV3 && refined));
+                stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,ar).WithWispV3ForReview(wispV3 && refined).WithFlameV3ForReview(flameV3 && refined));
             if (ar)
             {
                 var calibration=ArCalibration.Create(KeyboardLayout.Standard88,
@@ -59,7 +62,7 @@ internal static class HeldParticleArtReview
                 feed.Camera=new GpuCameraInput(ring,PictureFit.Fit,false,1);
                 feed.Ar=new GpuArInput(calibration,ArNoteStyle.Default,1,Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowDamperStrip:false);
             }
-            var name=$"{route.Id}-{(ar ? "ar" : "live-stage")}-{(wispV3 ? (refined ? "v3" : "v2") : (refined ? "art" : "classic"))}";
+            var name=$"{route.Id}-{(ar ? "ar" : "live-stage")}-{(candidateV3 ? (refined ? "v3" : "v2") : (refined ? "art" : "classic"))}";
             var folder=Path.Combine(output,name); Directory.CreateDirectory(folder);
             var hashes=new List<string>();
             var cropX=ar ? 235 : 240; var cropY=ar ? 90 : 180; const int cropWidth=140,cropHeight=160;
@@ -70,7 +73,7 @@ internal static class HeldParticleArtReview
                     BeforeFrame,KeyParticleFixtures.Seed);
                 void BeforeFrame(int f)
                 {
-                    if(!wispV3) { AuxParticleFixtures.Publish(feed,route,"expired",f*2,60);return; }
+                    if(!candidateV3) { AuxParticleFixtures.Publish(feed,route,"expired",f*2,60);return; }
                     var held=f<12;
                     int[] pitches=[60,61,64,67];
                     feed.SetDeterministicState([], (f+1)/(double)fps, false,held?pitches.ToHashSet():new HashSet<int>());
@@ -88,7 +91,7 @@ internal static class HeldParticleArtReview
                 hashes.Add(Convert.ToHexString(SHA256.HashData(crop)));
             }
             captures.Add(new {name,fps,frames,width,height,cropX,cropY,cropWidth,cropHeight,
-                heldFrames=11,releaseFrame=wispV3?12:(int?)null,firstReleasedSampleSeconds=wispV3?13.0/30:(double?)null,
+                heldFrames=11,releaseFrame=candidateV3?12:(int?)null,firstReleasedSampleSeconds=candidateV3?13.0/30:(double?)null,
                 releaseFirstStepSeconds=12.0/30,pedal=true,hashes});
         }
         var sourceRoot=Path.GetFullPath(Path.Combine(PrismFlowVisualReview.FindSamples(),"..",".."));
@@ -97,7 +100,7 @@ internal static class HeldParticleArtReview
         {sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
             sourceHashes=motionSources.ToDictionary(p=>p,p=>Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
                 File.ReadAllText(Path.Combine(sourceRoot,p)).Replace("\r\n","\n"))))),
-            seed=KeyParticleFixtures.Seed,wispV3ForReview=wispV3,pitches=wispV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
+            seed=KeyParticleFixtures.Seed,wispV3ForReview=wispV3,flameV3ForReview=flameV3,flameIntensity=70,pitches=candidateV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
     }
 
     private static void WritePng(string path,byte[] pixels,int width,int height)

@@ -31,6 +31,18 @@ public sealed class HeldParticleArtTests
     }
 
     [Theory]
+    [InlineData(true,false,false,7)] [InlineData(true,true,false,8)]
+    [InlineData(true,false,true,7)] [InlineData(true,true,true,8)]
+    [InlineData(false,false,false,4)] [InlineData(false,true,false,4)]
+    [InlineData(false,false,true,6)] [InlineData(false,true,true,6)]
+    public void FamilyCandidatesPreserveEnvelopeAndDoNotChangeTheOtherFamily(bool wisp,bool wispV3,bool flameV3,float shape)
+    {
+        Assert.True(HeldParticleAppearance.TryResolve(wisp,1.3f,.3f,1,.7f,.8f,new(.2f,.4f,1),.4f,true,out var original));
+        Assert.True(HeldParticleAppearance.TryResolve(wisp,1.3f,.3f,1,.7f,.8f,new(.2f,.4f,1),.4f,true,out var candidate,wispV3,flameV3));
+        Assert.Equal(original with{Shape=shape},candidate);
+    }
+
+    [Theory]
     [InlineData(float.NaN)] [InlineData(float.PositiveInfinity)] [InlineData(-1f)]
     public void InvalidInputsCannotMakeGeometry(float invalid)
     {

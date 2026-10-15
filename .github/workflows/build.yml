@@ -123,6 +123,8 @@ jobs:
           $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
           New-Item -ItemType Directory -Force -Path $review | Out-Null
           Copy-Item 'docs/evidence/held-light-isolation/manifest.json' (Join-Path $review 'prior-light-isolation.json')
+          Copy-Item 'docs/evidence/wisps-v3/manifest.json' (Join-Path $review 'prior-wisps-v3.json')
+          Copy-Item 'docs/evidence/wisps-v3/motion-manifest.json' (Join-Path $review 'prior-wisps-motion.json')
           $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-prism-only","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
           if (Test-Path $log) {
             Get-Content $log | ForEach-Object {
@@ -320,6 +322,32 @@ jobs:
             Copy-Item (Join-Path $review "frames/$id/on-both.png") (Join-Path $target "$id-full.png") -Force
           }
           "::notice title=Wisps v3 candidate::64 full-frame hashes, 16 native quartets, unchanged v2 history, paired population/actual geometry and 240 lossless APNG frames verified. Review-only, no art/projection/hardware acceptance."
+
+      - name: Validate and stage Flames v3 candidate
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $review = Join-Path $root 'flames-v3'
+          python tools/review_flames_v3.py $review --baseline (Join-Path $root 'held-light-isolation') --source-root . --expected-revision $env:GITHUB_SHA --historical (Join-Path $root 'prior-light-isolation.json') --wisps (Join-Path $root 'wisps-v3') --prior-wisps (Join-Path $root 'prior-wisps-v3.json') --prior-wisps-motion (Join-Path $root 'prior-wisps-motion.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Paired Flames validation failed' }
+          $target = 'docs/previews/flames-v3'
+          $evidence = 'docs/evidence/flames-v3'
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $evidence 'motion-manifest.json') -Force
+          # Off quartets are pixel-identical to v2; do not duplicate them in Git.
+          # Full dataset and four original APNGs remain in the artifact.
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter '*-on.png')
+          if ($sheets.Count -ne 8) { throw 'Missing Flames active quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          $pairs = @(Get-ChildItem (Join-Path $review 'motion') -Filter '*-paired.png')
+          if ($pairs.Count -ne 2) { throw 'Missing paired motion' }
+          foreach ($pair in $pairs) { Copy-Item $pair.FullName (Join-Path $target $pair.Name) -Force }
+          foreach ($view in @('live-stage','ar-reference')) {
+            $id = "flames-normal-prism-$view"
+            Copy-Item (Join-Path $review "frames/$id/on-both.png") (Join-Path $target "$id-full.png") -Force
+          }
+          "::notice title=Flames v3 candidate::64 full-frame hashes, 16 native quartets, paired geometry/population, 240 motion hashes and 120 lossless paired APNG frames verified. Accepted Wisps and retained v2 pixels unchanged; no art/hardware acceptance."
 
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
@@ -762,7 +790,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

@@ -25,9 +25,11 @@ internal static class HeldParticleControlReview
         string RawHash, string EligibleHash, string PackedHash);
     private sealed record Delta(int ChangedPixels, int OverFourPixels, int MaxChannelDelta, double MeanAbsoluteRgbDelta);
 
-    internal static int Render(string output, bool isolateLight = false, bool wispV3 = false)
+    internal static int Render(string output, bool isolateLight = false, bool wispV3 = false, bool flameV3 = false)
     {
-        if (wispV3 && !isolateLight) throw new ArgumentException("Wisps v3 requires independent light controls.");
+        var candidateV3=wispV3 || flameV3;
+        if ((candidateV3 && !isolateLight) || (wispV3 && flameV3))
+            throw new ArgumentException("Select one v3 family with independent light controls.");
         var previousLayout = KeyboardLayout.Active;
         KeyboardLayout.Use(KeyboardLayout.Standard88);
         try
@@ -42,10 +44,11 @@ internal static class HeldParticleControlReview
             if (!renderer.IsWarp) throw new InvalidOperationException("Held controls require WARP.");
             var scenes = new List<object>(); var count = 0;
             var effectOffHashes = new Dictionary<string,string>();
-            using var baseline = isolateLight ? JsonDocument.Parse(File.ReadAllText(Path.Combine(output,"..",wispV3 ? "held-light-isolation" : "held-particle-controls","manifest.json"))) : null;
+            using var baseline = isolateLight ? JsonDocument.Parse(File.ReadAllText(Path.Combine(output,"..",candidateV3 ? "held-light-isolation" : "held-particle-controls","manifest.json"))) : null;
             var entries = isolateLight ? HeldLightIsolationPlan.Entries
                 : HeldParticleControlPlan.Scenes.Select(s => new HeldLightIsolationPlan.Entry(s.Id,s,"normal",32));
             if (wispV3) entries=entries.Where(e=>e.Scene.Family=="wisps" && e.Load=="low");
+            if (flameV3) entries=entries.Where(e=>e.Scene.Family=="flames" && e.Load=="normal");
             var variants = isolateLight ? HeldLightIsolationPlan.Variants
                 : HeldParticleControlPlan.Variants.Select(v => new HeldLightIsolationPlan.Variant(v.Id,v.Particles,v.KeyLight,v.KeyLight)).ToArray();
             var populations = new Dictionary<string,string>();
@@ -72,7 +75,7 @@ internal static class HeldParticleControlReview
                     var feed = new GpuStageFeed(); feed.SetStageHeight(Height);
                     var look = GpuLook.From(s, (pitch,track) => stage.AdjustColor(stage.NoteColor(pitch,track)),
                         stage.KeyboardHeight / stage.ActualHeight, stage.AdjustColor, overCamera);
-                    look=look.WithWispV3ForReview(wispV3);
+                    look=look.WithWispV3ForReview(wispV3).WithFlameV3ForReview(flameV3);
                     feed.SetLook(look);
                     // KeyLighting=0 only mutes spill; ShaderKeyLight changes static ivory illumination.
                     // Neither is an honest Stage "key light off" control. Remove packed tint/emission/spill
@@ -92,7 +95,7 @@ internal static class HeldParticleControlReview
                         {
                             var p=simulation.ArParticleAt(i); raw.Add(Sample(p));
                             if (HeldParticleAppearance.TryResolve(p.Wisp,p.Size,p.Age,p.Life,p.Phase,p.Glow,p.Color,
-                                currentLook.WispWidth,currentLook.FlameNoteColor,out var surface,currentLook.WispArtV3ForReview) && surface.Color.W>.003f)
+                                currentLook.WispWidth,currentLook.FlameNoteColor,out var surface,currentLook.WispArtV3ForReview,currentLook.FlameArtV3ForReview) && surface.Color.W>.003f)
                                 eligible.Add(Sample(p));
                         }
                     } : null;
@@ -139,7 +142,7 @@ internal static class HeldParticleControlReview
                     var file = $"frames/{id}/{variant.Id}.png";
                     PrismFlowVisualReview.WriteAndVerifyPng(Path.Combine(output,file),image);
                     var hash = Hash(image);
-                    if (isolateLight && entry.Load=="normal" && variant.Tint==variant.Spill)
+                    if (isolateLight && !candidateV3 && entry.Load=="normal" && variant.Tint==variant.Spill)
                     {
                         var prior=baseline!.RootElement.GetProperty("scenes").EnumerateArray().Single(x=>x.GetProperty("Id").GetString()==scene.Id);
                         var priorVariant=variant.Particles ? (variant.Tint ? "combined" : "particles-only") : (variant.Tint ? "light-only" : "neither");
@@ -187,7 +190,7 @@ internal static class HeldParticleControlReview
                             heights.Length==0?null:heights.Min(),heights.Length==0?null:heights.Max(),heights.Length==0?null:heights.Average(),
                             centres.Length==0?null:centres.Min(),centres.Length==0?null:centres.Max(),Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(corners))));
                     }
-                    if(wispV3)
+                    if(candidateV3)
                     {
                         var prior=baseline!.RootElement.GetProperty("scenes").EnumerateArray().Single(x=>x.GetProperty("Id").GetString()==id)
                             .GetProperty("captures").EnumerateArray().Single(c=>c.GetProperty("Variant").GetString()==variant.Id);
@@ -268,14 +271,14 @@ internal static class HeldParticleControlReview
                 "docs/samples/ar-keyboard-topdown.png","Diagnostics/HeldLightIsolationPlan.cs"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new
             {
-                schema=wispV3 ? 3 : isolateLight ? 2 : 1, wispV3ForReview=wispV3, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
+                schema=candidateV3 ? 3 : isolateLight ? 2 : 1, wispV3ForReview=wispV3, flameV3ForReview=flameV3, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
                 sourceHashMethod="SHA256; UTF-8 text without BOM, CRLF normalized to LF; PNG bytes unchanged",
                 sourceHashes=sourceFiles.ToDictionary(p => p,p => Hash(p.EndsWith(".png",StringComparison.Ordinal)
                     ? File.ReadAllBytes(Path.Combine(root,p))
                     : Encoding.UTF8.GetBytes(File.ReadAllText(Path.Combine(root,p)).Replace("\r\n","\n")))),
                 adapter=renderer.AdapterName, width=Width,height=Height, seed=KeyParticleFixtures.Seed,
                 fps=HeldParticleControlPlan.Fps,frames=HeldParticleControlPlan.Frames,time=.6,velocity=.9,pedal=false,
-                heldArt=true, arKeyLightOn=.6, arDelay=0, arQuality="Ultra", mirrored=false, fit="Fit",
+                heldArt=true, flameIntensity=70, arKeyLightOn=.6, arDelay=0, arQuality="Ultra", mirrored=false, fit="Fit",
                 lightControl=isolateLight ? "Stage tint/emission group Emit.W and spill Base.Y independently masked; AR key patches and projected note-light spill independently gated. Static lighting/depression unchanged; default-off review seams only."
                     : "Stage: packed key Emit.W/Base.Y=0 (static lighting and depression unchanged); AR: KeyLight=0 (tint + projected spill).",
                 cameraMethod="Reference synthetic BGRA; other views nearest-neighbour planar reprojection with calibration-matched corners. Not re-lit 3D or real-camera evidence.",

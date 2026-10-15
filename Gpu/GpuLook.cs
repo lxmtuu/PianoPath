@@ -89,6 +89,13 @@ internal sealed class GpuLook
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
     internal bool WispArtV3ForReview { get; private set; }
+    internal bool FlameArtV3ForReview { get; private set; }
+    internal GpuLook WithFlameV3ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.FlameArtV3ForReview=enabled;
+        return copy;
+    }
     internal GpuLook WithWispV3ForReview(bool enabled)
     {
         var copy=(GpuLook)MemberwiseClone();

@@ -422,6 +422,32 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
         core = spine * ends * (1.0 - h) * 0.16;
         bodyColor *= lerp(1.0, 0.65, h); // depth along the parcel, not another lifetime fade
     }
+    else if (shape < 6.5) // Flames v3 review: two tapered tongues, coloured mantle and luminous inner body
+    {
+        // Confined to the existing base-anchored quad: no new births/geometry, no extra age fade.
+        float bend = sin(h * 4.8 + phase + progress * 2.6) * 0.20 * h;
+        float belly = 0.72 * pow(max(1.0 - h, 0.0), 0.78) * (0.80 + 0.20 * sin(h * 3.14159));
+        float d = x - bend;
+        float pixelHalf = max(fwidth(d) * 0.5, 0.0125);
+        float ends = smoothstep(0.0, 0.09, h) * (1.0 - smoothstep(0.88, 1.0, h));
+        float mantle = HeldStrokeCoverage(d, belly, pixelHalf) * ends;
+        float inner = HeldStrokeCoverage(d + belly * 0.10, belly * lerp(0.48, 0.22, h), pixelHalf) * ends;
+        float sideH = saturate(h / 0.73);
+        float sideWidth = 0.22 * pow(max(1.0 - sideH, 0.0), 0.85);
+        float sideD = x - (bend + 0.28 + sin(phase) * 0.08);
+        float side = HeldStrokeCoverage(sideD, sideWidth, max(fwidth(sideD) * 0.5, 0.0125));
+        side *= smoothstep(0.0, 0.14, h) * (1.0 - smoothstep(0.58, 0.73, h));
+        float peak = max(max(color.r, color.g), color.b);
+        float3 hue = pow(saturate(color.rgb / max(peak, 0.0001)), 1.12);
+        float3 outerColor = hue * min(peak, 0.78) * lerp(1.0, 0.68, h);
+        float3 innerColor = lerp(hue, float3(1.0, 0.80, 0.35), 0.12 * (1.0 - h) * (1.0 - h)) * min(peak, 0.98);
+        float outerAlpha = mantle * 0.52;
+        float innerAlpha = inner * 0.25;
+        float sideAlpha = side * 0.12;
+        float alpha = (outerAlpha + innerAlpha + sideAlpha) * color.a;
+        float3 rgb = (outerColor * (outerAlpha + sideAlpha) + innerColor * innerAlpha) * color.a;
+        return float4(rgb, alpha); // bounded premultiplied colour; existing CPU lifetime envelope only
+    }
     else if (shape > 7.5) // Wisps v3 review candidate; v2 shape 7 and flames stay byte-for-byte below/above
     {
         // A tapered ribbon with a coloured shoulder and narrow ridge, not an emissive white hair.
