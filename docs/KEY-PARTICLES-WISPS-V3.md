@@ -2,6 +2,8 @@
 
 ## Trạng thái
 
+**Bước sửa hướng AR sau review:** ảnh trong báo cáo artwork này được giữ ở geometry lịch sử (`legacyParticleAxesForReview=true`) để không trộn thay đổi material với thay đổi hướng. Đây không phải demo của đường AR mới; xem [đồng bộ hướng hạt/nốt](AR-PARTICLE-DIRECTION-ALIGNMENT.md). Artwork đã duyệt vẫn giữ nguyên.
+
 **Đã triển khai và capture candidate; người dùng đã chấp thuận hướng hình ảnh ở phần review hiện tại. Chưa promote/default enablement hoặc nghiệm thu toàn bộ điều kiện sử dụng.** Run [38672193965](https://github.com/lxmtuu/PianoPath/actions/runs/38672193965), source **`93e2a75`**, hoàn tất **SUCCESS**: static, portable .NET tests, Windows build, 64 full-frame hashes/16 native quartets, paired population/geometry, 240 lossless APNG frames, full verification **6.108 assertions / 1 skipped group**, benchmark, installer, galleries và distributable. Evidence/22 PNG/APNGs publish ở **`7c43e9b`**. Native renderer: Microsoft Basic Render Driver (WARP).
 
 Run đầu `38671949052` tìm ra harness dùng record-copy với `GpuLook` vốn là class; đã sửa thành copy review-only, không đổi type/equality toàn bộ look. Run `38672121075` bị supersede/cancel. Chỉ dùng run cuối ở trên làm bằng chứng build/render mới.

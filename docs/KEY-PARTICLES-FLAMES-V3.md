@@ -2,6 +2,8 @@
 
 ## Trạng thái
 
+**Bước sửa hướng AR sau review:** ảnh trong báo cáo artwork này được giữ ở geometry lịch sử (`legacyParticleAxesForReview=true`) để không trộn thay đổi material với thay đổi hướng. Đây không phải demo của đường AR mới; xem [đồng bộ hướng hạt/nốt](AR-PARTICLE-DIRECTION-ALIGNMENT.md). Artwork đã duyệt vẫn giữ nguyên.
+
 **Đã triển khai và capture candidate; người dùng đã chấp thuận hướng hình ảnh Flames ở phần review hiện tại. Chưa promote/default enablement hoặc nghiệm thu toàn bộ điều kiện sử dụng.** Run [38676096695](https://github.com/lxmtuu/PianoPath/actions/runs/38676096695), source **`75845d68de2ae01a7aef2ef25d57565aa5db3bac`**, hoàn tất **SUCCESS**: static, portable .NET tests, Windows build, paired Wisps/Flames validation, full verification suite, benchmark, installer, galleries và distributable. Native renderer: Microsoft Basic Render Driver (WARP). Evidence/12 PNG/APNGs publish ở **`66aaf91`**.
 
 Tiếp nối [Wisps v3](KEY-PARTICLES-WISPS-V3.md) đã được người dùng chấp thuận về hướng hình ảnh. Không mở lại Wisps làm điều kiện chặn Flames. Candidate Flames vẫn review-only/default-off, không binding settings/preset/menu.
