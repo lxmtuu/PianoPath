@@ -1,5 +1,6 @@
 // Real Chromium QA for native four-track burst/held review pages. Not a DOM mock.
 // Dependencies: puppeteer-core and either CHROME_BIN or @sparticuz/chromium.
+// Shatter single-impact label/metadata checks: add REVIEW_SINGLE_IMPACT=1.
 // Usage: NODE_PATH=/path/to/deps/node_modules node tools/check_burst_particle_review_browser.cjs URL [screenshot.png]
 const puppeteer=require('puppeteer-core');
 const assert=require('node:assert/strict');
@@ -44,7 +45,7 @@ const assert=require('node:assert/strict');
    assert.equal(await page.$eval('#release',x=>x.textContent),'Pedal on: frame 12');
    assert.deepEqual(await page.$$eval('#mode option',xs=>xs.map(x=>x.textContent)),['Stage · nhấn nhẹ','AR · nhấn nhẹ','Stage · nhấn mạnh','AR · nhấn mạnh']);
    const m=await page.evaluate(async()=>await(await fetch('manifest.json')).json());
-   assert.equal(m.family,'shatter');assert.deepEqual(m.staticSampleFrames,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.45]);
+   assert.equal(m.family,'shatter');assert.deepEqual(m.rasterEmptyPairs.slice().sort(),['indigo-ar-near-overhead-p61-held','prism-ar-near-overhead-p61-held']);assert.deepEqual(m.staticSampleFrames,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.45]);
    assert(m.motions.every(x=>x.emission.includes('single ')&&x.emission.includes('no held emitter; pedal f12')));
   }
   for(const mode of ['live-stage-held','ar-reference-held','live-stage-burst','ar-reference-burst']){
@@ -62,6 +63,7 @@ const assert=require('node:assert/strict');
   await page.click('#release');await ready('ar-reference-burst',12);await page.click('#play');
   await page.waitForFunction(()=>Number(document.getElementById('frame').value)>13);await page.click('#play');
   assert.equal(await page.$eval('#play',x=>x.textContent),'Phát');
+  await ready('ar-reference-burst',await page.$eval('#frame',x=>Number(x.value)));
   assert.deepEqual(errors,[]);
   if(process.argv[3])await page.screenshot({path:process.argv[3],fullPage:true});
   await page.setViewport({width:390,height:844});await page.goto(base,{waitUntil:'networkidle0'});
