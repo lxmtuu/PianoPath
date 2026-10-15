@@ -965,9 +965,16 @@ def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
         return []
-    return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures only, because CI commits everything in it on every run; "
+    # Bounded native animation assets: exact BGRA frames, not arbitrary diagnostics/archives.
+    # The family validators verify frame count, decoded length, hashes and publication budgets.
+    native_bundles = {f"{family}/{view}-{phase}.bgra.gz"
+                      for family in ("fireworks-art-v1", "confetti-art-v1")
+                      for view in ("live-stage", "ar-reference") for phase in ("burst", "held")}
+    return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures or explicitly named native frame bundles only; "
             "write diagnostics outside the repository (see App.ReportPreview)"
-            for path in sorted(folder.rglob("*")) if path.is_file() and path.suffix.lower() not in PREVIEW_PICTURES]
+            for path in sorted(folder.rglob("*")) if path.is_file()
+            and path.suffix.lower() not in PREVIEW_PICTURES
+            and path.relative_to(folder).as_posix() not in native_bundles]
 
 
 def scan_cli_and_samples():
