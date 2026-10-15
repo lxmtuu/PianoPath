@@ -398,6 +398,23 @@ jobs:
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
           "::notice title=Embers v2 energy::192 native statics / 720 native motion crops; unchanged raw state, geometry and selection; identical actual v2 colour/alpha payloads across Stage and three AR poses. Paired v1/v2 native crops/APNGs, review only."
 
+      - name: Validate and stage Splash v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/splash-art-v1'
+          python tools/review_splash_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Splash v1 validation failed' }
+          $target = 'docs/previews/splash-art-v1'
+          $evidence = 'docs/evidence/splash-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          if ($bytes -gt 0.8MB) { throw "Bounded Splash v1 subset exceeds 0.8 MiB: $bytes" }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Splash v1 material::192 native statics / 720 native motion crops; unchanged raw state, geometry and selection; identical actual v2 colour/alpha payloads across Stage and three AR poses. Paired classic/candidate native crops/APNGs, review only."
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -837,9 +854,10 @@ jobs:
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         shell: bash
         run: |
+          python -c 'import json,pathlib; ps=[pathlib.Path("docs/evidence")/p/"manifest.json" for p in ("held-light-isolation","held-particle-controls","wisps-v3","flames-v3")]; [(p.write_text(json.dumps(json.loads(p.read_text(encoding="utf-8-sig")),ensure_ascii=False,separators=(",",":"))+"\n",encoding="utf-8")) for p in ps]'
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2 docs/evidence/splash-art-v1
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

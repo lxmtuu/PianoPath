@@ -88,6 +88,11 @@ internal sealed class GpuLook
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
+    internal bool SplashArtForReview { get; private set; }
+    internal GpuLook WithSplashArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.SplashArtForReview=enabled;return copy;
+    }
     internal bool SparkArtForReview { get; private set; }
     internal bool SparkArtV2ForReview { get; private set; }
     internal GpuLook WithSparkV2ForReview(bool enabled)

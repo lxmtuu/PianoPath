@@ -495,6 +495,31 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
 // Review-only sparks: coloured faceted ember + velocity-aligned tapered sliver.
 // Shared by Stage and calibrated AR; CPU already owns the lifetime envelope.
 // No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
+// Liquid bead, coloured meniscus and restrained tinted glint; no white replacement or age fade.
+float4 ShadeSplashArt(float2 uv,float4 color,float component)
+{
+    float2 p=uv*2.0-1.0;
+    if(component<22.5) // Stage's existing broad halo quad: energy stays close to the bead.
+    {
+        float coverage=exp(-dot(p,p)*18.0)*0.09;
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    if(component>23.5 && component<24.5) // Existing small offset specular quad, never pure white.
+    {
+        float coverage=exp(-dot(p,p)*5.0)*0.22;
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    // Broad rounded lower bead with a pinched upper shoulder, inside the old ellipse quad.
+    float width=lerp(0.55,0.92,smoothstep(-0.75,0.35,p.y));
+    float d=length(float2(p.x/width,(p.y-0.08)/0.90));
+    float aa=max(fwidth(d)*0.5,0.015);
+    float body=saturate((1.0-d)/(2.0*aa)+0.5);
+    float rim=HeldStrokeCoverage(d-0.78,0.10,aa);
+    float ridge=exp(-dot(p-float2(-0.24,-0.22),p-float2(-0.24,-0.22))*32.0)*body;
+    float coverage=saturate(body*0.84+rim*0.12+ridge*0.04);
+    return float4(color.rgb*coverage*color.a,coverage*color.a);
+}
+
 float4 ShadeSparkArt(float2 uv, float4 color, bool streak)
 {
     float2 p = uv * 2.0 - 1.0;
@@ -549,6 +574,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if (kind > 24.5 && kind < 25.5) return ShadeSplashArt(i.Uv,i.Color,23);
     if (kind > 19.5 && kind < 21.5)
         return ShadeSparkArtV2(i.Uv, i.Color, kind < 20.5);
     if (kind > 17.5 && kind < 19.5)
@@ -1334,7 +1360,13 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if (kind > 17.5 && kind < 21.5)
+    if(kind>21.5 && kind<24.5)
+    {
+        // Exact legacy ellipse/glow geometry, including rotation, y/x ratio and softness.
+        extent=float2(size,size*max(s.Dir.z,0.02));
+        extra=float4(extent,1.0,s.Dir.w);
+    }
+    else if (kind > 17.5 && kind < 21.5)
     {
         // Exactly the legacy dot/streak extents and axes; only the fragment material changes.
         if (kind < 18.5 || (kind > 19.5 && kind < 20.5)) extent = float2(size * (1.0 + s.Dir.z), size);
@@ -1546,6 +1578,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>21.5 && kind<24.5) return ShadeSplashArt(v.Local*0.5+0.5,v.Color,kind);
     if (kind > 19.5 && kind < 21.5)
         return ShadeSparkArtV2(v.Local * 0.5 + 0.5, v.Color, kind < 20.5);
     if (kind > 17.5 && kind < 19.5)

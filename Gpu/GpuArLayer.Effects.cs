@@ -542,8 +542,15 @@ internal sealed partial class GpuArLayer
             color = new Vector3(spark.X, spark.Y, spark.Z);
             alpha = spark.W * opacity;
         }
+        var materialKind=SparkParticleAppearance.ArKind(look.SparkArtForReview,particle.Shape,particle.Wisp,look.SparkArtV2ForReview);
+        if(SplashParticleAppearance.Eligible(look.SplashArtForReview,particle.Shape,particle.Wisp)
+            && SplashParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var liquid))
+        {
+            color=new Vector3(liquid.X,liquid.Y,liquid.Z);alpha=liquid.W*opacity;
+            materialKind=SplashParticleAppearance.ArKind;
+        }
         quads.Add(Pack(patch, color, Math.Clamp((float)alpha, 0, 1),
-            new Vector4((float)progress, stageShape, SparkParticleAppearance.ArKind(look.SparkArtForReview, particle.Shape, particle.Wisp, look.SparkArtV2ForReview), particle.Phase)));
+            new Vector4((float)progress, stageShape, materialKind, particle.Phase)));
         return true;
     }
 

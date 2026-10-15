@@ -863,9 +863,20 @@ internal sealed partial class GpuStageSimulation
                     var alpha = MathF.Pow(fade, .8f) * look.ParticleGlow;
                     var size = p.Size * (.7f + fade * .5f);
                     var stretch = 1 + Math.Clamp(Math.Abs(p.Vy) / 700, 0, 1.2f);
+                    var firstSplashSprite=sprites.Count;
                     Glow(sprites, x, p.Y, size * 2.4f, size * 2.4f * stretch, c, alpha * .5f);
                     Ellipse(sprites, x, p.Y, size, size * stretch, 0, c * 1.2f, alpha, .15f);
                     Ellipse(sprites, x - size * .3f, p.Y - size * .35f * stretch, size * .32f, size * .32f, 0, Vector3.One * 1.5f, alpha, .2f);
+                    // Rewrite only accepted legacy packets: exact same positions, extents and ordering.
+                    if(SplashParticleAppearance.Eligible(look.SplashArtForReview,(int)p.Shape,p.Wisp)
+                        && SplashParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var liquid))
+                        for(var j=firstSplashSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            q.PosSize.W=q.PosSize.W==9?SplashParticleAppearance.HaloKind:
+                                q.Dir.W==.15f?SplashParticleAppearance.BodyKind:SplashParticleAppearance.GlintKind;
+                            q.Color=liquid;
+                        }
                     break;
                 }
                 case Shape.Shard:
