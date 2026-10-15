@@ -377,6 +377,8 @@ internal sealed class GpuStageRenderer : IDisposable
     internal Action<GpuArParticle>? ObserveArParticleForReview { get; set; }
     internal Action<GpuSpriteInstance>? ObserveHeldSpriteGeometryForReview { get; set; }
     internal Action<GpuArQuad>? ObserveHeldQuadGeometryForReview { get; set; }
+    // Null in production; regression checks partition actual key-anchored and particle packets.
+    internal Action<GpuArQuad>? ObserveArQuadForReview { get; set; }
 
 
     internal static void MaskPressedKeyLightForReview(Span<GpuKeyInstance> keys, bool suppressTint = true, bool suppressSpill = true)
@@ -538,6 +540,8 @@ internal sealed class GpuStageRenderer : IDisposable
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
             _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier,
                 SuppressArKeyTintForReview, SuppressArKeySpillForReview);
+        if (ObserveArQuadForReview is { } observeArQuad)
+            foreach (var quad in _arList.Span) observeArQuad(quad);
         if (ObserveHeldQuadGeometryForReview is { } observeQuad)
             foreach (var quad in _arList.Span)
                 if (quad.Misc.Z == 17) observeQuad(quad);

@@ -2007,18 +2007,48 @@ internal static partial class VerificationSuite
         Assert(releaseEffects > 0 && renderer.ArParticleFxCount > 0 && ColouredPixels(releaseFrame) > 100,
             $"The configured Dissolve release should emit a visible 3D release effect at its calibrated key ({releaseEffects} active releases, {renderer.ArParticleFxCount} particles).");
 
-        // Effects follow the keyboard transform and piano axes, independently of the note's editable travel direction.
+        // Every key effect follows the piano pose. Particles additionally follow the editable note direction;
+        // lights/rings/flashes/arcs/beams must NOT acquire that independent rotation.
         var movedImpactFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
             selectedCalibration: transformedCalibration, activePitches: new[] { 60, 64 });
         var movedImpactFrame = RenderFrames(movedImpactFeed, 4);
         var poseEffectPixels = ChangedPixels(ultraImpactFrame, movedImpactFrame, threshold: 4);
         Assert(poseEffectPixels > 100,
             $"Rotating/translating the calibrated piano must move the complete impact/hold effect group with it ({poseEffectPixels} changed pixels).");
-        var directionOnlyFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
-        directionOnlyFeed.Ar = directionOnlyFeed.Ar! with { NoteDirection = new ArNoteDirection(74, 39) };
-        var directionOnlyFrame = RenderFrames(directionOnlyFeed, 4);
-        Assert(ultraImpactFrame.AsSpan().SequenceEqual(directionOnlyFrame),
-            "Changing note travel direction alone must not rotate key-anchored Live Stage effects away from the calibrated piano.");
+        var directionPackets = new List<GpuArQuad>();
+        GpuArParticle[] directionState = [];
+        renderer.ObserveArQuadForReview = q => directionPackets.Add(q);
+        renderer.ObserveParticleStateForReview = (sim,_) => directionState=ParticleSnapshot(sim);
+        var particleDefaultFeed = PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        var particleDefaultFrame = RenderFrames(particleDefaultFeed,4);
+        var defaultPackets=directionPackets.ToArray();var defaultState=directionState;
+        directionPackets.Clear();
+        var directionOnlyFeed = PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        directionOnlyFeed.Ar = directionOnlyFeed.Ar! with { NoteDirection = new ArNoteDirection(74,39) };
+        var directionOnlyFrame = RenderFrames(directionOnlyFeed,4);
+        var editedPackets=directionPackets.ToArray();
+        renderer.ObserveArQuadForReview=null;renderer.ObserveParticleStateForReview=null;
+        static bool IsParticlePacket(GpuArQuad q)=>q.Misc.Z is 2 or 17;
+        var defaultParticles=defaultPackets.Where(IsParticlePacket).ToArray();
+        var editedParticles=editedPackets.Where(IsParticlePacket).ToArray();
+        Assert(defaultParticles.Length>0 && defaultParticles.Length==editedParticles.Length
+            && defaultState.SequenceEqual(directionState)
+            && defaultParticles.Select(q=>new{q.Color,q.Misc}).SequenceEqual(editedParticles.Select(q=>new{q.Color,q.Misc}))
+            && !defaultParticles.SequenceEqual(editedParticles)
+            && ChangedPixels(particleDefaultFrame,directionOnlyFrame,threshold:0)>0,
+            "Changing note direction must rotate actual production particle geometry, not RNG/state, selection or intrinsic colour/lifetime.");
+        Assert(defaultPackets.Where(q=>!IsParticlePacket(q)).SequenceEqual(editedPackets.Where(q=>!IsParticlePacket(q))),
+            "Changing note direction must leave actual key tints, lights, rings, flashes, arcs and beams fixed to the calibrated piano.");
+
+        // The old pixel independence guarantee remains explicitly available for historical artwork evidence ONLY.
+        var legacyDefaultFeed=PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        legacyDefaultFeed.Ar=legacyDefaultFeed.Ar! with {LegacyParticleAxesForReview=true};
+        var legacyDefaultFrame=RenderFrames(legacyDefaultFeed,4);
+        var legacyDirectionFeed=PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        legacyDirectionFeed.Ar=legacyDirectionFeed.Ar! with {LegacyParticleAxesForReview=true,NoteDirection=new ArNoteDirection(74,39)};
+        var legacyDirectionFrame=RenderFrames(legacyDirectionFeed,4);
+        Assert(legacyDefaultFrame.AsSpan().SequenceEqual(legacyDirectionFrame),
+            "Only the review-only legacy axes path must retain the historical note-direction-independent pixels.");
 
         // The flat stage-space trail stays suppressed; the selected note trail is emitted only as a calibrated AR quad.
         settings.FallingTrail = "None";
