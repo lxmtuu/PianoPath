@@ -84,3 +84,8 @@ PYTHONPATH=/path/to/pillow python3 tools/serve_shatter_particle_art.py \
 REVIEW_SINGLE_IMPACT=1 CHROME_BIN=/path/to/chrome NODE_PATH=/path/to/deps/node_modules \
   node tools/check_burst_particle_review_browser.cjs http://127.0.0.1:8777
 ```
+
+
+## Follow-up geometry experiment
+
+[Shatter billboard / Stage-clock trial](KEY-PARTICLES-SHATTER-BILLBOARD.md) separately recovers the two demonstrated near-overhead raster-empty samples and shares the Stage tumble clock in a camera-facing AR plane. It uses the same V1 material and is independently default-off/review-only. This V1 material dataset remains frozen, with its old geometry and two disclosed holes; the follow-up is not a retroactive claim that V1 already rendered them.

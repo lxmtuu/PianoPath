@@ -31,7 +31,8 @@ def build(repo,output):
 <p>Không claim realtime FPS, physical GPU/MIDI/camera, dense/cap/delay hay user art approval. Melt/Bounce/releases và settings chưa thay đổi. Source <code>__SOURCE__</code>.</p></html>'''
     (output/'index.html').write_text(page.replace('__SOURCE__',html.escape(m['sourceRevision'])),encoding='utf-8')
     # Start from the established player, then replace every inherited held/release and variant label.
-    player=PLAYER.replace('Embers','Shatter billboard').replace('classic ↔ v1','V1 trước ↔ billboard')
+    player=PLAYER.replace('Embers','Shatter billboard').replace('classic ↔ v1','V1 trước ↔ billboard').replace('Static quartets','Static comparison')
+    player=player.replace('<label>Mode', '<p><b>Geometry prototype · default-off · chưa nghiệm thu.</b> Cùng material V1 ở hai bên; chỉ đổi billboard/hướng xoay AR, không tăng size hay số hạt.</p><label>Mode')
     player=player.replace('Classic</span>','V1 trước · material V1</span>').replace('Shatter billboard v1 · review only','Billboard · cùng material V1')
     player=player.replace('Stage · giữ → thả','AR near-overhead · nhấn nhẹ').replace('AR · giữ → thả','AR reference · nhấn nhẹ').replace('Stage · burst','AR near-overhead · nhấn mạnh').replace('AR · burst','AR reference · nhấn mạnh')
     player=player.replace('live-stage-held','ar-near-overhead-held').replace('live-stage-burst','ar-near-overhead-burst')

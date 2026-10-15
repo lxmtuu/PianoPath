@@ -51,6 +51,23 @@ class ShatterBillboardTests(unittest.TestCase):
         self.assertNotIn('ShatterBillboardForReview { get; private set; } = true',(root/'Gpu/GpuLook.cs').read_text())
         native=(root/'Diagnostics/ShatterBillboardReview.cs').read_text()
         self.assertIn('CheckActualCorners(a)',native);self.assertIn('lineage!=64',native);self.assertIn('sample!=89 && after.Record.Signal==0',native)
+    def test_viewer_labels_do_not_inherit_stage_tracks_or_release_input(self):
+        import gzip,contextlib,io
+        from unittest.mock import patch
+        import serve_shatter_billboard as s
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);repo=root/'repo';output=root/'viewer';evidence=repo/'docs/evidence/shatter-billboard-v1';evidence.mkdir(parents=True)
+            (evidence/'manifest.json.gz').write_bytes(gzip.compress(json.dumps(plan()).encode()))
+            for name in s.NAMES:
+                p=repo/'docs/previews/shatter-billboard-v1'/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'contract-only')
+            with patch.object(s.review,'verify',return_value=plan()),patch.object(s.review,'paired_frames',return_value=iter(())),contextlib.redirect_stdout(io.StringIO()):
+                s.build(repo,output)
+            player=(output/'motion-review.html').read_text()
+            self.assertNotIn('live-stage-held',player);self.assertNotIn('live-stage-burst',player)
+            self.assertNotIn('Thả phím: frame 12',player);self.assertNotIn('Giữ phím · pedal off',player)
+            for label in ('AR near-overhead · nhấn nhẹ','AR reference · nhấn mạnh','Pedal on: frame 12','không held/release','cùng V1 material + billboard phải'):
+                self.assertIn(label,player)
+
     def test_exact_native_codec_publication_and_tamper(self):
         try:from PIL import Image
         except ImportError:self.skipTest('Pillow required')
