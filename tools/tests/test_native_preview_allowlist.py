@@ -8,7 +8,7 @@ class NativePreviewAllowlistTests(unittest.TestCase):
     def test_only_explicit_native_track_paths_allowed(self):
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp);folder=root/'docs/previews'
-            for name in ('confetti-art-v1/live-stage-held.bgra.gz','dust-art-v1/live-stage-burst.bgra.gz','fireworks-art-v1/ar-reference-burst.bgra.gz','ok.png',
+            for name in ('confetti-art-v1/live-stage-held.bgra.gz','dust-art-v1/live-stage-burst.bgra.gz','dust-art-v2/ar-reference-held.bgra.gz','fireworks-art-v1/ar-reference-burst.bgra.gz','ok.png',
                          'random.gz','confetti-art-v1/manifest.json.gz','unknown/live-stage-held.bgra.gz'):
                 p=folder/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'contract-fixture')
             with patch.object(check,'ROOT',root):errors=check.scan_previews_folder()

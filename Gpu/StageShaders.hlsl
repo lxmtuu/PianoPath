@@ -617,7 +617,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
-    if(kind>28.5 && kind<29.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
+    if(kind>28.5 && kind<30.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
     if(kind>27.5 && kind<28.5)
     {
         float2 p=(i.Uv*2.0-1.0)*float2(1.6,1.0);
@@ -1411,7 +1411,7 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>28.5 && kind<29.5)
+    if(kind>28.5 && kind<30.5)
     {
         // Exact old dust kind-0 square extent, axis and depth; no geometry enlargement.
     }
@@ -1642,7 +1642,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
-    if(kind>28.5 && kind<29.5) return ShadeDustArt(v.Local*4.32,v.Color);
+    if(kind>28.5 && kind<30.5) return ShadeDustArt(v.Local*4.32,v.Color);
     if(kind>27.5 && kind<28.5) return ShadeConfettiArt(v.Local*1.6,v.Color);
     if(kind>25.5 && kind<27.5) return ShadeFireworkArt(v.Local*0.5+0.5,v.Color,kind<26.5);
     if(kind>21.5 && kind<24.5) return ShadeSplashArt(v.Local*0.5+0.5,v.Color,kind);
