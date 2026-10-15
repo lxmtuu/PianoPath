@@ -549,6 +549,12 @@ internal sealed partial class GpuArLayer
             color=new Vector3(liquid.X,liquid.Y,liquid.Z);alpha=liquid.W*opacity;
             materialKind=SplashParticleAppearance.ArKind;
         }
+        if(FireworkParticleAppearance.Eligible(look.FireworkArtForReview && look.ImpactBurst=="Fireworks",particle.Shape,particle.Wisp)
+            && FireworkParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var shard))
+        {
+            color=new Vector3(shard.X,shard.Y,shard.Z);alpha=shard.W*opacity;
+            materialKind=FireworkParticleAppearance.StageKind(true,particle.Shape,particle.Wisp,2);
+        }
         quads.Add(Pack(patch, color, Math.Clamp((float)alpha, 0, 1),
             new Vector4((float)progress, stageShape, materialKind, particle.Phase)));
         return true;

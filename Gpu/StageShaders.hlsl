@@ -495,6 +495,26 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
 // Review-only sparks: coloured faceted ember + velocity-aligned tapered sliver.
 // Shared by Stage and calibrated AR; CPU already owns the lifetime envelope.
 // No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
+// Tapered multicolour radial spark; shared body for Stage and AR, no age fade or white core.
+float4 ShadeFireworkArt(float2 uv,float4 color,bool streak)
+{
+    float2 p=uv*2.0-1.0;
+    if(!streak)
+    {
+        float d=length(p);
+        float coverage=saturate((0.74-d)/max(fwidth(d),0.001)+0.5);
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    float t=saturate((p.x+1.0)*0.5);
+    float width=lerp(0.11,0.76,smoothstep(0.0,0.66,t))*sqrt(saturate((1.0-t)/0.24));
+    float pixelHalf=max(fwidth(p.y)*0.5,0.0125);
+    float body=HeldStrokeCoverage(p.y,width,pixelHalf);
+    float facet=HeldStrokeCoverage(p.y+width*0.16,width*0.30,pixelHalf);
+    float cap=saturate((1.0-abs(p.x))/max(fwidth(p.x),0.001));
+    float coverage=saturate(body*0.82+facet*0.18)*cap;
+    return float4(color.rgb*coverage*color.a,coverage*color.a);
+}
+
 // Liquid bead, coloured meniscus and restrained tinted glint; no white replacement or age fade.
 float4 ShadeSplashArt(float2 uv,float4 color,float component)
 {
@@ -574,6 +594,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind>25.5 && kind<27.5) return ShadeFireworkArt(i.Uv,i.Color,kind<26.5);
     if (kind > 24.5 && kind < 25.5) return ShadeSplashArt(i.Uv,i.Color,23);
     if (kind > 19.5 && kind < 21.5)
         return ShadeSparkArtV2(i.Uv, i.Color, kind < 20.5);
@@ -1360,7 +1381,12 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>21.5 && kind<24.5)
+    if(kind>25.5 && kind<27.5)
+    {
+        // Exact old dot/streak geometry, not the unrelated auxiliary glass shard primitive.
+        if(kind<26.5)extent=float2(size*(1.0+s.Dir.z),size);
+    }
+    else if(kind>21.5 && kind<24.5)
     {
         // Exact legacy ellipse/glow geometry, including rotation, y/x ratio and softness.
         extent=float2(size,size*max(s.Dir.z,0.02));
@@ -1578,6 +1604,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>25.5 && kind<27.5) return ShadeFireworkArt(v.Local*0.5+0.5,v.Color,kind<26.5);
     if(kind>21.5 && kind<24.5) return ShadeSplashArt(v.Local*0.5+0.5,v.Color,kind);
     if (kind > 19.5 && kind < 21.5)
         return ShadeSparkArtV2(v.Local * 0.5 + 0.5, v.Color, kind < 20.5);
