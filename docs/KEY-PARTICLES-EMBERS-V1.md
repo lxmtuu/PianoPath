@@ -52,3 +52,8 @@ python tools/serve_spark_particle_art.py --output /path/to/embers-review --port 
 ```
 
 Viewer phục vụ trên `0.0.0.0`; player tạm dừng/bước từng frame/nhảy tới release 12. Classic và candidate luôn trong cùng PNG, không hai autoplay lệch nhau. Source PNG được ghép lossless delta rectangles, 60 frames kể cả identical tail, đúng 1/30 s; browser tốc độ thực không được bảo đảm. Bản này chưa camera/MIDI thật, tint/spill/bloom-on art acceptance, mọi tier/delay/recording hoặc hardware performance.
+
+
+### Contrast follow-up
+
+[V2 shared material-energy candidate](KEY-PARTICLES-EMBERS-V2.md) now has a successful native comparison, with V1 retained as its left baseline. V1 remains visually unaccepted; V2 is also review-only pending user/camera/hardware acceptance. Historical v1 decoded static/motion and raw/packet digests remain unchanged.
