@@ -2,7 +2,7 @@
 
 ## Trạng thái
 
-**Đã triển khai và capture candidate; chưa nghiệm thu artwork/default enablement.** Run [38672193965](https://github.com/lxmtuu/PianoPath/actions/runs/38672193965), source **`93e2a75`**, hoàn tất **SUCCESS**: static, portable .NET tests, Windows build, 64 full-frame hashes/16 native quartets, paired population/geometry, 240 lossless APNG frames, full verification **6.108 assertions / 1 skipped group**, benchmark, installer, galleries và distributable. Evidence/22 PNG/APNGs publish ở **`7c43e9b`**. Native renderer: Microsoft Basic Render Driver (WARP).
+**Đã triển khai và capture candidate; người dùng đã chấp thuận hướng hình ảnh ở phần review hiện tại. Chưa promote/default enablement hoặc nghiệm thu toàn bộ điều kiện sử dụng.** Run [38672193965](https://github.com/lxmtuu/PianoPath/actions/runs/38672193965), source **`93e2a75`**, hoàn tất **SUCCESS**: static, portable .NET tests, Windows build, 64 full-frame hashes/16 native quartets, paired population/geometry, 240 lossless APNG frames, full verification **6.108 assertions / 1 skipped group**, benchmark, installer, galleries và distributable. Evidence/22 PNG/APNGs publish ở **`7c43e9b`**. Native renderer: Microsoft Basic Render Driver (WARP).
 
 Run đầu `38671949052` tìm ra harness dùng record-copy với `GpuLook` vốn là class; đã sửa thành copy review-only, không đổi type/equality toàn bộ look. Run `38672121075` bị supersede/cancel. Chỉ dùng run cuối ở trên làm bằng chứng build/render mới.
 
@@ -80,3 +80,10 @@ Live review có paired static quartets, hai cặp full scenes và player motion 
 Giữ v3 là **review-only/default-off**, giữ v2 làm baseline; chưa promote hoặc bật mặc định. Chưa sửa age bias cap 192, production density, emitter hoặc lifetime. Hướng geometry tiếp theo nên là candidate độc lập về **độ trải/rise trên AR theo pitch/age và pose**, giữ cùng pool, không tăng tất cả quad hoặc đổi projector theo phỏng đoán; phải so paired Stage/AR và material v2/v3.
 
 Sau đó mới tiếp tục Flames và các press/held families còn lại. Chưa nghiệm thu continuous motion, camera thật/hand occlusion/exposure, tier/delay, alpha-recording/WPF hoặc hardware. Settings menu vẫn làm cuối cùng.
+
+
+## Phản hồi người dùng — 2026-10-15
+
+Sau khi nhận viewer và kết quả v3, người dùng phản hồi: **“Dạ tớ thấy ổn rồi”**. Ghi nhận chấp thuận hướng hình ảnh Wisps v3 ở phần review hiện tại; không suy ra đã xem từng capture/frame, yêu cầu đổi mặc định hoặc nghiệm thu mọi camera/tier/hardware.
+
+Hướng artwork Wisps hiện tại được giữ làm mốc để chuyển vòng thiết kế sang **Flames**, luôn paired Stage/AR. Các vấn đề projection/rise và age bias đã ghi vẫn là hạng mục riêng; phản hồi này không thay số đo hoặc xác nhận chúng đã được sửa. Chưa đổi code/product flag; các press/held families khác tiếp tục theo roadmap, settings/menu vẫn cuối cùng.
