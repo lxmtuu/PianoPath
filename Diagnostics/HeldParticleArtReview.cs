@@ -91,8 +91,13 @@ internal static class HeldParticleArtReview
                 heldFrames=11,releaseFrame=wispV3?12:(int?)null,firstReleasedSampleSeconds=wispV3?13.0/30:(double?)null,
                 releaseFirstStepSeconds=12.0/30,pedal=true,hashes});
         }
+        var sourceRoot=Path.GetFullPath(Path.Combine(PrismFlowVisualReview.FindSamples(),"..",".."));
+        string[] motionSources=["Diagnostics/HeldParticleArtReview.cs","Diagnostics/AuxParticleTimeline.cs","Gpu/GpuRenderLoop.cs"];
         File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new
-        {seed=KeyParticleFixtures.Seed,wispV3ForReview=wispV3,pitches=wispV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
+        {sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
+            sourceHashes=motionSources.ToDictionary(p=>p,p=>Convert.ToHexString(SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(
+                File.ReadAllText(Path.Combine(sourceRoot,p)).Replace("\r\n","\n"))))),
+            seed=KeyParticleFixtures.Seed,wispV3ForReview=wispV3,pitches=wispV3?new[]{60,61,64,67}:new[]{60},wispAmount=wispV3?8:32,format="lossless cropped PNG frames; APNG assembled in CI",captures},new JsonSerializerOptions {WriteIndented=true}));
     }
 
     private static void WritePng(string path,byte[] pixels,int width,int height)

@@ -67,9 +67,16 @@ def historical_guard(current,path):
             raise ValueError('V3 branch changed retained v2 baseline pixels/metrics')
 
 
-def motion(directory,sheets_only=False):
+def motion(directory,sheets_only=False,source_root=None,revision=None):
     from PIL import Image
     m=json.loads((directory/'manifest.json').read_text(encoding='utf-8-sig'))
+    if revision and m['sourceRevision']!=revision:raise ValueError('Wrong motion revision')
+    if set(m['sourceHashes'])!={'Diagnostics/HeldParticleArtReview.cs','Diagnostics/AuxParticleTimeline.cs','Gpu/GpuRenderLoop.cs'}:
+        raise ValueError('Incomplete motion source guards')
+    if source_root:
+        for name,digest in m['sourceHashes'].items():
+            data=(source_root/name).read_text(encoding='utf-8-sig').replace('\r\n','\n').encode()
+            if hashlib.sha256(data).hexdigest().upper()!=digest:raise ValueError('Motion source differs: '+name)
     names={f'wisps-{view}-{version}' for view in ('live-stage','ar') for version in ('v2','v3')}
     if not m['wispV3ForReview'] or m['seed']!=20261014 or m['pitches']!=[60,61,64,67] or m['wispAmount']!=8:
         raise ValueError('Wrong motion input')
@@ -121,7 +128,7 @@ def run(directory,baseline,output,sheets_only=False,source_root=None,revision=No
                 for pane,k in enumerate(q['indices']):
                     c=s['captures'][k];frame=image_pixels(directory/c['File'],(1280,720),c['PixelSha256'])
                     if frame.crop((x,y,x+384,y+360)).tobytes()!=im.crop(((pane%2)*384,(pane//2)*360,(pane%2+1)*384,(pane//2+1)*360)).tobytes():raise ValueError('V3 sheet is not native frame crop')
-    mm=motion(directory/'motion',sheets_only)
+    mm=motion(directory/'motion',sheets_only,source_root,m['sourceRevision'])
     uri=lambda p:'data:image/png;base64,'+base64.b64encode(p.read_bytes()).decode()
     data={s['Id']:{'images':[[uri(baseline/q['sheetFile']) for q in before[s['Id']]['sheets']],[uri(directory/q['sheetFile']) for q in s['sheets']]],'geometry':[c['Geometry'] for c in s['captures']]} for s in m['scenes']}
     clips=''.join(f'<figure><figcaption>{html.escape(c["name"])}</figcaption><img width="140" height="160" src="{uri(directory/"motion"/(c["name"]+".png"))}" alt="{html.escape(c["name"])}"></figure>' for c in mm['captures'])
