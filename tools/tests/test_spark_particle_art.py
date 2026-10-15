@@ -42,6 +42,19 @@ class SparkArtTests(unittest.TestCase):
             with self.assertRaises(ValueError):r.validate(m)
         with self.assertRaises(ValueError):r.validate(plan(),'other')
 
+    def test_v2_requires_identical_actual_colour_payloads_across_outputs(self):
+        m=plan();m['schema']=2
+        for c in m['captures']:c['ColourHash']='1'*64
+        for t in m['motions']:
+            for v in t['tracks']:
+                for f in v['frames']:f['ColourHash']='1'*64
+        self.assertEqual(64,len(r.validate(m)))
+        for field in ('ColourHash','RawHash','PackedParticles'):
+            bad=copy.deepcopy(m)
+            c=next(c for c in bad['captures'] if c['Variant']=='art' and c['View']=='ar-reference' and c['Phase']=='held')
+            c[field]='2'*64 if field!='PackedParticles' else 0
+            with self.assertRaises(ValueError):r.validate(bad)
+
     def test_native_crop_and_apng_round_trip_then_tamper(self):
         try:from PIL import Image
         except ImportError:self.skipTest('Pillow is review-only')

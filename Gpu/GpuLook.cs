@@ -89,6 +89,14 @@ internal sealed class GpuLook
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
     internal bool SparkArtForReview { get; private set; }
+    internal bool SparkArtV2ForReview { get; private set; }
+    internal GpuLook WithSparkV2ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.SparkArtV2ForReview=enabled;
+        if(enabled)copy.SparkArtForReview=true;
+        return copy;
+    }
     internal GpuLook WithSparkArtForReview(bool enabled)
     {
         var copy=(GpuLook)MemberwiseClone();

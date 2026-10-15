@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Native Embers material pairs. Full validation in CI; publish bounded lossless static crops/APNG pairs."""
 import argparse
+import gzip
 import hashlib
 import itertools
 import io
@@ -24,13 +25,14 @@ def assemble_delta(frames):
     from PIL import ImageChops
     from make_held_particle_clips import SIGNATURE,chunk,read_png
     if len(frames)!=60 or any(im.size!=frames[0].size for im in frames):raise ValueError('Wrong delta APNG plan')
+    opaque=all(im.convert('RGBA').getchannel('A').getextrema()==(255,255) for im in frames)
     result=None;sequence=0;previous=None
     for index,frame in enumerate(frames):
         frame=frame.convert('RGBA');w,h=frame.size;box=(0,0,w,h)
         if previous is not None:
             r,g,b,a=ImageChops.difference(frame,previous).split()
             box=ImageChops.lighter(ImageChops.lighter(r,g),ImageChops.lighter(b,a)).getbbox() or (0,0,1,1)
-        buffer=io.BytesIO();frame.crop(box).save(buffer,format='PNG',compress_level=9)
+        buffer=io.BytesIO();tile=frame.crop(box);tile=tile.convert('RGB') if opaque else tile;tile.save(buffer,format='PNG',compress_level=9)
         header,compressed=read_png(buffer.getvalue())
         if result is None:
             result=bytearray(SIGNATURE+chunk(b'IHDR',header)+chunk(b'acTL',struct.pack('>II',60,0)))
@@ -42,7 +44,9 @@ def assemble_delta(frames):
     return bytes(result+chunk(b'IEND',b''))
 
 
-def read(p):return json.loads(p.read_text(encoding='utf-8-sig'))
+def read(p):
+    if p.suffix=='.gz':return json.loads(gzip.decompress(p.read_bytes()))
+    return json.loads(p.read_text(encoding='utf-8-sig'))
 def check_counts(record):
     if any(type(record[k]) is not int or record[k]<0 for k in ('RawParticles','PackedParticles')) or record['PackedParticles']>record['RawParticles']:
         raise ValueError('Bad spark counts')
@@ -54,7 +58,8 @@ def check_digest(value):
 
 def validate(m,revision=None):
     if revision is not None and m['sourceRevision']!=revision:raise ValueError('Wrong spark source revision')
-    if (m['schema'],m['family'],m['reviewOnly'],m['legacyParticleAxesForReview'],m['width'],m['height'],m['seed'],m['captureCount'],m['staticFps'],m['staticReleaseFrame'])!=(1,'embers',True,False,640,360,20261014,192,60,21):raise ValueError('Wrong spark recipe')
+    if m['schema'] not in (1,2):raise ValueError('Unknown spark schema')
+    if (m['family'],m['reviewOnly'],m['legacyParticleAxesForReview'],m['width'],m['height'],m['seed'],m['captureCount'],m['staticFps'],m['staticReleaseFrame'])!=('embers',True,False,640,360,20261014,192,60,21):raise ValueError('Wrong spark recipe')
     if set(m['sourceHashes'])!=SOURCES:raise ValueError('Missing spark source guards')
     expected=set(itertools.product(('prism','indigo'),VIEWS,(60,61),PHASES,('off','classic','art')))
     keys=[(c['Palette'],c['View'],c['Pitch'],c['Phase'],c['Variant']) for c in m['captures']]
@@ -69,6 +74,12 @@ def validate(m,revision=None):
             if c['RawParticles'] or c['PackedParticles']:raise ValueError('Off/expired spark particles')
         elif not c['PackedParticles']:raise ValueError('Missing active sparks')
         groups.setdefault(id_,{})[c['Variant']]=c
+    if m['schema']==2:
+        for c in m['captures']:
+            check_digest(c['ColourHash'])
+            if c['Variant']=='art':
+                stage=groups[f"{c['Palette']}-live-stage-p{c['Pitch']}-{c['Phase']}"]['art']
+                if any(c[k]!=stage[k] for k in ('RawHash','PackedParticles','ColourHash')):raise ValueError('Shared v2 colour/alpha differs across outputs')
     for group in groups.values():
         a,b=group['classic'],group['art']
         if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Spark state/actual packet changed')
@@ -85,6 +96,7 @@ def validate(m,revision=None):
             if len(t['hashes'])!=60 or len(t['frames'])!=60:raise ValueError('Missing spark frames')
             for h,f in zip(t['hashes'],t['frames']):
                 check_digest(h);check_counts(f)
+                if m['schema']==2:check_digest(f['ColourHash'])
                 for k in ('RawHash','PacketHash','fullPixelSha256'):check_digest(f[k])
                 if variant=='off' and (f['RawParticles'] or f['PackedParticles']):raise ValueError('Motion off emitted sparks')
         for a,b in zip(versions['classic']['frames'],versions['art']['frames']):
@@ -95,7 +107,9 @@ def validate(m,revision=None):
 
 def verify(directory,source_root=None,revision=None,published_only=False):
     from PIL import Image,ImageChops
-    m=read(directory/'manifest.json');groups=validate(m,revision)
+    manifest=directory/'manifest.json'
+    if not manifest.exists():manifest=directory/'manifest.json.gz'
+    m=read(manifest);groups=validate(m,revision)
     if source_root:
         for name,expected in m['sourceHashes'].items():
             raw=(source_root/name).read_bytes()
@@ -167,6 +181,8 @@ def verify(directory,source_root=None,revision=None,published_only=False):
                 if abs(im.info.get('duration',0)-1000/30)>.002:raise ValueError('Wrong APNG timing')
                 for i,v in enumerate(('classic','art')):
                     if digest(im.convert('RGBA').crop((i*w,0,(i+1)*w,h)))!=versions[v]['hashes'][f]:raise ValueError('APNG half differs from native frame')
+    if not published_only and m['schema']==2:
+        (directory/'manifest.json.gz').write_bytes(gzip.compress(json.dumps(m,separators=(',',':')).encode(),mtime=0))
     return m
 
 

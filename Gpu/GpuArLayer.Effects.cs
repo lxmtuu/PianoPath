@@ -535,8 +535,15 @@ internal sealed partial class GpuArLayer
 
         if (alpha <= .003f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, center, axisX, axisY, halfX, halfY, out var patch))
             return false;
+        // Keep the legacy eligibility/selection above: material energy must not change which particles pack.
+        if (look.SparkArtV2ForReview && !particle.Wisp && particle.Shape is 0 or ParticleStreak
+            && SparkParticleAppearance.TryColor(particle.Color, particle.Age, particle.Life, particle.Glow, look.ParticleGlow, out var spark))
+        {
+            color = new Vector3(spark.X, spark.Y, spark.Z);
+            alpha = spark.W * opacity;
+        }
         quads.Add(Pack(patch, color, Math.Clamp((float)alpha, 0, 1),
-            new Vector4((float)progress, stageShape, SparkParticleAppearance.ArKind(look.SparkArtForReview, particle.Shape, particle.Wisp), particle.Phase)));
+            new Vector4((float)progress, stageShape, SparkParticleAppearance.ArKind(look.SparkArtForReview, particle.Shape, particle.Wisp, look.SparkArtV2ForReview), particle.Phase)));
         return true;
     }
 

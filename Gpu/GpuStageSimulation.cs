@@ -794,6 +794,10 @@ internal sealed partial class GpuStageSimulation
         };
     }
 
+    private static Vector4 SparkColorForReview(GpuLook look, int shape, bool wisp, Vector3 birth, float age, float life, float glow, Vector4 legacy)
+        => look.SparkArtV2ForReview && !wisp && shape is 0 or 1
+            && SparkParticleAppearance.TryColor(birth, age, life, glow, look.ParticleGlow, out var color) ? color : legacy;
+
     /// <summary>Particles, rings, flashes, beams, held-key glows and the hit line.</summary>
     internal void BuildSprites(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> sprites, bool cameraOverlayActive = false)
     {
@@ -850,7 +854,7 @@ internal sealed partial class GpuStageSimulation
                 {
                     var speed = MathF.Sqrt(p.Vx * p.Vx + p.Vy * p.Vy);
                     var dir = speed > 1e-3f ? new Vector2(p.Vx / speed, p.Vy / speed) : new Vector2(0, -1);
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.4f, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 1)), Color = new Vector4(c * glowGain * p.Glow * fade * 1.3f, 1), Dir = new Vector4(dir, Math.Clamp(speed * .018f, .5f, 7), u) });
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.4f, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 1, look.SparkArtV2ForReview)), Color = SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * glowGain * p.Glow * fade * 1.3f, 1)), Dir = new Vector4(dir, Math.Clamp(speed * .018f, .5f, 7), u) });
                     break;
                 }
                 case Shape.Droplet:
@@ -903,7 +907,7 @@ internal sealed partial class GpuStageSimulation
                         fade = MathF.Min(1, u * 6) * (1 - u);
                     }
                     if (p.Shape == Shape.Dust) { size *= 1.8f; gain *= .35f; }
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 0)), Color = new Vector4(c * gain * p.Glow * fade, 1), Dir = new Vector4(0, -1, 0, u) });
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 0, look.SparkArtV2ForReview)), Color = SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * gain * p.Glow * fade, 1)), Dir = new Vector4(0, -1, 0, u) });
                     break;
                 }
             }

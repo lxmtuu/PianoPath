@@ -16,11 +16,11 @@ internal static class SparkParticleArtReview
     private const int Width=640, Height=360;
     private static readonly JsonSerializerOptions Json=new(){IncludeFields=true,WriteIndented=true};
     private sealed record Shot(string Id,string Palette,string View,int Pitch,string Phase,string Variant,string File,
-        string PixelSha256,string RawHash,string PacketHash,int RawParticles,int PackedParticles);
+        string PixelSha256,string RawHash,string PacketHash,int RawParticles,int PackedParticles,string? ColourHash=null,long Signal=0,int VisiblePixels=0);
     private sealed record Crop(int X,int Y,int Width,int Height);
     private sealed record Frame(byte[] Pixels, Shot Shot);
 
-    internal static int Render(string output)
+    internal static int Render(string output,bool v2=false)
     {
         var previous=KeyboardLayout.Active;KeyboardLayout.Use(KeyboardLayout.Standard88);
         try
@@ -37,12 +37,19 @@ internal static class SparkParticleArtReview
             foreach(var pitch in new[]{60,61})
             foreach(var phase in new[]{"burst","held","released","expired"})
             {
-                Frame? baseline=null;
+                Frame? baseline=null;byte[]? offPixels=null;
                 foreach(var variant in new[]{"off","classic","art"})
                 {
-                    var f=Draw(renderer,view,camera,palette,pitch,phase,variant,phase=="burst"?2:phase=="expired"?149:35,60);
+                    var f=Draw(renderer,view,camera,palette,pitch,phase,variant,phase=="burst"?2:phase=="expired"?149:35,60,v2:v2);
                     var id=$"{palette}-{view.Id}-p{pitch}-{phase}";
-                    var shot=f.Shot with {Id=id,File=id+"-"+variant+".png"};
+                    if(variant=="off")offPixels=f.Pixels;
+                    long signal=0;var visible=0;
+                    for(var i=0;i<f.Pixels.Length;i+=4)
+                    {
+                        var b=Math.Abs(f.Pixels[i]-offPixels![i]);var g=Math.Abs(f.Pixels[i+1]-offPixels[i+1]);var r=Math.Abs(f.Pixels[i+2]-offPixels[i+2]);
+                        signal+=b+g+r;if(Math.Max(b,Math.Max(g,r))>4)visible++;
+                    }
+                    var shot=f.Shot with {Id=id,File=id+"-"+variant+".png",Signal=signal,VisiblePixels=visible};
                     WritePng(Path.Combine(output,shot.File),f.Pixels,Width,Height);
                     if(variant=="off")
                     {
@@ -53,6 +60,13 @@ internal static class SparkParticleArtReview
                     captures.Add(shot);
                 }
             }
+            if(v2)
+                foreach(var shot in captures.Where(c=>c.Variant=="art"))
+                {
+                    var stageShot=captures.Single(c=>c.Palette==shot.Palette && c.View=="live-stage" && c.Pitch==shot.Pitch && c.Phase==shot.Phase && c.Variant=="art");
+                    if(shot.RawHash!=stageShot.RawHash || shot.PackedParticles!=stageShot.PackedParticles || shot.ColourHash!=stageShot.ColourHash)
+                        throw new InvalidDataException($"Shared spark colour/alpha differs across outputs: {shot.Id}");
+                }
             foreach(var view in HeldParticleControlPlan.Views.Take(2))
             foreach(var phase in new[]{"burst","held"})
             {
@@ -62,7 +76,7 @@ internal static class SparkParticleArtReview
                 foreach(var variant in new[]{"off","classic","art"})
                 {
                     var frames=new List<Frame>();
-                    for(var f=0;f<60;f++)frames.Add(Draw(renderer,view,camera,"prism",60,phase,variant,f,30,motion:true));
+                    for(var f=0;f<60;f++)frames.Add(Draw(renderer,view,camera,"prism",60,phase,variant,f,30,motion:true,v2:v2));
                     tracks.Add(variant,frames);
                 }
                 var x0=Width;var y0=Height;var x1=0;var y1=0;
@@ -90,7 +104,7 @@ internal static class SparkParticleArtReview
                         var frame=tracks[variant][f];var pixels=Extract(frame.Pixels,crop);
                         var file=$"motion/{view.Id}-{phase}/{variant}/{f:D3}.png";
                         WritePng(Path.Combine(output,file),pixels,crop.Width,crop.Height);
-                        hashes.Add(Hash(pixels));frames.Add(new{frame.Shot.RawHash,frame.Shot.PacketHash,frame.Shot.RawParticles,frame.Shot.PackedParticles,fullPixelSha256=frame.Shot.PixelSha256});
+                        hashes.Add(Hash(pixels));frames.Add(new{frame.Shot.RawHash,frame.Shot.PacketHash,frame.Shot.ColourHash,frame.Shot.RawParticles,frame.Shot.PackedParticles,fullPixelSha256=frame.Shot.PixelSha256});
                     }
                     records.Add(new{variant,hashes,frames});
                 }
@@ -105,7 +119,7 @@ internal static class SparkParticleArtReview
                 "Camera/ArCameraPose.cs","Stage/PianoStage.cs","Diagnostics/KeyParticleFixtures.cs","Diagnostics/HeldParticleControlPlan.cs",
                 "Diagnostics/SparkParticleArtReview.cs","docs/samples/ar-keyboard-topdown.png"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new{
-                schema=1,family="embers",reviewOnly=true,legacyParticleAxesForReview=false,sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
+                schema=v2?2:1,family="embers",reviewOnly=true,legacyParticleAxesForReview=false,sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA")??"workspace",
                 adapter=renderer.AdapterName,width=Width,height=Height,seed=KeyParticleFixtures.Seed,staticFps=60,staticReleaseFrame=21,
                 lighting="tint/spill masked; bloom off, isolated material review",captureCount=captures.Count,
                 sourceHashes=sources.ToDictionary(p=>p,p=>Hash(p.EndsWith(".png",StringComparison.Ordinal)?File.ReadAllBytes(Path.Combine(root,p)):
@@ -116,7 +130,7 @@ internal static class SparkParticleArtReview
     }
 
     private static Frame Draw(GpuStageRenderer renderer,HeldParticleControlPlan.View view,byte[] sourceCamera,
-        string palette,int pitch,string phase,string variant,int sample,int fps,bool motion=false)
+        string palette,int pitch,string phase,string variant,int sample,int fps,bool motion=false,bool v2=false)
     {
         var settings=KeyParticleFixtures.Settings(KeyParticleFixtures.All[0],variant!="off");
         settings.BloomIntensity=0;
@@ -125,7 +139,7 @@ internal static class SparkParticleArtReview
         stage.Measure(new Size(1280,720));stage.Arrange(new Rect(0,0,1280,720));stage.UpdateLayout();
         var feed=new GpuStageFeed();feed.SetStageHeight(720);
         feed.SetLook(GpuLook.From(settings,(p,t)=>stage.AdjustColor(stage.NoteColor(p,t)),stage.KeyboardHeight/stage.ActualHeight,
-            stage.AdjustColor,view.OverCamera).WithSparkArtForReview(variant=="art"));
+            stage.AdjustColor,view.OverCamera).WithSparkArtForReview(v2 || variant=="art").WithSparkV2ForReview(v2 && variant=="art"));
         if(view.OverCamera)
         {
             var calibration=ArCalibration.Create(KeyboardLayout.Standard88,view.Corners!,1280,720,out _,70)!;
@@ -135,19 +149,21 @@ internal static class SparkParticleArtReview
             feed.Camera=new GpuCameraInput(ring,PictureFit.Fit,false,1);
             feed.Ar=new GpuArInput(calibration,ArNoteStyle.Default,1,Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowNotes:false,ShowDamperStrip:false,NoteDirection:direction);
         }
-        var raw="";var count=0;var packets=new List<object>();var packed=0;
+        var raw="";var count=0;var packets=new List<object>();var colours=new List<Vector4>();var packed=0;
         renderer.ObserveParticleStateForReview=(sim,_)=>{count=sim.ArParticleCount;raw=Hash(JsonSerializer.SerializeToUtf8Bytes(Enumerable.Range(0,count).Select(sim.ArParticleAt).ToArray(),Json));};
         renderer.ObserveStageSpriteForReview=q=>
         {
-            var p=q.PosSize;if(p.W is 18 or 19)p.W=p.W==18?1:0;
-            if(p.W is 0 or 1)packed++;
-            packets.Add(new{PosSize=p,q.Color,q.Dir});
+            var p=q.PosSize;if(p.W is 18 or 19 or 20 or 21)p.W=p.W is 18 or 20?1:0;
+            var colour=q.Color;
+            if(p.W is 0 or 1){packed++;colours.Add(colour);if(v2)colour=default;}
+            packets.Add(new{PosSize=p,Color=colour,q.Dir});
         };
         renderer.ObserveArQuadForReview=q=>
         {
-            var misc=q.Misc;if(misc.Z is 18 or 19)misc.Z=2;
-            if(misc.Z==2)packed++;
-            packets.Add(new{q.A,q.B,q.W,q.Color,Misc=misc});
+            var misc=q.Misc;if(misc.Z is 18 or 19 or 20 or 21)misc.Z=2;
+            var colour=q.Color;
+            if(misc.Z==2){packed++;colours.Add(colour);if(v2)colour=default;}
+            packets.Add(new{q.A,q.B,q.W,Color=colour,Misc=misc});
         };
         var release=motion?12:21;
         var pixels=GpuRenderLoop.RenderFrames(renderer,feed,Width,Height,sample,1.0/fps,false,out _,f=>
@@ -159,7 +175,7 @@ internal static class SparkParticleArtReview
         },KeyParticleFixtures.Seed);
         if(view.OverCamera && (renderer.StageSpriteCount!=0 || renderer.StageKeyCount!=0 || renderer.StageNoteCount!=0))
             throw new InvalidDataException("Stage geometry leaked onto AR spark review.");
-        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed));
+        return new(pixels,new("",palette,view.Id,pitch,phase,variant,"",Hash(pixels),raw,Hash(JsonSerializer.SerializeToUtf8Bytes(packets,Json)),count,packed,v2?Hash(JsonSerializer.SerializeToUtf8Bytes(colours,Json)):null));
     }
     private static void GuardPair(Shot a,Shot b,bool active,bool requireSignal=true)
     {

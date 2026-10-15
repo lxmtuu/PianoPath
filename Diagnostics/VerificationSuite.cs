@@ -6736,6 +6736,9 @@ internal static partial class VerificationSuite
         var sparks=SparkParticleArtReview.Render(Path.Combine(outputDirectory,"embers-art-v1"));
         Assert(sparks==192,"Embers material needs 2 palettes × 4 views × 2 pitches × 4 phases × 3 variants.");
         Results.Add("PASS P3b Embers art v1: 192 native static frames and 720 motion crops, same raw state and normalized actual packets. Production aligned AR axes, bloom/tint/spill isolated. Review-only material, not visual/hardware acceptance.");
+        var sparksV2=SparkParticleArtReview.Render(Path.Combine(outputDirectory,"embers-art-v2"),v2:true);
+        Assert(sparksV2==192,"Embers v2 needs paired v1/v2 material captures and shared actual colour/alpha across four outputs.");
+        Results.Add("PASS P3b Embers art v2: 192 native statics and 720 native motion crops; raw state, actual geometry and selection unchanged; actual v2 colour/alpha payload hashes identical across Stage and three AR poses. Material-only coverage/energy change, not art/hardware acceptance.");
         HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
         Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }

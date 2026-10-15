@@ -381,6 +381,23 @@ jobs:
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
           "::notice title=Embers material review::192 native static frames, 64 paired raw/normalized actual-packet guards, 720 native motion crops, 480 lossless synchronized APNG halves. Production aligned AR geometry; candidate default-off, no visual/hardware acceptance."
 
+      - name: Validate and stage Embers v2 energy review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/embers-art-v2'
+          python tools/review_spark_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Embers v2 validation failed' }
+          $target = 'docs/previews/embers-art-v2'
+          $evidence = 'docs/evidence/embers-art-v2'
+          $names = @('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          if ($bytes -gt 0.7MB) { throw "Bounded Embers v2 subset exceeds 0.7 MiB: $bytes" }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Embers v2 energy::192 native statics / 720 native motion crops; unchanged raw state, geometry and selection; identical actual v2 colour/alpha payloads across Stage and three AR poses. Paired v1/v2 native crops/APNGs, review only."
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -822,7 +839,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

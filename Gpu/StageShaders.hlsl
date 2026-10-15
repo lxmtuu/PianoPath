@@ -521,9 +521,36 @@ float4 ShadeSparkArt(float2 uv, float4 color, bool streak)
     return float4(tint * alpha, alpha);
 }
 
+// V2 receives one shared intrinsic tint + lifetime alpha from both CPU builders.
+// More material coverage inside the SAME quad; no minimum pixel size or projector change.
+float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
+{
+    float2 p = uv * 2.0 - 1.0;
+    float body, halo;
+    if (streak)
+    {
+        float along = saturate((p.x + 1.0) * 0.5);
+        float width = lerp(0.085, 0.55, smoothstep(0.0, 0.74, along));
+        width *= sqrt(saturate((1.0 - along) / 0.16));
+        float cap = saturate((1.0 - abs(p.x)) / max(fwidth(p.x), 0.001));
+        body = HeldStrokeCoverage(p.y, width, fwidth(p.y) * 0.5) * cap;
+        halo = exp(-p.y * p.y * 12.0) * pow(saturate(1.0 - abs(p.x)), 0.8) * 0.14;
+    }
+    else
+    {
+        float d = abs(p.x) + abs(p.y);
+        body = saturate((0.72 - d) / max(fwidth(d), 0.001) + 0.5);
+        halo = exp(-dot(p,p) * 5.0) * 0.18;
+    }
+    float alpha = saturate(body * 0.95 + halo) * saturate(color.a);
+    return float4(clamp(color.rgb, 0.0, 0.95) * alpha, alpha);
+}
+
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if (kind > 19.5 && kind < 21.5)
+        return ShadeSparkArtV2(i.Uv, i.Color, kind < 20.5);
     if (kind > 17.5 && kind < 19.5)
         return ShadeSparkArt(i.Uv, i.Color, kind < 18.5);
     if (kind > 16.5 && kind < 17.5)
@@ -1307,10 +1334,10 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if (kind > 17.5 && kind < 19.5)
+    if (kind > 17.5 && kind < 21.5)
     {
         // Exactly the legacy dot/streak extents and axes; only the fragment material changes.
-        if (kind < 18.5) extent = float2(size * (1.0 + s.Dir.z), size);
+        if (kind < 18.5 || (kind > 19.5 && kind < 20.5)) extent = float2(size * (1.0 + s.Dir.z), size);
     }
     else if (kind > 16.5 && kind < 17.5)
     {
@@ -1519,6 +1546,8 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if (kind > 19.5 && kind < 21.5)
+        return ShadeSparkArtV2(v.Local * 0.5 + 0.5, v.Color, kind < 20.5);
     if (kind > 17.5 && kind < 19.5)
         return ShadeSparkArt(v.Local * 0.5 + 0.5, v.Color, kind < 18.5);
     if (kind > 16.5 && kind < 17.5)
