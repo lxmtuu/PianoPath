@@ -97,3 +97,7 @@ Ví dụ chord/Prism, số pixel full-frame có chênh RGB >4 do **particle fact
 Đã mở hai overview 40% chứa đủ 16 full-scene representatives, rồi xem native 1280×720 bốn ảnh: Wisps/Prism/chord/AR reference, Wisps/Indigo/chord/Stage, Flames/Prism/chord/AR near-overhead, Wisps/Prism/chord/AR oblique. Trong fixture cô lập này, Wisps Indigo còn đọc được thành các sợi trên Stage nền đen; ở AR Prism, key tint/spill nổi rõ hơn các nét Wisps rất nhỏ gần mép phím, đặc biệt khi nghiêng. Flames gần overhead vẫn có thân nhỏ phía trên phím, không biến thành một mảng full-screen. Không suy ra độ rõ với bài hát dày, camera thật, moving exposure hay motion từ các ảnh này.
 
 Bộ đếm cached đã được sửa ở **capture metadata**, không đổi renderer policy, shader, emitter hoặc AR cap. Node VM fake-DOM smoke kiểm 72 lựa chọn, decode lỗi và decode cũ trả về muộn (không phải browser/GPU visual test); source/static checks và 25 Python tests PASS. Review viewer có thể mở riêng full-frame combined ở 16 scene đã công bố; artifact vẫn giữ đủ 288 ảnh của bốn variants.
+
+## Follow-up đang triển khai
+
+[Tách tint/spill và coverage dưới cap](KEY-PARTICLES-TINT-SPILL-COVERAGE.md) thêm ma trận 24 cảnh × 8 factor variants, Wisps low fixture và observers theo pitch/age sau actual packing. CI/render/review mới đang chờ; không đổi shader, product recipe, selection policy/cap hoặc acceptance. Code mới mở rộng schema-1 metadata/source guards nhưng giữ kế hoạch/ảnh controls cũ làm baseline pixel guard trong cùng run.

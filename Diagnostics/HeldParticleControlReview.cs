@@ -16,10 +16,14 @@ internal static class HeldParticleControlReview
     private const int Width = HeldParticleControlPlan.Width, Height = HeldParticleControlPlan.Height;
     private sealed record Crop(int X, int Y, int Width, int Height);
     private sealed record Capture(string Variant, bool Particles, bool KeyLight, string File, string PixelSha256,
-        int StageKeys, int StageSprites, int ArKeys, int ArLights, int ArParticles);
+        int StageKeys, int StageSprites, int ArKeys, int ArLights, int ArParticles,
+        bool Tint, bool Spill, Coverage? Coverage);
+    private sealed record Coverage(IReadOnlyList<HeldLightIsolationPlan.Row> Raw,
+        IReadOnlyList<HeldLightIsolationPlan.Row> Eligible, IReadOnlyList<HeldLightIsolationPlan.Row> Packed,
+        string RawHash, string EligibleHash, string PackedHash);
     private sealed record Delta(int ChangedPixels, int OverFourPixels, int MaxChannelDelta, double MeanAbsoluteRgbDelta);
 
-    internal static int Render(string output)
+    internal static int Render(string output, bool isolateLight = false)
     {
         var previousLayout = KeyboardLayout.Active;
         KeyboardLayout.Use(KeyboardLayout.Standard88);
@@ -35,16 +39,23 @@ internal static class HeldParticleControlReview
             if (!renderer.IsWarp) throw new InvalidOperationException("Held controls require WARP.");
             var scenes = new List<object>(); var count = 0;
             var effectOffHashes = new Dictionary<string,string>();
-            foreach (var scene in HeldParticleControlPlan.Scenes)
+            using var baseline = isolateLight ? JsonDocument.Parse(File.ReadAllText(Path.Combine(output,"..","held-particle-controls","manifest.json"))) : null;
+            var entries = isolateLight ? HeldLightIsolationPlan.Entries
+                : HeldParticleControlPlan.Scenes.Select(s => new HeldLightIsolationPlan.Entry(s.Id,s,"normal",32));
+            var variants = isolateLight ? HeldLightIsolationPlan.Variants
+                : HeldParticleControlPlan.Variants.Select(v => new HeldLightIsolationPlan.Variant(v.Id,v.Particles,v.KeyLight,v.KeyLight)).ToArray();
+            var populations = new Dictionary<string,string>();
+            foreach (var entry in entries)
             {
+                var scene = entry.Scene; var id = entry.Id;
                 var route = AuxParticleTimeline.Routes.Single(r => r.Id == scene.Family);
                 var overCamera = scene.View.OverCamera;
                 var pixels = new List<byte[]>(); var captures = new List<Capture>();
                 Crop? crop = null;
-                foreach (var variant in HeldParticleControlPlan.Variants)
+                foreach (var variant in variants)
                 {
                     var s = AuxParticleFixtures.Settings(route, variant.Particles);
-                    s.HeldParticleArt = true; s.KeyboardSize = "88";
+                    s.HeldParticleArt = true; s.KeyboardSize = "88"; s.WispAmount = entry.WispAmount;
                     if (scene.Palette.FixedColor is { } color)
                     {
                         s.ColorMode = "Gradient"; s.Palette = "Custom";
@@ -61,7 +72,27 @@ internal static class HeldParticleControlReview
                     // KeyLighting=0 only mutes spill; ShaderKeyLight changes static ivory illumination.
                     // Neither is an honest Stage "key light off" control. Remove packed tint/emission/spill
                     // at the render seam instead, leaving the simulation, colours and press geometry alone.
-                    renderer.SuppressStageKeyLightingForReview = !overCamera && !variant.KeyLight;
+                    renderer.SuppressStageKeyLightingForReview = false;
+                    renderer.SuppressStageKeyTintForReview = !overCamera && !variant.Tint;
+                    renderer.SuppressStageKeySpillForReview = !overCamera && !variant.Spill;
+                    renderer.SuppressArKeyTintForReview = !variant.Tint;
+                    renderer.SuppressArKeySpillForReview = !variant.Spill;
+                    var raw = new List<HeldLightIsolationPlan.Sample>();
+                    var eligible = new List<HeldLightIsolationPlan.Sample>();
+                    var packed = new List<HeldLightIsolationPlan.Sample>();
+                    HeldLightIsolationPlan.Sample Sample(GpuArParticle p) => new(p.Pitch,p.Age,p.Life);
+                    renderer.ObserveParticleStateForReview = isolateLight ? (simulation, currentLook) =>
+                    {
+                        for (var i=0;i<simulation.ArParticleCount;i++)
+                        {
+                            var p=simulation.ArParticleAt(i); raw.Add(Sample(p));
+                            if (HeldParticleAppearance.TryResolve(p.Wisp,p.Size,p.Age,p.Life,p.Phase,p.Glow,p.Color,
+                                currentLook.WispWidth,currentLook.FlameNoteColor,out var surface) && surface.Color.W>.003f)
+                                eligible.Add(Sample(p));
+                        }
+                    } : null;
+                    renderer.ObserveStageParticleForReview = isolateLight && !overCamera ? p => packed.Add(Sample(p)) : null;
+                    renderer.ObserveArParticleForReview = isolateLight && overCamera ? p => packed.Add(Sample(p)) : null;
                     if (overCamera)
                     {
                         var calibration = ArCalibration.Create(KeyboardLayout.Standard88, scene.View.Corners!,
@@ -72,7 +103,7 @@ internal static class HeldParticleControlReview
                         ring.Publish(slot,Width,Height,Stopwatch.GetTimestamp());
                         feed.Camera = new GpuCameraInput(ring,PictureFit.Fit,false,1);
                         // AR's native control gates both key patches and projected neighbouring-key spill.
-                        feed.Ar = new GpuArInput(calibration,ArNoteStyle.Default,1,KeyLight:variant.KeyLight ? .6f : 0,
+                        feed.Ar = new GpuArInput(calibration,ArNoteStyle.Default,1,KeyLight:(variant.Tint || variant.Spill) ? .6f : 0,
                             Quality:ArQualityTier.Ultra,ProjectedNotes:true,ShowDamperStrip:false);
                     }
                     var pressed = scene.Pattern.Pitches.ToHashSet();
@@ -86,14 +117,22 @@ internal static class HeldParticleControlReview
                         1d/HeldParticleControlPlan.Fps,false,out _,BeforeFrame,KeyParticleFixtures.Seed);
                     var particles = overCamera ? renderer.ArParticleFxCount : renderer.StageSpriteCount;
                     if (variant.Particles ? particles <= 0 : particles != 0)
-                        throw new InvalidDataException($"Unexpected particle packing: {scene.Id}/{variant.Id}={particles}");
+                        throw new InvalidDataException($"Unexpected particle packing: {id}/{variant.Id}={particles}");
                     if (overCamera && (renderer.StageKeyCount != 0 || renderer.StageSpriteCount != 0 || renderer.StageNoteCount != 0))
-                        throw new InvalidDataException($"Stage geometry leaked into AR: {scene.Id}/{variant.Id}");
-                    if (overCamera && (!variant.KeyLight ? renderer.ArKeyQuadCount != 0 || renderer.ArNoteLightCount != 0 : renderer.ArKeyQuadCount <= 0))
-                        throw new InvalidDataException($"AR key-light gate failed: {scene.Id}/{variant.Id}");
-                    var file = $"frames/{scene.Id}/{variant.Id}.png";
+                        throw new InvalidDataException($"Stage geometry leaked into AR: {id}/{variant.Id}");
+                    if (overCamera && ((!variant.Tint ? renderer.ArKeyQuadCount != 0 : renderer.ArKeyQuadCount <= 0)
+                        || (!variant.Spill ? renderer.ArNoteLightCount != 0 : renderer.ArNoteLightCount <= 0)))
+                        throw new InvalidDataException($"AR key-light gate failed: {id}/{variant.Id}");
+                    var file = $"frames/{id}/{variant.Id}.png";
                     PrismFlowVisualReview.WriteAndVerifyPng(Path.Combine(output,file),image);
                     var hash = Hash(image);
+                    if (isolateLight && entry.Load=="normal" && variant.Tint==variant.Spill)
+                    {
+                        var prior=baseline!.RootElement.GetProperty("scenes").EnumerateArray().Single(x=>x.GetProperty("Id").GetString()==scene.Id);
+                        var priorVariant=variant.Particles ? (variant.Tint ? "combined" : "particles-only") : (variant.Tint ? "light-only" : "neither");
+                        var priorHash=prior.GetProperty("captures").EnumerateArray().Single(x=>x.GetProperty("Variant").GetString()==priorVariant).GetProperty("PixelSha256").GetString();
+                        if (hash!=priorHash) throw new InvalidDataException($"Split seam changed grouped-light baseline pixels: {id}/{variant.Id}");
+                    }
                     if (!variant.Particles)
                     {
                         var key = $"{scene.Palette.Id}/{scene.Pattern.Id}/{scene.View.Id}/{variant.Id}";
@@ -101,32 +140,81 @@ internal static class HeldParticleControlReview
                             throw new InvalidDataException($"Family changed its particle-off control: {key}");
                         effectOffHashes[key] = hash;
                     }
+                    Coverage? coverage = null;
+                    if (isolateLight)
+                    {
+                        if (packed.Count!=particles) throw new InvalidDataException($"Observer/count mismatch: {id}");
+                        coverage = new Coverage(HeldLightIsolationPlan.Summarize(scene.Pattern.Pitches,raw),
+                            HeldLightIsolationPlan.Summarize(scene.Pattern.Pitches,eligible),
+                            HeldLightIsolationPlan.Summarize(scene.Pattern.Pitches,packed),
+                            SampleHash(raw),SampleHash(eligible),SampleHash(packed));
+                        if (variant.Particles && (entry.Load=="low" || scene.Family=="flames"))
+                        {
+                            if (eligible.Count>=192 || coverage.PackedHash!=coverage.EligibleHash
+                                || coverage.Packed.Any(r=>r.Count==0))
+                                throw new InvalidDataException($"Sub-cap fixture lost an eligible pitch/particle: {id}");
+                        }
+                        if (variant.Particles && overCamera && scene.Family=="wisps" && entry.Load=="normal"
+                            && (eligible.Count<=192 || packed.Count!=192))
+                            throw new InvalidDataException($"Normal wisp chord no longer exercises the existing AR cap: {id}");
+                        var populationKey=$"{scene.Family}/{entry.Load}/{scene.Palette.Id}/{variant.Particles}";
+                        if (populations.TryGetValue(populationKey,out var previous) && previous!=coverage.RawHash)
+                            throw new InvalidDataException($"Lighting/output altered simulated population: {id}");
+                        populations[populationKey]=coverage.RawHash;
+                    }
                     // GpuArLayer counters describe its last Build and remain cached while Stage is active.
                     // Record the active output only, not the previous AR scene's stale diagnostics.
-                    captures.Add(new Capture(variant.Id,variant.Particles,variant.KeyLight,file,hash,renderer.StageKeyCount,
+                    captures.Add(new Capture(variant.Id,variant.Particles,variant.Tint || variant.Spill,file,hash,renderer.StageKeyCount,
                         renderer.StageSpriteCount,overCamera ? renderer.ArKeyQuadCount : 0,
-                        overCamera ? renderer.ArNoteLightCount : 0,overCamera ? renderer.ArParticleFxCount : 0));
+                        overCamera ? renderer.ArNoteLightCount : 0,overCamera ? renderer.ArParticleFxCount : 0,
+                        variant.Tint,variant.Spill,coverage));
                     pixels.Add(image); count++;
                     crop ??= CropFor(scene,look.KeyboardFraction);
                 }
-                // Light must not create/kill particle instances, and particles must not change AR key patches.
-                if (captures[2].StageSprites != captures[3].StageSprites || captures[2].ArParticles != captures[3].ArParticles
-                    || captures[0].ArKeys != captures[2].ArKeys || captures[1].ArKeys != captures[3].ArKeys
-                    || captures[1].ArLights != captures[3].ArLights)
-                    throw new InvalidDataException($"Factor changed an unrelated geometry count: {scene.Id}");
-                var quartet = Quartet(pixels,crop!); var sheetFile = $"sheets/{scene.Id}.png";
-                WritePng(Path.Combine(output,sheetFile),quartet,crop!.Width*2,crop.Height*2);
+                foreach (var group in captures.GroupBy(c=>c.Particles))
+                    if (group.Select(c=>(c.StageSprites,c.ArParticles,c.Coverage?.PackedHash,c.Coverage?.EligibleHash)).Distinct().Count()!=1)
+                        throw new InvalidDataException($"Light changed particle packing: {id}");
+                foreach (var group in captures.GroupBy(c=>c.Tint))
+                    if (group.Select(c=>c.ArKeys).Distinct().Count()!=1)
+                        throw new InvalidDataException($"Spill/particles changed key-tint packing: {id}");
+                foreach (var group in captures.GroupBy(c=>c.Spill))
+                    if (group.Select(c=>c.ArLights).Distinct().Count()!=1)
+                        throw new InvalidDataException($"Tint/particles changed spill packing: {id}");
+                var sheets = new List<object>();
+                for (var offset=0;offset<captures.Count;offset+=4)
+                {
+                    var quartet=Quartet(pixels.Skip(offset).Take(4).ToArray(),crop!);
+                    var name=isolateLight ? $"{id}-{(offset==0 ? "off" : "on")}" : id;
+                    var file=$"sheets/{name}.png";
+                    WritePng(Path.Combine(output,file),quartet,crop!.Width*2,crop.Height*2);
+                    sheets.Add(new { particles=offset!=0,sheetFile=file,sheetPixelSha256=Hash(quartet),indices=Enumerable.Range(offset,4).ToArray() });
+                }
+                var legacyQuartet=Quartet(pixels.Take(4).ToArray(),crop!);
+                var comparisons=new List<object>();
+                if (!isolateLight)
+                {
+                    comparisons.Add(Compare("particles-unlit",2,0)); comparisons.Add(Compare("particles-lit",3,1));
+                    comparisons.Add(Compare("light-without-particles",1,0)); comparisons.Add(Compare("light-with-particles",3,2));
+                }
+                else
+                {
+                    for (var k=0;k<4;k++) comparisons.Add(Compare($"particles-{k}",k+4,k));
+                    foreach (var offset in new[] {0,4})
+                    {
+                        comparisons.Add(Compare($"tint-no-spill-{offset}",offset+1,offset));
+                        comparisons.Add(Compare($"tint-with-spill-{offset}",offset+3,offset+2));
+                        comparisons.Add(Compare($"spill-no-tint-{offset}",offset+2,offset));
+                        comparisons.Add(Compare($"spill-with-tint-{offset}",offset+3,offset+1));
+                    }
+                }
                 scenes.Add(new
                 {
-                    scene.Id, scene.Family, palette=scene.Palette.Id, fixedColor=scene.Palette.FixedColor,
-                    pattern=scene.Pattern.Id, pitches=scene.Pattern.Pitches, view=scene.View.Id,
+                    Id=id, scene.Family, palette=scene.Palette.Id, fixedColor=scene.Palette.FixedColor,
+                    pattern=scene.Pattern.Id, pitches=scene.Pattern.Pitches, view=scene.View.Id, load=entry.Load,wispAmount=entry.WispAmount,
                     cameraSha256=overCamera ? cameraHashes[scene.View.Id] : null,
-                    crop, sheetFile, sheetPixelSha256=Hash(quartet), captures,
-                    comparisons = new[]
-                    {
-                        Compare("particles-unlit",2,0), Compare("particles-lit",3,1),
-                        Compare("light-without-particles",1,0), Compare("light-with-particles",3,2)
-                    }
+                    crop, sheetFile=isolateLight ? null : $"sheets/{id}.png",
+                    sheetPixelSha256=isolateLight ? null : Hash(legacyQuartet),
+                    sheets=isolateLight ? sheets : null, captures, comparisons
                 });
                 object Compare(string id,int after,int before) => new
                 {
@@ -141,10 +229,10 @@ internal static class HeldParticleControlReview
                 "Gpu/GpuStageFeed.cs","Gpu/HeldParticleAppearance.cs","Camera/ArCameraPose.cs","Camera/ArParticleBillboard.cs",
                 "Stage/PianoStage.cs","Stage/PrismFlowPalette.cs","Diagnostics/HeldParticleControlPlan.cs",
                 "Diagnostics/HeldParticleControlReview.cs","Diagnostics/AuxParticleFixtures.cs","Diagnostics/KeyParticleFixtures.cs",
-                "docs/samples/ar-keyboard-topdown.png"];
+                "docs/samples/ar-keyboard-topdown.png","Diagnostics/HeldLightIsolationPlan.cs"];
             File.WriteAllText(Path.Combine(output,"manifest.json"),JsonSerializer.Serialize(new
             {
-                schema=1, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
+                schema=isolateLight ? 2 : 1, sourceRevision=Environment.GetEnvironmentVariable("GITHUB_SHA") ?? "workspace",
                 sourceHashMethod="SHA256; UTF-8 text without BOM, CRLF normalized to LF; PNG bytes unchanged",
                 sourceHashes=sourceFiles.ToDictionary(p => p,p => Hash(p.EndsWith(".png",StringComparison.Ordinal)
                     ? File.ReadAllBytes(Path.Combine(root,p))
@@ -152,11 +240,14 @@ internal static class HeldParticleControlReview
                 adapter=renderer.AdapterName, width=Width,height=Height, seed=KeyParticleFixtures.Seed,
                 fps=HeldParticleControlPlan.Fps,frames=HeldParticleControlPlan.Frames,time=.6,velocity=.9,pedal=false,
                 heldArt=true, arKeyLightOn=.6, arDelay=0, arQuality="Ultra", mirrored=false, fit="Fit",
-                lightControl="Stage: packed key Emit.W/Base.Y=0 (static lighting and depression unchanged); AR: KeyLight=0 (tint + projected spill).",
+                lightControl=isolateLight ? "Stage tint/emission group Emit.W and spill Base.Y independently masked; AR key patches and projected note-light spill independently gated. Static lighting/depression unchanged; default-off review seams only."
+                    : "Stage: packed key Emit.W/Base.Y=0 (static lighting and depression unchanged); AR: KeyLight=0 (tint + projected spill).",
                 cameraMethod="Reference synthetic BGRA; other views nearest-neighbour planar reprojection with calibration-matched corners. Not re-lit 3D or real-camera evidence.",
-                variants=HeldParticleControlPlan.Variants,
+                variants,
                 views=HeldParticleControlPlan.Views.Select(v => new {v.Id, corners=v.Corners?.Select(c => new {c.X,c.Y})}),
-                sheetOrder="top-left neither; top-right light-only; bottom-left particles-only; bottom-right combined; native pixels, no resizing",
+                sheetOrder=isolateLight ? "two quartets: particles off/on; TL neither, TR tint, BL spill, BR both; native pixels"
+                    : "top-left neither; top-right light-only; bottom-left particles-only; bottom-right combined; native pixels, no resizing",
+                coverageMethod=isolateLight ? "Raw live pool; Stage-eligible alpha >.003 surface candidates; actually packed Stage/AR callbacks. Absolute-age bins 0/.2/.4 seconds; not screen-space visibility. Sorted sample hashes (pitch,age,life); AR cap unchanged at 192." : null,
                 metric="8-bit display RGB differences only; >4 footprint is not brightness, quality or an additive decomposition.",
                 captureCount=count,sceneCount=scenes.Count,scenes
             },new JsonSerializerOptions {WriteIndented=true}));
@@ -174,6 +265,8 @@ internal static class HeldParticleControlReview
         return new Crop(Math.Clamp((int)Math.Floor(center.X)-192,0,Width-384),
             Math.Clamp((int)Math.Floor(center.Y)-240,0,Height-360),384,360);
     }
+    private static string SampleHash(IEnumerable<HeldLightIsolationPlan.Sample> samples) =>
+        Hash(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(samples.OrderBy(s=>s.Pitch).ThenBy(s=>s.Age).ThenBy(s=>s.Life))));
     private static string Hash(byte[] bytes) => Convert.ToHexString(SHA256.HashData(bytes));
     private static byte[] Extract(byte[] image,Crop crop)
     {

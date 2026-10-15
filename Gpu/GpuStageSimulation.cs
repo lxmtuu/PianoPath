@@ -131,6 +131,8 @@ internal sealed partial class GpuStageSimulation
     internal IReadOnlyList<ArLiveMidiNote> ArRisingMidiNotes => _arRisingMidiNotes;
     /// <summary>Recent strikes for the camera-projected impact-light pass.</summary>
     internal IReadOnlyList<GpuArImpact> ArImpacts => _arImpacts;
+    // Null in production; notification after the held sprite is packed, no physics/RNG mutation.
+    internal Action<GpuArParticle>? ObservePackedHeldParticleForReview { get; set; }
     /// <summary>The same simulated particles, waves and flashes used by the stage, with the source pitch preserved for 3D AR projection.</summary>
     internal int ArParticleCount => _count;
     internal int ArRingCount => _rings.Count;
@@ -838,6 +840,7 @@ internal sealed partial class GpuStageSimulation
                         Color = surface.Color,
                         Dir = new Vector4(surface.HalfHeight, surface.Progress, surface.Shape, surface.Phase)
                     });
+                    ObservePackedHeldParticleForReview?.Invoke(ArParticleAt(i));
                 }
                 continue;
             }

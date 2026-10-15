@@ -368,11 +368,23 @@ internal sealed class GpuStageRenderer : IDisposable
     /// <summary>Verification-only render seam: removes pressed-key tint/emission/spill, not static
     /// ivory lighting, press geometry, simulation glow, emitter input or particle colour. Default off.</summary>
     internal bool SuppressStageKeyLightingForReview { get; set; }
+    internal bool SuppressStageKeyTintForReview { get; set; }
+    internal bool SuppressStageKeySpillForReview { get; set; }
+    internal bool SuppressArKeyTintForReview { get; set; }
+    internal bool SuppressArKeySpillForReview { get; set; }
+    internal Action<GpuStageSimulation, GpuLook>? ObserveParticleStateForReview { get; set; }
+    internal Action<GpuArParticle>? ObserveStageParticleForReview { get; set; }
+    internal Action<GpuArParticle>? ObserveArParticleForReview { get; set; }
 
-    internal static void MaskPressedKeyLightForReview(Span<GpuKeyInstance> keys)
+
+    internal static void MaskPressedKeyLightForReview(Span<GpuKeyInstance> keys, bool suppressTint = true, bool suppressSpill = true)
     {
         foreach (ref var key in keys)
-            if (key.Misc.X < 1.5f) { key.Emit.W = 0; key.Base.Y = 0; }
+            if (key.Misc.X < 1.5f)
+            {
+                if (suppressTint) key.Emit.W = 0;
+                if (suppressSpill) key.Base.Y = 0;
+            }
     }
 
     /// <summary>How many instances the stage-space note pass built in the last frame; camera regressions ensure it is zero over camera.</summary>
@@ -485,7 +497,11 @@ internal sealed class GpuStageRenderer : IDisposable
         StageNoteTrailCount = simulation.NoteTrailCount;
         simulation.BuildKeys(look, layout, keys, cameraActive,
             out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
-        if (SuppressStageKeyLightingForReview && !cameraActive) MaskPressedKeyLightForReview(keys.Writable);
+        if (!cameraActive && (SuppressStageKeyLightingForReview || SuppressStageKeyTintForReview || SuppressStageKeySpillForReview))
+            MaskPressedKeyLightForReview(keys.Writable, SuppressStageKeyLightingForReview || SuppressStageKeyTintForReview,
+                SuppressStageKeyLightingForReview || SuppressStageKeySpillForReview);
+        ObserveParticleStateForReview?.Invoke(simulation, look);
+        simulation.ObservePackedHeldParticleForReview = ObserveStageParticleForReview;
         StageKeyCount = keys.Count;
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
@@ -513,8 +529,10 @@ internal sealed class GpuStageRenderer : IDisposable
         // roadmap §14.8: every AR build hears the adaptive tier (the verify seam first, the profiler otherwise) and
         // drops what roadmap's sentence says, never what it forbids.
         var arBudgetTier = ArBudgetTierOverride ?? _adaptiveQualityController?.Tier ?? GpuAdaptiveQualityTier.Full;
+        _arLayer.ObservePackedParticleForReview = ObserveArParticleForReview;
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier,
+                SuppressArKeyTintForReview, SuppressArKeySpillForReview);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();

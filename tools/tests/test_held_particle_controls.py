@@ -16,7 +16,8 @@ def plan():
              'Gpu/GpuArLayer.cs','Gpu/GpuArLayer.Effects.cs','Gpu/GpuLook.cs','Gpu/GpuStageFeed.cs','Gpu/HeldParticleAppearance.cs',
              'Camera/ArCameraPose.cs','Camera/ArParticleBillboard.cs','Stage/PianoStage.cs','Stage/PrismFlowPalette.cs',
              'Diagnostics/HeldParticleControlPlan.cs','Diagnostics/HeldParticleControlReview.cs',
-             'Diagnostics/AuxParticleFixtures.cs','Diagnostics/KeyParticleFixtures.cs','docs/samples/ar-keyboard-topdown.png']
+             'Diagnostics/AuxParticleFixtures.cs','Diagnostics/KeyParticleFixtures.cs','docs/samples/ar-keyboard-topdown.png',
+             'Diagnostics/HeldLightIsolationPlan.cs']
     scenes=[]
     for family,palette,pattern,view in itertools.product(review.FAMILIES,review.PALETTES,review.PATTERNS,review.VIEWS):
         name='-'.join((family,palette,pattern,view))

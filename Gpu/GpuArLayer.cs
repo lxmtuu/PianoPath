@@ -97,7 +97,8 @@ internal sealed partial class GpuArLayer
     /// </summary>
     internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors,
         GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads, bool projectedNotes,
-        GpuAdaptiveQualityTier adaptiveTier = GpuAdaptiveQualityTier.Full)
+        GpuAdaptiveQualityTier adaptiveTier = GpuAdaptiveQualityTier.Full,
+        bool suppressKeyTintForReview = false, bool suppressKeySpillForReview = false)
     {
         quads.Clear();
         _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear(); _risingMidiNotes.Clear();
@@ -115,7 +116,7 @@ internal sealed partial class GpuArLayer
         for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch && pitch < keyColors.Count; pitch++)
         {
             var key = keyColors[pitch];
-            if (!(key.W > MinKeyGlow) || keyLight <= 0) continue;
+            if (!(key.W > MinKeyGlow) || keyLight <= 0 || suppressKeyTintForReview) continue;
             _keyPatches.Clear();
             ArKeys.Patches(ar.Calibration, view, pitch, _keyPatches);
             foreach (var patch in _keyPatches)
@@ -135,7 +136,7 @@ internal sealed partial class GpuArLayer
             DamperStripCount++;
         }
 
-        if (ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
+        if (!suppressKeySpillForReview && ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
             && !ArQualityBudget.IsCut(adaptiveTier, ArBudgetCut.NoteLights))
             BuildProjectedNoteLights(ar, view, keyColors, quads, opacity * keyLight, look, layout, keyPose);
 

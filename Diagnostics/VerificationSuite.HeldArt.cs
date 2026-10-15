@@ -25,6 +25,22 @@ internal static partial class VerificationSuite
             Assert(k==2 ? after.Emit.W==before.Emit.W && after.Base.Y==before.Base.Y : after.Emit.W==0 && after.Base.Y==0,
                 "Only real-key tint/emission/spill are muted; the felt is unchanged.");
         }
+        foreach (var tint in new[] {false,true})
+        foreach (var spill in new[] {false,true})
+        {
+            var split=beforeMask.ToArray(); GpuStageRenderer.MaskPressedKeyLightForReview(split,tint,spill);
+            for (var k=0;k<split.Length;k++)
+            {
+                var before=beforeMask[k]; var after=split[k];
+                Assert(after.Box==before.Box && after.Misc==before.Misc && after.Base.X==before.Base.X
+                    && after.Base.Z==before.Base.Z && after.Base.W==before.Base.W,
+                    "Split review mask preserves geometry/depression/shadows.");
+                Assert(after.Emit.X==before.Emit.X && after.Emit.Y==before.Emit.Y && after.Emit.Z==before.Emit.Z
+                    && after.Emit.W==(k<2 && tint ? 0 : before.Emit.W)
+                    && after.Base.Y==(k<2 && spill ? 0 : before.Base.Y),
+                    "Tint/emission and spill masks are independent; felt stays untouched.");
+            }
+        }
         Assert(!new PianoVisualSettings().HeldParticleArt && !CommunityPresets.Find("Prism Flow Preview")!.Settings.HeldParticleArt,
             "Legacy defaults and the particle-off palette control must not enable experimental art.");
         foreach (var route in AuxParticleTimeline.Routes.Where(r => r.Source == AuxParticleTimeline.Channel.Held))
@@ -50,6 +66,17 @@ internal static partial class VerificationSuite
             input.Look = art; layer.Build(input, ar, view, sim.KeyColors, sim, quads, projectedNotes: true);
             var projected = quads.Span.ToArray().Where(q => q.Misc.Z == 17).ToArray();
             Assert(projected.Length == stage.Length, $"{route.Id}/{pitch}: camera-facing held particles must survive this calibration.");
+            foreach (var tint in new[] {false,true})
+            foreach (var spill in new[] {false,true})
+            {
+                layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true,
+                    suppressKeyTintForReview:!tint,suppressKeySpillForReview:!spill);
+                Assert((tint ? layer.KeyQuadCount>0 : layer.KeyQuadCount==0)
+                    && (spill ? layer.NoteLightCount>0 : layer.NoteLightCount==0)
+                    && layer.ParticleFxCount==projected.Length,
+                    "AR tint/spill review gates must independently preserve particle packing.");
+            }
+            layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);
             foreach (var p in snapshot)
             {
                 Assert(HeldParticleAppearance.TryResolve(p.Wisp,p.Size,p.Age,p.Life,p.Phase,p.Glow,p.Color,art.WispWidth,art.FlameNoteColor,out var surface),

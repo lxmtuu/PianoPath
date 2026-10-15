@@ -5,6 +5,8 @@ namespace PianoPath;
 internal sealed partial class GpuArLayer
 {
     private const int MaxProjectedParticles = 192;
+    // Null in production. Observes only particles that really packed; never participates in selection.
+    internal Action<GpuArParticle>? ObservePackedParticleForReview { get; set; }
     private const byte ParticleStreak = 1, ParticleConfetti = 2, ParticleDust = 3,
         ParticleFlame = 4, ParticleDroplet = 5, ParticleShard = 6, ParticleWisp = 7;
     private static readonly ArVec3 Across = new(1, 0, 0);
@@ -396,6 +398,7 @@ internal sealed partial class GpuArLayer
                 if (!TryAddProjectedParticle(view, simulation, particle, quads, opacity, look, layout, pose)) continue;
                 emitted++;
                 ParticleFxCount++;
+                ObservePackedParticleForReview?.Invoke(particle);
                 if (particle.Origin == 1) ReleaseEffectCount++;
             }
         }

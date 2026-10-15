@@ -271,6 +271,30 @@ jobs:
           }
           "::notice title=Held lighting controls::288 WARP frame hashes, 72 native quartet hashes/crop reconstructions and source hashes verified. Synthetic static controls only, not visual acceptance."
 
+      - name: Validate and stage tint spill and coverage study
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/held-light-isolation'
+          python tools/review_held_light_isolation.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Tint/spill coverage evidence validation failed' }
+          $evidence = 'docs/evidence/held-light-isolation'
+          $target = 'docs/previews/held-light-isolation'
+          New-Item -ItemType Directory -Force -Path $evidence,$target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter *.png)
+          if ($sheets.Count -ne 48) { throw 'Incomplete tint/spill quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          # Only four new low-load full frames in Git. Normal-load full scenes already exist.
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          $selected = @($manifest.scenes | Where-Object { $_.load -eq 'low' -and $_.palette -eq 'prism' })
+          if ($selected.Count -ne 4) { throw 'Missing sub-cap full-scene samples' }
+          foreach ($scene in $selected) {
+            $combined = @($scene.captures | Where-Object { $_.Variant -eq 'on-both' })
+            if ($combined.Count -ne 1) { throw 'Missing sub-cap combined frame' }
+            Copy-Item (Join-Path $review $combined[0].File) (Join-Path $target "$($scene.Id)-full.png") -Force
+          }
+          "::notice title=Tint spill coverage::192 WARP frames, 48 native quartet hashes/crops, per-pitch/age packing invariants and source guards verified. No art/performance acceptance."
+
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -712,7 +736,7 @@ jobs:
         run: |
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"

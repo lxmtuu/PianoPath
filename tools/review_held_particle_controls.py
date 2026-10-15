@@ -35,12 +35,15 @@ def validate_plan(manifest, expected_revision=None):
     scenes = manifest['scenes']
     if len(scenes) != 72 or {s['Id'] for s in scenes} != expected:
         raise ValueError('Missing/duplicate control scenes')
-    if set(manifest['sourceHashes']) != {
+    required_sources = {
         'Gpu/StageShaders.hlsl','Gpu/GpuStageRenderer.cs','Gpu/GpuStageSimulation.cs','Gpu/GpuStageSimulation.Effects.cs',
         'Gpu/GpuArLayer.cs','Gpu/GpuArLayer.Effects.cs','Gpu/GpuLook.cs','Gpu/GpuStageFeed.cs','Gpu/HeldParticleAppearance.cs',
         'Camera/ArCameraPose.cs','Camera/ArParticleBillboard.cs','Stage/PianoStage.cs','Stage/PrismFlowPalette.cs',
         'Diagnostics/HeldParticleControlPlan.cs','Diagnostics/HeldParticleControlReview.cs',
-        'Diagnostics/AuxParticleFixtures.cs','Diagnostics/KeyParticleFixtures.cs','docs/samples/ar-keyboard-topdown.png'}:
+        'Diagnostics/AuxParticleFixtures.cs','Diagnostics/KeyParticleFixtures.cs','docs/samples/ar-keyboard-topdown.png',
+        'Diagnostics/HeldLightIsolationPlan.cs'}
+    # Earlier schema-1 captures predate the split-study helper. Keep their verification reproducible.
+    if set(manifest['sourceHashes']) not in (required_sources, required_sources-{'Diagnostics/HeldLightIsolationPlan.cs'}):
         raise ValueError('Incomplete source provenance')
     off_hashes = {}
     for scene in scenes:

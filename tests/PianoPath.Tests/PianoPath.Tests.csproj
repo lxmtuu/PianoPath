@@ -42,6 +42,7 @@
     <Compile Include="..\..\Gpu\KeyRingChannelGain.cs" Link="Product\Gpu\KeyRingChannelGain.cs" />
     <Compile Include="..\..\Diagnostics\AuxParticleTimeline.cs" Link="Product\Diagnostics\AuxParticleTimeline.cs" />
     <Compile Include="..\..\Diagnostics\HeldParticleControlPlan.cs" Link="Product\Diagnostics\HeldParticleControlPlan.cs" />
+    <Compile Include="..\..\Diagnostics\HeldLightIsolationPlan.cs" Link="Product\Diagnostics\HeldLightIsolationPlan.cs" />
     <Compile Include="..\..\Gpu\TransientFrameEpoch.cs" Link="Product\Gpu\TransientFrameEpoch.cs" />
     <Compile Include="..\..\Stage\KeyEmissionBudget.cs" Link="Product\Stage\KeyEmissionBudget.cs" />
     <Compile Include="..\..\Stage\PrismFlowPalette.cs" Link="Product\Stage\PrismFlowPalette.cs" />

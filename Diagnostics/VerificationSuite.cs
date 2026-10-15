@@ -6718,6 +6718,10 @@ internal static partial class VerificationSuite
         var controls = HeldParticleControlReview.Render(Path.Combine(outputDirectory,"held-particle-controls"));
         Assert(controls == 288, "Held controls need 72 scenes × four independent particle/light variants.");
         Results.Add("PASS P3b held controls: 288 WARP frames, matching camera/calibration planes, 72 native crop quartets; effect-off family identity, particle/light packing isolation, PNG round trips and source/pixel hashes. Not a brightness or art acceptance gate.");
+        Results.Add("NOTE Starting tint/spill × particles and sub-cap chord study; no material, production recipe, selection policy or cap changes.");
+        var isolated = HeldParticleControlReview.Render(Path.Combine(outputDirectory,"held-light-isolation"),isolateLight:true);
+        Assert(isolated==192,"Tint/spill study needs 24 scenes × eight independent variants.");
+        Results.Add("PASS P3b tint/spill study: 192 WARP frames, 48 native quartets, actual packed per-pitch/age coverage; sub-cap eligible preservation, high-load AR cap and unchanged grouped-light baseline pixels. Static diagnostics, not art/performance acceptance.");
         HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
         Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }
