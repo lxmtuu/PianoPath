@@ -21,7 +21,7 @@ def build(repo,output):
         if not target.exists() and not target.is_symlink():target.symlink_to(source)
         elif not target.is_symlink() or target.resolve()!=source.resolve():raise ValueError('Wrong Bounce asset '+name)
     m=review.verify(output,source_root=repo,published_only=True)
-    rows=[c for c in m['captures'] if c['Palette']=='prism' and c['View']=='ar-reference' and c['Pitch']==60 and c['Phase']=='held' and c['Variant']!='off']
+    rows=[c for c in m['captures'] if c['Palette']=='prism' and c['View']=='ar-reference' and c['Pitch']==60 and c['Phase']=='held' and c['Variant']=='art']
     metrics=' · '.join(f"{c['Variant']}: body-only RGB L1={c['BodySignal']}; {c['BodyVisiblePixels']} px ΔRGB>4" for c in rows)
     page='''<!doctype html><html lang="vi"><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Bounce · Stage / AR</title>
 <style>body{font:16px system-ui;background:#10141b;color:#dde6f4;max-width:1000px;margin:24px auto;padding:16px}p{line-height:1.7}a{color:#9bcfff}img{display:block;image-rendering:pixelated;width:640px;max-width:100%;margin:auto}figure{margin:24px 0;padding:12px;border:1px solid #354055;border-radius:12px}figcaption{text-align:center;padding:12px}code{word-break:break-all}</style>
