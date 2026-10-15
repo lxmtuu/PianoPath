@@ -6688,6 +6688,10 @@ internal static partial class VerificationSuite
         VerifyPrismFlowInputs();
         VerifyPrismFlowLook();
         VerifyKeyParticleLifecycle();
+        // Fail fast on the newest native candidate before regenerating historical reviews.
+        var shatter=ShatterParticleArtReview.Render(Path.Combine(outputDirectory,"shatter-art-v1"));
+        Assert(shatter==192,"Shatter requires paired native impact facets, unchanged state/geometry/components and actual body RGBA parity.");
+        Results.Add("PASS Shatter art v1: 192 statics / 720 motion crops; two single-press velocities, unchanged raw state and ordered geometry/counts. Stage retains body+glint, AR one body quad; actual body RGBA matches three AR poses. Review-only, not release/held redesign or art approval.");
         Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
         var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
         var prismCaptures = PrismFlowVisualReview.Render(prismOutput);
@@ -6745,9 +6749,6 @@ internal static partial class VerificationSuite
         var fireworks=FireworkParticleArtReview.Render(Path.Combine(outputDirectory,"fireworks-art-v1"));
         Assert(fireworks==192,"Fireworks requires paired native material captures and identity-linked radial spark colours.");
         Results.Add("PASS Fireworks art v1: 192 statics / 720 motion crops; unchanged raw state, ordered component geometry and physical-body counts. Stage and AR each retain one packet per physical dot/streak. Review-only, not art/hardware acceptance.");
-        var shatter=ShatterParticleArtReview.Render(Path.Combine(outputDirectory,"shatter-art-v1"));
-        Assert(shatter==192,"Shatter requires paired native impact facets, unchanged state/geometry/components and actual body RGBA parity.");
-        Results.Add("PASS Shatter art v1: 192 statics / 720 motion crops; two single-press velocities, unchanged raw state and ordered geometry/counts. Stage retains body+glint, AR one body quad; actual body RGBA matches three AR poses. Review-only, not release/held redesign or art approval.");
         var dustV2=DustParticleArtV2Review.Render(Path.Combine(outputDirectory,"dust-art-v2"));
         Assert(dustV2==192,"Dust V2 requires paired V1/V2 native frames, unchanged burst and intrinsic RGBA parity.");
         Results.Add("PASS Dust art v2: 192 statics / 720 motion crops; same raw state and ordered geometry/counts; actual RGBA matches Stage/three AR poses. Full-glow burst pixels identical to V1, held birth-glow response only, review-only.");

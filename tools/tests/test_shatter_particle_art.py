@@ -42,7 +42,7 @@ class ShatterArtTests(unittest.TestCase):
         m=plan();m['motions'][0]['tracks'][2]['hashes']=m['motions'][0]['tracks'][0]['hashes'][:]
         with self.assertRaisesRegex(ValueError,'Blank shatter'):r.validate(m)
 
-    def test_native_producer_and_material_routes_are_dust_specific(self):
+    def test_native_producer_and_material_routes_are_shatter_specific(self):
         root=Path(__file__).resolve().parents[2]
         producer=(root/'Diagnostics/ShatterParticleArtReview.cs').read_text()
         self.assertIn('r.Id=="morph-shatter"',producer)

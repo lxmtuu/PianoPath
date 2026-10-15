@@ -29,13 +29,13 @@ def build(repo,output):
 <p><a href="motion-review.html">→ Player nhấn nhẹ / mạnh, cùng frame</a> · <a href="manifest.json">Manifest</a></p>
 <p><b>Chỉ Shatter press:</b> Stage giữ body + glint, AR giữ một body quad, không ép số packet bằng nhau. Góc hình học cũ (Stage tumble, AR velocity) vẫn giữ nguyên; chỉ material cục bộ/RGBA dùng chung, không khẳng định đồng bộ spin hay pixel toàn cảnh.</p>
 <h2>Nhấn mạnh · sample 2 ở 60 Hz</h2><figure><figcaption>Classic trái · Shatter V1 phải</figcaption><img src="burst.png" alt="Native Shatter burst: Stage trên, AR dưới; classic trái, candidate phải"></figure>
-<h2>Giữa chuyển động · sample 10 ở 60 Hz</h2><figure><figcaption>Classic trái · Shatter V1 phải</figcaption><img src="held.png" alt="Native Shatter held: Stage trên, AR dưới; classic trái, candidate phải"></figure>
+<h2>Giữa chuyển động · sample 10 ở 60 Hz</h2><figure><figcaption>Classic trái · Shatter V1 phải</figcaption><img src="held.png" alt="Native Shatter mid-impact: Stage trên, AR dưới; classic trái, candidate phải"></figure>
 <p>__METRICS__. Signal trong cùng cảnh, không phải luminance hay điểm chất lượng.</p>
 <p>Crop native phóng nearest-neighbour; không chỉnh exposure/màu. Native CI kiểm 192 static / 720 motion; subset này kiểm 8 pane và 480 nửa frame lossless. Không có đủ original fulls/off frames ở đây để kiểm lại toàn bộ dataset. Không bảo đảm cadence realtime; mọi palette/tier, camera/GPU thật vẫn cần kiểm. Settings menu để cuối.</p><p>Source <code>__SOURCE__</code>.</p></html>'''
     (output/'index.html').write_text(page.replace('__SOURCE__',html.escape(m['sourceRevision'])).replace('__METRICS__',html.escape(metrics)),encoding='utf-8')
     player=PLAYER.replace('Embers','Shatter').replace('emitter sparks','emitter Shatter')
     player=player.replace('Stage · giữ → thả','Stage · nhấn nhẹ').replace('AR · giữ → thả','AR · nhấn nhẹ').replace('Stage · burst','Stage · nhấn mạnh').replace('AR · burst','AR · nhấn mạnh')
-    player=player.replace("$('pair').hidden=true;$('frame').value=n;", "$('release').textContent='Pedal on: frame 12';$('pair').hidden=true;$('frame').value=n;")
+    player=player.replace('Thả phím: frame 12','Pedal on: frame 12')
     start=player.index('<p>Held track:');end=player.index('</p>',start)+4
     player=player[:start]+'<p>Shatter duy nhất: nhấn nhẹ (.45) hoặc mạnh (.9) ở f0, không giữ emitter, không phát release. Pedal bật ở f12 chỉ là đối chứng. Crop union chung cho đủ 60 frame; Stage giữ body+glint, AR giữ một body quad. Storage lane held nghĩa là nhấn nhẹ, không phải giữ phím.</p>'+player[end:]
     status="mode.endsWith('burst')?(n<12?'Burst đã phát · không held · pedal off':'Không held · pedal on'):(n<12?'Giữ phím · pedal off':'Đã thả phím · pedal on')"

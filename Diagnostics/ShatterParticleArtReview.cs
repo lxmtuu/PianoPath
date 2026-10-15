@@ -51,13 +51,13 @@ internal static class ShatterParticleArtReview
                     }
                     var shot=f.Shot with {Id=id,File=id+"-"+variant+".png",Signal=signal,VisiblePixels=visible};
                     if(variant=="art" && phase!="expired" && signal==0)
-                        throw new InvalidDataException("Active shatter candidate contributes no native off-delta.");
+                        throw new InvalidDataException($"Active shatter candidate contributes no native off-delta: {id}, raw={shot.RawParticles}, bodies={shot.PackedParticles}, classic signal={baseline?.Shot.Signal}, classic/off same={baseline?.Shot.PixelSha256==Hash(offPixels!)}.");
                     WritePng(Path.Combine(output,shot.File),f.Pixels,Width,Height);
                     if(variant=="off")
                     {
                         if(shot.RawParticles!=0 || shot.PackedParticles!=0)throw new InvalidDataException("Shatter off control emitted particles.");
                     }
-                    else if(variant=="classic")baseline=f;
+                    else if(variant=="classic")baseline=f with {Shot=shot};
                     else GuardPair(baseline!.Shot,shot,phase!="expired");
                     captures.Add(shot);
                 }
