@@ -167,6 +167,18 @@ internal static partial class VerificationSuite
                 if(b.Misc.Z==39){Assert(a.Misc.Z==2,"Bounce body was a particle quad.");b.Misc.Z=a.Misc.Z;b.Color=a.Color;}
                 Assert(a.Equals(b),"Bounce cannot alter primary/ring AR packets or body corners/weights.");
             }
+            var billboard=art.WithBounceBillboardForReview(true);
+            feed.SetLook(billboard);feed.Capture(input,GpuStageFeed.Now);
+            layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var aligned=quads.Span.ToArray();
+            Assert(aligned.Length==arAfter.Length,"Bounce billboard preserves actual mixed count.");
+            for(var i=0;i<aligned.Length;i++)
+            {
+                var a=arAfter[i];var b=aligned[i];
+                if(b.Misc.Z==39){b.A=a.A;b.B=a.B;b.W=a.W;}
+                Assert(a.Equals(b),"Bounce billboard cannot change primary/ring packets, body RGBA or ordering.");
+            }
+            sim.BuildSprites(billboard,layout,sprites);
+            Assert(after.SequenceEqual(sprites.Span.ToArray()),"AR-only Bounce geometry flag cannot change Stage packets.");
             Assert(sim.Time==time && sim.ParticlesBorn==born && raw.SequenceEqual(ParticleSnapshot(sim)),
                 "Mixed Bounce builds are read-only including material provenance.");
         }

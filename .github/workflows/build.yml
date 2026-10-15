@@ -533,7 +533,7 @@ jobs:
           New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
           Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
-          "::notice title=Bounce v1 material::192 native statics + 64 body-off controls, 720 native motion crops; 48 active body-only deltas, 16 expired. Unchanged raw state, ordered geometry/counts/depth, non-body companion ring and selection. Shared body RGBA; explicit material provenance excludes primary Ember/Firework streaks. Default-off, review only."
+          "::notice title=Bounce v1 material::192 native statics + 64 body-off + 64 material-only controls, 720 native motion crops; explicit AR-only tangent billboard, independent actual corner/weight checks; 48 active body-only deltas, 16 expired. Unchanged raw state, ordered counts/depth, non-body companion ring and selection. Shared body RGBA; explicit material provenance excludes primary Ember/Firework streaks. Default-off, review only."
 
       - name: Validate and stage Shatter v1 material review
         shell: pwsh

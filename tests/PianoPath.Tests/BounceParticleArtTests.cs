@@ -15,6 +15,19 @@ public sealed class BounceParticleArtTests
         for(var shape=0;shape<8;shape++)Assert.Equal(shape==1,BounceParticleAppearance.Eligible(true,shape,false,0,2));
     }
     [Fact]
+    public void BillboardFollowsStageVelocityWithoutChangingScale()
+    {
+        var right=new ArVec3(1,0,0);var up=new ArVec3(0,1,0);
+        foreach(var v in new[]{new Vector2(20,-300),new Vector2(-15,70),Vector2.Zero})
+        {
+            BounceParticleAppearance.BillboardAxes(right,up,v.X,v.Y,out var x,out var y);
+            var d=BounceParticleAppearance.Orientation(v.X,v.Y);
+            Assert.InRange(Math.Abs(x.Length-1),0,1e-6);Assert.InRange(Math.Abs(y.Length-1),0,1e-6);
+            Assert.InRange(Math.Abs(ArVec3.Dot(x,y)),0,1e-6);
+            Assert.InRange((x-(right*d.X-up*d.Y)).Length,0,1e-6);
+        }
+    }
+    [Fact]
     public void SingleLinearEnvelopePreservesBothTintedAndNeutralBirths()
     {
         Assert.True(BounceParticleAppearance.TryColor(new(.2f,.6f,1),.5f,1,1,.65f,out var body));

@@ -535,6 +535,8 @@ internal sealed partial class GpuArLayer
                 break;
         }
 
+        if(!legacyAxes && BounceParticleAppearance.Eligible(look.BounceBillboardForReview && look.ImpactMorph=="Bounce",particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute))
+            BounceParticleAppearance.BillboardAxes(faceX,faceY,particle.Vx,particle.Vy,out axisX,out axisY);
         if (alpha <= .003f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, center, axisX, axisY, halfX, halfY, out var patch))
             return false;
         // Keep the legacy eligibility/selection above: material energy must not change which particles pack.

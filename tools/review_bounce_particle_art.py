@@ -83,7 +83,7 @@ def check_digest(value):
 
 def validate(m,revision=None):
     if revision is not None and m['sourceRevision']!=revision:raise ValueError('Wrong bounce source revision')
-    if m['schema']!=2:raise ValueError('Unknown bounce schema')
+    if m['schema']!=3:raise ValueError('Unknown bounce schema')
     if (m['family'],m['reviewOnly'],m['legacyParticleAxesForReview'],m['width'],m['height'],m['seed'],m['captureCount'],m['staticFps'],m['staticReleaseFrame'])!=('bounce',True,False,640,360,20261014,192,60,21):raise ValueError('Wrong bounce recipe')
     if m.get('staticSampleFrames')!=[2,10,26,89] or m.get('motionPressVelocities')!=[.9,.45]:raise ValueError('Wrong Bounce input timeline')
     if set(m['sourceHashes'])!=SOURCES:raise ValueError('Missing bounce source guards')
@@ -94,13 +94,13 @@ def validate(m,revision=None):
     for c in m['captures']:
         id_=f"{c['Palette']}-{c['View']}-p{c['Pitch']}-{c['Phase']}"
         if c['Id']!=id_ or c['File']!=id_+'-'+c['Variant']+'.png':raise ValueError('Bad static bounce provenance')
-        for k in ('PixelSha256','RawHash','PacketHash'):check_digest(c[k])
+        for k in ('PixelSha256','RawHash','PacketHash','NonBodyHash','SelectedHash'):check_digest(c[k])
         check_counts(c)
         if c['Variant']=='off' or c['Phase']=='expired':
             if c['RawParticles'] or c['PackedParticles']:raise ValueError('Off/expired bounce particles')
         elif not c['PackedParticles']:raise ValueError('Missing active bounces')
         groups.setdefault(id_,{})[c['Variant']]=c
-    if m['schema']==2:
+    if m['schema']==3:
         for c in m['captures']:
             check_digest(c['ColourHash'])
             if c['Variant']=='art':
@@ -108,7 +108,7 @@ def validate(m,revision=None):
                 if any(c[k]!=stage[k] for k in ('RawHash','PackedParticles','ColourHash')):raise ValueError('Shared v2 colour/alpha differs across outputs')
     for group in groups.values():
         a,b=group['classic'],group['art']
-        if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Bounce state/actual packet changed')
+        if any(a[k]!=b[k] for k in ('RawHash','NonBodyHash','SelectedHash','RawParticles','PackedParticles')):raise ValueError('Bounce state/actual packet changed')
         if (a['Phase']=='expired') != (a['PixelSha256']==b['PixelSha256']):raise ValueError('Wrong Bounce material delta')
         if a['Phase']!='expired' and b['PixelSha256']==group['off']['PixelSha256']:raise ValueError('Active Bounce candidate contributes no native off-delta')
         if a['Phase']=='expired' and a['PixelSha256']!=group['off']['PixelSha256']:raise ValueError('Expired output differs from off')
@@ -118,12 +118,25 @@ def validate(m,revision=None):
     for c in controls:
         a=groups[c['Id']]['art'];check_counts(c)
         if c['Variant']!='body-off' or c['File']!=c['Id']+'-body-off.png':raise ValueError('Wrong body control')
-        if any(c[k]!=a[k] for k in ('Palette','View','Pitch','Phase','RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Body control changed state/non-body geometry')
+        if any(c[k]!=a[k] for k in ('Palette','View','Pitch','Phase','RawHash','PacketHash','NonBodyHash','SelectedHash','RawParticles','PackedParticles')):raise ValueError('Body control changed state/non-body geometry')
         for k in ('PixelSha256','RawHash','PacketHash','ColourHash'):check_digest(c[k])
         active=a['Phase']!='expired'
         if active!=(a['PixelSha256']!=c['PixelSha256']):raise ValueError('Missing body-only off-delta; ring cannot substitute')
         if type(a['BodySignal']) is not int or a['BodySignal']<0 or active!=(a['BodySignal']>0):raise ValueError('Bad body signal')
         if type(a['BodyVisiblePixels']) is not int or a['BodyVisiblePixels']<0:raise ValueError('Bad body pixel count')
+    if m.get('geometryTrial')!='AR tangent billboard follows Stage velocity; unchanged extents; Stage unchanged':raise ValueError('Missing explicit geometry experiment')
+    geometry=m.get('geometryControls',[])
+    if len(geometry)!=64 or {c['Id'] for c in geometry}!=set(groups):raise ValueError('Incomplete material-only geometry controls')
+    for c in geometry:
+        group=groups[c['Id']];a=group['art'];classic=group['classic'];check_counts(c)
+        if c['Variant']!='material-only' or c['File']!=c['Id']+'-material-only.png':raise ValueError('Bad material-only control')
+        if any(c[k]!=a[k] for k in ('Palette','View','Pitch','Phase','RawHash','RawParticles','PackedParticles','NonBodyHash','SelectedHash','ColourHash')):raise ValueError('Geometry trial changed state/selection/material/non-body packets')
+        if c['PacketHash']!=classic['PacketHash']:raise ValueError('Material-only control altered original geometry')
+        for k in ('PixelSha256','PacketHash'):check_digest(c[k])
+        changed=a['View']!='live-stage' and a['Phase']!='expired'
+        if changed!=(c['PacketHash']!=a['PacketHash']):raise ValueError('Unexpected actual geometry delta')
+        if not changed and c['PixelSha256']!=a['PixelSha256']:raise ValueError('AR-only geometry changed Stage/expired pixels')
+        if type(a['MaxCornerError']) not in (float,int) or not 0<=a['MaxCornerError']<=.0003:raise ValueError('Actual AR corner/weight error')
     if len(m['motions'])!=4 or {x['Id'] for x in m['motions']}!={v+'-'+p for v in VIEWS[:2] for p in ('burst','held')}:raise ValueError('Missing bounce motion')
     for track in m['motions']:
         if track['Id']!=track['view']+'-'+track['phase'] or (track['fps'],track['count'],track['releaseFrame'])!=(30,60,12):raise ValueError('Bad bounce timeline')
@@ -135,11 +148,11 @@ def validate(m,revision=None):
             if len(t['hashes'])!=60 or len(t['frames'])!=60:raise ValueError('Missing bounce frames')
             for h,f in zip(t['hashes'],t['frames']):
                 check_digest(h);check_counts(f)
-                if m['schema']==2:check_digest(f['ColourHash'])
-                for k in ('RawHash','PacketHash','fullPixelSha256'):check_digest(f[k])
+                if m['schema']==3:check_digest(f['ColourHash'])
+                for k in ('RawHash','PacketHash','NonBodyHash','SelectedHash','fullPixelSha256'):check_digest(f[k])
                 if variant=='off' and (f['RawParticles'] or f['PackedParticles']):raise ValueError('Motion off emitted bounces')
         for a,b in zip(versions['classic']['frames'],versions['art']['frames']):
-            if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Motion state/packet changed')
+            if any(a[k]!=b[k] for k in ('RawHash','NonBodyHash','SelectedHash','RawParticles','PackedParticles')):raise ValueError('Motion state/packet changed')
         if sum(a!=b for a,b in zip(versions['classic']['hashes'],versions['art']['hashes']))<6:raise ValueError('Invisible bounce motion candidate')
         if sum(a!=b for a,b in zip(versions['off']['hashes'],versions['art']['hashes']))<6:raise ValueError('Blank bounce motion candidate')
         if sum(a!=b for a,b in zip(versions['off']['hashes'][10:],versions['art']['hashes'][10:]))<3:raise ValueError('No body tail after ring expiry')
@@ -152,7 +165,7 @@ def verify(directory,source_root=None,revision=None,published_only=False):
     if not manifest.exists():manifest=directory/'manifest.json.gz'
     m=read(manifest);groups=validate(m,revision)
     if not published_only:
-        for c in m['bodyControls']:
+        for c in m['bodyControls']+m['geometryControls']:
             if digest(Image.open(directory/c['File']))!=c['PixelSha256']:raise ValueError('Body-off native pixels changed')
     if source_root:
         for name,expected in m['sourceHashes'].items():
@@ -220,7 +233,7 @@ def verify(directory,source_root=None,revision=None,published_only=False):
         for f,im in enumerate(paired_frames(directory,t)):
             for i,v in enumerate(('classic','art')):
                 if digest(im.crop((i*w,0,(i+1)*w,h)))!=versions[v]['hashes'][f]:raise ValueError('Frame half differs from native frame')
-    if not published_only and m['schema']==2:
+    if not published_only and m['schema']==3:
         (directory/'manifest.json.gz').write_bytes(gzip.compress(json.dumps(m,separators=(',',':')).encode(),mtime=0))
     return m
 
@@ -228,4 +241,4 @@ def verify(directory,source_root=None,revision=None,published_only=False):
 if __name__=='__main__':
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('directory',type=Path);p.add_argument('--source-root',type=Path);p.add_argument('--expected-revision');p.add_argument('--published-only',action='store_true');a=p.parse_args()
     verify(a.directory,a.source_root,a.expected_revision,a.published_only)
-    print('PASS Bounce: 192 static records plus 64 body-off controls, 64 paired raw/actual-packet guards (48 active, 16 expired), 720 motion records; 8 published native crops and 480 lossless synchronized frame halves. '+('Full originals NOT checked locally.' if a.published_only else 'All original static/motion pixels verified.'))
+    print('PASS Bounce: 192 static records plus 64 body-off and 64 material-only geometry controls, 64 paired raw/actual-packet guards (48 active, 16 expired), 720 motion records; 8 published native crops and 480 lossless synchronized frame halves. '+('Full originals NOT checked locally.' if a.published_only else 'All original static/motion pixels verified.'))
