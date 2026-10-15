@@ -2,7 +2,7 @@
 
 ## Status
 
-Native/visual checks pending. **Default-off, review-only.** V1 stays frozen as its own evidence/checkpoint; no previous candidate or preset is promoted. Dust visibility is the current priority, then auxiliary morph/release, settings last.
+Full Windows/native and published-pixel/browser checks pass; native inspection recorded, not user art approval. **Default-off, review-only.** V1 stays frozen as its own evidence/checkpoint; no previous candidate or preset is promoted. Dust visibility is the current priority, then auxiliary morph/release, settings last.
 
 ## Deliberately narrow change
 
@@ -22,4 +22,43 @@ Both outputs use the same resolver. Internal `DustArtV2ForReview` defaults false
 
 Publication cap **1.75 MiB**: two native quartets + four lossless BGRA XOR+gzip 60-frame tracks + gzip metadata, preserving all native frames/pixels. Cumulative changed-file payload must remain below 128 MiB. Full originals/off stay artifact-only. No planned additional compaction or frame deletion.
 
-Native Windows, local published subset checks, real Chromium decoding/controls, native inspection and eight-family historical comparisons remain pending. In particular, higher held alpha also affects AR; camera clutter/occlusion cannot be judged from Stage or RGB off-delta alone. Real GPU/camera/MIDI, dense chords, Zone/live switches, all palettes/tiers/delay, bloom/tint/spill/recording, realtime cadence and user approval remain open.
+## Verified native result
+
+- [CI **38777928321**](https://github.com/lxmtuu/PianoPath/actions/runs/38777928321) **SUCCESS**; source `fd17d0cf10e9728497bc8c9bf10d1d7dfe727cb3`, publication `80e1a86`. Static/portable tests, Windows build, full native capture generation and publication validation, verification suite, frame budget, galleries and package passed. No failed native run is reclassified as success.
+- **192 static captures / 64 paired raw-state, ordered geometry/selection/count guards / 720 native motion crops** pass on Windows WARP. Actual candidate intrinsic RGBA, identity-linked before canonicalisation, matches Stage and all three static AR poses. This is intrinsic parity, not equal composited appearance.
+- **All 16 burst static pairs and all 120 burst motion pairs are pixel-identical to V1.** Held/released changes and nonblank guards pass. The separately generated V1 baseline/off lane also matches V2 baseline/off in **128 static records and 480 full motion records** (pixels, raw/normalized ordered packets, actual RGBA and counts); full-frame hashes are used for lineage even when ROI bounds differ.
+- Local published subset validation passes **19 source hashes, 8 native panes, 480 exact native motion halves**, plus baseline lineage. Four tracks retain all 60 frames at manifest 30 FPS. Full original/off frames were validated in CI, not downloaded/revalidated locally.
+- **Real headless Chromium 153** confirms all 480 decoded BGRA halves; release/step/seek for all four modes, play/pause, no page errors, and 390px static-page mobile overflow check pass. Player explicitly labels **V1 left / V2 right**, not legacy classic. Not native WPF GUI testing, realtime playback/FPS, camera or physical GPU acceptance.
+- **89 local Python tests**, source checker (323 C# / 2 XAML / 119 resources / 161 named elements), Python/JavaScript syntax and diff checks pass. C#/HLSL execution was Windows CI, not synthetic local render evidence.
+- Eight historical families match the frozen pre-V2 native pixel/frame digests: **320 each for Wisps/Flames**, **1,642 each for Embers V1/V2, Splash V1, Fireworks V1, Confetti V1 and Dust V1** — **10,492 fields unchanged**, excluding changed source provenance. These are digest fields, not distinct capture counts. V1's original legacy comparison is preserved separately.
+- Published V2 payload **407,061 bytes / 0.3882 MiB**, below 1.75 MiB. Cumulative session changed-file payload approximately **125.98 MiB**, below 128 MiB. No additional PNG compaction, resampling, quantisation, deleted imagery or dropped frames.
+
+### Same-scene native signal · Prism / pitch 60
+
+**This table compares V1 → V2, not legacy → V2.**
+
+| View / phase | Packed V1 / V2 | RGB L1 off-delta V1 → V2 | Pixels max ΔRGB > 4 V1 → V2 |
+|---|---|---|---|
+| Stage / burst | 35 / 35 | 21,897 → 21,897 | 50 → 50 |
+| Stage / held | 14 / 14 | 12,446 → 22,577 | 140 → 161 |
+| AR reference / burst | 35 / 35 | 3,356 → 3,356 | 43 → 43 |
+| AR reference / held | 14 / 14 | 6,617 → 11,876 | 124 → 141 |
+
+RGB L1 is **absolute** off-difference including darkening/occlusion, not emitted energy, luminance, a visibility score or a cross-mode brightness metric. Approximately 2.004× intrinsic alpha does not mean exactly twice final brightness. Do not choose a global gain from L1 alone.
+
+### Visual inspection / limitations
+
+Inspected both native static quartets at 8× nearest-neighbour enlargement, sixteen same-time samples through each of the four 60-frame tracks and the real Chromium screenshot/control run. Held V2's warm plume/motes are more discernible than V1 against both sampled backgrounds. The surface/colour stays soft; no new sharp white core or temporal brightness oscillation was introduced. The early/full-glow cloud/arc is unchanged, not redesigned or magically separated into fine individual grains.
+
+Stage remains deliberately subdued, much less white-hot than the original legacy Dust. Late tails and small/low-contrast patches can still be hard to see; this does **not** prove legibility on every background or at native small size. AR held is more present and may increase cloud opacity/occlusion over bright keys; real-camera readability must be checked separately. Longer *perceived* visibility is expected from increased alpha, but raw lifetime, death times and physical release/emission are unchanged.
+
+Real GPU/camera/MIDI, dense chords, Zone/live switches, every palette/tier/delay, bloom/tint/spill/recording, realtime cadence and **user art approval remain open**. Motion here covers reference AR / Stage only; oblique and near-overhead checks are static. No prior candidates/defaults are promoted. Auxiliary morph/release is next after this Dust review checkpoint; settings stays last.
+
+Evidence: [V1/V2 burst quartet](previews/dust-art-v2/burst.png), [V1/V2 held quartet](previews/dust-art-v2/held.png), [gzip manifest](evidence/dust-art-v2/manifest.json.gz).
+
+```bash
+# Pillow required; validate native pixels/source/lineage and serve on 0.0.0.0.
+python3 tools/serve_dust_particle_art_v2.py --output /tmp/dust-v2-review --port 8776
+CHROME_BIN=/path/to/chrome NODE_PATH=/path/to/deps/node_modules \
+  node tools/check_burst_particle_review_browser.cjs http://127.0.0.1:8776
+```
