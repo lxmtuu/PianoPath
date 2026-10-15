@@ -492,9 +492,40 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
     return float4(rgb * color.a, a);
 }
 
+// Review-only sparks: coloured faceted ember + velocity-aligned tapered sliver.
+// Shared by Stage and calibrated AR; CPU already owns the lifetime envelope.
+// No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
+float4 ShadeSparkArt(float2 uv, float4 color, bool streak)
+{
+    float2 p = uv * 2.0 - 1.0;
+    float body, halo;
+    if (streak)
+    {
+        float along = saturate((p.x + 1.0) * 0.5);
+        float width = lerp(0.055, 0.30, smoothstep(0.0, 0.74, along));
+        width *= sqrt(saturate((1.0 - along) / 0.16));
+        float cap = saturate((1.0 - abs(p.x)) / max(fwidth(p.x), 0.001));
+        body = HeldStrokeCoverage(p.y, width, fwidth(p.y) * 0.5) * cap;
+        halo = exp(-p.y * p.y * 18.0) * pow(saturate(1.0 - abs(p.x)), 0.8) * 0.12;
+    }
+    else
+    {
+        float d = abs(p.x) * 0.9 + abs(p.y) * 1.1;
+        body = saturate((0.57 - d) / max(fwidth(d), 0.001) + 0.5);
+        halo = exp(-dot(p,p) * 6.0) * 0.18;
+    }
+    float coverage = saturate(body * 0.85 + halo);
+    float peak = max(color.r, max(color.g, color.b));
+    float3 tint = max(color.rgb, 0.0) / (1.0 + max(peak, 0.0));
+    float alpha = coverage * saturate(color.a);
+    return float4(tint * alpha, alpha);
+}
+
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if (kind > 17.5 && kind < 19.5)
+        return ShadeSparkArt(i.Uv, i.Color, kind < 18.5);
     if (kind > 16.5 && kind < 17.5)
         return ShadeHeldParticleArt(i.Uv, i.Color, i.Misc.x, i.Misc.y, i.Misc.w);
     if (kind < 0.5)
@@ -1276,7 +1307,12 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if (kind > 16.5 && kind < 17.5)
+    if (kind > 17.5 && kind < 19.5)
+    {
+        // Exactly the legacy dot/streak extents and axes; only the fragment material changes.
+        if (kind < 18.5) extent = float2(size * (1.0 + s.Dir.z), size);
+    }
+    else if (kind > 16.5 && kind < 17.5)
     {
         axis = float2(1.0, 0.0); normal = float2(0.0, -1.0);
         extent = float2(size, s.Dir.x);
@@ -1483,6 +1519,8 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if (kind > 17.5 && kind < 19.5)
+        return ShadeSparkArt(v.Local * 0.5 + 0.5, v.Color, kind < 18.5);
     if (kind > 16.5 && kind < 17.5)
         return ShadeHeldParticleArt(v.Local * 0.5 + 0.5, v.Color, v.Extra.x, v.Extra.y, v.Extra.z);
     if (kind > 6.5) return SpriteShape(v);

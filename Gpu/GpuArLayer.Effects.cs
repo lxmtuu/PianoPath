@@ -536,7 +536,7 @@ internal sealed partial class GpuArLayer
         if (alpha <= .003f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, center, axisX, axisY, halfX, halfY, out var patch))
             return false;
         quads.Add(Pack(patch, color, Math.Clamp((float)alpha, 0, 1),
-            new Vector4((float)progress, stageShape, 2, particle.Phase)));
+            new Vector4((float)progress, stageShape, SparkParticleAppearance.ArKind(look.SparkArtForReview, particle.Shape, particle.Wisp), particle.Phase)));
         return true;
     }
 

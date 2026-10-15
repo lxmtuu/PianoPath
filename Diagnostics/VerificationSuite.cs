@@ -6733,6 +6733,9 @@ internal static partial class VerificationSuite
         var alignment=ArParticleAlignmentReview.Render(Path.Combine(outputDirectory,"ar-particle-alignment"));
         Assert(alignment==96,"AR particle alignment needs three poses × four directions × two families × two phases × two axes.");
         Results.Add("PASS AR particle alignment: 96 WARP frames, same raw state/intrinsic surfaces and note counts, actual packed long-axis error below one degree. Historical material fixtures explicitly retain legacy axes; production follows NoteDirection. Not real-camera acceptance.");
+        var sparks=SparkParticleArtReview.Render(Path.Combine(outputDirectory,"embers-art-v1"));
+        Assert(sparks==192,"Embers material needs 2 palettes × 4 views × 2 pitches × 4 phases × 3 variants.");
+        Results.Add("PASS P3b Embers art v1: 192 native static frames and 720 motion crops, same raw state and normalized actual packets. Production aligned AR axes, bloom/tint/spill isolated. Review-only material, not visual/hardware acceptance.");
         HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
         Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
     }

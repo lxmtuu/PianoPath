@@ -378,6 +378,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal Action<GpuSpriteInstance>? ObserveHeldSpriteGeometryForReview { get; set; }
     internal Action<GpuArQuad>? ObserveHeldQuadGeometryForReview { get; set; }
     // Null in production; regression checks partition actual key-anchored and particle packets.
+    internal Action<GpuSpriteInstance>? ObserveStageSpriteForReview { get; set; }
     internal Action<GpuArQuad>? ObserveArQuadForReview { get; set; }
 
 
@@ -508,6 +509,8 @@ internal sealed class GpuStageRenderer : IDisposable
         simulation.ObservePackedHeldParticleForReview = ObserveStageParticleForReview;
         StageKeyCount = keys.Count;
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
+        if (ObserveStageSpriteForReview is { } observeAllSprites)
+            foreach (var sprite in sprites.Span) observeAllSprites(sprite);
         if (ObserveHeldSpriteGeometryForReview is { } observeSprite)
             foreach (var sprite in sprites.Span)
                 if (sprite.PosSize.W == 17) observeSprite(sprite);

@@ -37,6 +37,7 @@
     <Compile Include="..\..\Stage\PianoSimulation.cs" Link="Product\Stage\PianoSimulation.cs" />
     <Compile Include="..\..\Gpu\StageLightCurves.cs" Link="Product\Gpu\StageLightCurves.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
+    <Compile Include="..\..\Gpu\SparkParticleAppearance.cs" Link="Product\Gpu\SparkParticleAppearance.cs" />
     <Compile Include="..\..\Gpu\HeldParticleAppearance.cs" Link="Product\Gpu\HeldParticleAppearance.cs" />
     <Compile Include="..\..\Camera\ArParticleBillboard.cs" Link="Product\Camera\ArParticleBillboard.cs" />
     <Compile Include="..\..\Gpu\KeyRingChannelGain.cs" Link="Product\Gpu\KeyRingChannelGain.cs" />
