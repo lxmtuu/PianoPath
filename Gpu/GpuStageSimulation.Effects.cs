@@ -138,7 +138,7 @@ internal sealed partial class GpuStageSimulation
             {
                 var count = Math.Clamp((int)(8 * intensity) + 3, 0, 20);
                 for (var i = 0; i < count; i++)
-                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 22, Y = y + 2, Vx = (Rand() - .5f) * 30, Vy = 40 + Rand() * 90, Life = .55f + Rand() * .45f, Mass = 2, Phase = Rand() * MathF.Tau, Size = 1.6f + Rand() * 2.2f, Grav = 1.1f, DragK = 1.6f, Glow = 1, Color = Vector3.Lerp(color, new Vector3(1f, .86f, .59f), .3f) }, pitch, origin: 0);
+                    Spawn(new Particle { Shape = Shape.Droplet, MaterialRoute = MeltParticleAppearance.Route, X = x + (Rand() - .5f) * 22, Y = y + 2, Vx = (Rand() - .5f) * 30, Vy = 40 + Rand() * 90, Life = .55f + Rand() * .45f, Mass = 2, Phase = Rand() * MathF.Tau, Size = 1.6f + Rand() * 2.2f, Grav = 1.1f, DragK = 1.6f, Glow = 1, Color = Vector3.Lerp(color, new Vector3(1f, .86f, .59f), .3f) }, pitch, origin: 0);
                 break;
             }
             case "Absorb":

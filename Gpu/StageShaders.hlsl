@@ -498,6 +498,24 @@ float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape
 // Physical raw-size coordinates, shared despite old Stage 4.32x / AR 2.4x quad extents.
 // Soft pigment mote: no white core, temporal noise, additional fade or added geometry.
 // Review-only coloured shard facet. No temporal glint, white core or extra age fade.
+// Viscous Melt bead: broad lower shoulder, softly shaded meniscus, same-hue components.
+// CPU owns the single lifetime envelope. No temporal noise, white core or geometry growth.
+float4 ShadeMeltArt(float2 p,float4 color,float component)
+{
+    if(component>33.5)
+    {
+        float coverage=exp(-dot(p,p)*(component<34.5?12.0:4.5));
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    float width=lerp(0.66,0.96,smoothstep(-0.85,0.45,p.y));
+    float d=length(float2(p.x/width,(p.y-0.04)/0.94));
+    float coverage=saturate(0.5+(1.0-d)/max(fwidth(d),0.001));
+    float shoulder=lerp(0.76,0.94,smoothstep(-0.7,0.65,p.y));
+    float meniscus=exp(-pow((d-0.76)*9.0,2.0))*0.06;
+    float3 pigment=color.rgb*min(1.0,shoulder+meniscus);
+    return float4(pigment*coverage*color.a,coverage*color.a);
+}
+
 float4 ShadeShatterArt(float2 p,float4 color)
 {
     float t=saturate((p.x+1.0)*0.5);
@@ -629,6 +647,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind>32.5 && kind<33.5) return ShadeMeltArt(i.Uv*2.0-1.0,i.Color,33);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(i.Uv*2.0-1.0,i.Color);
     if(kind>28.5 && kind<30.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
     if(kind>27.5 && kind<28.5)
@@ -1424,7 +1443,13 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>30.5 && kind<31.5)
+    if(kind>32.5 && kind<35.5)
+    {
+        // Exact legacy ellipse/glow extents, rotation, depth and softness; three Stage components retained.
+        extent=float2(size,size*max(s.Dir.z,0.02));
+        extra=float4(extent,1.0,s.Dir.w);
+    }
+    else if(kind>30.5 && kind<31.5)
     {
         // Exact old kind-8 ellipse extents/axis/softness; only surface material changes.
         extent=float2(size,size*max(s.Dir.z,0.02));
@@ -1670,6 +1695,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>32.5 && kind<35.5) return ShadeMeltArt(v.Local,v.Color,kind);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(v.Local,v.Color);
     if(kind>31.5 && kind<32.5)
     {

@@ -31,6 +31,8 @@ internal static partial class VerificationSuite
             var origin = route.Source switch { AuxParticleTimeline.Channel.Held => 2, AuxParticleTimeline.Channel.Release => 1, _ => 0 };
             Assert(snapshot.Length > 0 && snapshot.All(p => p.Pitch == pitch && p.Shape == route.Shape && p.Wisp == route.Wisp && p.Origin == origin),
                 $"{route.Id}/{pitch}: production births retain channel, source pitch and material shape tags.");
+            Assert(snapshot.All(p=>p.MaterialRoute==(route.Id=="morph-melt"?MeltParticleAppearance.Route:0)),
+                $"{route.Id}/{pitch}: only Melt births carry Melt material provenance; not a shape/origin heuristic.");
             Assert(snapshot.All(p => p.Age >= 0 && p.Age < p.Life && float.IsFinite(p.X) && float.IsFinite(p.Y)),
                 $"{route.Id}/{pitch}: active baseline must contain finite living particles.");
             Assert(route.Source == AuxParticleTimeline.Channel.Held ? sim.EmitterParticlesBorn == born : sim.EmitterParticlesBorn == 0,
@@ -75,7 +77,54 @@ internal static partial class VerificationSuite
             Assert(dark.ParticlesBorn == 0 && dark.ParticleCount == 0,
                 $"{route.Id}/{pitch}: same-input effect-off control cannot borrow another particle family.");
         }
+        VerifyMeltMixedRoutes(layer,ar,view,sprites,quads);
         Results.Add("PASS P3a auxiliary lifecycle: wisps/flames, Shatter/Melt/Bounce and Float Up/Dissolve/Smoke; white/black keys, tagged births, read-only Stage/AR builds, physical-release/heat/pedal policy, duplicate Note Off, song release cursor, disabled controls and expired tails. Baseline only, not new art or nonzero camera delay.");
+    }
+
+    private static void VerifyMeltMixedRoutes(GpuArLayer layer,GpuArInput ar,ArView view,
+        GpuInstanceList<GpuSpriteInstance> sprites,GpuInstanceList<GpuArQuad> quads)
+    {
+        var settings=AuxParticleFixtures.Settings(AuxParticleTimeline.Routes.Single(r=>r.Id=="morph-melt"));
+        settings.ShowEmbers=true;settings.ImpactBurst="Splash";settings.ParticleAmount=18;
+        var classic=ParticleLook(settings);var art=classic.WithMeltArtForReview(true);
+        Assert(!classic.MeltArtForReview,"Melt material must remain default-off.");
+        var feed=new GpuStageFeed();feed.SetLook(classic);feed.SetStageHeight(720);
+        feed.SetDeterministicState([],1.0/60,false,new HashSet<int>());feed.Impact(60,.9);
+        var input=new GpuFrameInput();feed.Capture(input,GpuStageFeed.Now);
+        var sim=new GpuStageSimulation(KeyParticleFixtures.Seed);sim.Step(1.0/60,input,feed,1280);
+        var raw=ParticleSnapshot(sim);var born=sim.ParticlesBorn;var time=sim.Time;
+        var melt=raw.Count(p=>p.MaterialRoute==MeltParticleAppearance.Route);
+        Assert(melt>0 && raw.Length>melt && raw.All(p=>p.Shape==5 && !p.Wisp && p.Origin==0),
+            "Mixed Melt+Splash has colliding shape/origin tags but distinct source metadata.");
+        var layout=new GpuSceneLayout(1280,720,classic.KeyboardFraction);
+        sim.BuildSprites(classic,layout,sprites);var before=sprites.Span.ToArray();
+        sim.BuildSprites(art,layout,sprites);var after=sprites.Span.ToArray();
+        Assert(before.Length==raw.Length*3 && after.Length==before.Length,"Mixed Stage keeps exactly three components per droplet.");
+        for(var i=0;i<raw.Length;i++)for(var c=0;c<3;c++)
+        {
+            var a=before[i*3+c];var b=after[i*3+c];
+            if(raw[i].MaterialRoute==0)Assert(a.Equals(b),"Melt candidate cannot recolour primary Splash.");
+            else
+            {
+                Assert(b.PosSize.W==(c==0?34:c==1?33:35),"Melt keeps halo/body/glint component order.");
+                b.PosSize.W=a.PosSize.W;b.Color=a.Color;
+                Assert(a.Equals(b),"Melt candidate cannot alter actual Stage position, axes, extents or softness.");
+            }
+        }
+        layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var arBefore=quads.Span.ToArray();
+        feed.SetLook(art);feed.Capture(input,GpuStageFeed.Now);
+        layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var arAfter=quads.Span.ToArray();
+        Assert(arBefore.Length==arAfter.Length && arAfter.Count(q=>q.Misc.Z==33)==melt,
+            "Mixed AR selects only Melt source bodies, preserving count and order.");
+        for(var i=0;i<arBefore.Length;i++)
+        {
+            var a=arBefore[i];var b=arAfter[i];
+            if(b.Misc.Z==33){b.Misc.Z=a.Misc.Z;b.Color=a.Color;}
+            Assert(a.Equals(b),"Melt cannot change AR geometry or a non-Melt packet.");
+        }
+        Assert(sim.Time==time && sim.ParticlesBorn==born && raw.SequenceEqual(ParticleSnapshot(sim)),
+            "Mixed repeated builds are read-only including material provenance.");
+        Results.Add("PASS Melt mixed-route isolation: same-shape/origin primary Splash unchanged, actual Stage/AR geometry/order/count unchanged; only tagged Melt material changes; read-only builds and default-off.");
     }
 
     private static void VerifyAuxSongRelease(AuxParticleTimeline.Route route, int pitch)

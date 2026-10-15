@@ -6688,6 +6688,9 @@ internal static partial class VerificationSuite
         VerifyPrismFlowInputs();
         VerifyPrismFlowLook();
         VerifyKeyParticleLifecycle();
+        var melt=MeltParticleArtReview.Render(Path.Combine(outputDirectory,"melt-art-v1"));
+        Assert(melt==192,"Melt requires 192 native single-impact statics and 720 motion crops with no blank active candidate.");
+        Results.Add("PASS Melt material trial: 192 statics / 720 motion crops; single firm/soft impacts only, unchanged state, ordered component geometry/counts, identity-linked body RGBA across Stage and three AR poses. Stage retains three components, AR one body; default-off, not held/release or art acceptance.");
         var shatterBillboard=ShatterBillboardReview.Render(Path.Combine(outputDirectory,"shatter-billboard-v1"));
         Assert(shatterBillboard==624,"Shatter billboard needs 624 statics across four directions, three AR poses and Stage controls.");
         Results.Add("PASS Shatter billboard trial: 624 statics, 720 motion crops, 64 frozen V1 pixel controls; shared Stage age/phase tumble, independent actual AR corner/weight checks, unchanged state/ordered identities/material/size. Active candidate statics cannot be raster-empty. Default-off geometry experiment, not art or hardware approval.");

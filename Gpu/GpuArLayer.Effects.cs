@@ -569,6 +569,12 @@ internal sealed partial class GpuArLayer
             color=new Vector3(facet.X,facet.Y,facet.Z);alpha=facet.W*opacity;
             materialKind=ShatterParticleAppearance.BodyKind;
         }
+        if(MeltParticleAppearance.Eligible(look.MeltArtForReview && look.ImpactMorph=="Melt",particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute)
+            && MeltParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var melt))
+        {
+            color=new Vector3(melt.X,melt.Y,melt.Z);alpha=melt.W*opacity;
+            materialKind=MeltParticleAppearance.BodyKind;
+        }
         var materialX=(float)progress;var materialY=(float)stageShape;
         if(ConfettiParticleAppearance.Eligible(look.ConfettiArtForReview && look.ImpactBurst=="Confetti",particle.Shape,particle.Wisp)
             && ConfettiParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,out var paper))

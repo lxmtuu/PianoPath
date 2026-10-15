@@ -17,7 +17,8 @@ internal readonly record struct GpuArImpact(int Pitch, double Age, float Strengt
 
 /// <summary>A live stage particle with its source pitch, so the AR pass can lift the same simulated effect into the calibrated piano pose.</summary>
 internal readonly record struct GpuArParticle(int Pitch, float X, float Y, float Vx, float Vy, float Age, float Life, float Size,
-    float Phase, float Glow, Vector3 Color, byte Shape, bool Wisp, byte Origin);
+    float Phase, float Glow, Vector3 Color, byte Shape, bool Wisp, byte Origin,
+    [property: System.Text.Json.Serialization.JsonIgnore] byte MaterialRoute=0);
 
 /// <summary>A live stage impact/release wave, retaining its pitch and visual channel for camera-space projection.</summary>
 internal readonly record struct GpuArRing(int Pitch, float X, float Y, float Age, float Life, float Strength, byte Kind,
@@ -69,6 +70,8 @@ internal sealed partial class GpuStageSimulation
         public float X, Y, Vx, Vy, Age, Life, Size, Phase, Grav, DragK, Mass, Glow;
         public int Pitch;
         public byte Origin;
+        // Render provenance only; never participates in physics, RNG or origin-priority packing.
+        public byte MaterialRoute;
         public Vector3 Color;
         public Shape Shape;
         public bool Wisp;
@@ -140,7 +143,7 @@ internal sealed partial class GpuStageSimulation
     internal GpuArParticle ArParticleAt(int index)
     {
         ref var p = ref _particles[index];
-        return new GpuArParticle(p.Pitch, p.X, p.Y, p.Vx, p.Vy, p.Age, p.Life, p.Size, p.Phase, p.Glow, p.Color, (byte)p.Shape, p.Wisp, p.Origin);
+        return new GpuArParticle(p.Pitch, p.X, p.Y, p.Vx, p.Vy, p.Age, p.Life, p.Size, p.Phase, p.Glow, p.Color, (byte)p.Shape, p.Wisp, p.Origin,p.MaterialRoute);
     }
     internal GpuArRing ArRingAt(int index)
     {
@@ -878,6 +881,15 @@ internal sealed partial class GpuStageSimulation
                             q.PosSize.W=q.PosSize.W==9?SplashParticleAppearance.HaloKind:
                                 q.Dir.W==.15f?SplashParticleAppearance.BodyKind:SplashParticleAppearance.GlintKind;
                             q.Color=liquid;
+                        }
+                    if(MeltParticleAppearance.Eligible(look.MeltArtForReview && look.ImpactMorph=="Melt",(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && MeltParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var melt))
+                        for(var j=firstSplashSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            var halo=q.PosSize.W is 9 or SplashParticleAppearance.HaloKind;var body=!halo && q.Dir.W==.15f;
+                            q.PosSize.W=halo?MeltParticleAppearance.HaloKind:body?MeltParticleAppearance.BodyKind:MeltParticleAppearance.GlintKind;
+                            q.Color=halo?MeltParticleAppearance.Halo(melt):body?melt:MeltParticleAppearance.Glint(melt);
                         }
                     break;
                 }

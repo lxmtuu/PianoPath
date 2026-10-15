@@ -9,6 +9,7 @@ const assert=require('node:assert/strict');
  let executablePath=process.env.CHROME_BIN,args=['--no-sandbox'];
  if(!executablePath){const mod=require('@sparticuz/chromium'),chromium=mod.default||mod;executablePath=await chromium.executablePath();args=chromium.args;}
  const billboard=process.env.REVIEW_SHATTER_BILLBOARD==='1';
+ const family=process.env.REVIEW_FAMILY||'shatter';
  const singleImpact=billboard||process.env.REVIEW_SINGLE_IMPACT==='1';
  const modes=billboard?['ar-near-overhead-held','ar-reference-held','ar-near-overhead-burst','ar-reference-burst']:['live-stage-held','ar-reference-held','live-stage-burst','ar-reference-burst'];
  const browser=await puppeteer.launch({args,executablePath,headless:true});
@@ -52,7 +53,7 @@ const assert=require('node:assert/strict');
     assert.equal(m.family,'shatter-billboard');assert.equal(m.staticCount,624);assert.equal(m.lineage,64);assert.deepEqual(m.samples,[2,10,26,89]);
     assert(m.motions.every(x=>x.velocity===(x.phase==='held'?.45:.9)&&x.pedalFrame===12));
    }else{
-    assert.equal(m.family,'shatter');assert.deepEqual(m.rasterEmptyPairs.slice().sort(),['indigo-ar-near-overhead-p61-held','prism-ar-near-overhead-p61-held']);assert.deepEqual(m.staticSampleFrames,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.45]);
+    assert.equal(m.family,family);if(family==='shatter')assert.deepEqual(m.rasterEmptyPairs.slice().sort(),['indigo-ar-near-overhead-p61-held','prism-ar-near-overhead-p61-held']);else {assert.equal(family,'melt');assert(!m.rasterEmptyPairs);}assert.deepEqual(m.staticSampleFrames,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.45]);
     assert(m.motions.every(x=>x.emission.includes('single ')&&x.emission.includes('no held emitter; pedal f12')));
    }
   }
@@ -77,6 +78,6 @@ const assert=require('node:assert/strict');
   await page.setViewport({width:390,height:844});await page.goto(base,{waitUntil:'networkidle0'});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   console.log('PASS real headless Chromium: 480 decoded native BGRA halves, four mode pedal/step/seek controls, play/pause, no page errors, mobile overflow check. Not realtime FPS/camera/GPU acceptance.');
-  if(singleImpact)console.log('PASS Shatter single-impact semantics: four soft/firm labels, pedal button and frame 0/11/12/13/59 statuses; no held/release claims.');
+  if(singleImpact)console.log('PASS '+family+' single-impact semantics: four soft/firm labels, pedal button and frame 0/11/12/13/59 statuses; no held/release claims.');
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});

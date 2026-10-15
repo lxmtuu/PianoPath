@@ -32,6 +32,20 @@ TARGETS=(
  'prism-flow-p3a-aux/morph-melt-61-ar-active.png',
  'prism-flow-p3a-aux/morph-shatter-60-ar-active.png',
  'prism-flow-p3a-aux/morph-shatter-61-ar-active.png',
+ 'prism-flow-p3a-aux/release-float-up-60-ar-active.png',
+ 'prism-flow-p3a-aux/release-float-up-61-ar-active.png',
+ 'wisps-v3/wisps-low-prism-ar-reference-full.png',
+ 'wisps-v3/wisps-low-prism-ar-reference-on.png',
+ 'wisps-v3/wisps-low-indigo-ar-reference-on.png',
+ 'wisps-v3/wisps-low-indigo-ar-reference-off.png',
+ 'flames-v3/flames-normal-prism-ar-reference-on.png',
+ 'flames-v3/flames-normal-indigo-ar-reference-on.png',
+ 'wisps-v3/wisps-low-prism-ar-near-overhead-on.png',
+ 'wisps-v3/wisps-low-indigo-ar-near-overhead-on.png',
+ 'wisps-v3/wisps-low-indigo-ar-near-overhead-off.png',
+ 'flames-v3/flames-normal-prism-ar-near-overhead-on.png',
+ 'flames-v3/flames-normal-indigo-ar-near-overhead-on.png',
+ 'wisps-v3/wisps-low-prism-ar-reference-off.png',
 )
 
 def display_chunks(data):
