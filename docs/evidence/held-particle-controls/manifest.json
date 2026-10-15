@@ -1,14 +1,14 @@
 {
   "schema": 1,
-  "sourceRevision": "edce79d21a433c7cc3e54455df0ba4b78ce97a88",
+  "sourceRevision": "159766104a61573e45c7304d6e872043954fc7ce",
   "sourceHashMethod": "SHA256; UTF-8 text without BOM, CRLF normalized to LF; PNG bytes unchanged",
   "sourceHashes": {
     "Gpu/StageShaders.hlsl": "00F510EAB56C54C75D9AB56F57E83764D60471DD24BC38999379620C16F582E7",
-    "Gpu/GpuStageRenderer.cs": "B8CE48C2468A6ABBD9D0217EEB4EC4275C4EB01E01BE7A03263A53337681F340",
-    "Gpu/GpuStageSimulation.cs": "B09837648E3EBDA4495052705BF5A8796DD64D7F9E8200CEA57D74CD97713AB8",
+    "Gpu/GpuStageRenderer.cs": "5012641D399C2C78DC7049C5C48657F1C5BF564958B0F7D5700BFE11C6B0E9DB",
+    "Gpu/GpuStageSimulation.cs": "3208F06D2111AB3ED6981030D36CD3958AE58F4CD2C3386E28BF0CFA6D9E6095",
     "Gpu/GpuStageSimulation.Effects.cs": "1A5FC87B719D69E416D791D11B2F8330B529060A8F878F5E63A94F61518AF92F",
-    "Gpu/GpuArLayer.cs": "29151FB037E42C019EA418E9EF0347B34742BFDA9FCB5F0F623AA72385634451",
-    "Gpu/GpuArLayer.Effects.cs": "AD935BA5B8FF76C51249B9CBF55BDC383C08E593BA7F81042DCA29112B053ED4",
+    "Gpu/GpuArLayer.cs": "A42EB25443DCB2C8D33B8026ED058C2759986CF003B00DDB944C84E664694249",
+    "Gpu/GpuArLayer.Effects.cs": "722A8A762505BB6C6DBFDAA3DBAC5E972E453B689D57E81F9E23F4E89C790018",
     "Gpu/GpuLook.cs": "F511C9C9A1F3E609EDD109153AD01218AD6F69A6170A2458464054E613BA28A7",
     "Gpu/GpuStageFeed.cs": "0BFCE28F4E5F59F6151A049E2E6B97A171A7B630A4C688572F7B49F79A35DA3D",
     "Gpu/HeldParticleAppearance.cs": "066AD67370745115E4E112A32975E145C5E84323175B052288E244D1686A917E",
@@ -17,10 +17,11 @@
     "Stage/PianoStage.cs": "BD4DDFAD71C562B542CA52AF9603C426440147257420279D6CFBF19DCCA9E0DE",
     "Stage/PrismFlowPalette.cs": "FCE9E74A066FD553164D564DC076E871838C237E26D9678EC02FFE1A049FFE58",
     "Diagnostics/HeldParticleControlPlan.cs": "E8BF16485588801BE69D6BC68365DEB89F1455E7C43E2531713646E8248897DB",
-    "Diagnostics/HeldParticleControlReview.cs": "D80AB3935F443E037CFB0EC7A38DC78560FFC1CFCD3E9E8117307EB39BDF5261",
+    "Diagnostics/HeldParticleControlReview.cs": "0101FE97C09A997EC0D70881EA8B976DDFFC2E14DA8AC8794C0ED2835841FEE7",
     "Diagnostics/AuxParticleFixtures.cs": "05ED1F236D54B439C35D6378E39F8D45500EBBF9AAE3ED6CFF144EC19E1DE37F",
     "Diagnostics/KeyParticleFixtures.cs": "DE14718A0B733D4105F67143FFC12CD4F7E862675FD96DA311142D4C358A9D05",
-    "docs/samples/ar-keyboard-topdown.png": "44A37C11C43CC2295B4E81391BE18C3792722351CE833BFC6F11FEC802ACEAE0"
+    "docs/samples/ar-keyboard-topdown.png": "44A37C11C43CC2295B4E81391BE18C3792722351CE833BFC6F11FEC802ACEAE0",
+    "Diagnostics/HeldLightIsolationPlan.cs": "A68EFFFF47BDFF90CA71444F9128D90C7908DE24DB5E8D6866992D777D9B36F0"
   },
   "adapter": "Microsoft Basic Render Driver",
   "width": 1280,
@@ -43,22 +44,26 @@
     {
       "Id": "neither",
       "Particles": false,
-      "KeyLight": false
+      "Tint": false,
+      "Spill": false
     },
     {
       "Id": "light-only",
       "Particles": false,
-      "KeyLight": true
+      "Tint": true,
+      "Spill": true
     },
     {
       "Id": "particles-only",
       "Particles": true,
-      "KeyLight": false
+      "Tint": false,
+      "Spill": false
     },
     {
       "Id": "combined",
       "Particles": true,
-      "KeyLight": true
+      "Tint": true,
+      "Spill": true
     }
   ],
   "views": [
@@ -131,6 +136,7 @@
     }
   ],
   "sheetOrder": "top-left neither; top-right light-only; bottom-left particles-only; bottom-right combined; native pixels, no resizing",
+  "coverageMethod": null,
   "metric": "8-bit display RGB differences only; \u003E4 footprint is not brightness, quality or an additive decomposition.",
   "captureCount": 288,
   "sceneCount": 72,
@@ -145,6 +151,8 @@
         60
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 386,
@@ -154,6 +162,7 @@
       },
       "sheetFile": "sheets/wisps-prism-white-live-stage.png",
       "sheetPixelSha256": "04A6F03264E1D74CC1E9E583030CB0E63B5CA3B5FBA2B5FE555A186358018DB4",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -165,7 +174,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -177,7 +189,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -189,7 +204,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -201,7 +219,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -285,6 +306,8 @@
         60
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 400,
@@ -294,6 +317,7 @@
       },
       "sheetFile": "sheets/wisps-prism-white-ar-reference.png",
       "sheetPixelSha256": "6CCBCD8AA8F746A4DFFB8FAEDAC51C00767057D62F726EBECB388D14855DBBB6",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -305,7 +329,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -317,7 +344,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -329,7 +359,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -341,7 +374,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -425,6 +461,8 @@
         60
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 393,
@@ -434,6 +472,7 @@
       },
       "sheetFile": "sheets/wisps-prism-white-ar-oblique.png",
       "sheetPixelSha256": "CC0F55E1132A16858F92171100FA1A5D3FA0917F494225C6E42AC5AB48AB01CC",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -445,7 +484,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -457,7 +499,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -469,7 +514,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -481,7 +529,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -565,6 +616,8 @@
         60
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 397,
@@ -574,6 +627,7 @@
       },
       "sheetFile": "sheets/wisps-prism-white-ar-near-overhead.png",
       "sheetPixelSha256": "2EF05FE366F7ECA8D6E2D3054B4D99820AFF70278E81F940B425D26E388CE65E",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -585,7 +639,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -597,7 +654,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -609,7 +669,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -621,7 +684,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -705,6 +771,8 @@
         61
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 396,
@@ -714,6 +782,7 @@
       },
       "sheetFile": "sheets/wisps-prism-black-live-stage.png",
       "sheetPixelSha256": "F59B4FA0A3A9AE3884DB30747B485CBA894C95BB1E218CDB425BF8C868BC8120",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -725,7 +794,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -737,7 +809,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -749,7 +824,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -761,7 +839,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -845,6 +926,8 @@
         61
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 409,
@@ -854,6 +937,7 @@
       },
       "sheetFile": "sheets/wisps-prism-black-ar-reference.png",
       "sheetPixelSha256": "AB03CDFDCD977382A110EDA84D27DC944BC2B3DEA22105A41C72AB04D2B5C2A7",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -865,7 +949,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -877,7 +964,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -889,7 +979,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -901,7 +994,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -985,6 +1081,8 @@
         61
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 401,
@@ -994,6 +1092,7 @@
       },
       "sheetFile": "sheets/wisps-prism-black-ar-oblique.png",
       "sheetPixelSha256": "651C5B98ED405595567EBA5F1FDA8C3583BFF92928E691E7320747862E5DF540",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1005,7 +1104,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1017,7 +1119,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1029,7 +1134,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1041,7 +1149,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1125,6 +1236,8 @@
         61
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 406,
@@ -1134,6 +1247,7 @@
       },
       "sheetFile": "sheets/wisps-prism-black-ar-near-overhead.png",
       "sheetPixelSha256": "CCBB2709195F52D8EEBA97CB2B9478AA5FB729D9626D6D7FF60C0D1D06FFECEA",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1145,7 +1259,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1157,7 +1274,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1169,7 +1289,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1181,7 +1304,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1268,6 +1394,8 @@
         67
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 425,
@@ -1277,6 +1405,7 @@
       },
       "sheetFile": "sheets/wisps-prism-chord-live-stage.png",
       "sheetPixelSha256": "C7B44F84F8A21339058AF2FA77DB33B9163265F3A070CDE3AC61C29A1B05A7AF",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1288,7 +1417,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1300,7 +1432,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1312,7 +1447,10 @@
           "StageSprites": 304,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1324,7 +1462,10 @@
           "StageSprites": 304,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1411,6 +1552,8 @@
         67
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 436,
@@ -1420,6 +1563,7 @@
       },
       "sheetFile": "sheets/wisps-prism-chord-ar-reference.png",
       "sheetPixelSha256": "CCB02CD61C10AA0D303AF7C6FBB22C8C35480EABC3A49C5F35315F052F1D3EED",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1431,7 +1575,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1443,7 +1590,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1455,7 +1605,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1467,7 +1620,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1554,6 +1710,8 @@
         67
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 426,
@@ -1563,6 +1721,7 @@
       },
       "sheetFile": "sheets/wisps-prism-chord-ar-oblique.png",
       "sheetPixelSha256": "9370917501D6EF3B013504C776A9C892E129EC192D1ABE1553D5505F4D08438B",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1574,7 +1733,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1586,7 +1748,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1598,7 +1763,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1610,7 +1778,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1697,6 +1868,8 @@
         67
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 430,
@@ -1706,6 +1879,7 @@
       },
       "sheetFile": "sheets/wisps-prism-chord-ar-near-overhead.png",
       "sheetPixelSha256": "916544CE49668687535AF1AB2BCD9C01F8BDDC3F33748C8FF28BF80684DD7B5E",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1717,7 +1891,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1729,7 +1906,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1741,7 +1921,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1753,7 +1936,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1837,6 +2023,8 @@
         60
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 386,
@@ -1846,6 +2034,7 @@
       },
       "sheetFile": "sheets/wisps-amber-white-live-stage.png",
       "sheetPixelSha256": "834E9E0A8B6E69D5811C8098F0DB88C5EB1F230EB32C9186EE4A954301AE0E52",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1857,7 +2046,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -1869,7 +2061,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -1881,7 +2076,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -1893,7 +2091,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -1977,6 +2178,8 @@
         60
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 400,
@@ -1986,6 +2189,7 @@
       },
       "sheetFile": "sheets/wisps-amber-white-ar-reference.png",
       "sheetPixelSha256": "63A9255E580E60FFC27F53B2C6A97C9CE9256BBEB845581DC29C4705A7EE805B",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -1997,7 +2201,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2009,7 +2216,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2021,7 +2231,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2033,7 +2246,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2117,6 +2333,8 @@
         60
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 393,
@@ -2126,6 +2344,7 @@
       },
       "sheetFile": "sheets/wisps-amber-white-ar-oblique.png",
       "sheetPixelSha256": "C30CEA51AD13D8EEAEECB1D157C0619DD1952445A594C2BA5CEFEBE04740F94F",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2137,7 +2356,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2149,7 +2371,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2161,7 +2386,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2173,7 +2401,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2257,6 +2488,8 @@
         60
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 397,
@@ -2266,6 +2499,7 @@
       },
       "sheetFile": "sheets/wisps-amber-white-ar-near-overhead.png",
       "sheetPixelSha256": "24025FE0D26F8D1632A1FEE0AE97FF3E2A43670FF0059921329779B14CCDE10D",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2277,7 +2511,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2289,7 +2526,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2301,7 +2541,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2313,7 +2556,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2397,6 +2643,8 @@
         61
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 396,
@@ -2406,6 +2654,7 @@
       },
       "sheetFile": "sheets/wisps-amber-black-live-stage.png",
       "sheetPixelSha256": "B0CBD530226ECAEF6DDE89CF408125DB0F14E99F149F52FC1E1631D79BA026D9",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2417,7 +2666,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2429,7 +2681,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2441,7 +2696,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2453,7 +2711,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2537,6 +2798,8 @@
         61
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 409,
@@ -2546,6 +2809,7 @@
       },
       "sheetFile": "sheets/wisps-amber-black-ar-reference.png",
       "sheetPixelSha256": "F18D4B9D84CB1A8C643B936969758C1F2D91E34E6E335363C96357E9AABAB115",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2557,7 +2821,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2569,7 +2836,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2581,7 +2851,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2593,7 +2866,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2677,6 +2953,8 @@
         61
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 401,
@@ -2686,6 +2964,7 @@
       },
       "sheetFile": "sheets/wisps-amber-black-ar-oblique.png",
       "sheetPixelSha256": "7ACD9F1A1EAB024FEE2DFCC3EEA8C57E5665EE4BF50397992C1A76A25A7CF0E1",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2697,7 +2976,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2709,7 +2991,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2721,7 +3006,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2733,7 +3021,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2817,6 +3108,8 @@
         61
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 406,
@@ -2826,6 +3119,7 @@
       },
       "sheetFile": "sheets/wisps-amber-black-ar-near-overhead.png",
       "sheetPixelSha256": "49E59AEEC67FAFD4EB20329B5704D8E23B9FEBEFD68B05A6AB4E3F3B355B5CB2",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2837,7 +3131,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2849,7 +3146,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -2861,7 +3161,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -2873,7 +3176,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -2960,6 +3266,8 @@
         67
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 425,
@@ -2969,6 +3277,7 @@
       },
       "sheetFile": "sheets/wisps-amber-chord-live-stage.png",
       "sheetPixelSha256": "0FA2880F7E4E7D23C317FA7F9B62E721020E21A02E429473FA89EB4C33A18C91",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -2980,7 +3289,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -2992,7 +3304,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3004,7 +3319,10 @@
           "StageSprites": 304,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3016,7 +3334,10 @@
           "StageSprites": 304,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3103,6 +3424,8 @@
         67
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 436,
@@ -3112,6 +3435,7 @@
       },
       "sheetFile": "sheets/wisps-amber-chord-ar-reference.png",
       "sheetPixelSha256": "ABE38704766BE2D12E55BC02E2D4C35D5910E42DD03B8820A2500AE1731222B8",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3123,7 +3447,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3135,7 +3462,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3147,7 +3477,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3159,7 +3492,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3246,6 +3582,8 @@
         67
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 426,
@@ -3255,6 +3593,7 @@
       },
       "sheetFile": "sheets/wisps-amber-chord-ar-oblique.png",
       "sheetPixelSha256": "BEDA65D6390D50C6485F67DB9EC539B489FDF220FC2616E5FB661B24896889CA",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3266,7 +3605,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3278,7 +3620,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3290,7 +3635,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3302,7 +3650,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3389,6 +3740,8 @@
         67
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 430,
@@ -3398,6 +3751,7 @@
       },
       "sheetFile": "sheets/wisps-amber-chord-ar-near-overhead.png",
       "sheetPixelSha256": "6718EECD4FB6432B7F74D830DB186A9E9C7EEDE756F34A693060B633727D7340",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3409,7 +3763,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3421,7 +3778,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3433,7 +3793,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3445,7 +3808,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3529,6 +3895,8 @@
         60
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 386,
@@ -3538,6 +3906,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-white-live-stage.png",
       "sheetPixelSha256": "297F1EE9EDB9F9077B4742864157F2CC4D03DFDFF916464DF6741BBB604A64C4",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3549,7 +3918,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3561,7 +3933,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3573,7 +3948,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3585,7 +3963,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3669,6 +4050,8 @@
         60
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 400,
@@ -3678,6 +4061,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-white-ar-reference.png",
       "sheetPixelSha256": "15E41E10F18BB62BE0AF24C0871C170B30EEF689FCFF5479B1203AF72CB03C3B",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3689,7 +4073,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3701,7 +4088,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3713,7 +4103,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3725,7 +4118,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3809,6 +4205,8 @@
         60
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 393,
@@ -3818,6 +4216,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-white-ar-oblique.png",
       "sheetPixelSha256": "C9C9EAC319836F2942BBFABE312F48250D494E329EC0CF2377AEBEA0B3B04DE6",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3829,7 +4228,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3841,7 +4243,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3853,7 +4258,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -3865,7 +4273,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -3949,6 +4360,8 @@
         60
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 397,
@@ -3958,6 +4371,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-white-ar-near-overhead.png",
       "sheetPixelSha256": "343A9B7EDC8A11320220B76B7F5A934851B7568EC37A5ED847DAF5AE87444EA9",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -3969,7 +4383,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -3981,7 +4398,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -3993,7 +4413,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4005,7 +4428,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4089,6 +4515,8 @@
         61
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 396,
@@ -4098,6 +4526,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-black-live-stage.png",
       "sheetPixelSha256": "3791CBF5AA2E8F0127BA1AC87576DF40DCC704272FEAF81E6168718FDB9A1659",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4109,7 +4538,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4121,7 +4553,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4133,7 +4568,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4145,7 +4583,10 @@
           "StageSprites": 76,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4229,6 +4670,8 @@
         61
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 409,
@@ -4238,6 +4681,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-black-ar-reference.png",
       "sheetPixelSha256": "3BCD7DAA9E3E9A5EBB13034A2B621D00F9E39FC0F912A0B1E3C05854D3CAD917",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4249,7 +4693,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4261,7 +4708,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4273,7 +4723,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4285,7 +4738,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4369,6 +4825,8 @@
         61
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 401,
@@ -4378,6 +4836,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-black-ar-oblique.png",
       "sheetPixelSha256": "E4D68D4BC3F2510B1B02F5BBD3468A03EFEE4F3E3D3C4E2725F5F454B3AC46F1",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4389,7 +4848,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4401,7 +4863,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4413,7 +4878,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4425,7 +4893,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4509,6 +4980,8 @@
         61
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 406,
@@ -4518,6 +4991,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-black-ar-near-overhead.png",
       "sheetPixelSha256": "914A41A257F78A5384CAB6AB4D71362A1ADDB887DB887B662A4971A2CE50DE50",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4529,7 +5003,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4541,7 +5018,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4553,7 +5033,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4565,7 +5048,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 76
+          "ArParticles": 76,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4652,6 +5138,8 @@
         67
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 425,
@@ -4661,6 +5149,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-chord-live-stage.png",
       "sheetPixelSha256": "3F5AE2EBF49EDEEB969ED3D0014F9B92145BE60474F72D51092733E2F7CF6878",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4672,7 +5161,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4684,7 +5176,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4696,7 +5191,10 @@
           "StageSprites": 304,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4708,7 +5206,10 @@
           "StageSprites": 304,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4795,6 +5296,8 @@
         67
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 436,
@@ -4804,6 +5307,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-chord-ar-reference.png",
       "sheetPixelSha256": "CB74643FCE6C4003DB14E62B69F515BEBB92DE9B38107EC15DEFE166B6FB792B",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4815,7 +5319,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4827,7 +5334,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4839,7 +5349,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4851,7 +5364,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -4938,6 +5454,8 @@
         67
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 426,
@@ -4947,6 +5465,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-chord-ar-oblique.png",
       "sheetPixelSha256": "CFB499F723B751D0B7242E186A473AAE9B9C534AF922310DB988E583CCEA9BC2",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -4958,7 +5477,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -4970,7 +5492,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -4982,7 +5507,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -4994,7 +5522,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5081,6 +5612,8 @@
         67
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 430,
@@ -5090,6 +5623,7 @@
       },
       "sheetFile": "sheets/wisps-indigo-chord-ar-near-overhead.png",
       "sheetPixelSha256": "E3E362445B86B1604392D1E7EEE3EB3436AE3327DA1A1834D53D62F6CE7D5753",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5101,7 +5635,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5113,7 +5650,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5125,7 +5665,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5137,7 +5680,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 192
+          "ArParticles": 192,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5221,6 +5767,8 @@
         60
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 386,
@@ -5230,6 +5778,7 @@
       },
       "sheetFile": "sheets/flames-prism-white-live-stage.png",
       "sheetPixelSha256": "6E13F683EE606B7A0D377A01A8C058E9C797970E58BC9889EB8CC00335691A64",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5241,7 +5790,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5253,7 +5805,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5265,7 +5820,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5277,7 +5835,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5361,6 +5922,8 @@
         60
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 400,
@@ -5370,6 +5933,7 @@
       },
       "sheetFile": "sheets/flames-prism-white-ar-reference.png",
       "sheetPixelSha256": "64103CC608B74AA97F4C26162668A85FC646FB6E858B6142D35BBA22D9E7141D",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5381,7 +5945,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5393,7 +5960,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5405,7 +5975,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5417,7 +5990,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5501,6 +6077,8 @@
         60
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 393,
@@ -5510,6 +6088,7 @@
       },
       "sheetFile": "sheets/flames-prism-white-ar-oblique.png",
       "sheetPixelSha256": "0E6BA88A6E91C9FB38CEC9AB37DEB968505D93C4AF17672D8C9A9266594D95CD",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5521,7 +6100,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5533,7 +6115,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5545,7 +6130,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5557,7 +6145,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5641,6 +6232,8 @@
         60
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 397,
@@ -5650,6 +6243,7 @@
       },
       "sheetFile": "sheets/flames-prism-white-ar-near-overhead.png",
       "sheetPixelSha256": "23B91C1817BC5ADE5E2E9FBFD4A6BD6F5DD6DC17576234974FF0D95DF8E3FA9F",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5661,7 +6255,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5673,7 +6270,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5685,7 +6285,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5697,7 +6300,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5781,6 +6387,8 @@
         61
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 396,
@@ -5790,6 +6398,7 @@
       },
       "sheetFile": "sheets/flames-prism-black-live-stage.png",
       "sheetPixelSha256": "91BA85D6858AD1EBD31204AB03CC7F2CCE3511DE9085D1689216B08B85111A50",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5801,7 +6410,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5813,7 +6425,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5825,7 +6440,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5837,7 +6455,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -5921,6 +6542,8 @@
         61
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 409,
@@ -5930,6 +6553,7 @@
       },
       "sheetFile": "sheets/flames-prism-black-ar-reference.png",
       "sheetPixelSha256": "93F07EC1F0A976E72BBE09078E73520CF450C4151B4B9177B734290BA9A7067C",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -5941,7 +6565,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -5953,7 +6580,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -5965,7 +6595,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -5977,7 +6610,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6061,6 +6697,8 @@
         61
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 401,
@@ -6070,6 +6708,7 @@
       },
       "sheetFile": "sheets/flames-prism-black-ar-oblique.png",
       "sheetPixelSha256": "0402FDD6AE492459D7D602A3EAA1B2748C448283B6718FE2AA7B7F089D9E072D",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6081,7 +6720,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6093,7 +6735,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6105,7 +6750,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6117,7 +6765,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6201,6 +6852,8 @@
         61
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 406,
@@ -6210,6 +6863,7 @@
       },
       "sheetFile": "sheets/flames-prism-black-ar-near-overhead.png",
       "sheetPixelSha256": "D73040B27EC0A9DB08FDCFD1925C88453C992C82DABE9E1C7ED97C815FE6EA2E",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6221,7 +6875,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6233,7 +6890,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6245,7 +6905,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6257,7 +6920,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6344,6 +7010,8 @@
         67
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 425,
@@ -6353,6 +7021,7 @@
       },
       "sheetFile": "sheets/flames-prism-chord-live-stage.png",
       "sheetPixelSha256": "0CDCB5DAC56B71EC72A1B4BB1FC0E483BF42D76FBEED275170C5757BDADA8626",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6364,7 +7033,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6376,7 +7048,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6388,7 +7063,10 @@
           "StageSprites": 83,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6400,7 +7078,10 @@
           "StageSprites": 83,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6487,6 +7168,8 @@
         67
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 436,
@@ -6496,6 +7179,7 @@
       },
       "sheetFile": "sheets/flames-prism-chord-ar-reference.png",
       "sheetPixelSha256": "CA428051DFBE90D5CAFB4D688295E6AC173A87659923F3AC5EB940D5CA0DAB33",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6507,7 +7191,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6519,7 +7206,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6531,7 +7221,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6543,7 +7236,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6630,6 +7326,8 @@
         67
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 426,
@@ -6639,6 +7337,7 @@
       },
       "sheetFile": "sheets/flames-prism-chord-ar-oblique.png",
       "sheetPixelSha256": "137FC8D6D85898D68EEBBBA06B0C925696F559C35AE51CBFDFD5B29DB047822A",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6650,7 +7349,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6662,7 +7364,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6674,7 +7379,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6686,7 +7394,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6773,6 +7484,8 @@
         67
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 430,
@@ -6782,6 +7495,7 @@
       },
       "sheetFile": "sheets/flames-prism-chord-ar-near-overhead.png",
       "sheetPixelSha256": "5C6FC8D81596C9F7E4C0BADE0421DC385B2AFE72EC21A39C2B51DB859921AF48",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6793,7 +7507,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6805,7 +7522,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6817,7 +7537,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6829,7 +7552,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -6913,6 +7639,8 @@
         60
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 386,
@@ -6922,6 +7650,7 @@
       },
       "sheetFile": "sheets/flames-amber-white-live-stage.png",
       "sheetPixelSha256": "05790D31FC4AA1C69C44CD1E03B3A6E1939526BE766EF7F834E2D713A612EAEF",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -6933,7 +7662,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -6945,7 +7677,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -6957,7 +7692,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -6969,7 +7707,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7053,6 +7794,8 @@
         60
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 400,
@@ -7062,6 +7805,7 @@
       },
       "sheetFile": "sheets/flames-amber-white-ar-reference.png",
       "sheetPixelSha256": "46489D6F1A50BDE1937E51E1F16EE6C8251A3230EDA6B7C3DC4582B2F14F847C",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7073,7 +7817,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7085,7 +7832,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7097,7 +7847,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7109,7 +7862,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7193,6 +7949,8 @@
         60
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 393,
@@ -7202,6 +7960,7 @@
       },
       "sheetFile": "sheets/flames-amber-white-ar-oblique.png",
       "sheetPixelSha256": "A50B2BF7E9F5CCD1B24128BA4B142D1E020C126E010B7AFECC2BB2E118C12F3A",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7213,7 +7972,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7225,7 +7987,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7237,7 +8002,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7249,7 +8017,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7333,6 +8104,8 @@
         60
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 397,
@@ -7342,6 +8115,7 @@
       },
       "sheetFile": "sheets/flames-amber-white-ar-near-overhead.png",
       "sheetPixelSha256": "E093FE65B3006FC6B1B740F047D5507CEE06C30F9ADF7D60334D392A0FD72485",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7353,7 +8127,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7365,7 +8142,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7377,7 +8157,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7389,7 +8172,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7473,6 +8259,8 @@
         61
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 396,
@@ -7482,6 +8270,7 @@
       },
       "sheetFile": "sheets/flames-amber-black-live-stage.png",
       "sheetPixelSha256": "C81B56F5AAFA83BF2898A569B661299BBD2E70FD897255E828267E3D73B896D8",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7493,7 +8282,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7505,7 +8297,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7517,7 +8312,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7529,7 +8327,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7613,6 +8414,8 @@
         61
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 409,
@@ -7622,6 +8425,7 @@
       },
       "sheetFile": "sheets/flames-amber-black-ar-reference.png",
       "sheetPixelSha256": "EC878A66A5881A45E892FF8F2634A84E30CC7D92AB11788D6DEF11EA58C78C99",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7633,7 +8437,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7645,7 +8452,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7657,7 +8467,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7669,7 +8482,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7753,6 +8569,8 @@
         61
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 401,
@@ -7762,6 +8580,7 @@
       },
       "sheetFile": "sheets/flames-amber-black-ar-oblique.png",
       "sheetPixelSha256": "5FD5C6B2793DA36BC239F544B1B1D162ED361E1BD8839DA997972E8E09E8D476",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7773,7 +8592,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7785,7 +8607,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7797,7 +8622,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7809,7 +8637,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -7893,6 +8724,8 @@
         61
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 406,
@@ -7902,6 +8735,7 @@
       },
       "sheetFile": "sheets/flames-amber-black-ar-near-overhead.png",
       "sheetPixelSha256": "8EA533FDE036A94262E80182B87DA876D8482CE6799C3E63259016BCF5A30F4D",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -7913,7 +8747,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -7925,7 +8762,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -7937,7 +8777,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -7949,7 +8792,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8036,6 +8882,8 @@
         67
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 425,
@@ -8045,6 +8893,7 @@
       },
       "sheetFile": "sheets/flames-amber-chord-live-stage.png",
       "sheetPixelSha256": "B71CAD49336E42171CCD14044F3F17903D910295AAB9CD4A7CD9516D1160D3D4",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8056,7 +8905,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8068,7 +8920,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8080,7 +8935,10 @@
           "StageSprites": 83,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8092,7 +8950,10 @@
           "StageSprites": 83,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8179,6 +9040,8 @@
         67
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 436,
@@ -8188,6 +9051,7 @@
       },
       "sheetFile": "sheets/flames-amber-chord-ar-reference.png",
       "sheetPixelSha256": "B7E90C6647BAC8732F5970A669831D864FD565586C4EBF8080A34028A30DEFC9",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8199,7 +9063,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8211,7 +9078,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8223,7 +9093,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8235,7 +9108,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8322,6 +9198,8 @@
         67
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 426,
@@ -8331,6 +9209,7 @@
       },
       "sheetFile": "sheets/flames-amber-chord-ar-oblique.png",
       "sheetPixelSha256": "63003DBBA5E5B3FD03CCB46098A8C2AC5FAF00B0F9FFE252F1F92406AB772CFA",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8342,7 +9221,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8354,7 +9236,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8366,7 +9251,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8378,7 +9266,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8465,6 +9356,8 @@
         67
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 430,
@@ -8474,6 +9367,7 @@
       },
       "sheetFile": "sheets/flames-amber-chord-ar-near-overhead.png",
       "sheetPixelSha256": "AA94362A3662FDCB6CA2CA5521985CC4703E938CE7B12C1F44E2EAA153663E79",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8485,7 +9379,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8497,7 +9394,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8509,7 +9409,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8521,7 +9424,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8605,6 +9511,8 @@
         60
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 386,
@@ -8614,6 +9522,7 @@
       },
       "sheetFile": "sheets/flames-indigo-white-live-stage.png",
       "sheetPixelSha256": "B6A2A6C0508A366FBFD35657A80CD7C990266A84A7EB6B3B6C82F3F2B93FCC9C",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8625,7 +9534,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8637,7 +9549,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8649,7 +9564,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8661,7 +9579,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8745,6 +9666,8 @@
         60
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 400,
@@ -8754,6 +9677,7 @@
       },
       "sheetFile": "sheets/flames-indigo-white-ar-reference.png",
       "sheetPixelSha256": "3A21940AAA324A60546A8B6963BCA9B1BE646A2960C1D773DBFAE1045283F03F",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8765,7 +9689,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8777,7 +9704,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8789,7 +9719,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8801,7 +9734,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -8885,6 +9821,8 @@
         60
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 393,
@@ -8894,6 +9832,7 @@
       },
       "sheetFile": "sheets/flames-indigo-white-ar-oblique.png",
       "sheetPixelSha256": "42D5E1431FDB45B767495B2F7654E49E5D7DF758A3ABE8AE5198CE2D27C26EF2",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -8905,7 +9844,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -8917,7 +9859,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -8929,7 +9874,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -8941,7 +9889,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9025,6 +9976,8 @@
         60
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 397,
@@ -9034,6 +9987,7 @@
       },
       "sheetFile": "sheets/flames-indigo-white-ar-near-overhead.png",
       "sheetPixelSha256": "F481C6716D2C22B2B5E6E68E70DA23593152F7DB5B33E76A056816F95F892A0B",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9045,7 +9999,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9057,7 +10014,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9069,7 +10029,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9081,7 +10044,10 @@
           "StageSprites": 0,
           "ArKeys": 2,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9165,6 +10131,8 @@
         61
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 396,
@@ -9174,6 +10142,7 @@
       },
       "sheetFile": "sheets/flames-indigo-black-live-stage.png",
       "sheetPixelSha256": "B2B7615DC33652CF62E54C8B10FEB64C08132E03BA6F1BBB6530435A1B4F4811",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9185,7 +10154,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9197,7 +10169,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9209,7 +10184,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9221,7 +10199,10 @@
           "StageSprites": 19,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9305,6 +10286,8 @@
         61
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 409,
@@ -9314,6 +10297,7 @@
       },
       "sheetFile": "sheets/flames-indigo-black-ar-reference.png",
       "sheetPixelSha256": "99E3E901D3A9E84A04FB6DBB191F4A89241258297ADD91BBF2424DBB9526B642",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9325,7 +10309,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9337,7 +10324,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9349,7 +10339,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9361,7 +10354,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9445,6 +10441,8 @@
         61
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 401,
@@ -9454,6 +10452,7 @@
       },
       "sheetFile": "sheets/flames-indigo-black-ar-oblique.png",
       "sheetPixelSha256": "04525AA16DA8EDBC871459BFF29A63ADBA2F727149FC1FBD13CDAE4DB6E983EF",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9465,7 +10464,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9477,7 +10479,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9489,7 +10494,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9501,7 +10509,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9585,6 +10596,8 @@
         61
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 406,
@@ -9594,6 +10607,7 @@
       },
       "sheetFile": "sheets/flames-indigo-black-ar-near-overhead.png",
       "sheetPixelSha256": "9AFA928C373C527BA6A6F0400A21C46544D463FE5133E56790E71EB6301960FD",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9605,7 +10619,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9617,7 +10634,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9629,7 +10649,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9641,7 +10664,10 @@
           "StageSprites": 0,
           "ArKeys": 1,
           "ArLights": 14,
-          "ArParticles": 19
+          "ArParticles": 19,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9728,6 +10754,8 @@
         67
       ],
       "view": "live-stage",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": null,
       "crop": {
         "X": 425,
@@ -9737,6 +10765,7 @@
       },
       "sheetFile": "sheets/flames-indigo-chord-live-stage.png",
       "sheetPixelSha256": "9F0955A2EDC1D7C44DDCEF8FB0669D6B8CE17454E61D1686134B9A023F95A7C9",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9748,7 +10777,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9760,7 +10792,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9772,7 +10807,10 @@
           "StageSprites": 83,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9784,7 +10822,10 @@
           "StageSprites": 83,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -9871,6 +10912,8 @@
         67
       ],
       "view": "ar-reference",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "677BAE83A7EF3CCA715C393ED955172E29E9B030BA1F77C09F6D65157DA97425",
       "crop": {
         "X": 436,
@@ -9880,6 +10923,7 @@
       },
       "sheetFile": "sheets/flames-indigo-chord-ar-reference.png",
       "sheetPixelSha256": "7E32832B87923DCC02050B6DDBEC0A60C3385E33E7E9C251752D988FEC978801",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -9891,7 +10935,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -9903,7 +10950,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -9915,7 +10965,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -9927,7 +10980,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -10014,6 +11070,8 @@
         67
       ],
       "view": "ar-oblique",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "17DBC2C3473ECB7704547ED0ACC3772E14AF559D1ED7B32D5488D1A103C5BD25",
       "crop": {
         "X": 426,
@@ -10023,6 +11081,7 @@
       },
       "sheetFile": "sheets/flames-indigo-chord-ar-oblique.png",
       "sheetPixelSha256": "969F99CD352BEAEE326956E197B74D475097778DB1F1DFEBAA262329E7DCC174",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -10034,7 +11093,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -10046,7 +11108,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -10058,7 +11123,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -10070,7 +11138,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
@@ -10157,6 +11228,8 @@
         67
       ],
       "view": "ar-near-overhead",
+      "load": "normal",
+      "wispAmount": 32,
       "cameraSha256": "89716EEA24F6A5839984A6B55A91B41FE4DC3295020A7ADF984AF5AC1B378647",
       "crop": {
         "X": 430,
@@ -10166,6 +11239,7 @@
       },
       "sheetFile": "sheets/flames-indigo-chord-ar-near-overhead.png",
       "sheetPixelSha256": "CEB5F7F19F409DEBB9EBBD07A93002027A3618A9A9FD8D62CD7232FD37DBA40F",
+      "sheets": null,
       "captures": [
         {
           "Variant": "neither",
@@ -10177,7 +11251,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "light-only",
@@ -10189,7 +11266,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 0
+          "ArParticles": 0,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         },
         {
           "Variant": "particles-only",
@@ -10201,7 +11281,10 @@
           "StageSprites": 0,
           "ArKeys": 0,
           "ArLights": 0,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": false,
+          "Spill": false,
+          "Coverage": null
         },
         {
           "Variant": "combined",
@@ -10213,7 +11296,10 @@
           "StageSprites": 0,
           "ArKeys": 7,
           "ArLights": 22,
-          "ArParticles": 83
+          "ArParticles": 83,
+          "Tint": true,
+          "Spill": true,
+          "Coverage": null
         }
       ],
       "comparisons": [
