@@ -5,7 +5,7 @@ from collections import deque
 from pathlib import Path
 from review_key_particle_ensemble import RECIPES,NOTES,CHECKPOINTS,digest,read,sha
 from review_release_particle_art import pack_frames
-VIEWS=['live-stage','ar-reference','ar-oblique','ar-near-overhead'];MODES=['fast','legacy','fair'];BUDGET=1100000
+VIEWS=['live-stage','ar-reference','ar-oblique','ar-near-overhead'];MODES=['fast','legacy','fair'];BUDGET=2400000
 POLICY='round-robin origins 0/1/2 then pitches, borrow unused shares; retain legacy draw order; exact under-cap identity'
 BASELINE='79930e52cb3773f02d9e8e59be2c111236917227'
 SOURCES={'Gpu/ArParticleBudget.cs','Gpu/GpuLook.cs','Gpu/GpuArLayer.cs','Gpu/GpuArLayer.Effects.cs','Gpu/GpuStageRenderer.cs',
