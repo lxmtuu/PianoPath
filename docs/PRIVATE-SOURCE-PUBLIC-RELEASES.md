@@ -19,7 +19,7 @@ Không bật đồng thời push/tag và release/published. Không sửa/tái s�
 ## 1. Mô hình
 
 ```
-lxmtuu/PianoPath  (nguồn, lịch sử, CI, dock, mã ứng dụng — public từ 2026-10-03, xem §2a; piano tải riêng)
+lxmtuu/PianoPath  (nguồn, lịch sử, CI, dock, mã ứng dụng — private từ 2026-10-16, xem §2a; piano tải riêng)
         │
         │  tag v1.0.0  ──►  release.yml
         │                      │
@@ -63,25 +63,32 @@ Có thể chạy cùng toàn bộ cổng đóng gói/smoke-test trước tag b�
 
 | Kho | Vai trò | Trạng thái |
 | --- | --- | --- |
-| `lxmtuu/PianoPath` | **nguồn**: mã, lịch sử, CI, và một bản sao các gói trong Release của chính nó; không chứa thư viện piano | **public** (mô hình này giả định private — xem *a*) |
-| `lxmtuu/KeyFlow` | **phát hành**: trang sản phẩm song ngữ, ảnh giao diện, bộ slide, các gói trong GitHub Release | public; `main` đang giữ tài liệu `v1.0.0` |
+| `lxmtuu/PianoPath` | **nguồn**: mã, lịch sử, CI, và một bản sao các gói trong Release của chính nó; không chứa thư viện piano | **private** từ 2026‑10‑16 — đúng mô hình này giả định (xem *a*) |
+| `lxmtuu/KeyFlow` | **phát hành**: trang sản phẩm song ngữ, ảnh giao diện, bộ slide, các gói trong GitHub Release | public; `main` đang giữ tài liệu `v2.1.1` (commit `f79c9a7`, cùng SHA với `release/public-v2.1.1`) |
 
-**a. (Tuỳ chọn, nhưng là mô hình) đưa kho nguồn về private**
+**a. Đưa kho nguồn về private — ✅ đã làm 2026‑10‑16** (chủ repo bấm, không phải token của một phiên agent)
 
 ```bash
 gh repo edit lxmtuu/PianoPath --visibility private --accept-visibility-change-consequences
 ```
 
-Trước khi bấm, biết trước ba điều: repo hiện có **1 sao và 0 fork** (nên không mất fork nào), **lịch sử
+Đo lại sau khi đổi, để lần sau không phải đoán: `gh api repos/lxmtuu/PianoPath --jq .private` → `true`;
+**0 fork** nên không mất fork nào; `stargazers_count` **3 → 2** và hai sao còn lại đọc được bằng tên
+(`gh api repos/lxmtuu/PianoPath/stargazers --jq '.[].login'` → `jin3107`, `lxmtuu`) — tức đúng hai người
+còn quyền vào kho private, còn sao của người ngoài bị gỡ khi đổi visibility. Hai hệ quả đã thành sự thật, không còn là cảnh báo: **lịch sử
 traffic/insights công khai dừng lại**, và mọi liên kết công khai cũ (`github.com/lxmtuu/PianoPath`,
-`blob/main`…) bắt đầu trả 404 với người ngoài — kể cả liên kết trong ghi chú phát hành `v1.0.0` đã phát
-hành trước đó, nên bản phát hành ở kho công khai là thứ thay thế chúng.
+`blob/main`…) trả **404 với người ngoài** — kể cả liên kết trong ghi chú phát hành `v1.0.0`/`v2.0.x` đã
+phát hành trước đó, nên bản phát hành ở kho công khai là thứ thay thế chúng.
 
-Chừng nào kho nguồn còn public thì **không có gì hỏng**: cả hai README và banner của trang công khai chỉ
-nói *mã nguồn nằm ở một kho riêng*, không nói kho đó công khai hay không — nên trang công khai không nói
-sai ở trạng thái nào.
+Trang công khai **không** phải sửa gì theo: cả hai README và banner của `docs/release/` chỉ nói *mã nguồn
+nằm ở một kho riêng*, không nói kho đó công khai hay không — nên nó không nói sai ở trạng thái nào.
+Thứ phải sửa theo là **câu mô tả trong chính hai README** (mục *Tải mã nguồn* nói kho này private — nay
+đã đúng, và bảng workflow từng tả một nhánh orphan dựng trong kho này — nay đã viết lại cho khớp
+`release.yml`).
 
-**b. Kho phát hành `lxmtuu/KeyFlow` đã có sẵn** — không tạo lại. Ba thứ nên kiểm một lần:
+**b. Kho phát hành `lxmtuu/KeyFlow` đã có sẵn** — không tạo lại. Ba thứ nên kiểm một lần (**đã kiểm
+2026‑10‑16**: default branch `main`, issues đang bật, cây kho chỉ có `CHANGELOG{,.en}.md` · `LICENSE` ·
+`README{,.en}.md` · `VERSION` · `docs/{LOCALIZATION.md,presentation/,previews/}` — không tệp nguồn nào):
 
 ```bash
 gh repo view lxmtuu/KeyFlow                     # default branch phải là main (trang sản phẩm nằm ở đó)
@@ -95,7 +102,13 @@ Nhánh `main` của kho đó **do phát hành sinh ra** — đừng sửa tay, l
 kế tiếp. Bộ slide `docs/presentation/` từng như vậy; nay nó nằm trong kho nguồn và đi theo mỗi bản phát
 hành (xem §5).
 
-**c. Secret và variable** (cả hai đều tuỳ chọn — thiếu cũng chỉ là đường thủ công)
+**c. Secret và variable** (cả hai đều tuỳ chọn — thiếu cũng chỉ là đường thủ công).
+**Đã kiểm 2026‑10‑16 bằng hành vi**, vì token của một phiên agent bị `403 Resource not accessible by
+integration` khi liệt kê secret/variable: lượt phát hành `v2.1.1` (run `38878150599`) **không** in câu
+cảnh báo `No PUBLIC_RELEASES_TOKEN secret`, và kho công khai nhận cả `release/public-v2.1.1` lẫn `main`
+ở cùng một commit ⇒ secret **đang được đặt** và đường tự động chạy trọn. Trang đích đúng là
+`lxmtuu/KeyFlow`, tức biến `PUBLIC_RELEASES_REPOSITORY` hoặc không đặt (dùng mặc định) hoặc đang mang
+đúng tên đó — cả hai đều cho một kết quả.
 
 ```bash
 # Fine-grained PAT, scope: chỉ repo KeyFlow, quyền Contents: Read and write (đẩy nhánh + tạo Release)

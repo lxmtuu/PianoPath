@@ -1,8 +1,21 @@
 # Rà soát toàn kho — 2026‑09 (ảnh chụp lịch sử)
 
-Ghi lại **kết quả rà soát toàn bộ mã nguồn** (đợt 2026‑09). Các kết luận dưới đây là trạng thái tại thời điểm đó, không phải mô tả hiện hành: những đoạn về SoundFont/SF2, Git LFS và tài sản piano đóng gói đã được thay thế bằng mô hình Salamander Grand Piano V3 tải riêng, SFZ-only. Xem `README.md`, `CHANGELOG.md` và `docs/ROADMAP.md` để biết trạng thái mới nhất.
+Ghi lại **kết quả rà soát toàn bộ mã nguồn** (đợt 2026‑09 → 2026‑10‑02, mỗi đợt một mục §). Các kết luận
+dưới đây là trạng thái **tại thời điểm của đợt đó**, không phải mô tả hiện hành.
 
-Đây là tài liệu *trạng thái lịch sử*, không phải kế hoạch: kế hoạch hiện tại nằm ở `docs/ROADMAP.md`, kiến trúc đa ngôn ngữ ở `docs/LOCALIZATION.md`, ảnh giao diện ở `docs/LOCALIZATION.md` §10.
+> **Đợt rà soát hiện hành nằm ở [`REPO-AUDIT-2026-10-16.md`](REPO-AUDIT-2026-10-16.md).** Đọc tệp này như
+> một *sổ nhật ký*: nó giữ nguyên văn các kết luận cũ — kể cả những kết luận đã bị chính các đợt sau bác
+> bỏ (ví dụ §6.9 sai và bị §6.10 sửa) — vì cách một phép kiểm hỏng cũng là thông tin.
+
+Ba loại câu trong tệp này đã **hết hiệu lực**, và được giữ nguyên văn có chủ đích:
+
+| Loại | Ví dụ trong tệp | Thực tế 2026‑10‑16 |
+|---|---|---|
+| **SoundFont/SF2, Git LFS, tài sản piano đóng gói** | `Assets/ConcertGrand.sf2` là con trỏ LFS 134 byte; `publish.ps1 -AllowLfsPointer`; ba nhóm `--verify` SKIP vì SF2 (§5.2, §6.1, §7.1, §7.4) | bỏ hẳn từ **2.0.0** (2026‑10‑10): `Assets/` chỉ còn `Keyflow.ico` + `KeyflowLogo.png`, không `.gitattributes`, không `git lfs`; đàn là **Salamander Grand Piano V3 tải riêng** (~748 MB, SFZ-only), `--verify` nay chỉ còn **1** nhóm skip |
+| **Mọi con số đếm** | "79 tệp C#" (§6.1), "90 tệp C#" (§8.1), "56 hàm `Verify*` trong 4 888 dòng", "1407 assertions", "1266 khoá trong inventory" | số của ngày ghi. Nay: **349** tệp C#, **116** hàm `Verify*` trong **11 559** dòng, **7910** assertions, **1653** khoá inventory / 1482 khoá nguồn in ra, bộ test **687 `[Fact]` + 128 `[Theory]`** |
+| **Trạng thái kho và cách phát hành** | kho nguồn công khai; `release.yml` dựng nhánh orphan `release/public-<tag>` **trong kho này** (§8.2, §8.3) | kho nguồn **private** từ 2026‑10‑16; workflow nay dựng cây tài liệu bằng **Git index riêng** và không tạo nhánh nào ở kho nguồn; hai nhánh `release/public-v2.0.x` còn lại là tàn dư |
+
+Đây là tài liệu *trạng thái lịch sử*, không phải kế hoạch: kế hoạch hiện tại nằm ở `docs/ROADMAP.md`, độ phủ hiệu ứng ở `docs/EFFECT-COVERAGE-AUDIT.md`, mô hình hai kho ở `docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`, kiến trúc đa ngôn ngữ ở `docs/LOCALIZATION.md`, ảnh giao diện ở `docs/LOCALIZATION.md` §10.
 
 ## 1. Phương pháp
 
@@ -166,6 +179,10 @@ Ba nhóm SKIP của `--verify` đều là `Assets/ConcertGrand.sf2` còn là con
 | **`docs/previews/presets.jpg` cũng cũ theo.** Gallery dựng từ chính `$shots`-era preset look; `9b7fb57` đổi atmosphere + hit-line của GPU nên cột "GPU (WARP)" của Galaxy Voyage / Electric Storm trong ảnh không còn là look hiện tại | cùng bằng chứng ngày commit ở dòng 1 của bảng này; `presets.jpg` nằm trong `docs/previews/` nên cùng một commit `de75f93` |
 
 ### 6.3 Đối chiếu roadmap P3 — từng dòng, bằng chứng lấy tại chỗ
+
+> **Bảng này là ảnh chụp *trước khi vào P3*, và năm dòng ⬜ bên dưới đã được chính các mục sau của tệp
+> này đóng lại**: #2 xong phần lõi ở §6.11, #3 xong ở §6.14, #4/#5/#7 được ghi lại trong `docs/ROADMAP.md`
+> §4 (đối chiếu 2026‑10‑16: không còn mục nào "chưa làm"). Bảng giữ nguyên văn để thấy P3 bắt đầu từ đâu.
 
 | P3 | Roadmap nói | Đo lại lần này |
 |---|---|---|
