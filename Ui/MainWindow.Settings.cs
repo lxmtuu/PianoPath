@@ -143,6 +143,7 @@ public partial class MainWindow
     {
         _loadingVisualSettings = true;
         BuildStylePage(); BuildThemePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage(); BuildGeneralPage();
+        ArrangeApprovedSettingsLayout();
         _loadingVisualSettings = false;
         // Pickers hold translated captions, so they are repainted from their raw option list whenever
         // the language changes (the selected values themselves never move).
@@ -291,15 +292,18 @@ public partial class MainWindow
         if (index < 0 || index >= SettingsPages.Order.Length) return null;
         return SettingsPages.Order[index] switch
         {
-            SettingsPages.Style => StyleSettingsHost,
-            SettingsPages.Theme => ThemeSettingsHost,
+            SettingsPages.Overview => StyleSettingsHost,
             SettingsPages.Notes => NoteSettingsHost,
-            SettingsPages.Particles => ParticleSettingsHost,
-            SettingsPages.Keyboard => KeyboardSettingsHost,
-            SettingsPages.Background => SceneSettingsHost,
+            SettingsPages.Press => PressSettingsHost,
+            SettingsPages.Hold => HoldSettingsHost,
+            SettingsPages.Release => ReleaseSettingsHost,
+            SettingsPages.Lighting => LightingSettingsHost,
+            SettingsPages.StageDesign => StageDesignSettingsHost,
             SettingsPages.Camera => CameraSettingsHost,
             SettingsPages.Recording => RecordingSettingsHost,
-            SettingsPages.General => GeneralSettingsHost,
+            SettingsPages.Sound => SoundSettingsHost,
+            SettingsPages.Session => SessionSettingsHost,
+            SettingsPages.Application => GeneralSettingsHost,
             _ => null
         };
     }
@@ -1097,6 +1101,7 @@ public partial class MainWindow
         body.Children.Add(heading);
         body.Children.Add(caption);
         card.Child = body; page.Children.Add(card); _settingCards.Add(card); _cardsByTitle[title] = card;
+        _settingsCardOrigins.Add(card, (page.Name, title));
         return body;
     }
 
@@ -1109,6 +1114,9 @@ public partial class MainWindow
     private void JumpToCard(string title)
     {
         if (!_cardsByTitle.TryGetValue(title, out var card) || card.Parent is not Panel page) return;
+        if (SettingsSearchBox.Text.Length > 0) SettingsSearchBox.Clear();
+        foreach (var (advanced, rows) in _settingsAdvancedGroups)
+            if (rows.Any(row => ReferenceEquals(row.Card, card))) advanced.IsExpanded = true;
         for (var i = 0; i < SettingsPages.Order.Length; i++)
             if (ReferenceEquals(SettingsPageHost(i), page)) { SettingsTabs.SelectedIndex = i; break; }
         Dispatcher.BeginInvoke(new Action(() => { card.BringIntoView(); ChromeMotion.Pulse(card); }), System.Windows.Threading.DispatcherPriority.Loaded);
@@ -1172,7 +1180,7 @@ public partial class MainWindow
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) };
         Loc.Set(text, label);
         var box = new TextBox { Text = FormatSetting(property, current), Tag = property, Width = 74, Height = 24, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, TextAlignment = TextAlignment.Right };
         Loc.Set(box, "Type a value and press Enter", FrameworkElement.ToolTipProperty);
@@ -1201,16 +1209,19 @@ public partial class MainWindow
         Loc.Set(row, tooltip, FrameworkElement.ToolTipProperty);
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) };
         Loc.Set(text, label);
-        var combo = new ComboBox { Tag = property, Width = 210, Height = 30, DisplayMemberPath = "Caption", SelectedValuePath = "Value" };
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var combo = new ComboBox { Tag = property, MaxWidth = 270, MinWidth = 140, HorizontalAlignment = HorizontalAlignment.Stretch, Height = 30, DisplayMemberPath = "Caption", SelectedValuePath = "Value" };
         Loc.Set(combo, label, AutomationProperties.NameProperty);
         // The caption is display only; the stored value stays the English identifier, so a saved
         // preset keeps working after the interface language changes.
         combo.ItemsSource = options.Select(o => new ChoiceOption(o.Value, Loc.T(o.Caption))).ToList();
         combo.SelectedValue = (string)Prop(property).GetValue(_visualSettings)!;
         combo.SelectionChanged += VisualChoice_Changed;
-        Grid.SetColumn(combo, 1); row.Children.Add(text); row.Children.Add(combo);
+        Grid.SetColumnSpan(text, 2); Grid.SetRow(combo, 1); Grid.SetColumnSpan(combo, 2);
+        combo.Margin = new Thickness(0, 5, 0, 0); row.Children.Add(text); row.Children.Add(combo);
         _visualChoices[property] = combo; _visualChoiceOptions[property] = options;
         return Register(body, row, property, [label, tooltip, .. options.Select(o => o.Caption)]).WithCaption(text, TextBlock.TextProperty, label);
     }
@@ -1246,7 +1257,7 @@ public partial class MainWindow
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) };
         Loc.Set(text, label);
         var swatch = new Button { Tag = property, Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)) };
         Loc.Set(swatch, "Open color picker", FrameworkElement.ToolTipProperty);
@@ -1343,6 +1354,7 @@ public partial class MainWindow
         nameof(PianoVisualSettings.RecordingFrameRate) => $"{value:0} fps",
         nameof(PianoVisualSettings.ArLookahead) => $"{value:0.0} s",
         nameof(PianoVisualSettings.ArDelay) => $"{value:0} ms",
+        nameof(PianoVisualSettings.ArNoteDirectionTilt) or nameof(PianoVisualSettings.ArNoteDirectionAzimuth) or nameof(PianoVisualSettings.ShaderCameraTilt) => $"{value:0}°",
         _ => $"{value:0}%"
     };
 
@@ -1565,6 +1577,7 @@ public partial class MainWindow
             var anyVisible = _settingRows.Any(r => ReferenceEquals(r.Card, card) && r.Element.Visibility == Visibility.Visible);
             card.Visibility = anyVisible ? Visibility.Visible : Visibility.Collapsed;
         }
+        RefreshSettingsLayoutSearch(query.Length > 0);
         if (SettingsSearchHint is not null) SettingsSearchHint.Visibility = query.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -1584,8 +1597,7 @@ public partial class MainWindow
             var found = false;
             foreach (var phrase in phrases)
             {
-                if (phrase.Contains(token, StringComparison.OrdinalIgnoreCase)
-                    || Loc.Known(phrase) && Loc.T(phrase).Contains(token, StringComparison.OrdinalIgnoreCase))
+                if (SettingsPhraseMatches(phrase, token))
                 {
                     found = true;
                     break;
@@ -1637,6 +1649,20 @@ public partial class MainWindow
     private static IEnumerable<string> SearchPhrases(SettingRow row)
     {
         foreach (var key in row.SearchKeys) yield return key;
+        yield return row.Page.Name switch
+        {
+            nameof(NoteSettingsHost) => SettingsPages.Notes,
+            nameof(PressSettingsHost) => SettingsPages.Press,
+            nameof(HoldSettingsHost) => SettingsPages.Hold,
+            nameof(ReleaseSettingsHost) => SettingsPages.Release,
+            nameof(LightingSettingsHost) => SettingsPages.Lighting,
+            nameof(StageDesignSettingsHost) => SettingsPages.StageDesign,
+            nameof(CameraSettingsHost) => SettingsPages.Camera,
+            nameof(SoundSettingsHost) => SettingsPages.Sound,
+            nameof(SessionSettingsHost) => SettingsPages.Session,
+            nameof(GeneralSettingsHost) => SettingsPages.Application,
+            _ => SettingsPages.Overview
+        };
         if (row.Property is not { } property) yield break;
         if (SearchSynonyms.TryGetValue(property, out var synonyms)) yield return synonyms;
         // The property name itself is the last safety net: "NoteFallSpeed" answers to "fall" and "speed"
@@ -1794,7 +1820,7 @@ public partial class MainWindow
         if (query.Length == 0) return;
         // Jump to the first page that has a match when the current page shows none.
         var pageCount = SettingsPages.Order.Length;
-        bool HasMatch(int index) { var page = SettingsPageHost(index); return page is not null && _settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible); }
+        bool HasMatch(int index) { var page = SettingsPageHost(index); return page is not null && (_settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible) || ReferenceEquals(page, StyleSettingsHost) && _settingsOverviewElements.Any(element => element.Visibility == Visibility.Visible)); }
         var currentIndex = SettingsTabs.SelectedIndex;
         if (currentIndex >= 0 && currentIndex < pageCount && HasMatch(currentIndex)) return;
         for (var i = 0; i < pageCount; i++) if (HasMatch(i)) { SettingsTabs.SelectedIndex = i; return; }
@@ -1805,7 +1831,7 @@ public partial class MainWindow
         // Selector.SelectionChanged bubbles from combo boxes and lists inside the pages; only react to the tab strip itself.
         if (!ReferenceEquals(e.OriginalSource, SettingsTabs)) return;
         _lastPointerActivity = DateTime.UtcNow;
-        // The navigation strip holds thirteen rows in a scrollable column, so arriving at a page from
+        // The navigation strip holds twelve rows in a scrollable column, so arriving at a page from
         // anywhere else — the header chip, a search hit, the General page at the bottom, --settings-tab —
         // has to bring that row into view. Otherwise the dock shows a page whose own entry is off screen.
         // One layout pass later, because the item is still being measured when SelectionChanged fires.
@@ -1822,7 +1848,12 @@ public partial class MainWindow
     {
         var page = SettingsPageHost(SettingsTabs.SelectedIndex);
         if (page is null) { Loc.Set(SettingsSaveLabel, "This page has no visual settings to reset"); return; }
-        var source = BasePresetSettings();
+        if (!SuppressErrorDialogs && MessageBox.Show(this,
+            Loc.T("Reset this section to the active look? Camera sources, saved calibration and machine preferences are kept."),
+            Loc.T("Reset section"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        // Use the same preset-copy boundary as Apply preset; merged pages must not reset machine-local values.
+        var source = PianoVisualSettings.FromJson(_visualSettings.ToJson());
+        source.CopyFrom(BasePresetSettings(), keepBackgroundImage: true);
         foreach (var row in _settingRows)
         {
             if (!ReferenceEquals(row.Page, page) || row.Property is null) continue;

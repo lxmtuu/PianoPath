@@ -25,47 +25,62 @@ internal sealed record SettingsSection(string Label, string[] Pages);
 /// </summary>
 internal static class SettingsPages
 {
+    // Visible pages. Legacy names below resolve through Canonical; IDs in files and command lines remain valid.
+    internal const string Overview = "Overview";
+    internal const string Notes = "Notes & color";
+    internal const string Press = "Press";
+    internal const string Hold = "Hold";
+    internal const string Release = "Release";
+    internal const string Lighting = "Lighting";
+    internal const string StageDesign = "Stage & background";
+    internal const string Camera = "Camera & AR";
+    internal const string Recording = "Recording";
+    internal const string Sound = "Sound & MIDI";
+    internal const string Session = "Practice & history";
+    internal const string Application = "Application";
+
     internal const string Style = "Style";
     internal const string Theme = "Theme";
-    internal const string Notes = "Notes";
     internal const string Particles = "Particles";
     internal const string Keyboard = "Keyboard";
     internal const string Background = "Background";
-    internal const string Camera = "Camera";
     internal const string Audio = "Audio";
     internal const string Midi = "MIDI";
     internal const string Practice = "Practice";
     internal const string History = "History";
-    internal const string Recording = "Recording";
     internal const string General = "General";
+    internal const string DesignSection = "EFFECT DESIGN";
+    internal const string SpaceSection = "ENVIRONMENT";
+    internal const string SessionSection = "SESSION & APP";
 
-    /// <summary>Caption of the first group; also the fallback section for an unlabelled page.</summary>
-    internal const string DesignSection = "STAGE DESIGN";
-    internal const string SoundSection = "SOUND & INPUT";
-    internal const string SessionSection = "SESSION";
-    internal const string AppSection = "APP";
-
-    /// <summary>
-    /// The navigation groups, in display order: what the stage looks like, what it sounds like, what
-    /// the current practice session does, and how the application itself behaves. Grouping the pages by
-    /// intent is what keeps the dock readable as it grows.
-    /// </summary>
     internal static readonly SettingsSection[] Sections =
     [
-        new(DesignSection, [Style, Theme, Notes, Particles, Keyboard, Background, Camera]),
-        new(SoundSection, [Audio, Midi]),
-        new(SessionSection, [Practice, History, Recording]),
-        new(AppSection, [General]),
+        new(DesignSection, [Overview, Notes, Press, Hold, Release, Lighting]),
+        new(SpaceSection, [StageDesign, Camera]),
+        new(SessionSection, [Recording, Sound, Session, Application]),
     ];
+
+    internal static string? Canonical(string? name) => name switch
+    {
+        Style => Overview,
+        Theme or General => Application,
+        "Notes" => Notes,
+        Particles => Press,
+        Keyboard or Background => StageDesign,
+        "Camera" or "Camera & FX" => Camera,
+        Audio or Midi => Sound,
+        Practice or History => Session,
+        _ => name
+    };
 
     /// <summary>Tab-strip order; the index in this array is the <c>SettingsTabs.SelectedIndex</c>.</summary>
     internal static readonly string[] Order = [.. Sections.SelectMany(section => section.Pages)];
 
-    internal static int IndexOf(string? name) => Array.IndexOf(Order, name);
+    internal static int IndexOf(string? name) => Array.IndexOf(Order, Canonical(name));
 
     /// <summary>The section a page belongs to, or <c>null</c> when the name is unknown.</summary>
     internal static SettingsSection? SectionOf(string? name) =>
-        name is null ? null : Sections.FirstOrDefault(section => section.Pages.Contains(name));
+        name is null ? null : Sections.FirstOrDefault(section => section.Pages.Contains(Canonical(name)!));
 
     // =================================================================================================
     // The section label is an attached property so the navigation template can print the group header

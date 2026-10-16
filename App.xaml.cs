@@ -105,7 +105,12 @@ public partial class App : Application
                 var tab = e.Args.FirstOrDefault(a => a.StartsWith("--settings-tab=", StringComparison.Ordinal))?[15..];
                 var page = tab?.ToLowerInvariant() switch
                 {
-                    "notes" => SettingsPages.Notes,
+                    "overview" or "style" => SettingsPages.Overview,
+                    "notes" or "notes & color" => SettingsPages.Notes,
+                    "press" => SettingsPages.Press,
+                    "hold" or "wisps" or "flames" => SettingsPages.Hold,
+                    "release" => SettingsPages.Release,
+                    "lighting" => SettingsPages.Lighting,
                     "theme" or "themes" => SettingsPages.Theme,
                     "particles" or "embers" => SettingsPages.Particles,
                     "keyboard" or "keys" => SettingsPages.Keyboard,

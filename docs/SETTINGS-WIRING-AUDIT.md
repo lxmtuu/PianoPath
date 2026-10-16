@@ -1,4 +1,7 @@
 # Kiểm tra liên kết logic của mọi chức năng cài đặt
+
+> **P6 sau khi duyệt layout:** source hiện chuyển sang **12 nhóm WPF**, có alias cho 13 trang cũ. Các danh mục, số đếm và dòng source bên dưới là lịch sử rà soát trước migration, không phải layout hiện tại. Xem [báo cáo migration và giới hạn kiểm tra](SETTINGS-WPF-MIGRATION.md) và [inventory trước migration](SETTINGS-LAYOUT-INVENTORY.tsv).
+
 > **Cập nhật sau tài liệu này:** thêm trang **General** (ngôn ngữ giao diện) và trang **History** (lịch sử luyện tập) nên danh mục là **13 trang / 4 nhóm**; bảng đối chiếu setting ↔ code bên dưới vẫn đúng từng dòng vì hai trang mới không thêm thông số sân khấu nào.
 
 

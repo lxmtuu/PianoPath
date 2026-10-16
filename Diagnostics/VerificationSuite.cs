@@ -2659,9 +2659,9 @@ internal static partial class VerificationSuite
         // The captions of the tab strip are translated, so the comparison runs through Loc too — a
         // check that reads an English literal would fail the moment the suite runs in Vietnamese.
         string Shown(string caption) => Loc.T(caption);
-        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == Shown("Style") && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == Shown("Theme") && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == Shown(SettingsPages.General),
-            $"The settings dock should expose all {pageCount} categorized pages from Style to General.");
-        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.General) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
+        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == Shown(SettingsPages.Overview) && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == Shown(SettingsPages.Application) && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == Shown(SettingsPages.Application),
+            $"The settings dock should expose all {pageCount} categorized pages from Overview to Application.");
+        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == SettingsPages.IndexOf(SettingsPages.Application) && SettingsPages.IndexOf(SettingsPages.General) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
             "Settings page names should resolve to their tab-strip index so no code has to keep magic tab numbers.");
         // The navigation is grouped by intent. Order is derived from the sections, the XAML tab strip
         // must match that order, and the header printed above a page must be the header of the section
@@ -2681,8 +2681,8 @@ internal static partial class VerificationSuite
             foreach (var page in section.Pages) Assert(SettingsPages.SectionOf(page)?.Label == section.Label, $"Settings page {page} should resolve to the section that lists it.");
         }
         Assert(SettingsPages.SectionOf("Nope") is null, "An unknown page name should have no section.");
-        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.General),
-            "The first section should open on Style and the last one should close on the pages of the application itself.");
+        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Overview) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.Application),
+            "The first section should open on Overview and the last one should close on Application.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         var settingRows = ((System.Collections.IEnumerable)Field(window, "_settingRows")).Cast<object>().ToArray();
         var rowDetails = settingRows.Select(row =>
@@ -2697,6 +2697,20 @@ internal static partial class VerificationSuite
             .Where(row => !string.IsNullOrWhiteSpace(row.Property))
             .Select(row => row.Property!)
             .ToHashSet(StringComparer.Ordinal);
+        Assert(pageCount == 12 && rowDetails.Where(row => row.Property is not null).GroupBy(row => row.Property).All(group => group.Count() == 1),
+            "P6 should expose twelve groups and one generated editor per property, not independent Stage/AR copies.");
+        foreach (var row in settingRows)
+        {
+            var type = row.GetType();
+            var page = (Panel)type.GetField("Page")!.GetValue(row)!;
+            var card = (Border)type.GetField("Card")!.GetValue(row)!;
+            Assert(ReferenceEquals(card.Parent, page), "A moved settings card and every registered row must agree on their live page.");
+        }
+        var beforeContext = visualSettings.ToJson();
+        var previousContext = (bool)Field(window, "_settingsArContext");
+        Invoke(window, "SetSettingsContext", !previousContext);
+        Assert(visualSettings.ToJson() == beforeContext, "Settings context must not mutate shared values, presets or camera configuration.");
+        Invoke(window, "SetSettingsContext", previousContext);
         var staticSettingControls = new (string Property, string ControlName)[]
         {
             (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
