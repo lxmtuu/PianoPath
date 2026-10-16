@@ -9,9 +9,13 @@ The ensemble review exposed existing AR starvation: a dense held chord could use
 - Evidence publication: `9a0555c`; [manifest](evidence/ar-particle-budget-v1/manifest.json.gz), six static sheets and two lossless temporal bundles in `docs/previews/ar-particle-budget-v1`.
 - [Native comparison viewer](https://8784-isuyvot335g1n340b9fei.e2b.app/): 24 exact static crop panes; 64 exact temporal halves (two recipes × 16 paired frames). Real Chromium checked decoded BGRA digests, six recipe/pose choices, hold/release boundary, seek/step/play/pause, rapid selection/decode races and 390 px layout.
 - Local Python: **150 tests PASS, 43.162 s**; static/source and whitespace checks pass.
-- **Full regression:** [normal CI 38849867407](https://github.com/lxmtuu/PianoPath/actions/runs/38849867407), source `ebfcba8`, has been started for the production review-hook changes and is **still in progress**. Focused success above is not a full-regression result.
+- **Full regression:** [normal CI 38849867407](https://github.com/lxmtuu/PianoPath/actions/runs/38849867407), source `ebfcba8`, is **SUCCESS**: static checks, portable tests, full Windows build/regression and keyboard-light lane all passed. Publications: `ff1863b` (keyboard-light) and `bf4301c` (full previews). The focused budget lane was intentionally skipped in this normal run; its separate success is recorded above.
 
 The first focused run, [38848552261](https://github.com/lxmtuu/PianoPath/actions/runs/38848552261), passed native rendering and all original pixel/inventory checks, then failed only the final publication-size gate (2,234,531 bytes versus an underestimated 1,100,000). The successful retry uses a measured 2,400,000-byte ceiling after reclaiming storage losslessly; no frames, precision, alpha, camera inputs or assertions were removed. Final published payload is **2,234,822 bytes**.
+
+## Visual acceptance — 2026-10-16
+
+The user reviewed the paired viewer and replied **“hợp lí rồi”**, accepting the displayed held/impact/release balance. Preserve this selection/artwork direction for subsequent hardening. This is visual acceptance of the shown native subset, not authorization to enable the review flag by default or certification of all poses, full lifecycle, live MIDI/camera, hardware or frame-time performance. Keep the trial default off until runtime/CPU/allocation and longer-motion checks are completed. Settings redesign remains last.
 
 ## Policy and isolation
 
