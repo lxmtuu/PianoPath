@@ -56,6 +56,18 @@ class BudgetTests(unittest.TestCase):
             r.verify(path,published_only=True)
             t=m['motions'][0];data=bytearray((path/t['file']).read_bytes());data[len(data)//2]^=5;(path/t['file']).write_bytes(data)
             with self.assertRaises((ValueError,OSError,EOFError)):r.verify(path,published_only=True)
+    def test_viewer_copies_compressed_manifest_before_validation(self):
+        from unittest.mock import patch
+        import serve_ar_particle_budget as viewer
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);repo=root/'repo';output=root/'viewer';evidence=repo/'docs/evidence/ar-particle-budget-v1';evidence.mkdir(parents=True)
+            data=dict(sourceRevision='synthetic',sheets=[],motions=[])
+            (evidence/'manifest.json.gz').write_bytes(gzip.compress(json.dumps(data).encode()))
+            def validate_copy(path,**kw):
+                self.assertEqual(repo,kw['source_root']);self.assertTrue(kw['published_only'])
+                self.assertEqual(data,r.read(path/'manifest.json.gz'));self.assertEqual(data,r.read(path/'manifest.json'));return data
+            with patch.object(viewer.review,'verify',side_effect=validate_copy) as check:viewer.build(repo,output)
+            check.assert_called_once();self.assertIn('Trial mặc định tắt',(output/'index.html').read_text())
     def test_only_review_flag_controls_the_new_policy(self):
         root=Path(__file__).resolve().parents[2]
         look=(root/'Gpu/GpuLook.cs').read_text();layer=(root/'Gpu/GpuArLayer.Effects.cs').read_text()
