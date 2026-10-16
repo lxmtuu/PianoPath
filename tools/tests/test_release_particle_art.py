@@ -21,8 +21,8 @@ def plan():
     for view,phase in itertools.product(r.VIEWS[:2],('burst','held')):
         tracks=[]
         for variant in ('off','classic','art'):
-            tracks.append(dict(variant=variant,hashes=[('A' if variant=='off' else 'B' if variant=='classic' else 'C')*64]*60,
-                frames=[dict(ColourHash='1'*64,RawHash='D'*64,PacketHash='E'*64,RawParticles=int(variant!='off'),PackedParticles=int(variant!='off'),fullPixelSha256='F'*64) for _ in range(60)]))
+            tracks.append(dict(variant=variant,hashes=[('A' if variant=='off' or not 12<=f<45 else 'B' if variant=='classic' else 'C')*64 for f in range(60)],
+                frames=[dict(ColourHash='1'*64,RawHash='D'*64,PacketHash='E'*64,RawParticles=int(variant!='off' and 12<=f<45),PackedParticles=int(variant!='off' and 12<=f<45),fullPixelSha256='F'*64) for f in range(60)]))
         motions.append(dict(emission='physical Note Off f12; pedal '+('on' if phase=='held' else 'off')+'; no impact/held emitter',Id=f'{view}-{phase}',view=view,phase=phase,fps=30,count=60,releaseFrame=12,crop=dict(X=1,Y=1,Width=10,Height=12),tracks=tracks))
     controls=[dict(c,Variant='material-only',File=c['Id']+'-material-only.png') for c in captures if c['View']=='live-stage' and c['Variant']=='art']
     pedal=[dict(c,Variant='pedal-off',File=c['Id']+'-pedal-off.png') for c in captures if c['Variant']=='art']
@@ -55,6 +55,16 @@ class ReleaseArtTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'off-delta'):r.validate(m)
         m=plan();m['motions'][0]['tracks'][2]['hashes']=m['motions'][0]['tracks'][0]['hashes'][:]
         with self.assertRaisesRegex(ValueError,'Blank release'):r.validate(m)
+
+    def test_full_motion_pedal_state_held_emission_and_expiration_are_guarded(self):
+        changes=(lambda m:m['motions'][0]['tracks'][2]['frames'][13].__setitem__('ColourHash','2'*64),
+            lambda m:[t['tracks'][2]['frames'][0].__setitem__('RawParticles',1) for t in m['motions']],
+            lambda m:[t['tracks'][2]['frames'][12].__setitem__('PackedParticles',0) for t in m['motions']],
+            lambda m:[t['tracks'][2]['frames'][46].update(RawParticles=1,PackedParticles=1) for t in m['motions']],
+            lambda m:[t['tracks'][2]['frames'][59].update(RawParticles=1,PackedParticles=1) for t in m['motions']])
+        for change in changes:
+            m=plan();change(m)
+            with self.assertRaises(ValueError):r.validate(m)
 
     def test_release_sources_are_distinct_and_note_off_is_real(self):
         root=Path(__file__).resolve().parents[2];producer=(root/'Diagnostics/ReleaseParticleArtReview.cs').read_text()
@@ -125,7 +135,7 @@ class ReleaseArtTests(unittest.TestCase):
                 for v in t['tracks']:
                     for f in range(60):
                         im=Image.new('RGBA',(10,12),(20,30,40,255))
-                        if v['variant']!='off' and f<45:im.putpixel((f%10,f%12),(150 if v['variant']=='classic' else 110,70,30,255))
+                        if v['variant']!='off' and 12<=f<45:im.putpixel((f%10,f%12),(150 if v['variant']=='classic' else 110,70,30,255))
                         file=root/'motion'/t['Id']/v['variant']/f'{f:03}.png';file.parent.mkdir(parents=True,exist_ok=True);im.save(file);v['hashes'][f]=r.digest(im)
             (root/'manifest.json').write_text(json.dumps(m));r.verify(root,revision='synthetic')
             published=r.verify(root,published_only=True);self.assertEqual(4,len(published['motions']))
@@ -161,6 +171,25 @@ class ReleaseArtTests(unittest.TestCase):
         with Image.open(io.BytesIO(r.assemble_delta(frames))) as im:
             self.assertEqual(60,im.n_frames)
             for f,source in enumerate(frames):im.seek(f);self.assertEqual(r.digest(source),r.digest(im))
+
+    def test_group_http_handler_cannot_mix_family_frames(self):
+        import contextlib,io,threading,urllib.request,urllib.error
+        from functools import partial
+        from http.server import ThreadingHTTPServer
+        import serve_release_particle_art as viewer
+        class Quiet(viewer.Handler):
+            def log_message(self,*args):pass
+        Quiet.families={family:{'live-stage-held':[(family+'/'+str(n)).encode() for n in range(60)]} for family in viewer.FAMILIES}
+        with tempfile.TemporaryDirectory() as folder:
+            server=ThreadingHTTPServer(('127.0.0.1',0),partial(Quiet,directory=folder))
+            thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
+            try:
+                base='http://127.0.0.1:'+str(server.server_port)
+                for family in viewer.FAMILIES:
+                    self.assertEqual((family+'/14').encode(),urllib.request.urlopen(base+'/'+family+'/motion/live-stage-held/14.png').read())
+                for path in ('/smoke/motion/live-stage-held/60.png','/smoke/motion/ar-reference-held/14.png','/unknown/motion/live-stage-held/14.png','/smoke/motion/live-stage-held/-1.png'):
+                    with self.assertRaises(urllib.error.HTTPError):urllib.request.urlopen(base+path)
+            finally:server.shutdown();thread.join();server.server_close()
 
 
 if __name__=='__main__':unittest.main()

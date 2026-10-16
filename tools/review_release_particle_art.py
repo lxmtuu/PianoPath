@@ -139,6 +139,8 @@ def validate(m,revision=None):
             check_counts(c)
             if c['Variant']!=variant or c['File']!=c['Id']+'-'+variant+'.png' or c['Id']!=a['Id']:raise ValueError('Bad pre-release provenance')
             for k in ('PixelSha256','RawHash','PacketHash','ColourHash'):check_digest(c[k])
+            target=groups[c['Id']]['art']
+            if any(c[k]!=target[k] for k in ('Palette','View','Pitch','Phase')):raise ValueError('Wrong pre-release scene')
             if c['RawParticles'] or c['PackedParticles']:raise ValueError('Release emitted before physical Note Off')
         if a['PixelSha256']!=b['PixelSha256']:raise ValueError('Release changed pre-release scene')
     if len(m['motions'])!=4 or {x['Id'] for x in m['motions']}!={v+'-'+p for v in VIEWS[:2] for p in ('burst','held')}:raise ValueError('Missing release motion')
@@ -161,6 +163,23 @@ def validate(m,revision=None):
             if any(a[k]!=b[k] for k in ('RawHash','PacketHash','RawParticles','PackedParticles')):raise ValueError('Motion state/packet changed')
         if sum(a!=b for a,b in zip(versions['classic']['hashes'],versions['art']['hashes']))<6:raise ValueError('Invisible release motion candidate')
         if sum(a!=b for a,b in zip(versions['off']['hashes'],versions['art']['hashes']))<6:raise ValueError('Blank release motion candidate')
+    # Actual lifecycle and CC64 independence throughout the captured sequence, not only four stills.
+    by_id={t['Id']:t for t in m['motions']}
+    for view in VIEWS[:2]:
+        on,off=(by_id[view+'-'+phase] for phase in ('held','burst'))
+        a={t['variant']:t for t in on['tracks']};b={t['variant']:t for t in off['tracks']}
+        for variant in ('classic','art'):
+            for x,y in zip(a[variant]['frames'],b[variant]['frames']):
+                if any(x[k]!=y[k] for k in ('RawHash','PacketHash','ColourHash','RawParticles','PackedParticles')):raise ValueError('Motion pedal changed release state/material/packing')
+        for track in (on,off):
+            variants={t['variant']:t for t in track['tracks']}
+            for variant in ('classic','art'):
+                frames=variants[variant]['frames']
+                if any(f['RawParticles'] or f['PackedParticles'] for f in frames[:12]):raise ValueError('Motion released before Note Off')
+                if any(x!=y for x,y in zip(variants[variant]['hashes'][:12],variants['off']['hashes'][:12])):raise ValueError('Pre-release motion changed pixels')
+                if not frames[12]['RawParticles'] or not frames[12]['PackedParticles']:raise ValueError('No physical release birth at f12')
+                if any(y['RawParticles']>x['RawParticles'] for x,y in zip(frames[12:],frames[13:])):raise ValueError('Release became a held/pedal emitter')
+                if frames[59]['RawParticles'] or frames[59]['PackedParticles']:raise ValueError('Release failed to expire independently of sustain')
     return groups
 
 

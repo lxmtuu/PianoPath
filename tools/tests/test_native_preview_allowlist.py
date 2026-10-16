@@ -22,3 +22,16 @@ class NativePreviewAllowlistTests(unittest.TestCase):
             self.assertTrue(any('random.gz' in e for e in errors))
             self.assertTrue(any('manifest.json.gz' in e for e in errors))
             self.assertTrue(any('unknown/' in e for e in errors))
+
+    def test_release_group_has_only_twelve_bounded_tracks(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);folder=root/'docs/previews'
+            allowed=[f'release-{family}-v1/{view}-{phase}.bgra.gz' for family in ('float-up','dissolve','smoke')
+                for view in ('live-stage','ar-reference') for phase in ('burst','held')]
+            denied=['release-smoke-v1/ar-oblique-held.bgra.gz','release-float-up-v1/manifest.json.gz',
+                'release-dissolve-v2/live-stage-held.bgra.gz','release-other-v1/live-stage-burst.bgra.gz']
+            for name in allowed+denied:
+                p=folder/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'contract-fixture')
+            with patch.object(check,'ROOT',root):errors=check.scan_previews_folder()
+            self.assertEqual(4,len(errors))
+            for name in denied:self.assertTrue(any(name in e for e in errors))

@@ -10,6 +10,7 @@ const assert=require('node:assert/strict');
  if(!executablePath){const mod=require('@sparticuz/chromium'),chromium=mod.default||mod;executablePath=await chromium.executablePath();args=chromium.args;}
  const billboard=process.env.REVIEW_SHATTER_BILLBOARD==='1';
  const family=process.env.REVIEW_FAMILY||'shatter';
+ const releaseGroup=process.env.REVIEW_RELEASE==='1';
  const singleImpact=billboard||process.env.REVIEW_SINGLE_IMPACT==='1';
  const modes=billboard?['ar-near-overhead-held','ar-reference-held','ar-near-overhead-burst','ar-reference-burst']:['live-stage-held','ar-reference-held','live-stage-burst','ar-reference-burst'];
  const browser=await puppeteer.launch({args,executablePath,headless:true});
@@ -37,6 +38,12 @@ const assert=require('node:assert/strict');
   await page.goto(base+'/motion-review.html',{waitUntil:'networkidle0'});
   const ready=async(mode,n)=>{
    await page.waitForFunction((mode,n)=>!document.getElementById('pair').hidden&&document.getElementById('status').textContent.includes(`${mode} · Frame ${n}/59`),{},mode,n);
+   if(releaseGroup){
+    const status=await page.$eval('#status',x=>x.textContent);
+    assert(status.includes(n<12?'Đang giữ phím · chưa phát release':'Đã nhả phím · release'));
+    assert(status.includes(n>=12&&mode.endsWith('held')?'pedal on':'pedal off'));
+    assert(!/Nhấn mạnh|Nhấn nhẹ|Burst đã phát/.test(status));
+   }
    if(singleImpact){
     const status=await page.$eval('#status',x=>x.textContent);
     assert(status.includes(mode.endsWith('burst')?'Nhấn mạnh .9':'Nhấn nhẹ .45'));
@@ -57,9 +64,19 @@ const assert=require('node:assert/strict');
     assert(m.motions.every(x=>x.emission.includes('single ')&&x.emission.includes('no held emitter; pedal f12')));
    }
   }
+  if(releaseGroup){
+   await ready('live-stage-held',14);
+   assert.equal(await page.$eval('#release',x=>x.textContent),'Nhả phím: frame 12');
+   assert.deepEqual(await page.$$eval('#mode option',xs=>xs.map(x=>x.textContent)),['Stage · pedal on','AR · pedal on','Stage · pedal off','AR · pedal off']);
+   const m=await page.evaluate(async()=>await(await fetch('manifest.json')).json());
+   assert.equal(m.family,family);assert.equal(m.schema,4);
+   assert.deepEqual(m.staticSampleFrames,[23,31,47,110]);assert.deepEqual(m.releaseOffsets,[2,10,26,89]);assert.deepEqual(m.motionPressVelocities,[.9,.9]);
+   assert.equal(m.pedalControls.length,64);assert.equal(m.preReleaseControls.length,16);assert.equal(m.stageDepthControls.length,16);
+   assert(m.motions.every(t=>t.emission==='physical Note Off f12; pedal '+(t.phase==='held'?'on':'off')+'; no impact/held emitter'));
+  }
   for(const mode of modes){
    await page.select('#mode',mode);
-   if(singleImpact){
+   if(singleImpact||releaseGroup){
     for(const n of [0,11]){
      await page.$eval('#frame',(x,n)=>{x.value=n;x.dispatchEvent(new Event('input',{bubbles:true}));},n);await ready(mode,n);
     }
@@ -78,6 +95,7 @@ const assert=require('node:assert/strict');
   await page.setViewport({width:390,height:844});await page.goto(base,{waitUntil:'networkidle0'});
   assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
   console.log('PASS real headless Chromium: 480 decoded native BGRA halves, four mode pedal/step/seek controls, play/pause, no page errors, mobile overflow check. Not realtime FPS/camera/GPU acceptance.');
+  if(releaseGroup)console.log('PASS '+family+' actual Note Off semantics: matched on/off pedal labels, no emission before f12, physical release f12/13/59, metadata and controls.');
   if(singleImpact)console.log('PASS '+family+' single-impact semantics: four soft/firm labels, pedal button and frame 0/11/12/13/59 statuses; no held/release claims.');
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1)});
