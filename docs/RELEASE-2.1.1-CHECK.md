@@ -26,3 +26,9 @@ The correction changes version pins, release workflow/static guards and document
 5. After the actual tag run finishes, verify its portable tests/native suite, exact tag target, complete source/public asset names/sizes/SHA-256 digests, latest-release state and document-only public tree. Record the result in the correction PR/release; this pre-merge snapshot alone is not proof of publication.
 
 Hardware/ARM/real-camera/audio/MIDI/DPI/manual-visual limitations and unsigned/SmartScreen guidance remain as in the 2.1 check. The software renderer remains classic and the legacy camera-file half-rate policy remains.
+
+## Tagged-check follow-up
+
+The initial unpublished 2.1.1 tag run `38876574673` correctly stopped before any source release was created: `OfflineFrameQueueTests.WriterFailureIsObservedAfterWakeup` timed out waiting for a thread-pool worker to start. Both queue handshake tests now use dedicated LongRunning workers, retaining all queue capacity/order, failure propagation, timeout and closed-recorder assertions. Production queue/encoder/application code is unchanged. The new tag will target the merged test-harness correction; no immutable or published tag is changed.
+
+The dedicated-worker correction passed release preflight [38876959998](https://github.com/lxmtuu/PianoPath/actions/runs/38876959998) at `eb8860c`: Windows portable tests and actual published-executable native gates, public staging, three ZIPs/installer/SHA256 all SUCCESS. Compile lane `38876960073` also SUCCESS. No production queue/encoder change or deadline/assertion removal.
