@@ -20,6 +20,13 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ## Unreleased
 
+## 2.1.0 — 2026-10-16
+
+### Settings, particle effects and AR export
+- **Settings now has 12 approved groups:** Notes & color → Press → Hold → Release → Lighting, with Advanced sections, accent-insensitive VI/EN search and aliases for all 13 legacy pages. Presets/share codes, camera/calibration, Audio/MIDI, practice/history, recording, themes and profiles retain their existing handlers/IDs. The Stage/AR header selects a settings context, not a camera/output mode.
+- **Upgraded particle effects are opt-in**, off for existing looks. Wisps/Flames and Float Up/Dissolve/Smoke release materials are shared by GPU Live Stage and AR, with a role/note-group fair allocation of the AR cap of 192. Includes Prism Flow - Wisps / Prism Flow - Flames presets; software rendering keeps the classic effects.
+- **Offline AR exports retain particle lifecycle state** throughout each take instead of recreating simulation on every frame, using the planned scene clock and substeps of at most 50 ms. The legacy half-rate camera-file policy remains; this is not a universal A/V-sync fix or webcam/ARM hardware certification.
+
 ### AR overlay
 - **AR render-to-video — export UI (S7 complete)**: the Recording page gains an **AR RENDER‑TO‑VIDEO** card — RENDER AR TAKE… renders the loaded song over the calibrated camera video file offline: no live clock, a fixed time step, the machine's exact look (AR overlay, the kind‑16 watermark strip, every layer), the piano mixed tick-exact into a `.wav` beside the AVI (resolution cap and fps follow the OUTPUT choices; Record audio and Watermark are honoured), with the ffmpeg mux line printed on completion. Song → tick script is pure code (`ArVideoExportScript`, xUnit `SongExportScriptTests`); verify drives the real route with an MP4 written by the app's own recorder and decoded by its reader: the fixture's stripe brightens in step with every engine tick.
 - **AR render-to-video — watermark**: the **Watermark** toggle's «KEYFLOW» strip is now drawn by the GPU itself (sprite kind 16 + the `MarkTex` texture), so the GPU screen recording and every offline take carry exactly what the live stage shows; the placement (centred, the stage's own 18 DIPs above the key line, shrinking only on narrow frames) is pure code with xUnit tests. Verify byte-compares one tick with and without the strip: the difference lights exactly the strip's rect and nothing else.

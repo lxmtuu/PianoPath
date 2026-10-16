@@ -5,7 +5,8 @@ name: release
 # docs/CODE-SIGNING.md), so downloaders see the SmartScreen "Windows protected your PC" dialog and the
 # release notes say how to continue. Runs when a version tag such as v2.0.0 is pushed (the packages are
 # attached to a GitHub Release) or manually from the Actions tab (they are available as workflow artifacts,
-# and no release is created).
+# and no release is created). A session-branch push marked [release-preflight] runs those same
+# packaging/smoke-test gates without creating a tag, a release or any public-repository changes.
 #
 # build.yml already publishes the framework-dependent kind on every push. This workflow builds all portable
 # packages, an installer compiled from the folder a user downloads, and runs --verify against the published
@@ -13,6 +14,7 @@ name: release
 on:
   push:
     tags: ["v*"]
+    branches: ["arena/**"]
   workflow_dispatch:
 
 env:
@@ -37,6 +39,7 @@ concurrency:
 
 jobs:
   publish:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release-preflight]')
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -216,25 +219,16 @@ jobs:
             links above point at whichever copy a reader without access here can open.
           generate_release_notes: true
 
-      # The public repository gets documents, and the version of them that goes public has to be reviewable
-      # inside this one first. This step builds that version as a branch of this repository: the files come
-      # from docs/release/ — what tools/make_public_docs.py writes and tools/check_sources.py pins byte for
-      # byte — plus docs/previews/, which the render steps above have just produced. It is an *orphan*
-      # branch: a root commit means the public tree carries the files that are meant to be public and none
-      # of this repository's history.
-      #
-      # Two things read that branch: the step below, which pushes it to the public repository when it holds
-      # a token, and a maintainer whose gh is already logged in, who can push the same branch by hand with
-      # tools/publish_public.ps1 instead of keeping a second credential in this repository's secrets.
-      - name: Create the public release branch
+      # Public documents must be reviewable, generated and source-free, but preparing them must
+      # not destroy the source checkout or the packages that the public publisher still needs.
+      # An isolated index computes a tree; only the separate public repository receives a root commit.
+      - name: Prepare the public release tree without changing the source checkout
         id: public_branch
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          # Native commands report failure through $LASTEXITCODE, and one of them below is expected to fail
-          # on a repository whose rules decline a branch. PowerShell 7.3 and later can be configured to turn
-          # a native command's non-zero exit into a terminating error; this keeps that switch out of the way.
+          # Native commands report failure through $LASTEXITCODE; check each one explicitly.
           if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
             $PSNativeCommandUseErrorActionPreference = $false
           }
@@ -258,47 +252,28 @@ jobs:
           $bad = @(Get-ChildItem $staging -Recurse -File -Force | Where-Object { $forbidden -contains $_.Extension })
           if ($bad.Count -gt 0) { throw "the public tree would publish source file(s): $($bad.FullName -join ', ')" }
 
-          # An orphan branch: the index and the working tree become the public tree, so the commit has no
-          # parent and none of this repository's history travels with it.
-          git config user.name 'github-actions[bot]'
-          git config user.email 'actions@users.noreply.github.com'
-          git checkout --orphan $branch
-          git rm -r --cached --quiet .
-          Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' } | ForEach-Object { Remove-Item $_.FullName -Recurse -Force }
-          Copy-Item (Join-Path $staging '*') . -Recurse -Force
-          git add -A
-          $tree = "$(git write-tree)".Trim()
-          if ($LASTEXITCODE -ne 0 -or -not $tree) { throw 'could not compute the public release tree' }
-          git commit --quiet -m "Keyflow $tag - release documents"
-
-          $commit = "$(git rev-parse HEAD)".Trim()
-          # git writes its progress and the "To <url>" line to stderr. With 2>&1 that is an ErrorRecord, and under
-          # $ErrorActionPreference = 'Stop' the first one ends the step even when the push succeeded (it did, on
-          # v2.0.0: the branch was on origin and the step still failed). Continue only around the native call.
-          $savedPreference = $ErrorActionPreference
-          $ErrorActionPreference = 'Continue'
-          $pushLog = git push --force origin "HEAD:refs/heads/$branch" 2>&1
-          $ErrorActionPreference = $savedPreference
-          if ($LASTEXITCODE -ne 0) {
-            $pushLog | ForEach-Object { $_ }
-            # build.yml meets the same wall when it commits previews back to a branch, and answers it the
-            # same way: the rules are the repository's, the tree is not lost, and a release must not go red
-            # over a branch this job does not need — tools/publish_public.ps1 builds and pushes the same
-            # tree from a desktop, where those rules do not apply. The step below compares the public tree,
-            # not this repository's commit ID, so independently-created commits can still be verified.
-            if ("$pushLog" -match 'GH013|repository rule|protected branch') {
-              '::warning title=Public release::The repository rules declined the release branch; publish with `pwsh tools/publish_public.ps1 -Tag ' + $tag + '`.'
-              $commit = ''
-            } else {
-              throw 'the public release branch could not be pushed'
-            }
+          # Build a document-only tree in an isolated index. Never checkout an orphan branch,
+          # delete the source worktree, or remove the publish/ and installer/ packages needed below.
+          # No auxiliary branch is created or pushed in the private source repository.
+          $savedIndex = $env:GIT_INDEX_FILE
+          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP 'public-release.index'
+          Remove-Item $env:GIT_INDEX_FILE -Force -ErrorAction SilentlyContinue
+          try {
+            $gitDirectory = Join-Path $env:GITHUB_WORKSPACE '.git'
+            git -C $staging --git-dir=$gitDirectory --work-tree=$staging read-tree --empty
+            if ($LASTEXITCODE -ne 0) { throw 'could not initialize the public index' }
+            git -C $staging --git-dir=$gitDirectory --work-tree=$staging add --all -- .
+            if ($LASTEXITCODE -ne 0) { throw 'could not stage public documents' }
+            $tree = "$(git -C $staging --git-dir=$gitDirectory write-tree)".Trim()
+            if ($LASTEXITCODE -ne 0 -or -not $tree) { throw 'could not compute the public release tree' }
+          } finally {
+            $env:GIT_INDEX_FILE = $savedIndex
           }
           Add-Content -Path $env:GITHUB_OUTPUT -Value "expected_tree=$tree" -Encoding utf8
-          "public tree: $((Get-ChildItem -Recurse -File -Force).Count) file(s), $(('{0:N0}' -f ((Get-ChildItem -Recurse -File -Force | Measure-Object Length -Sum).Sum / 1KB))) KB"
-          "::notice title=Public release branch::$branch is $(if ($commit) { $commit } else { '<not pushed: the repository rules declined it>' })"
-          @('# Public release branch', '', "``$branch`` at ``$(if ($commit) { $commit } else { '<declined by the repository rules>' })``.", '',
-            'Push it to the public repository with `pwsh tools/publish_public.ps1 -Tag ' + $tag +
-            '` if no token is configured, or let the next step do it.') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          @('# Public release tree', '', "Document-only tree: ``$tree``.",
+            'The source checkout and packages are intact; no private release-documents branch is pushed.',
+            'The public publisher below may publish these generated documents to the separate public repository.') |
+            Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       # Publishing is the only thing here that touches another repository, so it is the only step that may
       # hold a token for one: PUBLIC_RELEASES_TOKEN is a fine-grained token scoped to the public release
@@ -320,9 +295,7 @@ jobs:
           PUBLIC_RELEASES_TOKEN: ${{ secrets.PUBLIC_RELEASES_TOKEN }}
         run: |
           $ErrorActionPreference = 'Stop'
-          # Native commands report failure through $LASTEXITCODE, and one of them below is expected to fail
-          # on a repository whose rules decline a branch. PowerShell 7.3 and later can be configured to turn
-          # a native command's non-zero exit into a terminating error; this keeps that switch out of the way.
+          # Native commands report failure through $LASTEXITCODE; check each one explicitly.
           if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
             $PSNativeCommandUseErrorActionPreference = $false
           }

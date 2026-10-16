@@ -1816,6 +1816,14 @@ def scan_public_release():
         errors.append(f".github/workflows/build.yml names {token}; the build job must not be able to reach "
                       f"the public repository at all")
 
+    # Preparing the public tree must not remove the project or the packages needed by the next step.
+    if "$env:GIT_INDEX_FILE" not in workflow_text or "read-tree --empty" not in workflow_text:
+        errors.append("release.yml must prepare its public tree with an isolated Git index")
+    if any(line.strip().startswith("git checkout --orphan") for line in workflow_text.splitlines()):
+        errors.append("release.yml must not replace the source checkout with an orphan documentation branch")
+    if "Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' }" in workflow_text:
+        errors.append("release.yml must not delete the source worktree before public package publication")
+
     # 7. Neither place that can push release documents may write main of the source repository. It happened
     # once — on 2026-10-03 `publish_public.ps1 -Repository lxmtuu/PianoPath` replaced main with docs/release
     # and the sources had to be restored from a branch — and the two refusals that came out of it are

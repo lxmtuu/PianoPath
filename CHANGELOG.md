@@ -19,6 +19,13 @@ không được lặp lại ở đây; việc còn mở nằm ở [`docs/ROADMAP
 
 ## Unreleased
 
+## 2.1.0 — 2026-10-16
+
+### Settings, hiệu ứng hạt và xuất AR
+- **Settings mới gồm 12 nhóm** theo bố cục đã duyệt: Nốt & màu → Nhấn phím → Giữ phím → Thả phím → Ánh sáng; thêm Nâng cao, tìm VI/EN không dấu và alias cho 13 trang cũ. Preset/share code, camera/calibration, Audio/MIDI, luyện tập/lịch sử, ghi hình, theme và hồ sơ vẫn giữ handler/ID cũ. Stage/AR trên header là ngữ cảnh cài đặt, không tự đổi camera hay output.
+- **Hiệu ứng hạt nâng cấp** là opt-in, mặc định tắt cho look cũ. Wisps/Flames và vật liệu nhả Float Up/Dissolve/Smoke dùng chung cho GPU Live Stage và AR; AR chia cap 192 theo vai trò/nhóm nốt. Thêm preset Prism Flow - Wisps / Prism Flow - Flames. Renderer phần mềm giữ classic.
+- **Xuất AR offline giữ vòng đời hạt liên tục** trong mỗi take thay vì tạo lại simulation mỗi frame; dùng clock đã lập kế hoạch và substep tối đa 50 ms. Chính sách camera-file nửa tốc độ khung hình cũ vẫn giữ; không tuyên bố sửa mọi trường hợp đồng bộ A/V hoặc đã thử webcam/hardware ARM.
+
 ### AR overlay
 - **AR render-to-video — giao diện xuất (S7 trọn vẹn)**: thẻ mới **AR RENDER‑TO‑VIDEO** ở trang Recording — một nút RENDER AR TAKE… render offline bài hát đang mở trên video camera đã hiệu chỉnh: không đồng hồ live, bước thời gian cố định, đúng look máy đang dùng (lớp AR, watermark kind‑16, watermark… mọi lớp), tiếng piano mix khớp tick ra `.wav` cạnh AVI (độ phân giải/fps theo lựa chọn OUTPUT; Record audio + Watermark đều tôn trọng), kèm dòng ffmpeg ghép khi xong. Song → script sự kiện làm code thuần (`ArVideoExportScript`, xUnit `SongExportScriptTests`); verify chạy đường thật với MP4 do chính app ghi + reader decode: sọc sáng của file tăng đều theo từng tick của engine.
 - **AR render-to-video — phần watermark**: dải «KEYFLOW» của toggle **Watermark** giờ do chính GPU in lên khung hình (sprite kind 16 + texture `MarkTex`), nên bản ghi GPU và take offline đều mang đúng dải mà live stage đang hiển thị; placement (giữa màn, đúng 18 DIP trên đường bàn phím, chỉ co lại khi khung hình hẹp) là code thuần có xUnit. Verify so byte: cùng một tick có/không watermark khác đúng và chỉ ở vùng strip.

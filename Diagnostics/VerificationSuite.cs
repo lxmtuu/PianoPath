@@ -2932,7 +2932,7 @@ internal static partial class VerificationSuite
         var vietnameseCaption = Loc.T("Falling notes");
         Loc.ResetDiagnostics();
         Assert(Loc.Current.Id == "vi" && vietnameseCaption != "Falling notes", "Applying a language must change the captions the interface prints.");
-        Assert(firstHeader() == Loc.T("Style"), "A window that is already open must repaint its labels when the language changes.");
+        Assert(firstHeader() == Loc.T(SettingsPages.Overview), "A window that is already open must repaint its labels when the language changes.");
         // The row of the "Falling notes" switch is found by its translated caption, not only by English.
         var search = (TextBox)window.FindName("SettingsSearchBox");
         var rows = (System.Collections.IList)Field(window, "_settingRows");
@@ -3137,6 +3137,14 @@ internal static partial class VerificationSuite
             {
                 var tab = (TabItem)tabs.Items[index];
                 tabs.SelectedIndex = index;
+                var expanders = new List<Expander>();
+                WalkApplicationTree(tab, element => { if (element is Expander expander) expanders.Add(expander); });
+                var expansion = expanders.ToDictionary(expander => expander, expander => expander.IsExpanded);
+                try
+                {
+                foreach (var expanded in new[] { false, true })
+                {
+                foreach (var expander in expanders) expander.IsExpanded = expanded;
                 // Keep the pointer "recent", otherwise the idle timer hides the dock while it is measured.
                 SetField(window, "_lastPointerActivity", DateTime.UtcNow);
                 window.UpdateLayout();
@@ -3187,13 +3195,22 @@ internal static partial class VerificationSuite
                         $"Every '{header}' card should fit the scroll column at the compact window size.");
                     measured++;
                 }
-                foreach (var row in pageRows)
+                foreach (var row in pageRows.Where(row => row.Element.IsVisible))
                 {
+                    // Collapsed content need not have a visual ancestor or measured size. The second
+                    // pass expands Advanced and checks those same controls, rather than dropping them.
                     var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
                     Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
                         $"The control of a row on the '{header}' page should stay inside its card at the compact window size.");
                 }
-                pages++; reachable += focusable.Count;
+                reachable += focusable.Count;
+                }
+                }
+                finally
+                {
+                    foreach (var (expander, expanded) in expansion) expander.IsExpanded = expanded;
+                }
+                pages++;
             }
         }
         finally
@@ -3201,7 +3218,7 @@ internal static partial class VerificationSuite
             tabs.SelectedIndex = wasIndex;
             window.Width = wasWidth; window.Height = wasHeight; window.WindowState = wasState; window.UpdateLayout();
         }
-        Results.Add($"PASS dock accessibility: all {pages} pages keep their {reachable} keyboard-reachable controls inside the scroll column at 1080x700, each of the {measured} generated cards stays inside the scroll column ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
+        Results.Add($"PASS dock accessibility: all {pages} pages, with Advanced both collapsed and expanded, keep their {reachable} keyboard-reachable control visits inside the scroll column at 1080x700, each of the {measured} generated cards stays inside the scroll column ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
     }
 
     /// <summary>
