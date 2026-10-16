@@ -30,3 +30,5 @@ Hardware/ARM/real-camera/audio/MIDI/DPI/manual-visual limitations and unsigned/S
 ## Tagged-check follow-up
 
 The initial unpublished 2.1.1 tag run `38876574673` correctly stopped before any source release was created: `OfflineFrameQueueTests.WriterFailureIsObservedAfterWakeup` timed out waiting for a thread-pool worker to start. Both queue handshake tests now use dedicated LongRunning workers, retaining all queue capacity/order, failure propagation, timeout and closed-recorder assertions. Production queue/encoder/application code is unchanged. The new tag will target the merged test-harness correction; no immutable or published tag is changed.
+
+The dedicated-worker correction passed release preflight [38876959998](https://github.com/lxmtuu/PianoPath/actions/runs/38876959998) at `eb8860c`: Windows portable tests and actual published-executable native gates, public staging, three ZIPs/installer/SHA256 all SUCCESS. Compile lane `38876960073` also SUCCESS. No production queue/encoder change or deadline/assertion removal.
