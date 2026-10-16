@@ -13,7 +13,7 @@ SOURCES={'Gpu/StageShaders.hlsl','Gpu/GpuLook.cs','Gpu/GpuStageRenderer.cs','Gpu
  'Gpu/GpuArLayer.cs','Gpu/GpuArLayer.Effects.cs','Gpu/GpuRenderLoop.cs','Gpu/GpuStageFeed.cs','Gpu/HeldParticleAppearance.cs','Gpu/ReleaseParticleAppearance.cs',
  'Stage/PianoVisualSettings.cs','Stage/PianoStage.cs','Stage/PianoStage.Gpu.cs','Camera/ArParticleBillboard.cs','Camera/Ar3DNoteProjection.cs','Camera/ArCameraPose.cs',
  'Diagnostics/KeyParticleFixtures.cs','Diagnostics/HeldParticleControlPlan.cs','Diagnostics/KeyParticleEnsemblePlan.cs','Diagnostics/KeyParticleEnsembleReview.cs','docs/samples/ar-keyboard-topdown.png'}
-BUDGET=350000
+BUDGET=750000
 
 def read(p):return json.loads(gzip.decompress(p.read_bytes()) if p.suffix=='.gz' else p.read_text(encoding='utf-8-sig'))
 def digest(im):return hashlib.sha256(im.convert('RGBA').tobytes('raw','BGRA')).hexdigest().upper()
