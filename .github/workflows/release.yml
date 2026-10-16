@@ -132,7 +132,28 @@ jobs:
           }
 
       - name: Test the tagged source
-        run: dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release
+        shell: pwsh
+        run: >-
+          dotnet test tests/PianoPath.Tests/PianoPath.Tests.csproj --configuration Release
+          --logger "console;verbosity=normal" --logger "trx;LogFileName=tests.trx"
+          --results-directory "$env:RUNNER_TEMP/test-results"
+
+      - name: Report release test results
+        if: always()
+        shell: pwsh
+        run: |
+          $trx = Get-ChildItem (Join-Path $env:RUNNER_TEMP 'test-results') -Filter *.trx -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $trx) { 'No test results were written.'; exit 0 }
+          [xml]$run = Get-Content $trx.FullName
+          $counters = $run.TestRun.ResultSummary.Counters
+          "::notice title=Release tests::$($counters.passed) passed, $($counters.failed) failed, $($counters.notExecuted) not executed of $($counters.total)."
+          foreach ($test in @($run.TestRun.Results.UnitTestResult)) {
+            if ($test.outcome -ne 'Failed') { continue }
+            $detail = "$($test.testName) — $($test.Output.ErrorInfo.Message) $($test.Output.ErrorInfo.StackTrace)" -replace '\s+', ' '
+            if ($detail.Length -gt 1200) { $detail = $detail.Substring(0, 1200) }
+            $detail = $detail -replace '%', '%25'
+            "::error title=Release test failed::$detail"
+          }
 
       - name: Publish self-contained single file (win-x64)
         shell: pwsh
