@@ -39,6 +39,12 @@ internal sealed record ArVideoRenderProfile
     internal required int Downsample { get; init; }
     /// <summary>Seconds one output frame advances the scene; the fixed time step of the sweep.</summary>
     internal double FrameSeconds => 1.0 / FrameRate;
+    /// <summary>Exact start of an output tick; independent of the requested/camera frame rate.</summary>
+    internal double PositionAt(int frame)
+    {
+        if((uint)frame>=(uint)Frames)throw new ArgumentOutOfRangeException(nameof(frame));
+        return frame*FrameSeconds;
+    }
     /// <summary>Seconds the take covers (Frames ticks, including the final settle frame).</summary>
     internal double Seconds => Frames / (double)FrameRate;
     /// <summary>What the writer receives: the render size divided by <see cref="Downsample"/>.</summary>

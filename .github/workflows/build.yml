@@ -10,7 +10,7 @@ on:
         description: 'Full build or the bounded native mixed-particle diagnostic'
         type: choice
         default: full
-        options: [full, key-ensemble, ar-budget]
+        options: [full, key-ensemble, ar-budget, app-build]
 
 # The preview step commits the freshly rendered screenshots back to the branch it built, which keeps
 # docs/previews in step with the interface without anyone copying files around by hand. A branch that
@@ -24,7 +24,7 @@ permissions:
 # replaces the older one — except on main, where a cancelled run would throw away the preview commit that
 # belongs to a commit people are already reading.
 concurrency:
-  group: build-${{ github.ref }}${{ ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))) && '-ar-budget' || (((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) && '-key-ensemble' || '') }}
+  group: build-${{ github.ref }}${{ ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]'))) && '-app-build' || (((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))) && '-ar-budget' || (((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) && '-key-ensemble' || '')) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
@@ -43,6 +43,8 @@ jobs:
 
       # Input-fixture validation only; does not claim Windows/GPU/AR render evidence.
       - name: Prism Flow baseline input checks
+        if: >-
+          !((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]')))
         run: |
           python3 -m unittest discover -s tools/tests -v
           python3 tools/make_prism_flow_fixture.py
@@ -55,6 +57,8 @@ jobs:
   # about a minute without waiting for a Windows runner to be free. It runs beside `build` rather than
   # in front of it: both only need `static`, and neither is a prerequisite for the other.
   test:
+    if: >-
+      !((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]')))
     needs: static
     runs-on: ubuntu-latest
     steps:
@@ -102,9 +106,41 @@ jobs:
             "::error title=Test failed::$text"
           }
 
+  # Compile/package only: explicitly no native capture, performance or test rerun.
+  app-build:
+    if: >-
+      ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]')))
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish private Windows integration build
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'keyflow-app-win-x64'
+          ./publish.ps1 -Mode SelfContained -Runtime win-x64 -Output $output
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Join-Path $output 'PianoPath.exe'
+          if (-not (Test-Path $exe)) { throw 'Published executable is missing.' }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          @("Source: $env:GITHUB_SHA", 'Private integration build; not a public release.', 'Self-contained Windows x64; native/performance/runtime checks not run.', "PianoPath.exe SHA256: $hash") | Set-Content (Join-Path $output 'BUILD-INFO.txt')
+          @('# Windows integration build', "Source: $env:GITHUB_SHA", "Executable SHA256: $hash", 'Compile/package only: native/performance/runtime checks were not run.') | Set-Content $env:GITHUB_STEP_SUMMARY
+      - name: Upload private application build
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-app-win-x64
+          path: ${{ runner.temp }}/keyflow-app-win-x64/
+          if-no-files-found: error
+          retention-days: 7
+
   keyboard-light:
     if: >-
-      !(((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))))
+      !((((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]')))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]'))))
     needs: static
     runs-on: windows-latest
     steps:
@@ -264,7 +300,7 @@ jobs:
 
   build:
     if: >-
-      !(((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))))
+      !((((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]')))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]'))))
     needs: static
     runs-on: windows-latest
     steps:

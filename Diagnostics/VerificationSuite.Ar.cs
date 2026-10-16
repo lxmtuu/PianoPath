@@ -2377,7 +2377,6 @@ internal static partial class VerificationSuite
             var feed = new GpuStageFeed(); feed.SetStageHeight(360);
             feed.SetLook(GpuLook.From(look, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
             if (look.ShowWatermark) feed.Watermark = PianoStage.GpuWatermark; // the GPU prints its own strip (kind 16)
-            feed.ClearTransient();
             feed.SetDeterministicState([], 0, false, held);
             feed.SetDeterministicBeatPulse(0);
             if (tick == 2) { feed.LiveNote(60, true, .8f); feed.Impact(60, .8); }
@@ -2448,10 +2447,12 @@ internal static partial class VerificationSuite
             }
             Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
             Assert(keyLevels.Count >= 6, $"The take must carry at least six probe readings (got {keyLevels.Count}).");
-            // Keys light the moment they are pressed (ticks 1–3) and go quiet when the take goes quiet.
-            Assert(keyLevels[0] < 160 && keyLevels[5] < 170 && keyLevels[1] > keyLevels[0] + 40 && keyLevels[2] > keyLevels[0] + 40
-                    && keyLevels[3] > keyLevels[0] + 40 && keyLevels[5] < keyLevels[2] - 40,
-                $"The C4 light must be quiet at the take's ends and lit through the pressed ticks ({string.Join("/", keyLevels)}).");
+            // Compare against each tick's changing camera background: release fades over time,
+            // rather than teleporting to a fresh/empty simulation on the first unpressed frame.
+            var keyExcess=keyLevels.Select((level,tick)=>level-(90+tick*8)).ToArray();
+            Assert(keyExcess[0]<70 && keyExcess[1]>keyExcess[0]+40 && keyExcess[2]>keyExcess[0]+40
+                    && keyExcess[3]>keyExcess[0]+40 && keyExcess[5]<keyExcess[3],
+                $"The C4 light must grow on press and fade after release over the changing camera ({string.Join("/",keyExcess)}).");
 
             // PNG: downsample 2 boxes the 320×180 sweep into 160×90 frames — and the sweep itself replays bit-identically.
             var pngPlan = ArVideoRenderProfile.Plan(cw, ch, 0.5, 12, downsample: 2, maxSide: 320);
@@ -2459,18 +2460,26 @@ internal static partial class VerificationSuite
                 "Downsample 2 should box a 320×180 render into a 160×90 output frame.");
             var firstBuffers = new List<byte[]>();
             var pngDir = Path.Combine(directory, "frames");
-            using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+            var sceneTimes=new List<double>();
+            renderer.ObserveParticleStateForReview=(simulation,_)=>sceneTimes.Add(simulation.Time);
+            try
             {
+                using var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate);
                 var pngTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), pngPlan, recorder, (i, bgra) => firstBuffers.Add(bgra));
                 Assert(pngTake.FramesWritten == 6 && pngTake.Downsample == 2, "The PNG take writes the full sweep.");
             }
+            finally{renderer.ObserveParticleStateForReview=null;}
+            Assert(sceneTimes.Count==pngPlan.Frames && sceneTimes.Select((time,i)=>Math.Abs(time-(i+1)*pngPlan.FrameSeconds)<.000001).All(correct=>correct),
+                "Offline simulation time must advance continuously by every full frame interval, including at 12 fps; no per-frame restart or 50 ms time loss.");
             Assert(Directory.GetFiles(pngDir, "frame-*.png").Length == 6 && File.Exists(Path.Combine(pngDir, PngSequenceRecorder.ManifestName))
                     && firstBuffers.All(b => b.Length == 160 * 4 * 90),
                 "The take writes one PNG per tick plus the manifest, from 160×90 BGRA readbacks.");
-            // So khung live ↔ render: tick 2 by hand, the exact call the engine made, is the same picture bit for bit.
-            var liveTick = GpuRenderLoop.RenderFrames(renderer, TickFeed(2, quiet), 320, 180, 0, pngPlan.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
+            // Live-shaped sequential replay must include ticks 0 and 1, not restart at tick 2.
+            byte[] liveTick=[];
+            using(var replay=new GpuOfflineFrameSequence(renderer,320,180,ArVideoRenderProfile.Seed))
+                for(var tick=0;tick<=2;tick++)liveTick=replay.RenderFrame(TickFeed(tick,quiet),pngPlan.FrameSeconds);
             Assert(BgraPack.Box2(liveTick, 320, 180).AsSpan().SequenceEqual(firstBuffers[2]),
-                "A live-shaped render of the same tick, same fixed time step and same seed must land on the take's third frame bit for bit.");
+                "A continuous replay of the same preceding ticks, fixed time steps and seed must match the take's third frame bit for bit.");
             // And the whole take seconds as an export: a second sweep of the same script writes the same readbacks.
             var secondBuffers = new List<byte[]>();
             using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
