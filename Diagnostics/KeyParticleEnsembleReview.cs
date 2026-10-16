@@ -18,7 +18,7 @@ internal static class KeyParticleEnsembleReview
     internal sealed record Shot(string Id,string Recipe,string Palette,int Light,string View,string Phase,int Frame,string Variant,string File,
         string PixelSha256,string RawHash,string GeometryHash,string PacketHash,string KeyHash,int RawParticles,int Packets,
         Population[] Population,Population[] ArSelected,int StageNotes,int ArLiveBars,long Signal,int VisiblePixels,int ClippedDeltaPixels);
-    private sealed record FrameResult(byte[] Pixels,Shot Shot);
+    internal sealed record FrameResult(byte[] Pixels,Shot Shot);
     internal static int Render(string output)
     {
         var previous=KeyboardLayout.Active;KeyboardLayout.Use(KeyboardLayout.Standard88);
@@ -95,8 +95,8 @@ internal static class KeyParticleEnsembleReview
         }
         finally{KeyboardLayout.Use(previous);}
     }
-    private static FrameResult Draw(GpuStageRenderer renderer,KeyParticleEnsemblePlan.Recipe recipe,string palette,int light,
-        HeldParticleControlPlan.View view,byte[] camera,KeyParticleEnsemblePlan.Checkpoint sample,string variant)
+    internal static FrameResult Draw(GpuStageRenderer renderer,KeyParticleEnsemblePlan.Recipe recipe,string palette,int light,
+        HeldParticleControlPlan.View view,byte[] camera,KeyParticleEnsemblePlan.Checkpoint sample,string variant,bool budgetTrial=false,Action<GpuArQuad>? observeQuad=null)
     {
         var enabled=variant!="off";var art=variant is "mixed" or "front-control";
         var s=KeyParticleFixtures.Settings(KeyParticleFixtures.All[0],enabled);
@@ -111,7 +111,7 @@ internal static class KeyParticleEnsembleReview
         stage.Measure(new Size(1280,720));stage.Arrange(new Rect(0,0,1280,720));stage.UpdateLayout();
         var feed=new GpuStageFeed();feed.SetStageHeight(720);
         var look=GpuLook.From(s,(p,t)=>stage.AdjustColor(stage.NoteColor(p,t)),stage.KeyboardHeight/stage.ActualHeight,stage.AdjustColor,view.OverCamera)
-            .WithWispV3ForReview(art).WithFlameV3ForReview(art).WithReleaseArtForReview(art).WithReleaseFrontLayerForReview(variant=="front-control");
+            .WithWispV3ForReview(art).WithFlameV3ForReview(art).WithReleaseArtForReview(art).WithReleaseFrontLayerForReview(variant=="front-control").WithArFairParticleBudgetForReview(budgetTrial);
         feed.SetLook(look);
         if(view.OverCamera)
         {
@@ -134,7 +134,7 @@ internal static class KeyParticleEnsembleReview
         };
         renderer.ObserveArQuadForReview=q=>
         {
-            packets.Add(q);var misc=q.Misc;if(misc.Z is 40 or 43 or 46)misc.Z=2;
+            observeQuad?.Invoke(q);packets.Add(q);var misc=q.Misc;if(misc.Z is 40 or 43 or 46)misc.Z=2;
             if(misc.Z==17)misc.Y=misc.Y==8?7:misc.Y==6?4:misc.Y;
             geometry.Add(new{q.A,q.B,q.W,Misc=misc});
         };

@@ -88,6 +88,10 @@ internal sealed class GpuLook
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
+    // Explicit diagnostic only; never persisted or enabled by settings/presets.
+    internal bool ArFairParticleBudgetForReview { get; private set; }
+    internal GpuLook WithArFairParticleBudgetForReview(bool enabled)
+    {var copy=(GpuLook)MemberwiseClone();copy.ArFairParticleBudgetForReview=enabled;return copy;}
     internal bool ReleaseArtForReview { get; private set; }
     internal bool ReleaseFrontLayerForReview { get; private set; }
     internal GpuLook WithReleaseArtForReview(bool enabled)

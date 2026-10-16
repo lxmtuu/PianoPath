@@ -383,11 +383,55 @@ internal sealed partial class GpuArLayer
         quads.Add(Pack(patch, color, Math.Clamp(alpha, 0, 1), new Vector4(0, 0, 3, 0)));
     }
 
+    internal sealed record BudgetEntry(GpuArParticle Particle,GpuArQuad Quad);
+    internal sealed record BudgetTrace(int Start,BudgetEntry[] Eligible,int[] Selected,bool Fair);
+    internal Action<BudgetTrace>? ObserveBudgetForReview { get; set; }
+    private readonly GpuInstanceList<GpuArQuad> _budgetQuads=new(1024);
+    private readonly List<GpuArParticle> _budgetParticles=[];
+
+    private void BuildBudgetTrial(ArView view,GpuStageSimulation simulation,GpuInstanceList<GpuArQuad> quads,
+        float opacity,GpuLook look,KeyboardLayout layout,ArCameraPose pose,ArParticleFrame frame,bool legacyAxes)
+    {
+        _budgetQuads.Clear();_budgetParticles.Clear();
+        // Evaluate the SAME projectability/alpha gate once, before allocation. No trial material/geometry changes.
+        for(var pass=0;pass<2;pass++)
+            for(var i=simulation.ArParticleCount-1;i>=0;i--)
+            {
+                var p=simulation.ArParticleAt(i);
+                if((pass==0 && p.Origin==2)||(pass==1 && p.Origin!=2))continue;
+                if(!layout.Contains(p.Pitch) || !(p.Life>0) || p.Age<0 || p.Age>=p.Life)continue;
+                var before=_budgetQuads.Count;
+                if(!TryAddProjectedParticle(view,simulation,p,_budgetQuads,opacity,look,layout,pose,frame,legacyAxes))
+                {
+                    if(_budgetQuads.Count!=before)throw new InvalidOperationException("Rejected budget candidate appended geometry.");
+                    continue;
+                }
+                if(_budgetQuads.Count!=before+1)throw new InvalidOperationException("Budget trial expects one existing quad per particle.");
+                _budgetParticles.Add(p);
+            }
+        var fair=look.ArFairParticleBudgetForReview;
+        var selected=fair?ArParticleBudget.Select(_budgetParticles.Select(p=>new ArParticleBudget.Candidate(p.Pitch,p.Origin)).ToArray(),MaxProjectedParticles)
+            :Enumerable.Range(0,Math.Min(MaxProjectedParticles,_budgetParticles.Count)).ToArray();
+        var start=quads.Count;
+        foreach(var i in selected)
+        {
+            quads.Add(_budgetQuads.Span[i]);ParticleFxCount++;
+            var p=_budgetParticles[i];ObservePackedParticleForReview?.Invoke(p);
+            if(p.Origin==1)ReleaseEffectCount++;
+        }
+        if(ObserveBudgetForReview is { } observe)
+            observe(new BudgetTrace(start,_budgetParticles.Select((p,i)=>new BudgetEntry(p,_budgetQuads.Span[i])).ToArray(),selected,fair));
+    }
+
     private void BuildStageParticles(ArView view, GpuStageSimulation simulation,
         GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose,
         ArNoteDirection direction, bool legacyAxes)
     {
         var frame = legacyAxes ? ArParticleFrame.Legacy : ArParticleFrame.ForNotes(direction);
+        if(look.ArFairParticleBudgetForReview || ObserveBudgetForReview is not null)
+        {
+            BuildBudgetTrial(view,simulation,quads,opacity,look,layout,pose,frame,legacyAxes);return;
+        }
         var emitted = 0;
         // Draw impact and release bursts before continuous emitters when the AR tier's per-frame fill cap is reached.
         for (var originPass = 0; originPass < 2 && emitted < MaxProjectedParticles; originPass++)

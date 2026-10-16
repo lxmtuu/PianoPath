@@ -4,6 +4,18 @@ import argparse,hashlib,io,json
 from pathlib import Path
 
 TARGETS=(
+ 'held-particle-controls-scenes/wisps-prism-chord-ar-near-overhead.png',
+ 'held-light-isolation/wisps-low-prism-ar-near-overhead-full.png',
+ 'prism-flow-p0/concert-gold-live-stage.png',
+ 'held-particle-controls-scenes/flames-prism-chord-ar-oblique.png',
+ 'held-particle-controls-scenes/wisps-prism-chord-ar-oblique.png',
+ 'held-light-isolation/wisps-low-prism-ar-oblique-full.png',
+ 'prism-flow-p0/neon-violet-live-stage.png',
+ 'prism-flow-p0/ice-crystal-live-stage.png',
+ 'vi/background-image.png',
+ 'en/background-image.png',
+ 'ar-particle-alignment/default.png',
+ 'vi/stage-gpu.png',
  'prism-flow-p3a-aux/wisps-60-ar-active.png',
  'held-particle-controls-scenes/flames-prism-chord-ar-near-overhead.png',
  'held-particle-controls-scenes/wisps-prism-chord-ar-reference.png',

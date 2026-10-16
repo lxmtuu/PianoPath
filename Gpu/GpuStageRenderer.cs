@@ -372,6 +372,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal bool SuppressStageKeySpillForReview { get; set; }
     internal bool SuppressArKeyTintForReview { get; set; }
     internal bool SuppressArKeySpillForReview { get; set; }
+    internal Action<GpuArLayer.BudgetTrace>? ObserveArBudgetForReview { get; set; }
     internal Action<GpuKeyInstance>? ObserveStageKeyForReview { get; set; }
     internal Action<GpuStageSimulation, GpuLook>? ObserveParticleStateForReview { get; set; }
     internal Action<GpuArParticle>? ObserveStageParticleForReview { get; set; }
@@ -547,6 +548,7 @@ internal sealed class GpuStageRenderer : IDisposable
         // drops what roadmap's sentence says, never what it forbids.
         var arBudgetTier = ArBudgetTierOverride ?? _adaptiveQualityController?.Tier ?? GpuAdaptiveQualityTier.Full;
         _arLayer.ObservePackedParticleForReview = ObserveArParticleForReview;
+        _arLayer.ObserveBudgetForReview = ObserveArBudgetForReview;
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
             _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier,
                 SuppressArKeyTintForReview, SuppressArKeySpillForReview);

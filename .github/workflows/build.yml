@@ -10,7 +10,7 @@ on:
         description: 'Full build or the bounded native mixed-particle diagnostic'
         type: choice
         default: full
-        options: [full, key-ensemble]
+        options: [full, key-ensemble, ar-budget]
 
 # The preview step commits the freshly rendered screenshots back to the branch it built, which keeps
 # docs/previews in step with the interface without anyone copying files around by hand. A branch that
@@ -24,7 +24,7 @@ permissions:
 # replaces the older one — except on main, where a cancelled run would throw away the preview commit that
 # belongs to a commit people are already reading.
 concurrency:
-  group: build-${{ github.ref }}${{ ((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) && '-key-ensemble' || '' }}
+  group: build-${{ github.ref }}${{ ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))) && '-ar-budget' || (((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) && '-key-ensemble' || '') }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
@@ -104,7 +104,7 @@ jobs:
 
   keyboard-light:
     if: >-
-      !((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]')))
+      !(((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))))
     needs: static
     runs-on: windows-latest
     steps:
@@ -209,9 +209,62 @@ jobs:
           git pull --rebase origin "$GITHUB_REF_NAME"
           git push origin "$GITHUB_REF_NAME"
 
+  ar-budget:
+    if: >-
+      ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]')))
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build AR budget diagnostic
+        run: dotnet build PianoPath.csproj --configuration Release
+      - name: Native mixed-scene checkpoints
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'ar-particle-budget'
+          $log = Join-Path $env:RUNNER_TEMP 'ar-particle-budget.log'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-ar-budget-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) { Get-Content $log }
+          if ($proc.ExitCode -ne 0) { Write-Output '::error title=Key AR budget::Native mixed diagnostic failed'; exit $proc.ExitCode }
+      - name: Validate original AR budget pixels and bounded subset
+        shell: pwsh
+        run: |
+          python -m pip install Pillow
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $review = Join-Path $env:RUNNER_TEMP 'ar-particle-budget'
+          python tools/review_ar_particle_budget.py $review --source-root . --expected-revision $env:GITHUB_SHA --publish-evidence docs/evidence/ar-particle-budget-v1 --publish-previews docs/previews/ar-particle-budget-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output '::notice title=Key AR budget::904 native budget captures verified. Review-only fixed-cap trial, not continuous motion, hardware, full regression or art approval.'
+      - name: Publish native AR budget originals
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ar-particle-budget-native
+          path: |
+            ${{ runner.temp }}/ar-particle-budget
+            ${{ runner.temp }}/ar-particle-budget.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Save bounded AR budget evidence
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && startsWith(github.ref, 'refs/heads/arena/')
+        shell: bash
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/evidence/ar-particle-budget-v1 docs/previews/ar-particle-budget-v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "$GITHUB_REF_NAME"
+
   build:
     if: >-
-      !((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]')))
+      !(((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))))
     needs: static
     runs-on: windows-latest
     steps:

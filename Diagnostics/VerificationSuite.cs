@@ -54,6 +54,18 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
+        if (args.Contains("--verify-ar-budget-only"))
+        {
+            try
+            {
+                if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("AR budget review requires --verify-review-out=<directory>.");
+                var count=ArParticleBudgetReview.Render(reviewOutput);
+                Results.Add($"PASS AR budget trial: {count} native captures; default/frozen baseline unchanged, under-cap identity, unchanged eligible payloads/non-particle packets; fixed 192 cap and stable selected order. Not hardware/performance/default promotion.");
+                Finish(app,args,null);
+            }
+            catch(Exception ex){Finish(app,args,ex);}
+            return;
+        }
         if (args.Contains("--verify-key-ensemble-only"))
         {
             try
