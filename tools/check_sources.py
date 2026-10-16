@@ -1816,6 +1816,9 @@ def scan_public_release():
         errors.append(f".github/workflows/build.yml names {token}; the build job must not be able to reach "
                       f"the public repository at all")
 
+    if re.search(r"Set-Content[^\n]*-Append", workflow_text, re.I):
+        errors.append("release.yml must use Add-Content: PowerShell Set-Content has no -Append parameter")
+
     # Preparing the public tree must not remove the project or the packages needed by the next step.
     if "$env:GIT_INDEX_FILE" not in workflow_text or "read-tree --empty" not in workflow_text:
         errors.append("release.yml must prepare its public tree with an isolated Git index")

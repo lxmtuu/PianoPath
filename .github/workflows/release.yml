@@ -106,7 +106,7 @@ jobs:
             @('# Public release tree', '', "Document-only tree: ``$tree``.",
               'The source checkout and packages are intact; no private release-documents branch is pushed.',
               'The public publisher below may publish these generated documents to the separate public repository.') |
-              Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+              Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           } catch {
             $detail = "$($_.Exception.Message) | $($_.InvocationInfo.PositionMessage)" -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
             "::error title=Public release tree::$detail"
@@ -359,7 +359,7 @@ jobs:
               'No public repository received these documents. The release and its packages are attached to this',
               "repository's release page, and the documents are on ``$branch`` here.", '',
               'When a separate public repository exists, the next step of a release publishes the same tree there',
-              '(`pwsh tools/publish_public.ps1 -Tag ' + $tag + '`).') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+              '(`pwsh tools/publish_public.ps1 -Tag ' + $tag + '`).') | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           } elseif ([string]::IsNullOrWhiteSpace($env:PUBLIC_RELEASES_TOKEN)) {
             '::warning title=Public release::No PUBLIC_RELEASES_TOKEN secret: run `pwsh tools/publish_public.ps1 -Tag ' + $tag + '` within the next few minutes to publish ' + $repository + ', or add the secret to let this step do it.'
           } else {
@@ -379,7 +379,7 @@ jobs:
               if ($LASTEXITCODE -ne 0) { throw "the push of main to $repository failed" }
             }
             "::notice title=Public release::published $branch$(if ($updateMain) { ' and main' }) to $repository"
-            "https://github.com/$repository/tree/$branch" | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+            "https://github.com/$repository/tree/$branch" | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
 
             # The public repository is where a downloader lands, so it needs the packages themselves and
             # not only the pages that describe them: a download page whose ZIP and installer live in
@@ -424,7 +424,7 @@ jobs:
                 '::warning title=Public release::the packages could not be attached to the release on ' + $repository + ' (does the token hold Contents: write on it?); they are attached to the release of this repository.'
               } else {
                 "::notice title=Public release::$($files.Count) package(s) attached to the $tag release on $repository"
-                "https://github.com/$repository/releases/tag/$tag" | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+                "https://github.com/$repository/releases/tag/$tag" | Add-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
               }
             }
           }
