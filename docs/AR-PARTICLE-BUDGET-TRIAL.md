@@ -15,7 +15,9 @@ The first focused run, [38848552261](https://github.com/lxmtuu/PianoPath/actions
 
 ## Visual acceptance — 2026-10-16
 
-The user reviewed the paired viewer and replied **“hợp lí rồi”**, accepting the displayed held/impact/release balance. Preserve this selection/artwork direction for subsequent hardening. This is visual acceptance of the shown native subset, not authorization to enable the review flag by default or certification of all poses, full lifecycle, live MIDI/camera, hardware or frame-time performance. Keep the trial default off until runtime/CPU/allocation and longer-motion checks are completed. Settings redesign remains last.
+The user reviewed the paired viewer and replied **“hợp lí rồi”**, accepting the displayed held/impact/release balance. Preserve this selection/artwork direction for subsequent hardening. This is visual acceptance of the shown native subset, not authorization to enable the review flag by default or certification of all poses, full lifecycle, live MIDI/camera, hardware or frame-time performance. The review flag remains unchanged by this acceptance record; this is not a default-promotion change. Settings redesign remains last.
+
+**User follow-up:** “không cần kiểm, tớ kiểm rồi” — the user reports having tested this and explicitly declines the additional checks proposed by the assistant. Accept the user’s testing as the project acceptance decision for this step; do not rerun or block progress on the proposed CPU/runtime/longer-motion checks. Test devices, measurements and exact coverage were not specified, so this does not create independently measured FPS or universal hardware claims.
 
 ## Policy and isolation
 
@@ -75,9 +77,9 @@ The viewer deliberately exposes both f33/f38 and f29–44 with synchronized halv
 
 ## Cost and remaining acceptance
 
-The old path could stop projecting after 192 accepted particles. The trial scans/projects **all** eligible particles and allocates selection queues/arrays. The recorded `DrawMilliseconds` includes diagnostic replay, setup, packet construction, WARP rendering and readback; it is **not an isolated selector benchmark or real-app FPS**. No performance improvement is claimed. Real-device profiling and reducing trial-only scan/allocation cost are required before considering promotion.
+The old path could stop projecting after 192 accepted particles. The trial scans/projects **all** eligible particles and allocates selection queues/arrays. The recorded `DrawMilliseconds` includes diagnostic replay, setup, packet construction, WARP rendering and readback; it is **not an isolated selector benchmark or real-app FPS**. No performance improvement is claimed. These are known implementation costs, not a request for additional testing: the user has tested this step and declined further checks.
 
-Selected held quads now exist across pitches in this matrix, but this is not proof that every body is visually strong enough at every pose. The comparison reduces impact density; Wisps remains subtle in dense scenes. No isolated held-body-off raster control was added here. Visual approval, longer temporal/lifecycle review, real MIDI/app/camera behavior, sustained device load and hardware/driver coverage remain open. Determinism and cap compliance do not certify flicker-free motion.
+Selected held quads now exist across pitches in this matrix, but this is not proof that every body is visually strong enough at every pose. The comparison reduces impact density; Wisps remains subtle in dense scenes. No isolated held-body-off raster control was added here. Visual balance is accepted and the user reports completing their own testing; additional assistant-led runtime/longer-motion checks are waived at the user’s request. The automated evidence does not independently establish sustained device load, universal hardware/driver coverage or flicker-free motion.
 
 The approved artwork remains the baseline. Settings redesign is still the **last** roadmap stage and was not started. No default/preset/depth promotion follows automatically from the green diagnostic.
 
