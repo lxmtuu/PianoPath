@@ -35,3 +35,15 @@ class NativePreviewAllowlistTests(unittest.TestCase):
             with patch.object(check,'ROOT',root):errors=check.scan_previews_folder()
             self.assertEqual(4,len(errors))
             for name in denied:self.assertTrue(any(name in e for e in errors))
+
+    def test_budget_group_has_only_two_bounded_temporal_slices(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp);folder=root/'docs/previews'
+            allowed=['ar-particle-budget-v1/embers-wisps.bgra.gz','ar-particle-budget-v1/splash-flames.bgra.gz']
+            denied=['ar-particle-budget-v1/manifest.json.gz','ar-particle-budget-v1/fireworks-wisps.bgra.gz',
+                'ar-particle-budget-v2/embers-wisps.bgra.gz','ar-particle-budget-v1/inventory.json.gz']
+            for name in allowed+denied:
+                p=folder/name;p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'contract-fixture')
+            with patch.object(check,'ROOT',root):errors=check.scan_previews_folder()
+            self.assertEqual(4,len(errors))
+            for name in denied:self.assertTrue(any(name in e for e in errors))

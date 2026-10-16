@@ -97,3 +97,6 @@ node tools/check_key_particle_ensemble_browser.cjs http://127.0.0.1:8783 /path/t
 CI lane chuyên biệt dùng workflow input `review=key-ensemble` hoặc push marker `[ensemble-native]`, concurrency riêng để không hủy full run. Lượt này dùng push vì quyền integration không cho workflow dispatch; không cần credential mới để push.
 
 **Ưu tiên kế tiếp được đề xuất:** một trial selection policy riêng, default-off, phân bổ cap hiện có giữa impact/release/held và pitch để held không bị loại cả nhóm. Giữ nguyên cap 192, births/RNG/physics/artwork và giữ output order ổn định trong tập đã chọn; phải đo/kiểm riêng thay đổi selected identities/geometry, không gọi đây là material-only. **Chưa triển khai trial đó trong lượt này.** Sau đó mới mở rộng full-scene motion, AR oblique/near-overhead, palette/preset breadth và hardware/MIDI/camera checks. Chưa redesign Settings hoặc promote art/depth defaults.
+
+
+**Cập nhật lượt kế tiếp:** đã triển khai [AR fixed-cap selection trial riêng, default-off](AR-PARTICLE-BUDGET-TRIAL.md). Native 904 captures và source/payload/under-cap/frozen-default guards đã PASS; có viewer trái/phải với ba AR poses và 16 frame quanh Note Off. Kết quả này không đổi provenance/source `79930e5` của ensemble gallery ở trên và không tự promote trial hay Settings.

@@ -239,7 +239,7 @@ jobs:
           $review = Join-Path $env:RUNNER_TEMP 'ar-particle-budget'
           python tools/review_ar_particle_budget.py $review --source-root . --expected-revision $env:GITHUB_SHA --publish-evidence docs/evidence/ar-particle-budget-v1 --publish-previews docs/previews/ar-particle-budget-v1
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          Write-Output '::notice title=Key AR budget::904 native budget captures verified. Review-only fixed-cap trial, not continuous motion, hardware, full regression or art approval.'
+          Write-Output '::notice title=Key AR budget::904 native budget captures verified. Review-only fixed-cap trial with a bounded temporal slice, not full-lifecycle playback, hardware, full regression or art approval.'
       - name: Publish native AR budget originals
         if: always()
         uses: actions/upload-artifact@v7
