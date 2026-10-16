@@ -2693,6 +2693,9 @@ internal static partial class VerificationSuite
                 SearchKeys: (string[])rowType.GetField("SearchKeys")!.GetValue(row)!,
                 Element: (FrameworkElement)rowType.GetField("Element")!.GetValue(row)!);
         }).ToArray();
+        var coverageRow = rowDetails.Single(row => row.Property == nameof(PianoVisualSettings.ArLiveBarCoverPercent));
+        for (DependencyObject? parent = coverageRow.Element.Parent; parent is not null; parent = LogicalTreeHelper.GetParent(parent))
+            Assert(parent is not Expander, "The legacy MORE live-bar-coverage button must reveal its slider without a second, closed Advanced gate.");
         var rowSettingProperties = rowDetails
             .Where(row => !string.IsNullOrWhiteSpace(row.Property))
             .Select(row => row.Property!)
@@ -3142,69 +3145,69 @@ internal static partial class VerificationSuite
                 var expansion = expanders.ToDictionary(expander => expander, expander => expander.IsExpanded);
                 try
                 {
-                foreach (var expanded in new[] { false, true })
-                {
-                foreach (var expander in expanders) expander.IsExpanded = expanded;
-                // Keep the pointer "recent", otherwise the idle timer hides the dock while it is measured.
-                SetField(window, "_lastPointerActivity", DateTime.UtcNow);
-                window.UpdateLayout();
-                var header = (string)tab.Header;
-                var content = (ScrollViewer?)tab.Content;
-                Assert(content is not null, $"The '{header}' dock page should scroll instead of clipping content that does not fit.");
-                var page = content!;
-                page.ScrollToTop(); window.UpdateLayout();
-                // The controls a keyboard can reach on this page, in the order WPF would visit them.
-                var focusable = new List<FrameworkElement>();
-                WalkApplicationTree(page, element =>
-                {
-                    if (element.Focusable && element.IsVisible && element.IsEnabled && element is ButtonBase or TextBox or Slider or ComboBox or ListBox)
-                        focusable.Add(element);
-                });
-                Assert(focusable.Count > 0, $"The '{header}' dock page should expose at least one control the keyboard can reach.");
-                // The generated rows of this page, in the order they were registered, which is the order
-                // the page prints them and the order they joined the visual tree.
-                var host = InvokeReturn(window, "SettingsPageHost", index) as Panel;
-                var pageRows = catalogue.Where(row => ReferenceEquals(row.Page, host)).ToList();
-                // One card can hold several rows, so a control is matched to its row through the row
-                // element itself; the walk above and this order are what Tab follows.
-                int? RowOf(DependencyObject element)
-                {
-                    for (var position = 0; position < pageRows.Count; position++)
-                        for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
-                            if (ReferenceEquals(node, pageRows[position].Element)) return position;
-                    return null;
-                }
-                var previous = -1; var own = 0;
-                foreach (var control in focusable)
-                {
-                    if (RowOf(control) is not { } position) { handBuilt++; continue; }
-                    Assert(position >= previous, $"On the '{header}' page Tab would reach row {position} before row {previous}, which is printed above it.");
-                    previous = position; own++;
-                }
-                Assert(pageRows.Count == 0 || own > 0, $"The generated rows of the '{header}' page should be reachable with the keyboard, not only with the mouse.");
-                var cards = new List<Border>();
-                foreach (var row in pageRows) if (!cards.Contains(row.Card)) cards.Add(row.Card);
-                foreach (var card in cards)
-                {
-                    var offset = card.TransformToAncestor(page).Transform(new Point(0, 0));
-                    Assert(offset.Y >= -1 && offset.Y + card.ActualHeight <= page.ExtentHeight + 1,
-                        $"Every '{header}' card should stay inside its scrollable content, not below it.");
-                    // The viewport may still be sized for the layout from before the vertical bar appeared,
-                    // so a card is allowed the width of that bar on top of the visible column.
-                    Assert(card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
-                        $"Every '{header}' card should fit the scroll column at the compact window size.");
-                    measured++;
-                }
-                foreach (var row in pageRows.Where(row => row.Element.IsVisible))
-                {
-                    // Collapsed content need not have a visual ancestor or measured size. The second
-                    // pass expands Advanced and checks those same controls, rather than dropping them.
-                    var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
-                    Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
-                        $"The control of a row on the '{header}' page should stay inside its card at the compact window size.");
-                }
-                reachable += focusable.Count;
-                }
+                    foreach (var expanded in new[] { false, true })
+                    {
+                        foreach (var expander in expanders) expander.IsExpanded = expanded;
+                        // Keep the pointer "recent", otherwise the idle timer hides the dock while it is measured.
+                        SetField(window, "_lastPointerActivity", DateTime.UtcNow);
+                        window.UpdateLayout();
+                        var header = (string)tab.Header;
+                        var content = (ScrollViewer?)tab.Content;
+                        Assert(content is not null, $"The '{header}' dock page should scroll instead of clipping content that does not fit.");
+                        var page = content!;
+                        page.ScrollToTop(); window.UpdateLayout();
+                        // The controls a keyboard can reach on this page, in the order WPF would visit them.
+                        var focusable = new List<FrameworkElement>();
+                        WalkApplicationTree(page, element =>
+                        {
+                            if (element.Focusable && element.IsVisible && element.IsEnabled && element is ButtonBase or TextBox or Slider or ComboBox or ListBox)
+                                focusable.Add(element);
+                        });
+                        Assert(focusable.Count > 0, $"The '{header}' dock page should expose at least one control the keyboard can reach.");
+                        // The generated rows of this page, in the order they were registered, which is the order
+                        // the page prints them and the order they joined the visual tree.
+                        var host = InvokeReturn(window, "SettingsPageHost", index) as Panel;
+                        var pageRows = catalogue.Where(row => ReferenceEquals(row.Page, host)).ToList();
+                        // One card can hold several rows, so a control is matched to its row through the row
+                        // element itself; the walk above and this order are what Tab follows.
+                        int? RowOf(DependencyObject element)
+                        {
+                            for (var position = 0; position < pageRows.Count; position++)
+                                for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
+                                    if (ReferenceEquals(node, pageRows[position].Element)) return position;
+                            return null;
+                        }
+                        var previous = -1; var own = 0;
+                        foreach (var control in focusable)
+                        {
+                            if (RowOf(control) is not { } position) { handBuilt++; continue; }
+                            Assert(position >= previous, $"On the '{header}' page Tab would reach row {position} before row {previous}, which is printed above it.");
+                            previous = position; own++;
+                        }
+                        Assert(pageRows.Count == 0 || own > 0, $"The generated rows of the '{header}' page should be reachable with the keyboard, not only with the mouse.");
+                        var cards = new List<Border>();
+                        foreach (var row in pageRows) if (!cards.Contains(row.Card)) cards.Add(row.Card);
+                        foreach (var card in cards)
+                        {
+                            var offset = card.TransformToAncestor(page).Transform(new Point(0, 0));
+                            Assert(offset.Y >= -1 && offset.Y + card.ActualHeight <= page.ExtentHeight + 1,
+                                $"Every '{header}' card should stay inside its scrollable content, not below it.");
+                            // The viewport may still be sized for the layout from before the vertical bar appeared,
+                            // so a card is allowed the width of that bar on top of the visible column.
+                            Assert(card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
+                                $"Every '{header}' card should fit the scroll column at the compact window size.");
+                            measured++;
+                        }
+                        foreach (var row in pageRows.Where(row => row.Element.IsVisible))
+                        {
+                            // Collapsed content need not have a visual ancestor or measured size. The second
+                            // pass expands Advanced and checks those same controls, rather than dropping them.
+                            var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
+                            Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
+                                $"The control of a row on the '{header}' page should stay inside its card at the compact window size.");
+                        }
+                        reachable += focusable.Count;
+                    }
                 }
                 finally
                 {

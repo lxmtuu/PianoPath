@@ -50,7 +50,11 @@ public sealed class TransientFrameEpochTests
         Task<long> worker;
         lock (epoch.Gate)
         {
-            worker = Task.Run(() => { started.Set(); return epoch.Advance(); });
+            // This test deliberately blocks the reader while the writer reaches Gate. A pool task
+            // can starve behind other parallel tests on a small CI runner, timing out before it even
+            // starts. Use a dedicated worker; keep the same lock, generation and clear assertions.
+            worker = Task.Factory.StartNew(() => { started.Set(); return epoch.Advance(); },
+                CancellationToken.None, TaskCreationOptions.LongRunning, TaskScheduler.Default);
             Assert.True(started.Wait(TimeSpan.FromSeconds(5)));
             Assert.Equal(0, epoch.Generation);
             Assert.False(worker.IsCompleted); // writer cannot publish through a caller's snapshot boundary

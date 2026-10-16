@@ -15,6 +15,10 @@ on:
   push:
     tags: ["v*"]
     branches: ["arena/**"]
+  # Publishing a release through gh/the GitHub API creates a tag without requiring a local tag push.
+  # This event must be in the default branch before that release is published.
+  release:
+    types: [published]
   workflow_dispatch:
 
 env:
@@ -141,13 +145,13 @@ jobs:
         run: |
           $packages = @(Get-ChildItem publish -Filter '*.zip' -ErrorAction SilentlyContinue) +
                       @(Get-ChildItem 'installer/Output' -Filter 'Keyflow-Setup-*.exe' -ErrorAction SilentlyContinue)
-          if ($packages.Count -eq 0) { throw 'no package was published, so there is nothing to hash' }
+          if ($packages.Count -ne 4) { throw "expected three ZIPs and one installer, found $($packages.Count) package(s)" }
           $sums = 'publish/SHA256SUMS.txt'
           $lines = @(foreach ($package in ($packages | Sort-Object Name)) {
             '{0}  {1}' -f (Get-FileHash $package.FullName -Algorithm SHA256).Hash.ToLowerInvariant(), $package.Name
           })
           Set-Content -Path $sums -Value $lines -Encoding utf8
-          $lines | ForEach-Object { $_ }
+          $lines | ForEach-Object { "::notice title=Package SHA256::$_" }
           "::notice title=Packages::$($packages.Count) package(s) hashed into $sums"
 
       - name: Upload workflow artifacts
@@ -319,17 +323,17 @@ jobs:
           # ``docs/release`` and nothing else. Two refusals follow from that, and tools/check_sources.py
           # fails the static check if either is edited away.
           #
-          # (1) A target that *is* this repository: the documents were already built on $branch here by the
-          # step above, so there is nothing to publish anywhere else. main is not touched.
+          # (1) A target that *is* this repository: use documents from the release tag itself,
+          # do not push the generated document-only tree anywhere in this repository.
           $sourceRepository = $env:GITHUB_REPOSITORY
           $publish = $true
           if ($repository -ieq $sourceRepository) {
             $updateMain = $false
             $publish = $false
-            '::notice title=Public release::PUBLIC_REPOSITORY is this repository, so the documents of ' + $tag + ' are already on ' + $branch + ' here; nothing is pushed to a public repository, and main of the source repository is never written.'
+            '::notice title=Public release::PUBLIC_REPOSITORY is this repository, so the documents of ' + $tag + ' are available from its source tag; nothing is pushed to a public repository, and main of the source repository is never written.'
           } else {
             # (2) A target that does not exist yet is a setup step somebody has not done, not a defect in
-            # the release: the packages, the GitHub Release and the documents branch are all in place in
+            # the release: the packages and GitHub Release are in place in
             # this repository already, so this is a warning rather than a red run. The token, when there is
             # one, is scoped to the public repository, so it cannot see an unrelated one: the answer is a
             # 404 either way, and both mean the same thing here.

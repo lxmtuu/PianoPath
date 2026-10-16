@@ -24,7 +24,7 @@ public partial class MainWindow
         "WispGlow", "ShowFlame", "FlameIntensity", "FlameHeight", "FlameColorMode", "ReleaseEffect", "ReleaseIntensity",
         "HoldBar", "HoldBreath", "ShowKeys", "KeyboardSize", "ShowBackground", "BackgroundMode", "BackgroundColor",
         "BackgroundDim", "BloomIntensity", "ShaderKeyLight", "ArKeyLight", "ArEnabled", "ArMode", "ArLivePressTrails",
-        "ArNotesInPerspective", "ArViewProfileId", "ArOpacity", "ArDelay", "CameraMirror", "ShowCameraOverlay",
+        "ArNotesInPerspective", "ArLiveBarCoverPercent", "ArViewProfileId", "ArOpacity", "ArDelay", "CameraMirror", "ShowCameraOverlay",
         "CameraSourceLink", "RecordingFormat", "RecordingResolution", "RecordingFrameRate", "RecordAudio",
         "ShellTheme", "ReducedMotion", "ReduceFlashes", "HighContrast", "GpuFrameRate", "GpuVSync"
     };
