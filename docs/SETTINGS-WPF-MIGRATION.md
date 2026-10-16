@@ -33,7 +33,7 @@ Chevron của layer resolve theo owner/card đã chuyển, không giữ đích c
 
 ## Bổ sung khi chuẩn bị v2.1.0
 
-Xem [final release check](RELEASE-2.1.0-CHECK.md) cho bằng chứng mới nhất. Preflight Windows [38867895710](https://github.com/lxmtuu/PianoPath/actions/runs/38867895710) đã PASS 1.357 portable tests và 7.911 assertions trên executable self-contained đã publish (1 nhóm skip), gồm kiểm tra WPF/Settings. Đây không phải chứng nhận UI thủ công trên mọi DPI hay phần cứng thật. Các số liệu compile-only dưới đây là **snapshot lịch sử của lần giao package Settings ban đầu**, không phải trạng thái kiểm tra mới nhất.
+Xem [bản kiểm phát hành 2.1.1](RELEASE-2.1.1-CHECK.md) cho bằng chứng mới nhất. Lượt tag Windows [38878150599](https://github.com/lxmtuu/PianoPath/actions/runs/38878150599) đã PASS 1.357 portable tests và 7.909 assertions trên executable self-contained đã publish (1 nhóm skip), gồm kiểm tra WPF/Settings; các preflight trước đó báo 7.911. Đây không phải chứng nhận UI thủ công trên mọi DPI hay phần cứng thật. Các số liệu compile-only dưới đây là **snapshot lịch sử của lần giao package Settings ban đầu**, không phải trạng thái kiểm tra mới nhất.
 
 ## Kiểm tra và giới hạn · snapshot package ban đầu
 
