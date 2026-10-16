@@ -19,6 +19,7 @@ internal struct GpuFrameConstants
     public Vector4 ScreenTime, SceneSize, Camera, Background, Aura, Horizon, SceneA, SceneB;
     public Vector4 NoteA, NoteB, NoteC, KeyA, KeyB, KeyC, KeyD, RimColor, Post, Post2, SceneFx, SceneFxColor, HitFx, KeyRange, ArPicture, ArFlags;
     public Vector4 ArMatrix0, ArMatrix1, ArMatrix2, ArMatrixFlags;
+    public Vector4 NoteD; // appended: preserve the offsets of existing constants
 }
 
 [StructLayout(LayoutKind.Sequential)]
@@ -364,6 +365,36 @@ internal sealed class GpuStageRenderer : IDisposable
     /// </summary>
     internal void SetArKeyColors(Vector4[]? colors) => _arKeyColors = colors;
 
+    /// <summary>Verification-only render seam: removes pressed-key tint/emission/spill, not static
+    /// ivory lighting, press geometry, simulation glow, emitter input or particle colour. Default off.</summary>
+    internal bool SuppressStageKeyLightingForReview { get; set; }
+    internal bool SuppressStageKeyTintForReview { get; set; }
+    internal bool SuppressStageKeySpillForReview { get; set; }
+    internal bool SuppressArKeyTintForReview { get; set; }
+    internal bool SuppressArKeySpillForReview { get; set; }
+    internal Action<GpuArLayer.BudgetTrace>? ObserveArBudgetForReview { get; set; }
+    internal Action<GpuKeyInstance>? ObserveStageKeyForReview { get; set; }
+    internal Action<GpuStageSimulation, GpuLook>? ObserveParticleStateForReview { get; set; }
+    internal Action<GpuArParticle>? ObserveStageParticleForReview { get; set; }
+    internal Action<GpuArParticle>? ObserveArParticleForReview { get; set; }
+    internal Action<GpuSpriteInstance>? ObserveHeldSpriteGeometryForReview { get; set; }
+    internal Action<GpuArQuad>? ObserveHeldQuadGeometryForReview { get; set; }
+    // Null in production; regression checks partition actual key-anchored and particle packets.
+    internal bool SuppressBounceBodyForReview { get; set; }
+    internal Action<GpuSpriteInstance>? ObserveStageSpriteForReview { get; set; }
+    internal Action<GpuArQuad>? ObserveArQuadForReview { get; set; }
+
+
+    internal static void MaskPressedKeyLightForReview(Span<GpuKeyInstance> keys, bool suppressTint = true, bool suppressSpill = true)
+    {
+        foreach (ref var key in keys)
+            if (key.Misc.X < 1.5f)
+            {
+                if (suppressTint) key.Emit.W = 0;
+                if (suppressSpill) key.Base.Y = 0;
+            }
+    }
+
     /// <summary>How many instances the stage-space note pass built in the last frame; camera regressions ensure it is zero over camera.</summary>
     internal int StageNoteCount { get; private set; }
     /// <summary>How many stage-space falling-note trails were built in the last frame.</summary>
@@ -474,8 +505,23 @@ internal sealed class GpuStageRenderer : IDisposable
         StageNoteTrailCount = simulation.NoteTrailCount;
         simulation.BuildKeys(look, layout, keys, cameraActive,
             out var frontHeight, out var blackLength, out var blackHeight, out var whiteWidth, out var blackWidth);
+        if (!cameraActive && (SuppressStageKeyLightingForReview || SuppressStageKeyTintForReview || SuppressStageKeySpillForReview))
+            MaskPressedKeyLightForReview(keys.Writable, SuppressStageKeyLightingForReview || SuppressStageKeyTintForReview,
+                SuppressStageKeyLightingForReview || SuppressStageKeySpillForReview);
+        ObserveParticleStateForReview?.Invoke(simulation, look);
+        simulation.ObservePackedHeldParticleForReview = ObserveStageParticleForReview;
         StageKeyCount = keys.Count;
+        if (ObserveStageKeyForReview is { } observeKey)
+            foreach(var key in keys.Span) observeKey(key);
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
+        if(SuppressBounceBodyForReview)
+            for(var i=0;i<sprites.Count;i++)
+                if(sprites.Writable[i].PosSize.W==BounceParticleAppearance.Kind)sprites.Writable[i].Color=default;
+        if (ObserveStageSpriteForReview is { } observeAllSprites)
+            foreach (var sprite in sprites.Span) observeAllSprites(sprite);
+        if (ObserveHeldSpriteGeometryForReview is { } observeSprite)
+            foreach (var sprite in sprites.Span)
+                if (sprite.PosSize.W == 17) observeSprite(sprite);
         // test-only hook: the verification suite adds sprites of its own (a sprite at a known scene point) to read the sprite pass back
         if (ExtraSprites is { } extraSprites) foreach (var extra in extraSprites) sprites.Add(in extra);
         // The export watermark draws on its own terms: a whole-line text sprite in front of the keys,
@@ -501,8 +547,19 @@ internal sealed class GpuStageRenderer : IDisposable
         // roadmap §14.8: every AR build hears the adaptive tier (the verify seam first, the profiler otherwise) and
         // drops what roadmap's sentence says, never what it forbids.
         var arBudgetTier = ArBudgetTierOverride ?? _adaptiveQualityController?.Tier ?? GpuAdaptiveQualityTier.Full;
+        _arLayer.ObservePackedParticleForReview = ObserveArParticleForReview;
+        _arLayer.ObserveBudgetForReview = ObserveArBudgetForReview;
         if (_arInput is { } ar && TryCameraView(target, look, out var arView) && _camera!.Width == ar.Calibration.ImageWidth && _camera.Height == ar.Calibration.ImageHeight)
-            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier);
+            _arLayer.Build(input, ar, arView, _arKeyColors ?? simulation.KeyColors, simulation, _arList, arProjectedNotes, arBudgetTier,
+                SuppressArKeyTintForReview, SuppressArKeySpillForReview);
+        if(SuppressBounceBodyForReview)
+            for(var i=0;i<_arList.Count;i++)
+                if(_arList.Writable[i].Misc.Z==BounceParticleAppearance.Kind)_arList.Writable[i].Color=default;
+        if (ObserveArQuadForReview is { } observeArQuad)
+            foreach (var quad in _arList.Span) observeArQuad(quad);
+        if (ObserveHeldQuadGeometryForReview is { } observeQuad)
+            foreach (var quad in _arList.Span)
+                if (quad.Misc.Z == 17) observeQuad(quad);
         _arQuads.Upload(context, _arList.Span);
 
         context.ClearState();
@@ -688,6 +745,7 @@ internal sealed class GpuStageRenderer : IDisposable
             SceneB = new Vector4(_backgroundAspect, 1, beat, .88f),
             NoteA = new Vector4(look.NoteStyle, 2 + look.NoteRoundness * 12, edge, 5 + look.BloomSize * 16),
             NoteB = new Vector4(look.NoteTint, look.NoteEdge * 1.15f, look.NoteHeadGlow, look.NoteRefraction),
+            NoteD = new Vector4(look.NoteSatin ? 1 : 0, look.KeyboardSoftboxReferenceForReview, 0, 0),
             NoteC = new Vector4(look.NoteTexture, look.Notes3D ? 1 : 0, look.NoteGlow * look.BloomIntensity / .65f * .75f * (1 + beat * .5f) * simulation.EnergyBoost, 150),
             KeyA = new Vector4(look.ShaderKeyLight, look.ShaderShadows, look.ShaderAmbientOcclusion, look.ShaderGloss),
             KeyB = new Vector4(look.ShaderRimLight, look.ShaderEmissive * 1.7f * simulation.PedalBoost, look.ShaderCameraTilt, look.KeyboardStyle),

@@ -18,12 +18,12 @@ lxmtuu/PianoPath  (nguồn, lịch sử, CI, dock, mã ứng dụng — public t
         │                      ├── publish 3 gói (ZIP x64, ZIP x64-fd, ZIP arm64) + bộ cài .exe
         │                      ├── SHA256SUMS.txt
         │                      ├── đính 4 gói + SHA256SUMS.txt vào Release của **chính kho này**
-        │                      ├── dựng nhánh orphan `release/public-v1.0.0`
+        │                      ├── dựng tree tài liệu bằng Git index riêng (không đổi/xóa workspace)
         │                      │      = docs/release/ (sinh sẵn, đã commit, đã được kiểm)
         │                      │      + docs/previews/ (ảnh CI vừa render)
         │                      │      + docs/presentation/ (bộ slide PDF + DOCX + README)
         │                      │      + 0 dòng lịch sử của kho nguồn
-        │                      └── đẩy nhánh đó sang kho công khai, và đính cùng 4 gói ấy
+        │                      └── tạo root commit/nhánh ở kho công khai, đính cùng 4 gói ấy
         ▼                         vào Release ở đó
 lxmtuu/KeyFlow  (public — chỉ tài liệu + ảnh + bộ slide, và GitHub Release đính kèm 4 gói)
         https://github.com/lxmtuu/KeyFlow
@@ -42,8 +42,14 @@ Hai đường đẩy sang kho công khai, cùng một kết quả:
 | **Thủ công** — `pwsh tools/publish_public.ps1 -Tag v1.0.0` | máy bạn đã `gh auth login`; không muốn lưu token thứ hai | chính đăng nhập `gh` của bạn; script dựng lại đúng nhánh ấy rồi `git push` |
 
 Thiếu secret thì bước tự động **không làm đỏ build**: nó in một cảnh báo kèm đúng câu lệnh cần chạy, rồi
-chờ tối đa **5 phút** để xem bản đẩy tay có lên không. Nếu không, lượt chạy vẫn xanh — vì gói và nhánh
-phát hành đã nằm đúng chỗ của chúng trong kho nguồn rồi.
+chờ tối đa **5 phút** để xem bản đẩy tay có lên không. Nếu không, lượt chạy vẫn xanh với cảnh báo;
+điều đó chỉ xác nhận các gói nguồn đã được phát hành, **không** xác nhận bản public đã lên.
+
+Từ v2.1.0, workflow **không** tạo/push nhánh tài liệu phụ trong kho nguồn và không checkout orphan
+trong workspace build. Git index tách biệt tạo tree tài liệu, còn project, `publish/` và installer
+vẫn còn nguyên cho bước public. Commit trên kho public là root commit, không mang lịch sử source.
+Có thể chạy cùng toàn bộ cổng đóng gói/smoke-test trước tag bằng push lên `arena/**` với marker
+`[release-preflight]`; lượt này chỉ tạo artifact, không tạo release hay sửa kho public.
 
 ## 2. Trạng thái hiện tại, và những gì còn phải cấu hình
 
@@ -113,7 +119,7 @@ một tên, xem §7.
    ```
 
 4. **Đợi `release.yml`.** Nó publish ba gói + bộ cài, băm `SHA256SUMS.txt`, đính kèm vào Release của
-   **kho này**, dựng nhánh `release/public-v1.0.0`, rồi đẩy sang kho công khai — và đính **cùng bốn gói +
+   **kho này**, dựng tree tài liệu bằng index riêng, rồi tạo root commit ở kho công khai — và đính **cùng bốn gói +
    `SHA256SUMS.txt`** vào Release ở kho công khai đó (một lượt tải 370 MB hai lần; đổi lại, người tải
    không phải sang kho nguồn):
    * có secret → tự động, xong trong vài phút;
@@ -125,9 +131,9 @@ một tên, xem §7.
      pwsh tools/publish_public.ps1 -Tag v1.0.0 -DryRun               # xem trước, không đẩy gì
      ```
 
-5. **Nếu lỡ quá 5 phút**: không sao. Nhánh `release/public-v1.0.0` đã nằm trong kho nguồn và chứa đúng
-   commit cần đẩy; chạy lệnh ở bước 4 lúc nào cũng được (hoặc bấm **Run workflow** cho `release.yml` với
-   `workflow_dispatch` — nó chạy lại toàn bộ, kể cả publish ba gói).
+5. **Nếu lỡ quá 5 phút**: chạy lệnh thủ công ở bước 4 từ tag lúc nào cũng được. `workflow_dispatch`
+   chỉ đóng gói và tạo artifact, **không** phát hành hay chạy các bước chỉ dành cho tag; muốn retry
+   phát hành tự động, chạy lại lượt tag tương ứng. Luôn kiểm riêng release public sau đó.
 
 Chạy lại cùng một tag là chuyện bình thường: nhánh phát hành được **force push** (nó là nội dung sinh
 tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó), và gói thì được tải lên với `--clobber`.
@@ -186,9 +192,8 @@ tựa, sửa tay sẽ bị ghi đè — trang công khai nói rõ điều đó),
   (xUnit) và `tools/` (Python) thì chỉ chạy được khi có mã nguồn — trang công khai nói rõ phần nào cần gì.
 - **Nếu secret hết hạn hoặc bị thu hồi**: không có gì hỏng. Bước tự động chỉ cảnh báo, và đường thủ công
   `tools/publish_public.ps1` vẫn chạy được bằng `gh` của bạn.
-- **Nếu ruleset của kho chặn push nhánh `release/public-*`**: bước dựng nhánh cũng chỉ **cảnh báo** (nó
-  nhận diện GH013, đúng cách `build.yml` xử lý khi bị chặn commit ảnh), và `publish_public.ps1` tự dựng
-  nhánh y hệt trên máy bạn — luật của kho không áp cho lần đẩy tay đó.
+- **Ruleset kho nguồn**: workflow không còn push nhánh tài liệu `release/public-*` vào kho nguồn.
+  Ruleset/quyền của **kho public** vẫn áp dụng bình thường; không suy ra quyền đẩy tay từ một lượt CI xanh.
 - **Không dùng GitHub Pages, không có telemetry, không auto-update**: mô hình này không thêm dịch vụ nào.
   Trang sản phẩm là README của kho phát hành.
 

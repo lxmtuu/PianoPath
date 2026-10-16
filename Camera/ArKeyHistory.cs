@@ -17,6 +17,7 @@ internal sealed class ArKeyHistory
     private readonly Queue<(double Time, Vector4[] Keys)> _frames = new();
     private readonly Stack<Vector4[]> _spare = new();
     private readonly int _size;
+    private long? _generation;
     private double _newest = double.NegativeInfinity;
 
     internal ArKeyHistory(int keyCount = 128) => _size = keyCount;
@@ -24,11 +25,13 @@ internal sealed class ArKeyHistory
     /// <summary>How many pictures are held.</summary>
     internal int Count => _frames.Count;
 
-    /// <summary>Remembers the glow as it is at <paramref name="time"/> (seconds, any steady clock). A time that goes backwards starts the history again.</summary>
-    internal void Record(double time, IReadOnlyList<Vector4> keys)
+    /// <summary>Remembers glow at a steady time. A clock rewind OR a new transient epoch starts
+    /// a fresh history, so camera delay cannot sample key light from before stop/seek/clear.</summary>
+    internal void Record(double time, IReadOnlyList<Vector4> keys, long generation = 0)
     {
         if (!double.IsFinite(time)) return;
-        if (time < _newest) Clear();
+        if (time < _newest || _generation != generation) Clear();
+        _generation = generation;
         while (_frames.Count > 0 && time - _frames.Peek().Time > Reach) _spare.Push(_frames.Dequeue().Keys);
         var copy = _spare.Count > 0 ? _spare.Pop() : new Vector4[_size];
         for (var i = 0; i < _size; i++) copy[i] = i < keys.Count ? keys[i] : Vector4.Zero;
@@ -40,6 +43,7 @@ internal sealed class ArKeyHistory
     {
         while (_frames.Count > 0) _spare.Push(_frames.Dequeue().Keys);
         _newest = double.NegativeInfinity;
+        _generation = null;
     }
 
     /// <summary>

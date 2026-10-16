@@ -35,11 +35,34 @@
        build says so immediately on the Linux job. -->
   <ItemGroup>
     <Compile Include="..\..\Stage\PianoSimulation.cs" Link="Product\Stage\PianoSimulation.cs" />
+    <Compile Include="..\..\Gpu\ArParticleBudget.cs" Link="Product\Gpu\ArParticleBudget.cs" />
+    <Compile Include="..\..\Diagnostics\KeyParticleEnsemblePlan.cs" Link="Product\Diagnostics\KeyParticleEnsemblePlan.cs" />
+    <Compile Include="..\..\Diagnostics\KeyboardKeyLightPlan.cs" Link="Product\Diagnostics\KeyboardKeyLightPlan.cs" />
     <Compile Include="..\..\Gpu\StageLightCurves.cs" Link="Product\Gpu\StageLightCurves.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
+    <Compile Include="..\..\Gpu\ReleaseParticleAppearance.cs" Link="Product\Gpu\ReleaseParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\BounceParticleAppearance.cs" Link="Product\Gpu\BounceParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\MeltParticleAppearance.cs" Link="Product\Gpu\MeltParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\ShatterParticleAppearance.cs" Link="Product\Gpu\ShatterParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\DustParticleAppearance.cs" Link="Product\Gpu\DustParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\ConfettiParticleAppearance.cs" Link="Product\Gpu\ConfettiParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\FireworkParticleAppearance.cs" Link="Product\Gpu\FireworkParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\SplashParticleAppearance.cs" Link="Product\Gpu\SplashParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\SparkParticleAppearance.cs" Link="Product\Gpu\SparkParticleAppearance.cs" />
+    <Compile Include="..\..\Gpu\HeldParticleAppearance.cs" Link="Product\Gpu\HeldParticleAppearance.cs" />
+    <Compile Include="..\..\Camera\ArParticleBillboard.cs" Link="Product\Camera\ArParticleBillboard.cs" />
+    <Compile Include="..\..\Gpu\KeyRingChannelGain.cs" Link="Product\Gpu\KeyRingChannelGain.cs" />
+    <Compile Include="..\..\Diagnostics\AuxParticleTimeline.cs" Link="Product\Diagnostics\AuxParticleTimeline.cs" />
+    <Compile Include="..\..\Diagnostics\HeldParticleControlPlan.cs" Link="Product\Diagnostics\HeldParticleControlPlan.cs" />
+    <Compile Include="..\..\Diagnostics\HeldLightIsolationPlan.cs" Link="Product\Diagnostics\HeldLightIsolationPlan.cs" />
+    <Compile Include="..\..\Gpu\TransientFrameEpoch.cs" Link="Product\Gpu\TransientFrameEpoch.cs" />
+    <Compile Include="..\..\Stage\KeyEmissionBudget.cs" Link="Product\Stage\KeyEmissionBudget.cs" />
+    <Compile Include="..\..\Stage\PrismFlowPalette.cs" Link="Product\Stage\PrismFlowPalette.cs" />
     <Compile Include="..\..\Stage\MusicKey.cs" Link="Product\Stage\MusicKey.cs" />
     <Compile Include="..\..\Stage\GraphVariable.cs" Link="Product\Stage\GraphVariable.cs" />
     <Compile Include="..\..\Stage\ShareCodeEnvelope.cs" Link="Product\Stage\ShareCodeEnvelope.cs" />
+    <Compile Include="..\..\Video\OfflineFrameQueue.cs" Link="Product\Video\OfflineFrameQueue.cs" />
+    <Compile Include="..\..\Video\AviFrameInventory.cs" Link="Product\Video\AviFrameInventory.cs" />
     <Compile Include="..\..\Video\IFrameRecorder.cs" Link="Product\Video\IFrameRecorder.cs" />
     <Compile Include="..\..\Video\ArVideoRenderProfile.cs" Link="Product\Video\ArVideoRenderProfile.cs" />
     <Compile Include="..\..\Video\BgraPack.cs" Link="Product\Video\BgraPack.cs" />
@@ -76,6 +99,7 @@
     <Compile Include="..\..\Audio\ReverbImpulse.cs" Link="Product\Audio\ReverbImpulse.cs" />
     <Compile Include="..\..\Audio\ConvolutionReverb.cs" Link="Product\Audio\ConvolutionReverb.cs" />
     <Compile Include="..\..\Diagnostics\FrameBudget.cs" Link="Product\Diagnostics\FrameBudget.cs" />
+    <Compile Include="..\..\Diagnostics\PrismFlowBaseline.cs" Link="Product\Diagnostics\PrismFlowBaseline.cs" />
     <Compile Include="..\..\Gpu\GpuAdaptiveQuality.cs" Link="Product\Gpu\GpuAdaptiveQuality.cs" />
     <Compile Include="..\..\Gpu\GpuArMap.cs" Link="Product\Gpu\GpuArMap.cs" />
     <Compile Include="..\..\Gpu\GpuInstanceList.cs" Link="Product\Gpu\GpuInstanceList.cs" />
@@ -124,6 +148,7 @@
   <!-- Real libFLAC output for the decoder tests; each .flac has a .wav twin with the same samples. -->
   <ItemGroup>
     <Content Include="Fixtures\**" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\samples\prism-flow-p0\*" Link="Fixtures\prism-flow-p0\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- The synthetic camera picture of a keyboard and its ground truth, written by tools/make_ar_sample.py. The tests hold the

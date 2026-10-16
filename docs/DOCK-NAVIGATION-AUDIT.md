@@ -1,4 +1,7 @@
 # Tái cấu trúc điều hướng dock: danh mục trang theo mục đích
+
+> **P6 sau khi duyệt layout:** source hiện chuyển sang **12 nhóm WPF**, có alias cho 13 trang cũ. Các danh mục, số đếm và dòng source bên dưới là lịch sử rà soát trước migration, không phải layout hiện tại. Xem [báo cáo migration và giới hạn kiểm tra](SETTINGS-WPF-MIGRATION.md) và [inventory trước migration](SETTINGS-LAYOUT-INVENTORY.tsv).
+
 > **Cập nhật sau lần rà soát ban đầu:** phần mô tả vấn đề ở §1 ghi lại dock 11 trang, trước khi thêm **General** (nhóm **APP**) và **History** (nhóm **SESSION**). Dock hiện có 13 trang chia thành bốn nhóm; danh mục hiện tại bên dưới phản ánh `Ui/SettingsPages.cs`, nguồn sự thật duy nhất mà `tools/check_sources.py` đối chiếu với XAML.
 
 

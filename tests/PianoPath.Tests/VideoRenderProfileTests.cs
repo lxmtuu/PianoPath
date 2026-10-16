@@ -10,6 +10,17 @@ namespace PianoPath.Tests;
 public class VideoRenderProfileTests
 {
     [Fact]
+    public void SongPositionsUseThePlannedTakeRateNotTheRequestedCameraRate()
+    {
+        var plan=ArVideoRenderProfile.Plan(640,360,2,frameRate:15);
+        Assert.Equal(0,plan.PositionAt(0));
+        Assert.Equal(1,plan.PositionAt(15),12);
+        Assert.Equal(29/15.0,plan.PositionAt(29),12);
+        Assert.Throws<ArgumentOutOfRangeException>(()=>plan.PositionAt(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(()=>plan.PositionAt(plan.Frames));
+    }
+
+    [Fact]
     public void APlanFitsTheOutputIntoTheCapWithEvenSides()
     {
         var plan = ArVideoRenderProfile.Plan(640, 360, lengthSeconds: 0.5, frameRate: 12, downsample: 1, maxSide: 200);

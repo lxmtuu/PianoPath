@@ -143,6 +143,7 @@ public partial class MainWindow
     {
         _loadingVisualSettings = true;
         BuildStylePage(); BuildThemePage(); BuildNotesPage(); BuildParticlesPage(); BuildKeyboardPage(); BuildBackgroundPage(); BuildCameraPage(); BuildRecordingPage(); BuildGeneralPage();
+        ArrangeApprovedSettingsLayout();
         _loadingVisualSettings = false;
         // Pickers hold translated captions, so they are repainted from their raw option list whenever
         // the language changes (the selected values themselves never move).
@@ -291,15 +292,18 @@ public partial class MainWindow
         if (index < 0 || index >= SettingsPages.Order.Length) return null;
         return SettingsPages.Order[index] switch
         {
-            SettingsPages.Style => StyleSettingsHost,
-            SettingsPages.Theme => ThemeSettingsHost,
+            SettingsPages.Overview => StyleSettingsHost,
             SettingsPages.Notes => NoteSettingsHost,
-            SettingsPages.Particles => ParticleSettingsHost,
-            SettingsPages.Keyboard => KeyboardSettingsHost,
-            SettingsPages.Background => SceneSettingsHost,
+            SettingsPages.Press => PressSettingsHost,
+            SettingsPages.Hold => HoldSettingsHost,
+            SettingsPages.Release => ReleaseSettingsHost,
+            SettingsPages.Lighting => LightingSettingsHost,
+            SettingsPages.StageDesign => StageDesignSettingsHost,
             SettingsPages.Camera => CameraSettingsHost,
             SettingsPages.Recording => RecordingSettingsHost,
-            SettingsPages.General => GeneralSettingsHost,
+            SettingsPages.Sound => SoundSettingsHost,
+            SettingsPages.Session => SessionSettingsHost,
+            SettingsPages.Application => GeneralSettingsHost,
             _ => null
         };
     }
@@ -310,10 +314,12 @@ public partial class MainWindow
         Choice(color, "Color mode", nameof(PianoVisualSettings.ColorMode), "Gradient across the keyboard, one color per hand, per MIDI track, or animated rainbows.",
             ("Gradient", "Gradient by pitch"), ("PerHand", "Left / right hand"), ("PerTrack", "Per MIDI track"), ("RainbowPitch", "Rainbow by pitch"), ("RainbowTime", "Rainbow cycling in time"));
         Choice(color, "Palette", nameof(PianoVisualSettings.Palette), "Built-in gradient families. Editing the start/end colors switches to Custom.",
-            ("Spectrum", "Spectrum"), ("Aurora", "Aurora"), ("Fire", "Fire"), ("Ocean", "Ocean"), ("Violet", "Violet"), ("Custom", "Custom"))
+            ("Spectrum", "Spectrum"), ("Aurora", "Aurora"), ("Fire", "Fire"), ("Ocean", "Ocean"), ("Violet", "Violet"), ("Custom", "Custom"), ("Prism Flow", "Prism Flow"))
             .VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Gradient start (low keys)", nameof(PianoVisualSettings.NoteColorStart), "Color of the lowest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
-        ColorRow(color, "Gradient end (high keys)", nameof(PianoVisualSettings.NoteColorEnd), "Color of the highest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient";
+        SliderRow(color, "Palette low pitch", nameof(PianoVisualSettings.PaletteLowPitch), 0, 126, "Fixed MIDI range for Prism Flow. Notes outside it keep the nearest endpoint color.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette == "Prism Flow";
+        SliderRow(color, "Palette high pitch", nameof(PianoVisualSettings.PaletteHighPitch), 1, 127, "Upper MIDI pitch for Prism Flow; always higher than the low pitch.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette == "Prism Flow";
+        ColorRow(color, "Gradient start (low keys)", nameof(PianoVisualSettings.NoteColorStart), "Color of the lowest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette != "Prism Flow";
+        ColorRow(color, "Gradient end (high keys)", nameof(PianoVisualSettings.NoteColorEnd), "Color of the highest notes.").VisibleWhen = () => _visualSettings.ColorMode == "Gradient" && _visualSettings.Palette != "Prism Flow";
         ColorRow(color, "Left hand", nameof(PianoVisualSettings.LeftHandColor), "Notes below the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
         ColorRow(color, "Right hand", nameof(PianoVisualSettings.RightHandColor), "Notes at or above the split point.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
         SliderRow(color, "Hand split point", nameof(PianoVisualSettings.HandSplitPitch), 21, 108, "MIDI note where the right hand begins (C4 = 60). Type a note name such as C4 or F#3.").VisibleWhen = () => _visualSettings.ColorMode == "PerHand";
@@ -329,7 +335,8 @@ public partial class MainWindow
         SliderRow(shape, "Corner roundness", nameof(PianoVisualSettings.NoteRoundness), 0, 100, "Rounded corners of every bar.");
         SliderRow(shape, "Minimum length", nameof(PianoVisualSettings.NoteMinLength), 4, 60, "Very short notes are stretched to at least this many pixels.");
         SliderRow(shape, "Gap between notes", nameof(PianoVisualSettings.NoteGap), 0, 12, "Space carved between consecutive notes of the same key.");
-        SliderRow(shape, "Fire texture", nameof(PianoVisualSettings.NoteTexture), 0, 100, "Strength of the animated ember holes in the Fire style.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire";
+        SliderRow(shape, "Material texture", nameof(PianoVisualSettings.NoteTexture), 0, 100, "Fire: animated ember holes. Satin: subtle static grain inside each note; zero removes only grain.").VisibleWhen = () => _visualSettings.NoteStyle == "Fire" || (_visualSettings.NoteSatin && _visualSettings.NoteStyle is "Solid" or "Glass");
+        Toggle(shape, "Satin surface", nameof(PianoVisualSettings.NoteSatin), "Pigment-first satin on Solid or Glass. GPU Stage and AR share the material; software rendering uses an approximation.").VisibleWhen = () => _visualSettings.NoteStyle is "Solid" or "Glass";
         Toggle(shape, "3D shading", nameof(PianoVisualSettings.Notes3D), "Adds a subtle bevel to Solid and Glass, and stronger faceted depth to Gem. Off is the flatter 2D treatment; Crystal Outline stays intentionally flat.");
         Toggle(shape, "Note names on bars", nameof(PianoVisualSettings.ShowNoteLabels), "Print the note name inside each bar when there is room.");
 
@@ -411,6 +418,9 @@ public partial class MainWindow
 
     private void BuildParticlesPage()
     {
+        var appearance = Card(ParticleSettingsHost, "PARTICLE APPEARANCE", "Shared held and release appearance for Live Stage and AR.");
+        Toggle(appearance, "Upgraded particle effects", nameof(PianoVisualSettings.UpgradedParticleEffects), "Use approved Wisps/Flames and Float Up/Dissolve/Smoke materials in GPU Live Stage and AR, with balanced AR cap 192. Existing effect switches still apply. Software rendering stays classic.");
+
         var sparks = Card(ParticleSettingsHost, "SPARKS · EMITTER", "Impact bursts with a lighter stream of sparks while notes are held.");
         Toggle(sparks, "Enable sparks", nameof(PianoVisualSettings.ShowEmbers), "Enable impact bursts and the sustained note spark emitter.");
         SliderRow(sparks, "Amount", nameof(PianoVisualSettings.ParticleAmount), 0, 120, "Particles per impact and rate of the held-key emitter.");
@@ -1091,6 +1101,7 @@ public partial class MainWindow
         body.Children.Add(heading);
         body.Children.Add(caption);
         card.Child = body; page.Children.Add(card); _settingCards.Add(card); _cardsByTitle[title] = card;
+        _settingsCardOrigins.Add(card, (page.Name, title));
         return body;
     }
 
@@ -1103,6 +1114,9 @@ public partial class MainWindow
     private void JumpToCard(string title)
     {
         if (!_cardsByTitle.TryGetValue(title, out var card) || card.Parent is not Panel page) return;
+        if (SettingsSearchBox.Text.Length > 0) SettingsSearchBox.Clear();
+        foreach (var (advanced, rows) in _settingsAdvancedGroups)
+            if (rows.Any(row => ReferenceEquals(row.Card, card))) advanced.IsExpanded = true;
         for (var i = 0; i < SettingsPages.Order.Length; i++)
             if (ReferenceEquals(SettingsPageHost(i), page)) { SettingsTabs.SelectedIndex = i; break; }
         Dispatcher.BeginInvoke(new Action(() => { card.BringIntoView(); ChromeMotion.Pulse(card); }), System.Windows.Threading.DispatcherPriority.Loaded);
@@ -1121,7 +1135,11 @@ public partial class MainWindow
         var jump = new Button { Content = "›", Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         Loc.Set(jump, "Open the detailed controls for this layer", FrameworkElement.ToolTipProperty);
         Loc.Set(jump, "Open the detailed controls for this layer", AutomationProperties.NameProperty);
-        jump.Click += (_, _) => JumpToCard(detailCard);
+        jump.Click += (_, _) =>
+        {
+            var owner = _settingRows.LastOrDefault(candidate => candidate.Property == property);
+            JumpToCard(owner is not null && _settingsCardOrigins.TryGetValue(owner.Card, out var location) ? location.Title : detailCard);
+        };
         Grid.SetColumn(jump, 1);
         line.Children.Add(check); line.Children.Add(jump);
         body.Children.Insert(index, line);
@@ -1166,7 +1184,7 @@ public partial class MainWindow
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) };
         Loc.Set(text, label);
         var box = new TextBox { Text = FormatSetting(property, current), Tag = property, Width = 74, Height = 24, Padding = new Thickness(6, 2, 6, 2), FontSize = 10.5, TextAlignment = TextAlignment.Right };
         Loc.Set(box, "Type a value and press Enter", FrameworkElement.ToolTipProperty);
@@ -1195,16 +1213,19 @@ public partial class MainWindow
         Loc.Set(row, tooltip, FrameworkElement.ToolTipProperty);
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) };
         Loc.Set(text, label);
-        var combo = new ComboBox { Tag = property, Width = 210, Height = 30, DisplayMemberPath = "Caption", SelectedValuePath = "Value" };
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        row.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var combo = new ComboBox { Tag = property, MaxWidth = 270, MinWidth = 140, HorizontalAlignment = HorizontalAlignment.Stretch, Height = 30, DisplayMemberPath = "Caption", SelectedValuePath = "Value" };
         Loc.Set(combo, label, AutomationProperties.NameProperty);
         // The caption is display only; the stored value stays the English identifier, so a saved
         // preset keeps working after the interface language changes.
         combo.ItemsSource = options.Select(o => new ChoiceOption(o.Value, Loc.T(o.Caption))).ToList();
         combo.SelectedValue = (string)Prop(property).GetValue(_visualSettings)!;
         combo.SelectionChanged += VisualChoice_Changed;
-        Grid.SetColumn(combo, 1); row.Children.Add(text); row.Children.Add(combo);
+        Grid.SetColumnSpan(text, 2); Grid.SetRow(combo, 1); Grid.SetColumnSpan(combo, 2);
+        combo.Margin = new Thickness(0, 5, 0, 0); row.Children.Add(text); row.Children.Add(combo);
         _visualChoices[property] = combo; _visualChoiceOptions[property] = options;
         return Register(body, row, property, [label, tooltip, .. options.Select(o => o.Caption)]).WithCaption(text, TextBlock.TextProperty, label);
     }
@@ -1240,7 +1261,7 @@ public partial class MainWindow
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle") };
+        var text = new TextBlock { Style = (Style)FindResource("LabelTextStyle"), TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 8, 0) };
         Loc.Set(text, label);
         var swatch = new Button { Tag = property, Width = 30, Height = 26, Padding = new Thickness(0), Margin = new Thickness(0, 0, 6, 0), BorderBrush = new SolidColorBrush(Color.FromArgb(120, 255, 255, 255)) };
         Loc.Set(swatch, "Open color picker", FrameworkElement.ToolTipProperty);
@@ -1333,10 +1354,11 @@ public partial class MainWindow
         nameof(PianoVisualSettings.NoteMinLength) or nameof(PianoVisualSettings.NoteGap) => $"{value:0} px",
         nameof(PianoVisualSettings.NoteFallSpeed) or nameof(PianoVisualSettings.WispSpeed) => $"{value:0} px/s",
         nameof(PianoVisualSettings.ParticleAmount) or nameof(PianoVisualSettings.ParticleVelocity) or nameof(PianoVisualSettings.Gravity) or nameof(PianoVisualSettings.VectorField) or nameof(PianoVisualSettings.WispAmount) => $"{value:0}",
-        nameof(PianoVisualSettings.HandSplitPitch) => $"{NoteLabel((int)Math.Round(value))} ({value:0})",
+        nameof(PianoVisualSettings.HandSplitPitch) or nameof(PianoVisualSettings.PaletteLowPitch) or nameof(PianoVisualSettings.PaletteHighPitch) => $"{NoteLabel((int)Math.Round(value))} ({value:0})",
         nameof(PianoVisualSettings.RecordingFrameRate) => $"{value:0} fps",
         nameof(PianoVisualSettings.ArLookahead) => $"{value:0.0} s",
         nameof(PianoVisualSettings.ArDelay) => $"{value:0} ms",
+        nameof(PianoVisualSettings.ArNoteDirectionTilt) or nameof(PianoVisualSettings.ArNoteDirectionAzimuth) or nameof(PianoVisualSettings.ShaderCameraTilt) => $"{value:0}°",
         _ => $"{value:0}%"
     };
 
@@ -1344,7 +1366,7 @@ public partial class MainWindow
     internal static bool TryParseSettingValue(string property, string text, out double value)
     {
         value = 0;
-        if (property == nameof(PianoVisualSettings.HandSplitPitch) && NoteNamePattern.Match(text) is { Success: true } note)
+        if ((property is nameof(PianoVisualSettings.HandSplitPitch) or nameof(PianoVisualSettings.PaletteLowPitch) or nameof(PianoVisualSettings.PaletteHighPitch)) && NoteNamePattern.Match(text) is { Success: true } note)
         {
             var letter = char.ToUpperInvariant(note.Groups[1].Value[0]); var accidental = note.Groups[2].Value; var octave = int.Parse(note.Groups[3].Value, CultureInfo.InvariantCulture);
             var semitone = letter switch { 'C' => 0, 'D' => 2, 'E' => 4, 'F' => 5, 'G' => 7, 'A' => 9, _ => 11 };
@@ -1391,6 +1413,11 @@ public partial class MainWindow
     {
         if (!_uiReady || _loadingVisualSettings || sender is not Slider slider || slider.Tag is not string property) return;
         Prop(property).SetValue(_visualSettings, slider.Value);
+        if (property is nameof(PianoVisualSettings.PaletteLowPitch) or nameof(PianoVisualSettings.PaletteHighPitch))
+        {
+            _visualSettings.Clamp();
+            RefreshSettingControls(); // show both corrected bounds when a crossed range is normalised
+        }
         if (_visualValueBoxes.TryGetValue(property, out var box) && !box.IsKeyboardFocused) box.Text = FormatSetting(property, slider.Value);
         MarkModified(property);
         // AR‑3.5: a delay tuned while a camera is open belongs to that camera; moving to another one brings its own back.
@@ -1554,6 +1581,7 @@ public partial class MainWindow
             var anyVisible = _settingRows.Any(r => ReferenceEquals(r.Card, card) && r.Element.Visibility == Visibility.Visible);
             card.Visibility = anyVisible ? Visibility.Visible : Visibility.Collapsed;
         }
+        RefreshSettingsLayoutSearch(query.Length > 0);
         if (SettingsSearchHint is not null) SettingsSearchHint.Visibility = query.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
     }
 
@@ -1573,8 +1601,7 @@ public partial class MainWindow
             var found = false;
             foreach (var phrase in phrases)
             {
-                if (phrase.Contains(token, StringComparison.OrdinalIgnoreCase)
-                    || Loc.Known(phrase) && Loc.T(phrase).Contains(token, StringComparison.OrdinalIgnoreCase))
+                if (SettingsPhraseMatches(phrase, token))
                 {
                     found = true;
                     break;
@@ -1626,6 +1653,21 @@ public partial class MainWindow
     private static IEnumerable<string> SearchPhrases(SettingRow row)
     {
         foreach (var key in row.SearchKeys) yield return key;
+        yield return row.Page.Name switch
+        {
+            nameof(NoteSettingsHost) => SettingsPages.Notes,
+            nameof(PressSettingsHost) => SettingsPages.Press,
+            nameof(HoldSettingsHost) => SettingsPages.Hold,
+            nameof(ReleaseSettingsHost) => SettingsPages.Release,
+            nameof(LightingSettingsHost) => SettingsPages.Lighting,
+            nameof(StageDesignSettingsHost) => SettingsPages.StageDesign,
+            nameof(CameraSettingsHost) => SettingsPages.Camera,
+            nameof(RecordingSettingsHost) => SettingsPages.Recording,
+            nameof(SoundSettingsHost) => SettingsPages.Sound,
+            nameof(SessionSettingsHost) => SettingsPages.Session,
+            nameof(GeneralSettingsHost) => SettingsPages.Application,
+            _ => SettingsPages.Overview
+        };
         if (row.Property is not { } property) yield break;
         if (SearchSynonyms.TryGetValue(property, out var synonyms)) yield return synonyms;
         // The property name itself is the last safety net: "NoteFallSpeed" answers to "fall" and "speed"
@@ -1783,7 +1825,7 @@ public partial class MainWindow
         if (query.Length == 0) return;
         // Jump to the first page that has a match when the current page shows none.
         var pageCount = SettingsPages.Order.Length;
-        bool HasMatch(int index) { var page = SettingsPageHost(index); return page is not null && _settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible); }
+        bool HasMatch(int index) { var page = SettingsPageHost(index); return page is not null && (_settingRows.Any(r => ReferenceEquals(r.Page, page) && r.Element.Visibility == Visibility.Visible) || ReferenceEquals(page, StyleSettingsHost) && _settingsOverviewElements.Any(element => element.Visibility == Visibility.Visible)); }
         var currentIndex = SettingsTabs.SelectedIndex;
         if (currentIndex >= 0 && currentIndex < pageCount && HasMatch(currentIndex)) return;
         for (var i = 0; i < pageCount; i++) if (HasMatch(i)) { SettingsTabs.SelectedIndex = i; return; }
@@ -1794,7 +1836,7 @@ public partial class MainWindow
         // Selector.SelectionChanged bubbles from combo boxes and lists inside the pages; only react to the tab strip itself.
         if (!ReferenceEquals(e.OriginalSource, SettingsTabs)) return;
         _lastPointerActivity = DateTime.UtcNow;
-        // The navigation strip holds thirteen rows in a scrollable column, so arriving at a page from
+        // The navigation strip holds twelve rows in a scrollable column, so arriving at a page from
         // anywhere else — the header chip, a search hit, the General page at the bottom, --settings-tab —
         // has to bring that row into view. Otherwise the dock shows a page whose own entry is off screen.
         // One layout pass later, because the item is still being measured when SelectionChanged fires.
@@ -1811,7 +1853,12 @@ public partial class MainWindow
     {
         var page = SettingsPageHost(SettingsTabs.SelectedIndex);
         if (page is null) { Loc.Set(SettingsSaveLabel, "This page has no visual settings to reset"); return; }
-        var source = BasePresetSettings();
+        if (!SuppressErrorDialogs && MessageBox.Show(this,
+            Loc.T("Reset this section to the active look? Camera sources, saved calibration and machine preferences are kept."),
+            Loc.T("Reset section"), MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
+        // Use the same preset-copy boundary as Apply preset; merged pages must not reset machine-local values.
+        var source = PianoVisualSettings.FromJson(_visualSettings.ToJson());
+        source.CopyFrom(BasePresetSettings(), keepBackgroundImage: true);
         foreach (var row in _settingRows)
         {
             if (!ReferenceEquals(row.Page, page) || row.Property is null) continue;

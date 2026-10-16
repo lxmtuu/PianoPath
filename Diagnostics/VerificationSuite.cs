@@ -54,7 +54,56 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
-            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
+        if (args.Contains("--verify-ar-budget-only"))
+        {
+            try
+            {
+                if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("AR budget review requires --verify-review-out=<directory>.");
+                var count=ArParticleBudgetReview.Render(reviewOutput);
+                Results.Add($"PASS AR budget trial: {count} native captures; default/frozen baseline unchanged, under-cap identity, unchanged eligible payloads/non-particle packets; fixed 192 cap and stable selected order. Not hardware/performance/default promotion.");
+                Finish(app,args,null);
+            }
+            catch(Exception ex){Finish(app,args,ex);}
+            return;
+        }
+        if (args.Contains("--verify-key-ensemble-only"))
+        {
+            try
+            {
+                if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("Ensemble review requires --verify-review-out=<directory>.");
+                var count=KeyParticleEnsembleReview.Render(reviewOutput);
+                Results.Add($"PASS key-particle ensemble: {count} native checkpoints, real live down/up/impact and independent pedal; raw/normalized geometry/key guards, main-light/AR invariance. Static integration slice, not full regression/performance or art acceptance.");
+                Finish(app,args,null);
+            }
+            catch(Exception ex){Finish(app,args,ex);}
+            return;
+        }
+        if (args.Contains("--verify-key-light-only"))
+        {
+            try
+            {
+                if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("Key light review requires --verify-review-out=<directory>.");
+                var count=KeyboardKeyLightReview.Render(reviewOutput);
+                Results.Add($"PASS keyboard key-light native review: {count} actual captures, zero equals independent lamp-off, old/new pixels preserved from 25 percent, monotone fixed-scene ramps, unchanged AR/raw/packets; software true zero remains unchanged.");
+                Finish(app,args,null);
+            }
+            catch(Exception ex){Finish(app,args,ex);}
+            return;
+        }
+        if (args.Contains("--verify-prism-only"))
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(reviewOutput))
+                    throw new ArgumentException("Prism-only verification requires --verify-review-out=<directory>.");
+                Results.Add("NOTE Isolated Prism Flow baseline and palette/satin preview verification; this does not run or certify the full regression suite.");
+                VerifyPrismFlowReview(reviewOutput);
+                Finish(app, args, null);
+            }
+            catch (Exception ex) { Finish(app, args, ex); }
+            return;
+        }
+            try { VerifyMidiImport(); VerifyMeter(); VerifyMusicXmlImport(); VerifyHandSplitInference(); VerifyHandTracking(); VerifyKeyboardLayout(); VerifyGuardedStart(); VerifyPresetShareCodes(); VerifyVisualSettings(); VerifyPrismFlowLook(); VerifyKeyParticleLifecycle(); VerifyShaderPipeline(); VerifyGpuStage(); VerifyDeterministicGpuFrame(); VerifyFrameBudget(); VerifyLitKeyTilesBakeInBackground(); VerifyAviVideoRecorder(); VerifyPianoPedalModel(); VerifyPianoSimulation(); VerifyArGraphVariable(); VerifyArQualityTiers(); VerifyArSceneProjection(); VerifyArNoteProjection(); VerifyFlacReader(); VerifySfzEngine(); VerifySalamanderPiano(); VerifyStereoHallReverb(); VerifyConvolutionReverb(); VerifyAudioOutputSelection(); VerifyMidiDevicesAndKeyboardMap(); VerifyCameraOverlay(); VerifyArCameraLayer(); VerifyArRecording(); VerifyArDelay(); VerifyArLatency(); VerifyArDriftWatch(); VerifyArCalibrationArchive(); VerifyCalibrationAdvice(); VerifyArQualityBudget(); VerifyArRenderToVideo(); if (reviewOutputOption is not null) VerifyPhase1VisualReview(reviewOutput!); }
         catch (Exception ex) { Finish(app, args, ex); return; }
 
         var startupWindow = new MainWindow(loadSalamanderOnStart: false) { WindowState = WindowState.Normal, Width = 1240, Height = 780, SuppressErrorDialogs = true };
@@ -273,6 +322,7 @@ internal static partial class VerificationSuite
 
     private static void VerifyVisualSettings()
     {
+        VerifyUpgradedParticleEffectsSettings();
         // Automated runs must not write to the folder that holds the user's own look and presets.
         var realDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Keyflow");
         Assert(!string.Equals(Path.GetFullPath(PianoVisualSettingsStore.SettingsDirectory), Path.GetFullPath(realDirectory), StringComparison.OrdinalIgnoreCase)
@@ -1217,6 +1267,22 @@ internal static partial class VerificationSuite
             var frameChunks = movi < 0 ? 0 : CountToken(text[(movi + 4)..], "00dc") + CountToken(text[(movi + 4)..], "00db");
             Assert(frameChunks >= 4, "The AVI should contain all four submitted video frames.");
             Results.Add($"PASS video recording: 4 frames finalized into AVI ({(mjpeg ? "MJPEG" : "uncompressed RGB")}).");
+            // Burst faster than the bounded live queue: an offline writer must backpressure, never coalesce.
+            using (var recorder = new AviVideoRecorder(path,64,48,12))
+            {
+                IFrameRecorder offline = recorder;
+                var frame = new byte[recorder.FrameBytes];
+                for (var i=0;i<32;i++)
+                {
+                    Array.Fill(frame,(byte)(50+i*5));
+                    offline.WriteOfflineFrame(frame);
+                }
+                Assert(offline.FrameCount == 32,"Every rapid offline input must get its own timeline slot.");
+            }
+            var inventory = AviFrameInventory.Read(File.ReadAllBytes(path));
+            Assert(inventory == new AviFrameInventory(32,32,32),
+                $"Rapid offline writes must retain 32 distinct nonempty payloads after finalization ({inventory}).");
+            Results.Add("PASS offline AVI backpressure: 32 rapid changing frames finalized as 32 nonempty, distinct video payloads; no live-queue coalescing.");
         }
         finally { if (File.Exists(path)) File.Delete(path); }
     }
@@ -2278,7 +2344,7 @@ internal static partial class VerificationSuite
                 && Math.Abs(rowDefinitions[0].ActualHeight - headerRowHeight) < .5 && Math.Abs(rowDefinitions[2].ActualHeight - footerRowHeight) < .5;
         }
         Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && stageWidth > 0 && stageHeight > 0 && StageFillsClient(),
-            "Live Play should start with settings hidden, the idle toolbar available and the stage canvas filling the full window client area.");
+            $"Live Play should start with settings hidden, the idle toolbar available and the stage canvas filling the full window client area (settings={panel.Visibility}, toolbar={overlay.Visibility}, stage={stageWidth:0.##}x{stageHeight:0.##}, client={rootGrid.ActualWidth:0.##}x{rootGrid.ActualHeight:0.##}, fills={StageFillsClient()}, rendered={Field(window, "_chromeHasRendered")}).");
         GoIdle();
         Assert(overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
                 && headerChrome.Opacity == 0 && footerChrome.Opacity == 0 && StageViewportStable(),
@@ -2593,9 +2659,9 @@ internal static partial class VerificationSuite
         // The captions of the tab strip are translated, so the comparison runs through Loc too — a
         // check that reads an English literal would fail the moment the suite runs in Vietnamese.
         string Shown(string caption) => Loc.T(caption);
-        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == Shown("Style") && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == Shown("Theme") && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == Shown(SettingsPages.General),
-            $"The settings dock should expose all {pageCount} categorized pages from Style to General.");
-        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == 1 && SettingsPages.IndexOf(SettingsPages.General) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
+        Assert(tabs.Items.Count == pageCount && ((TabItem)tabs.Items[0]).Header.ToString() == Shown(SettingsPages.Overview) && ((TabItem)tabs.Items[SettingsPages.IndexOf(SettingsPages.Theme)]).Header.ToString() == Shown(SettingsPages.Application) && ((TabItem)tabs.Items[pageCount - 1]).Header.ToString() == Shown(SettingsPages.Application),
+            $"The settings dock should expose all {pageCount} categorized pages from Overview to Application.");
+        Assert(SettingsPages.IndexOf(SettingsPages.Theme) == SettingsPages.IndexOf(SettingsPages.Application) && SettingsPages.IndexOf(SettingsPages.General) == pageCount - 1 && SettingsPages.IndexOf("Nope") < 0,
             "Settings page names should resolve to their tab-strip index so no code has to keep magic tab numbers.");
         // The navigation is grouped by intent. Order is derived from the sections, the XAML tab strip
         // must match that order, and the header printed above a page must be the header of the section
@@ -2615,8 +2681,8 @@ internal static partial class VerificationSuite
             foreach (var page in section.Pages) Assert(SettingsPages.SectionOf(page)?.Label == section.Label, $"Settings page {page} should resolve to the section that lists it.");
         }
         Assert(SettingsPages.SectionOf("Nope") is null, "An unknown page name should have no section.");
-        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Style) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.General),
-            "The first section should open on Style and the last one should close on the pages of the application itself.");
+        Assert(SettingsPages.Sections[0].Pages.Contains(SettingsPages.Overview) && SettingsPages.Sections[^1].Pages.Contains(SettingsPages.Application),
+            "The first section should open on Overview and the last one should close on Application.");
         var choices = (Dictionary<string, ComboBox>)Field(window, "_visualChoices"); var toggles = (Dictionary<string, CheckBox>)Field(window, "_visualToggles");
         var settingRows = ((System.Collections.IEnumerable)Field(window, "_settingRows")).Cast<object>().ToArray();
         var rowDetails = settingRows.Select(row =>
@@ -2627,10 +2693,27 @@ internal static partial class VerificationSuite
                 SearchKeys: (string[])rowType.GetField("SearchKeys")!.GetValue(row)!,
                 Element: (FrameworkElement)rowType.GetField("Element")!.GetValue(row)!);
         }).ToArray();
+        var coverageRow = rowDetails.Single(row => row.Property == nameof(PianoVisualSettings.ArLiveBarCoverPercent));
+        for (DependencyObject? parent = coverageRow.Element.Parent; parent is not null; parent = LogicalTreeHelper.GetParent(parent))
+            Assert(parent is not Expander, "The legacy MORE live-bar-coverage button must reveal its slider without a second, closed Advanced gate.");
         var rowSettingProperties = rowDetails
             .Where(row => !string.IsNullOrWhiteSpace(row.Property))
             .Select(row => row.Property!)
             .ToHashSet(StringComparer.Ordinal);
+        Assert(pageCount == 12 && rowDetails.Where(row => row.Property is not null).GroupBy(row => row.Property).All(group => group.Count() == 1),
+            "P6 should expose twelve groups and one generated editor per property, not independent Stage/AR copies.");
+        foreach (var row in settingRows)
+        {
+            var type = row.GetType();
+            var page = (Panel)type.GetField("Page")!.GetValue(row)!;
+            var card = (Border)type.GetField("Card")!.GetValue(row)!;
+            Assert(ReferenceEquals(card.Parent, page), "A moved settings card and every registered row must agree on their live page.");
+        }
+        var beforeContext = visualSettings.ToJson();
+        var previousContext = (bool)Field(window, "_settingsArContext");
+        Invoke(window, "SetSettingsContext", !previousContext);
+        Assert(visualSettings.ToJson() == beforeContext, "Settings context must not mutate shared values, presets or camera configuration.");
+        Invoke(window, "SetSettingsContext", previousContext);
         var staticSettingControls = new (string Property, string ControlName)[]
         {
             (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
@@ -2650,6 +2733,9 @@ internal static partial class VerificationSuite
         };
         var nonControlProperties = new HashSet<string>(StringComparer.Ordinal)
         {
+            // P3b is a JSON-only prototype gate, not a released menu setting. Remove this exact
+            // exception when the shared particle controls ship in P6; do not hide future settings by pattern.
+            nameof(PianoVisualSettings.HeldParticleArt),
             nameof(PianoVisualSettings.BackgroundAppearanceVersion), // JSON compatibility migration
             nameof(PianoVisualSettings.PresetName),                 // preset workflow metadata
             nameof(PianoVisualSettings.PresetModified),             // preset workflow metadata
@@ -2677,7 +2763,10 @@ internal static partial class VerificationSuite
         Assert(unclassifiedProperties.Length == 0 && unexpectedClassifications.Length == 0
                 && classificationCount == classifiedProperties.Count && workflowControlsMissing.Length == 0
                 && missingRows.Length == 0 && unexpectedRows.Length == 0,
-            $"Every public visual setting should be a generated row, a mapped static XAML control, a mapped workflow control, or explicitly classified metadata; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing workflow controls={string.Join(",", workflowControlsMissing)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+            $"Every public visual setting should be a generated row, a mapped static XAML control, a mapped workflow control, or explicitly classified metadata/JSON-only prototype gate; unclassified={string.Join(",", unclassifiedProperties)}, unexpected classifications={string.Join(",", unexpectedClassifications)}, missing workflow controls={string.Join(",", workflowControlsMissing)}, missing rows={string.Join(",", missingRows)}, unexpected rows={string.Join(",", unexpectedRows)}.");
+        Assert(!rowSettingProperties.Contains(nameof(PianoVisualSettings.HeldParticleArt))
+                && !new PianoVisualSettings().HeldParticleArt,
+            "Held art must remain an explicitly classified, default-off JSON-only prototype until the P6 settings pass.");
         foreach (var (property, controlName) in staticSettingControls)
             Assert(publicSettings.Contains(property) && window.FindName(controlName) is FrameworkElement,
                 $"Static setting {property} should have its XAML control {controlName}.");
@@ -2846,7 +2935,7 @@ internal static partial class VerificationSuite
         var vietnameseCaption = Loc.T("Falling notes");
         Loc.ResetDiagnostics();
         Assert(Loc.Current.Id == "vi" && vietnameseCaption != "Falling notes", "Applying a language must change the captions the interface prints.");
-        Assert(firstHeader() == Loc.T("Style"), "A window that is already open must repaint its labels when the language changes.");
+        Assert(firstHeader() == Loc.T(SettingsPages.Overview), "A window that is already open must repaint its labels when the language changes.");
         // The row of the "Falling notes" switch is found by its translated caption, not only by English.
         var search = (TextBox)window.FindName("SettingsSearchBox");
         var rows = (System.Collections.IList)Field(window, "_settingRows");
@@ -2890,7 +2979,7 @@ internal static partial class VerificationSuite
             "The camera corner picker should offer each corner under the English id the settings file stores while printing the translated caption.");
 
         Loc.Apply("en");
-        Assert(firstHeader() == "Style" && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
+        Assert(firstHeader() == Loc.T(SettingsPages.Overview) && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
         Assert(PaintedCorners().Select(item => Painted(item, "Caption")).SequenceEqual(CameraOverlay.Corners),
             "Switching back to English must restore the camera corner captions to the ids they are stored as.");
         Loc.Apply("");
@@ -3051,63 +3140,80 @@ internal static partial class VerificationSuite
             {
                 var tab = (TabItem)tabs.Items[index];
                 tabs.SelectedIndex = index;
-                // Keep the pointer "recent", otherwise the idle timer hides the dock while it is measured.
-                SetField(window, "_lastPointerActivity", DateTime.UtcNow);
-                window.UpdateLayout();
-                var header = (string)tab.Header;
-                var content = (ScrollViewer?)tab.Content;
-                Assert(content is not null, $"The '{header}' dock page should scroll instead of clipping content that does not fit.");
-                var page = content!;
-                page.ScrollToTop(); window.UpdateLayout();
-                // The controls a keyboard can reach on this page, in the order WPF would visit them.
-                var focusable = new List<FrameworkElement>();
-                WalkApplicationTree(page, element =>
+                var expanders = new List<Expander>();
+                WalkApplicationTree(tab, element => { if (element is Expander expander) expanders.Add(expander); });
+                var expansion = expanders.ToDictionary(expander => expander, expander => expander.IsExpanded);
+                try
                 {
-                    if (element.Focusable && element.IsVisible && element.IsEnabled && element is ButtonBase or TextBox or Slider or ComboBox or ListBox)
-                        focusable.Add(element);
-                });
-                Assert(focusable.Count > 0, $"The '{header}' dock page should expose at least one control the keyboard can reach.");
-                // The generated rows of this page, in the order they were registered, which is the order
-                // the page prints them and the order they joined the visual tree.
-                var host = InvokeReturn(window, "SettingsPageHost", index) as Panel;
-                var pageRows = catalogue.Where(row => ReferenceEquals(row.Page, host)).ToList();
-                // One card can hold several rows, so a control is matched to its row through the row
-                // element itself; the walk above and this order are what Tab follows.
-                int? RowOf(DependencyObject element)
-                {
-                    for (var position = 0; position < pageRows.Count; position++)
-                        for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
-                            if (ReferenceEquals(node, pageRows[position].Element)) return position;
-                    return null;
+                    foreach (var expanded in new[] { false, true })
+                    {
+                        foreach (var expander in expanders) expander.IsExpanded = expanded;
+                        // Keep the pointer "recent", otherwise the idle timer hides the dock while it is measured.
+                        SetField(window, "_lastPointerActivity", DateTime.UtcNow);
+                        window.UpdateLayout();
+                        var header = (string)tab.Header;
+                        var content = (ScrollViewer?)tab.Content;
+                        Assert(content is not null, $"The '{header}' dock page should scroll instead of clipping content that does not fit.");
+                        var page = content!;
+                        page.ScrollToTop(); window.UpdateLayout();
+                        // The controls a keyboard can reach on this page, in the order WPF would visit them.
+                        var focusable = new List<FrameworkElement>();
+                        WalkApplicationTree(page, element =>
+                        {
+                            if (element.Focusable && element.IsVisible && element.IsEnabled && element is ButtonBase or TextBox or Slider or ComboBox or ListBox)
+                                focusable.Add(element);
+                        });
+                        Assert(focusable.Count > 0, $"The '{header}' dock page should expose at least one control the keyboard can reach.");
+                        // The generated rows of this page, in the order they were registered, which is the order
+                        // the page prints them and the order they joined the visual tree.
+                        var host = InvokeReturn(window, "SettingsPageHost", index) as Panel;
+                        var pageRows = catalogue.Where(row => ReferenceEquals(row.Page, host)).ToList();
+                        // One card can hold several rows, so a control is matched to its row through the row
+                        // element itself; the walk above and this order are what Tab follows.
+                        int? RowOf(DependencyObject element)
+                        {
+                            for (var position = 0; position < pageRows.Count; position++)
+                                for (DependencyObject? node = element; node is Visual or System.Windows.Media.Media3D.Visual3D; node = VisualTreeHelper.GetParent(node))
+                                    if (ReferenceEquals(node, pageRows[position].Element)) return position;
+                            return null;
+                        }
+                        var previous = -1; var own = 0;
+                        foreach (var control in focusable)
+                        {
+                            if (RowOf(control) is not { } position) { handBuilt++; continue; }
+                            Assert(position >= previous, $"On the '{header}' page Tab would reach row {position} before row {previous}, which is printed above it.");
+                            previous = position; own++;
+                        }
+                        Assert(pageRows.Count == 0 || own > 0, $"The generated rows of the '{header}' page should be reachable with the keyboard, not only with the mouse.");
+                        var cards = new List<Border>();
+                        foreach (var row in pageRows) if (!cards.Contains(row.Card)) cards.Add(row.Card);
+                        foreach (var card in cards)
+                        {
+                            var offset = card.TransformToAncestor(page).Transform(new Point(0, 0));
+                            Assert(offset.Y >= -1 && offset.Y + card.ActualHeight <= page.ExtentHeight + 1,
+                                $"Every '{header}' card should stay inside its scrollable content, not below it.");
+                            // The viewport may still be sized for the layout from before the vertical bar appeared,
+                            // so a card is allowed the width of that bar on top of the visible column.
+                            Assert(card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
+                                $"Every '{header}' card should fit the scroll column at the compact window size.");
+                            measured++;
+                        }
+                        foreach (var row in pageRows.Where(row => row.Element.IsVisible))
+                        {
+                            // Collapsed content need not have a visual ancestor or measured size. The second
+                            // pass expands Advanced and checks those same controls, rather than dropping them.
+                            var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
+                            Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
+                                $"The control of a row on the '{header}' page should stay inside its card at the compact window size.");
+                        }
+                        reachable += focusable.Count;
+                    }
                 }
-                var previous = -1; var own = 0;
-                foreach (var control in focusable)
+                finally
                 {
-                    if (RowOf(control) is not { } position) { handBuilt++; continue; }
-                    Assert(position >= previous, $"On the '{header}' page Tab would reach row {position} before row {previous}, which is printed above it.");
-                    previous = position; own++;
+                    foreach (var (expander, expanded) in expansion) expander.IsExpanded = expanded;
                 }
-                Assert(pageRows.Count == 0 || own > 0, $"The generated rows of the '{header}' page should be reachable with the keyboard, not only with the mouse.");
-                var cards = new List<Border>();
-                foreach (var row in pageRows) if (!cards.Contains(row.Card)) cards.Add(row.Card);
-                foreach (var card in cards)
-                {
-                    var offset = card.TransformToAncestor(page).Transform(new Point(0, 0));
-                    Assert(offset.Y >= -1 && offset.Y + card.ActualHeight <= page.ExtentHeight + 1,
-                        $"Every '{header}' card should stay inside its scrollable content, not below it.");
-                    // The viewport may still be sized for the layout from before the vertical bar appeared,
-                    // so a card is allowed the width of that bar on top of the visible column.
-                    Assert(card.ActualWidth <= page.ViewportWidth + SystemParameters.VerticalScrollBarWidth + 1,
-                        $"Every '{header}' card should fit the scroll column at the compact window size.");
-                    measured++;
-                }
-                foreach (var row in pageRows)
-                {
-                    var frame = row.Element.TransformToAncestor(row.Card).TransformBounds(new Rect(row.Element.RenderSize));
-                    Assert(frame.Left >= -1 && frame.Top >= -1 && frame.Right <= row.Card.ActualWidth + 1 && frame.Bottom <= row.Card.ActualHeight + 1,
-                        $"The control of a row on the '{header}' page should stay inside its card at the compact window size.");
-                }
-                pages++; reachable += focusable.Count;
+                pages++;
             }
         }
         finally
@@ -3115,7 +3221,7 @@ internal static partial class VerificationSuite
             tabs.SelectedIndex = wasIndex;
             window.Width = wasWidth; window.Height = wasHeight; window.WindowState = wasState; window.UpdateLayout();
         }
-        Results.Add($"PASS dock accessibility: all {pages} pages keep their {reachable} keyboard-reachable controls inside the scroll column at 1080x700, each of the {measured} generated cards stays inside the scroll column ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
+        Results.Add($"PASS dock accessibility: all {pages} pages, with Advanced both collapsed and expanded, keep their {reachable} keyboard-reachable control visits inside the scroll column at 1080x700, each of the {measured} generated cards stays inside the scroll column ({handBuilt} hand-built controls sit outside the catalogue), and Tab walks a page in the order its rows are printed.");
     }
 
     /// <summary>
@@ -6646,6 +6752,113 @@ internal static partial class VerificationSuite
         var captures = Phase1VisualReview.Render(outputDirectory);
         Assert(captures == 48, "Phase 1 visual review must write 48 images across three looks, four checkpoints, two renderers and two sizes.");
         Results.Add($"PASS Phase 1 visual review: {captures} WPF/GPU-WARP images at 1920×1080 and 960×540, with manifest and HTML index in {Path.GetFullPath(outputDirectory)}.");
+    }
+
+    private static void VerifyPrismFlowReview(string outputDirectory)
+    {
+        VerifyPrismFlowInputs();
+        VerifyPrismFlowLook();
+        VerifyKeyParticleLifecycle();
+        var releases=ReleaseParticleArtReview.RenderAll(outputDirectory);
+        Assert(releases==576,"Three release trials require 576 main statics, per-family depth/pedal/pre-release controls and 2160 motion crops.");
+        Results.Add("PASS release trials: Float Up/Dissolve/Smoke, actual Note On/held/Note Off, independent pedal controls, no births before release; 576 main statics / 2160 motion crops plus explicit Stage depth controls. Shared body RGBA, unchanged raw physics/RNG and ordered geometry; default-off Stage front-layer trial, not art/hardware approval.");
+        var bounce=BounceParticleArtReview.Render(Path.Combine(outputDirectory,"bounce-art-v1"));
+        Assert(bounce==192,"Bounce needs 192 main statics, 64 body-off and 64 material-only geometry controls, 720 motion crops without body-empty exemptions.");
+        Results.Add("PASS Bounce material trial: 192 statics + 64 body-off + 64 material-only controls / 720 motion crops; independent actual AR billboard corner/weight checks; body-only signal cannot be substituted by its unchanged companion ring. Shared actual body RGBA across Stage/three AR poses; unchanged raw state, non-body geometry, counts, depth and selection; explicit AR-only tangent geometry trial. Default-off, not new rebound physics or art/hardware acceptance.");
+        var melt=MeltParticleArtReview.Render(Path.Combine(outputDirectory,"melt-art-v1"));
+        Assert(melt==192,"Melt requires 192 native single-impact statics plus 16 Stage depth controls and 720 motion crops with no blank active candidate.");
+        Results.Add("PASS Melt material/front-layer trial: 192 statics + 16 material-only Stage depth controls / 720 motion crops; single firm/soft impacts only, unchanged state, ordered component geometry/counts, identity-linked body RGBA across Stage and three AR poses. Stage retains three components, AR one body; default-off, not held/release or art acceptance.");
+        var shatterBillboard=ShatterBillboardReview.Render(Path.Combine(outputDirectory,"shatter-billboard-v1"));
+        Assert(shatterBillboard==624,"Shatter billboard needs 624 statics across four directions, three AR poses and Stage controls.");
+        Results.Add("PASS Shatter billboard trial: 624 statics, 720 motion crops, 64 frozen V1 pixel controls; shared Stage age/phase tumble, independent actual AR corner/weight checks, unchanged state/ordered identities/material/size. Active candidate statics cannot be raster-empty. Default-off geometry experiment, not art or hardware approval.");
+        // Fail fast on the newest native candidate before regenerating historical reviews.
+        var shatter=ShatterParticleArtReview.Render(Path.Combine(outputDirectory,"shatter-art-v1"));
+        Assert(shatter==192,"Shatter requires paired native impact facets, unchanged state/geometry/components and actual body RGBA parity.");
+        Results.Add("PASS Shatter art v1: 192 statics / 720 motion crops; 46 visible active pairs, two pinned legacy near-overhead raster-empty pairs and 16 expired pairs; two single-press velocities, unchanged raw state and ordered geometry/counts. Stage retains body+glint, AR one body quad; actual body RGBA matches three AR poses. Review-only, not release/held redesign or art approval.");
+        Results.Add("NOTE Starting Prism Flow P0 song-state captures: WARP, explicit pedal input, synthetic camera, AR delay zero; not live MIDI routing or performance evidence.");
+        var prismOutput = Path.Combine(outputDirectory, "prism-flow-p0");
+        var prismCaptures = PrismFlowVisualReview.Render(prismOutput);
+        Assert(prismCaptures == 78, "Prism Flow P0 requires 72 baseline frames and six phase-FX-off controls.");
+        using (var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(prismOutput, "manifest.json"))))
+            foreach (var image in manifest.RootElement.GetProperty("captures").EnumerateArray())
+                if (image.GetProperty("Checkpoint").GetString() == "dense-chord" && image.GetProperty("Variant").GetString() == "baseline")
+                    Results.Add($"NOTE P0 baseline sample {image.GetProperty("Preset").GetString()}/{image.GetProperty("Mode").GetString()}: stage notes={image.GetProperty("StageNotes").GetInt32()}, AR quads={image.GetProperty("ArQuads").GetInt32()}, AR particles={image.GetProperty("ArParticles").GetInt32()}, pixel SHA256={image.GetProperty("PixelSha256").GetString()}.");
+        Results.Add($"PASS Prism Flow P0 captures: {prismCaptures} GPU-WARP frames, three control presets, 12 checkpoints, stage/AR Ultra and six effect-off controls in {Path.GetFullPath(prismOutput)}. No hardware, latency, WPF parity or full style coverage claim.");
+        var candidateOutput = Path.Combine(outputDirectory, "prism-flow-p1");
+        var candidates = PrismFlowVisualReview.RenderPrototype(candidateOutput);
+        Assert(candidates == 30, "Prism Flow preview requires 24 frames and six separate surface/texture/bloom-off controls.");
+        using (var manifest = JsonDocument.Parse(File.ReadAllText(Path.Combine(candidateOutput, "manifest.json"))))
+            foreach (var image in manifest.RootElement.GetProperty("captures").EnumerateArray())
+                if (image.GetProperty("Checkpoint").GetString() == "dense-chord")
+                    Results.Add($"NOTE P1 sample {image.GetProperty("Mode").GetString()}/{image.GetProperty("Variant").GetString()}: changed pixels={image.GetProperty("ChangedPixels")}, pixel SHA256={image.GetProperty("PixelSha256").GetString()}.");
+        Results.Add($"PASS Prism Flow preview captures: {candidates} GPU-WARP frames, 12 checkpoints in Stage/AR Ultra with surface/texture/bloom-off controls. Experimental palette/material only, no new flow particles; {Path.GetFullPath(candidateOutput)}.");
+        var particleOutput = Path.Combine(outputDirectory, "key-particles-p3a");
+        Results.Add("NOTE Starting P3a current particle-family inventory: one explicit impact or held input, Stage/AR Ultra, synthetic camera, zero delay. Not the finished particle redesign.");
+        var particleCaptures = KeyParticleVisualReview.Render(particleOutput);
+        Assert(particleCaptures == 70, "P3a must capture all five families and both Zone routes in both modes, with burst/held/released/tail/emitter-off controls.");
+        Results.Add($"PASS P3a particle inventory: {particleCaptures} GPU-WARP captures; 7 routes × 5 phases × Stage/AR Ultra. PNG round trips, visible held-vs-off deltas, no Stage-space leak and expired tails. {Path.GetFullPath(particleOutput)}.");
+        var auxiliaryOutput = Path.Combine(outputDirectory, "key-particles-aux");
+        var auxiliaryCaptures = AuxParticleVisualReview.Render(auxiliaryOutput);
+        Assert(auxiliaryCaptures == 128, "Auxiliary channels need white/black keys and four phases in both modes.");
+        Results.Add($"PASS P3a auxiliary captures: {auxiliaryCaptures} WARP frames; 8 channels × white/black × 4 phases × Stage/AR Ultra. Same-input effect-off controls, active visibility, expired tails, PNG round trips and no Stage-space leak; not art sign-off. {Path.GetFullPath(auxiliaryOutput)}.");
+        Results.Add("NOTE Starting held particle lighting/palette/chord/pose controls: 72 synthetic WARP scenes, four lighting × particle variants each. Shader v2 unchanged; no visual acceptance implied.");
+        var controls = HeldParticleControlReview.Render(Path.Combine(outputDirectory,"held-particle-controls"));
+        Assert(controls == 288, "Held controls need 72 scenes × four independent particle/light variants.");
+        Results.Add("PASS P3b held controls: 288 WARP frames, matching camera/calibration planes, 72 native crop quartets; effect-off family identity, particle/light packing isolation, PNG round trips and source/pixel hashes. Not a brightness or art acceptance gate.");
+        Results.Add("NOTE Starting tint/spill × particles and sub-cap chord study; no material, production recipe, selection policy or cap changes.");
+        var isolated = HeldParticleControlReview.Render(Path.Combine(outputDirectory,"held-light-isolation"),isolateLight:true);
+        Assert(isolated==192,"Tint/spill study needs 24 scenes × eight independent variants.");
+        Results.Add("PASS P3b tint/spill study: 192 WARP frames, 48 native quartets, actual packed per-pitch/age coverage; sub-cap eligible preservation, high-load AR cap and unchanged grouped-light baseline pixels. Static diagnostics, not art/performance acceptance.");
+        var v3=HeldParticleControlReview.Render(Path.Combine(outputDirectory,"wisps-v3"),isolateLight:true,wispV3:true);
+        Assert(v3==64,"Wisps v3 needs eight sub-cap scenes × eight independent factors.");
+        HeldParticleArtReview.RenderWispV3Motion(Path.Combine(outputDirectory,"wisps-v3","motion"));
+        Results.Add("PASS P3b Wisps v3: 64 sub-cap WARP captures; same v2 simulation, eligibility, actual packing and geometry hashes; particle-off pixels unchanged. Four paired 60-frame Stage/reference AR motion sequences. Review-only candidate, not art acceptance or a projection/cap fix.");
+        var flameV3=HeldParticleControlReview.Render(Path.Combine(outputDirectory,"flames-v3"),isolateLight:true,flameV3:true);
+        Assert(flameV3==64,"Flames v3 needs eight scenes × eight independent factors.");
+        HeldParticleArtReview.RenderFlameV3Motion(Path.Combine(outputDirectory,"flames-v3","motion"));
+        Results.Add("PASS P3b Flames v3: 64 WARP captures and four 60-frame motion sequences; unchanged v2 populations, geometry and off controls. Candidate material only; not art/hardware acceptance.");
+        var alignment=ArParticleAlignmentReview.Render(Path.Combine(outputDirectory,"ar-particle-alignment"));
+        Assert(alignment==96,"AR particle alignment needs three poses × four directions × two families × two phases × two axes.");
+        Results.Add("PASS AR particle alignment: 96 WARP frames, same raw state/intrinsic surfaces and note counts, actual packed long-axis error below one degree. Historical material fixtures explicitly retain legacy axes; production follows NoteDirection. Not real-camera acceptance.");
+        var sparks=SparkParticleArtReview.Render(Path.Combine(outputDirectory,"embers-art-v1"));
+        Assert(sparks==192,"Embers material needs 2 palettes × 4 views × 2 pitches × 4 phases × 3 variants.");
+        Results.Add("PASS P3b Embers art v1: 192 native static frames and 720 motion crops, same raw state and normalized actual packets. Production aligned AR axes, bloom/tint/spill isolated. Review-only material, not visual/hardware acceptance.");
+        var sparksV2=SparkParticleArtReview.Render(Path.Combine(outputDirectory,"embers-art-v2"),v2:true);
+        Assert(sparksV2==192,"Embers v2 needs paired v1/v2 material captures and shared actual colour/alpha across four outputs.");
+        Results.Add("PASS P3b Embers art v2: 192 native statics and 720 native motion crops; raw state, actual geometry and selection unchanged; actual v2 colour/alpha payload hashes identical across Stage and three AR poses. Material-only coverage/energy change, not art/hardware acceptance.");
+        var splash=SplashParticleArtReview.Render(Path.Combine(outputDirectory,"splash-art-v1"));
+        Assert(splash==192,"Splash requires paired native material captures and identity-linked body colour across modes.");
+        Results.Add("PASS Splash art v1: 192 static captures / 720 motion crops, unchanged raw state, selected physical beads and actual ordered packet geometry; Stage retains three component quads per bead, AR one. Review-only, not visual/hardware acceptance.");
+        var fireworks=FireworkParticleArtReview.Render(Path.Combine(outputDirectory,"fireworks-art-v1"));
+        Assert(fireworks==192,"Fireworks requires paired native material captures and identity-linked radial spark colours.");
+        Results.Add("PASS Fireworks art v1: 192 statics / 720 motion crops; unchanged raw state, ordered component geometry and physical-body counts. Stage and AR each retain one packet per physical dot/streak. Review-only, not art/hardware acceptance.");
+        var dustV2=DustParticleArtV2Review.Render(Path.Combine(outputDirectory,"dust-art-v2"));
+        Assert(dustV2==192,"Dust V2 requires paired V1/V2 native frames, unchanged burst and intrinsic RGBA parity.");
+        Results.Add("PASS Dust art v2: 192 statics / 720 motion crops; same raw state and ordered geometry/counts; actual RGBA matches Stage/three AR poses. Full-glow burst pixels identical to V1, held birth-glow response only, review-only.");
+        var dust=DustParticleArtReview.Render(Path.Combine(outputDirectory,"dust-art-v1"));
+        Assert(dust==192,"Dust requires native material pairs, unchanged state/geometry/counts and identity-linked actual RGBA parity.");
+        Results.Add("PASS Dust art v1: 192 static / 720 motion captures; unchanged raw state, ordered geometry/selection/counts; actual intrinsic RGBA matches Stage and three AR poses. Material only, default-off, not art/hardware acceptance.");
+        var confetti=ConfettiParticleArtReview.Render(Path.Combine(outputDirectory,"confetti-art-v1"));
+        Assert(confetti==192,"Confetti requires native material captures, unchanged geometry/counts and actual intrinsic colour/orientation parity.");
+        Results.Add("PASS Confetti art v1: 192 static / 720 motion captures; unchanged raw state, physical geometry/order/counts; identity-linked actual RGB/alpha and orientation match Stage and three AR poses. Paper material only, default-off; not art/hardware acceptance.");
+        HeldParticleArtReview.Render(Path.Combine(outputDirectory,"held-particle-art"),auxiliaryOutput);
+        Results.Add("PASS P3b held art captures: 32 opt-in wisps/flames frames; active differs from classic, off/expired equal; eight 60-frame cropped motion sequences for lossless APNG assembly. Not user art sign-off, full-family or hardware certification.");
+    }
+
+    private static void VerifyPrismFlowInputs()
+    {
+        var scene = PrismFlowBaseline.Load(Path.Combine(PrismFlowVisualReview.FindSamples(), "prism-flow-p0"));
+        Assert(scene.Notes.Count == 26 && scene.Manifest.DurationSeconds == 28,
+            "The shipping MIDI reader must match all 26 P0 notes while the capture clock preserves the 28-second review tail.");
+        var count = 0;
+        var pedal = false;
+        var cursor = scene.CreateCursor();
+        cursor.AdvanceTo(13.5, _ => count++, (down, _) => pedal = down);
+        Assert(pedal && !scene.Notes.Any(n => n.Start <= 13.5 && n.End > 13.5),
+            "P0 distinguishes pedal-down from physical-held: no keys remain down at 13.5 seconds.");
+        cursor.AdvanceTo(28, _ => count++, (down, _) => pedal = down);
+        Assert(!pedal && count == 26, "P0 dispatches each onset once and releases its explicit pedal by the final rest.");
+        Results.Add("PASS Prism Flow P0 inputs: product MIDI reader agrees with checksum-pinned manifest; explicit pedal cursor and trailing rest are independent of MidiSong note durations. Capture and hardware evidence are separate.");
     }
 
     private static void Finish(App app, string[] args, Exception? failure)

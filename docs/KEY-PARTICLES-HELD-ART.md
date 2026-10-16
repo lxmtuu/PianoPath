@@ -1,0 +1,48 @@
+# P3b — Wisps + Flames, art thử dùng chung Stage / AR
+
+**2026-10-15: prototype đã PASS full CI; ảnh/clip đã được đưa về repo. V2 đã PASS full CI và review theo mẫu so với v1; chưa user sign-off/nghiệm thu artwork.**
+
+Tiếp nối [baseline auxiliary](KEY-PARTICLES-AUX-BASELINE.md) và [routing đã PASS](KEY-PARTICLES-RING-CHANNELS.md). Đây là hai họ held đầu tiên, không phải hoàn tất toàn bộ press/held hoặc thay mọi họ bằng Prism Flow.
+
+## Lát thay đổi
+
+- Wisps: nét sáng uốn cong, mềm ở hai đầu; không phải chấm nóng hoặc smoke card.
+- Flames: parcel nhiệt có chân rộng, lưỡi cong thuôn lên và lõi ấm; chân material neo tại vị trí parcel mô phỏng, **không** đóng đinh mọi flame lên mặt phím.
+- `HeldParticleAppearance`: một nguồn kích thước theo scene unit, màu linear, alpha tuổi thọ, phase và shape. Stage và AR dùng cùng hàm HLSL `ShadeHeldParticleArt` (kind 17), premultiplied output. Kind 16 của watermark không đổi.
+- AR: billboard hướng camera tại **vị trí keyboard-local 3D thật** của hạt. Trục ngang theo keyboard, trục đứng vuông góc tia nhìn; không đổi trajectory thành screen-space hoặc flatten camera simulation. Flame chỉ dịch render centre để chân UV=0 trùng anchor vật lý.
+- Không thay emitter, seed/RNG, heat, tốc độ, lifespan, release/pedal ownership hoặc clear epoch. Không thêm pass/texture mới. Các họ khác và đường classic giữ nguyên.
+
+## Bật thử, không sửa menu
+
+Flag JSON `HeldParticleArt` mặc định **false**; preset cũ được generator bổ sung false, không đổi các giá trị art cũ. Clone/apply/snapshot giữ flag. Có thể import [Held Particle Art Preview.json](examples/Held%20Particle%20Art%20Preview.json) theo luồng preset JSON hiện có để thử cả hai họ; đặt `HeldParticleArt: false` để so classic. Preset này chỉ là ví dụ trong docs, **không** thay hoặc thêm mặc định vào community shelf.
+
+Phạm vi prototype là **GPU Live Stage + GPU AR**. WPF fallback chưa có material này. Import preset không tự chọn camera, calibration, chất lượng AR hoặc GPU; chọn chúng qua luồng hiện có. Chưa thêm checkbox/menu mới, **P6 menu vẫn làm cuối**.
+
+## Kiểm chứng được chuẩn bị
+
+- Portable: 8 cases cho envelope/kích thước/invalid inputs và camera-facing basis, ba calibration, mirror và Fit/Fill. Không thay portable tests thành bằng chứng GPU.
+- Shipping: payload màu/alpha/progress/phase dùng chung, kind 17 ở cả builder, quay lại classic, build không đổi state/time/births, clone/apply và clear epoch.
+- Static: 32 captures = 2 họ × 2 pitch (60/61) × 2 mode × 4 phase. So với classic **cùng run, cùng input/time/seed**: active phải khác; effect-off và expired phải bằng; pedal-tail có thể đã hết lifetime nên không ép khác.
+- Motion: 8 sequence = 2 họ × 2 mode × classic/art; pitch 60, 60 frame ở 30 FPS, 2 giây. Nhấn/giữ 11 step; step đầu sau thả kết thúc ở t=0,4 s, pedal bật khi thả. Replay seeded prefix cho từng frame, không dùng async recorder nên không rơi/lặp frame do queue. Không phải test audio hoặc MIDI device thật.
+- Clip là **APNG lossless**, giữ nguyên PNG frame data, full-frame SOURCE blend, không quantize palette. Crop cố định 140×160 từ output 640×360: Stage (240,180), AR (235,90). Crop giúp review material/tail và giữ Git nhỏ; không dùng clip để chứng nhận composition/full-scene hoặc rằng mọi particle luôn nằm trong crop. Full static 1280×720 và chuỗi PNG nằm trong CI artifact.
+- CI giữ 8 active ảnh, 8 APNG crop ở `docs/previews/held-particle-art`, manifests ở `docs/evidence/held-particle-art`; bộ 32/static + nguồn clip đầy đủ ở artifact. Chỉ được review khi CI đã sinh chúng, không dùng baseline cũ thay bằng chứng material mới.
+
+Local Python/static/diff checks PASS; máy này không có .NET/Windows. Source `892f1d0`, [run `38634465675`](https://github.com/lxmtuu/PianoPath/actions/runs/38634465675): static/portable/Windows build/isolated capture và APNG assembly PASS. Full verification FAIL ở AR AVI readback (5/12 decoded frames, cần ≥6); benchmark/packaging và preview auto-commit không chạy. Artifacts đã giữ 32 ảnh và 8 clip, nhưng **chưa review hình/motion thật**. Lần sửa [offline recording](OFFLINE-VIDEO-FRAME-PRESERVATION.md), run `38636257464`/source `21e8f25`, đã qua AVI với 12 nonempty/distinct payloads, sau đó fail ở kiểm tra độ phủ settings do flag prototype chưa phân loại JSON-only. Đã bổ sung phân loại chính xác flag đó, giữ default-off và không thêm menu.
+
+**Full rerun PASS:** [run `38637127055`](https://github.com/lxmtuu/PianoPath/actions/runs/38637127055), source `87ca500`, **6.047 assertions / 1 skipped group**, preview `b17a691`. Static/portable/Windows build/isolated captures/full verification/WARP benchmark/installer/publication đều thành công. 8 active images + 8 APNG crops đã có tại `docs/previews/held-particle-art`; manifests tại `docs/evidence/held-particle-art`; 32 static captures và nguồn clip đầy đủ ở artifact. Đây là bằng chứng build/runtime, **không phải human art sign-off hoặc hardware performance pass**.
+
+## Gate còn mở
+
+Nhận xét before–after thật, cân độ sáng/độ dày/density, full-view press/hold/release/pedal motion, prototype ở oblique/overhead camera thật, nonzero delay, all AR tiers, GPU recording/alpha, WPF fallback và hardware/performance. Tiếp tục mọi burst/held/morph/release family và accents; **menu cuối cùng**, theo [roadmap](PRISM-FLOW-DESIGN-ROADMAP.md).
+
+### Evidence storage follow-up
+
+After fetching `b17a691`, a fresh local source check exposed the image-only preview rule: the two generated JSON manifests must not live in `docs/previews`. They are moved to `docs/evidence/held-particle-art`, and the workflow stages that evidence directory explicitly. The C#/shader code is unchanged from successful run `38637127055`; **[Run `38640821342`](https://github.com/lxmtuu/PianoPath/actions/runs/38640821342), source `29aefb7`, completed SUCCESS** with the storage correction: static/portable/Windows build/full verification (**6,047 assertions / 1 skipped group**), captures/APNG assembly, WARP benchmark, installer, galleries and distributable publication all passed. This prevents the preview auto-commit itself from breaking the next static check.
+
+Independent local artifact integrity check: decoded all **480 APNG frames** (8 × 60) and all **8 committed active images** using Pillow, converted to raw BGRA and compared SHA-256 against the capture manifests; every hash matched. This proves lossless frame/image preservation, not visual artwork approval. After the final CI run, a fresh checkout/source check also passes with JSON evidence outside the image-only directory.
+
+## Review và vòng material kế tiếp
+
+[Xem nhận xét v1/v2, giới hạn temporal sampling và player frame-locked](KEY-PARTICLES-HELD-ART-REVIEW.md). V2 source `74941f0` PASS full run `38645329801` (6.047 assertions / 1 skipped group), preview `e4c9dd6`; đã kiểm 480 frame/8 active hashes, controls/classic không đổi và xem static/temporal samples. Wisps mảnh nhưng tối hơn; Flames bớt thân đặc. AR key contrast và các gate rộng hơn vẫn mở; không user art sign-off.
+
+Tiếp tục bằng [bộ đối chứng lighting/palette/chord/pose](KEY-PARTICLES-HELD-CONTROLS.md): 72 cảnh, 4 tổ hợp light/particles mỗi cảnh, giữ nguyên shader v2. Final source `edce79d` PASS CI `38659928167` (6.056 assertions / 1 skipped group), previews `0a3214e`; đã xem paired crops/full-scene samples. Dải sáng phím có trong light-only, nhưng Wisps ivory contrast và chord AR cap 192 vẫn cần lát contrast/budget riêng. Không thay shader v2/default-off hoặc tuyên bố art sign-off.

@@ -2007,18 +2007,48 @@ internal static partial class VerificationSuite
         Assert(releaseEffects > 0 && renderer.ArParticleFxCount > 0 && ColouredPixels(releaseFrame) > 100,
             $"The configured Dissolve release should emit a visible 3D release effect at its calibrated key ({releaseEffects} active releases, {renderer.ArParticleFxCount} particles).");
 
-        // Effects follow the keyboard transform and piano axes, independently of the note's editable travel direction.
+        // Every key effect follows the piano pose. Particles additionally follow the editable note direction;
+        // lights/rings/flashes/arcs/beams must NOT acquire that independent rotation.
         var movedImpactFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook,
             selectedCalibration: transformedCalibration, activePitches: new[] { 60, 64 });
         var movedImpactFrame = RenderFrames(movedImpactFeed, 4);
         var poseEffectPixels = ChangedPixels(ultraImpactFrame, movedImpactFrame, threshold: 4);
         Assert(poseEffectPixels > 100,
             $"Rotating/translating the calibrated piano must move the complete impact/hold effect group with it ({poseEffectPixels} changed pixels).");
-        var directionOnlyFeed = PressFeed(false, .6f, ArQualityTier.Ultra, addImpact: true, visualSettings: liveFxLook, activePitches: new[] { 60, 64 });
-        directionOnlyFeed.Ar = directionOnlyFeed.Ar! with { NoteDirection = new ArNoteDirection(74, 39) };
-        var directionOnlyFrame = RenderFrames(directionOnlyFeed, 4);
-        Assert(ultraImpactFrame.AsSpan().SequenceEqual(directionOnlyFrame),
-            "Changing note travel direction alone must not rotate key-anchored Live Stage effects away from the calibrated piano.");
+        var directionPackets = new List<GpuArQuad>();
+        GpuArParticle[] directionState = [];
+        renderer.ObserveArQuadForReview = q => directionPackets.Add(q);
+        renderer.ObserveParticleStateForReview = (sim,_) => directionState=ParticleSnapshot(sim);
+        var particleDefaultFeed = PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        var particleDefaultFrame = RenderFrames(particleDefaultFeed,4);
+        var defaultPackets=directionPackets.ToArray();var defaultState=directionState;
+        directionPackets.Clear();
+        var directionOnlyFeed = PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        directionOnlyFeed.Ar = directionOnlyFeed.Ar! with { NoteDirection = new ArNoteDirection(74,39) };
+        var directionOnlyFrame = RenderFrames(directionOnlyFeed,4);
+        var editedPackets=directionPackets.ToArray();
+        renderer.ObserveArQuadForReview=null;renderer.ObserveParticleStateForReview=null;
+        static bool IsParticlePacket(GpuArQuad q)=>q.Misc.Z is 2 or 17;
+        var defaultParticles=defaultPackets.Where(IsParticlePacket).ToArray();
+        var editedParticles=editedPackets.Where(IsParticlePacket).ToArray();
+        Assert(defaultParticles.Length>0 && defaultParticles.Length==editedParticles.Length
+            && defaultState.SequenceEqual(directionState)
+            && defaultParticles.Select(q=>new{q.Color,q.Misc}).SequenceEqual(editedParticles.Select(q=>new{q.Color,q.Misc}))
+            && !defaultParticles.SequenceEqual(editedParticles)
+            && ChangedPixels(particleDefaultFrame,directionOnlyFrame,threshold:0)>0,
+            "Changing note direction must rotate actual production particle geometry, not RNG/state, selection or intrinsic colour/lifetime.");
+        Assert(defaultPackets.Where(q=>!IsParticlePacket(q)).SequenceEqual(editedPackets.Where(q=>!IsParticlePacket(q))),
+            "Changing note direction must leave actual key tints, lights, rings, flashes, arcs and beams fixed to the calibrated piano.");
+
+        // The old pixel independence guarantee remains explicitly available for historical artwork evidence ONLY.
+        var legacyDefaultFeed=PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        legacyDefaultFeed.Ar=legacyDefaultFeed.Ar! with {LegacyParticleAxesForReview=true};
+        var legacyDefaultFrame=RenderFrames(legacyDefaultFeed,4);
+        var legacyDirectionFeed=PressFeed(false,.6f,ArQualityTier.Ultra,addImpact:true,visualSettings:liveFxLook,activePitches:new[]{60,64});
+        legacyDirectionFeed.Ar=legacyDirectionFeed.Ar! with {LegacyParticleAxesForReview=true,NoteDirection=new ArNoteDirection(74,39)};
+        var legacyDirectionFrame=RenderFrames(legacyDirectionFeed,4);
+        Assert(legacyDefaultFrame.AsSpan().SequenceEqual(legacyDirectionFrame),
+            "Only the review-only legacy axes path must retain the historical note-direction-independent pixels.");
 
         // The flat stage-space trail stays suppressed; the selected note trail is emitted only as a calibrated AR quad.
         settings.FallingTrail = "None";
@@ -2347,7 +2377,6 @@ internal static partial class VerificationSuite
             var feed = new GpuStageFeed(); feed.SetStageHeight(360);
             feed.SetLook(GpuLook.From(look, (pitch, track) => Color.FromRgb(255, 80, 220), .205));
             if (look.ShowWatermark) feed.Watermark = PianoStage.GpuWatermark; // the GPU prints its own strip (kind 16)
-            feed.ClearTransient();
             feed.SetDeterministicState([], 0, false, held);
             feed.SetDeterministicBeatPulse(0);
             if (tick == 2) { feed.LiveNote(60, true, .8f); feed.Impact(60, .8); }
@@ -2378,6 +2407,11 @@ internal static partial class VerificationSuite
                 aviTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), aviPlan, recorder);
             Assert(aviTake.FramesWritten == 12 && aviTake.Seconds is > 0.96 and <= 1.05 && File.Exists(aviPath) && new FileInfo(aviPath).Length > 2000,
                 $"The engine should write every planned frame into the AVI (frames {aviTake.FramesWritten}, seconds {aviTake.Seconds:0.##}).");
+            var inventory = AviFrameInventory.Read(File.ReadAllBytes(aviPath));
+            Results.Add($"NOTE offline AVI: {inventory.Samples} samples, {inventory.NonEmptySamples} nonempty, {inventory.DistinctPayloads} distinct payloads for {aviPlan.Frames} scripted camera ticks.");
+            Assert(inventory.Samples == aviPlan.Frames && inventory.NonEmptySamples == aviPlan.Frames
+                    && inventory.DistinctPayloads == aviPlan.Frames,
+                $"Offline AVI must preserve all {aviPlan.Frames} changing images, not coalesce them into live-mode repeats ({inventory}).");
             var reader = CameraFrameReader.OpenFile(aviPath, out var readError);
             Assert(reader is not null, $"The take must read back as a video ({readError}); the media stack of the CI box decodes the app's own AVI as part of the recording checks.");
             var lumaLeftStripe0 = 0; var keyLevels = new List<int>();
@@ -2408,15 +2442,17 @@ internal static partial class VerificationSuite
                     frameIndex++;
                 }
                 Assert(frameIndex >= 6 && frameIndex <= aviPlan.Frames,
-                    $"At least the six content ticks must be in the file (read {frameIndex} of {aviPlan.Frames}; "
+                    $"At least the six content ticks must be in the file (read {frameIndex} of {aviPlan.Frames}; AVI payloads {inventory}; "
                     + (reader.AtEnd ? "the stream reported its end" : "the readback was still waiting after sixty seconds") + ").");
             }
             Assert(lumaLeftStripe0 > 120, $"The left stripe of the tick-0 camera picture must survive recording ({lumaLeftStripe0}).");
             Assert(keyLevels.Count >= 6, $"The take must carry at least six probe readings (got {keyLevels.Count}).");
-            // Keys light the moment they are pressed (ticks 1–3) and go quiet when the take goes quiet.
-            Assert(keyLevels[0] < 160 && keyLevels[5] < 170 && keyLevels[1] > keyLevels[0] + 40 && keyLevels[2] > keyLevels[0] + 40
-                    && keyLevels[3] > keyLevels[0] + 40 && keyLevels[5] < keyLevels[2] - 40,
-                $"The C4 light must be quiet at the take's ends and lit through the pressed ticks ({string.Join("/", keyLevels)}).");
+            // Compare against each tick's changing camera background: release fades over time,
+            // rather than teleporting to a fresh/empty simulation on the first unpressed frame.
+            var keyExcess=keyLevels.Select((level,tick)=>level-(90+tick*8)).ToArray();
+            Assert(keyExcess[0]<70 && keyExcess[1]>keyExcess[0]+40 && keyExcess[2]>keyExcess[0]+40
+                    && keyExcess[3]>keyExcess[0]+40 && keyExcess[5]<keyExcess[3],
+                $"The C4 light must grow on press and fade after release over the changing camera ({string.Join("/",keyExcess)}).");
 
             // PNG: downsample 2 boxes the 320×180 sweep into 160×90 frames — and the sweep itself replays bit-identically.
             var pngPlan = ArVideoRenderProfile.Plan(cw, ch, 0.5, 12, downsample: 2, maxSide: 320);
@@ -2424,18 +2460,26 @@ internal static partial class VerificationSuite
                 "Downsample 2 should box a 320×180 render into a 160×90 output frame.");
             var firstBuffers = new List<byte[]>();
             var pngDir = Path.Combine(directory, "frames");
-            using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
+            var sceneTimes=new List<double>();
+            renderer.ObserveParticleStateForReview=(simulation,_)=>sceneTimes.Add(simulation.Time);
+            try
             {
+                using var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate);
                 var pngTake = ArRenderToVideo.Run(renderer, t => TickFeed(t, quiet), pngPlan, recorder, (i, bgra) => firstBuffers.Add(bgra));
                 Assert(pngTake.FramesWritten == 6 && pngTake.Downsample == 2, "The PNG take writes the full sweep.");
             }
+            finally{renderer.ObserveParticleStateForReview=null;}
+            Assert(sceneTimes.Count==pngPlan.Frames && sceneTimes.Select((time,i)=>Math.Abs(time-(i+1)*pngPlan.FrameSeconds)<.000001).All(correct=>correct),
+                "Offline simulation time must advance continuously by every full frame interval, including at 12 fps; no per-frame restart or 50 ms time loss.");
             Assert(Directory.GetFiles(pngDir, "frame-*.png").Length == 6 && File.Exists(Path.Combine(pngDir, PngSequenceRecorder.ManifestName))
                     && firstBuffers.All(b => b.Length == 160 * 4 * 90),
                 "The take writes one PNG per tick plus the manifest, from 160×90 BGRA readbacks.");
-            // So khung live ↔ render: tick 2 by hand, the exact call the engine made, is the same picture bit for bit.
-            var liveTick = GpuRenderLoop.RenderFrames(renderer, TickFeed(2, quiet), 320, 180, 0, pngPlan.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
+            // Live-shaped sequential replay must include ticks 0 and 1, not restart at tick 2.
+            byte[] liveTick=[];
+            using(var replay=new GpuOfflineFrameSequence(renderer,320,180,ArVideoRenderProfile.Seed))
+                for(var tick=0;tick<=2;tick++)liveTick=replay.RenderFrame(TickFeed(tick,quiet),pngPlan.FrameSeconds);
             Assert(BgraPack.Box2(liveTick, 320, 180).AsSpan().SequenceEqual(firstBuffers[2]),
-                "A live-shaped render of the same tick, same fixed time step and same seed must land on the take's third frame bit for bit.");
+                "A continuous replay of the same preceding ticks, fixed time steps and seed must match the take's third frame bit for bit.");
             // And the whole take seconds as an export: a second sweep of the same script writes the same readbacks.
             var secondBuffers = new List<byte[]>();
             using (var recorder = new PngSequenceRecorder(pngDir, pngPlan.Width, pngPlan.Height, pngPlan.FrameRate))
@@ -2570,6 +2614,9 @@ internal static partial class VerificationSuite
                 exportTake = ArRenderToVideo.Run(renderer, FileFeed, aviPlan, recorder);
             Assert(exportTake.FramesWritten == 12 && File.Exists(exportAvi),
                 $"The camera-file take must write every planned frame ({exportTake.FramesWritten}).");
+            var exportInventory = AviFrameInventory.Read(File.ReadAllBytes(exportAvi));
+            Assert(exportInventory.Samples == aviPlan.Frames && exportInventory.NonEmptySamples == aviPlan.Frames,
+                $"The camera-file offline export must retain every planned image ({exportInventory}).");
             var exportReader = CameraFrameReader.OpenFile(exportAvi, out var exportError);
             Assert(exportReader is not null, $"The camera-file take must read back as video ({exportError}).");
             var stripeLevels = new List<int>();
@@ -2601,6 +2648,17 @@ internal static partial class VerificationSuite
             Assert(brightened >= 4 && stripeLevels[5] > stripeLevels[0] + 16,
                 $"The file's greys must tick through the engine in order (levels {string.Join("/", stripeLevels)}).");
             Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 12 frames — six quiet runway ticks so the box's swallowed tail still leaves the six content ticks readable, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 44100 WAV frames — exactly the twelve ticks of the video — with the onset ramping gently and the held ticks loud, the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it, and a real camera video file — an MP4 pressed by the app's own writer and decoded by its reader — ticks through the engine one frame a tick, its stripe brightening in order.");
+        }
+        catch
+        {
+            // Keep the failed media, not merely a count. CI uploads these with the verification log.
+            try
+            {
+                foreach (var file in Directory.GetFiles(directory,"*.avi"))
+                    File.Copy(file,Path.Combine(Path.GetTempPath(),"keyflow-arvideo-failure-"+Path.GetFileName(file)),true);
+            }
+            catch (Exception ex) { Results.Add($"NOTE could not preserve the failed AVI: {ex.Message}"); }
+            throw;
         }
         finally { try { Directory.Delete(directory, true); } catch { } }
     }

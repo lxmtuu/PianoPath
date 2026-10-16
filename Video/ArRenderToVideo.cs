@@ -35,6 +35,7 @@ internal static class ArRenderToVideo
         ArgumentNullException.ThrowIfNull(profile);
         profile.MustFit(recorder);
         var written = 0;
+        using var sequence = new GpuOfflineFrameSequence(renderer,profile.RenderWidth,profile.RenderHeight,ArVideoRenderProfile.Seed);
         float[]? floats = null; short[]? pcm = null; long mixed = 0;
         if (audio is not null) { floats = new float[4096 * 2]; pcm = new short[4096 * 2]; }
         for (var i = 0; i < profile.Frames; i++)
@@ -42,14 +43,13 @@ internal static class ArRenderToVideo
             // The tick's sound covers exactly the span of the tick's frame — events on it land with its picture.
             if (audio is not null) mixed = ArVideoMixdown.MixTick(audio, profile.FrameRate, i, mixed, floats!, pcm!);
             var feed = feedForFrame(i) ?? throw new InvalidOperationException($"The take script produced no feed for frame {i + 1} of {profile.Frames}.");
-            // One output frame is exactly one fixed time step: a fresh simulation over the tick's feed,
-            // seeded identically every sweep so nothing but the script can differ between two takes.
-            var bgra = GpuRenderLoop.RenderFrames(renderer, feed, profile.RenderWidth, profile.RenderHeight,
-                0, profile.FrameSeconds, false, out _, null, ArVideoRenderProfile.Seed);
+            // Seed once per take, not once per frame: particle ages, emitter credit, key envelopes,
+            // release history and RNG all continue across ticks, just as they do in the live loop.
+            var bgra = sequence.RenderFrame(feed,profile.FrameSeconds);
             if (profile.Downsample >= 2) bgra = BgraPack.Box2(bgra, profile.RenderWidth, profile.RenderHeight);
             if (profile.Downsample == 4) bgra = BgraPack.Box2(bgra, profile.RenderWidth / 2, profile.RenderHeight / 2);
             onFrame?.Invoke(i, bgra);
-            recorder.WriteFrame(recorder.HasAlpha ? bgra : BgraPack.ToBottomUpBgr(bgra, profile.Width, profile.Height));
+            recorder.WriteOfflineFrame(recorder.HasAlpha ? bgra : BgraPack.ToBottomUpBgr(bgra, profile.Width, profile.Height));
             written++;
         }
         return new ArVideoTake(written, profile.Seconds, recorder.OutputPath, profile.Width, profile.Height, profile.Downsample,

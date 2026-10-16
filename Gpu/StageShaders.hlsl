@@ -48,6 +48,7 @@ cbuffer Frame : register(b0)
     float4 ArMatrix1;
     float4 ArMatrix2;
     float4 ArMatrixFlags; // legacy shader-branch flags; the active renderer keeps all four lanes zero
+    float4 NoteD;         // x = opt-in satin; y = keyboard main-lamp diagnostic reference (0 normal, 1 legacy, 2 off); zw reserved
 };
 
 cbuffer PassConstants : register(b1)
@@ -391,9 +392,315 @@ ArQuadOut VsArQuad(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     return o;
 }
 
+// Pixel-box integration of a thin signed-distance band. Unlike smoothstep(width +/- fwidth(abs(d))),
+// a subpixel stroke loses coverage with its width instead of staying a half-opaque card at any scale.
+float HeldStrokeCoverage(float signedDistance, float halfWidth, float pixelHalfWidth)
+{
+    float pixel = max(pixelHalfWidth, 0.0001);
+    float overlap = min(signedDistance + pixel, halfWidth) - max(signedDistance - pixel, -halfWidth);
+    return saturate(overlap / (2.0 * pixel));
+}
+
+// Experimental held surfaces. Both Stage and AR use the same premultiplied material;
+// world anchoring/projection happens in the builders, not in this shading function.
+float4 ShadeHeldParticleArt(float2 uv, float4 color, float progress, float shape, float phase)
+{
+    float h = saturate(uv.y);
+    float x = uv.x * 2.0 - 1.0;
+    float coverage, core;
+    float3 bodyColor = color.rgb;
+    if (shape < 5.0) // translucent heat veil around a narrower, curved luminous core
+    {
+        float centre = sin(h * 5.5 + phase + progress * 2.0) * 0.22 * h;
+        float width = lerp(0.78, 0.035, pow(h, 0.8));
+        float signedDistance = x - centre;
+        float pixelHalf = max(fwidth(signedDistance) * 0.5, 0.0125);
+        float veil = HeldStrokeCoverage(signedDistance, width, pixelHalf);
+        float spine = HeldStrokeCoverage(signedDistance, width * 0.28 + 0.015, pixelHalf);
+        float ends = smoothstep(0.0, 0.12, h) * (1.0 - smoothstep(0.86, 1.0, h));
+        coverage = (veil * 0.28 + spine * 0.60) * ends;
+        core = spine * ends * (1.0 - h) * 0.16;
+        bodyColor *= lerp(1.0, 0.65, h); // depth along the parcel, not another lifetime fade
+    }
+    else if (shape < 6.5) // Flames v3 review: two tapered tongues, coloured mantle and luminous inner body
+    {
+        // Confined to the existing base-anchored quad: no new births/geometry, no extra age fade.
+        float bend = sin(h * 4.8 + phase + progress * 2.6) * 0.20 * h;
+        float belly = 0.72 * pow(max(1.0 - h, 0.0), 0.78) * (0.80 + 0.20 * sin(h * 3.14159));
+        float d = x - bend;
+        float pixelHalf = max(fwidth(d) * 0.5, 0.0125);
+        float ends = smoothstep(0.0, 0.09, h) * (1.0 - smoothstep(0.88, 1.0, h));
+        float mantle = HeldStrokeCoverage(d, belly, pixelHalf) * ends;
+        float inner = HeldStrokeCoverage(d + belly * 0.10, belly * lerp(0.48, 0.22, h), pixelHalf) * ends;
+        float sideH = saturate(h / 0.73);
+        float sideWidth = 0.22 * pow(max(1.0 - sideH, 0.0), 0.85);
+        float sideD = x - (bend + 0.28 + sin(phase) * 0.08);
+        float side = HeldStrokeCoverage(sideD, sideWidth, max(fwidth(sideD) * 0.5, 0.0125));
+        side *= smoothstep(0.0, 0.14, h) * (1.0 - smoothstep(0.58, 0.73, h));
+        float peak = max(max(color.r, color.g), color.b);
+        float3 hue = pow(saturate(color.rgb / max(peak, 0.0001)), 1.12);
+        float3 outerColor = hue * min(peak, 0.78) * lerp(1.0, 0.68, h);
+        float3 innerColor = lerp(hue, float3(1.0, 0.80, 0.35), 0.12 * (1.0 - h) * (1.0 - h)) * min(peak, 0.98);
+        float outerAlpha = mantle * 0.52;
+        float innerAlpha = inner * 0.25;
+        float sideAlpha = side * 0.12;
+        float alpha = (outerAlpha + innerAlpha + sideAlpha) * color.a;
+        float3 rgb = (outerColor * (outerAlpha + sideAlpha) + innerColor * innerAlpha) * color.a;
+        return float4(rgb, alpha); // bounded premultiplied colour; existing CPU lifetime envelope only
+    }
+    else if (shape > 7.5) // Wisps v3 review candidate; v2 shape 7 and flames stay byte-for-byte below/above
+    {
+        // A tapered ribbon with a coloured shoulder and narrow ridge, not an emissive white hair.
+        // Same UV extent, birth phase and lifetime envelope as v2; no screen-space size floor.
+        float centre = sin(h * 5.2 + phase + progress * 3.0) * 0.30;
+        float taper = pow(max(sin(h * 3.14159), 0.0), 0.7);
+        float width = 0.055 + 0.22 * taper;
+        float signedDistance = x - centre;
+        float pixelHalf = max(fwidth(signedDistance) * 0.5, 0.0175);
+        float shoulder = HeldStrokeCoverage(signedDistance, width, pixelHalf);
+        float ridge = HeldStrokeCoverage(signedDistance + width * 0.20, width * 0.26, pixelHalf);
+        float ends = smoothstep(0.0, 0.13, h) * (1.0 - smoothstep(0.82, 1.0, h));
+        float variation = 0.85 + 0.15 * (0.5 + 0.5 * cos(phase));
+        float body = shoulder * ends * variation;
+        float crest = ridge * ends * variation;
+        float peak = max(max(color.r, color.g), color.b);
+        // Bound the straight colour, not the shared alpha/lifetime. HDR gain in v2 could bleach
+        // accumulated parcels against ivory; this shoulder remains chromatic over a bright key.
+        float3 hue = pow(saturate(color.rgb / max(peak, 0.0001)), 1.35);
+        float3 shoulderColor = hue * min(peak, 0.78);
+        float3 ridgeColor = hue * min(peak, 0.95);
+        float shoulderAlpha = body * 0.64;
+        float ridgeAlpha = crest * 0.18;
+        float a = saturate(shoulderAlpha + ridgeAlpha) * color.a;
+        float3 rgb = (shoulderColor * shoulderAlpha + ridgeColor * ridgeAlpha) * color.a;
+        return float4(rgb, a); // premultiplied, no warm/white core or second fade
+    }
+    else // fine, partly transparent thread: dense births must not become an opaque AR patch
+    {
+        float centre = sin(h * 6.0 + phase + progress * 4.0) * 0.34;
+        float width = 0.08 + sin(h * 3.14159) * 0.08;
+        float signedDistance = x - centre;
+        float pixelHalf = max(fwidth(signedDistance) * 0.5, 0.0175);
+        float ends = smoothstep(0.0, 0.16, h) * (1.0 - smoothstep(0.8, 1.0, h));
+        float variation = 0.78 + 0.22 * (0.5 + 0.5 * cos(phase)); // fixed birth phase, no RNG/time mutation
+        coverage = HeldStrokeCoverage(signedDistance, width, pixelHalf) * ends * 0.52 * variation;
+        core = coverage * exp(-signedDistance * signedDistance * 90.0) * 0.08;
+    }
+    float a = saturate(coverage) * color.a;
+    float3 warmCore = lerp(color.rgb, float3(1.0, 0.94, 0.70), 0.18);
+    float3 rgb = bodyColor * coverage + warmCore * core;
+    return float4(rgb * color.a, a);
+}
+
+// Review-only sparks: coloured faceted ember + velocity-aligned tapered sliver.
+// Shared by Stage and calibrated AR; CPU already owns the lifetime envelope.
+// No ScreenTime flicker, whitening core, geometry expansion or extra life fade.
+// Physical raw-size coordinates, shared despite old Stage 4.32x / AR 2.4x quad extents.
+// Soft pigment mote: no white core, temporal noise, additional fade or added geometry.
+// Review-only coloured shard facet. No temporal glint, white core or extra age fade.
+// Viscous Melt bead: broad lower shoulder, softly shaded meniscus, same-hue components.
+// CPU owns the single lifetime envelope. No temporal noise, white core or geometry growth.
+float4 ShadeMeltArt(float2 p,float4 color,float component)
+{
+    if(component>33.5)
+    {
+        float coverage=exp(-dot(p,p)*(component<34.5?12.0:4.5));
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    float width=lerp(0.66,0.96,smoothstep(-0.85,0.45,p.y));
+    float d=length(float2(p.x/width,(p.y-0.04)/0.94));
+    float coverage=saturate(0.5+(1.0-d)/max(fwidth(d),0.001));
+    float shoulder=lerp(0.76,0.94,smoothstep(-0.7,0.65,p.y));
+    float meniscus=exp(-pow((d-0.76)*9.0,2.0))*0.06;
+    float3 pigment=color.rgb*min(1.0,shoulder+meniscus);
+    return float4(pigment*coverage*color.a,coverage*color.a);
+}
+
+// Release materials own coverage only. One CPU lifetime envelope, no temporal noise or new geometry.
+float4 ShadeReleaseArt(float2 p,float4 color,float kind)
+{
+    float coverage;
+    if(kind>45.5)
+    {
+        float lobe=exp(-dot(p-float2(-0.16,0.08),p-float2(-0.16,0.08))*3.4);
+        float veil=exp(-dot(p-float2(0.22,-0.18),p-float2(0.22,-0.18))*5.0);
+        coverage=(lobe*.65+veil*.35)*(1.0-smoothstep(.72,1.0,length(p)));
+    }
+    else if(kind==41 || kind==44)coverage=exp(-dot(p,p)*9.0);
+    else if(kind==42 || kind==45)coverage=exp(-dot(p,p)*3.5);
+    else
+    {
+        float r=length(p);
+        // Float Up is a soft buoyant bead; Dissolve is a restrained fine grain, not another liquid glint.
+        coverage=kind<42.5?1.0-smoothstep(.52,.96,r):exp(-dot(p,p)*4.5)*(1.0-smoothstep(.65,1.0,r));
+    }
+    float alpha=coverage*color.a;
+    return float4(color.rgb*alpha,alpha);
+}
+
+// Rounded directional Bounce stroke: a broad shoulder at the leading end and a quiet tapered tail.
+// Same local pigment in both outputs; CPU alpha is the only lifetime fade. No phase noise or white core.
+float4 ShadeBounceArt(float2 p,float4 color)
+{
+    float t=saturate((p.x+1.0)*0.5);
+    float width=lerp(0.12,0.62,smoothstep(0.0,0.65,t));
+    float d=length(float2(p.x,p.y/max(width,0.01)));
+    float coverage=saturate(0.5+(0.96-d)/max(fwidth(d),0.001));
+    float pigment=lerp(0.72,0.96,smoothstep(0.0,0.8,t));
+    float alpha=coverage*color.a;
+    return float4(color.rgb*pigment*alpha,alpha);
+}
+
+float4 ShadeShatterArt(float2 p,float4 color)
+{
+    float t=saturate((p.x+1.0)*0.5);
+    float width=lerp(0.12,0.68,t);
+    float d=max(abs(p.x)-0.92,abs(p.y)-width);
+    float coverage=saturate(0.5-d/max(fwidth(d),0.001));
+    float plane=smoothstep(-0.08,0.08,p.y+p.x*0.22);
+    float3 tint=color.rgb*lerp(0.78,1.0,plane);
+    return float4(tint*coverage*color.a,coverage*color.a);
+}
+
+float4 ShadeDustArt(float2 q,float4 color)
+{
+    float r=length(q);
+    float edge=1.0-smoothstep(1.6,2.2,r);
+    float coverage=exp(-dot(q,q)*0.9)*edge;
+    float alpha=coverage*color.a;
+    return float4(color.rgb*alpha,alpha);
+}
+
+// Paper coordinates in units of raw particle size. Clipped corners fit inside the narrow AR quad
+// at every rotation; shared physical aspect, no new geometry or age/brightness oscillation.
+float4 ShadeConfettiArt(float2 q,float4 color)
+{
+    float2 a=abs(q);
+    float d=max(max(a.x-0.94,a.y-0.55),a.x+a.y-1.21);
+    float coverage=saturate(0.5-d/max(fwidth(d),0.001));
+    float fold=smoothstep(-0.14,0.14,q.x+q.y*0.32);
+    float3 tint=color.rgb*lerp(0.80,1.0,fold);
+    return float4(tint*coverage*color.a,coverage*color.a);
+}
+
+// Tapered multicolour radial spark; shared body for Stage and AR, no age fade or white core.
+float4 ShadeFireworkArt(float2 uv,float4 color,bool streak)
+{
+    float2 p=uv*2.0-1.0;
+    if(!streak)
+    {
+        float d=length(p);
+        float coverage=saturate((0.74-d)/max(fwidth(d),0.001)+0.5);
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    float t=saturate((p.x+1.0)*0.5);
+    float width=lerp(0.11,0.76,smoothstep(0.0,0.66,t))*sqrt(saturate((1.0-t)/0.24));
+    float pixelHalf=max(fwidth(p.y)*0.5,0.0125);
+    float body=HeldStrokeCoverage(p.y,width,pixelHalf);
+    float facet=HeldStrokeCoverage(p.y+width*0.16,width*0.30,pixelHalf);
+    float cap=saturate((1.0-abs(p.x))/max(fwidth(p.x),0.001));
+    float coverage=saturate(body*0.82+facet*0.18)*cap;
+    return float4(color.rgb*coverage*color.a,coverage*color.a);
+}
+
+// Liquid bead, coloured meniscus and restrained tinted glint; no white replacement or age fade.
+float4 ShadeSplashArt(float2 uv,float4 color,float component)
+{
+    float2 p=uv*2.0-1.0;
+    if(component<22.5) // Stage's existing broad halo quad: energy stays close to the bead.
+    {
+        float coverage=exp(-dot(p,p)*18.0)*0.09;
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    if(component>23.5 && component<24.5) // Existing small offset specular quad, never pure white.
+    {
+        float coverage=exp(-dot(p,p)*5.0)*0.22;
+        return float4(color.rgb*coverage*color.a,coverage*color.a);
+    }
+    // Broad rounded lower bead with a pinched upper shoulder, inside the old ellipse quad.
+    float width=lerp(0.55,0.92,smoothstep(-0.75,0.35,p.y));
+    float d=length(float2(p.x/width,(p.y-0.08)/0.90));
+    float aa=max(fwidth(d)*0.5,0.015);
+    float body=saturate((1.0-d)/(2.0*aa)+0.5);
+    float rim=HeldStrokeCoverage(d-0.78,0.10,aa);
+    float ridge=exp(-dot(p-float2(-0.24,-0.22),p-float2(-0.24,-0.22))*32.0)*body;
+    float coverage=saturate(body*0.84+rim*0.12+ridge*0.04);
+    return float4(color.rgb*coverage*color.a,coverage*color.a);
+}
+
+float4 ShadeSparkArt(float2 uv, float4 color, bool streak)
+{
+    float2 p = uv * 2.0 - 1.0;
+    float body, halo;
+    if (streak)
+    {
+        float along = saturate((p.x + 1.0) * 0.5);
+        float width = lerp(0.055, 0.30, smoothstep(0.0, 0.74, along));
+        width *= sqrt(saturate((1.0 - along) / 0.16));
+        float cap = saturate((1.0 - abs(p.x)) / max(fwidth(p.x), 0.001));
+        body = HeldStrokeCoverage(p.y, width, fwidth(p.y) * 0.5) * cap;
+        halo = exp(-p.y * p.y * 18.0) * pow(saturate(1.0 - abs(p.x)), 0.8) * 0.12;
+    }
+    else
+    {
+        float d = abs(p.x) * 0.9 + abs(p.y) * 1.1;
+        body = saturate((0.57 - d) / max(fwidth(d), 0.001) + 0.5);
+        halo = exp(-dot(p,p) * 6.0) * 0.18;
+    }
+    float coverage = saturate(body * 0.85 + halo);
+    float peak = max(color.r, max(color.g, color.b));
+    float3 tint = max(color.rgb, 0.0) / (1.0 + max(peak, 0.0));
+    float alpha = coverage * saturate(color.a);
+    return float4(tint * alpha, alpha);
+}
+
+// V2 receives one shared intrinsic tint + lifetime alpha from both CPU builders.
+// More material coverage inside the SAME quad; no minimum pixel size or projector change.
+float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
+{
+    float2 p = uv * 2.0 - 1.0;
+    float body, halo;
+    if (streak)
+    {
+        float along = saturate((p.x + 1.0) * 0.5);
+        float width = lerp(0.085, 0.55, smoothstep(0.0, 0.74, along));
+        width *= sqrt(saturate((1.0 - along) / 0.16));
+        float cap = saturate((1.0 - abs(p.x)) / max(fwidth(p.x), 0.001));
+        body = HeldStrokeCoverage(p.y, width, fwidth(p.y) * 0.5) * cap;
+        halo = exp(-p.y * p.y * 12.0) * pow(saturate(1.0 - abs(p.x)), 0.8) * 0.14;
+    }
+    else
+    {
+        float d = abs(p.x) + abs(p.y);
+        body = saturate((0.72 - d) / max(fwidth(d), 0.001) + 0.5);
+        halo = exp(-dot(p,p) * 5.0) * 0.18;
+    }
+    float alpha = saturate(body * 0.95 + halo) * saturate(color.a);
+    return float4(clamp(color.rgb, 0.0, 0.95) * alpha, alpha);
+}
+
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind==40 || kind==43 || kind==46) return ShadeReleaseArt(i.Uv*2.0-1.0,i.Color,kind);
+    if(kind>38.5 && kind<39.5) return ShadeBounceArt(i.Uv*2.0-1.0,i.Color);
+    if(kind>32.5 && kind<33.5) return ShadeMeltArt(i.Uv*2.0-1.0,i.Color,33);
+    if(kind>30.5 && kind<31.5) return ShadeShatterArt(i.Uv*2.0-1.0,i.Color);
+    if(kind>28.5 && kind<30.5) return ShadeDustArt((i.Uv*2.0-1.0)*2.4,i.Color);
+    if(kind>27.5 && kind<28.5)
+    {
+        float2 p=(i.Uv*2.0-1.0)*float2(1.6,1.0);
+        float2 q=float2(p.x*i.Misc.x+p.y*i.Misc.y,-p.x*i.Misc.y+p.y*i.Misc.x);
+        return ShadeConfettiArt(q,i.Color);
+    }
+    if(kind>25.5 && kind<27.5) return ShadeFireworkArt(i.Uv,i.Color,kind<26.5);
+    if (kind > 24.5 && kind < 25.5) return ShadeSplashArt(i.Uv,i.Color,23);
+    if (kind > 19.5 && kind < 21.5)
+        return ShadeSparkArtV2(i.Uv, i.Color, kind < 20.5);
+    if (kind > 17.5 && kind < 19.5)
+        return ShadeSparkArt(i.Uv, i.Color, kind < 18.5);
+    if (kind > 16.5 && kind < 17.5)
+        return ShadeHeldParticleArt(i.Uv, i.Color, i.Misc.x, i.Misc.y, i.Misc.w);
     if (kind < 0.5)
     {
         // Reuse the exact Live Stage material in linear light. UV derivatives recover the projected body's
@@ -778,7 +1085,30 @@ float4 ShadeNoteMaterial(NoteMaterialInput v)
     float head = pow(along, 10.0) * NoteB.z;
     float xN = p.x / hb.x;
 
-    if (style < 0.5)
+    bool satin = NoteD.x > 0.5 && (style < 0.5 || (style > 1.5 && style < 2.5));
+    if (satin)
+    {
+        // Pigment-first satin, not another material ID. Local normalised UVs are shared with AR;
+        // static per-note phase avoids screen-space swimming and time/seek-dependent flicker.
+        float2 uv = p / hb;
+        float phase = frac(v.Misc.y * 0.6180339) * 6.2831853;
+        float bevel = saturate(-d / max(1.5, hb.x * 0.55));
+        float shade = lerp(1.0, 0.72 + 0.28 * bevel, NoteC.y);
+        float grain = sin(uv.y * 47.0 + sin(uv.x * 7.0 + phase) * 1.6 + phase);
+        // Attenuate grain on short/distant bars before it aliases. No texture sample or extra pass.
+        float frequency = length(fwidth(uv * float2(7.0, 47.0)));
+        float filtered = 1.0 - smoothstep(0.65, 2.0, frequency);
+        float grainDelta = grain * 0.085 * NoteC.x * filtered;
+        float sheen = exp(-pow((uv.x + uv.y * 0.16 + 0.32) * 5.5, 2.0)) * NoteB.w;
+        float rim = exp(-abs(d + edgeW * 0.4) / max(0.5, edgeW * 0.4));
+        float3 pigment = col * (0.62 + 0.38 * NoteB.x) * shade * (1.0 + grainDelta);
+        float3 highlight = lerp(col, 1.0, 0.18);
+        emit += (pigment + highlight * (sheen * 0.12 + rim * NoteB.y * 0.26)
+                 + col * sounding * 0.10) * inside;
+        // Filled and readable without bloom, including on bright camera pictures.
+        alpha = inside;
+    }
+    else if (style < 0.5)
     {
         // Solid: a lacquered bar with a rounded bevel, a bright rim and a cool reflection
         float bevel = saturate(-d / max(2.0, min(hb.x, hb.y) * 0.9));
@@ -889,7 +1219,7 @@ float4 ShadeNoteMaterial(NoteMaterialInput v)
         alpha = inside;
     }
 
-    emit += lerp(col, 1.0, 0.65) * head * inside * 2.2;
+    emit += lerp(col, 1.0, satin ? 0.18 : 0.65) * head * inside * (satin ? 0.35 : 2.2);
 
     // Hold Bar: a white-hot outline just outside a sounding bar plus a tinted halo around it
     float holdBar = v.Misc.w;
@@ -1058,7 +1388,13 @@ float4 PsKey(KeyOut v) : SV_Target
 
     // lights: a soft box above and in front, a fill from the room and a rim from behind the keys
     float3 keyDir = normalize(float3(-0.18, 1.0, 0.62));
-    float3 lightColor = float3(1.0, 0.98, 0.95) * (0.35 + 1.25 * KeyA.x);
+    // True zero for the main lamp; leave ambient/rim/emission and post exposure alone.
+    // Below 25%, a monotone C1 rolloff reaches zero without a hidden floor. At/above 25%
+    // keep the previous expression exactly, preserving existing default/preset illumination.
+    float softbox = 0.35 + 1.25 * KeyA.x;
+    if (NoteD.y > 1.5) softbox = 0.0; // independent native forced-off reference, not a setting
+    else if (NoteD.y < 0.5 && KeyA.x < 0.25) softbox = KeyA.x * (4.05 - 5.6 * KeyA.x);
+    float3 lightColor = float3(1.0, 0.98, 0.95) * softbox;
     float3 color = KeyLight(n, view, keyDir, albedo, roughness, f0, lightColor);
     if (black)
     {
@@ -1150,7 +1486,71 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if (kind > 6.5)
+    if(kind>39.5 && kind<53.5)
+    {
+        float baseKind=kind>46.5?kind-7:kind;
+        if(kind>46.5)depth=0.01; // Separate default-off Stage front-layer experiment, never AR.
+        if(baseKind<45.5){extent=float2(size,size*max(s.Dir.z,0.02));extra=float4(extent,1.0,s.Dir.w);}
+        // Smoke keeps the exact old kind-0 dust square, axis and extent.
+    }
+    else if(kind>38.5 && kind<39.5)
+    {
+        // Exact legacy kind-1 streak axis, stretch and depth (.6), not a billboard or size change.
+        extent=float2(size*(1.0+s.Dir.z),size);
+    }
+    else if(kind>32.5 && kind<38.5)
+    {
+        // Exact legacy XY extents/rotation/softness; the separate default-off front-layer trial only changes depth.
+        if(kind>35.5)depth=0.01;
+        extent=float2(size,size*max(s.Dir.z,0.02));
+        extra=float4(extent,1.0,s.Dir.w);
+    }
+    else if(kind>30.5 && kind<31.5)
+    {
+        // Exact old kind-8 ellipse extents/axis/softness; only surface material changes.
+        extent=float2(size,size*max(s.Dir.z,0.02));
+        extra=float4(extent,1.0,s.Dir.w);
+    }
+    else if(kind>31.5 && kind<32.5)
+    {
+        // Exact old kind-7 line padding, offset, extent and depth.
+        float halfLength=length(s.Dir.xy)*0.5;
+        float pad=size*3.0+1.0;
+        offset=s.Dir.xy*0.5;
+        extent=float2(halfLength+pad,pad);
+        extra=float4(extent,halfLength,max(size,0.35));
+    }
+    else if(kind>28.5 && kind<30.5)
+    {
+        // Exact old dust kind-0 square extent, axis and depth; no geometry enlargement.
+    }
+    else if(kind>27.5 && kind<28.5)
+    {
+        // Exact old kind-3 square extent and age/phase axis; material alone supplies the paper shape.
+    }
+    else if(kind>25.5 && kind<27.5)
+    {
+        // Exact old dot/streak geometry, not the unrelated auxiliary glass shard primitive.
+        if(kind<26.5)extent=float2(size*(1.0+s.Dir.z),size);
+    }
+    else if(kind>21.5 && kind<24.5)
+    {
+        // Exact legacy ellipse/glow geometry, including rotation, y/x ratio and softness.
+        extent=float2(size,size*max(s.Dir.z,0.02));
+        extra=float4(extent,1.0,s.Dir.w);
+    }
+    else if (kind > 17.5 && kind < 21.5)
+    {
+        // Exactly the legacy dot/streak extents and axes; only the fragment material changes.
+        if (kind < 18.5 || (kind > 19.5 && kind < 20.5)) extent = float2(size * (1.0 + s.Dir.z), size);
+    }
+    else if (kind > 16.5 && kind < 17.5)
+    {
+        axis = float2(1.0, 0.0); normal = float2(0.0, -1.0);
+        extent = float2(size, s.Dir.x);
+        extra = float4(s.Dir.y, s.Dir.z, s.Dir.w, 0.0); // progress, surface shape, birth phase
+    }
+    else if (kind > 6.5)
     {
         // shapes (kind 7+): Dir.xy is a rotation (the whole segment for lines), Dir.zw per-kind values
         float2 along = s.Dir.xy;
@@ -1351,6 +1751,27 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>39.5 && kind<53.5) return ShadeReleaseArt(v.Local,v.Color,kind>46.5?kind-7:kind);
+    if(kind>38.5 && kind<39.5) return ShadeBounceArt(v.Local,v.Color);
+    if(kind>32.5 && kind<38.5) return ShadeMeltArt(v.Local,v.Color,kind>35.5?kind-3:kind);
+    if(kind>30.5 && kind<31.5) return ShadeShatterArt(v.Local,v.Color);
+    if(kind>31.5 && kind<32.5)
+    {
+        float2 px=v.Local*v.Extra.xy;
+        float d=length(float2(max(abs(px.x)-v.Extra.z,0.0),px.y))/v.Extra.w;
+        float coverage=exp(-d*d*0.7);
+        return float4(v.Color.rgb*coverage*v.Color.a,coverage*v.Color.a);
+    }
+    if(kind>28.5 && kind<30.5) return ShadeDustArt(v.Local*4.32,v.Color);
+    if(kind>27.5 && kind<28.5) return ShadeConfettiArt(v.Local*1.6,v.Color);
+    if(kind>25.5 && kind<27.5) return ShadeFireworkArt(v.Local*0.5+0.5,v.Color,kind<26.5);
+    if(kind>21.5 && kind<24.5) return ShadeSplashArt(v.Local*0.5+0.5,v.Color,kind);
+    if (kind > 19.5 && kind < 21.5)
+        return ShadeSparkArtV2(v.Local * 0.5 + 0.5, v.Color, kind < 20.5);
+    if (kind > 17.5 && kind < 19.5)
+        return ShadeSparkArt(v.Local * 0.5 + 0.5, v.Color, kind < 18.5);
+    if (kind > 16.5 && kind < 17.5)
+        return ShadeHeldParticleArt(v.Local * 0.5 + 0.5, v.Color, v.Extra.x, v.Extra.y, v.Extra.z);
     if (kind > 6.5) return SpriteShape(v);
     float2 p = v.Local;
     float3 c = v.Color.rgb;

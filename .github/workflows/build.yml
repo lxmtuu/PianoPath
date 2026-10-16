@@ -4,6 +4,13 @@ on:
   push:
     branches: ["main", "arena/**"]
   pull_request:
+  workflow_dispatch:
+    inputs:
+      review:
+        description: 'Full build or the bounded native mixed-particle diagnostic'
+        type: choice
+        default: full
+        options: [full, key-ensemble, ar-budget, app-build]
 
 # The preview step commits the freshly rendered screenshots back to the branch it built, which keeps
 # docs/previews in step with the interface without anyone copying files around by hand. A branch that
@@ -17,7 +24,7 @@ permissions:
 # replaces the older one — except on main, where a cancelled run would throw away the preview commit that
 # belongs to a commit people are already reading.
 concurrency:
-  group: build-${{ github.ref }}
+  group: build-${{ github.ref }}${{ ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]'))) && '-app-build' || (((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]'))) && '-ar-budget' || (((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) && '-key-ensemble' || '')) }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' && !startsWith(github.ref, 'refs/tags/') }}
 
 jobs:
@@ -34,6 +41,15 @@ jobs:
       - name: Static source check
         run: python3 tools/check_sources.py
 
+      # Input-fixture validation only; does not claim Windows/GPU/AR render evidence.
+      - name: Prism Flow baseline input checks
+        if: >-
+          !((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]')))
+        run: |
+          python3 -m unittest discover -s tools/tests -v
+          python3 tools/make_prism_flow_fixture.py
+          python3 tools/make_prism_flow_fixture.py --check
+
   # Second lane: the checks that used to live only inside `--verify`, which means they could only run on
   # a Windows runner and could not be run one at a time. tests/PianoPath.Tests links the sources that
   # need neither WPF nor WinMM (MIDI, MusicXML, the hand-split guess, the meter table, the WAV writer,
@@ -41,6 +57,8 @@ jobs:
   # about a minute without waiting for a Windows runner to be free. It runs beside `build` rather than
   # in front of it: both only need `static`, and neither is a prerequisite for the other.
   test:
+    if: >-
+      !((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]')))
     needs: static
     runs-on: ubuntu-latest
     steps:
@@ -88,7 +106,201 @@ jobs:
             "::error title=Test failed::$text"
           }
 
+  # Compile/package only: explicitly no native capture, performance or test rerun.
+  app-build:
+    if: >-
+      ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]')))
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Publish private Windows integration build
+        shell: pwsh
+        run: |
+          $output = Join-Path $env:RUNNER_TEMP 'keyflow-app-win-x64'
+          ./publish.ps1 -Mode SelfContained -Runtime win-x64 -Output $output
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $exe = Join-Path $output 'PianoPath.exe'
+          if (-not (Test-Path $exe)) { throw 'Published executable is missing.' }
+          $hash = (Get-FileHash $exe -Algorithm SHA256).Hash
+          @("Source: $env:GITHUB_SHA", 'Private integration build; not a public release.', 'Self-contained Windows x64; native/performance/runtime checks not run.', "PianoPath.exe SHA256: $hash") | Set-Content (Join-Path $output 'BUILD-INFO.txt')
+          @('# Windows integration build', "Source: $env:GITHUB_SHA", "Executable SHA256: $hash", 'Compile/package only: native/performance/runtime checks were not run.') | Set-Content $env:GITHUB_STEP_SUMMARY
+      - name: Upload private application build
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyflow-app-win-x64
+          path: ${{ runner.temp }}/keyflow-app-win-x64/
+          if-no-files-found: error
+          retention-days: 7
+
+  keyboard-light:
+    if: >-
+      !((((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]')))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]'))))
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build key-light diagnostic
+        run: dotnet build PianoPath.csproj --configuration Release
+      - name: Native keyboard lamp response
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'keyboard-key-light'
+          $log = Join-Path $env:RUNNER_TEMP 'keyboard-key-light.log'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-key-light-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) { Get-Content $log }
+          if ($proc.ExitCode -ne 0) { Write-Output '::error title=Keyboard key-light::Native diagnostic failed'; exit $proc.ExitCode }
+      - name: Validate and bound native key-light publication
+        shell: pwsh
+        run: |
+          python -m pip install Pillow
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $review = Join-Path $env:RUNNER_TEMP 'keyboard-key-light'
+          python tools/review_keyboard_key_light.py $review --source-root . --expected-revision $env:GITHUB_SHA --publish-evidence docs/evidence/keyboard-key-light-v1 --publish-previews docs/previews/keyboard-key-light-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output '::notice title=Keyboard key-light::154 native captures passed: true zero, unchanged 25–200 percent, monotone fixed-scene ramps, no AR/packet/background change. Full build is a separate job, not implied by this diagnostic.'
+      - name: Publish native key-light originals
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: keyboard-key-light-native
+          path: |
+            ${{ runner.temp }}/keyboard-key-light
+            ${{ runner.temp }}/keyboard-key-light.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Save bounded native key-light evidence
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/arena/')
+        shell: bash
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/evidence/keyboard-key-light-v1 docs/previews/keyboard-key-light-v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh native keyboard key-light evidence [skip ci]'
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "$GITHUB_REF_NAME"
+
+  # Focused native lane (manual or explicit push marker): never cancel/re-run the full lane for diagnostic-only work.
+  key-ensemble:
+    if: >-
+      ((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]')))
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build ensemble diagnostic
+        run: dotnet build PianoPath.csproj --configuration Release
+      - name: Native mixed-scene checkpoints
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'key-particle-ensemble'
+          $log = Join-Path $env:RUNNER_TEMP 'key-particle-ensemble.log'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-key-ensemble-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) { Get-Content $log }
+          if ($proc.ExitCode -ne 0) { Write-Output '::error title=Key ensemble::Native mixed diagnostic failed'; exit $proc.ExitCode }
+      - name: Validate original ensemble pixels and bounded subset
+        shell: pwsh
+        run: |
+          python -m pip install Pillow
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $review = Join-Path $env:RUNNER_TEMP 'key-particle-ensemble'
+          python tools/review_key_particle_ensemble.py $review --source-root . --expected-revision $env:GITHUB_SHA --publish-evidence docs/evidence/key-particle-ensemble-v1 --publish-previews docs/previews/key-particle-ensemble-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output '::notice title=Key ensemble::1120 native checkpoints verified. Static integration slice only, not continuous motion, hardware, full regression or art approval.'
+      - name: Publish native ensemble originals
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: key-particle-ensemble-native
+          path: |
+            ${{ runner.temp }}/key-particle-ensemble
+            ${{ runner.temp }}/key-particle-ensemble.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Save bounded ensemble evidence
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && startsWith(github.ref, 'refs/heads/arena/')
+        shell: bash
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/evidence/key-particle-ensemble-v1 docs/previews/key-particle-ensemble-v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "$GITHUB_REF_NAME"
+
+  ar-budget:
+    if: >-
+      ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]')))
+    needs: static
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          lfs: false
+      - uses: actions/setup-dotnet@v6
+        with:
+          dotnet-version: 10.0.x
+      - name: Build AR budget diagnostic
+        run: dotnet build PianoPath.csproj --configuration Release
+      - name: Native mixed-scene checkpoints
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'ar-particle-budget'
+          $log = Join-Path $env:RUNNER_TEMP 'ar-particle-budget.log'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList '--verify','--verify-ar-budget-only',"--verify-review-out=$review","--verify-log=$log" -PassThru -Wait
+          if (Test-Path $log) { Get-Content $log }
+          if ($proc.ExitCode -ne 0) { Write-Output '::error title=Key AR budget::Native mixed diagnostic failed'; exit $proc.ExitCode }
+      - name: Validate original AR budget pixels and bounded subset
+        shell: pwsh
+        run: |
+          python -m pip install Pillow
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $review = Join-Path $env:RUNNER_TEMP 'ar-particle-budget'
+          python tools/review_ar_particle_budget.py $review --source-root . --expected-revision $env:GITHUB_SHA --publish-evidence docs/evidence/ar-particle-budget-v1 --publish-previews docs/previews/ar-particle-budget-v1
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Write-Output '::notice title=Key AR budget::904 native budget captures verified. Review-only fixed-cap trial with a bounded temporal slice, not full-lifecycle playback, hardware, full regression or art approval.'
+      - name: Publish native AR budget originals
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ar-particle-budget-native
+          path: |
+            ${{ runner.temp }}/ar-particle-budget
+            ${{ runner.temp }}/ar-particle-budget.log
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Save bounded AR budget evidence
+        if: (github.event_name == 'workflow_dispatch' || github.event_name == 'push') && startsWith(github.ref, 'refs/heads/arena/')
+        shell: bash
+        run: |
+          git config user.name 'keyflow previews'
+          git config user.email 'actions@users.noreply.github.com'
+          git add docs/evidence/ar-particle-budget-v1 docs/previews/ar-particle-budget-v1
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m 'Refresh native mixed key-particle evidence [skip ci]'
+          git pull --rebase origin "$GITHUB_REF_NAME"
+          git push origin "$GITHUB_REF_NAME"
+
   build:
+    if: >-
+      !((((github.event_name == 'workflow_dispatch' && inputs.review == 'key-ensemble') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ensemble-native]'))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'ar-budget') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[ar-budget-native]')))) || ((github.event_name == 'workflow_dispatch' && inputs.review == 'app-build') || (github.event_name == 'push' && contains(github.event.head_commit.message, '[app-build]'))))
     needs: static
     runs-on: windows-latest
     steps:
@@ -107,6 +319,7 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
+      # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
       # Runs on every push and blocks the build. The suite detects what the runner is missing
       # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
       # SKIP/NOTE instead of failing, so a red step here means a real regression.
@@ -156,6 +369,571 @@ jobs:
           @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
 
+      # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
+      - name: Prism Flow baseline and candidate verification
+        id: prism-review
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-prism-verification.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          New-Item -ItemType Directory -Force -Path $review | Out-Null
+          Copy-Item 'docs/evidence/held-light-isolation/manifest.json' (Join-Path $review 'prior-light-isolation.json')
+          Copy-Item 'docs/evidence/wisps-v3/manifest.json' (Join-Path $review 'prior-wisps-v3.json')
+          Copy-Item 'docs/evidence/wisps-v3/motion-manifest.json' (Join-Path $review 'prior-wisps-motion.json')
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-prism-only","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
+          if (Test-Path $log) {
+            Get-Content $log | ForEach-Object {
+              Write-Output $_
+              if ($_ -like 'FAIL*') { "::error title=Prism Flow P0::$_" }
+              elseif ($_ -like 'NOTE P0 baseline sample*' -or $_ -like 'PASS Prism Flow*' -or $_ -like 'PASS P3a*' -or $_ -like 'PASS P3b*') { "::notice title=Prism Flow P0::$_" }
+            }
+          } else { "::error title=Prism Flow P0::No verification log was written" }
+          exit $proc.ExitCode
+
+      # Keep only six representative, app-rendered baseline images with the existing preview commit.
+      # The complete 78-frame review and manifest stay in artifacts, not in Git.
+      - name: Stage representative Prism Flow baseline previews
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/prism-flow-p0'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 78) { throw 'Incomplete Prism Flow baseline artifact' }
+          $target = 'docs/previews/prism-flow-p0'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($preset in @('concert-gold', 'ice-crystal', 'neon-violet')) {
+            foreach ($mode in @('live-stage', 'ar')) {
+              $source = Join-Path $review "$preset/$mode/dense-chord-baseline.png"
+              if (-not (Test-Path $source)) { throw "Missing baseline: $source" }
+              Copy-Item $source (Join-Path $target "$preset-$mode.png") -Force
+            }
+          }
+
+      - name: Stage Prism Flow palette and satin previews
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/prism-flow-p1'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 30) { throw 'Incomplete Prism Flow candidate artifact' }
+          foreach ($image in $manifest.captures | Where-Object { $_.Checkpoint -eq 'dense-chord' }) {
+            "::notice title=Prism Flow candidate::NOTE P1 sample $($image.Mode)/$($image.Variant): changed pixels=$($image.ChangedPixels), pixel SHA256=$($image.PixelSha256)."
+          }
+          $target = 'docs/previews/prism-flow-p1'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($mode in @('live-stage', 'ar')) {
+            foreach ($variant in @('candidate', 'texture-off', 'bloom-off')) {
+              $source = Join-Path $review "prism-flow-preview/$mode/dense-chord-$variant.png"
+              if (-not (Test-Path $source)) { throw "Missing candidate: $source" }
+              Copy-Item $source (Join-Path $target "$mode-$variant.png") -Force
+            }
+          }
+
+      # All 70 current-family frames live in the review artifact; keep only five families' paired
+      # press/held pictures in Git for the next art pass. Zone/release/off/tail stay in the manifest.
+      - name: Stage particle family baseline previews
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/key-particles-p3a'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 70) { throw 'Incomplete particle family inventory' }
+          $target = 'docs/previews/prism-flow-p3a'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($family in @('embers', 'splash', 'fireworks', 'confetti', 'dust')) {
+            $samples = @($manifest.captures | Where-Object { $_.Family -eq $family -and $_.Phase -eq 'held' })
+            if ($samples.Count -ne 2) { throw "Missing paired held counters: $family" }
+            $counts = ($samples | ForEach-Object { "$($_.Mode):StageSprites=$($_.StageSprites),ARParticles=$($_.ArParticles),delta=$($_.ChangedPixels)" }) -join '; '
+            "::notice title=Particle family baseline::$family / $counts"
+            foreach ($mode in @('live-stage', 'ar')) {
+              foreach ($phase in @('burst', 'held')) {
+                $source = Join-Path $review "$family/$mode/$phase.png"
+                if (-not (Test-Path $source)) { throw "Missing particle baseline: $source" }
+                Copy-Item $source (Join-Path $target "$family-$mode-$phase.png") -Force
+              }
+            }
+          }
+
+      - name: Stage auxiliary particle baselines
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/key-particles-aux'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 128) { throw 'Incomplete auxiliary particle inventory' }
+          $target = 'docs/previews/prism-flow-p3a-aux'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          foreach ($route in $manifest.settings) {
+            $samples = @($manifest.captures | Where-Object { $_.Route -eq $route.Id -and $_.Phase -eq 'active' })
+            if ($samples.Count -ne 4) { throw "Missing white/black Stage/AR auxiliary pair: $($route.Id)" }
+            $counts = ($samples | ForEach-Object { "$($_.Pitch)/$($_.Mode):sprites=$($_.StageSprites),particles=$($_.ArParticles),release=$($_.ArReleaseEffects),delta=$($_.ChangedPixels),sha=$($_.PixelSha256)" }) -join '; '
+            "::notice title=Auxiliary particle baseline::$($route.Id) / $counts"
+            foreach ($sample in $samples) {
+              $source = Join-Path $review $sample.File
+              if (-not (Test-Path $source)) { throw "Missing auxiliary baseline: $source" }
+              Copy-Item $source (Join-Path $target "$($route.Id)-$($sample.Pitch)-$($sample.Mode)-active.png") -Force
+            }
+          }
+
+      - name: Assemble and stage experimental held particle review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/held-particle-art'
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          if ($manifest.captureCount -ne 32 -or -not $manifest.heldArt) { throw 'Incomplete held art prototype' }
+          python tools/make_held_particle_clips.py (Join-Path $review 'motion')
+          if ($LASTEXITCODE -ne 0) { throw 'Motion assembly failed' }
+          $target = 'docs/previews/held-particle-art'
+          New-Item -ItemType Directory -Force -Path $target | Out-Null
+          # docs/previews is image-only. Stable capture evidence belongs outside that directory.
+          $evidence = 'docs/evidence/held-particle-art'
+          New-Item -ItemType Directory -Force -Path $evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $evidence 'motion-manifest.json') -Force
+          $active = @($manifest.captures | Where-Object { $_.Phase -eq 'active' })
+          if ($active.Count -ne 8) { throw 'Missing paired held material images' }
+          foreach ($sample in $active) {
+            Copy-Item (Join-Path $review $sample.File) (Join-Path $target "$($sample.Route)-$($sample.Pitch)-$($sample.Mode)-art.png") -Force
+          }
+          $clips = @(Get-ChildItem (Join-Path $review 'motion') -Filter *.png)
+          if ($clips.Count -ne 8) { throw 'Missing lossless APNG comparisons' }
+          foreach ($clip in $clips) {
+            Copy-Item $clip.FullName (Join-Path $target "$($clip.BaseName)-motion.png") -Force
+          }
+          python tools/review_held_particle_art.py --output (Join-Path $review 'review-player.html') --label $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Frame-locked review player failed' }
+          "::notice title=Held particle art::32 static captures, 8 active representatives, 8 lossless 60-frame 30-FPS APNG crops staged. Prototype only, no visual/hardware acceptance."
+
+      - name: Validate and stage held particle lighting controls
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/held-particle-controls'
+          # Review-only PNG decoding; no application/runtime dependency.
+          python -m pip install Pillow==11.3.0
+          if ($LASTEXITCODE -ne 0) { throw 'Review image decoder install failed' }
+          python tools/review_held_particle_controls.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Held control pixel/source validation failed' }
+          $evidence = 'docs/evidence/held-particle-controls'
+          $target = 'docs/previews/held-particle-controls'
+          New-Item -ItemType Directory -Force -Path $evidence,$target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter *.png)
+          if ($sheets.Count -ne 72) { throw 'Incomplete held control quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          # Keep 16 actual full frames for local full-scene review, not reconstructed backgrounds.
+          # All 288 originals still stay in the artifact; no HTML/base64 in the image-only tree.
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          $fullTarget = 'docs/previews/held-particle-controls-scenes'
+          New-Item -ItemType Directory -Force -Path $fullTarget | Out-Null
+          $fullScenes = @($manifest.scenes | Where-Object { $_.pattern -eq 'chord' -and ($_.palette -eq 'prism' -or $_.view -in @('live-stage','ar-reference')) })
+          if ($fullScenes.Count -ne 16) { throw 'Missing representative full scenes' }
+          foreach ($scene in $fullScenes) {
+            $combined = @($scene.captures | Where-Object { $_.Variant -eq 'combined' })
+            if ($combined.Count -ne 1) { throw "Missing combined full frame: $($scene.Id)" }
+            Copy-Item (Join-Path $review $combined[0].File) (Join-Path $fullTarget "$($scene.Id).png") -Force
+          }
+          "::notice title=Held lighting controls::288 WARP frame hashes, 72 native quartet hashes/crop reconstructions and source hashes verified. Synthetic static controls only, not visual acceptance."
+
+      - name: Validate and stage tint spill and coverage study
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/held-light-isolation'
+          python tools/review_held_light_isolation.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Tint/spill coverage evidence validation failed' }
+          $evidence = 'docs/evidence/held-light-isolation'
+          $target = 'docs/previews/held-light-isolation'
+          New-Item -ItemType Directory -Force -Path $evidence,$target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter *.png)
+          if ($sheets.Count -ne 48) { throw 'Incomplete tint/spill quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          # Only four new low-load full frames in Git. Normal-load full scenes already exist.
+          $manifest = Get-Content (Join-Path $review 'manifest.json') -Raw | ConvertFrom-Json
+          $selected = @($manifest.scenes | Where-Object { $_.load -eq 'low' -and $_.palette -eq 'prism' })
+          if ($selected.Count -ne 4) { throw 'Missing sub-cap full-scene samples' }
+          foreach ($scene in $selected) {
+            $combined = @($scene.captures | Where-Object { $_.Variant -eq 'on-both' })
+            if ($combined.Count -ne 1) { throw 'Missing sub-cap combined frame' }
+            Copy-Item (Join-Path $review $combined[0].File) (Join-Path $target "$($scene.Id)-full.png") -Force
+          }
+          "::notice title=Tint spill coverage::192 WARP frames, 48 native quartet hashes/crops, per-pitch/age packing invariants and source guards verified. No art/performance acceptance."
+
+      - name: Validate and stage paired Wisps v3 candidate
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $review = Join-Path $root 'wisps-v3'
+          python tools/review_wisps_v3.py $review --baseline (Join-Path $root 'held-light-isolation') --source-root . --expected-revision $env:GITHUB_SHA --historical (Join-Path $root 'prior-light-isolation.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Paired Wisps v3 validation failed' }
+          $evidence = 'docs/evidence/wisps-v3'
+          $target = 'docs/previews/wisps-v3'
+          New-Item -ItemType Directory -Force -Path $evidence,$target | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $evidence 'motion-manifest.json') -Force
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter '*.png')
+          if ($sheets.Count -ne 16) { throw 'Missing v3 quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          $clips = @(Get-ChildItem (Join-Path $review 'motion') -Filter '*.png')
+          if ($clips.Count -ne 4) { throw 'Missing paired v2/v3 motion clips' }
+          foreach ($clip in $clips) { Copy-Item $clip.FullName (Join-Path $target $clip.Name) -Force }
+          foreach ($view in @('live-stage','ar-reference')) {
+            $id = "wisps-low-prism-$view"
+            Copy-Item (Join-Path $review "frames/$id/on-both.png") (Join-Path $target "$id-full.png") -Force
+          }
+          "::notice title=Wisps v3 candidate::64 full-frame hashes, 16 native quartets, unchanged v2 history, paired population/actual geometry and 240 lossless APNG frames verified. Review-only, no art/projection/hardware acceptance."
+
+      - name: Validate and stage Flames v3 candidate
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $review = Join-Path $root 'flames-v3'
+          python tools/review_flames_v3.py $review --baseline (Join-Path $root 'held-light-isolation') --source-root . --expected-revision $env:GITHUB_SHA --historical (Join-Path $root 'prior-light-isolation.json') --wisps (Join-Path $root 'wisps-v3') --prior-wisps (Join-Path $root 'prior-wisps-v3.json') --prior-wisps-motion (Join-Path $root 'prior-wisps-motion.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Paired Flames validation failed' }
+          $target = 'docs/previews/flames-v3'
+          $evidence = 'docs/evidence/flames-v3'
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          Copy-Item (Join-Path $review 'motion/manifest.json') (Join-Path $evidence 'motion-manifest.json') -Force
+          # Off quartets are pixel-identical to v2; do not duplicate them in Git.
+          # Full dataset and four original APNGs remain in the artifact.
+          $sheets = @(Get-ChildItem (Join-Path $review 'sheets') -Filter '*-on.png')
+          if ($sheets.Count -ne 8) { throw 'Missing Flames active quartets' }
+          foreach ($sheet in $sheets) { Copy-Item $sheet.FullName (Join-Path $target $sheet.Name) -Force }
+          $pairs = @(Get-ChildItem (Join-Path $review 'motion') -Filter '*-paired.png')
+          if ($pairs.Count -ne 2) { throw 'Missing paired motion' }
+          foreach ($pair in $pairs) { Copy-Item $pair.FullName (Join-Path $target $pair.Name) -Force }
+          foreach ($view in @('live-stage','ar-reference')) {
+            $id = "flames-normal-prism-$view"
+            Copy-Item (Join-Path $review "frames/$id/on-both.png") (Join-Path $target "$id-full.png") -Force
+          }
+          "::notice title=Flames v3 candidate::64 full-frame hashes, 16 native quartets, paired geometry/population, 240 motion hashes and 120 lossless paired APNG frames verified. Accepted Wisps and retained v2 pixels unchanged; no art/hardware acceptance."
+
+      - name: Validate and stage production AR particle alignment
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/ar-particle-alignment'
+          python tools/review_ar_particle_alignment.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Production particle alignment failed' }
+          $target = 'docs/previews/ar-particle-alignment'
+          $evidence = 'docs/evidence/ar-particle-alignment'
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          foreach ($name in @('default','diagonal-release')) {
+            Copy-Item (Join-Path $review "$name.png") (Join-Path $target "$name.png") -Force
+          }
+          "::notice title=AR particle direction alignment::96 native frames, 48 same-state/intrinsic/count pairs, actual packed long-axis error <=1 degree; 8 published panes are native full-frame pixels. Historical artwork intentionally keeps legacy geometry, production defaults to note-aligned geometry."
+
+      - name: Validate and stage Embers material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/embers-art-v1'
+          python tools/review_spark_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Embers material review failed' }
+          $target = 'docs/previews/embers-art-v1'
+          $evidence = 'docs/evidence/embers-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          if ($bytes -gt 1.4MB) { throw "Bounded Embers publication exceeds 1.4 MiB: $bytes; originals remain artifact-only" }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json') (Join-Path $evidence 'manifest.json') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Embers material review::192 native static frames, 64 paired raw/normalized actual-packet guards, 720 native motion crops, 480 lossless synchronized APNG halves. Production aligned AR geometry; candidate default-off, no visual/hardware acceptance."
+
+      - name: Validate and stage Embers v2 energy review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/embers-art-v2'
+          python tools/review_spark_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Embers v2 validation failed' }
+          $target = 'docs/previews/embers-art-v2'
+          $evidence = 'docs/evidence/embers-art-v2'
+          $names = @('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          if ($bytes -gt 0.7MB) { throw "Bounded Embers v2 subset exceeds 0.7 MiB: $bytes" }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Embers v2 energy::192 native statics / 720 native motion crops; unchanged raw state, geometry and selection; identical actual v2 colour/alpha payloads across Stage and three AR poses. Paired v1/v2 native crops/APNGs, review only."
+
+      - name: Validate and stage Splash v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/splash-art-v1'
+          python tools/review_splash_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Splash v1 validation failed' }
+          $target = 'docs/previews/splash-art-v1'
+          $evidence = 'docs/evidence/splash-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.png','live-stage-held.png','ar-reference-burst.png','ar-reference-held.png')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          if ($bytes -gt 0.8MB) { throw "Bounded Splash v1 subset exceeds 0.8 MiB: $bytes" }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Splash v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains three component draws per bead, AR one. Paired classic/candidate native crops/APNGs, review only."
+
+      - name: Validate and stage Fireworks v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/fireworks-art-v1'
+          $validation = (& python tools/review_firework_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Fireworks native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/fireworks-art-v1'
+          $evidence = 'docs/evidence/fireworks-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Fireworks publication size::$bytes bytes"
+          if ($bytes -gt 2.5MB) { Write-Output "::error title=Fireworks publication budget::$bytes bytes exceeds 2.5 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Fireworks v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage and AR each retain one packet per physical dot/streak. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+
+      - name: Validate and stage Dust v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/dust-art-v1'
+          $validation = (& python tools/review_dust_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Dust native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/dust-art-v1'
+          $evidence = 'docs/evidence/dust-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Dust publication size::$bytes bytes"
+          if ($bytes -gt 2.5MB) { Write-Output "::error title=Dust publication budget::$bytes bytes exceeds 2.5 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Dust v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage and AR each retain one packet per physical dust particle. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+
+      - name: Validate and stage Shatter billboard geometry review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/shatter-billboard-v1'
+          $validation = (& python tools/review_shatter_billboard.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Shatter billboard native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/shatter-billboard-v1'
+          $evidence = 'docs/evidence/shatter-billboard-v1'
+          $names = @('early.png','mid.png','ar-near-overhead-burst.bgra.gz','ar-near-overhead-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Shatter publication size::$bytes bytes"
+          if ($bytes -gt 1.4MB) { Write-Output "::error title=Shatter publication budget::$bytes bytes exceeds 1.4 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Shatter billboard geometry::624 native statics, 720 motion crops, 64 frozen V1 pixel controls; shared Stage age/phase clock in a camera tangent billboard. Same material/state/ordered identities/non-body packets; independently checked uploaded corners/weights. Every active candidate static must contribute off-delta; no raster-empty exemptions. Default-off geometry trial, not art/hardware acceptance."
+
+      - name: Validate and stage Release float-up v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/release-float-up-v1'
+          $validation = (& python tools/review_release_particle_art.py $review --expected-family release-float-up --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Release float-up native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/release-float-up-v1'
+          $evidence = 'docs/evidence/release-float-up-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Release float-up publication size::$bytes bytes"
+          if ($bytes -gt 0.65MB) { Write-Output "::error title=Release float-up publication budget::$bytes bytes exceeds 0.65 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Release native trial::192 main statics + 16 Stage depth + 64 pedal + 32 pre-release controls, 720 native motion crops. Actual physical Note Off, no pre-release births, independent pedal, shared intrinsic body RGBA, unchanged state/geometry/counts. Separate default-off Stage front-layer option, not art/hardware approval."
+
+      - name: Validate and stage Release dissolve v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/release-dissolve-v1'
+          $validation = (& python tools/review_release_particle_art.py $review --expected-family release-dissolve --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Release dissolve native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/release-dissolve-v1'
+          $evidence = 'docs/evidence/release-dissolve-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Release dissolve publication size::$bytes bytes"
+          if ($bytes -gt 0.65MB) { Write-Output "::error title=Release dissolve publication budget::$bytes bytes exceeds 0.65 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Release native trial::192 main statics + 16 Stage depth + 64 pedal + 32 pre-release controls, 720 native motion crops. Actual physical Note Off, no pre-release births, independent pedal, shared intrinsic body RGBA, unchanged state/geometry/counts. Separate default-off Stage front-layer option, not art/hardware approval."
+
+      - name: Validate and stage Release smoke v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/release-smoke-v1'
+          $validation = (& python tools/review_release_particle_art.py $review --expected-family release-smoke --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Release smoke native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/release-smoke-v1'
+          $evidence = 'docs/evidence/release-smoke-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Release smoke publication size::$bytes bytes"
+          if ($bytes -gt 0.65MB) { Write-Output "::error title=Release smoke publication budget::$bytes bytes exceeds 0.65 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Release native trial::192 main statics + 16 Stage depth + 64 pedal + 32 pre-release controls, 720 native motion crops. Actual physical Note Off, no pre-release births, independent pedal, shared intrinsic body RGBA, unchanged state/geometry/counts. Separate default-off Stage front-layer option, not art/hardware approval."
+
+      - name: Validate and stage Melt v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/melt-art-v1'
+          $validation = (& python tools/review_melt_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Melt native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/melt-art-v1'
+          $evidence = 'docs/evidence/melt-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Melt publication size::$bytes bytes"
+          if ($bytes -gt 1.3MB) { Write-Output "::error title=Melt publication budget::$bytes bytes exceeds 1.3 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Melt v1 material::192 native statics + 16 Stage material-only depth controls / 720 native motion crops; explicit candidate-only Stage front-layer trial; 48 active pairs (no blank exemptions), 16 expired pairs; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains halo/body/glint, AR one physical body quad; firm and soft single presses only; mixed primary Splash route explicitly unchanged. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+
+      - name: Validate and stage Bounce v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/bounce-art-v1'
+          $validation = (& python tools/review_bounce_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Bounce native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/bounce-art-v1'
+          $evidence = 'docs/evidence/bounce-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Bounce publication size::$bytes bytes"
+          if ($bytes -gt 0.9MB) { Write-Output "::error title=Bounce publication budget::$bytes bytes exceeds 0.9 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Bounce v1 material::192 native statics + 64 body-off + 64 material-only controls, 720 native motion crops; explicit AR-only tangent billboard, independent actual corner/weight checks; 48 active body-only deltas, 16 expired. Unchanged raw state, ordered counts/depth, non-body companion ring and selection. Shared body RGBA; explicit material provenance excludes primary Ember/Firework streaks. Default-off, review only."
+
+      - name: Validate and stage Shatter v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/shatter-art-v1'
+          $validation = (& python tools/review_shatter_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Shatter native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/shatter-art-v1'
+          $evidence = 'docs/evidence/shatter-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Shatter publication size::$bytes bytes"
+          if ($bytes -gt 1.5MB) { Write-Output "::error title=Shatter publication budget::$bytes bytes exceeds 1.5 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Shatter v1 material::192 native statics / 720 native motion crops; 46 visible active pairs, two explicitly pinned legacy near-overhead raster-empty pairs, 16 expired pairs (not whole-pose visual approval); unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage retains a body and glint, AR one physical body quad; firm and soft single presses only. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+
+      - name: Validate and stage Dust v2 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/dust-art-v2'
+          $validation = (& python tools/review_dust_particle_art_v2.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Dust V2 native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/dust-art-v2'
+          $evidence = 'docs/evidence/dust-art-v2'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Dust V2 publication size::$bytes bytes"
+          if ($bytes -gt 1.75MB) { Write-Output "::error title=Dust V2 publication budget::$bytes bytes exceeds 1.75 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Dust v2 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha matches Stage and three AR poses. Stage and AR each retain one packet per physical dust particle. Paired V1/V2 native crops, full-glow burst unchanged/lossless XOR frame bundles, review only."
+
+      - name: Validate and stage Confetti v1 material review
+        shell: pwsh
+        run: |
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review/confetti-art-v1'
+          $validation = (& python tools/review_confetti_particle_art.py $review --source-root . --expected-revision $env:GITHUB_SHA 2>&1 | Out-String)
+          $validationCode = $LASTEXITCODE
+          Write-Host $validation
+          if ($validationCode -ne 0) {
+            $escaped = $validation.Replace('%','%25').Replace("`r",'%0D').Replace("`n",'%0A')
+            Write-Output "::error title=Confetti native validation::$escaped"
+            exit 1
+          }
+          $target = 'docs/previews/confetti-art-v1'
+          $evidence = 'docs/evidence/confetti-art-v1'
+          $names = @('burst.png','held.png','live-stage-burst.bgra.gz','live-stage-held.bgra.gz','ar-reference-burst.bgra.gz','ar-reference-held.bgra.gz')
+          $bytes = (Get-Item (Join-Path $review 'manifest.json.gz')).Length
+          foreach ($name in $names) { $bytes += (Get-Item (Join-Path $review $name)).Length }
+          Write-Output "::notice title=Confetti publication size::$bytes bytes"
+          if ($bytes -gt 3.0MB) { Write-Output "::error title=Confetti publication budget::$bytes bytes exceeds 3.0 MiB"; exit 1 }
+          New-Item -ItemType Directory -Force -Path $target,$evidence | Out-Null
+          Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
+          foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
+          "::notice title=Confetti v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha/orientation matches Stage and three AR poses. Stage and AR each retain one packet per physical paper particle. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
+
       # GitHub shows at most ten annotations of one level, and a run whose child process reports its stages
       # line by line has more NOTEs than that: the lines that matter are the ones near the end. So the step
       # above leaves the older NOTEs to the job summary, and this one keeps the whole log as an artifact —
@@ -166,7 +944,10 @@ jobs:
         uses: actions/upload-artifact@v7
         with:
           name: keyflow-verification-log
-          path: ${{ runner.temp }}/keyflow-verification.log
+          path: |
+            ${{ runner.temp }}/keyflow-verification.log
+            ${{ runner.temp }}/keyflow-prism-verification.log
+            ${{ runner.temp }}/keyflow-arvideo-failure-*.avi
           if-no-files-found: warn
 
       # Human review gate: the fixture is rendered through the real WPF stage and the app's GPU renderer
@@ -395,7 +1176,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
-          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive')
+          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive', 'PrismFlowPreview', 'PrismFlow-Wisps', 'PrismFlow-Flames')
           $work = Join-Path $env:TEMP 'keyflow-gallery'
           Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $work | Out-Null
@@ -543,9 +1324,12 @@ jobs:
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
         shell: bash
         run: |
+          python -c 'import json,pathlib; ps=[pathlib.Path("docs/evidence")/p/"manifest.json" for p in ("held-light-isolation","held-particle-controls","wisps-v3","flames-v3")]; [(p.write_text(json.dumps(json.loads(p.read_text(encoding="utf-8-sig")),ensure_ascii=False,separators=(",",":"))+"\n",encoding="utf-8")) for p in ps]'
+          python tools/compact_native_review_pngs.py --root .
+          if [ "$?" -ne 0 ]; then exit 1; fi
           git config user.name 'keyflow previews'
           git config user.email 'actions@users.noreply.github.com'
-          git add docs/previews
+          git add docs/previews docs/evidence/held-particle-art docs/evidence/held-particle-controls docs/evidence/held-light-isolation docs/evidence/wisps-v3 docs/evidence/flames-v3 docs/evidence/ar-particle-alignment docs/evidence/embers-art-v1 docs/evidence/embers-art-v2 docs/evidence/splash-art-v1 docs/evidence/fireworks-art-v1 docs/evidence/confetti-art-v1 docs/evidence/dust-art-v1 docs/evidence/dust-art-v2 docs/evidence/shatter-art-v1 docs/evidence/shatter-billboard-v1 docs/evidence/melt-art-v1 docs/evidence/bounce-art-v1 docs/evidence/release-float-up-v1 docs/evidence/release-dissolve-v1 docs/evidence/release-smoke-v1
           if git diff --cached --quiet; then
             echo "docs/previews is already up to date."
             echo 'landed=true' >>"$GITHUB_OUTPUT"
@@ -553,6 +1337,8 @@ jobs:
           fi
           git commit -m "Refresh the README previews from CI [skip ci]"
           log="$RUNNER_TEMP/previews-push.log"
+          # The independent key-light job may have published its validated docs while this job rendered.
+          git pull --rebase origin "$GITHUB_REF_NAME"
           if git push >"$log" 2>&1; then
             cat "$log"
             # 'landed' means the pictures are on the branch, not merely committed on this runner: the

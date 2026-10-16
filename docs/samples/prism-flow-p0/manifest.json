@@ -1,0 +1,273 @@
+{
+  "schemaVersion": 1,
+  "status": "input-fixture-not-renderer-evidence",
+  "durationSeconds": 28,
+  "ppq": 480,
+  "tempoMicroseconds": 500000,
+  "renderSeedProposal": 20261014,
+  "renderFpsToTest": [
+    30,
+    60,
+    120
+  ],
+  "notes": [
+    {
+      "start": 1,
+      "duration": 0.5,
+      "pitch": 21,
+      "velocity": 40,
+      "channel": 0
+    },
+    {
+      "start": 2,
+      "duration": 0.5,
+      "pitch": 108,
+      "velocity": 110,
+      "channel": 0
+    },
+    {
+      "start": 3,
+      "duration": 2,
+      "pitch": 60,
+      "velocity": 80,
+      "channel": 0
+    },
+    {
+      "start": 3,
+      "duration": 2,
+      "pitch": 61,
+      "velocity": 96,
+      "channel": 1
+    },
+    {
+      "start": 6.0,
+      "duration": 0.0625,
+      "pitch": 64,
+      "velocity": 24,
+      "channel": 0
+    },
+    {
+      "start": 6.25,
+      "duration": 0.0625,
+      "pitch": 64,
+      "velocity": 48,
+      "channel": 0
+    },
+    {
+      "start": 6.5,
+      "duration": 0.0625,
+      "pitch": 64,
+      "velocity": 80,
+      "channel": 0
+    },
+    {
+      "start": 6.75,
+      "duration": 0.0625,
+      "pitch": 64,
+      "velocity": 112,
+      "channel": 0
+    },
+    {
+      "start": 7.0,
+      "duration": 0.0625,
+      "pitch": 64,
+      "velocity": 127,
+      "channel": 0
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 36,
+      "velocity": 55,
+      "channel": 0
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 43,
+      "velocity": 61,
+      "channel": 1
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 48,
+      "velocity": 67,
+      "channel": 0
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 55,
+      "velocity": 73,
+      "channel": 1
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 60,
+      "velocity": 79,
+      "channel": 0
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 61,
+      "velocity": 85,
+      "channel": 1
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 64,
+      "velocity": 91,
+      "channel": 0
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 67,
+      "velocity": 97,
+      "channel": 1
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 72,
+      "velocity": 103,
+      "channel": 0
+    },
+    {
+      "start": 9,
+      "duration": 1.5,
+      "pitch": 79,
+      "velocity": 109,
+      "channel": 1
+    },
+    {
+      "start": 12.25,
+      "duration": 0.75,
+      "pitch": 48,
+      "velocity": 88,
+      "channel": 0
+    },
+    {
+      "start": 12.25,
+      "duration": 0.75,
+      "pitch": 60,
+      "velocity": 88,
+      "channel": 0
+    },
+    {
+      "start": 12.25,
+      "duration": 0.75,
+      "pitch": 64,
+      "velocity": 88,
+      "channel": 0
+    },
+    {
+      "start": 12.25,
+      "duration": 0.75,
+      "pitch": 67,
+      "velocity": 88,
+      "channel": 0
+    },
+    {
+      "start": 18,
+      "duration": 3,
+      "pitch": 60,
+      "velocity": 76,
+      "channel": 0
+    },
+    {
+      "start": 18.5,
+      "duration": 1,
+      "pitch": 60,
+      "velocity": 104,
+      "channel": 1
+    },
+    {
+      "start": 23,
+      "duration": 1,
+      "pitch": 61,
+      "velocity": 64,
+      "channel": 0
+    }
+  ],
+  "controls": [
+    {
+      "time": 12,
+      "channel": 0,
+      "controller": 64,
+      "value": 127
+    },
+    {
+      "time": 16,
+      "channel": 0,
+      "controller": 64,
+      "value": 0
+    }
+  ],
+  "checkpoints": [
+    {
+      "time": 0.5,
+      "id": "initial-rest"
+    },
+    {
+      "time": 1.25,
+      "id": "lowest-key"
+    },
+    {
+      "time": 2.25,
+      "id": "highest-key"
+    },
+    {
+      "time": 4,
+      "id": "white-black-hold"
+    },
+    {
+      "time": 6.03125,
+      "id": "short-note"
+    },
+    {
+      "time": 9.5,
+      "id": "dense-chord"
+    },
+    {
+      "time": 12.5,
+      "id": "pedal-held-keys-down"
+    },
+    {
+      "time": 13.5,
+      "id": "pedal-held-keys-up"
+    },
+    {
+      "time": 16.25,
+      "id": "pedal-release-tail"
+    },
+    {
+      "time": 19,
+      "id": "same-pitch-two-channels"
+    },
+    {
+      "time": 21.25,
+      "id": "release-tail"
+    },
+    {
+      "time": 27,
+      "id": "final-rest"
+    }
+  ],
+  "manualScenarios": [
+    "pause-resume",
+    "seek-forward-backward",
+    "loop",
+    "mode-switch-while-held",
+    "all-notes-off",
+    "camera-disconnect",
+    "midi-disconnect",
+    "ar-delay-zero-and-nonzero",
+    "mirror-crop-pose-change"
+  ],
+  "midiSha256": "121c4b01bec2d8ddf10363cd42901a57363aa9b8751a0a6bf1b13f1a48a0df1e"
+}

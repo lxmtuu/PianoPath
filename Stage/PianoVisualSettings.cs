@@ -70,6 +70,11 @@ internal sealed class PianoVisualSettings
     public string BackgroundMotionColor { get; set; } = "#7B5CFF";
     public bool ShowStars { get; set; }
     public bool ShowWisps { get; set; } = false;
+    /// <summary>Experimental shared wisps/flames surfaces. GPU Stage/AR only; legacy false, no menu control yet.</summary>
+    public bool HeldParticleArt { get; set; } = false;
+    /// <summary>Opt-in approved GPU held/release materials and balanced AR particle selection.
+    /// Shared by Live Stage/AR; false preserves existing looks and the legacy HeldParticleArt option.</summary>
+    public bool UpgradedParticleEffects { get; set; } = false;
     public bool ShowImpactRings { get; set; } = true;
     public bool ShowLightBeams { get; set; } = false;
     public bool ShowNoteLabels { get; set; } = false;
@@ -125,6 +130,9 @@ internal sealed class PianoVisualSettings
     /// <summary>Gradient, PerHand, PerTrack, RainbowPitch or RainbowTime.</summary>
     public string ColorMode { get; set; } = "Gradient";
     public string Palette { get; set; } = "Spectrum";
+    /// <summary>Fixed MIDI range for Prism Flow only; independent of song, layout, time and track.</summary>
+    public double PaletteLowPitch { get; set; } = 21;
+    public double PaletteHighPitch { get; set; } = 108;
     public string NoteColorStart { get; set; } = "#43E6FF";
     public string NoteColorEnd { get; set; } = "#D95EFF";
     public string LeftHandColor { get; set; } = "#3FA9FF";
@@ -166,6 +174,9 @@ internal sealed class PianoVisualSettings
     public double NoteGap { get; set; } = 2;
     public double NoteHeadGlow { get; set; } = 40;
     public double NoteTexture { get; set; } = 60;
+    /// <summary>Opt-in satin body for Solid/Glass; NoteTexture controls its local, static grain.
+    /// False preserves every legacy material, including Fire texture semantics.</summary>
+    public bool NoteSatin { get; set; } = false;
     public double NoteTint { get; set; } = 78;
     public double NoteGlow { get; set; } = 100;
     public double NoteEdge { get; set; } = 88;
@@ -513,7 +524,7 @@ internal sealed class PianoVisualSettings
 
     internal static readonly string[] ColorModes = ["Gradient", "PerHand", "PerTrack", "RainbowPitch", "RainbowTime"];
     internal static readonly string[] ChromeMotions = ["Off", "Calm", "Full"];
-    internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom"];
+    internal static readonly string[] Palettes = ["Spectrum", "Aurora", "Fire", "Ocean", "Violet", "Custom", "Prism Flow"];
     // Array order is the stable integer ID sent to the GPU shader; append new materials without moving the shipped IDs.
     internal static readonly string[] NoteStyles = ["Solid", "Neon", "Glass", "Fire", "Gem", "CrystalOutline"];
     internal static readonly string[] NoteDirections = ["Down", "Up"];
@@ -799,6 +810,8 @@ internal sealed class PianoVisualSettings
         Contrast = Math.Clamp(Contrast, 0, 200); BloomIntensity = Math.Clamp(BloomIntensity, 0, 150); BloomSize = Math.Clamp(BloomSize, 0, 150);
         Vignette = Math.Clamp(Vignette, 0, 100); StarDensity = Math.Clamp(StarDensity, 0, 100); HorizonGlow = Math.Clamp(HorizonGlow, 0, 100); BeamIntensity = Math.Clamp(BeamIntensity, 0, 100);
         RecordingFrameRate = Math.Clamp(Math.Round(RecordingFrameRate), 15, 60);
+        PaletteLowPitch = double.IsFinite(PaletteLowPitch) ? Math.Clamp(Math.Round(PaletteLowPitch), 0, 126) : 21;
+        PaletteHighPitch = double.IsFinite(PaletteHighPitch) ? Math.Clamp(Math.Round(PaletteHighPitch), PaletteLowPitch + 1, 127) : Math.Max(108, PaletteLowPitch + 1);
         if (!Palettes.Contains(Palette)) Palette = "Spectrum";
         if (!ColorModes.Contains(ColorMode)) ColorMode = "Gradient";
         if (!NoteStyles.Contains(NoteStyle)) NoteStyle = "Neon";

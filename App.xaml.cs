@@ -105,7 +105,12 @@ public partial class App : Application
                 var tab = e.Args.FirstOrDefault(a => a.StartsWith("--settings-tab=", StringComparison.Ordinal))?[15..];
                 var page = tab?.ToLowerInvariant() switch
                 {
-                    "notes" => SettingsPages.Notes,
+                    "overview" or "style" => SettingsPages.Overview,
+                    "notes" or "notes & color" => SettingsPages.Notes,
+                    "press" => SettingsPages.Press,
+                    "hold" or "wisps" or "flames" => SettingsPages.Hold,
+                    "release" => SettingsPages.Release,
+                    "lighting" => SettingsPages.Lighting,
                     "theme" or "themes" => SettingsPages.Theme,
                     "particles" or "embers" => SettingsPages.Particles,
                     "keyboard" or "keys" => SettingsPages.Keyboard,
@@ -117,7 +122,7 @@ public partial class App : Application
                     "history" or "session" => SettingsPages.History,
                     "recording" or "record" => SettingsPages.Recording,
                     "general" or "language" or "app" => SettingsPages.General,
-                    _ => SettingsPages.Style
+                    _ => SettingsPages.Order.FirstOrDefault(page => string.Equals(page, tab, StringComparison.OrdinalIgnoreCase)) ?? SettingsPages.Overview
                 };
                 tabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));
             }

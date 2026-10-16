@@ -17,7 +17,8 @@ internal readonly record struct GpuArImpact(int Pitch, double Age, float Strengt
 
 /// <summary>A live stage particle with its source pitch, so the AR pass can lift the same simulated effect into the calibrated piano pose.</summary>
 internal readonly record struct GpuArParticle(int Pitch, float X, float Y, float Vx, float Vy, float Age, float Life, float Size,
-    float Phase, float Glow, Vector3 Color, byte Shape, bool Wisp, byte Origin);
+    float Phase, float Glow, Vector3 Color, byte Shape, bool Wisp, byte Origin,
+    [property: System.Text.Json.Serialization.JsonIgnore] byte MaterialRoute=0);
 
 /// <summary>A live stage impact/release wave, retaining its pitch and visual channel for camera-space projection.</summary>
 internal readonly record struct GpuArRing(int Pitch, float X, float Y, float Age, float Life, float Strength, byte Kind,
@@ -69,6 +70,8 @@ internal sealed partial class GpuStageSimulation
         public float X, Y, Vx, Vy, Age, Life, Size, Phase, Grav, DragK, Mass, Glow;
         public int Pitch;
         public byte Origin;
+        // Render provenance only; never participates in physics, RNG or origin-priority packing.
+        public byte MaterialRoute;
         public Vector3 Color;
         public Shape Shape;
         public bool Wisp;
@@ -100,11 +103,12 @@ internal sealed partial class GpuStageSimulation
     private readonly List<ArLiveMidiNote> _arRisingMidiNotes = [];
     private readonly List<GpuArImpact> _arImpacts = [];
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128], _keyHold = new float[128];
-    private readonly float[] _sparkBudget = new float[128], _wispBudget = new float[128], _flameBudget = new float[128];
+    private readonly double[] _sparkBudget = new double[128], _wispBudget = new double[128], _flameBudget = new double[128];
     private readonly bool[] _active = new bool[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
     private readonly Random _random;
     private double _time;
+    private long _frameGeneration;
 
     internal GpuStageSimulation() : this(20260930) { }
     internal GpuStageSimulation(int seed) => _random = new Random(seed);
@@ -113,6 +117,10 @@ internal sealed partial class GpuStageSimulation
 
     internal double Time => _time;
     internal int ParticleCount => _count;
+    /// <summary>Successful births since soft clear, including impact/morph/release particles.</summary>
+    internal long ParticlesBorn { get; private set; }
+    /// <summary>Origin=2 births (sparks/wisps plus heat-tail flames), not an audio-sounding count.</summary>
+    internal long EmitterParticlesBorn { get; private set; }
     internal int LiveTrailCount => _trails.Count;
     internal int NoteTrailCount => _noteTrails.Count;
 
@@ -126,6 +134,8 @@ internal sealed partial class GpuStageSimulation
     internal IReadOnlyList<ArLiveMidiNote> ArRisingMidiNotes => _arRisingMidiNotes;
     /// <summary>Recent strikes for the camera-projected impact-light pass.</summary>
     internal IReadOnlyList<GpuArImpact> ArImpacts => _arImpacts;
+    // Null in production; notification after the held sprite is packed, no physics/RNG mutation.
+    internal Action<GpuArParticle>? ObservePackedHeldParticleForReview { get; set; }
     /// <summary>The same simulated particles, waves and flashes used by the stage, with the source pitch preserved for 3D AR projection.</summary>
     internal int ArParticleCount => _count;
     internal int ArRingCount => _rings.Count;
@@ -133,7 +143,7 @@ internal sealed partial class GpuStageSimulation
     internal GpuArParticle ArParticleAt(int index)
     {
         ref var p = ref _particles[index];
-        return new GpuArParticle(p.Pitch, p.X, p.Y, p.Vx, p.Vy, p.Age, p.Life, p.Size, p.Phase, p.Glow, p.Color, (byte)p.Shape, p.Wisp, p.Origin);
+        return new GpuArParticle(p.Pitch, p.X, p.Y, p.Vx, p.Vy, p.Age, p.Life, p.Size, p.Phase, p.Glow, p.Color, (byte)p.Shape, p.Wisp, p.Origin,p.MaterialRoute);
     }
     internal GpuArRing ArRingAt(int index)
     {
@@ -145,6 +155,8 @@ internal sealed partial class GpuStageSimulation
         var f = _flashes[index];
         return new GpuArFlash(f.Pitch, f.X, f.Y, f.Age, f.Life, f.Size, f.Strength, f.Style, f.Color, f.Intensity, f.Channel, f.Origin);
     }
+    internal (double Sparks, double Wisps, double Flames) EmissionCredits(int pitch)
+        => (_sparkBudget[pitch], _wispBudget[pitch], _flameBudget[pitch]);
     internal bool IsActive(int pitch) => pitch is >= 0 and < 128 && _active[pitch];
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
@@ -184,16 +196,31 @@ internal sealed partial class GpuStageSimulation
 
     private float Rand() => (float)_random.NextDouble();
 
+    /// <summary>Soft clear for stop/seek/song change: discard musical transients and emission credit.
+    /// Keep animation time and session RNG/ambient continuity. Exact replay requires a fresh seeded instance.</summary>
     internal void Clear()
     {
         _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear(); _arImpacts.Clear();
         _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); _livePresses.Clear();
         Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_active);
+        Array.Clear(_spill); Array.Clear(_keyHold); Array.Clear(_keyColor); Array.Clear(KeyColors);
+        Array.Clear(_sparkBudget); Array.Clear(_wispBudget); Array.Clear(_flameBudget);
+        _noteTrails.Clear(); _noteLabels.Clear(); _shimmerBars.Clear(); _landings.Clear();
+        _releaseNotes = null; _releaseScanPos = 0; _releaseScanIndex = 0;
+        _activity = _energy = _beatPulse = 0; _pedalBoost = 1; HorizonColor = Vector3.Zero;
+        ParticlesBorn = EmitterParticlesBorn = 0;
     }
 
     /// <summary>Advances the simulation by one rendered frame.</summary>
     internal void Step(double seconds, GpuFrameInput input, GpuStageFeed feed, float sceneWidth)
     {
+        var previousGeneration = input.Generation;
+        var previousHeight = Math.Max(120, input.StageHeightDip);
+        var clear = feed.PrepareFrame(input);
+        if (clear || input.Generation != _frameGeneration) Clear();
+        _frameGeneration = input.Generation;
+        if (input.Generation != previousGeneration)
+            sceneWidth *= (float)(Math.Max(120, input.StageHeightDip) / previousHeight);
         var look = _look = input.Look;
         // A 2D trail is culled at the stage edge; a calibrated 3D bar stays in simulation until its own AR reach is consumed.
         var arLiveReleaseSeconds = feed.Ar is { ShowLiveTrails: true } ar
@@ -202,8 +229,7 @@ internal sealed partial class GpuStageSimulation
                 : 0;
         var risingMidiStyle = feed.Ar is { ShowRisingMidiNotes: true } midiAr
             && midiAr.Calibration.CameraPose is not null && midiAr.Notes.IsUsable ? midiAr.RisingMidiNoteStyle : null;
-        if (feed.TakeClearRequest()) Clear();
-        var frameDt = (float)Math.Clamp(seconds, 0, .05);
+        var frameDt = double.IsFinite(seconds) ? (float)Math.Clamp(seconds, 0, .05) : 0;
         if (risingMidiStyle is null) { _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); }
         for (var i = _arImpacts.Count - 1; i >= 0; i--)
         {
@@ -246,7 +272,7 @@ internal sealed partial class GpuStageSimulation
         }
 
         // ---- live events and hits from the UI thread ----
-        while (feed.TryDequeueLive(out var live))
+        while (feed.TryDequeueLive(input.Generation, out var live))
         {
             if (live.Down)
             {
@@ -267,7 +293,7 @@ internal sealed partial class GpuStageSimulation
                     }
             }
         }
-        while (feed.TryDequeueHit(out var hit)) Impact(hit.Pitch, hit.Strength, layout);
+        while (feed.TryDequeueHit(input.Generation, out var hit)) Impact(hit.Pitch, hit.Strength, layout);
         ScanReleaseFx(input, layout);
 
         // ---- keys: press animation, glow, heat, spill ----
@@ -299,6 +325,11 @@ internal sealed partial class GpuStageSimulation
         for (var pitch = 0; pitch < 128; pitch++)
         {
             var c = ToLinear(_keyColor[pitch]);
+            // Active means the pressed snapshot OR the current song interval; pedal alone does not
+            // own an emitter. Off-layout/disabled/released sources cannot carry credit into a new epoch.
+            if (!OnKeyboard(pitch) || !_active[pitch] || !look.ShowEmbers || !(look.ParticleAmount > 0)) _sparkBudget[pitch] = 0;
+            if (!OnKeyboard(pitch) || !_active[pitch] || !look.ShowWisps || !(look.WispAmount > 0)) _wispBudget[pitch] = 0;
+            if (!OnKeyboard(pitch) || !look.ShowFlame || _heat[pitch] <= .01f) _flameBudget[pitch] = 0;
             // A held key breathes: a slow, quiet sway on its light so a long press feels alive (Live Stage key glow and AR tint share this colour buffer).
             KeyColors[pitch] = new Vector4(c, OnKeyboard(pitch) ? Math.Min(1, _glow[pitch] * StageLightCurves.KeyBreathMultiplier(_keyHold[pitch], _time, pitch)) : 0);
         }
@@ -306,6 +337,7 @@ internal sealed partial class GpuStageSimulation
         // ---- continuous emitters on sounding keys ----
         for (var pitch = FirstPitch; pitch < FirstPitch + KeyCount; pitch++)
         {
+            // Flames intentionally continue emitting from cooling heat after key-active state ends.
             if (!_active[pitch] && _heat[pitch] <= .01f) continue;
             var x = layout.X(pitch);
             var color = _keyColor[pitch];
@@ -313,13 +345,13 @@ internal sealed partial class GpuStageSimulation
             {
                 // The held-key emitter follows the selected burst family, so a water or confetti preset
                 // stays coherent between the initial hit and the note's sustain.
-                _sparkBudget[pitch] += look.ParticleAmount * 1.3f * frameDt;
+                var sparkCount = KeyEmissionBudget.Take(ref _sparkBudget[pitch], look.ParticleAmount * 1.3f,
+                    frameDt, MaxParticles - _count);
                 var emitterStyle = look.ImpactBurst == "Zone"
                     ? pitch < look.ZoneSplitPitch ? "Embers" : "Splash"
                     : look.ImpactBurst;
-                while (_sparkBudget[pitch] >= 1 && _count < MaxParticles)
+                for (var birth = 0; birth < sparkCount; birth++)
                 {
-                    _sparkBudget[pitch] -= 1;
                     var angle = -MathF.PI / 2 + (Rand() - .5f) * look.ParticleSpread * MathF.PI;
                     var speedScale = 1f; var lifeScale = 1f; var sizeScale = 1f;
                     var grav = .55f; var drag = 1.2f; var glow = 1f;
@@ -365,11 +397,11 @@ internal sealed partial class GpuStageSimulation
             if (_active[pitch] && look.ShowWisps && look.WispAmount > 0)
             {
                 // two strands per key that twist around each other as they climb (the rainbow capture's smoke ribbons)
-                _wispBudget[pitch] += look.WispAmount * 4f * frameDt;
+                var wispCount = KeyEmissionBudget.Take(ref _wispBudget[pitch], look.WispAmount * 4f,
+                    frameDt, MaxParticles - _count);
                 var life = .35f + look.WispHeight * 1.9f;
-                while (_wispBudget[pitch] >= 1 && _count < MaxParticles)
+                for (var birth = 0; birth < wispCount; birth++)
                 {
-                    _wispBudget[pitch] -= 1;
                     var strand = _random.Next(2);
                     Spawn(new Particle
                     {
@@ -383,10 +415,10 @@ internal sealed partial class GpuStageSimulation
             }
             if (look.ShowFlame && _heat[pitch] > .01f)
             {
-                _flameBudget[pitch] += 70 * look.FlameIntensity * _heat[pitch] * frameDt;
-                while (_flameBudget[pitch] >= 1 && _count < MaxParticles)
+                var flameCount = KeyEmissionBudget.Take(ref _flameBudget[pitch], 70 * look.FlameIntensity * _heat[pitch],
+                    frameDt, MaxParticles - _count);
+                for (var birth = 0; birth < flameCount; birth++)
                 {
-                    _flameBudget[pitch] -= 1;
                     Spawn(new Particle
                     {
                         X = x + (Rand() - .5f) * layout.Lane * .7f, Y = layout.HitY - 1,
@@ -480,6 +512,8 @@ internal sealed partial class GpuStageSimulation
         tagged.Pitch = pitch;
         tagged.Origin = origin;
         _particles[_count++] = tagged;
+        ParticlesBorn++;
+        if (origin == 2) EmitterParticlesBorn++;
     }
 
     /// <summary>A note reached the keys: wave, flash, morph and burst, styled like the software stage.</summary>
@@ -763,6 +797,12 @@ internal sealed partial class GpuStageSimulation
         };
     }
 
+    private static Vector4 SparkColorForReview(GpuLook look, int shape, bool wisp, Vector3 birth, float age, float life, float glow, Vector4 legacy)
+        => look.ImpactBurst=="Fireworks" && FireworkParticleAppearance.Eligible(look.FireworkArtForReview,shape,wisp)
+            && FireworkParticleAppearance.TryColor(birth,age,life,glow,look.ParticleGlow,out var firework) ? firework
+        : look.SparkArtV2ForReview && !wisp && shape is 0 or 1
+            && SparkParticleAppearance.TryColor(birth, age, life, glow, look.ParticleGlow, out var color) ? color : legacy;
+
     /// <summary>Particles, rings, flashes, beams, held-key glows and the hit line.</summary>
     internal void BuildSprites(GpuLook look, GpuSceneLayout layout, GpuInstanceList<GpuSpriteInstance> sprites, bool cameraOverlayActive = false)
     {
@@ -792,13 +832,40 @@ internal sealed partial class GpuStageSimulation
             var fade = 1 - u;
             var x = p.X * scaleX;
             var c = ToLinear(p.Color);
+            if (look.HeldParticleArt && (p.Wisp || p.Shape == Shape.Flame))
+            {
+                if (HeldParticleAppearance.TryResolve(p.Wisp, p.Size, p.Age, p.Life, p.Phase, p.Glow,
+                    p.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.UseWispArtV3, look.UseFlameArtV3) && surface.Color.W > .003f)
+                {
+                    var px = x;
+                    if (p.Wisp)
+                    {
+                        var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * MathF.Min(1, p.Age * 1.6f);
+                        px += MathF.Sin(p.Age * (3 + look.WispTurbulence * 5) + p.Phase) * amp;
+                    }
+                    sprites.Add(new GpuSpriteInstance
+                    {
+                        PosSize = new Vector4(px, p.Y - (surface.BaseAnchored ? surface.HalfHeight : 0), surface.HalfWidth, 17),
+                        Color = surface.Color,
+                        Dir = new Vector4(surface.HalfHeight, surface.Progress, surface.Shape, surface.Phase)
+                    });
+                    ObservePackedHeldParticleForReview?.Invoke(ArParticleAt(i));
+                }
+                continue;
+            }
             switch (p.Shape)
             {
                 case Shape.Streak:
                 {
                     var speed = MathF.Sqrt(p.Vx * p.Vx + p.Vy * p.Vy);
                     var dir = speed > 1e-3f ? new Vector2(p.Vx / speed, p.Vy / speed) : new Vector2(0, -1);
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.4f, 1), Color = new Vector4(c * glowGain * p.Glow * fade * 1.3f, 1), Dir = new Vector4(dir, Math.Clamp(speed * .018f, .5f, 7), u) });
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.4f, FireworkParticleAppearance.StageKind(look.FireworkArtForReview && look.ImpactBurst=="Fireworks", (int)p.Shape, p.Wisp, SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 1, look.SparkArtV2ForReview))), Color = SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * glowGain * p.Glow * fade * 1.3f, 1)), Dir = new Vector4(dir, Math.Clamp(speed * .018f, .5f, 7), u) });
+                    if(BounceParticleAppearance.Eligible(look.BounceArtForReview && look.ImpactMorph=="Bounce",(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && BounceParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var bounce))
+                    {
+                        ref var q=ref sprites.Writable[sprites.Count-1];
+                        q.PosSize.W=BounceParticleAppearance.Kind;q.Color=bounce;
+                    }
                     break;
                 }
                 case Shape.Droplet:
@@ -807,25 +874,73 @@ internal sealed partial class GpuStageSimulation
                     var alpha = MathF.Pow(fade, .8f) * look.ParticleGlow;
                     var size = p.Size * (.7f + fade * .5f);
                     var stretch = 1 + Math.Clamp(Math.Abs(p.Vy) / 700, 0, 1.2f);
+                    var firstSplashSprite=sprites.Count;
                     Glow(sprites, x, p.Y, size * 2.4f, size * 2.4f * stretch, c, alpha * .5f);
                     Ellipse(sprites, x, p.Y, size, size * stretch, 0, c * 1.2f, alpha, .15f);
                     Ellipse(sprites, x - size * .3f, p.Y - size * .35f * stretch, size * .32f, size * .32f, 0, Vector3.One * 1.5f, alpha, .2f);
+                    // Rewrite only accepted legacy packets: exact same positions, extents and ordering.
+                    if(SplashParticleAppearance.Eligible(look.SplashArtForReview,(int)p.Shape,p.Wisp)
+                        && SplashParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var liquid))
+                        for(var j=firstSplashSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            q.PosSize.W=q.PosSize.W==9?SplashParticleAppearance.HaloKind:
+                                q.Dir.W==.15f?SplashParticleAppearance.BodyKind:SplashParticleAppearance.GlintKind;
+                            q.Color=liquid;
+                        }
+                    if(MeltParticleAppearance.Eligible(look.MeltArtForReview && look.ImpactMorph=="Melt",(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && MeltParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var melt))
+                        for(var j=firstSplashSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            var halo=q.PosSize.W is 9 or SplashParticleAppearance.HaloKind;var body=!halo && q.Dir.W==.15f;
+                            q.PosSize.W=look.MeltFrontLayerForReview
+                                ? halo?MeltParticleAppearance.FrontHaloKind:body?MeltParticleAppearance.FrontBodyKind:MeltParticleAppearance.FrontGlintKind
+                                : halo?MeltParticleAppearance.HaloKind:body?MeltParticleAppearance.BodyKind:MeltParticleAppearance.GlintKind;
+                            q.Color=halo?MeltParticleAppearance.Halo(melt):body?melt:MeltParticleAppearance.Glint(melt);
+                        }
+                    if(ReleaseParticleAppearance.Eligible(look.UseReleaseArt,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && ReleaseParticleAppearance.TryColor(p.MaterialRoute,p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var release))
+                        for(var j=firstSplashSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            var halo=q.PosSize.W is 9 or SplashParticleAppearance.HaloKind;
+                            var body=!halo && q.Dir.W==.15f;
+                            q.PosSize.W=ReleaseParticleAppearance.StageKind(p.MaterialRoute,halo?1:body?0:2,look.ReleaseFrontLayerForReview);
+                            q.Color=halo?ReleaseParticleAppearance.Halo(release,p.MaterialRoute):body?release:ReleaseParticleAppearance.Glint(release,p.MaterialRoute);
+                        }
                     break;
                 }
                 case Shape.Shard:
                 {
                     // a tumbling glass shard: a thin bright wedge with a white glint along it
                     var alpha = fade * look.ParticleGlow;
-                    var angle = p.Phase + p.Age * 7.3f;
+                    var angle = ShatterParticleAppearance.Angle(p.Age,p.Phase);
                     var len = p.Size * 2.4f;
+                    var firstShardSprite=sprites.Count;
                     Ellipse(sprites, x, p.Y, len * .5f, p.Size * .4f, angle, c * 1.4f, alpha, .1f);
                     var dx = MathF.Cos(angle) * len * .5f; var dy = MathF.Sin(angle) * len * .5f;
                     Line(sprites, x - dx, p.Y - dy, x + dx, p.Y + dy, .5f, Vector3.One, alpha * .9f, 1);
+                    if(ShatterParticleAppearance.Eligible(look.ShatterArtForReview && look.ImpactMorph=="Shatter",(int)p.Shape,p.Wisp,p.Origin)
+                        && ShatterParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var shard))
+                        for(var j=firstShardSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            var body=q.PosSize.W==KindEllipse;
+                            q.PosSize.W=body?ShatterParticleAppearance.BodyKind:ShatterParticleAppearance.GlintKind;
+                            q.Color=body?shard:ShatterParticleAppearance.Glint(shard);
+                        }
                     break;
                 }
                 case Shape.Confetti:
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.6f, 3), Color = new Vector4(c * 1.1f, Math.Min(1, fade * 1.5f)), Dir = new Vector4(MathF.Cos(p.Age * 7 + p.Phase), MathF.Sin(p.Age * 7 + p.Phase), 0, u) });
+                {
+                    var kind=3f;var color=new Vector4(c*1.1f,Math.Min(1,fade*1.5f));
+                    if(ConfettiParticleAppearance.Eligible(look.ConfettiArtForReview && look.ImpactBurst=="Confetti",(int)p.Shape,p.Wisp)
+                        && ConfettiParticleAppearance.TryColor(p.Color,p.Age,p.Life,out var paper))
+                    {kind=ConfettiParticleAppearance.Kind;color=paper;}
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(x, p.Y, p.Size * 1.6f, kind), Color = color, Dir = new Vector4(MathF.Cos(p.Age * 7 + p.Phase), MathF.Sin(p.Age * 7 + p.Phase), 0, u) });
                     break;
+                }
                 case Shape.Flame:
                 {
                     // white core -> yellow -> orange -> deep red, swelling then shrinking
@@ -851,7 +966,16 @@ internal sealed partial class GpuStageSimulation
                         fade = MathF.Min(1, u * 6) * (1 - u);
                     }
                     if (p.Shape == Shape.Dust) { size *= 1.8f; gain *= .35f; }
-                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, 0), Color = new Vector4(c * gain * p.Glow * fade, 1), Dir = new Vector4(0, -1, 0, u) });
+                    var kind=FireworkParticleAppearance.StageKind(look.FireworkArtForReview && look.ImpactBurst=="Fireworks", (int)p.Shape, p.Wisp,
+                        SparkParticleAppearance.StageKind(look.SparkArtForReview, (int)p.Shape, p.Wisp, 0, look.SparkArtV2ForReview));
+                    var color=SparkColorForReview(look, (int)p.Shape, p.Wisp, p.Color, p.Age, p.Life, p.Glow, new Vector4(c * gain * p.Glow * fade, 1));
+                    if(DustParticleAppearance.Eligible(look.DustArtForReview && look.ImpactBurst=="Dust",(int)p.Shape,p.Wisp)
+                        && DustParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var dust,look.DustArtV2ForReview))
+                    {kind=look.DustArtV2ForReview?DustParticleAppearance.V2Kind:DustParticleAppearance.Kind;color=dust;}
+                    if(ReleaseParticleAppearance.Eligible(look.UseReleaseArt,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && ReleaseParticleAppearance.TryColor(p.MaterialRoute,p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var smoke))
+                    {kind=ReleaseParticleAppearance.StageKind(p.MaterialRoute,0,look.ReleaseFrontLayerForReview);color=smoke;}
+                    sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, kind), Color = color, Dir = new Vector4(0, -1, 0, u) });
                     break;
                 }
             }

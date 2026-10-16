@@ -5,6 +5,8 @@ namespace PianoPath;
 internal sealed partial class GpuArLayer
 {
     private const int MaxProjectedParticles = 192;
+    // Null in production. Observes only particles that really packed; never participates in selection.
+    internal Action<GpuArParticle>? ObservePackedParticleForReview { get; set; }
     private const byte ParticleStreak = 1, ParticleConfetti = 2, ParticleDust = 3,
         ParticleFlame = 4, ParticleDroplet = 5, ParticleShard = 6, ParticleWisp = 7;
     private static readonly ArVec3 Across = new(1, 0, 0);
@@ -245,7 +247,7 @@ internal sealed partial class GpuArLayer
             BuildStageRings(view, simulation, quads, opacity, look, layout, pose, preset);
         if (!ArQualityBudget.CanDraw(ar.Quality, adaptiveTier, ArElement.Particles)) return;
 
-        BuildStageParticles(view, simulation, quads, opacity, look, layout, pose);
+        BuildStageParticles(view, simulation, quads, opacity, look, layout, pose, ar.NoteDirection, ar.LegacyParticleAxesForReview);
         BuildStageFlashes(view, simulation, quads, opacity, look, layout, pose);
         if (!preset.TallEffectsVisible) return;
         BuildHoldArcs(view, simulation, quads, opacity, look, layout, pose);
@@ -285,14 +287,7 @@ internal sealed partial class GpuArLayer
         {
             var ring = simulation.ArRingAt(i);
             if (!layout.Contains(ring.Pitch) || !(ring.Life > 0) || ring.Age < 0 || ring.Age >= ring.Life) continue;
-            var channelIntensity = ring.Channel switch
-            {
-                0 => look.ImpactWaveIntensity,
-                1 => look.ImpactMorphIntensity,
-                // Release rings already carry ReleaseIntensity in their simulated strength.
-                2 => 1f,
-                _ => 0
-            };
+            var channelIntensity = KeyRingChannelGain.Resolve(ring.Channel, look.ImpactWaveIntensity, look.ImpactMorphIntensity);
             if (channelIntensity <= 0) continue;
             var t = Math.Clamp(ring.Age / ring.Life, 0, 1);
             var strength = Math.Clamp(.5f + ring.Strength * .5f, 0, 1.2f);
@@ -388,9 +383,55 @@ internal sealed partial class GpuArLayer
         quads.Add(Pack(patch, color, Math.Clamp(alpha, 0, 1), new Vector4(0, 0, 3, 0)));
     }
 
-    private void BuildStageParticles(ArView view, GpuStageSimulation simulation,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+    internal sealed record BudgetEntry(GpuArParticle Particle,GpuArQuad Quad);
+    internal sealed record BudgetTrace(int Start,BudgetEntry[] Eligible,int[] Selected,bool Fair);
+    internal Action<BudgetTrace>? ObserveBudgetForReview { get; set; }
+    private readonly GpuInstanceList<GpuArQuad> _budgetQuads=new(1024);
+    private readonly List<GpuArParticle> _budgetParticles=[];
+
+    private void BuildBudgetSelection(ArView view,GpuStageSimulation simulation,GpuInstanceList<GpuArQuad> quads,
+        float opacity,GpuLook look,KeyboardLayout layout,ArCameraPose pose,ArParticleFrame frame,bool legacyAxes)
     {
+        _budgetQuads.Clear();_budgetParticles.Clear();
+        // Evaluate the same projectability/alpha gate once, before allocation; reuse exact quads.
+        for(var pass=0;pass<2;pass++)
+            for(var i=simulation.ArParticleCount-1;i>=0;i--)
+            {
+                var p=simulation.ArParticleAt(i);
+                if((pass==0 && p.Origin==2)||(pass==1 && p.Origin!=2))continue;
+                if(!layout.Contains(p.Pitch) || !(p.Life>0) || p.Age<0 || p.Age>=p.Life)continue;
+                var before=_budgetQuads.Count;
+                if(!TryAddProjectedParticle(view,simulation,p,_budgetQuads,opacity,look,layout,pose,frame,legacyAxes))
+                {
+                    if(_budgetQuads.Count!=before)throw new InvalidOperationException("Rejected budget candidate appended geometry.");
+                    continue;
+                }
+                if(_budgetQuads.Count!=before+1)throw new InvalidOperationException("Budget selection expects one existing quad per particle.");
+                _budgetParticles.Add(p);
+            }
+        var fair=look.UseFairArParticleBudget;
+        var selected=fair?ArParticleBudget.Select(_budgetParticles.Select(p=>new ArParticleBudget.Candidate(p.Pitch,p.Origin)).ToArray(),MaxProjectedParticles)
+            :Enumerable.Range(0,Math.Min(MaxProjectedParticles,_budgetParticles.Count)).ToArray();
+        var start=quads.Count;
+        foreach(var i in selected)
+        {
+            quads.Add(_budgetQuads.Span[i]);ParticleFxCount++;
+            var p=_budgetParticles[i];ObservePackedParticleForReview?.Invoke(p);
+            if(p.Origin==1)ReleaseEffectCount++;
+        }
+        if(ObserveBudgetForReview is { } observe)
+            observe(new BudgetTrace(start,_budgetParticles.Select((p,i)=>new BudgetEntry(p,_budgetQuads.Span[i])).ToArray(),selected,fair));
+    }
+
+    private void BuildStageParticles(ArView view, GpuStageSimulation simulation,
+        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose,
+        ArNoteDirection direction, bool legacyAxes)
+    {
+        var frame = legacyAxes ? ArParticleFrame.Legacy : ArParticleFrame.ForNotes(direction);
+        if(look.UseFairArParticleBudget || ObserveBudgetForReview is not null)
+        {
+            BuildBudgetSelection(view,simulation,quads,opacity,look,layout,pose,frame,legacyAxes);return;
+        }
         var emitted = 0;
         // Draw impact and release bursts before continuous emitters when the AR tier's per-frame fill cap is reached.
         for (var originPass = 0; originPass < 2 && emitted < MaxProjectedParticles; originPass++)
@@ -400,16 +441,18 @@ internal sealed partial class GpuArLayer
                 var particle = simulation.ArParticleAt(i);
                 if ((originPass == 0 && particle.Origin == 2) || (originPass == 1 && particle.Origin != 2)) continue;
                 if (!layout.Contains(particle.Pitch) || !(particle.Life > 0) || particle.Age < 0 || particle.Age >= particle.Life) continue;
-                if (!TryAddProjectedParticle(view, simulation, particle, quads, opacity, look, layout, pose)) continue;
+                if (!TryAddProjectedParticle(view, simulation, particle, quads, opacity, look, layout, pose, frame, legacyAxes)) continue;
                 emitted++;
                 ParticleFxCount++;
+                ObservePackedParticleForReview?.Invoke(particle);
                 if (particle.Origin == 1) ReleaseEffectCount++;
             }
         }
     }
 
     private bool TryAddProjectedParticle(ArView view, GpuStageSimulation simulation, GpuArParticle particle,
-        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose)
+        GpuInstanceList<GpuArQuad> quads, float opacity, GpuLook look, KeyboardLayout layout, ArCameraPose pose,
+        ArParticleFrame frame, bool legacyAxes)
     {
         var unit = pose.KeyboardWidthDepthRatio / Math.Max(1, simulation.SimulationWidth);
         var xPixels = particle.X;
@@ -422,24 +465,42 @@ internal sealed partial class GpuArLayer
             var amp = (5 + look.WispTurbulence * 26) * (.45f + look.WispWidth) * Math.Min(1, particle.Age * 1.6f);
             x += Math.Sin(particle.Age * (3 + look.WispTurbulence * 5) + particle.Phase) * amp * unit;
         }
-        var center = new ArVec3(x, .12, -y);
+        var anchorX = layout.CenterX(particle.Pitch) * pose.KeyboardWidthDepthRatio;
+        var center = legacyAxes ? new ArVec3(x, .12, -y) : frame.Point(new(anchorX, .12, 0), x - anchorX, y);
+        ArVec3 faceX = default, faceY = default;
+        if (!legacyAxes && !ArParticleBillboard.TryAligned(pose, view, center, frame.Up, out faceX, out faceY)) return false;
+        if (look.HeldParticleArt && (particle.Wisp || particle.Shape == ParticleFlame))
+        {
+            if (!HeldParticleAppearance.TryResolve(particle.Wisp, particle.Size, particle.Age, particle.Life,
+                particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.UseWispArtV3, look.UseFlameArtV3)
+                || (legacyAxes && !ArParticleBillboard.TryFacing(pose, center, out faceX, out faceY))) return false;
+            var halfWidth = surface.HalfWidth * unit; var halfHeight = surface.HalfHeight * unit;
+            var surfaceCenter = center + faceY * (surface.BaseAnchored ? halfHeight : 0);
+            if (surface.Color.W * opacity <= .003f
+                || !Ar3DNoteProjection.TryProjectBillboard(pose, view, surfaceCenter, faceX, faceY,
+                    halfWidth, halfHeight, out var facePatch)) return false;
+            quads.Add(Pack(facePatch, new Vector3(surface.Color.X, surface.Color.Y, surface.Color.Z),
+                Math.Clamp(surface.Color.W * opacity, 0, 1),
+                new Vector4(surface.Progress, surface.Shape, 17, surface.Phase)));
+            return true;
+        }
         var progress = Math.Clamp(particle.Age / particle.Life, 0, 1);
         var fade = 1 - progress;
         var stageShape = particle.Wisp ? ParticleWisp : particle.Shape;
         var size = Math.Clamp(particle.Size * unit, .0015, .16);
         var alpha = opacity * look.ParticleGlow;
         var color = GpuStageSimulation.ToLinear(particle.Color);
-        ArVec3 axisX = Across, axisY = Normal;
+        ArVec3 axisX = legacyAxes ? Across : faceX, axisY = legacyAxes ? Normal : faceY * -1;
         double halfX = size, halfY = size;
 
         switch (stageShape)
         {
             case ParticleStreak:
             {
-                var velocity = new ArVec3(particle.Vx * unit, 0, particle.Vy * unit);
+                var velocity = legacyAxes ? new ArVec3(particle.Vx * unit, 0, particle.Vy * unit) : frame.Velocity(particle.Vx * unit, particle.Vy * unit);
                 var speed = Math.Sqrt(particle.Vx * particle.Vx + particle.Vy * particle.Vy);
-                axisX = velocity.Length > 1e-8 ? velocity.Normalized : Normal;
-                axisY = ArVec3.Cross(axisX, Depth).Normalized;
+                axisX = velocity.Length > 1e-8 ? velocity.Normalized : frame.Up * -1;
+                axisY = ArVec3.Cross(axisX, frame.Depth).Normalized;
                 if (axisY.Length < .9) axisY = Across;
                 var stretch = Math.Clamp(speed * .018, .5, 7);
                 halfX = size * 1.4 * (1 + stretch);
@@ -466,7 +527,7 @@ internal sealed partial class GpuArLayer
             case ParticleFlame:
             {
                 // UV y increases away from the key so the flame's broad base attaches to the surface and its tip rises.
-                axisY = Normal * -1;
+                axisY = legacyAxes ? Normal * -1 : faceY;
                 var t = progress;
                 var fire = t < .25 ? Vector3.Lerp(new Vector3(1f, .95f, .8f), new Vector3(1f, .78f, .3f), (float)(t / .25))
                     : t < .6 ? Vector3.Lerp(new Vector3(1f, .78f, .3f), new Vector3(1f, .38f, .08f), (float)((t - .25) / .35))
@@ -491,11 +552,14 @@ internal sealed partial class GpuArLayer
             case ParticleShard:
             {
                 var angle = particle.Phase + particle.Age * 7.3;
-                var baseAxis = new ArVec3(Math.Cos(angle), 0, Math.Sin(angle));
-                var velocity = new ArVec3(particle.Vx * unit, 0, particle.Vy * unit);
+                var baseAxis = legacyAxes ? new ArVec3(Math.Cos(angle), 0, Math.Sin(angle))
+                    : frame.Across * Math.Cos(angle) - frame.Up * Math.Sin(angle);
+                var velocity = legacyAxes ? new ArVec3(particle.Vx * unit, 0, particle.Vy * unit) : frame.Velocity(particle.Vx * unit, particle.Vy * unit);
                 axisX = velocity.Length > 1e-8 ? velocity.Normalized : baseAxis;
-                axisY = ArVec3.Cross(axisX, Depth).Normalized;
-                if (axisY.Length < .9) axisY = new ArVec3(-baseAxis.Z, 0, baseAxis.X);
+                axisY = ArVec3.Cross(axisX, frame.Depth).Normalized;
+                if (axisY.Length < .9) axisY = legacyAxes ? new ArVec3(-baseAxis.Z, 0, baseAxis.X) : frame.Depth;
+                if(!legacyAxes && ShatterParticleAppearance.Eligible(look.ShatterBillboardForReview && look.ImpactMorph=="Shatter",particle.Shape,particle.Wisp,particle.Origin))
+                    ShatterParticleAppearance.BillboardAxes(faceX,faceY,particle.Age,particle.Phase,out axisX,out axisY);
                 halfX = size * 1.2;
                 halfY = size * .42;
                 color *= 1.4f;
@@ -515,10 +579,72 @@ internal sealed partial class GpuArLayer
                 break;
         }
 
+        if(!legacyAxes && BounceParticleAppearance.Eligible(look.BounceBillboardForReview && look.ImpactMorph=="Bounce",particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute))
+            BounceParticleAppearance.BillboardAxes(faceX,faceY,particle.Vx,particle.Vy,out axisX,out axisY);
         if (alpha <= .003f || !Ar3DNoteProjection.TryProjectBillboard(pose, view, center, axisX, axisY, halfX, halfY, out var patch))
             return false;
+        // Keep the legacy eligibility/selection above: material energy must not change which particles pack.
+        if (look.SparkArtV2ForReview && !particle.Wisp && particle.Shape is 0 or ParticleStreak
+            && SparkParticleAppearance.TryColor(particle.Color, particle.Age, particle.Life, particle.Glow, look.ParticleGlow, out var spark))
+        {
+            color = new Vector3(spark.X, spark.Y, spark.Z);
+            alpha = spark.W * opacity;
+        }
+        var materialKind=SparkParticleAppearance.ArKind(look.SparkArtForReview,particle.Shape,particle.Wisp,look.SparkArtV2ForReview);
+        if(SplashParticleAppearance.Eligible(look.SplashArtForReview,particle.Shape,particle.Wisp)
+            && SplashParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var liquid))
+        {
+            color=new Vector3(liquid.X,liquid.Y,liquid.Z);alpha=liquid.W*opacity;
+            materialKind=SplashParticleAppearance.ArKind;
+        }
+        if(FireworkParticleAppearance.Eligible(look.FireworkArtForReview && look.ImpactBurst=="Fireworks",particle.Shape,particle.Wisp)
+            && FireworkParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var shard))
+        {
+            color=new Vector3(shard.X,shard.Y,shard.Z);alpha=shard.W*opacity;
+            materialKind=FireworkParticleAppearance.StageKind(true,particle.Shape,particle.Wisp,2);
+        }
+        if(DustParticleAppearance.Eligible(look.DustArtForReview && look.ImpactBurst=="Dust",particle.Shape,particle.Wisp)
+            && DustParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var dust,look.DustArtV2ForReview))
+        {
+            color=new Vector3(dust.X,dust.Y,dust.Z);alpha=dust.W*opacity;
+            materialKind=look.DustArtV2ForReview?DustParticleAppearance.V2Kind:DustParticleAppearance.Kind;
+        }
+        if(ShatterParticleAppearance.Eligible(look.ShatterArtForReview && look.ImpactMorph=="Shatter",particle.Shape,particle.Wisp,particle.Origin)
+            && ShatterParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var facet))
+        {
+            color=new Vector3(facet.X,facet.Y,facet.Z);alpha=facet.W*opacity;
+            materialKind=ShatterParticleAppearance.BodyKind;
+        }
+        if(MeltParticleAppearance.Eligible(look.MeltArtForReview && look.ImpactMorph=="Melt",particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute)
+            && MeltParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var melt))
+        {
+            color=new Vector3(melt.X,melt.Y,melt.Z);alpha=melt.W*opacity;
+            materialKind=MeltParticleAppearance.BodyKind;
+        }
+        if(BounceParticleAppearance.Eligible(look.BounceArtForReview && look.ImpactMorph=="Bounce",particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute)
+            && BounceParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var bounce))
+        {
+            color=new Vector3(bounce.X,bounce.Y,bounce.Z);alpha=bounce.W*opacity;
+            materialKind=BounceParticleAppearance.Kind;
+        }
+        if(ReleaseParticleAppearance.Eligible(look.UseReleaseArt,particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute)
+            && ReleaseParticleAppearance.TryColor(particle.MaterialRoute,particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var release))
+        {
+            color=new Vector3(release.X,release.Y,release.Z);alpha=release.W*opacity;
+            materialKind=ReleaseParticleAppearance.BodyKind(particle.MaterialRoute);
+        }
+        var materialX=(float)progress;var materialY=(float)stageShape;
+        if(ConfettiParticleAppearance.Eligible(look.ConfettiArtForReview && look.ImpactBurst=="Confetti",particle.Shape,particle.Wisp)
+            && ConfettiParticleAppearance.TryColor(particle.Color,particle.Age,particle.Life,out var paper))
+        {
+            color=new Vector3(paper.X,paper.Y,paper.Z);alpha=paper.W*opacity;
+            materialKind=ConfettiParticleAppearance.Kind;
+            // Material orientation matches Stage's actual age-based axis, not normalised-life progress.
+            var orientation=ConfettiParticleAppearance.Orientation(particle.Age,particle.Phase);
+            materialX=orientation.X;materialY=orientation.Y;
+        }
         quads.Add(Pack(patch, color, Math.Clamp((float)alpha, 0, 1),
-            new Vector4((float)progress, stageShape, 2, particle.Phase)));
+            new Vector4(materialX, materialY, materialKind, particle.Phase)));
         return true;
     }
 

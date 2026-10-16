@@ -285,6 +285,8 @@ internal sealed partial class PianoStage : FrameworkElement
     public void ClearTransient()
     {
         _liveTrails.Clear(); _sparks.Clear(); _rings.Clear(); _flashes.Clear(); Array.Clear(_keyHeat); Array.Clear(_activeKey); _anyHeat = false;
+        Array.Clear(_wispBudget);
+        _beatPulse = _energyLevel = 0;
         _simulation.Reset();
         _gpu?.ClearTransient();
         InvalidateVisual();
@@ -612,6 +614,7 @@ internal sealed partial class PianoStage : FrameworkElement
             _keyHeat[pitch] = heat;
             if (heat > .01) _anyHeat = true;
             if (_activeKey[pitch] && _visual.ShowWisps && _visual.WispAmount > 0 && ActualWidth >= 1) SpawnWisps(pitch, dt, hitY, lane);
+            else _wispBudget[pitch] = 0;
         }
         for (var i = _sparks.Count - 1; i >= 0; i--)
         {
@@ -1290,7 +1293,9 @@ internal sealed partial class PianoStage : FrameworkElement
             var shellAlpha = Alpha(58 * opacity * glow * Math.Exp(-2.2 * f));
             dc.DrawRoundedRectangle(Brush(Color.FromArgb(shellAlpha, cr, cg, cb)), null, Inflate(r, spread), radius + spread, radius + spread);
         }
-        switch (style)
+        var satin = _visual.NoteSatin && style is "Solid" or "Glass";
+        if (satin) DrawSatinNote(dc, r, color, opacity, radius, pitch);
+        else switch (style)
         {
             case "Neon":
             {
@@ -1408,13 +1413,13 @@ internal sealed partial class PianoStage : FrameworkElement
                 break;
             }
         }
-        if (_visual.NoteRefraction > 0 && r.Width > 6)
+        if (!satin && _visual.NoteRefraction > 0 && r.Width > 6)
         {
             var materialRefraction = style switch { "Neon" => 90, "Gem" => 130, "CrystalOutline" => 72, _ => 170 };
             var fringe = Alpha(materialRefraction * opacity * _visual.NoteRefraction / 100);
             dc.DrawLine(Pen(Color.FromArgb(fringe, 255, 255, 255), 1), new Point(r.X + 2, r.Y + 3), new Point(r.X + 2, r.Bottom - 3));
         }
-        if (_visual.Notes3D && r.Height > 20 && style is "Solid" or "Glass")
+        if (!satin && _visual.Notes3D && r.Height > 20 && style is "Solid" or "Glass")
         {
             // The solid style already carries its bevel gradient, so only glass needs the extra inner shade.
             if (style == "Glass")
@@ -1553,6 +1558,43 @@ internal sealed partial class PianoStage : FrameworkElement
         return CacheGradient(key, gradient);
     }
 
+    /// <summary>WPF approximation of the GPU satin body: pigment, local sheen and clipped static grain.
+    /// No screen/time UV, so seeking or moving the camera cannot slide a texture across the bar.</summary>
+    private void DrawSatinNote(DrawingContext dc, Rect r, Color color, double opacity, double radius, int pitch)
+    {
+        var body = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, 0) };
+        var edge = Blend(color, Colors.Black, _visual.Notes3D ? .28 : .08);
+        body.GradientStops.Add(new GradientStop(edge, 0));
+        body.GradientStops.Add(new GradientStop(color, .42));
+        body.GradientStops.Add(new GradientStop(edge, 1));
+        body.Freeze();
+        dc.PushOpacity(Math.Clamp(opacity * (.65 + .35 * _visual.NoteTint / 100), 0, 1));
+        dc.DrawRoundedRectangle(body, null, r, radius, radius);
+        dc.Pop();
+        var clip = new RectangleGeometry(r, radius, radius); clip.Freeze();
+        dc.PushClip(clip);
+        if (_visual.NoteTexture > 0 && r.Height > 4)
+        {
+            // At most 20 soft diagonals per bar; never allocate a bitmap or draw in scene UVs.
+            var texture = _visual.NoteTexture / 100;
+            var spacing = Math.Max(9, r.Height / 20);
+            var ink = Pen(Color.FromArgb(Alpha(22 * texture * opacity), color.R, color.G, color.B), 1);
+            for (var y = r.Top + (pitch * 7 % 9); y < r.Bottom; y += spacing)
+                dc.DrawLine(ink, new Point(r.Left, y), new Point(r.Right, y + r.Width * .3));
+        }
+        var sheen = new LinearGradientBrush { StartPoint = new Point(0, 0), EndPoint = new Point(1, .18) };
+        var light = Blend(color, Colors.White, .18);
+        sheen.GradientStops.Add(new GradientStop(Colors.Transparent, .12));
+        sheen.GradientStops.Add(new GradientStop(Color.FromArgb(Alpha(55 * opacity * _visual.NoteRefraction / 100), light.R, light.G, light.B), .34));
+        sheen.GradientStops.Add(new GradientStop(Colors.Transparent, .55));
+        sheen.Freeze();
+        dc.DrawRectangle(sheen, null, r);
+        dc.Pop();
+        var rim = Blend(color, Colors.White, .18);
+        dc.DrawRoundedRectangle(null, Pen(Color.FromArgb(Alpha(150 * opacity * Math.Min(1, _visual.NoteEdge / 100)), rim.R, rim.G, rim.B),
+            .6 + _visual.NoteEdgeWidth / 100), r, radius, radius);
+    }
+
     private Brush GlassBrush(Color color, double strength)
     {
         var key = GradientKey(3, Color.FromArgb(Alpha(strength * 255), color.R, color.G, color.B));
@@ -1596,12 +1638,20 @@ internal sealed partial class PianoStage : FrameworkElement
         return _visual.Palette switch
         {
             "Aurora" => Blend(ParseColor(_visual.NoteColorStart, Colors.DeepSkyBlue), ParseColor(_visual.NoteColorEnd, Colors.MediumPurple), t),
+            "Prism Flow" => PrismPaletteColor(pitch),
             "Fire" => Blend(Color.FromRgb(255, 204, 72), Color.FromRgb(255, 53, 91), t),
             "Ocean" => Blend(Color.FromRgb(70, 246, 237), Color.FromRgb(55, 106, 255), t),
             "Violet" => Blend(Color.FromRgb(161, 94, 255), Color.FromRgb(255, 70, 196), t),
             "Custom" => Blend(ParseColor(_visual.NoteColorStart, Colors.DeepSkyBlue), ParseColor(_visual.NoteColorEnd, Colors.MediumPurple), t),
             _ => ColorFromHue(Hue(pitch) + 24)
         };
+    }
+
+    private Color PrismPaletteColor(int pitch)
+    {
+        var c = PrismFlowPalette.ForPitch(pitch, (int)_visual.PaletteLowPitch, (int)_visual.PaletteHighPitch);
+        return Color.FromRgb((byte)Math.Clamp(Math.Round(c.X * 255), 0, 255),
+            (byte)Math.Clamp(Math.Round(c.Y * 255), 0, 255), (byte)Math.Clamp(Math.Round(c.Z * 255), 0, 255));
     }
 
     /// <summary>Note color plus the smart color modulators (octave blend, zone tint).</summary>

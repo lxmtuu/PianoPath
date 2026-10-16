@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10 or damper strip 11.</summary>
+    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10 or damper strip 11; experimental held particle surface 17.</summary>
     public Vector4 Misc;
 }
 
@@ -38,6 +38,9 @@ internal struct GpuArQuad
 /// <param name="ViewProfileId">The view the camera is at (roadmap §14.7 "Thêm 5"): the layer retunes the effect heights and hides the stand-up quads for the 90° overhead view; the default keeps the leaned look at every call site.</param>
 internal sealed record GpuArInput(ArCalibration Calibration, ArNoteStyle Notes, float Opacity, float KeyLight = .6f, bool ShowNotes = true, float DelaySeconds = 0, ArQualityTier Quality = ArQualityTier.Standard, bool ProjectedNotes = false, float MinAspect = 0, bool ShowLiveTrails = false, ArNoteDirection NoteDirection = default, bool ShowRisingMidiNotes = false, bool AlignmentGuides = false, bool ShowDamperStrip = true, Vector3 AlignmentGuideColor = default, string? ViewProfileId = null)
 {
+    // Historical artwork fixtures ONLY. Not persisted or exposed by the app; production always follows NoteDirection.
+    internal bool LegacyParticleAxesForReview { get; init; }
+
     /// <summary>Live press bars keep the user's width/fade graphs but use a fixed travel reach, independent of Learn lookahead.</summary>
     internal ArNoteStyle LivePressStyle => ArOptions.LivePressNoteStyle(Notes);
 
@@ -97,7 +100,8 @@ internal sealed partial class GpuArLayer
     /// </summary>
     internal void Build(GpuFrameInput input, GpuArInput ar, ArView view, IReadOnlyList<Vector4> keyColors,
         GpuStageSimulation simulation, GpuInstanceList<GpuArQuad> quads, bool projectedNotes,
-        GpuAdaptiveQualityTier adaptiveTier = GpuAdaptiveQualityTier.Full)
+        GpuAdaptiveQualityTier adaptiveTier = GpuAdaptiveQualityTier.Full,
+        bool suppressKeyTintForReview = false, bool suppressKeySpillForReview = false)
     {
         quads.Clear();
         _shapes.Clear(); _projectedShapes.Clear(); _liveBars.Clear(); _projectedLiveBars.Clear(); _risingMidiNotes.Clear();
@@ -115,7 +119,7 @@ internal sealed partial class GpuArLayer
         for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch && pitch < keyColors.Count; pitch++)
         {
             var key = keyColors[pitch];
-            if (!(key.W > MinKeyGlow) || keyLight <= 0) continue;
+            if (!(key.W > MinKeyGlow) || keyLight <= 0 || suppressKeyTintForReview) continue;
             _keyPatches.Clear();
             ArKeys.Patches(ar.Calibration, view, pitch, _keyPatches);
             foreach (var patch in _keyPatches)
@@ -135,7 +139,7 @@ internal sealed partial class GpuArLayer
             DamperStripCount++;
         }
 
-        if (ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
+        if (!suppressKeySpillForReview && ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
             && !ArQualityBudget.IsCut(adaptiveTier, ArBudgetCut.NoteLights))
             BuildProjectedNoteLights(ar, view, keyColors, quads, opacity * keyLight, look, layout, keyPose);
 

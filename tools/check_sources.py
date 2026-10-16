@@ -786,7 +786,8 @@ def scan_readme():
 # docs/previews belongs to CI: the build runs ``git add docs/previews`` and commits whatever is there. A
 # diagnostic written into it (a capture report with a measured duration, a hash, a log) changes on every run
 # and so guarantees a fresh commit forever, which is exactly what happened once with ``*.report.txt``. The
-# folder may hold pictures only; diagnostics go outside the repository (see ``App.ReportPreview``).
+# folder holds pictures and explicitly allowlisted native frame bundles; diagnostics go outside the
+# repository (see ``App.ReportPreview``).
 PREVIEW_PICTURES = {".png", ".jpg", ".jpeg"}
 
 
@@ -965,9 +966,20 @@ def scan_previews_folder():
     folder = ROOT / "docs" / "previews"
     if not folder.exists():
         return []
-    return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures only, because CI commits everything in it on every run; "
+    # Bounded native animation assets: exact BGRA frames, not arbitrary diagnostics/archives.
+    # The family validators verify frame count, decoded length, hashes and publication budgets.
+    native_bundles = {f"{family}/{view}-{phase}.bgra.gz"
+                      for family in ("fireworks-art-v1", "confetti-art-v1", "dust-art-v1", "dust-art-v2", "shatter-art-v1", "melt-art-v1", "bounce-art-v1", "release-float-up-v1", "release-dissolve-v1", "release-smoke-v1")
+                      for view in ("live-stage", "ar-reference") for phase in ("burst", "held")}
+    native_bundles.update(f"shatter-billboard-v1/{view}-{phase}.bgra.gz"
+                          for view in ("ar-reference","ar-near-overhead") for phase in ("burst","held"))
+    native_bundles.update(f"ar-particle-budget-v1/{recipe}.bgra.gz"
+                          for recipe in ("embers-wisps", "splash-flames"))
+    return [f"{path.relative_to(ROOT).as_posix()}: docs/previews may hold pictures or explicitly named native frame bundles only; "
             "write diagnostics outside the repository (see App.ReportPreview)"
-            for path in sorted(folder.rglob("*")) if path.is_file() and path.suffix.lower() not in PREVIEW_PICTURES]
+            for path in sorted(folder.rglob("*")) if path.is_file()
+            and path.suffix.lower() not in PREVIEW_PICTURES
+            and path.relative_to(folder).as_posix() not in native_bundles]
 
 
 def scan_cli_and_samples():
@@ -1803,6 +1815,17 @@ def scan_public_release():
     if ".github/workflows/build.yml" in holders:
         errors.append(f".github/workflows/build.yml names {token}; the build job must not be able to reach "
                       f"the public repository at all")
+
+    if re.search(r"Set-Content[^\n]*-Append", workflow_text, re.I):
+        errors.append("release.yml must use Add-Content: PowerShell Set-Content has no -Append parameter")
+
+    # Preparing the public tree must not remove the project or the packages needed by the next step.
+    if "$env:GIT_INDEX_FILE" not in workflow_text or "read-tree --empty" not in workflow_text:
+        errors.append("release.yml must prepare its public tree with an isolated Git index")
+    if any(line.strip().startswith("git checkout --orphan") for line in workflow_text.splitlines()):
+        errors.append("release.yml must not replace the source checkout with an orphan documentation branch")
+    if "Get-ChildItem -Force | Where-Object { $_.Name -ne '.git' }" in workflow_text:
+        errors.append("release.yml must not delete the source worktree before public package publication")
 
     # 7. Neither place that can push release documents may write main of the source repository. It happened
     # once — on 2026-10-03 `publish_public.ps1 -Repository lxmtuu/PianoPath` replaced main with docs/release

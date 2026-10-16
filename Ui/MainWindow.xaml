@@ -96,11 +96,17 @@
                                 </StackPanel>
                                 <TextBlock x:Name="PresetNameLabel" Text="Preset · Concert Gold" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,3,0,0"/>
                             </StackPanel>
-                            <Grid Grid.Column="1" VerticalAlignment="Center" MaxWidth="268" HorizontalAlignment="Stretch">
-                                <TextBox x:Name="SettingsSearchBox" Height="32" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Search detailed stage, recording and app settings. Audio, MIDI, Practice and History are not included." local:Loc.Localize="True"/>
+                            <StackPanel Grid.Column="1" Margin="0,0,4,0">
+                                <WrapPanel Margin="0,0,0,6">
+                                    <ToggleButton x:Name="SettingsStageContextButton" Content="Live Stage" local:Loc.Localize="True" Style="{StaticResource PedalToggleStyle}" Click="SettingsStageContext_Click" Margin="0,0,5,4" IsChecked="True"/>
+                                    <ToggleButton x:Name="SettingsArContextButton" Content="AR mode" local:Loc.Localize="True" Style="{StaticResource PedalToggleStyle}" Click="SettingsArContext_Click" Margin="0,0,0,4"/>
+                                </WrapPanel>
+                            <Grid VerticalAlignment="Center" HorizontalAlignment="Stretch">
+                                <TextBox x:Name="SettingsSearchBox" Height="32" MinWidth="160" Style="{StaticResource SearchBoxStyle}" TextChanged="SettingsSearch_TextChanged" ToolTip="Search all settings in English or Vietnamese, including audio, MIDI, practice and history." local:Loc.Localize="True"/>
                                 <Path Data="{StaticResource IconSearch}" Fill="{DynamicResource MutedTextBrush}" Width="13" Height="13" Stretch="Uniform" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False"/>
                                 <TextBlock x:Name="SettingsSearchHint" Text="Search settings" local:Loc.Localize="True" Foreground="{DynamicResource DimTextBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="31,0,0,0" IsHitTestVisible="False"/>
                             </Grid>
+                            </StackPanel>
                             <StackPanel Grid.Column="2" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="8,0,0,0">
                                 <Button x:Name="SettingsReturnButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconBack}" Width="28" Height="28" Click="SettingsBack_Click" ToolTip="Return to the Play dialog" AutomationProperties.Name="Return to the Play dialog" local:Loc.Localize="True" Visibility="Collapsed"/>
                                 <Button x:Name="SettingsCloseButton" Style="{StaticResource CaptionButtonStyle}" Tag="{StaticResource IconClose}" Click="SettingsClose_Click" Margin="4,0,0,0" ToolTip="Close settings" local:Loc.Localize="True"/>
@@ -109,8 +115,8 @@
                     </Border>
 
                     <TabControl x:Name="SettingsTabs" Grid.Row="1" Style="{StaticResource SettingsTabControlStyle}" ItemContainerStyle="{StaticResource SettingsNavItemStyle}" SelectedIndex="0" SelectionChanged="SettingsTabs_SelectionChanged">
-                        <TabItem Header="Style" local:Loc.Localize="True" Tag="{StaticResource IconStyle}" local:SettingsPages.Section="STAGE DESIGN">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <TabItem Header="Overview" local:Loc.Localize="True" Tag="{StaticResource IconStyle}" local:SettingsPages.Section="EFFECT DESIGN">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                                 <StackPanel Margin="18,12,18,18">
                                     <TextBlock Text="PRESETS" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="Pick a complete look, then fine-tune it on the other pages. Save your own presets to reuse or share them." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
@@ -136,27 +142,38 @@
                                 </StackPanel>
                             </ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Theme" local:Loc.Localize="True" Tag="{StaticResource IconTheme}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="ThemeSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Notes &amp; color" local:Loc.Localize="True" Tag="{StaticResource IconNotes}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="NoteSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Notes" local:Loc.Localize="True" Tag="{StaticResource IconNotes}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="NoteSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Press" local:Loc.Localize="True" Tag="{StaticResource IconParticles}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="PressSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Particles" local:Loc.Localize="True" Tag="{StaticResource IconParticles}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="ParticleSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Hold" local:Loc.Localize="True" Tag="{StaticResource IconParticles}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="HoldSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Keyboard" local:Loc.Localize="True" Tag="{StaticResource IconKeyboard}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="KeyboardSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Release" local:Loc.Localize="True" Tag="{StaticResource IconParticles}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="ReleaseSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Background" local:Loc.Localize="True" Tag="{StaticResource IconBackground}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="SceneSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Lighting" local:Loc.Localize="True" Tag="{StaticResource IconSparkle}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="LightingSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Camera &amp; FX" local:Loc.Localize="True" Tag="{StaticResource IconCamera}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="CameraSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Stage &amp; background" local:Loc.Localize="True" Tag="{StaticResource IconBackground}" local:SettingsPages.Section="ENVIRONMENT">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="StageDesignSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Audio" local:Loc.Localize="True" Tag="{StaticResource IconAudio}" local:SettingsPages.Section="SOUND &amp; INPUT">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="18,12,18,18">
+                        <TabItem Header="Camera &amp; AR" local:Loc.Localize="True" Tag="{StaticResource IconCamera}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="CameraSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Recording" local:Loc.Localize="True" Tag="{StaticResource IconRecord}" local:SettingsPages.Section="SESSION &amp; APP">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel Margin="18,12,18,18">
+                                    <TextBlock Text="VIDEO CAPTURE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
+                                    <TextBlock Text="Records the stage to an AVI file (MJPEG when a codec is available). Use the Green Screen preset and OBS for a keyed overlay." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
+                                    <StackPanel x:Name="RecordingSettingsHost"/>
+                                    <TextBlock x:Name="RecordingInfoLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>
+                                    <Button Content="Start / stop recording" local:Loc.Localize="True" Tag="{StaticResource IconRecord}" Style="{StaticResource DangerIconButtonStyle}" Click="RecordVideo_Click" Padding="14,8" HorizontalAlignment="Left"/>
+                                </StackPanel></ScrollViewer>
+                        </TabItem>
+                        <TabItem Header="Sound &amp; MIDI" local:Loc.Localize="True" Tag="{StaticResource IconAudio}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="SoundSettingsHost" Margin="18,8,18,18"><Border x:Name="AudioBusinessCard" Padding="14" Margin="0,4,0,12" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"><StackPanel Margin="0">
                                     <TextBlock Text="PIANO" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="One concert grand, tuned for live play" local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,12"/>
                                     <Border Padding="14" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1">
@@ -197,12 +214,7 @@
                                     <TextBlock Text="Boosts or lowers the piano synth; a soft limiter protects peaks from clipping." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,2,0,0"/>
                                     <Button x:Name="AsioPanelButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconSliders}" Click="AsioPanel_Click" ToolTip="ASIO control panel" HorizontalAlignment="Left" Margin="0,10,0,0" IsEnabled="False" local:Loc.Localize="True"/>
                                     <TextBlock x:Name="AudioOutputHint" Text="Download Salamander Grand to enable piano audio." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,8,0,0"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
-                        <TabItem Header="MIDI" local:Loc.Localize="True" Tag="{StaticResource IconMidi}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="18,12,18,18">
+                                </StackPanel></Border><Border x:Name="MidiBusinessCard" Padding="14" Margin="0,4,0,12" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"><StackPanel Margin="0">
                                     <TextBlock Text="DEVICES" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="MIDI input" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
                                     <ComboBox x:Name="InputDeviceCombo" AutomationProperties.Name="MIDI input device" local:Loc.Localize="True" DisplayMemberPath="Display" SelectedValuePath="Id" SelectionChanged="InputDeviceCombo_SelectionChanged"/>
@@ -215,12 +227,10 @@
                                     <StackPanel x:Name="TrackListHost" Margin="0,10,0,0"/>
                                     <TextBlock Text="METRONOME" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <CheckBox x:Name="MetronomeCheck" Content="Piano metronome click" local:Loc.Localize="True" IsEnabled="False"/>
-                                </StackPanel>
-                            </ScrollViewer>
+                                </StackPanel></Border></StackPanel></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Practice" local:Loc.Localize="True" Tag="{StaticResource IconPractice}" local:SettingsPages.Section="SESSION">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="18,12,18,18">
+                        <TabItem Header="Practice &amp; history" local:Loc.Localize="True" Tag="{StaticResource IconPractice}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="SessionSettingsHost" Margin="18,8,18,18"><Border x:Name="PracticeBusinessCard" Padding="14" Margin="0,4,0,12" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"><StackPanel Margin="0">
                                     <TextBlock Text="PRACTICE MODE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <ComboBox x:Name="ModeCombo" AutomationProperties.Name="Practice mode" local:Loc.Localize="True" SelectedIndex="0" Margin="0,8,0,0" SelectionChanged="ModeCombo_SelectionChanged"><ComboBoxItem Content="Follow along" local:Loc.Localize="True"/><ComboBoxItem Content="Wait for my note" local:Loc.Localize="True"/><ComboBoxItem Content="Right hand only" local:Loc.Localize="True"/><ComboBoxItem Content="Left hand only" local:Loc.Localize="True"/></ComboBox>
                                     <Grid Margin="0,18,0,0">
@@ -245,12 +255,7 @@
                                     </StackPanel>
                                     <TextBlock Text="SHORTCUTS" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Style="{StaticResource MutedTextStyle}" Text="Keys A W S E D F T G Y H U J K play an octave from C3 · Space play/pause · Escape settings · F11 full screen · click the on-screen keyboard to play with the mouse." local:Loc.Localize="True"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
-                        <TabItem Header="History" local:Loc.Localize="True" Tag="{StaticResource IconPractice}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="18,12,18,18">
+                                </StackPanel></Border><Border x:Name="HistoryBusinessCard" Padding="14" Margin="0,4,0,12" CornerRadius="12" Background="{DynamicResource ControlBrush}" BorderBrush="{DynamicResource ControlBorderBrush}" BorderThickness="1"><StackPanel Margin="0">
                                     <TextBlock Text="PRACTICE HISTORY" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
                                     <TextBlock Text="Every finished run of the open song lands here: when it was played, its accuracy, the hits and the longest streak." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
                                     <TextBlock Text="PRACTICE CHART" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
@@ -268,24 +273,19 @@
                                         <Button Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconExport}" Click="ExportHistory_Click" Margin="0,0,6,0" ToolTip="Export the practice history as an HTML file" local:Loc.Localize="True"/>
                                         <Button Style="{StaticResource GlyphButtonStyle}" Foreground="{DynamicResource DangerBrush}" Tag="{StaticResource IconTrash}" Click="ClearHistory_Click" ToolTip="Clear all practice history" local:Loc.Localize="True"/>
                                     </StackPanel>
-                                </StackPanel>
-                            </ScrollViewer>
+                                </StackPanel></Border></StackPanel></ScrollViewer>
                         </TabItem>
-                        <TabItem Header="Recording" local:Loc.Localize="True" Tag="{StaticResource IconRecord}">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto">
-                                <StackPanel Margin="18,12,18,18">
-                                    <TextBlock Text="VIDEO CAPTURE" local:Loc.Localize="True" Style="{StaticResource EyebrowTextStyle}"/>
-                                    <TextBlock Text="Records the stage to an AVI file (MJPEG when a codec is available). Use the Green Screen preset and OBS for a keyed overlay." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,4,0,10"/>
-                                    <StackPanel x:Name="RecordingSettingsHost"/>
-                                    <TextBlock x:Name="RecordingInfoLabel" Style="{StaticResource MutedTextStyle}" Margin="0,10,0,10"/>
-                                    <Button Content="Start / stop recording" local:Loc.Localize="True" Tag="{StaticResource IconRecord}" Style="{StaticResource DangerIconButtonStyle}" Click="RecordVideo_Click" Padding="14,8" HorizontalAlignment="Left"/>
-                                </StackPanel>
-                            </ScrollViewer>
-                        </TabItem>
-                        <TabItem Header="General" local:Loc.Localize="True" Tag="{StaticResource IconSliders}" local:SettingsPages.Section="APP">
-                            <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel x:Name="GeneralSettingsHost" Margin="18,6,18,18"/></ScrollViewer>
+                        <TabItem Header="Application" local:Loc.Localize="True" Tag="{StaticResource IconSliders}">
+                            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><StackPanel x:Name="GeneralSettingsHost" Margin="18,8,18,18"/></ScrollViewer>
                         </TabItem>
                     </TabControl>
+                    <!-- Construction-only hosts keep legacy builder contracts. Their cards are reparented once, never cloned. -->
+                    <StackPanel Visibility="Collapsed" IsHitTestVisible="False">
+                        <StackPanel x:Name="ThemeSettingsHost"/>
+                        <StackPanel x:Name="ParticleSettingsHost"/>
+                        <StackPanel x:Name="KeyboardSettingsHost"/>
+                        <StackPanel x:Name="SceneSettingsHost"/>
+                    </StackPanel>
 
                     <Border Grid.Row="2" Padding="18,10" BorderBrush="{DynamicResource PanelBorderBrush}" BorderThickness="0,1,0,0">
                         <Grid>

@@ -87,7 +87,7 @@ public partial class MainWindow
     private sealed record ArExportJob(string Target, string VideoPath,
         List<NoteEvent> Notes, GpuLook Look, GpuArInput Ar,
         bool Mirror, double StageHeight, int FrameRate, double Seconds, bool WithAudio, int ResolutionCap);
-    // The settings frame-rate is the recording's breath; the camera clip feeds at half of it, source-domain.
+    // The legacy camera-file export rate policy is preserved; all scene clocks follow the resulting plan.
 
     private void RunArExport(ArExportJob job)
     {
@@ -98,8 +98,8 @@ public partial class MainWindow
                 ?? throw new InvalidOperationException(Loc.F("The camera video file would not open: {0}", openError));
             using var renderer = GpuStageRenderer.Create(forceWarp: false);
             var maxSide = job.ResolutionCap > 0 ? job.ResolutionCap : Math.Max(reader.Width, reader.Height);
-            // Media Foundation trick play decodes a finished file at half speed, so the camera-video clock
-            // runs at half the take's clock: one tick holds every other source frame.
+            // Keep the existing half-requested-rate camera-file policy in this fix. It must not create
+            // a second song clock: the scene/audio positions below always follow the actual plan rate.
             var plan = ArVideoRenderProfile.Plan(reader.Width, reader.Height, job.Seconds, job.FrameRate / 2, downsample: 1, maxSide);
             var ring = new CameraFrameRing();
             var videoBuffer = new byte[reader.Width * reader.Height * 4];
@@ -107,9 +107,8 @@ public partial class MainWindow
             WavWriter? wav = null; SfzSynthesizer? synth = null;
             GpuStageFeed Feed(int tick)
             {
-                // The decoder of a finished file paces near real time, and the render ticks run faster than
-                // the clock they are planning: an empty stream tick waits for the decoder (the take's plan
-                // already asks for only half of the clip's own speed), four seconds at most.
+                // Wait for a decoded camera frame, up to four seconds. Decoder delivery time must not
+                // advance the deterministic song/simulation clock.
                 var deadline = Stopwatch.GetTimestamp() + Stopwatch.Frequency * 4;
                 while (!reader.TryReadFrame(videoBuffer, mirror: false, out var gotW, out var gotH) || gotW != reader.Width || gotH != reader.Height)
                 {
@@ -124,7 +123,14 @@ public partial class MainWindow
                 var feed = new GpuStageFeed();
                 feed.SetStageHeight(job.StageHeight);
                 feed.SetLook(job.Look);
-                feed.SetState(job.Notes, tick / (double)job.FrameRate, playing: true, new HashSet<int>());  // live-shaped song state — the engine's own smoke claim
+                // The planned output rate may differ from the requested camera rate. Song, audio and
+                // simulation must all use the plan's clock, without wall-clock extrapolation.
+                feed.SetDeterministicState(job.Notes, plan.PositionAt(tick), playing: true, new HashSet<int>());
+                feed.SetDeterministicBeatPulse(0);
+                // Only onsets need explicit hits. Song intervals drive held emitters and the existing
+                // song-release scanner owns Note Off; adding live releases here would double them.
+                foreach(var note in ArVideoExportScript.EventsForTick(script,tick))
+                    if(note.On)feed.Impact(note.Pitch,note.Velocity/127.0);
                 feed.Camera = new GpuCameraInput(ring, PictureFit.Fit, job.Mirror, 1f);
                 feed.Ar = job.Ar;
                 if (job.Look.ShowWatermark) feed.Watermark = PianoStage.GpuWatermark;

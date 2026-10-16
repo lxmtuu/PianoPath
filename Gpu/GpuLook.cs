@@ -35,6 +35,7 @@ internal sealed class GpuLook
     public float NoteHeadGlow { get; init; } = .4f;
     public float NoteRefraction { get; init; } = .35f;
     public float NoteTexture { get; init; } = .6f;
+    public bool NoteSatin { get; init; }
     public bool Notes3D { get; init; } = true;
     /// <summary>Note names printed inside the bars when there is room (Style → SHAPE &amp; STYLE).</summary>
     public bool ShowNoteLabels { get; init; }
@@ -85,6 +86,106 @@ internal sealed class GpuLook
 
     // ---- particles ----
     public bool ShowEmbers { get; init; } = true;
+    public bool HeldParticleArt { get; init; }
+    /// <summary>Persisted user opt-in, shared by GPU Stage/AR and their recordings.
+    /// Only the accepted held/release materials and fixed-cap AR allocation are included.</summary>
+    public bool UpgradedParticleEffects { get; init; }
+    internal bool UseWispArtV3 => UpgradedParticleEffects || WispArtV3ForReview;
+    internal bool UseFlameArtV3 => UpgradedParticleEffects || FlameArtV3ForReview;
+    internal bool UseReleaseArt => UpgradedParticleEffects || ReleaseArtForReview;
+    internal bool UseFairArParticleBudget => UpgradedParticleEffects || ArFairParticleBudgetForReview;
+    /// <summary>Independent diagnostic opt-in; production uses UseFairArParticleBudget.</summary>
+    // Explicit diagnostic only; never persisted or enabled by settings/presets.
+    internal bool ArFairParticleBudgetForReview { get; private set; }
+    internal GpuLook WithArFairParticleBudgetForReview(bool enabled)
+    {var copy=(GpuLook)MemberwiseClone();copy.ArFairParticleBudgetForReview=enabled;return copy;}
+    internal bool ReleaseArtForReview { get; private set; }
+    internal bool ReleaseFrontLayerForReview { get; private set; }
+    internal GpuLook WithReleaseArtForReview(bool enabled)
+    {var copy=(GpuLook)MemberwiseClone();copy.ReleaseArtForReview=enabled;return copy;}
+    internal GpuLook WithReleaseFrontLayerForReview(bool enabled)
+    {var copy=(GpuLook)MemberwiseClone();copy.ReleaseFrontLayerForReview=enabled;return copy;}
+    internal bool BounceBillboardForReview { get; private set; }
+    internal GpuLook WithBounceBillboardForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.BounceBillboardForReview=enabled;return copy;
+    }
+    internal bool BounceArtForReview { get; private set; }
+    internal GpuLook WithBounceArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.BounceArtForReview=enabled;return copy;
+    }
+    internal bool MeltFrontLayerForReview { get; private set; }
+    internal GpuLook WithMeltFrontLayerForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.MeltFrontLayerForReview=enabled;return copy;
+    }
+    internal bool MeltArtForReview { get; private set; }
+    internal GpuLook WithMeltArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.MeltArtForReview=enabled;return copy;
+    }
+    internal bool ShatterArtForReview { get; private set; }
+    internal GpuLook WithShatterArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.ShatterArtForReview=enabled;return copy;
+    }
+    // Separate, default-off geometry experiment; material approval does not enable it.
+    internal bool ShatterBillboardForReview { get; private set; }
+    internal GpuLook WithShatterBillboardForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.ShatterBillboardForReview=enabled;return copy;
+    }
+    internal bool DustArtForReview { get; private set; }
+    internal bool DustArtV2ForReview { get; private set; }
+    internal GpuLook WithDustArtForReview(bool enabled,bool v2=false)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.DustArtForReview=enabled;copy.DustArtV2ForReview=enabled && v2;return copy;
+    }
+    internal bool ConfettiArtForReview { get; private set; }
+    internal GpuLook WithConfettiArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.ConfettiArtForReview=enabled;return copy;
+    }
+    internal bool FireworkArtForReview { get; private set; }
+    internal GpuLook WithFireworkArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.FireworkArtForReview=enabled;return copy;
+    }
+    internal bool SplashArtForReview { get; private set; }
+    internal GpuLook WithSplashArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();copy.SplashArtForReview=enabled;return copy;
+    }
+    internal bool SparkArtForReview { get; private set; }
+    internal bool SparkArtV2ForReview { get; private set; }
+    internal GpuLook WithSparkV2ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.SparkArtV2ForReview=enabled;
+        if(enabled)copy.SparkArtForReview=true;
+        return copy;
+    }
+    internal GpuLook WithSparkArtForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.SparkArtForReview=enabled;
+        return copy;
+    }
+    internal bool WispArtV3ForReview { get; private set; }
+    internal bool FlameArtV3ForReview { get; private set; }
+    internal GpuLook WithFlameV3ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.FlameArtV3ForReview=enabled;
+        return copy;
+    }
+    internal GpuLook WithWispV3ForReview(bool enabled)
+    {
+        var copy=(GpuLook)MemberwiseClone();
+        copy.WispArtV3ForReview=enabled;
+        return copy;
+    }
     public bool ShowWisps { get; init; }
     public bool ShowFlame { get; init; } = true;
     public bool ShowImpactRings { get; init; } = true;
@@ -155,6 +256,13 @@ internal sealed class GpuLook
     /// <summary>Note names engraved on the white keys: 0 = none, 1 = only the Cs, 2 = every white key.</summary>
     public int KeyLabels { get; init; } = 1;
     public float ShaderKeyLight { get; init; } = .92f;
+    // Native diagnostics only: 0 production, 1 previous softbox floor, 2 independently forced-off lamp.
+    internal int KeyboardSoftboxReferenceForReview { get; private set; }
+    internal GpuLook WithKeyboardSoftboxReferenceForReview(int mode)
+    {
+        if(mode is <0 or >2)throw new ArgumentOutOfRangeException(nameof(mode));
+        var copy=(GpuLook)MemberwiseClone();copy.KeyboardSoftboxReferenceForReview=mode;return copy;
+    }
     public float ShaderShadows { get; init; } = .78f;
     public float ShaderAmbientOcclusion { get; init; } = .7f;
     public float ShaderGloss { get; init; } = .72f;
@@ -272,6 +380,7 @@ internal sealed class GpuLook
             NoteWidth = P(s.NoteWidth), NoteMinLength = (float)s.NoteMinLength, NoteGap = (float)Math.Min(s.NoteGap, 12),
             NoteRoundness = P(s.NoteRoundness), NoteEdgeWidth = P(s.NoteEdgeWidth), NoteGlow = P(s.NoteGlow), NoteTint = P(s.NoteTint),
             NoteEdge = P(s.NoteEdge), NoteHeadGlow = P(s.NoteHeadGlow), NoteRefraction = P(s.NoteRefraction), NoteTexture = P(s.NoteTexture),
+            NoteSatin = s.NoteSatin && s.NoteStyle is "Solid" or "Glass",
             Notes3D = s.Notes3D, ShowNoteLabels = s.ShowNoteLabels,
             ShowWatermark = s.ShowWatermark,
             SongFallSpeed = (float)(258 * s.NoteFallSpeed / 550), LiveFallSpeed = (float)s.NoteFallSpeed,
@@ -306,6 +415,8 @@ internal sealed class GpuLook
             ParticleSizeRandomness = P(s.ParticleSizeRandomness), ParticleGlow = P(s.ParticleGlow), EmitterSize = P(s.EmitterSize), Spiral = P(s.Spiral),
             Gravity = (float)s.Gravity, Drag = P(s.Drag), VectorField = P(s.VectorField), FieldScale = (float)Math.Max(1, s.FieldScale),
             EvolutionSpeed = P(s.EvolutionSpeed), PhysicsTimeFactor = P(s.PhysicsTimeFactor),
+            HeldParticleArt = s.HeldParticleArt || s.UpgradedParticleEffects,
+            UpgradedParticleEffects = s.UpgradedParticleEffects,
             WispAmount = (float)s.WispAmount, WispSpeed = (float)s.WispSpeed, WispHeight = P(s.WispHeight), WispWidth = P(s.WispWidth),
             WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",
