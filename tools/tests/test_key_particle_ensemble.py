@@ -36,7 +36,10 @@ class EnsembleTests(unittest.TestCase):
         try:from PIL import Image
         except ImportError:self.skipTest('Pillow required for pixel tests')
         with tempfile.TemporaryDirectory() as tmp:
-            path=Path(tmp);m=fixture()
+            path=Path(tmp);m=fixture();repo=path/'repo'
+            for name in r.SOURCES:
+                source=repo/name;source.parent.mkdir(parents=True,exist_ok=True);source.write_bytes(b'fixture')
+            m['sourceHashes']=dict.fromkeys(r.SOURCES,hashlib.sha256(b'fixture').hexdigest().upper())
             # Only two unique fake images; hardlinks bound IO while exercising every original path.
             files={}
             for c in m['captures']:
@@ -47,7 +50,11 @@ class EnsembleTests(unittest.TestCase):
                 if active in files:dest.hardlink_to(files[active])
                 else:im.save(dest);files[active]=dest
             (path/'manifest.json').write_text(json.dumps(m));out=r.verify(path)
-            (path/'manifest.json').unlink();r.verify(path,published_only=True)
+            (path/'manifest.json').unlink();r.verify(path,published_only=True,publish=(repo/'docs/evidence/key-particle-ensemble-v1',repo/'docs/previews/key-particle-ensemble-v1'))
+            import serve_key_particle_ensemble as viewer
+            viewer.build(repo,path/'viewer')
+            page=(path/'viewer/index.html').read_text()
+            self.assertNotIn('__DATA__',page);self.assertIn('192',page);self.assertIn('gen!==generation',page)
             out['sheets'][0]['panes'][0]['box']=[0,0,220,160]
             (path/'manifest.json.gz').write_bytes(gzip.compress(json.dumps(out).encode()))
             with self.assertRaisesRegex(ValueError,'provenance'):r.verify(path,published_only=True)

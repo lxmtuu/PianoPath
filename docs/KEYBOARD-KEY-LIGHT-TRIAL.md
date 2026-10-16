@@ -76,8 +76,8 @@ Kiểm tra local cuối cùng: **140 Python tests PASS** (33.443 giây), static 
 
 ## Giới hạn và việc chưa chốt
 
-Tại thời điểm viết, job Windows **build/full regression vẫn đang chạy** trong cùng run; không gọi đây là full regression xanh và chưa xác nhận lại toàn bộ historical manifests sau lần rerender này. Không dùng các lượt bị supersede trước đó để tuyên bố full pass. Hai lượt focused trước đã render thành công nhưng vướng budget publication 700,000 byte; budget hiện 1,050,000 byte, không giảm chất lượng crop để lách kiểm tra.
+Cập nhật sau duyệt ảnh: [run 38841543462](https://github.com/lxmtuu/PianoPath/actions/runs/38841543462) đã **SUCCESS toàn bộ**, gồm full regression, benchmark, galleries và distributable. Evidence refresh `d36364c` đã được kéo về. Đối chiếu freeze: **69.964 historical native pixel/frame/raw-state/geometry digests giữ nguyên, 16 families / 18 manifests**; source/revision metadata được loại riêng. Đây là full run của source `8325ae8`, không đánh đồng với lane ensemble mới chỉ chạy diagnostic. Hai lượt focused cũ render thành công nhưng fail publication budget 700.000 byte; lượt thành công dùng cap 1.050.000, không giảm chất lượng crop.
 
 Chưa kiểm app UI thực, realtime, các GPU vật lý, toàn bộ style/quality/camera pose, camera live hoặc preset đầy đủ trên máy người dùng. WARP và software native là bằng chứng cho fixture xác định, không thay cho bước đó.
 
-Bước duyệt ảnh đối chiếu đã hoàn thành với phản hồi “tớ thấy ổn rồi”. Phần còn lại là theo dõi full regression và thử app Windows build mới với Key light 0 → 10 → 25 → 100. Kỳ vọng highlight đèn chính biến mất ở 0, phần còn lại có thể còn sáng do ambient/rim/emission. Chưa tự promote thay đổi thiết kế/particle khác; giữ Settings UI ở giai đoạn cuối đã thống nhất.
+Bước duyệt ảnh đối chiếu đã hoàn thành với phản hồi “tớ thấy ổn rồi”. Full regression đã hoàn thành; phần còn lại là thử app Windows build mới với Key light 0 → 10 → 25 → 100. Kỳ vọng highlight đèn chính biến mất ở 0, phần còn lại có thể còn sáng do ambient/rim/emission. Chưa tự promote thay đổi thiết kế/particle khác; giữ Settings UI ở giai đoạn cuối đã thống nhất.
