@@ -1139,7 +1139,7 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'bin/Release/net10.0-windows/PianoPath.exe'
-          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive', 'PrismFlowPreview')
+          $presets = @('ConcertGold', 'NeonViolet', 'TwoHands', 'ClassicRoll', 'GreenScreen', 'Inferno', 'IceCrystal', 'SakuraNocturne', 'MoonlightSonata', 'AuroraRainbow', 'OceanDepths', 'GalaxyVoyage', 'ElectricStorm', 'RetroArcade', 'EmberRain', 'Lo-FiStudy', 'SunsetDrive', 'PrismFlowPreview', 'PrismFlow-Wisps', 'PrismFlow-Flames')
           $work = Join-Path $env:TEMP 'keyflow-gallery'
           Remove-Item -Recurse -Force $work -ErrorAction SilentlyContinue
           New-Item -ItemType Directory -Force -Path $work | Out-Null

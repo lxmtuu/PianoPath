@@ -835,7 +835,7 @@ internal sealed partial class GpuStageSimulation
             if (look.HeldParticleArt && (p.Wisp || p.Shape == Shape.Flame))
             {
                 if (HeldParticleAppearance.TryResolve(p.Wisp, p.Size, p.Age, p.Life, p.Phase, p.Glow,
-                    p.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.WispArtV3ForReview, look.FlameArtV3ForReview) && surface.Color.W > .003f)
+                    p.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.UseWispArtV3, look.UseFlameArtV3) && surface.Color.W > .003f)
                 {
                     var px = x;
                     if (p.Wisp)
@@ -899,7 +899,7 @@ internal sealed partial class GpuStageSimulation
                                 : halo?MeltParticleAppearance.HaloKind:body?MeltParticleAppearance.BodyKind:MeltParticleAppearance.GlintKind;
                             q.Color=halo?MeltParticleAppearance.Halo(melt):body?melt:MeltParticleAppearance.Glint(melt);
                         }
-                    if(ReleaseParticleAppearance.Eligible(look.ReleaseArtForReview,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                    if(ReleaseParticleAppearance.Eligible(look.UseReleaseArt,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
                         && ReleaseParticleAppearance.TryColor(p.MaterialRoute,p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var release))
                         for(var j=firstSplashSprite;j<sprites.Count;j++)
                         {
@@ -972,7 +972,7 @@ internal sealed partial class GpuStageSimulation
                     if(DustParticleAppearance.Eligible(look.DustArtForReview && look.ImpactBurst=="Dust",(int)p.Shape,p.Wisp)
                         && DustParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var dust,look.DustArtV2ForReview))
                     {kind=look.DustArtV2ForReview?DustParticleAppearance.V2Kind:DustParticleAppearance.Kind;color=dust;}
-                    if(ReleaseParticleAppearance.Eligible(look.ReleaseArtForReview,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                    if(ReleaseParticleAppearance.Eligible(look.UseReleaseArt,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
                         && ReleaseParticleAppearance.TryColor(p.MaterialRoute,p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var smoke))
                     {kind=ReleaseParticleAppearance.StageKind(p.MaterialRoute,0,look.ReleaseFrontLayerForReview);color=smoke;}
                     sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, kind), Color = color, Dir = new Vector4(0, -1, 0, u) });

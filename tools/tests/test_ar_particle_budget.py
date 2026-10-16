@@ -68,12 +68,14 @@ class BudgetTests(unittest.TestCase):
                 self.assertEqual(data,r.read(path/'manifest.json.gz'));self.assertEqual(data,r.read(path/'manifest.json'));return data
             with patch.object(viewer.review,'verify',side_effect=validate_copy) as check:viewer.build(repo,output)
             check.assert_called_once();self.assertIn('Trial mặc định tắt',(output/'index.html').read_text())
-    def test_only_review_flag_controls_the_new_policy(self):
+    def test_review_override_and_persisted_opt_in_are_separate(self):
         root=Path(__file__).resolve().parents[2]
         look=(root/'Gpu/GpuLook.cs').read_text();layer=(root/'Gpu/GpuArLayer.Effects.cs').read_text()
         self.assertIn('ArFairParticleBudgetForReview { get; private set; }',look)
         self.assertNotIn('ArFairParticleBudgetForReview = s.',look)
         self.assertIn('private const int MaxProjectedParticles = 192',layer)
-        self.assertIn('look.ArFairParticleBudgetForReview || ObserveBudgetForReview is not null',layer)
+        self.assertIn('look.UseFairArParticleBudget || ObserveBudgetForReview is not null',layer)
+        self.assertIn('UseFairArParticleBudget => UpgradedParticleEffects || ArFairParticleBudgetForReview',look)
+        self.assertIn('UpgradedParticleEffects = s.UpgradedParticleEffects',look)
         self.assertIn('selected.Sort()', (root/'Gpu/ArParticleBudget.cs').read_text())
 if __name__=='__main__':unittest.main()

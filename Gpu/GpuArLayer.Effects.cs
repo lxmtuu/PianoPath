@@ -389,11 +389,11 @@ internal sealed partial class GpuArLayer
     private readonly GpuInstanceList<GpuArQuad> _budgetQuads=new(1024);
     private readonly List<GpuArParticle> _budgetParticles=[];
 
-    private void BuildBudgetTrial(ArView view,GpuStageSimulation simulation,GpuInstanceList<GpuArQuad> quads,
+    private void BuildBudgetSelection(ArView view,GpuStageSimulation simulation,GpuInstanceList<GpuArQuad> quads,
         float opacity,GpuLook look,KeyboardLayout layout,ArCameraPose pose,ArParticleFrame frame,bool legacyAxes)
     {
         _budgetQuads.Clear();_budgetParticles.Clear();
-        // Evaluate the SAME projectability/alpha gate once, before allocation. No trial material/geometry changes.
+        // Evaluate the same projectability/alpha gate once, before allocation; reuse exact quads.
         for(var pass=0;pass<2;pass++)
             for(var i=simulation.ArParticleCount-1;i>=0;i--)
             {
@@ -406,10 +406,10 @@ internal sealed partial class GpuArLayer
                     if(_budgetQuads.Count!=before)throw new InvalidOperationException("Rejected budget candidate appended geometry.");
                     continue;
                 }
-                if(_budgetQuads.Count!=before+1)throw new InvalidOperationException("Budget trial expects one existing quad per particle.");
+                if(_budgetQuads.Count!=before+1)throw new InvalidOperationException("Budget selection expects one existing quad per particle.");
                 _budgetParticles.Add(p);
             }
-        var fair=look.ArFairParticleBudgetForReview;
+        var fair=look.UseFairArParticleBudget;
         var selected=fair?ArParticleBudget.Select(_budgetParticles.Select(p=>new ArParticleBudget.Candidate(p.Pitch,p.Origin)).ToArray(),MaxProjectedParticles)
             :Enumerable.Range(0,Math.Min(MaxProjectedParticles,_budgetParticles.Count)).ToArray();
         var start=quads.Count;
@@ -428,9 +428,9 @@ internal sealed partial class GpuArLayer
         ArNoteDirection direction, bool legacyAxes)
     {
         var frame = legacyAxes ? ArParticleFrame.Legacy : ArParticleFrame.ForNotes(direction);
-        if(look.ArFairParticleBudgetForReview || ObserveBudgetForReview is not null)
+        if(look.UseFairArParticleBudget || ObserveBudgetForReview is not null)
         {
-            BuildBudgetTrial(view,simulation,quads,opacity,look,layout,pose,frame,legacyAxes);return;
+            BuildBudgetSelection(view,simulation,quads,opacity,look,layout,pose,frame,legacyAxes);return;
         }
         var emitted = 0;
         // Draw impact and release bursts before continuous emitters when the AR tier's per-frame fill cap is reached.
@@ -472,7 +472,7 @@ internal sealed partial class GpuArLayer
         if (look.HeldParticleArt && (particle.Wisp || particle.Shape == ParticleFlame))
         {
             if (!HeldParticleAppearance.TryResolve(particle.Wisp, particle.Size, particle.Age, particle.Life,
-                particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.WispArtV3ForReview, look.FlameArtV3ForReview)
+                particle.Phase, particle.Glow, particle.Color, look.WispWidth, look.FlameNoteColor, out var surface, look.UseWispArtV3, look.UseFlameArtV3)
                 || (legacyAxes && !ArParticleBillboard.TryFacing(pose, center, out faceX, out faceY))) return false;
             var halfWidth = surface.HalfWidth * unit; var halfHeight = surface.HalfHeight * unit;
             var surfaceCenter = center + faceY * (surface.BaseAnchored ? halfHeight : 0);
@@ -627,7 +627,7 @@ internal sealed partial class GpuArLayer
             color=new Vector3(bounce.X,bounce.Y,bounce.Z);alpha=bounce.W*opacity;
             materialKind=BounceParticleAppearance.Kind;
         }
-        if(ReleaseParticleAppearance.Eligible(look.ReleaseArtForReview,particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute)
+        if(ReleaseParticleAppearance.Eligible(look.UseReleaseArt,particle.Shape,particle.Wisp,particle.Origin,particle.MaterialRoute)
             && ReleaseParticleAppearance.TryColor(particle.MaterialRoute,particle.Color,particle.Age,particle.Life,particle.Glow,look.ParticleGlow,out var release))
         {
             color=new Vector3(release.X,release.Y,release.Z);alpha=release.W*opacity;

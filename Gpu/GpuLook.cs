@@ -87,7 +87,14 @@ internal sealed class GpuLook
     // ---- particles ----
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
-    /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
+    /// <summary>Persisted user opt-in, shared by GPU Stage/AR and their recordings.
+    /// Only the accepted held/release materials and fixed-cap AR allocation are included.</summary>
+    public bool UpgradedParticleEffects { get; init; }
+    internal bool UseWispArtV3 => UpgradedParticleEffects || WispArtV3ForReview;
+    internal bool UseFlameArtV3 => UpgradedParticleEffects || FlameArtV3ForReview;
+    internal bool UseReleaseArt => UpgradedParticleEffects || ReleaseArtForReview;
+    internal bool UseFairArParticleBudget => UpgradedParticleEffects || ArFairParticleBudgetForReview;
+    /// <summary>Independent diagnostic opt-in; production uses UseFairArParticleBudget.</summary>
     // Explicit diagnostic only; never persisted or enabled by settings/presets.
     internal bool ArFairParticleBudgetForReview { get; private set; }
     internal GpuLook WithArFairParticleBudgetForReview(bool enabled)
@@ -408,7 +415,8 @@ internal sealed class GpuLook
             ParticleSizeRandomness = P(s.ParticleSizeRandomness), ParticleGlow = P(s.ParticleGlow), EmitterSize = P(s.EmitterSize), Spiral = P(s.Spiral),
             Gravity = (float)s.Gravity, Drag = P(s.Drag), VectorField = P(s.VectorField), FieldScale = (float)Math.Max(1, s.FieldScale),
             EvolutionSpeed = P(s.EvolutionSpeed), PhysicsTimeFactor = P(s.PhysicsTimeFactor),
-            HeldParticleArt = s.HeldParticleArt,
+            HeldParticleArt = s.HeldParticleArt || s.UpgradedParticleEffects,
+            UpgradedParticleEffects = s.UpgradedParticleEffects,
             WispAmount = (float)s.WispAmount, WispSpeed = (float)s.WispSpeed, WispHeight = P(s.WispHeight), WispWidth = P(s.WispWidth),
             WispTurbulence = P(s.WispTurbulence), WispGlow = P(s.WispGlow),
             FlameIntensity = P(s.FlameIntensity), FlameHeight = P(s.FlameHeight), FlameNoteColor = s.FlameColorMode == "Note",

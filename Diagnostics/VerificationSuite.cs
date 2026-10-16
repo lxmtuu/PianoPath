@@ -322,6 +322,7 @@ internal static partial class VerificationSuite
 
     private static void VerifyVisualSettings()
     {
+        VerifyUpgradedParticleEffectsSettings();
         // Automated runs must not write to the folder that holds the user's own look and presets.
         var realDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Keyflow");
         Assert(!string.Equals(Path.GetFullPath(PianoVisualSettingsStore.SettingsDirectory), Path.GetFullPath(realDirectory), StringComparison.OrdinalIgnoreCase)

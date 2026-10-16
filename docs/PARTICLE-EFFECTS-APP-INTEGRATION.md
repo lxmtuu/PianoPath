@@ -1,0 +1,45 @@
+# Accepted particle effects — application integration
+
+## Scope
+
+The user selected **“Đưa hiệu ứng đã duyệt vào app”** after accepting the AR allocation balance and reporting that their own testing was complete. This implementation connects those accepted effects to normal application settings; it does not start the final Settings redesign or promote every experimental effect.
+
+The persisted opt-in is `PianoVisualSettings.UpgradedParticleEffects` (default `false`). Old files without the property and existing presets retain their old look. This is a real application control, not a diagnostic launch flag.
+
+## How to use
+
+On the **Particles** page, enable **Upgraded particle effects** / **Hiệu ứng hạt nâng cấp**. It applies to both GPU Live Stage and AR, including the GPU look snapshot used by recording/export. No need to run `--verify` or edit JSON.
+
+Alternatively apply either embedded community preset:
+
+- **Prism Flow - Wisps**: Embers + Wisps + Shatter + Float Up.
+- **Prism Flow - Flames**: Splash + Flames + Melt + Dissolve.
+
+These use the accepted ensemble recipe settings. Preset application retains the existing machine-local camera/calibration and AR configuration through the normal `CopyFrom` path; it does not turn AR on, change MIDI/audio routing or pick a different graphics backend. The existing `Prism Flow Preview` palette-only preset remains particle-off.
+
+The option changes **appearance and AR selection**, not channel enablement: existing sparks/Wisps/Flames/release switches, intensities and styles still decide what is emitted. For example, choose Smoke in the existing release control to use the approved Smoke material. Turning the option off restores classic rendering/selection, or the older held-v2 material if the user's existing `HeldParticleArt` option was already true. The underlying legacy setting is not overwritten.
+
+## Runtime wiring
+
+`GpuLook.From` snapshots the persisted option, enables the shared held-material path when opted in and exposes four effective policies:
+
+| Policy | Effect |
+| --- | --- |
+| `UseWispArtV3` | Approved Wisps v3 surface in Stage/AR |
+| `UseFlameArtV3` | Approved Flames v3 surface in Stage/AR |
+| `UseReleaseArt` | Approved Float Up/Dissolve/Smoke material routes |
+| `UseFairArParticleBudget` | Accepted role/pitch allocation, still capped at 192, AR only |
+
+The existing independent diagnostic opt-ins are preserved. Ordinary application settings do not set those private flags. Stage and AR packers read the same effective material policies; AR reads the effective allocation policy. A setting change publishes a new immutable look, not a mutable settings reference to the render thread. Persistence, clone, presets and share codes carry the new Boolean through the existing settings serializer/copy path.
+
+No births, RNG, trajectories, source artwork, alpha, key-light curve, cap, shader or depth values were changed in this integration. Burst/morph materials remain shipping classic; separate Shatter/Melt/Bounce depth/billboard experiments remain off. WPF/software rendering stays classic, as stated in the control tooltip and preset descriptions. This is not a claim of software/GPU visual parity.
+
+Only a small card/control was added to the existing Particles page, with VI/EN labels, search metadata, accessibility name and the normal setting-change/save machinery. Navigation, page grouping, camera controls and the later Settings redesign are untouched.
+
+## Verification status
+
+The earlier trial evidence remains frozen at its recorded source; see [AR allocation trial](AR-PARTICLE-BUDGET-TRIAL.md). It must not be relabelled as evidence generated from this integration.
+
+Per the user's request, **no new native render run, performance measurement or full regression was launched for this integration**. No new Windows build/runtime success is claimed. A future verification run has explicit contracts for old-file defaults, JSON/clone/share/apply persistence, both output snapshots, turning the option off, snapshot immutability, shelf availability and exclusion of unselected experimental flags. The existing source contract for the AR budget was updated to recognize the separate persisted opt-in. These added/updated checks have not been executed in this step.
+
+Source-only checks (`tools/check_sources.py`) and whitespace inspection were used for implementation hygiene; they do not constitute a new native/runtime regression or a Windows build.

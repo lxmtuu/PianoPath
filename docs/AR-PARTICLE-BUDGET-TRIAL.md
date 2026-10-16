@@ -1,5 +1,7 @@
 # AR fixed-cap selection trial — default off
 
+**Later integration:** the accepted policy is now available through the explicit application option and two community presets described in [app integration](PARTICLE-EFFECTS-APP-INTEGRATION.md). The diagnostic flags remain separate; this report and its source/evidence describe the earlier trial, not a new capture of the integrated app.
+
 ## Status and evidence
 
 The ensemble review exposed existing AR starvation: a dense held chord could use all 192 particle slots for impact/morph, leaving no held particles selected. This trial changes **selection policy**, not particle artwork. It is deliberately separate from the approved held/release materials and stays **default off**. No Settings, presets, density, brightness, physics, Stage depth, or shipping default was promoted.

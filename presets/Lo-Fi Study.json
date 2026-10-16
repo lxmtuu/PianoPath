@@ -35,6 +35,7 @@
     "ShowStars": false,
     "ShowWisps": false,
     "HeldParticleArt": false,
+    "UpgradedParticleEffects": false,
     "ShowImpactRings": false,
     "ShowLightBeams": false,
     "ShowNoteLabels": false,

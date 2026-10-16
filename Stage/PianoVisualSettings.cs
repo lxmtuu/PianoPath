@@ -72,6 +72,9 @@ internal sealed class PianoVisualSettings
     public bool ShowWisps { get; set; } = false;
     /// <summary>Experimental shared wisps/flames surfaces. GPU Stage/AR only; legacy false, no menu control yet.</summary>
     public bool HeldParticleArt { get; set; } = false;
+    /// <summary>Opt-in approved GPU held/release materials and balanced AR particle selection.
+    /// Shared by Live Stage/AR; false preserves existing looks and the legacy HeldParticleArt option.</summary>
+    public bool UpgradedParticleEffects { get; set; } = false;
     public bool ShowImpactRings { get; set; } = true;
     public bool ShowLightBeams { get; set; } = false;
     public bool ShowNoteLabels { get; set; } = false;

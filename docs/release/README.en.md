@@ -31,6 +31,8 @@ radiation, acoustic resonance waves drift, a flame burns at the impact point and
 never holds up MIDI input; the WPF software renderer is only the fallback for when Direct3D cannot start
 (see [Stage & visual effects](#stage--visual-effects)).
 
+**Accepted effects (current source):** enable Particles → **Upgraded particle effects**, or apply **Prism Flow - Wisps / Prism Flow - Flames**, for shared GPU Live Stage/AR held/release materials and balanced AR cap 192. Existing presets stay unchanged; software rendering remains classic.
+
 The pictures below are **rendered by the application itself** in CI (`--snapshot`) and refreshed in
 `docs/previews/` automatically — they are not staged artwork:
 

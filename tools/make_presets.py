@@ -141,9 +141,42 @@ PRESETS: list[dict] = [
     },
 ]
 
+# Accepted ensemble recipes, now reachable without diagnostic flags. Applying a shelf look
+# preserves machine-local AR calibration, camera, MIDI/audio routing and GPU preferences.
+for _name, _burst, _held, _morph, _release in (
+    ("Prism Flow - Wisps", "Embers", "Wisps", "Shatter", "Float Up"),
+    ("Prism Flow - Flames", "Splash", "Flames", "Melt", "Dissolve"),
+):
+    PRESETS.append({
+        "name": _name,
+        "description": "Approved held/release materials for GPU Live Stage and AR, with balanced AR cap 192. Other burst/morph artwork stays classic; software rendering stays classic.",
+        "settings": {
+            **PRESETS[0]["settings"],
+            "UpgradedParticleEffects": True,
+            "ShowNotes": True, "ShowHalo": True, "ShowEmbers": True,
+            "ShowWisps": _held == "Wisps", "ShowFlame": _held == "Flames",
+            "WispAmount": 32, "WispHeight": 35, "WispSpeed": 100,
+            "FlameIntensity": 70, "FlameHeight": 45, "FlameColorMode": "Note",
+            "ImpactBurst": _burst, "ImpactMorph": _morph, "ImpactMorphIntensity": 70,
+            "ReleaseEffect": _release, "ReleaseIntensity": 70,
+            "ParticleAmount": 18, "ParticleResponse": 55, "ParticleVelocity": 170,
+            "ParticleSpeed": 100, "ParticleSpread": 38, "ParticleLife": .7, "ParticleSize": 1.8,
+            "ParticleLifeRandomness": 0, "ParticleSizeRandomness": 0, "ParticleRandomness": 0,
+            "ParticleGlow": 65, "Gravity": 180, "Drag": 32, "Spiral": 0, "EmitterSize": 8,
+            "ShowImpactFlash": False, "ShowImpactRings": False, "ImpactWave": "None",
+            "ShaderKeyLight": 100, "ShaderRimLight": 62, "ShaderEmissive": 149, "ShaderGloss": 92,
+            "ShaderCameraTilt": 38, "ShaderShadows": 46, "ShaderAmbientOcclusion": 52,
+            "BloomIntensity": 35, "BackgroundMode": "Solid", "BackgroundColor": "#10141B",
+            "KeyLabels": "None", "HorizonGlow": 0, "PedalGlow": True,
+            "HoldBar": False, "HoldElectricArc": False, "PhysicsTimeFactor": 100,
+        },
+    })
+
+
 # Community looks are also assembled from a quiet, explicit visual baseline rather than inheriting
 # whatever a future model-default happens to turn on. Each recipe opts into its own effects below.
 COMMUNITY_BASE: dict[str, object] = {
+    "UpgradedParticleEffects": False,
     "ShowBackground": True, "ShowNotes": True, "ShowKeys": True, "ShowKeyShadow": True,
     "BackgroundMode": "Solid", "BackgroundColor": "#080B12", "BackgroundGradient": False, "BackgroundGuide": False, "BackgroundDim": 28,
     "BackgroundMotion": "None", "BackgroundMotionAmount": 0, "BackgroundMotionSpeed": 18, "BackgroundMotionColor": "#8A9AAD",

@@ -414,6 +414,9 @@ public partial class MainWindow
 
     private void BuildParticlesPage()
     {
+        var appearance = Card(ParticleSettingsHost, "PARTICLE APPEARANCE", "Shared held and release appearance for Live Stage and AR.");
+        Toggle(appearance, "Upgraded particle effects", nameof(PianoVisualSettings.UpgradedParticleEffects), "Use approved Wisps/Flames and Float Up/Dissolve/Smoke materials in GPU Live Stage and AR, with balanced AR cap 192. Existing effect switches still apply. Software rendering stays classic.");
+
         var sparks = Card(ParticleSettingsHost, "SPARKS · EMITTER", "Impact bursts with a lighter stream of sparks while notes are held.");
         Toggle(sparks, "Enable sparks", nameof(PianoVisualSettings.ShowEmbers), "Enable impact bursts and the sustained note spark emitter.");
         SliderRow(sparks, "Amount", nameof(PianoVisualSettings.ParticleAmount), 0, 120, "Particles per impact and rate of the held-key emitter.");

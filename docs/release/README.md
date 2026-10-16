@@ -22,6 +22,8 @@
 
 Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đàn, luyện tập và làm video piano theo MIDI** với chất lượng trình diễn hoà nhạc. Giao diện có **hai ngôn ngữ — English và Tiếng Việt** — đổi ngay trong ứng dụng, không cần khởi động lại (xem [Đa ngôn ngữ](#đa-ngôn-ngữ)). Sân khấu mặc định là một hội trường tối: nốt rơi theo thời gian, bàn phím 88 phím đổ bóng bằng shader mô phỏng mô hình Unreal (GGX + softbox + ACES), tia lửa nóng sáng nguội dần theo bức xạ nhiệt, sóng cộng hưởng âm học, lửa tại điểm phím gõ và các lớp không khí (bụi acoustic, cánh hoa, đèn sân khấu) có thể bật riêng. Sân khấu ấy do một **engine GPU Direct3D 11** vẽ trên luồng riêng — HDR 16-bit, bloom nhiều tầng, tới 240 FPS và không bao giờ làm chậm đầu vào MIDI; bộ dựng hình WPF chỉ còn là đường dự phòng khi Direct3D không khởi động được (xem [Sân khấu & hiệu ứng hình ảnh](#sân-khấu--hiệu-ứng-hình-ảnh)).
 
+**Hiệu ứng đã duyệt (mã nguồn hiện tại):** vào Particles → **Hiệu ứng hạt nâng cấp**, hoặc chọn preset **Prism Flow - Wisps / Prism Flow - Flames** để dùng vật liệu held/release chung cho GPU Live Stage và AR cùng cách chia cap AR 192. Preset cũ không tự đổi; renderer phần mềm giữ classic.
+
 Ảnh dưới đây do **chính ứng dụng render** trong CI (`--snapshot`) với `--lang=vi`, nằm trong `docs/previews/vi/` và được cập nhật tự động — không phải ảnh dàn dựng (bản tiếng Anh có bộ ảnh riêng ở `docs/previews/en/`):
 
 ![Keyflow live piano stage](docs/previews/vi/stage-live.png)
