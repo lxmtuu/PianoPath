@@ -57,6 +57,22 @@ class KeyboardKeyLightTests(unittest.TestCase):
             r.verify(path,revision='synthetic')
             (path/'manifest.json').unlink();m=r.verify(path,published_only=True)
             self.assertEqual(10,len(m['sheets']))
+            # Viewer-derived pairs/ramps remain exact crops of the publication (not render evidence).
+            from unittest.mock import patch
+            import shutil,serve_keyboard_key_light as viewer
+            repo=path/'repo';e=repo/'docs/evidence/keyboard-key-light-v1';v=repo/'docs/previews/keyboard-key-light-v1'
+            e.mkdir(parents=True);v.mkdir(parents=True)
+            shutil.copyfile(path/'manifest.json.gz',e/'manifest.json.gz')
+            for sheet in m['sheets']:shutil.copyfile(path/sheet['file'],v/sheet['file'])
+            with patch.object(viewer.review,'verify',return_value=m):viewer.build(repo,path/'viewer')
+            for sheet in m['sheets']:
+                if '-ar-' in sheet['file']:continue
+                pair=Image.open(path/'viewer/pairs'/sheet['file'])
+                for i,pane in enumerate(sheet['panes'][:2]):
+                    self.assertEqual(pane['hash'],r.digest(pair.crop((i*220,0,(i+1)*220,pane['height']))))
+            page=(path/'viewer/index.html').read_text()
+            self.assertNotIn('__DATA__',page);self.assertIn('Ép đèn tắt',page);self.assertIn('gen!==generation',page)
+
             changed=copy.deepcopy(m);changed['sheets'][0]['panes'][0]['box']=[0,0,220,120]
             (path/'manifest.json').write_text(json.dumps(changed))
             with self.assertRaisesRegex(ValueError,'provenance'):r.verify(path,published_only=True)
