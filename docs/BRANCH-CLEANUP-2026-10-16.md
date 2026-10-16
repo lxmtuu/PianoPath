@@ -125,7 +125,23 @@ nguồn còn đúng cây tài liệu mà trang công khai đáng lẽ phải nh�
    **tag và gói**, còn đây chỉ là văn bản ghi chú của một bản đã bị 2.1.1 thay thế; vẫn nên ghi lại nếu sửa.
 3. **Chấp nhận link gãy** của một bản pre‑2.1 đã bị thay thế, rồi xoá cả hai nhánh (SHA ở bảng trên).
 
-Chưa làm gì thêm cho tới khi chọn — đó là lý do hai nhánh này vẫn còn.
+**Đã chọn (2026‑10‑17, chủ repo): cách 1 — đăng lại cây sang KeyFlow.** Kiểm tra lần cuối trước khi
+chuyển lệnh cho chủ repo: `44a716b` là **root commit, 0 cha**, 40 tệp thuần tài liệu, có đúng
+`CHANGELOG.md` + `CHANGELOG.en.md` **ở gốc cây** — khớp từng ký tự với đường dẫn của hai link gãy, và
+đẩy nhánh này sang KeyFlow không mang theo bất kỳ commit nguồn nào.
+
+Phiên agent thử đẩy một lần nữa ngày 2026‑10‑17 và **vẫn 403**, với một chi tiết đáng ghi: trường
+`permissions` của `GET /repos/lxmtuu/KeyFlow` báo `push:true, admin:true`, nhưng **cả hai đường viết
+thật** đều bị từ chối — REST `POST /repos/lxmtuu/KeyFlow/git/refs` → 403 `Resource not accessible by
+integration`, và `git push` HTTPS (kể cả với username `x-access-token`) → 403 `Permission to
+lxmtuu/KeyFlow.git denied`. Bài học: metadata `permissions` không phải bằng chứng; phép thử viết thật
+mới là bằng chứng — giống hệt lần xoá 4 nhánh ở §3.
+
+**Trạng thái: chờ chủ repo chạy lệnh của cách 1 trên máy của mình** (một lệnh, như lần §3). Sau khi
+nhánh tồn tại bên KeyFlow — kiểm bằng `GET /repos/lxmtuu/KeyFlow/contents/CHANGELOG.md?ref=release/public-v2.0.0`
+và `VERSION` phải đọc ra `2.0.0` — thì **xoá được cả hai nhánh mồ côi bên kho nguồn mà không mất gì**:
+cây v2.0.0 sống trên KeyFlow dưới **đúng SHA `44a716b`**; cây v2.0.1 đã sống trên KeyFlow dưới
+`e9a5fab6` (trước khi xoá `c84b9aca` thì so cây của hai commit đó một lần cho chắc).
 
 ## 3. Đã xoá — 4 nhánh bản nháp trong kho **phát hành công khai** `lxmtuu/KeyFlow`
 
