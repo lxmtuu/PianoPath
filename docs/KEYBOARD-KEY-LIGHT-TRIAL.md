@@ -39,7 +39,7 @@ Các kiểm tra native và kiểm chứng PNG đã qua:
 
 ### Số đo 0% từ ảnh native
 
-Trung bình ba kênh RGB **đã encode** trong ROI: GPU `(0,240)–(640,360)`, software toàn band 640×128. Không phải lux, radiance tuyến tính, hay thước đo để so chéo renderer.
+Trung bình ba kênh RGB **đã encode** trong ROI: GPU `(20,240)–(620,360)`, software `(20,0)–(620,128)` (bỏ 20px mỗi mép ngang). Không phải lux, radiance tuyến tính, hay thước đo để so chéo renderer.
 
 | Renderer / cảnh | Phím | Reference 0% | Production 0% |
 |---|---|---:|---:|

@@ -54,6 +54,18 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
+        if (args.Contains("--verify-key-ensemble-only"))
+        {
+            try
+            {
+                if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("Ensemble review requires --verify-review-out=<directory>.");
+                var count=KeyParticleEnsembleReview.Render(reviewOutput);
+                Results.Add($"PASS key-particle ensemble: {count} native checkpoints, real live down/up/impact and independent pedal; raw/normalized geometry/key guards, main-light/AR invariance. Static integration slice, not full regression/performance or art acceptance.");
+                Finish(app,args,null);
+            }
+            catch(Exception ex){Finish(app,args,ex);}
+            return;
+        }
         if (args.Contains("--verify-key-light-only"))
         {
             try
