@@ -40,7 +40,11 @@ Only a small card/control was added to the existing Particles page, with VI/EN l
 
 The earlier trial evidence remains frozen at its recorded source; see [AR allocation trial](AR-PARTICLE-BUDGET-TRIAL.md). It must not be relabelled as evidence generated from this integration.
 
-Per the user's request, **no new native render run, performance measurement or full regression was launched for this integration**. No new Windows build/runtime success is claimed. A future verification run has explicit contracts for old-file defaults, JSON/clone/share/apply persistence, both output snapshots, turning the option off, snapshot immutability, shelf availability and exclusion of unselected experimental flags. The existing source contract for the AR budget was updated to recognize the separate persisted opt-in. These added/updated checks have not been executed in this step.
+The initial integration commit `9f6511f` did not create a Windows build. The subsequent compile/package-only run [38856662037](https://github.com/lxmtuu/PianoPath/actions/runs/38856662037) is **SUCCESS** at source `f5d201e064b95f279d38693ed90a0355a0dadffa`: static source checks and self-contained Windows x64 publishing passed. Native capture, Python/.NET test suites, performance measurement and the full runtime regression were explicitly skipped, in accordance with the user's request. Build success is not a new runtime/visual acceptance claim.
+
+[Download the private integration artifact](https://github.com/lxmtuu/PianoPath/actions/runs/38856662037/artifacts/12027432990): `keyflow-app-win-x64`, 70,953,281 compressed bytes, seven-day retention. Extract it and run `PianoPath.exe`; the .NET runtime is bundled. `BUILD-INFO.txt` records the source SHA and executable SHA-256. This is an unsigned branch build, not an installer or a public release; no release tag was created.
+
+Future verification contracts cover old-file defaults, JSON/clone/share/apply persistence, both output snapshots, turning the option off, snapshot immutability, shelf availability, exclusion of unselected experimental flags, continuous export replay and planned scene time. These runtime/test contracts have not been executed in this step.
 
 Source-only checks (`tools/check_sources.py`) and whitespace inspection were used for implementation hygiene; they do not constitute a new native/runtime regression or a Windows build.
 
