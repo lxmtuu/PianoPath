@@ -51,6 +51,68 @@ jobs:
           # The optional 748 MB Salamander library is downloaded by the app after installation; no Git LFS objects are needed.
           lfs: false
 
+      # Validate the source-free document tree first; no package build is needed to diagnose staging.
+      # Public documents must be reviewable, generated and source-free, but preparing them must
+      # not destroy the source checkout or the packages that the public publisher still needs.
+      # An isolated index computes a tree; only the separate public repository receives a root commit.
+      - name: Prepare the public release tree without changing the source checkout
+        id: public_branch
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          try {
+            # Native commands report failure through $LASTEXITCODE; check each one explicitly.
+            if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
+              $PSNativeCommandUseErrorActionPreference = $false
+            }
+            $tag = $env:RELEASE_TAG
+            $branch = "release/public-$tag"
+            $staging = Join-Path $env:RUNNER_TEMP 'public-release'
+
+            # Nothing here is guessed: docs/release is committed (the checker compares it with its generator),
+            # and docs/previews is what the render steps above put into the working tree.
+            if (-not (Test-Path 'docs/release/README.md')) { throw 'docs/release is missing; run tools/make_public_docs.py and commit the result' }
+            if (-not (Test-Path 'docs/previews')) { throw 'docs/previews is missing; the README pictures would not resolve on the public page' }
+
+            Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
+            New-Item -ItemType Directory -Path $staging | Out-Null
+            Copy-Item 'docs/release/*' $staging -Recurse -Force
+            Copy-Item 'docs/previews' (Join-Path $staging 'docs/previews') -Recurse -Force
+
+            # A public branch may never carry source code. tools/check_sources.py asserts the same list against
+            # the committed docs/release tree; this one covers the previews and anything a future copy list adds.
+            $forbidden = @('.cs', '.xaml', '.csproj', '.sln', '.iss', '.ps1', '.py', '.hlsl', '.sf2', '.yml')
+            $bad = @(Get-ChildItem $staging -Recurse -File -Force | Where-Object { $forbidden -contains $_.Extension })
+            if ($bad.Count -gt 0) { throw "the public tree would publish source file(s): $($bad.FullName -join ', ')" }
+
+            # Build a document-only tree in an isolated index. Never checkout an orphan branch,
+            # delete the source worktree, or remove the publish/ and installer/ packages needed below.
+            # No auxiliary branch is created or pushed in the private source repository.
+            $savedIndex = $env:GIT_INDEX_FILE
+            $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP 'public-release.index'
+            Remove-Item $env:GIT_INDEX_FILE -Force -ErrorAction SilentlyContinue
+            try {
+              $gitDirectory = Join-Path $env:GITHUB_WORKSPACE '.git'
+              git -C $staging --git-dir=$gitDirectory --work-tree=$staging read-tree --empty
+              if ($LASTEXITCODE -ne 0) { throw 'could not initialize the public index' }
+              git -C $staging --git-dir=$gitDirectory --work-tree=$staging add --all -- .
+              if ($LASTEXITCODE -ne 0) { throw 'could not stage public documents' }
+              $tree = "$(git -C $staging --git-dir=$gitDirectory write-tree)".Trim()
+              if ($LASTEXITCODE -ne 0 -or -not $tree) { throw 'could not compute the public release tree' }
+            } finally {
+              $env:GIT_INDEX_FILE = $savedIndex
+            }
+            Add-Content -Path $env:GITHUB_OUTPUT -Value "expected_tree=$tree" -Encoding utf8
+            @('# Public release tree', '', "Document-only tree: ``$tree``.",
+              'The source checkout and packages are intact; no private release-documents branch is pushed.',
+              'The public publisher below may publish these generated documents to the separate public repository.') |
+              Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          } catch {
+            $detail = "$($_.Exception.Message) | $($_.InvocationInfo.PositionMessage)" -replace '%', '%25' -replace "`r", '%0D' -replace "`n", '%0A'
+            "::error title=Public release tree::$detail"
+            throw
+          }
+
       - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: 10.0.x
@@ -223,61 +285,6 @@ jobs:
             travel there (<https://github.com/${{ steps.notes.outputs.public_repository }}/releases>); the
             links above point at whichever copy a reader without access here can open.
           generate_release_notes: true
-
-      # Public documents must be reviewable, generated and source-free, but preparing them must
-      # not destroy the source checkout or the packages that the public publisher still needs.
-      # An isolated index computes a tree; only the separate public repository receives a root commit.
-      - name: Prepare the public release tree without changing the source checkout
-        id: public_branch
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          # Native commands report failure through $LASTEXITCODE; check each one explicitly.
-          if (Get-Variable -Name PSNativeCommandUseErrorActionPreference -ErrorAction SilentlyContinue) {
-            $PSNativeCommandUseErrorActionPreference = $false
-          }
-          $tag = $env:RELEASE_TAG
-          $branch = "release/public-$tag"
-          $staging = Join-Path $env:RUNNER_TEMP 'public-release'
-
-          # Nothing here is guessed: docs/release is committed (the checker compares it with its generator),
-          # and docs/previews is what the render steps above put into the working tree.
-          if (-not (Test-Path 'docs/release/README.md')) { throw 'docs/release is missing; run tools/make_public_docs.py and commit the result' }
-          if (-not (Test-Path 'docs/previews')) { throw 'docs/previews is missing; the README pictures would not resolve on the public page' }
-
-          Remove-Item $staging -Recurse -Force -ErrorAction SilentlyContinue
-          New-Item -ItemType Directory -Path $staging | Out-Null
-          Copy-Item 'docs/release/*' $staging -Recurse -Force
-          Copy-Item 'docs/previews' (Join-Path $staging 'docs/previews') -Recurse -Force
-
-          # A public branch may never carry source code. tools/check_sources.py asserts the same list against
-          # the committed docs/release tree; this one covers the previews and anything a future copy list adds.
-          $forbidden = @('.cs', '.xaml', '.csproj', '.sln', '.iss', '.ps1', '.py', '.hlsl', '.sf2', '.yml')
-          $bad = @(Get-ChildItem $staging -Recurse -File -Force | Where-Object { $forbidden -contains $_.Extension })
-          if ($bad.Count -gt 0) { throw "the public tree would publish source file(s): $($bad.FullName -join ', ')" }
-
-          # Build a document-only tree in an isolated index. Never checkout an orphan branch,
-          # delete the source worktree, or remove the publish/ and installer/ packages needed below.
-          # No auxiliary branch is created or pushed in the private source repository.
-          $savedIndex = $env:GIT_INDEX_FILE
-          $env:GIT_INDEX_FILE = Join-Path $env:RUNNER_TEMP 'public-release.index'
-          Remove-Item $env:GIT_INDEX_FILE -Force -ErrorAction SilentlyContinue
-          try {
-            $gitDirectory = Join-Path $env:GITHUB_WORKSPACE '.git'
-            git -C $staging --git-dir=$gitDirectory --work-tree=$staging read-tree --empty
-            if ($LASTEXITCODE -ne 0) { throw 'could not initialize the public index' }
-            git -C $staging --git-dir=$gitDirectory --work-tree=$staging add --all -- .
-            if ($LASTEXITCODE -ne 0) { throw 'could not stage public documents' }
-            $tree = "$(git -C $staging --git-dir=$gitDirectory write-tree)".Trim()
-            if ($LASTEXITCODE -ne 0 -or -not $tree) { throw 'could not compute the public release tree' }
-          } finally {
-            $env:GIT_INDEX_FILE = $savedIndex
-          }
-          Add-Content -Path $env:GITHUB_OUTPUT -Value "expected_tree=$tree" -Encoding utf8
-          @('# Public release tree', '', "Document-only tree: ``$tree``.",
-            'The source checkout and packages are intact; no private release-documents branch is pushed.',
-            'The public publisher below may publish these generated documents to the separate public repository.') |
-            Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
 
       # Publishing is the only thing here that touches another repository, so it is the only step that may
       # hold a token for one: PUBLIC_RELEASES_TOKEN is a fine-grained token scoped to the public release

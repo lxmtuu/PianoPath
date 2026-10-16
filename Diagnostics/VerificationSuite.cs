@@ -2344,7 +2344,7 @@ internal static partial class VerificationSuite
                 && Math.Abs(rowDefinitions[0].ActualHeight - headerRowHeight) < .5 && Math.Abs(rowDefinitions[2].ActualHeight - footerRowHeight) < .5;
         }
         Assert(panel.Visibility == Visibility.Collapsed && overlay.Visibility == Visibility.Visible && stageWidth > 0 && stageHeight > 0 && StageFillsClient(),
-            "Live Play should start with settings hidden, the idle toolbar available and the stage canvas filling the full window client area.");
+            $"Live Play should start with settings hidden, the idle toolbar available and the stage canvas filling the full window client area (settings={panel.Visibility}, toolbar={overlay.Visibility}, stage={stageWidth:0.##}x{stageHeight:0.##}, client={rootGrid.ActualWidth:0.##}x{rootGrid.ActualHeight:0.##}, fills={StageFillsClient()}, rendered={Field(window, "_chromeHasRendered")}).");
         GoIdle();
         Assert(overlay.Visibility == Visibility.Collapsed && recordButton.Visibility == Visibility.Collapsed
                 && headerChrome.Opacity == 0 && footerChrome.Opacity == 0 && StageViewportStable(),

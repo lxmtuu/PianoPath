@@ -57,6 +57,7 @@ public partial class MainWindow : Window
     /// <summary>True once the user deliberately picked a MIDI input; until then refreshes auto-connect the first keyboard.</summary>
     private bool _inputChoiceByUser;
     private DateTime _lastPointerActivity = DateTime.UtcNow;
+    private bool _chromeHasRendered;
     private Point? _lastPointerPoint;
     /// <summary>Notes before this index are already played, missed or intentionally skipped by a seek; only later notes can still be missed.</summary>
     private int _missScanIndex;
@@ -137,6 +138,9 @@ public partial class MainWindow : Window
         RefreshLibrarySongs(); StartSongFolderWatch(SongFolderIndex.Folder);
         ApplyChromeTheme();
         StartChromeSweeps();
+        // Construction, bindings and the first layout are not user idle time. In a slow startup
+        // they can exceed the hide delay before the person has seen a single frame.
+        ContentRendered += (_, _) => { _lastPointerActivity = DateTime.UtcNow; _chromeHasRendered = true; };
         SetChromeVisible(true); _chromeTimer.Start();
         // The GPU stage is the main stage: the render loop starts with the window and the software
         // renderer only steps in if Direct3D cannot start (or for a --software run).
@@ -885,7 +889,7 @@ public partial class MainWindow : Window
     }
     private void CheckChromeIdle()
     {
-        if (_closing || !AutoHideChrome) return;
+        if (_closing || !AutoHideChrome || !_chromeHasRendered) return;
         // Modal surfaces and the advanced settings dock are explicit destinations, not hover chrome: leave them open until the user closes them.
         if (MainMenuOverlay?.Visibility == Visibility.Visible || PlayDialogOverlay?.Visibility == Visibility.Visible
             || QuickAdjustOverlay?.Visibility == Visibility.Visible || SettingsPanel?.Visibility == Visibility.Visible || ShortcutsVisible) return;
