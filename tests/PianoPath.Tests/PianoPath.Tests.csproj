@@ -35,6 +35,7 @@
        build says so immediately on the Linux job. -->
   <ItemGroup>
     <Compile Include="..\..\Stage\PianoSimulation.cs" Link="Product\Stage\PianoSimulation.cs" />
+    <Compile Include="..\..\Diagnostics\KeyboardKeyLightPlan.cs" Link="Product\Diagnostics\KeyboardKeyLightPlan.cs" />
     <Compile Include="..\..\Gpu\StageLightCurves.cs" Link="Product\Gpu\StageLightCurves.cs" />
     <Compile Include="..\..\Camera\ArDriftMeter.cs" Link="Product\Camera\ArDriftMeter.cs" />
     <Compile Include="..\..\Gpu\ReleaseParticleAppearance.cs" Link="Product\Gpu\ReleaseParticleAppearance.cs" />

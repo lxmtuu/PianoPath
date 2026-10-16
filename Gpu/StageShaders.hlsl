@@ -48,7 +48,7 @@ cbuffer Frame : register(b0)
     float4 ArMatrix1;
     float4 ArMatrix2;
     float4 ArMatrixFlags; // legacy shader-branch flags; the active renderer keeps all four lanes zero
-    float4 NoteD;         // x = opt-in satin surface (Solid/Glass only); remaining lanes reserved
+    float4 NoteD;         // x = opt-in satin; y = keyboard main-lamp diagnostic reference (0 normal, 1 legacy, 2 off); zw reserved
 };
 
 cbuffer PassConstants : register(b1)
@@ -1388,7 +1388,13 @@ float4 PsKey(KeyOut v) : SV_Target
 
     // lights: a soft box above and in front, a fill from the room and a rim from behind the keys
     float3 keyDir = normalize(float3(-0.18, 1.0, 0.62));
-    float3 lightColor = float3(1.0, 0.98, 0.95) * (0.35 + 1.25 * KeyA.x);
+    // True zero for the main lamp; leave ambient/rim/emission and post exposure alone.
+    // Below 25%, a monotone C1 rolloff reaches zero without a hidden floor. At/above 25%
+    // keep the previous expression exactly, preserving existing default/preset illumination.
+    float softbox = 0.35 + 1.25 * KeyA.x;
+    if (NoteD.y > 1.5) softbox = 0.0; // independent native forced-off reference, not a setting
+    else if (NoteD.y < 0.5 && KeyA.x < 0.25) softbox = KeyA.x * (4.05 - 5.6 * KeyA.x);
+    float3 lightColor = float3(1.0, 0.98, 0.95) * softbox;
     float3 color = KeyLight(n, view, keyDir, albedo, roughness, f0, lightColor);
     if (black)
     {

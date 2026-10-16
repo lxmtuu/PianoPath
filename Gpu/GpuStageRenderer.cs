@@ -372,6 +372,7 @@ internal sealed class GpuStageRenderer : IDisposable
     internal bool SuppressStageKeySpillForReview { get; set; }
     internal bool SuppressArKeyTintForReview { get; set; }
     internal bool SuppressArKeySpillForReview { get; set; }
+    internal Action<GpuKeyInstance>? ObserveStageKeyForReview { get; set; }
     internal Action<GpuStageSimulation, GpuLook>? ObserveParticleStateForReview { get; set; }
     internal Action<GpuArParticle>? ObserveStageParticleForReview { get; set; }
     internal Action<GpuArParticle>? ObserveArParticleForReview { get; set; }
@@ -509,6 +510,8 @@ internal sealed class GpuStageRenderer : IDisposable
         ObserveParticleStateForReview?.Invoke(simulation, look);
         simulation.ObservePackedHeldParticleForReview = ObserveStageParticleForReview;
         StageKeyCount = keys.Count;
+        if (ObserveStageKeyForReview is { } observeKey)
+            foreach(var key in keys.Span) observeKey(key);
         simulation.BuildSprites(look, layout, sprites, cameraOverlayActive: cameraActive);
         if(SuppressBounceBodyForReview)
             for(var i=0;i<sprites.Count;i++)
@@ -740,7 +743,7 @@ internal sealed class GpuStageRenderer : IDisposable
             SceneB = new Vector4(_backgroundAspect, 1, beat, .88f),
             NoteA = new Vector4(look.NoteStyle, 2 + look.NoteRoundness * 12, edge, 5 + look.BloomSize * 16),
             NoteB = new Vector4(look.NoteTint, look.NoteEdge * 1.15f, look.NoteHeadGlow, look.NoteRefraction),
-            NoteD = new Vector4(look.NoteSatin ? 1 : 0, 0, 0, 0),
+            NoteD = new Vector4(look.NoteSatin ? 1 : 0, look.KeyboardSoftboxReferenceForReview, 0, 0),
             NoteC = new Vector4(look.NoteTexture, look.Notes3D ? 1 : 0, look.NoteGlow * look.BloomIntensity / .65f * .75f * (1 + beat * .5f) * simulation.EnergyBoost, 150),
             KeyA = new Vector4(look.ShaderKeyLight, look.ShaderShadows, look.ShaderAmbientOcclusion, look.ShaderGloss),
             KeyB = new Vector4(look.ShaderRimLight, look.ShaderEmissive * 1.7f * simulation.PedalBoost, look.ShaderCameraTilt, look.KeyboardStyle),

@@ -245,6 +245,13 @@ internal sealed class GpuLook
     /// <summary>Note names engraved on the white keys: 0 = none, 1 = only the Cs, 2 = every white key.</summary>
     public int KeyLabels { get; init; } = 1;
     public float ShaderKeyLight { get; init; } = .92f;
+    // Native diagnostics only: 0 production, 1 previous softbox floor, 2 independently forced-off lamp.
+    internal int KeyboardSoftboxReferenceForReview { get; private set; }
+    internal GpuLook WithKeyboardSoftboxReferenceForReview(int mode)
+    {
+        if(mode is <0 or >2)throw new ArgumentOutOfRangeException(nameof(mode));
+        var copy=(GpuLook)MemberwiseClone();copy.KeyboardSoftboxReferenceForReview=mode;return copy;
+    }
     public float ShaderShadows { get; init; } = .78f;
     public float ShaderAmbientOcclusion { get; init; } = .7f;
     public float ShaderGloss { get; init; } = .72f;

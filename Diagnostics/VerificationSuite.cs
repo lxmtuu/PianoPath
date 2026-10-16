@@ -54,6 +54,18 @@ internal static partial class VerificationSuite
         var reviewOutputOption = args.FirstOrDefault(a => a.StartsWith("--verify-review-out=", StringComparison.Ordinal));
         var reviewOutput = reviewOutputOption is null ? null : reviewOutputOption["--verify-review-out=".Length..];
         Results.Path = logOption is null ? Path.Combine(System.IO.Path.GetTempPath(), "keyflow-verification.log") : logOption[13..];
+        if (args.Contains("--verify-key-light-only"))
+        {
+            try
+            {
+                if(string.IsNullOrWhiteSpace(reviewOutput))throw new ArgumentException("Key light review requires --verify-review-out=<directory>.");
+                var count=KeyboardKeyLightReview.Render(reviewOutput);
+                Results.Add($"PASS keyboard key-light native review: {count} actual captures, zero equals independent lamp-off, old/new pixels preserved from 25 percent, monotone fixed-scene ramps, unchanged AR/raw/packets; software true zero remains unchanged.");
+                Finish(app,args,null);
+            }
+            catch(Exception ex){Finish(app,args,ex);}
+            return;
+        }
         if (args.Contains("--verify-prism-only"))
         {
             try
