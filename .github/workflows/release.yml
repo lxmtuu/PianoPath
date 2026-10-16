@@ -13,12 +13,10 @@ name: release
 # executable. Piano samples are fetched by the app after the user requests audio setup.
 on:
   push:
-    tags: ["v*"]
     branches: ["arena/**"]
-  # Publishing a release through gh/the GitHub API creates a tag without requiring a local tag push.
-  # This event must be in the default branch before that release is published.
-  release:
-    types: [published]
+  # One authoritative tag-creation event (including API-created tags). Do not subscribe to both
+  # push/tag and release/published: that duplicates publishing and collides with immutable releases.
+  create:
   workflow_dispatch:
 
 env:
@@ -43,7 +41,7 @@ concurrency:
 
 jobs:
   publish:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v') || contains(github.event.head_commit.message, '[release-preflight]')
+    if: github.event_name == 'workflow_dispatch' || (github.event_name == 'create' && github.event.ref_type == 'tag' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'push' && contains(github.event.head_commit.message, '[release-preflight]'))
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -426,7 +424,12 @@ jobs:
               & gh release view $tag --repo $repository 2>&1 | Out-Null
               $ErrorActionPreference = $savedPreference
               if ($LASTEXITCODE -eq 0) {
+                $state = (& gh api "repos/$repository/releases/tags/$tag" | Out-String | ConvertFrom-Json)
+                if ($state.immutable) { throw "The public $tag release is immutable; do not overwrite it. Verify existing assets or use a new version." }
                 & gh release upload $tag @paths --repo $repository --clobber | Out-Host
+                if ($LASTEXITCODE -eq 0 -and $state.draft) {
+                  & gh release edit $tag --repo $repository --draft=false | Out-Host
+                }
               } else {
                 $notes = @(
                   "**Keyflow $tag** for Windows 10/11 (64-bit). Pick one package: the installer, or a ZIP you unzip and run ``PianoPath.exe`` from.",
@@ -439,7 +442,11 @@ jobs:
                   '',
                   "What changed: https://github.com/$repository/blob/$branch/CHANGELOG.en.md · https://github.com/$repository/blob/$branch/CHANGELOG.md"
                 ) -join "`n"
-                & gh release create $tag @paths --repo $repository --title "Keyflow $version" --notes $notes | Out-Host
+                # Immutable repositories lock assets at publication: upload everything to a draft first.
+                & gh release create $tag @paths --repo $repository --title "Keyflow $version" --notes $notes --draft | Out-Host
+                if ($LASTEXITCODE -eq 0) {
+                  & gh release edit $tag --repo $repository --draft=false | Out-Host
+                }
               }
               if ($LASTEXITCODE -ne 0) {
                 '::warning title=Public release::the packages could not be attached to the release on ' + $repository + ' (does the token hold Contents: write on it?); they are attached to the release of this repository.'

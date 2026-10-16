@@ -1816,6 +1816,11 @@ def scan_public_release():
         errors.append(f".github/workflows/build.yml names {token}; the build job must not be able to reach "
                       f"the public repository at all")
 
+    if "  release:" in workflow_text or 'tags: ["v*"]' in workflow_text:
+        errors.append("release.yml must use one tag-creation trigger, not duplicate push/published events")
+    if "  create:" not in workflow_text or "--notes $notes --draft" not in workflow_text or "--draft=false" not in workflow_text:
+        errors.append("release.yml must trigger on tag creation and upload public assets before publishing its draft")
+
     if re.search(r"Set-Content[^\n]*-Append", workflow_text, re.I):
         errors.append("release.yml must use Add-Content: PowerShell Set-Content has no -Append parameter")
 
