@@ -25,7 +25,7 @@ def validate(m,revision=None):
     records={key(c):c for c in m['captures']}
     for c in m['captures']:
         e,s,t,p,v=key(c);id_=f'{e}-{s}-{t}-p{p}-{v}'
-        if c['Id']!=id_ or c['File']!=id_+'.png' or (c['Width'],c['Height'])!=(640,360 if e=='gpu' else 128):raise ValueError('Bad capture provenance')
+        if c['Id']!=id_ or c['File']!=id_+'.png' or (c['Width'],c['Height'])!=(640,360 if e=='gpu' else 128):raise ValueError(f'Bad capture provenance: {id_} / {c}')
         for field in ('PixelSha256','RawHash','PacketHash'):
             if not isinstance(c[field],str) or not re.fullmatch('[A-F0-9]{64}',c[field]):raise ValueError('Bad native digest')
         if type(c['KeyboardMean']) not in (float,int) or not 0<=c['KeyboardMean']<=255:raise ValueError('Bad mean RGB')
@@ -77,7 +77,7 @@ def verify(directory,source_root=None,revision=None,published_only=False,publish
                 top=c['Height']-120 if c['Engine']=='gpu' else 0
                 roi=im.convert('RGB').crop((20,top,c['Width']-20,c['Height']))
                 measured=sum(ImageStat.Stat(roi).sum)/(roi.width*roi.height*3)
-                if abs(measured-c['KeyboardMean'])>1e-9:raise ValueError('Native mean RGB changed')
+                if abs(measured-c['KeyboardMean'])>1e-9:raise ValueError(f'Native mean RGB changed: {c["Id"]}, measured={measured}, recorded={c["KeyboardMean"]}')
         # Pixel-level proof that the main lamp cannot darken the non-keyboard region.
         for engine,scene,state,p,variant in plan():
             if engine!='gpu' or scene=='ar' or variant!='fixed':continue
@@ -104,7 +104,7 @@ def verify(directory,source_root=None,revision=None,published_only=False,publish
         import shutil
         evidence,previews=publish;evidence.mkdir(parents=True,exist_ok=True);previews.mkdir(parents=True,exist_ok=True)
         names=[s['file'] for s in m['sheets']];size=(directory/'manifest.json.gz').stat().st_size+sum((directory/n).stat().st_size for n in names)
-        if size>700000:raise ValueError('Bounded publication exceeds 700000 bytes')
+        if size>700000:raise ValueError(f'Bounded publication {size} bytes exceeds 700000 bytes')
         shutil.copyfile(directory/'manifest.json.gz',evidence/'manifest.json.gz')
         for name in names:shutil.copyfile(directory/name,previews/name)
         print('Native publication bytes:',size)
@@ -113,6 +113,11 @@ def verify(directory,source_root=None,revision=None,published_only=False,publish
 def main():
     p=argparse.ArgumentParser(description=__doc__);p.add_argument('directory',type=Path);p.add_argument('--source-root',type=Path);p.add_argument('--expected-revision');p.add_argument('--published-only',action='store_true');p.add_argument('--publish-evidence',type=Path);p.add_argument('--publish-previews',type=Path);a=p.parse_args()
     if bool(a.publish_evidence)!=bool(a.publish_previews):p.error('Both publication directories required')
-    verify(a.directory,a.source_root,a.expected_revision,a.published_only,(a.publish_evidence,a.publish_previews) if a.publish_evidence else None)
+    try:
+        verify(a.directory,a.source_root,a.expected_revision,a.published_only,(a.publish_evidence,a.publish_previews) if a.publish_evidence else None)
+    except Exception as error:
+        message=str(error).replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+        print('::error title=Keyboard native validation::'+message,flush=True)
+        raise
     print('PASS 154 native key-light captures: independent true-zero references, monotone means, preserved 25+ illumination, unchanged packets/background/AR; exact bounded crop provenance.')
 if __name__=='__main__':main()
