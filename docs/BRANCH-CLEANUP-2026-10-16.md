@@ -13,10 +13,15 @@ nên mọi commit của nó đã nằm trong `main` và việc xoá không mất
 
 ## 0. Kết quả, đếm được bằng `git ls-remote`
 
-| Kho | Trước | Đã xoá | Sau | Ghi chú |
+| Kho | Trước | Đã xoá | Sau | Ai xoá, bằng gì |
 |---|---|---|---|---|
-| `lxmtuu/PianoPath` | 63 nhánh | **49** | **14** | `main` + 11 nhánh `diverged` (§4.1) + 2 nhánh `release/public-v2.0.x` (§2) |
-| `lxmtuu/KeyFlow` | 7 nhánh | **0** | 7 | **403** — token phiên này không có quyền ghi lên kho công khai (§3); 4 nhánh nháp vẫn còn, kèm một lệnh sẵn |
+| `lxmtuu/PianoPath` | 63 nhánh | **49** | **14** | phiên agent, `git push origin --delete` |
+| `lxmtuu/KeyFlow` | 7 nhánh | **4** | **3** | **chủ repo**, trên máy của mình: `gh auth login` rồi `git push https://github.com/lxmtuu/KeyFlow --delete …` (§3) |
+
+Số ở kho nguồn kiểm lại được: `git ls-remote --heads origin \| wc -l` = 14 = 63 − 49, và đúng bằng
+1 (`main`) + 11 (`diverged`) + 2 (`orphan`). Số ở kho công khai: `git ls-remote --heads …/KeyFlow` = 3 =
+`main` (`f79c9a70`) + `release/public-v2.0.1` (`e9a5fab6`) + `release/public-v2.1.1` (`f79c9a70`) — đo lại
+sau khi chủ repo chạy lệnh, và SHA của `main` trùng SHA của `release/public-v2.1.1` đúng như §4.2 ghi.
 
 Số 49 đã xoá kiểm lại được: `git ls-remote --heads origin \| wc -l` = 14 = 63 − 49, và đúng bằng
 1 (`main`) + 11 (`diverged`) + 2 (`orphan`).
@@ -120,24 +125,25 @@ nguồn còn đúng cây tài liệu mà trang công khai đáng lẽ phải nh�
 
 Chưa làm gì thêm cho tới khi chọn — đó là lý do hai nhánh này vẫn còn.
 
-## 3. **Chưa xoá được** — 4 nhánh bản nháp trong kho **phát hành công khai** `lxmtuu/KeyFlow`
+## 3. Đã xoá — 4 nhánh bản nháp trong kho **phát hành công khai** `lxmtuu/KeyFlow`
 
 Bốn nhánh này là **bản nháp sửa tay** trang sản phẩm thời 1.0.0/2.0.0, tạo ra trước khi mô hình "trang công
 khai chỉ do máy sinh" được siết (`tools/make_public_docs.py` + `scan_public_release` so từng byte). Chúng cũng
 là commit gốc nên không so ancestry được; mình so **cây nội dung** với `main` của kho đó
 (`f79c9a70`, VERSION 2.1.1, 404 tệp):
 
-> **Không xoá được từ phiên này, và đây là ràng buộc quyền chứ không phải lỗi:**
+> **Đã xoá 2026‑10‑16 bởi chủ repo, trên máy của mình** — và đây chính là bằng chứng cho ràng buộc quyền
+> ghi ở kho công khai: phiên agent thử trước và **thất bại đúng như dự đoán** —
 > `gh api -X DELETE repos/lxmtuu/KeyFlow/git/refs/heads/<nhánh>` → **403 `Resource not accessible by
-> integration`**, và `git push --delete` → **`remote: Permission to lxmtuu/KeyFlow.git denied to lxmtuu`**.
-> Token của phiên agent chỉ có quyền trên kho nguồn; quyền ghi lên kho công khai nằm ở secret
-> `PUBLIC_RELEASES_TOKEN` (đúng như `docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md` §2c thiết kế — token đó *scoped
-> chỉ repo KeyFlow*). Chủ repo chạy một lệnh là xong:
+> integration`**, `git push --delete` → **`remote: Permission to lxmtuu/KeyFlow.git denied to lxmtuu`** — vì
+> token của phiên chỉ có quyền trên kho nguồn; quyền ghi lên kho công khai nằm ở secret
+> `PUBLIC_RELEASES_TOKEN` (đúng như `docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md` §2c thiết kế: token đó *scoped
+> chỉ repo KeyFlow*). Chủ repo chạy `gh auth login` rồi một lệnh một dòng:
 > ```bash
-> git push git@github.com:lxmtuu/KeyFlow --delete \
->   arena/01a0fc21-keyflow arena/01a0fc63-keyflow arena/01a102b7-keyflow arena/75990fb0-keyflow
+> git push https://github.com/lxmtuu/KeyFlow --delete arena/01a0fc21-keyflow arena/01a0fc63-keyflow arena/01a102b7-keyflow arena/75990fb0-keyflow
 > ```
-> Kết luận kiểm tra vẫn giữ: **không có gì đáng giữ** trong bốn nhánh đó (xem bảng và đoạn về
+> Cả bốn dòng trả `[deleted]`; `git ls-remote --heads` ngay sau đó còn đúng ba nhánh.
+> Kết luận kiểm tra giữ nguyên: **không có gì đáng giữ** trong bốn nhánh đó (xem bảng và đoạn về
 > `Assets/ATTRIBUTION.txt` bên dưới).
 
 | Nhánh | SHA tip | VERSION | Số tệp | Khác `main` ở chỗ nào |
@@ -232,8 +238,9 @@ lượt GC chủ động):
 # một nhánh của kho nguồn, ví dụ nhánh đầu bảng §1 (SHA lấy ở cột 2)
 git push origin b781d871f8d37eff43c9b90a167aff9c12bd0d72:refs/heads/arena/01a0e95c-pianopath
 ```
-Bốn nhánh nháp ở §3 **chưa bị xoá** nên không cần khôi phục; nếu sau này bạn xoá bằng lệnh ở §3 thì đường
-khôi phục cũng là `git push git@github.com:lxmtuu/KeyFlow.git <SHA>:refs/heads/<nhánh>` với SHA ở bảng đó.
+Bốn nhánh nháp ở §3 đã bị xoá **bằng lệnh của chủ repo**, nên đường khôi phục của chúng (nếu cần) là
+`git push https://github.com/lxmtuu/KeyFlow <SHA>:refs/heads/<nhánh>` với SHA ở bảng §3 — nhưng lưu ý nội dung
+duy nhất không còn ở `main` công khai là tệp ghi công đã hết hiệu lực chép lại ở §6.
 Nếu SHA đã bị GC: nội dung của 49 nhánh ở §1 **vẫn còn nguyên trong `main`** (đó chính là lý do chúng được
 xoá), và lịch sử PR của từng nhánh vẫn xem được trên GitHub sau khi nhánh bị xoá.
 
