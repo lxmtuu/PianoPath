@@ -76,19 +76,7 @@ jobs:
         shell: pwsh
         run: .\publish.ps1 -Mode SelfContained -Runtime win-x64
 
-      - name: Publish framework-dependent single file (win-x64)
-        shell: pwsh
-        run: .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64
-
-      # Windows on ARM gets a portable package and no installer: Keyflow.iss sets
-      # ArchitecturesAllowed=x64compatible, and an ARM wizard would need its own script and an ARM machine
-      # to be checked on. ReadyToRun is switched off for this one leg on purpose — the runner is x64, so
-      # compiling it would mean cross-generating ARM code no run of this repository has ever measured, and
-      # this package is for a machine nobody here has run it on yet. The two x64 legs keep ReadyToRun.
-      - name: Publish self-contained single file (win-arm64)
-        shell: pwsh
-        run: .\publish.ps1 -Mode SelfContained -Runtime win-arm64 -NoReadyToRun
-
+      # Test the real x64 single-file build before spending time on the two other packages.
       - name: Smoke test the published executable
         # A release is gated on the executable that will ship, not just on the source build.
         # Keep the verification log and annotations, but let a failed check stop packaging and publication.
@@ -108,6 +96,19 @@ jobs:
           if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
           @('# Keyflow verification suite (published build)', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
           exit $proc.ExitCode
+
+      - name: Publish framework-dependent single file (win-x64)
+        shell: pwsh
+        run: .\publish.ps1 -Mode FrameworkDependent -Runtime win-x64
+
+      # Windows on ARM gets a portable package and no installer: Keyflow.iss sets
+      # ArchitecturesAllowed=x64compatible, and an ARM wizard would need its own script and an ARM machine
+      # to be checked on. ReadyToRun is switched off for this one leg on purpose — the runner is x64, so
+      # compiling it would mean cross-generating ARM code no run of this repository has ever measured, and
+      # this package is for a machine nobody here has run it on yet. The two x64 legs keep ReadyToRun.
+      - name: Publish self-contained single file (win-arm64)
+        shell: pwsh
+        run: .\publish.ps1 -Mode SelfContained -Runtime win-arm64 -NoReadyToRun
 
       # The installer is compiled from the same publish\win-x64 the zips will be packed from, with the same
       # script build.yml runs against a stub folder on every push, so the wizard text cannot be broken

@@ -319,6 +319,56 @@ jobs:
       - name: Build
         run: dotnet build PianoPath.csproj --configuration Release --no-restore
 
+      # Fail fast on functional/native/WPF regressions before expensive art-review recaptures.
+      # Runs on every push and blocks the build. The suite detects what the runner is missing
+      # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
+      # SKIP/NOTE instead of failing, so a red step here means a real regression.
+      # Every log line is also echoed into the job summary; annotations stay under GitHub's
+      # 10-per-level cap by only surfacing SKIP/NOTE/FAIL plus the final summary line.
+      - name: Verification suite
+        shell: pwsh
+        run: |
+          $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
+          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
+          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
+          $lines = if (Test-Path $log) { Get-Content $log } else { @() }
+          # A child process that reports every stage it reaches can print more NOTE lines than GitHub will
+          # show, and the ones that matter are the last ones — the step the machine stopped at. So only the
+          # tail of the NOTEs is surfaced: SKIP and FAIL lines always are, and the whole log is in the job
+          # summary and in the run's artifacts either way.
+          $notes = @($lines | Where-Object { $_ -like 'NOTE*' })
+          $tail = @($notes | Select-Object -Last 6)
+          # A FAIL line is this run's own failure, with one exception. The MP4 take is written by a child
+          # process, and the suite copies that child's lines into the log in the machine's own words — FAIL lines
+          # and all, since they are what says where the machine stopped. The suite's own answer to them is a SKIP
+          # line that names the step the child stopped at word for word (see Diagnostics/Mp4TakeAttempt.cs). So a
+          # FAIL line that appears inside a SKIP line was written by the machine's child process and not by the
+          # suite: the suite has already ruled on that step, and annotating it as an error put a red mark on
+          # green runs whose only trouble was a take this machine cannot write. The line is still in the job
+          # summary and in the artifact, right where the suite answers it.
+          $skipLines = @($lines | Where-Object { $_ -like 'SKIP*' }) -join "`n"
+          $lines | ForEach-Object {
+            if ($_ -like 'FAIL*') { if ($skipLines.Contains($_)) { return }; $level = 'error' }
+            elseif ($_ -like 'SKIP*') { $level = 'warning' }
+            elseif ($_ -like 'NOTE*') { if ($_ -notin $tail) { return }; $level = 'warning' }
+            elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
+            else { return }
+            $text = $_ -replace '%', '%25'
+            "::${level} title=Keyflow verification::$text"
+          }
+          # The exit code and the very last line of the log are named whatever the log says: a run that is
+          # taken down inside a native call never reaches the suite's own verdict, and then the last line is the
+          # only thing that says where the process died.
+          $last = if ($lines) { $lines[-1] } else { '<the log was empty>' }
+          "::notice title=Keyflow verification::PianoPath.exe exited with code $($proc.ExitCode) after $($lines.Count) log line(s)."
+          if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
+          elseif ($last -notlike 'Verification passed*' -and $last -notlike 'Verification failed*') {
+            $text = $last -replace '%', '%25'
+            "::error title=Keyflow verification::The log ends without a verdict, at: $text"
+          }
+          @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
+          exit $proc.ExitCode
+
       # Isolate deterministic P0 capture from realtime/device smoke tests. Both still block the build.
       - name: Prism Flow baseline and candidate verification
         id: prism-review
@@ -883,55 +933,6 @@ jobs:
           Copy-Item (Join-Path $review 'manifest.json.gz') (Join-Path $evidence 'manifest.json.gz') -Force
           foreach ($name in $names) { Copy-Item (Join-Path $review $name) (Join-Path $target $name) -Force }
           "::notice title=Confetti v1 material::192 native statics / 720 native motion crops; unchanged raw state, ordered component geometry and selection; identity-linked actual body colour/alpha/orientation matches Stage and three AR poses. Stage and AR each retain one packet per physical paper particle. Paired classic/candidate native crops/lossless XOR frame bundles, review only."
-
-      # Runs on every push and blocks the build. The suite detects what the runner is missing
-      # (no local Salamander download, no audio device, an unopenable MIDI port) and reports those as
-      # SKIP/NOTE instead of failing, so a red step here means a real regression.
-      # Every log line is also echoed into the job summary; annotations stay under GitHub's
-      # 10-per-level cap by only surfacing SKIP/NOTE/FAIL plus the final summary line.
-      - name: Verification suite
-        shell: pwsh
-        run: |
-          $log = Join-Path $env:RUNNER_TEMP 'keyflow-verification.log'
-          $review = Join-Path $env:RUNNER_TEMP 'phase1-visual-review'
-          $proc = Start-Process -FilePath 'bin/Release/net10.0-windows/PianoPath.exe' -ArgumentList "--verify","--verify-log=$log","--verify-review-out=$review" -PassThru -Wait
-          $lines = if (Test-Path $log) { Get-Content $log } else { @() }
-          # A child process that reports every stage it reaches can print more NOTE lines than GitHub will
-          # show, and the ones that matter are the last ones — the step the machine stopped at. So only the
-          # tail of the NOTEs is surfaced: SKIP and FAIL lines always are, and the whole log is in the job
-          # summary and in the run's artifacts either way.
-          $notes = @($lines | Where-Object { $_ -like 'NOTE*' })
-          $tail = @($notes | Select-Object -Last 6)
-          # A FAIL line is this run's own failure, with one exception. The MP4 take is written by a child
-          # process, and the suite copies that child's lines into the log in the machine's own words — FAIL lines
-          # and all, since they are what says where the machine stopped. The suite's own answer to them is a SKIP
-          # line that names the step the child stopped at word for word (see Diagnostics/Mp4TakeAttempt.cs). So a
-          # FAIL line that appears inside a SKIP line was written by the machine's child process and not by the
-          # suite: the suite has already ruled on that step, and annotating it as an error put a red mark on
-          # green runs whose only trouble was a take this machine cannot write. The line is still in the job
-          # summary and in the artifact, right where the suite answers it.
-          $skipLines = @($lines | Where-Object { $_ -like 'SKIP*' }) -join "`n"
-          $lines | ForEach-Object {
-            if ($_ -like 'FAIL*') { if ($skipLines.Contains($_)) { return }; $level = 'error' }
-            elseif ($_ -like 'SKIP*') { $level = 'warning' }
-            elseif ($_ -like 'NOTE*') { if ($_ -notin $tail) { return }; $level = 'warning' }
-            elseif ($_ -like 'Verification passed*' -or $_ -like 'Verification failed*') { $level = 'notice' }
-            else { return }
-            $text = $_ -replace '%', '%25'
-            "::${level} title=Keyflow verification::$text"
-          }
-          # The exit code and the very last line of the log are named whatever the log says: a run that is
-          # taken down inside a native call never reaches the suite's own verdict, and then the last line is the
-          # only thing that says where the process died.
-          $last = if ($lines) { $lines[-1] } else { '<the log was empty>' }
-          "::notice title=Keyflow verification::PianoPath.exe exited with code $($proc.ExitCode) after $($lines.Count) log line(s)."
-          if (-not $lines) { "::error title=Keyflow verification::PianoPath.exe did not write $log" }
-          elseif ($last -notlike 'Verification passed*' -and $last -notlike 'Verification failed*') {
-            $text = $last -replace '%', '%25'
-            "::error title=Keyflow verification::The log ends without a verdict, at: $text"
-          }
-          @('# Keyflow verification suite', '```', $lines, '```') | Set-Content -Path $env:GITHUB_STEP_SUMMARY -Encoding utf8
-          exit $proc.ExitCode
 
       # GitHub shows at most ten annotations of one level, and a run whose child process reports its stages
       # line by line has more NOTEs than that: the lines that matter are the ones near the end. So the step

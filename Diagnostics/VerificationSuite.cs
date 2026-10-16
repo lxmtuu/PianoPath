@@ -2979,7 +2979,7 @@ internal static partial class VerificationSuite
             "The camera corner picker should offer each corner under the English id the settings file stores while printing the translated caption.");
 
         Loc.Apply("en");
-        Assert(firstHeader() == "Style" && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
+        Assert(firstHeader() == Loc.T(SettingsPages.Overview) && Loc.T("Falling notes") == "Falling notes", "Switching back to English must restore every caption.");
         Assert(PaintedCorners().Select(item => Painted(item, "Caption")).SequenceEqual(CameraOverlay.Corners),
             "Switching back to English must restore the camera corner captions to the ids they are stored as.");
         Loc.Apply("");
