@@ -1,5 +1,7 @@
 # Keyflow 2.1.0 · Final release check
 
+**Publication correction:** the source 2.1.0 release was published empty and is immutable. It has no downloadable build. The verified feature set ships as 2.1.1 with draft-first publication; the 2.1.0 tag is not changed or reused. The checks below remain historical pre-merge evidence.
+
 Pre-merge evidence snapshot, 2026-10-16. Scope: the complete feature branch since `a52ca16947df6b689c594c7b747a95fbd694618e`, not only the last Settings changes.
 
 ## Changes being released

@@ -8,6 +8,14 @@ Nếu chỉ đọc một câu: **mọi thứ đi qua ranh giới đều do máy 
 `tools/make_public_docs.py` sinh từ chính hai README này, `tools/check_sources.py` so từng byte với
 script đó, và `release.yml` chỉ chép đúng thư mục ấy (cộng `docs/previews/`) sang kho công khai.
 
+## Lưu ý vận hành 2.1.1 · immutable releases
+
+Không tạo/publish release trống để kích hoạt CI. Tạo **tag** tại commit đã merge; sự kiện `create`
+chạy đúng một lượt release workflow. `softprops/action-gh-release@v3` upload gói vào draft trước khi
+publish release nguồn; publisher public cũng dùng `--draft`, upload đủ asset, rồi `--draft=false`.
+Không bật đồng thời push/tag và release/published. Không sửa/tái sử dụng tag bất biến. v2.1.0 nguồn
+đã bị publish trống và không có gói tải; v2.1.1 là bản có gói của đợt tính năng này.
+
 ## 1. Mô hình
 
 ```

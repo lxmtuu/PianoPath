@@ -19,6 +19,12 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 
 ## Unreleased
 
+## 2.1.1 — 2026-10-16
+
+### Phát hành gói bất biến đúng quy trình
+- **Bản tải xuống đầu tiên của đợt 2.1:** bao gồm toàn bộ tính năng hiệu ứng/AR/Settings liệt kê ở 2.1.0 bên dưới. Release nguồn 2.1.0 đã bị publish khi chưa có asset và bị immutable khóa; không có gói tải, không đổi/xóa/tái sử dụng tag đó.
+- Dùng duy nhất sự kiện tạo tag để tránh hai lượt publish. Workflow tạo draft, upload đủ gói rồi publish; không tắt immutability và không cố ghi đè release bất biến.
+
 ## 2.1.0 — 2026-10-16
 
 ### Settings, hiệu ứng hạt và xuất AR

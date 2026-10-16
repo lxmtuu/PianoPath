@@ -20,6 +20,12 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 
 ## Unreleased
 
+## 2.1.1 — 2026-10-16
+
+### Correct immutable package publication
+- **First downloadable build of the 2.1 feature set:** includes all particle/AR/Settings features listed under 2.1.0 below. The source 2.1.0 release was published without assets and locked by immutability; it has no downloadable build and its tag is not moved, deleted or reused.
+- A single tag-creation trigger avoids duplicate publication. Create a draft, upload the complete packages, then publish; immutability is not disabled and immutable releases are not overwritten.
+
 ## 2.1.0 — 2026-10-16
 
 ### Settings, particle effects and AR export
