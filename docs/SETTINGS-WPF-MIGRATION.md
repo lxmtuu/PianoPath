@@ -12,7 +12,7 @@
 - Audio/MIDI và Practice/History dùng lại nguyên các control XAML, named hosts và event handlers. Search theo card nghiệp vụ: có kết quả thì hiện cả card, không lọc rời rạc label khỏi control. Device-derived lists, MIDI track mute/colors, history chart/ghost, theme/language chips vẫn dùng logic cũ.
 - Search khớp English + Vietnamese kể cả ngôn ngữ không đang chọn; normalize dấu và `đ`. Caption highlights vẫn theo ngôn ngữ hiển thị. Preset/share-code workflow trong Overview cũng có thể tìm.
 - Caption choice xuống hàng riêng, label wrap; sidebar wrap tên dài, cả 12 trang dùng ScrollViewer. Đơn vị góc dùng `°`, vẫn parse được typed values theo đường cũ. Không giảm minimum window của toàn app hay thay kích thước scene.
-- Badge phân biệt Shared / Stage only / AR only ở các editor được phân loại. Bộ chọn Stage/AR trên header **chỉ chọn ngữ cảnh cài đặt trong phiên**, không bật/tắt output AR, không đổi camera, không disable editor, không CopyFrom/MarkModified/ApplyVisualSettings. AR output thật vẫn bật bằng control ArEnabled cũ. Đây không phải hai bản preset độc lập.
+- Badge phân biệt Shared / Stage only / AR only ở các editor được phân loại. Bộ chọn Stage/AR trên header **chỉ chọn ngữ cảnh cài đặt trong phiên**, chỉ nhấn mạnh/giảm nhấn badge theo ngữ cảnh; không bật/tắt output AR, không đổi camera, không disable editor, không CopyFrom/MarkModified/ApplyVisualSettings. AR output thật vẫn bật bằng control ArEnabled cũ. Đây không phải hai bản preset độc lập.
 - Reset nhóm có xác nhận, đi qua `CopyFrom` trên bản sao current settings để giữ cùng ranh giới machine-local như Apply preset, gồm nguồn camera/video, view/calibration-related options, audio device/gain/latency, language, FPS/VSync và background path. Các nút calibration reset/import/export thật vẫn riêng biệt và giữ nguyên handler.
 
 ## Tương thích đường vào cũ
@@ -29,7 +29,7 @@
 | Practice / History | Practice & history |
 | Recording | Recording |
 
-Các inline More links của Flame → Hold, Embers → Press, Halo → Lighting được cập nhật riêng. `JumpToCard` vẫn dùng các title key cũ. Preset/property/theme/language IDs trong file lưu không đổi.
+Chevron của layer resolve theo owner/card đã chuyển, không giữ đích cũ sai nhóm (ví dụ Light beams). Các inline More links của Flame → Hold, Embers → Press, Halo → Lighting được cập nhật riêng. `JumpToCard` vẫn dùng các title key cũ. Preset/property/theme/language IDs trong file lưu không đổi.
 
 ## Kiểm tra và giới hạn
 
@@ -37,7 +37,8 @@ Các inline More links của Flame → Hold, Embers → Press, Halo → Lighting
 - `tools/check_settings_layout_migration.py`: PASS — chín builder và các handler nghiệp vụ được chọn nguyên vẹn so với source đã duyệt; mọi XAML name/event cũ và unnamed business actions được giữ; có alias routes, reparent/dedup, Advanced/search và reset boundary; không sửa Gpu/Stage/Camera/Audio/Video.
 - `tools/check_settings_layout_inventory.py`: PASS cho snapshot **trước migration**. Prototype và TSV cố định source `3914aac`, không tự đổi theo UI mới; generator đọc Git object này để giữ bằng chứng bố cục đã duyệt. Chạy các audit này cần commit gốc có trong local Git history.
 - Contract trong `VerificationSuite` đã cập nhật cho 12 trang, canonical aliases, một owner/property, card/row/page agreement và context không sửa model. **Chỉ được compile trong app-build; không thực thi native suite.**
-- Biên dịch/package Windows: **đang chờ kết quả**, sẽ ghi source SHA/run/artifact sau khi CI hoàn tất.
+- Biên dịch/package Windows: **SUCCESS** tại source `3072caf707b56265a6dcf2ea31c79a67353952fe`, [run 38861088955](https://github.com/lxmtuu/PianoPath/actions/runs/38861088955). Static 26 s; self-contained win-x64 publish/package 4 m 39 s. `test`, full `build`, `keyboard-light`, `key-ensemble`, `ar-budget` và Python fixture lane đều skipped.
+- **[Tải build Settings WPF](https://github.com/lxmtuu/PianoPath/actions/runs/38861088955/artifacts/12029109241)**: private artifact `keyflow-app-win-x64`, **70,988,011 bytes**, tạo `2026-10-16T06:30:18Z`, chưa expired khi truy vấn; workflow retention 7 ngày (API expires `2026-10-23T06:25:10Z`). Giải nén toàn bộ rồi chạy `PianoPath.exe`; không cần cài .NET, không phải installer/public release, build chưa ký. `BUILD-INFO.txt` chứa source SHA và SHA256 executable. Không tải ZIP/dataset vào repo.
 - Không chạy native/runtime/CPU/FPS/long-motion checks, không lấy screenshot app hay chứng nhận WPF layout trên Windows. Static guards và compile không chứng minh runtime behavior, focus/scroll/DPI hoặc visual acceptance.
 
 ## Lệnh source-only
