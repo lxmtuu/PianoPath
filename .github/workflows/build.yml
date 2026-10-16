@@ -1316,9 +1316,22 @@ jobs:
       # A branch that only takes pull requests (a repository rule the workflow's own token cannot bypass)
       # declines the push with GH013. Nothing is wrong with the build then, so that one rejection is
       # reported as a warning instead of turning the job red, and the renders are still in the
-      # keyflow-previews artifact. Every other push failure (network, authentication, a branch that moved
-      # meanwhile) still fails the step. bash rather than pwsh because the decision needs git's exit code
-      # and its message side by side.
+      # keyflow-previews artifact. Every other push failure (network, authentication) still fails the
+      # step. bash rather than pwsh because the decision needs git's exit code and its message side by
+      # side.
+      #
+      # A branch that moved *while this job rendered* is not one of those failures any more. Two runs of
+      # main overlap by design (main never cancels a running build, so the preview commit that belongs to
+      # a merge people are already reading is not thrown away), and a newer push lands its own refresh
+      # while an older run is still rendering: on 2026-10-16 run 38878121563 started from `e4ea5e36` at
+      # 09:05 and the run before it pushed `0ff9d1b` at 09:08. That run then committed its screenshots and
+      # `git pull --rebase` stopped on the first file both runs had touched — both normalise the same
+      # manifests, compact the same PNGs and re-render the same screenshots, and renders are not
+      # byte-stable between runners — so the job went red with the distributable-build check still to run.
+      # A branch that moved is not a reason to fail, and the screenshots this run rendered must not
+      # overwrite the branch's: they show the interface of the commit this run built, which is no longer
+      # the tip, while the set on the branch came from the newer tip. The step therefore leaves a branch
+      # that moved alone, says so as a warning, and keeps its own pictures in the artifact.
       - name: Commit refreshed previews
         id: commit-previews
         if: github.event_name == 'push' && github.actor != 'github-actions[bot]'
@@ -1337,8 +1350,21 @@ jobs:
           fi
           git commit -m "Refresh the README previews from CI [skip ci]"
           log="$RUNNER_TEMP/previews-push.log"
-          # The independent key-light job may have published its validated docs while this job rendered.
-          git pull --rebase origin "$GITHUB_REF_NAME"
+          # The independent key-light job may have published its validated docs while this job rendered,
+          # and so may a newer run of main (see the comment above the step). `git pull --rebase` stopped on
+          # the first file two runs had both touched and turned run 38878121563 red on 2026-10-16 with the
+          # distributable-build check still to run. No replay and no overwrite: when the tip is no longer
+          # the commit this run built, the branch keeps its own screenshots — they belong to the newer tip
+          # — and this run's are still in the keyflow-previews artifact. A tip that cannot be read (the
+          # fetch below fails loudly) and a tip that moves again between that fetch and the push (git
+          # reports a non-fast-forward rejection, handled below) both get the same warning.
+          git fetch --quiet origin "$GITHUB_REF_NAME"
+          tip=$(git rev-parse "origin/$GITHUB_REF_NAME")
+          if [ -n "$tip" ] && [ "$tip" != "$GITHUB_SHA" ]; then
+            echo "::warning title=Previews not committed::The branch moved while this build rendered (now $tip, this run built $GITHUB_SHA), so the screenshots it re-rendered were not pushed. The branch keeps the set that belongs to its newer tip; these pictures are in the keyflow-previews artifact of this run."
+            echo 'landed=superseded' >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           if git push >"$log" 2>&1; then
             cat "$log"
             # 'landed' means the pictures are on the branch, not merely committed on this runner: the
@@ -1350,6 +1376,15 @@ jobs:
           cat "$log"
           if grep -Eqi 'GH013|repository rule violations|protected branch' "$log"; then
             echo "::warning title=Previews not committed::The branch only accepts pull requests, so the refreshed screenshots were not pushed. They are in the keyflow-previews artifact of this run."
+            # 'landed' stays unset on purpose: nothing newer is on the branch, so the drift check
+            # below still reports the README as stale. Only a branch that moved has newer pictures.
+            exit 0
+          fi
+          # The tip can also move between the fetch above and this push; git then reports a plain
+          # non-fast-forward rejection, which is the same race and gets the same answer.
+          if grep -Eqi 'non-fast-forward|fetch first|stale info|cannot lock ref' "$log"; then
+            echo "::warning title=Previews not committed::The branch moved again while this build was pushing, so the screenshots it re-rendered were not pushed. The branch keeps the set that belongs to its newer tip; these pictures are in the keyflow-previews artifact of this run."
+            echo 'landed=superseded' >>"$GITHUB_OUTPUT"
             exit 0
           fi
           exit 1
@@ -1371,10 +1406,10 @@ jobs:
       #
       # So: diff the working tree against $GITHUB_SHA, the commit this run started from, to see what the
       # build re-rendered (README sets, preset gallery and note-material gallery), and ask the commit step whether that refresh actually *landed* on the branch.
-      # Only "re-rendered and not landed" is drift worth reporting; a landed refresh and an untouched
-      # folder both get a plain line. A warning rather than an error on purpose: with the branch rules in
-      # place the workflow's own token cannot push, so making it red would paint every pull request red
-      # for a thing only a human — or a bypass rule — can settle.
+      # Only "re-rendered and not landed" is drift worth reporting; a landed refresh, a refresh the branch
+      # already has from a newer run and an untouched folder all get a plain line. A warning rather than an
+      # error on purpose: with the branch rules in place the workflow's own token cannot push, so making it
+      # red would paint every pull request red for a thing only a human — or a bypass rule — can settle.
       - name: Report preview drift
         if: always() && steps.render-previews.outcome == 'success' && steps.render-gallery.outcome == 'success' && steps.render-note-styles.outcome == 'success'
         shell: bash
@@ -1388,6 +1423,10 @@ jobs:
           names=$(printf '%s\n' "$drifted" | sed 's|^docs/previews/||' | paste -sd, - | sed 's/,/, /g')
           if [ '${{ steps.commit-previews.outputs.landed }}' = 'true' ]; then
             echo "This build re-rendered $count file(s) and the step above committed them to the branch."
+            exit 0
+          fi
+          if [ '${{ steps.commit-previews.outputs.landed }}' = 'superseded' ]; then
+            echo "::notice title=Previews left to the newer tip::This build re-rendered $count file(s), but the branch had already moved, so the set that belongs to its newer tip was kept and these pictures are in the keyflow-previews artifact of this run. Re-run this workflow from the tip if its screenshots look stale."
             exit 0
           fi
           {
