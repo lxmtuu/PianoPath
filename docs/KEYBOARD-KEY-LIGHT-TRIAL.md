@@ -1,6 +1,6 @@
 # Key light: bản thử tắt đúng đèn chính ở 0%
 
-Ngày: 2026-10-16. Người dùng cho phép thử sửa; **chưa phải xác nhận hình ảnh/thời gian thực trên máy người dùng**. Không mở lại các bản particle đã duyệt và không bắt đầu thiết kế lại Settings.
+Ngày: 2026-10-16. Người dùng đã duyệt ảnh đối chiếu trong viewer: **“tớ thấy ổn rồi”**. Chốt hướng sửa và hình ảnh của bản thử này; **chưa phải xác nhận app/thời gian thực trên máy người dùng hoặc full regression**. Không mở lại các bản particle đã duyệt và không bắt đầu thiết kế lại Settings.
 
 ## Thay đổi có chủ đích
 
@@ -80,4 +80,4 @@ Tại thời điểm viết, job Windows **build/full regression vẫn đang ch�
 
 Chưa kiểm app UI thực, realtime, các GPU vật lý, toàn bộ style/quality/camera pose, camera live hoặc preset đầy đủ trên máy người dùng. WARP và software native là bằng chứng cho fixture xác định, không thay cho bước đó.
 
-Bước tiếp theo: người dùng xem cặp GPU/mixed/nghỉ và GPU/mixed/giữ, rồi thử app Windows build mới với Key light 0 → 10 → 25 → 100. Kỳ vọng highlight đèn chính biến mất ở 0, phần còn lại có thể còn sáng do ambient/rim/emission. Chưa tự promote thay đổi thiết kế/particle khác; giữ Settings UI ở giai đoạn cuối đã thống nhất.
+Bước duyệt ảnh đối chiếu đã hoàn thành với phản hồi “tớ thấy ổn rồi”. Phần còn lại là theo dõi full regression và thử app Windows build mới với Key light 0 → 10 → 25 → 100. Kỳ vọng highlight đèn chính biến mất ở 0, phần còn lại có thể còn sáng do ambient/rim/emission. Chưa tự promote thay đổi thiết kế/particle khác; giữ Settings UI ở giai đoạn cuối đã thống nhất.
