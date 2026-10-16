@@ -118,9 +118,10 @@ already have.
 
 ## Getting the source
 
-This repository is **private**: only the owners and invited collaborators can clone it. An end user does
-not need the source — download a package from [the public release repository](https://github.com/lxmtuu/KeyFlow/releases). What follows
-is for contributors who have been given access.
+This repository is the **source repository** of the two-repository model; its visibility (public or private)
+is the owner's setting, and it was flipped back and forth during 2026-10-16 — in either state an end user does
+not need the source: download a package from [the public release repository](https://github.com/lxmtuu/KeyFlow/releases). What follows
+is for contributors.
 
 ```powershell
 cd $HOME\source            # or any folder; avoid paths with special characters
@@ -538,7 +539,7 @@ git push origin v2.1.1
 
 Neither workflow downloads piano samples. The verification suite creates small local fixtures; it never downloads Salamander's 748 MB library.
 
-**Two repositories, one product.** This repository is the source (**private** since 2026-10-16); [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow) is the public one:
+**Two repositories, one product.** This repository is the source (visibility is the owner's setting — the 2026-10-16 note lives in the handbook's §2a); [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow) is the public one:
 every tag gets a `release/public-<tag>` branch **in that repository** holding the bilingual product page,
 the changelogs, the licences, the interface pictures and the slide deck, plus — the part that matters
 most — the packages attached to its GitHub Release; the public repository's `main` always carries the

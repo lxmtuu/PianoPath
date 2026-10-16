@@ -8,8 +8,10 @@ còn sống trong kho dưới dạng *unreachable* cho tới khi GitHub chạy G
 tên. Luật dùng để quyết định: **chỉ xoá nhánh có `ahead_by = 0`** — tức tip của nó là tổ tiên của `main`,
 nên mọi commit của nó đã nằm trong `main` và việc xoá không mất một dòng code nào.
 
-> Một điều kiện khiến việc dọn này khả thi hơn trước: kho đã **private** từ 2026‑10‑16, nên các nhánh cũ
-> không còn bày ra công khai. Mặt trái của chính việc đó ghi ở §5.
+> Việc dọn chạy lúc kho đang **private** (sáng 2026‑10‑16); trong ngày visibility đổi qua lại bốn trạng thái
+> (public → private → public → private) và lần đo cuối của phiên lại là **private**. Ở trạng thái nào thì 49
+> nhánh đã xoá cũng không quay lại, và 13 nhánh giữ lại đều có lý do ghi ở §4. Mặt trái đo được của vòng đổi
+> visibility ghi ở §5.
 
 ## 0. Kết quả, đếm được bằng `git ls-remote`
 
@@ -190,22 +192,30 @@ Không có lệnh nào trong đợt dọn này chạm tới chúng; bảng này 
 | `arena/0e081d37-pianopath` | nhánh của phiên làm việc đang tạo ra tệp này |
 | `release/public-v2.0.1`, `release/public-v2.1.1` (ở `lxmtuu/KeyFlow`) | **đang được dùng**: ghi chú phát hành của mỗi tag link CHANGELOG vào đúng nhánh `release/public-<tag>` (`release.yml` bước *Decide where the release notes' changelog links point*). Đã kiểm link của v2.1.1 trỏ tới nhánh có thật; v2.1.0 là pre-release viết tay, không link nên không gãy |
 
-## 5. Một hệ quả của việc kho thành private, phát hiện trong lúc dọn
+## 5. Một hệ quả của vòng đổi visibility, phát hiện trong lúc dọn
 
-`gh api repos/lxmtuu/PianoPath/rulesets` nay trả **403 "Upgrade to GitHub Pro or make this repository public
-to enable this feature."** — GitHub **không bật ruleset cho kho private trên gói Free**. Hai ruleset từng
-được `docs/REPO-AUDIT.md` §6.2/§8.1 đo và mô tả (`24265624` *Protect Branch*, `24233546` *Protect Main Branch*
-với `pull_request` + code-owner review, và `bypass_actors: null`) vì thế **không còn hiệu lực** chừng nào kho
-còn private trên gói Free. Kiểm chéo: `branches/main/protection` cũng `403 Resource not accessible by
-integration` với token phiên này, nên không đọc được trạng thái protection cổ điển — **cần chính chủ repo xem
-lại trong Settings → Rules / Branches**.
+`gh api repos/lxmtuu/PianoPath/rulesets` được đo **bốn lần** trong phiên, ở cả hai trạng thái visibility:
 
-Việc này đổi hai điều mà tài liệu đang ghi:
+| Lần đo | Trạng thái kho | Kết quả |
+|---|---|---|
+| sáng 2026‑10‑16 (khi dọn nhánh) | private | **403** "Upgrade to GitHub Pro or make this repository public to enable this feature" — gói Free không có ruleset cho kho private |
+| giữa ngày | public | **mảng rỗng** — 0 ruleset |
+| cuối phiên | **private lại** | 403 lại |
 
-* `main` **không còn** bị buộc nhận pull request hay code-owner review ⇒ một lệnh push thẳng là vào được.
-* Lý do tồn tại của mấy nhánh xử lý **GH013** trong `build.yml`/`release.yml` ("nhánh chỉ nhận pull request
-  nên bước commit ảnh chỉ cảnh báo") nay không còn đúng hoàn cảnh; chúng vẫn vô hại và nên giữ, vì bật lại
-  protection (hoặc nâng gói / làm kho public lại) là chuyện một lần bấm.
+Kết luận: hai ruleset `24265624` (*Protect Branch*) và `24233546` (*Protect Main Branch*, có `pull_request` +
+code-owner review) mà `docs/REPO-AUDIT.md` §6.2/§8.1 từng đo **đã không sống sót qua vòng private→public**, và
+không tự quay lại khi đổi visibility lần nữa. `main` vì thế hiện **không còn gì bảo vệ** — không buộc pull
+request, không code-owner review — với người có quyền push thì push thẳng vào được. Kèm theo, sao công khai
+**3 → 2** vĩnh viễn: sao của người ngoài bị gỡ lúc kho private lần đầu và không trả lại (hai sao còn đọc được
+bằng tên: `jin3107`, `lxmtuu`).
+
+Việc này **không đụng vào bất kỳ nhánh nào đã dọn** (49 nhánh xoá vẫn xoá, 13 nhánh giữ vẫn giữ), nhưng nó
+đổi nghĩa của mấy câu trong hai workflow: các nhánh xử lý **GH013** ("nhánh chỉ nhận pull request nên bước
+commit ảnh chỉ cảnh báo") nay mô tả một hoàn cảnh không tồn tại. Chúng vô hại nên giữ; còn protection của
+`main` là quyết định của chủ repo, và có một ràng buộc phải nói thẳng: **gói Free chỉ có ruleset cho kho
+public** — muốn protection mà vẫn private thì cần GitHub Pro. Nếu dựng lại, **đừng chép nguyên bản cũ**:
+`bypass_actors: null` của nó chặn cả `GITHUB_TOKEN`, tức chặn luôn bước commit ảnh preview của CI
+(`docs/REPO-AUDIT.md` §6.2 đã ghi bài học đó).
 
 ## 6. Nội dung `Assets/ATTRIBUTION.txt` của thời SF2 (chép lại để không mất)
 

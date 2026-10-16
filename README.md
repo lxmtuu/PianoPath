@@ -105,8 +105,9 @@ Mở **PowerShell** (không cần quyền admin) và cài lần lượt. Nếu �
 
 ## Tải mã nguồn
 
-Kho này là **private**: chỉ chủ dự án và người được mời clone được. Người dùng cuối không cần mã nguồn —
-tải gói ở [kho phát hành công khai](https://github.com/lxmtuu/KeyFlow/releases). Phần dưới dành cho người đóng góp đã được cấp quyền.
+Kho này là **kho mã nguồn** của mô hình hai kho; visibility của nó (public hay private) là thiết lập của chủ
+repo và đã đổi qua lại trong ngày 2026‑10‑16 — ở trạng thái nào thì người dùng cuối cũng không cần mã nguồn:
+tải gói ở [kho phát hành công khai](https://github.com/lxmtuu/KeyFlow/releases). Phần dưới dành cho người đóng góp.
 
 ```powershell
 cd $HOME\source            # hoặc thư mục bất kỳ; tránh đường dẫn có ký tự đặc biệt
@@ -492,7 +493,7 @@ git push origin v2.1.1
 
 Các workflow không tải mẫu piano. Bộ kiểm chứng tạo fixture nhỏ tại chỗ; nó không tải bộ Salamander 748 MB.
 
-**Hai kho, một sản phẩm.** Kho này là nguồn (**private** từ 2026‑10‑16); [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow) là nơi công khai: mỗi tag có một nhánh `release/public-<tag>` **ở kho đó** chứa trang sản phẩm song ngữ, CHANGELOG, giấy phép, ảnh giao diện, bộ slide và — quan trọng nhất — các gói đính kèm trong GitHub Release; `main` của kho công khai luôn giữ bản mới nhất. Trang đó **không** mang mã nguồn, không mang lịch sử commit của kho này, và không được sửa tay: nó do máy sinh từ chính hai README này và `tools/check_sources.py` so từng byte của `docs/release/` với script sinh ra nó, nên một trang công khai lệch khỏi README này là một lần build đỏ. Việc thiết lập một lần (tạo kho, secret, variable), cách phát hành bằng tay và những đánh đổi của mô hình này nằm ở [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md).
+**Hai kho, một sản phẩm.** Kho này là nguồn (visibility do chủ repo đặt — mốc 2026‑10‑16 ghi ở sổ tay §2a); [lxmtuu/KeyFlow](https://github.com/lxmtuu/KeyFlow) là nơi công khai: mỗi tag có một nhánh `release/public-<tag>` **ở kho đó** chứa trang sản phẩm song ngữ, CHANGELOG, giấy phép, ảnh giao diện, bộ slide và — quan trọng nhất — các gói đính kèm trong GitHub Release; `main` của kho công khai luôn giữ bản mới nhất. Trang đó **không** mang mã nguồn, không mang lịch sử commit của kho này, và không được sửa tay: nó do máy sinh từ chính hai README này và `tools/check_sources.py` so từng byte của `docs/release/` với script sinh ra nó, nên một trang công khai lệch khỏi README này là một lần build đỏ. Việc thiết lập một lần (tạo kho, secret, variable), cách phát hành bằng tay và những đánh đổi của mô hình này nằm ở [`docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`](docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md).
 
 ### Lỗi thường gặp khi publish
 

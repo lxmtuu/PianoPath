@@ -9,7 +9,7 @@ lộ trình riêng của AR ở `docs/AR-OVERLAY-ROADMAP.md`; mô hình kho ngu�
 `docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md`.
 
 > **Ảnh chụp trạng thái 2026‑10‑16** (đo tại chỗ, không chép lại số cũ): phiên bản `2.1.1`
-> (`PianoPath.csproj:20`), kho nguồn **private**, trang phát hành công khai `lxmtuu/KeyFlow` đang giữ
+> (`PianoPath.csproj:20`), kho nguồn **private ở lần đo cuối của phiên** (visibility đổi qua lại bốn trạng thái trong ngày 2026‑10‑16 — dòng thời gian và hệ quả ở `docs/PRIVATE-SOURCE-PUBLIC-RELEASES.md` §2a), trang phát hành công khai `lxmtuu/KeyFlow` đang giữ
 > `v2.1.1`. `python3 tools/check_sources.py` xanh (349 tệp C#, 2 XAML, 1482 khoá chuỗi nguồn in ra / 1653
 > trong inventory). CI trên `main` run **38900310173** xanh cả `static` · `test` · `build` ·
 > `keyboard-light`; `--verify` báo **7910 assertions, 1 nhóm skip**; bộ test `tests/PianoPath.Tests` có
