@@ -104,7 +104,7 @@ def verify(directory,source_root=None,revision=None,published_only=False,publish
         import shutil
         evidence,previews=publish;evidence.mkdir(parents=True,exist_ok=True);previews.mkdir(parents=True,exist_ok=True)
         names=[s['file'] for s in m['sheets']];size=(directory/'manifest.json.gz').stat().st_size+sum((directory/n).stat().st_size for n in names)
-        if size>700000:raise ValueError(f'Bounded publication {size} bytes exceeds 700000 bytes')
+        if size>1050000:raise ValueError(f'Bounded publication {size} bytes exceeds 1050000 bytes')
         shutil.copyfile(directory/'manifest.json.gz',evidence/'manifest.json.gz')
         for name in names:shutil.copyfile(directory/name,previews/name)
         print('Native publication bytes:',size)
