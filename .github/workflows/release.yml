@@ -224,7 +224,6 @@ jobs:
       # An isolated index computes a tree; only the separate public repository receives a root commit.
       - name: Prepare the public release tree without changing the source checkout
         id: public_branch
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
