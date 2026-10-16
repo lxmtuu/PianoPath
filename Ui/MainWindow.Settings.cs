@@ -1135,7 +1135,11 @@ public partial class MainWindow
         var jump = new Button { Content = "›", Style = (Style)FindResource("MiniButtonStyle"), Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
         Loc.Set(jump, "Open the detailed controls for this layer", FrameworkElement.ToolTipProperty);
         Loc.Set(jump, "Open the detailed controls for this layer", AutomationProperties.NameProperty);
-        jump.Click += (_, _) => JumpToCard(detailCard);
+        jump.Click += (_, _) =>
+        {
+            var owner = _settingRows.LastOrDefault(candidate => candidate.Property == property);
+            JumpToCard(owner is not null && _settingsCardOrigins.TryGetValue(owner.Card, out var location) ? location.Title : detailCard);
+        };
         Grid.SetColumn(jump, 1);
         line.Children.Add(check); line.Children.Add(jump);
         body.Children.Insert(index, line);

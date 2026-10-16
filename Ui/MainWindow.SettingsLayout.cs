@@ -17,7 +17,7 @@ public partial class MainWindow
 
     private static readonly HashSet<string> CommonSettings = new(StringComparer.Ordinal)
     {
-        "ShowSheet", "ShowWatermark", "ShowCounter", "ShowFps", "ShowNotes", "ColorMode", "Palette", "NoteColorStart", "NoteColorEnd", "LeftHandColor", "RightHandColor",
+        "ShowSheet", "ShowWatermark", "ShowCounter", "ShowFps", "ShowLightBeams", "BeamIntensity", "ShowNotes", "ColorMode", "Palette", "NoteColorStart", "NoteColorEnd", "LeftHandColor", "RightHandColor",
         "TrackColors", "NoteStyle", "NoteWidth", "NoteFallSpeed", "NoteDirection", "NoteSatin", "ShowEmbers",
         "ImpactBurst", "ParticleAmount", "ParticleSize", "ParticleGlow", "ShowImpactRings", "ImpactWave", "RingSize",
         "ShowImpactFlash", "ImpactMorph", "UpgradedParticleEffects", "ShowWisps", "WispAmount", "WispHeight",

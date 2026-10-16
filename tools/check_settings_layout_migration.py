@@ -57,6 +57,7 @@ def main():
     assert 'foreach (var duplicates' in layout and '_settingRows.Remove(alias)' in layout
     assert '_settingsExpansionBeforeSearch' in layout
     assert 'advanced.IsExpanded = true' in new
+    assert '_settingsCardOrigins.TryGetValue(owner.Card, out var location)' in new
     assert 'RegisterBusinessCard(AudioBusinessCard' in layout
     assert 'RegisterBusinessCard(MidiBusinessCard' in layout
     assert 'RegisterBusinessCard(PracticeBusinessCard' in layout
