@@ -31,8 +31,8 @@ internal static partial class VerificationSuite
             var origin = route.Source switch { AuxParticleTimeline.Channel.Held => 2, AuxParticleTimeline.Channel.Release => 1, _ => 0 };
             Assert(snapshot.Length > 0 && snapshot.All(p => p.Pitch == pitch && p.Shape == route.Shape && p.Wisp == route.Wisp && p.Origin == origin),
                 $"{route.Id}/{pitch}: production births retain channel, source pitch and material shape tags.");
-            Assert(snapshot.All(p=>p.MaterialRoute==(route.Id=="morph-melt"?MeltParticleAppearance.Route:route.Id=="morph-bounce"?BounceParticleAppearance.Route:0)),
-                $"{route.Id}/{pitch}: Melt/Bounce births alone carry their distinct material provenance; not a shape/origin heuristic.");
+            Assert(snapshot.All(p=>p.MaterialRoute==(route.Id switch {"morph-melt"=>1,"morph-bounce"=>2,"release-float-up"=>3,"release-dissolve"=>4,"release-smoke"=>5,_=>0})),
+                $"{route.Id}/{pitch}: Melt/Bounce/release births carry distinct material provenance; not a shape/origin heuristic.");
             Assert(snapshot.All(p => p.Age >= 0 && p.Age < p.Life && float.IsFinite(p.X) && float.IsFinite(p.Y)),
                 $"{route.Id}/{pitch}: active baseline must contain finite living particles.");
             Assert(route.Source == AuxParticleTimeline.Channel.Held ? sim.EmitterParticlesBorn == born : sim.EmitterParticlesBorn == 0,
@@ -79,6 +79,7 @@ internal static partial class VerificationSuite
         }
         VerifyMeltMixedRoutes(layer,ar,view,sprites,quads);
         VerifyBounceMixedRoutes(layer,ar,view,sprites,quads);
+        VerifyReleaseMixedRoutes(layer,ar,view,sprites,quads);
         Results.Add("PASS P3a auxiliary lifecycle: wisps/flames, Shatter/Melt/Bounce and Float Up/Dissolve/Smoke; white/black keys, tagged births, read-only Stage/AR builds, physical-release/heat/pedal policy, duplicate Note Off, song release cursor, disabled controls and expired tails. Baseline only, not new art or nonzero camera delay.");
     }
 
@@ -183,6 +184,66 @@ internal static partial class VerificationSuite
                 "Mixed Bounce builds are read-only including material provenance.");
         }
         Results.Add("PASS Bounce mixed-route isolation: same-shape/origin Ember/Firework streaks unchanged, companion ring unchanged, Stage/AR geometry/order/counts unchanged; only tagged Bounce body material changes, read-only and default-off.");
+    }
+
+    private static void VerifyReleaseMixedRoutes(GpuArLayer layer,GpuArInput ar,ArView view,
+        GpuInstanceList<GpuSpriteInstance> sprites,GpuInstanceList<GpuArQuad> quads)
+    {
+        var settings=AuxParticleFixtures.Settings(AuxParticleTimeline.Routes.Single(r=>r.Id=="release-float-up"));
+        settings.ShowEmbers=true;settings.ImpactBurst="Splash";settings.ParticleAmount=18;
+        settings.ImpactMorph="Melt";settings.ImpactMorphIntensity=70;
+        var feed=new GpuStageFeed();feed.SetStageHeight(720);var sim=new GpuStageSimulation(KeyParticleFixtures.Seed);var input=new GpuFrameInput();
+        var tick=0;
+        foreach(var effect in new[]{"Float Up","Dissolve","Smoke"})
+        {
+            settings.ReleaseEffect=effect;var current=ParticleLook(settings);feed.SetLook(current);
+            feed.SetDeterministicState([],++tick/60.0,false,new HashSet<int>());feed.SetSustainLevel(true,1);
+            if(tick==1)feed.Impact(60,.9);
+            feed.LiveNote(61,true,.9);feed.LiveNote(61,false,.9);
+            feed.Capture(input,GpuStageFeed.Now);sim.Step(1.0/60,input,feed,1280);
+        }
+        var classic=ParticleLook(settings);var art=classic.WithReleaseArtForReview(true);
+        Assert(!classic.ReleaseArtForReview && !classic.ReleaseFrontLayerForReview,"Release material/depth flags must default off.");
+        var raw=ParticleSnapshot(sim);var time=sim.Time;var born=sim.ParticlesBorn;
+        Assert(new[]{0,1,3,4,5}.All(route=>raw.Any(p=>p.MaterialRoute==route)),
+            "Mixed fixture must retain primary Splash, Melt and all three simultaneous release tails across setting changes.");
+        var layout=new GpuSceneLayout(1280,720,classic.KeyboardFraction);
+        sim.BuildSprites(classic,layout,sprites);var before=sprites.Span.ToArray();
+        sim.BuildSprites(art,layout,sprites);var after=sprites.Span.ToArray();
+        Assert(before.Length==after.Length,"Release material cannot change component count/order.");
+        Assert(after.Count(q=>q.PosSize.W==40)==raw.Count(p=>p.MaterialRoute==3)
+            && after.Count(q=>q.PosSize.W==43)==raw.Count(p=>p.MaterialRoute==4)
+            && after.Count(q=>q.PosSize.W==46)==raw.Count(p=>p.MaterialRoute==5),"All release source tags must retain their own pigment even after changing current release setting.");
+        for(var i=0;i<before.Length;i++)
+        {
+            var a=before[i];var b=after[i];
+            if(b.PosSize.W>=40 && b.PosSize.W<=46){b.PosSize.W=a.PosSize.W;b.Color=a.Color;}
+            Assert(a.Equals(b),"Release material cannot alter primary/morph packets, geometry or ordered non-body data.");
+        }
+        feed.SetLook(classic);feed.Capture(input,GpuStageFeed.Now);
+        layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var arBefore=quads.Span.ToArray();
+        feed.SetLook(art);feed.Capture(input,GpuStageFeed.Now);
+        layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);var arAfter=quads.Span.ToArray();
+        Assert(arBefore.Length==arAfter.Length,"Release AR keeps ordered counts.");
+        for(var i=0;i<arBefore.Length;i++)
+        {
+            var a=arBefore[i];var b=arAfter[i];
+            if(b.Misc.Z is 40 or 43 or 46){b.Misc.Z=a.Misc.Z;b.Color=a.Color;}
+            Assert(a.Equals(b),"Release cannot alter AR corners/weights, primary Splash/Melt packets or non-body data.");
+        }
+        var front=art.WithReleaseFrontLayerForReview(true);
+        sim.BuildSprites(front,layout,sprites);var foreground=sprites.Span.ToArray();
+        Assert(foreground.Length==after.Length,"Release front-layer keeps all accepted components.");
+        for(var i=0;i<after.Length;i++)
+        {
+            var a=after[i];var b=foreground[i];
+            if(a.PosSize.W>=40 && a.PosSize.W<=46){Assert(b.PosSize.W==a.PosSize.W+7,"Front-layer changes only tagged release kind.");b.PosSize.W=a.PosSize.W;}
+            Assert(a.Equals(b),"Release depth option cannot change XY geometry/RGBA/non-release data.");
+        }
+        feed.SetLook(front);feed.Capture(input,GpuStageFeed.Now);layer.Build(input,ar,view,sim.KeyColors,sim,quads,projectedNotes:true);
+        Assert(arAfter.SequenceEqual(quads.Span.ToArray()),"Stage-only release depth flag cannot change AR.");
+        Assert(time==sim.Time && born==sim.ParticlesBorn && raw.SequenceEqual(ParticleSnapshot(sim)),"Mixed release builds are read-only, including provenance and RNG-dependent future state.");
+        Results.Add("PASS release mixed provenance: Float Up/Dissolve/Smoke tails coexist after setting changes, primary Splash/Melt unchanged; actual Stage/AR geometry/count/order and state unchanged, separate Stage-only depth tag; default-off.");
     }
 
     private static void VerifyAuxSongRelease(AuxParticleTimeline.Route route, int pitch)

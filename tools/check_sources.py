@@ -969,7 +969,7 @@ def scan_previews_folder():
     # Bounded native animation assets: exact BGRA frames, not arbitrary diagnostics/archives.
     # The family validators verify frame count, decoded length, hashes and publication budgets.
     native_bundles = {f"{family}/{view}-{phase}.bgra.gz"
-                      for family in ("fireworks-art-v1", "confetti-art-v1", "dust-art-v1", "dust-art-v2", "shatter-art-v1", "melt-art-v1", "bounce-art-v1")
+                      for family in ("fireworks-art-v1", "confetti-art-v1", "dust-art-v1", "dust-art-v2", "shatter-art-v1", "melt-art-v1", "bounce-art-v1", "release-float-up-v1", "release-dissolve-v1", "release-smoke-v1")
                       for view in ("live-stage", "ar-reference") for phase in ("burst", "held")}
     native_bundles.update(f"shatter-billboard-v1/{view}-{phase}.bgra.gz"
                           for view in ("ar-reference","ar-near-overhead") for phase in ("burst","held"))

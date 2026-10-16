@@ -88,6 +88,12 @@ internal sealed class GpuLook
     public bool ShowEmbers { get; init; } = true;
     public bool HeldParticleArt { get; init; }
     /// <summary>Verification-only material candidate; never bound to settings/presets/menu.</summary>
+    internal bool ReleaseArtForReview { get; private set; }
+    internal bool ReleaseFrontLayerForReview { get; private set; }
+    internal GpuLook WithReleaseArtForReview(bool enabled)
+    {var copy=(GpuLook)MemberwiseClone();copy.ReleaseArtForReview=enabled;return copy;}
+    internal GpuLook WithReleaseFrontLayerForReview(bool enabled)
+    {var copy=(GpuLook)MemberwiseClone();copy.ReleaseFrontLayerForReview=enabled;return copy;}
     internal bool BounceBillboardForReview { get; private set; }
     internal GpuLook WithBounceBillboardForReview(bool enabled)
     {

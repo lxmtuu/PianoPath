@@ -4,6 +4,15 @@ import argparse,hashlib,io,json
 from pathlib import Path
 
 TARGETS=(
+ 'held-particle-controls-scenes/wisps-prism-chord-ar-reference.png',
+ 'held-light-isolation/wisps-low-prism-ar-reference-full.png',
+ 'held-particle-art/flames-61-ar-art.png',
+ 'held-particle-art/flames-60-ar-art.png',
+ 'held-particle-art/wisps-61-ar-art.png',
+ 'prism-flow-p3a-aux/flames-61-ar-active.png',
+ 'held-particle-art/wisps-60-ar-art.png',
+ 'prism-flow-p3a-aux/wisps-61-ar-active.png',
+ 'prism-flow-p3a-aux/flames-60-ar-active.png',
  'prism-flow-p0/concert-gold-ar.png','prism-flow-p0/neon-violet-ar.png','prism-flow-p0/ice-crystal-ar.png',
  'prism-flow-p1/ar-candidate.png','prism-flow-p1/ar-texture-off.png','prism-flow-p1/ar-bloom-off.png',
  'held-particle-controls-scenes/flames-indigo-chord-ar-reference.png',

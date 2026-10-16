@@ -177,7 +177,7 @@ internal sealed partial class GpuStageSimulation
             {
                 var count = Math.Clamp((int)(6 * strength) + 2, 0, 10);
                 for (var i = 0; i < count; i++)
-                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 18, Y = y - 4, Vx = (Rand() - .5f) * 24, Vy = -(50 + Rand() * 90), Life = .7f + Rand() * .5f, Mass = .5f, Phase = Rand() * MathF.Tau, Size = 1.4f + Rand() * 1.6f, Grav = -.25f, DragK = 1, Glow = 1, Color = color }, clamped, origin: 1);
+                    Spawn(new Particle { Shape = Shape.Droplet, MaterialRoute = ReleaseParticleAppearance.FloatRoute, X = x + (Rand() - .5f) * 18, Y = y - 4, Vx = (Rand() - .5f) * 24, Vy = -(50 + Rand() * 90), Life = .7f + Rand() * .5f, Mass = .5f, Phase = Rand() * MathF.Tau, Size = 1.4f + Rand() * 1.6f, Grav = -.25f, DragK = 1, Glow = 1, Color = color }, clamped, origin: 1);
                 break;
             }
             case "Dissolve":
@@ -186,7 +186,7 @@ internal sealed partial class GpuStageSimulation
                 for (var i = 0; i < count; i++)
                 {
                     var angle = Rand() * MathF.Tau; var speed = 20 + Rand() * 70;
-                    Spawn(new Particle { Shape = Shape.Droplet, X = x + (Rand() - .5f) * 26, Y = y - 6, Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed - 20, Life = .4f + Rand() * .35f, Mass = 1, Phase = Rand() * MathF.Tau, Size = .9f + Rand() * 1.1f, Grav = .3f, DragK = 2, Glow = 1, Color = color }, clamped, origin: 1);
+                    Spawn(new Particle { Shape = Shape.Droplet, MaterialRoute = ReleaseParticleAppearance.DissolveRoute, X = x + (Rand() - .5f) * 26, Y = y - 6, Vx = MathF.Cos(angle) * speed, Vy = MathF.Sin(angle) * speed - 20, Life = .4f + Rand() * .35f, Mass = 1, Phase = Rand() * MathF.Tau, Size = .9f + Rand() * 1.1f, Grav = .3f, DragK = 2, Glow = 1, Color = color }, clamped, origin: 1);
                 }
                 break;
             }
@@ -194,7 +194,7 @@ internal sealed partial class GpuStageSimulation
             {
                 var count = Math.Clamp((int)(4 * strength) + 2, 0, 8);
                 for (var i = 0; i < count; i++)
-                    Spawn(new Particle { Shape = Shape.Dust, X = x + (Rand() - .5f) * 20, Y = y - 6, Vx = (Rand() - .5f) * 20, Vy = -(30 + Rand() * 50), Life = .8f + Rand() * .6f, Mass = 1, Phase = Rand() * MathF.Tau, Size = 2 + Rand() * 2, Grav = -.1f, DragK = 2, Glow = 1, Color = Vector3.Lerp(new Vector3(.59f, .57f, .55f), color, .2f) }, clamped, origin: 1);
+                    Spawn(new Particle { Shape = Shape.Dust, MaterialRoute = ReleaseParticleAppearance.SmokeRoute, X = x + (Rand() - .5f) * 20, Y = y - 6, Vx = (Rand() - .5f) * 20, Vy = -(30 + Rand() * 50), Life = .8f + Rand() * .6f, Mass = 1, Phase = Rand() * MathF.Tau, Size = 2 + Rand() * 2, Grav = -.1f, DragK = 2, Glow = 1, Color = Vector3.Lerp(new Vector3(.59f, .57f, .55f), color, .2f) }, clamped, origin: 1);
                 break;
             }
             case "Snap Back":

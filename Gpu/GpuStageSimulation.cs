@@ -899,6 +899,16 @@ internal sealed partial class GpuStageSimulation
                                 : halo?MeltParticleAppearance.HaloKind:body?MeltParticleAppearance.BodyKind:MeltParticleAppearance.GlintKind;
                             q.Color=halo?MeltParticleAppearance.Halo(melt):body?melt:MeltParticleAppearance.Glint(melt);
                         }
+                    if(ReleaseParticleAppearance.Eligible(look.ReleaseArtForReview,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && ReleaseParticleAppearance.TryColor(p.MaterialRoute,p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var release))
+                        for(var j=firstSplashSprite;j<sprites.Count;j++)
+                        {
+                            ref var q=ref sprites.Writable[j];
+                            var halo=q.PosSize.W is 9 or SplashParticleAppearance.HaloKind;
+                            var body=!halo && q.Dir.W==.15f;
+                            q.PosSize.W=ReleaseParticleAppearance.StageKind(p.MaterialRoute,halo?1:body?0:2,look.ReleaseFrontLayerForReview);
+                            q.Color=halo?ReleaseParticleAppearance.Halo(release,p.MaterialRoute):body?release:ReleaseParticleAppearance.Glint(release,p.MaterialRoute);
+                        }
                     break;
                 }
                 case Shape.Shard:
@@ -962,6 +972,9 @@ internal sealed partial class GpuStageSimulation
                     if(DustParticleAppearance.Eligible(look.DustArtForReview && look.ImpactBurst=="Dust",(int)p.Shape,p.Wisp)
                         && DustParticleAppearance.TryColor(p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var dust,look.DustArtV2ForReview))
                     {kind=look.DustArtV2ForReview?DustParticleAppearance.V2Kind:DustParticleAppearance.Kind;color=dust;}
+                    if(ReleaseParticleAppearance.Eligible(look.ReleaseArtForReview,(int)p.Shape,p.Wisp,p.Origin,p.MaterialRoute)
+                        && ReleaseParticleAppearance.TryColor(p.MaterialRoute,p.Color,p.Age,p.Life,p.Glow,look.ParticleGlow,out var smoke))
+                    {kind=ReleaseParticleAppearance.StageKind(p.MaterialRoute,0,look.ReleaseFrontLayerForReview);color=smoke;}
                     sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(px, p.Y, size, kind), Color = color, Dir = new Vector4(0, -1, 0, u) });
                     break;
                 }

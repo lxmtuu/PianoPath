@@ -6688,6 +6688,9 @@ internal static partial class VerificationSuite
         VerifyPrismFlowInputs();
         VerifyPrismFlowLook();
         VerifyKeyParticleLifecycle();
+        var releases=ReleaseParticleArtReview.RenderAll(outputDirectory);
+        Assert(releases==576,"Three release trials require 576 main statics, per-family depth/pedal/pre-release controls and 2160 motion crops.");
+        Results.Add("PASS release trials: Float Up/Dissolve/Smoke, actual Note On/held/Note Off, independent pedal controls, no births before release; 576 main statics / 2160 motion crops plus explicit Stage depth controls. Shared body RGBA, unchanged raw physics/RNG and ordered geometry; default-off Stage front-layer trial, not art/hardware approval.");
         var bounce=BounceParticleArtReview.Render(Path.Combine(outputDirectory,"bounce-art-v1"));
         Assert(bounce==192,"Bounce needs 192 main statics, 64 body-off and 64 material-only geometry controls, 720 motion crops without body-empty exemptions.");
         Results.Add("PASS Bounce material trial: 192 statics + 64 body-off + 64 material-only controls / 720 motion crops; independent actual AR billboard corner/weight checks; body-only signal cannot be substituted by its unchanged companion ring. Shared actual body RGBA across Stage/three AR poses; unchanged raw state, non-body geometry, counts, depth and selection; explicit AR-only tangent geometry trial. Default-off, not new rebound physics or art/hardware acceptance.");

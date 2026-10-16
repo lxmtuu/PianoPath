@@ -516,6 +516,28 @@ float4 ShadeMeltArt(float2 p,float4 color,float component)
     return float4(pigment*coverage*color.a,coverage*color.a);
 }
 
+// Release materials own coverage only. One CPU lifetime envelope, no temporal noise or new geometry.
+float4 ShadeReleaseArt(float2 p,float4 color,float kind)
+{
+    float coverage;
+    if(kind>45.5)
+    {
+        float lobe=exp(-dot(p-float2(-0.16,0.08),p-float2(-0.16,0.08))*3.4);
+        float veil=exp(-dot(p-float2(0.22,-0.18),p-float2(0.22,-0.18))*5.0);
+        coverage=(lobe*.65+veil*.35)*(1.0-smoothstep(.72,1.0,length(p)));
+    }
+    else if(kind==41 || kind==44)coverage=exp(-dot(p,p)*9.0);
+    else if(kind==42 || kind==45)coverage=exp(-dot(p,p)*3.5);
+    else
+    {
+        float r=length(p);
+        // Float Up is a soft buoyant bead; Dissolve is a restrained fine grain, not another liquid glint.
+        coverage=kind<42.5?1.0-smoothstep(.52,.96,r):exp(-dot(p,p)*4.5)*(1.0-smoothstep(.65,1.0,r));
+    }
+    float alpha=coverage*color.a;
+    return float4(color.rgb*alpha,alpha);
+}
+
 // Rounded directional Bounce stroke: a broad shoulder at the leading end and a quiet tapered tail.
 // Same local pigment in both outputs; CPU alpha is the only lifetime fade. No phase noise or white core.
 float4 ShadeBounceArt(float2 p,float4 color)
@@ -660,6 +682,7 @@ float4 ShadeSparkArtV2(float2 uv, float4 color, bool streak)
 float4 PsArQuad(ArQuadOut i) : SV_Target
 {
     float kind = i.Misc.z;
+    if(kind==40 || kind==43 || kind==46) return ShadeReleaseArt(i.Uv*2.0-1.0,i.Color,kind);
     if(kind>38.5 && kind<39.5) return ShadeBounceArt(i.Uv*2.0-1.0,i.Color);
     if(kind>32.5 && kind<33.5) return ShadeMeltArt(i.Uv*2.0-1.0,i.Color,33);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(i.Uv*2.0-1.0,i.Color);
@@ -1457,7 +1480,14 @@ SpriteOut VsSprite(uint vid : SV_VertexID, uint iid : SV_InstanceID)
     float2 offset = 0.0;
     float4 extra = 0.0;
     float depth = 0.6;
-    if(kind>38.5 && kind<39.5)
+    if(kind>39.5 && kind<53.5)
+    {
+        float baseKind=kind>46.5?kind-7:kind;
+        if(kind>46.5)depth=0.01; // Separate default-off Stage front-layer experiment, never AR.
+        if(baseKind<45.5){extent=float2(size,size*max(s.Dir.z,0.02));extra=float4(extent,1.0,s.Dir.w);}
+        // Smoke keeps the exact old kind-0 dust square, axis and extent.
+    }
+    else if(kind>38.5 && kind<39.5)
     {
         // Exact legacy kind-1 streak axis, stretch and depth (.6), not a billboard or size change.
         extent=float2(size*(1.0+s.Dir.z),size);
@@ -1715,6 +1745,7 @@ float4 SpriteShape(SpriteOut v)
 float4 PsSprite(SpriteOut v) : SV_Target
 {
     float kind = v.Params.x;
+    if(kind>39.5 && kind<53.5) return ShadeReleaseArt(v.Local,v.Color,kind>46.5?kind-7:kind);
     if(kind>38.5 && kind<39.5) return ShadeBounceArt(v.Local,v.Color);
     if(kind>32.5 && kind<38.5) return ShadeMeltArt(v.Local,v.Color,kind>35.5?kind-3:kind);
     if(kind>30.5 && kind<31.5) return ShadeShatterArt(v.Local,v.Color);
