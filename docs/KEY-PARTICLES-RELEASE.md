@@ -1,6 +1,6 @@
 # Float Up / Dissolve / Smoke — physical-release material trials
 
-**Default-off, review-only; not final art approval.** Settings/menu/default presets have not been promoted or redesigned.
+**User-tested and visually accepted for all three reviewed candidates (2026-10-16).** The implementation remains default-off/review-only; settings/menu/default presets have not been promoted or redesigned.
 
 ## Scope and appearance
 
@@ -76,8 +76,10 @@ The gallery links all three effects. The player initially opens f14, after relea
 
 ## Art status
 
-**All flags remain default-off; all three designs remain art-open.** Native sheets show Float Up as smaller, more coloured beads rather than white glints; Dissolve is finer and particularly faint late in its short life; Smoke softens the white puffs, but the two-lobe silhouette is not reliably legible at normal resolution and AR can blend into the common key/camera texture. The large shared bright key region in paired crops is not new Smoke or a new particle core. Positive native off-delta is not proof that the three identities read distinctly enough in a real performance.
+**User acceptance recorded on 2026-10-16:** “tớ đã test cả ba và thấy ổn”. Float Up, Dissolve and Smoke are accepted visually for the versions the user reviewed. The test environment, camera poses, hardware and whether the user separately compared the Stage depth controls were not specified; this acceptance does not assert broader coverage or select a production depth policy. Both review flags remain default-off, with no runtime/settings change.
 
-The viewer uses exact native pixels with nearest-neighbour enlargement and no colour/exposure edits. Keeping physics/size/counts frozen intentionally leaves those readability questions open rather than hiding them behind larger particles.
+The following observations were recorded before user acceptance and remain context, not an unresolved request for that same visual approval. Native sheets show Float Up as smaller, more coloured beads rather than white glints; Dissolve is finer and particularly faint late in its short life; Smoke softens the white puffs, but the two-lobe silhouette is not reliably legible at normal resolution and AR can blend into the common key/camera texture. The large shared bright key region in paired crops is not new Smoke or a new particle core. Positive native off-delta is not proof that the three identities read distinctly enough in a real performance.
 
-Still open: final artistic/readability approval under ordinary scene lighting, palette/tier/layout breadth, all camera directions and motion poses, actual cameras/GPU/MIDI devices and nonzero camera delay. Software WARP pixels and browser decoding do not establish those properties. Earlier trials remain frozen controls; broad art review comes before default promotion, with settings UI last.
+The viewer uses exact native pixels with nearest-neighbour enlargement and no colour/exposure edits. Physics/size/counts remain frozen; the accepted versions are retained as the visual baseline rather than enlarged or retuned after acceptance.
+
+Still unverified beyond the user-reported test: palette/tier/layout breadth, all camera directions and motion poses, ordinary-scene lighting coverage, actual cameras/GPU/MIDI devices and nonzero camera delay. Neither software WARP pixels, browser decoding nor the unspecified user test establishes universal coverage. Earlier trials remain frozen controls. Default promotion and the separate Stage depth-policy decision are not authorized by this visual feedback alone; settings UI remains last.
