@@ -13,6 +13,7 @@ public partial class MainWindow
     private readonly List<(Expander Element, List<SettingRow> Rows)> _settingsAdvancedGroups = [];
     private readonly Dictionary<Expander, bool> _settingsExpansionBeforeSearch = [];
     private bool _settingsArContext;
+    private readonly List<(TextBlock Badge, string Scope)> _settingsScopeLabels = [];
 
     private static readonly HashSet<string> CommonSettings = new(StringComparer.Ordinal)
     {
@@ -147,6 +148,7 @@ public partial class MainWindow
         if (rows.Count == 0) return;
         var content = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
         var advanced = new Expander { Content = content, Margin = new Thickness(0, 10, 0, 0), Foreground = (Brush)FindResource("MutedTextBrush"), IsExpanded = false };
+        advanced.SetResourceReference(Control.ForegroundProperty, "MutedTextBrush");
         Loc.Set(advanced, "Advanced", HeaderedContentControl.HeaderProperty);
         Loc.Set(advanced, "Advanced", AutomationProperties.NameProperty);
         foreach (var row in rows) { body.Children.Remove(row.Element); content.Children.Add(row.Element); }
@@ -164,7 +166,9 @@ public partial class MainWindow
         var original = row.Element; var index = parent.Children.IndexOf(original); parent.Children.RemoveAt(index);
         var wrapper = new StackPanel();
         var badge = new TextBlock { FontSize = 8.5, Foreground = (Brush)FindResource("DimTextBrush"), Margin = new Thickness(0, 5, 0, 0) };
+        badge.SetResourceReference(TextBlock.ForegroundProperty, "DimTextBrush");
         Loc.Set(badge, scope); wrapper.Children.Add(badge); wrapper.Children.Add(original);
+        _settingsScopeLabels.Add((badge, scope));
         parent.Children.Insert(index, wrapper); row.Element = wrapper;
         // Context badges are informational. Do not disable a live editor or change an app/device mode.
     }
@@ -192,6 +196,8 @@ public partial class MainWindow
     {
         _settingsArContext = ar;
         SettingsStageContextButton.IsChecked = !ar; SettingsArContextButton.IsChecked = ar;
+        foreach (var (badge, scope) in _settingsScopeLabels)
+            badge.Opacity = scope == "Shared" || (scope == "AR only") == _settingsArContext ? 1 : .55;
         Loc.Set(SettingsStageContextButton, "Settings context only. Shared values, camera sources and calibration are unchanged.", FrameworkElement.ToolTipProperty);
         Loc.Set(SettingsArContextButton, "Settings context only. Shared values, camera sources and calibration are unchanged.", FrameworkElement.ToolTipProperty);
         // Selection context is session-only. Never call ApplyVisualSettings, MarkModified, CopyFrom or a camera handler here.

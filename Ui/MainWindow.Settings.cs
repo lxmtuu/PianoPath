@@ -1658,6 +1658,7 @@ public partial class MainWindow
             nameof(LightingSettingsHost) => SettingsPages.Lighting,
             nameof(StageDesignSettingsHost) => SettingsPages.StageDesign,
             nameof(CameraSettingsHost) => SettingsPages.Camera,
+            nameof(RecordingSettingsHost) => SettingsPages.Recording,
             nameof(SoundSettingsHost) => SettingsPages.Sound,
             nameof(SessionSettingsHost) => SettingsPages.Session,
             nameof(GeneralSettingsHost) => SettingsPages.Application,

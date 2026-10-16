@@ -122,7 +122,7 @@ public partial class App : Application
                     "history" or "session" => SettingsPages.History,
                     "recording" or "record" => SettingsPages.Recording,
                     "general" or "language" or "app" => SettingsPages.General,
-                    _ => SettingsPages.Style
+                    _ => SettingsPages.Order.FirstOrDefault(page => string.Equals(page, tab, StringComparison.OrdinalIgnoreCase)) ?? SettingsPages.Overview
                 };
                 tabs.SelectedIndex = Math.Max(0, SettingsPages.IndexOf(page));
             }

@@ -50,6 +50,7 @@ def main():
         assert call not in re.sub(r'//[^\n]*', '', method(layout, 'SetSettingsContext')), call
     assert 'source.CopyFrom(BasePresetSettings(), keepBackgroundImage: true)' in method(new, 'ResetPage_Click')
     assert 'SettingsPhraseMatches(phrase, token)' in new
+    assert 'nameof(RecordingSettingsHost) => SettingsPages.Recording' in new
     assert 'StringsVietnamese.Table.TryGetValue' in layout
     assert 'NormalizeSettingsSearch' in layout
     assert 'ArrangeApprovedSettingsLayout();' in new
