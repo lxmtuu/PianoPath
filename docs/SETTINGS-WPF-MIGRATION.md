@@ -31,7 +31,11 @@
 
 Chevron của layer resolve theo owner/card đã chuyển, không giữ đích cũ sai nhóm (ví dụ Light beams). Các inline More links của Flame → Hold, Embers → Press, Halo → Lighting được cập nhật riêng. `JumpToCard` vẫn dùng các title key cũ. Preset/property/theme/language IDs trong file lưu không đổi.
 
-## Kiểm tra và giới hạn
+## Bổ sung khi chuẩn bị v2.1.0
+
+Xem [final release check](RELEASE-2.1.0-CHECK.md) cho bằng chứng mới nhất. Preflight Windows [38867895710](https://github.com/lxmtuu/PianoPath/actions/runs/38867895710) đã PASS 1.357 portable tests và 7.911 assertions trên executable self-contained đã publish (1 nhóm skip), gồm kiểm tra WPF/Settings. Đây không phải chứng nhận UI thủ công trên mọi DPI hay phần cứng thật. Các số liệu compile-only dưới đây là **snapshot lịch sử của lần giao package Settings ban đầu**, không phải trạng thái kiểm tra mới nhất.
+
+## Kiểm tra và giới hạn · snapshot package ban đầu
 
 - `tools/check_sources.py`: PASS (XAML/resource/event handlers/catalogue/localization/syntax guards).
 - `tools/check_settings_layout_migration.py`: PASS — chín builder và các handler nghiệp vụ được chọn nguyên vẹn so với source đã duyệt; mọi XAML name/event cũ và unnamed business actions được giữ; có alias routes, reparent/dedup, Advanced/search và reset boundary; không sửa Gpu/Stage/Camera/Audio/Video.
