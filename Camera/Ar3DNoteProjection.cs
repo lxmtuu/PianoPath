@@ -203,7 +203,8 @@ internal static class Ar3DNoteProjection
                     out var patch, out var halfWidthPx, out var halfLengthPx, out var sceneY)) continue;
                 var fadeOut = Math.Clamp((style.Reach - headDistance) / (style.Reach * .25), 0, 1);
                 var fadeRate = Math.Clamp(style.FadeGraph.Sample(velocity), .1, 2);
-                var fadeIn = Math.Clamp(note.Age * fadeRate / .045, .25, 1);
+                // Keep a fresh onset unmistakably visible at the key plane while the short material fade-in settles.
+                var fadeIn = Math.Clamp(.5 + note.Age * fadeRate / .045, .5, 1);
                 var fade = fadeOut * fadeIn;
                 into.Add(new Ar3DLiveMidiNote(patch, note.Pitch, fade, note.Down, note.Strength,
                     halfWidthPx, halfLengthPx, sceneY, target, travel, headDistance, tailDistance, halfWidth));

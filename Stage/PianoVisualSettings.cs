@@ -461,7 +461,7 @@ internal sealed class PianoVisualSettings
     public bool ArNotesInPerspective { get; set; } = false;
     /// <summary>Draw the player's growing press bars over the camera; the key tint remains independent. Off by default to avoid bright press trails in a stream or call.</summary>
     public bool ArLivePressTrails { get; set; } = false;
-    /// <summary>Live press bars fade by their own lifetime — walked forward as the bar stretches and backwards over the release (AR‑6.2 Keysight keypress parity) — instead of the always-on length fade.</summary>
+    /// <summary>When enabled, live press bars follow their own lifetime graph — forward as they stretch and backwards on release (AR‑6.2 Keysight keypress parity); off leaves held bars fully solid.</summary>
     public bool ArLiveFadeByLifetime { get; set; } = false;
     /// <summary>Solidity of a live bar the moment the key goes down, percent of full, when the lifetime fade is on.</summary>
     public double ArLiveFadeStart { get; set; } = 60;
@@ -577,7 +577,7 @@ internal sealed class PianoVisualSettings
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArNoteFadeSoft / 100, Max: ArNoteFadeHard / 100)
         : null;
 
-    /// <summary>The lifetime fade of a live press bar, built the same way from <see cref="ArLiveFadeByLifetime"/>; null keeps the legacy length fade.</summary>
+    /// <summary>The lifetime fade of a live press bar, built the same way from <see cref="ArLiveFadeByLifetime"/>; null keeps a held bar fully solid.</summary>
     internal GraphVariable? ArLiveFadeGraph => ArLiveFadeByLifetime
         ? new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: ArLiveFadeStart / 100, Max: ArLiveFadeEnd / 100)
         : null;
@@ -590,8 +590,8 @@ internal sealed class PianoVisualSettings
         ArLivePressTrails, ArNoteDirectionTilt, ArNoteDirectionAzimuth, ArRisingMidiNotes, ArLiveFadeGraph,
         ArLiveBarCoverPercentFraction).Normalised();
 
-    /// <summary>The notes are drawn in perspective: the switch is on and the tier is not Lite (see <see cref="ArOptions.NotesProjected"/>).</summary>
-    internal bool ArNotesProjected => ArNotesInPerspective && ArQualityTiers.TierOf(ArQuality) != ArQualityTier.Lite;
+    /// <summary>The notes are drawn in perspective when the switch is on; manual quality tiers do not change their geometry.</summary>
+    internal bool ArNotesProjected => ArNotesInPerspective;
 
     /// <summary>The keyboard <see cref="KeyboardSize"/> names; the full one for a value that is not a known size.</summary>
     internal KeyboardLayout KeyboardLayoutChoice =>

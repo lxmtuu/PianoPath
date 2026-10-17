@@ -3,29 +3,30 @@ using Xunit;
 namespace PianoPath.Tests;
 
 /// <summary>
-/// The fade-over-lifetime of a live press bar (AR‑6.2): nothing changes without the graph, a held key walks it
-/// forward with the bar's stretch, and letting the key go walks it backwards over the release. The two builders
-/// multiply it with their own release dim; these facts pin the factor itself.
+/// The live press-bar lifetime fade (AR‑6.2): held bars stay fully solid by default, an optional graph walks forward
+/// as they stretch and backwards on release, and each builder applies its own release dim. These facts pin the opacity factor itself.
 /// </summary>
 public sealed class ArLiveFadeTests
 {
     private static readonly GraphVariable SoftToFull = new(Graph: true, Start: 0, Stop: 1, Min: .2, Max: 1);
 
     [Theory]
-    [InlineData(0, 1)]
-    [InlineData(.25, .75)]
-    [InlineData(.5, .5)]
-    [InlineData(.92, .08)]                            // the faint floor a held key never falls under
-    [InlineData(1, .08)]
-    public void Without_a_graph_the_legacy_length_fade_is_what_it_always_was(double heldFraction, double expected)
+    [InlineData(0)]
+    [InlineData(.25)]
+    [InlineData(.5)]
+    [InlineData(.92)]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void Without_a_graph_a_held_bar_stays_fully_solid_at_every_stretch(double heldFraction)
     {
-        Assert.Equal(expected, ArLiveFade.Opacity(null, heldFraction, true, 0), 9);
+        Assert.Equal(1, ArLiveFade.Opacity(null, heldFraction, true, 0), 9);
     }
 
     [Fact]
-    public void The_legacy_path_ignores_the_release_fraction_because_the_release_dim_handles_it()
+    public void Without_a_graph_release_fade_is_left_to_the_bar_builder()
     {
-        Assert.Equal(ArLiveFade.Opacity(null, .5, false, 0), ArLiveFade.Opacity(null, .5, false, .75), 12);
+        Assert.Equal(1, ArLiveFade.Opacity(null, .5, false, 0), 12);
+        Assert.Equal(1, ArLiveFade.Opacity(null, .5, false, .75), 12);
     }
 
     [Fact]
@@ -75,7 +76,7 @@ public sealed class ArLiveFadeTests
     public void Numbers_that_are_not_numbers_read_as_their_walks_start_and_the_answer_stays_in_range()
     {
         Assert.Equal(1, ArLiveFade.Opacity(null, double.NaN, true, 0), 9);
-        Assert.Equal(.08, ArLiveFade.Opacity(null, 2, true, 0), 9);
+        Assert.Equal(1, ArLiveFade.Opacity(null, 2, true, 0), 9);
         Assert.Equal(.2, ArLiveFade.Opacity(SoftToFull, double.NaN, true, 0), 9);
         // A release age that is not a number reads as "just let go": the walk stands at the held spot.
         Assert.Equal(.6, ArLiveFade.Opacity(SoftToFull, .5, false, double.NaN), 9);

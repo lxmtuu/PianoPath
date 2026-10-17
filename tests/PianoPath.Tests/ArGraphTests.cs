@@ -107,9 +107,9 @@ public class ArGraphTests
         Assert.True(Width(hard.Patch) > Width(soft.Patch), "A harder press should leave a wider bar.");
         Near(Width(hard.Patch) * (.5 + .5 * .2), Width(soft.Patch), 1e-6); // strength .2 walks the graph partway
         Assert.True(hard.Fade > soft.Fade, "A harder press should keep more of its bar's brightness.");
-        // the bar's own fade (how far it has stretched) is untouched by the graph's flat default
+        // without the optional lifetime graph, the bar stays solid; only an explicit velocity fade changes it
         var flat = BuildLive([new ArLivePress(60, .5, .5, true, .2f)]);
-        Near(Math.Clamp(1 - .75 / Style.Reach, .08, 1), Assert.Single(flat).Fade, 1e-9);
+        Near(1, Assert.Single(flat).Fade, 1e-9);
     }
 
     [Fact]

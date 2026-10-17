@@ -122,15 +122,18 @@ public class ArOptionsTests
     }
 
     [Fact]
-    public void Perspective_notes_require_the_user_toggle_and_a_non_lite_quality_and_live_bars_start_off()
+    public void Perspective_notes_require_the_user_toggle_but_share_one_path_across_quality_tiers()
     {
         Assert.False(ArOptions.Default.NotesProjected);
         Assert.False(ArOptions.Default.LivePressTrails);
-        var standard = ArOptions.Default with { NotesInPerspective = true, Quality = ArQualityTier.Standard };
-        Assert.True(standard.NotesProjected);
-        Assert.False(standard.LivePressTrails);
-        Assert.False((standard with { Quality = ArQualityTier.Lite }).NotesProjected);
-        Assert.True((standard with { LivePressTrails = true }).LivePressTrails);
+        foreach (var quality in new[] { ArQualityTier.Lite, ArQualityTier.Standard, ArQualityTier.Ultra })
+        {
+            var options = ArOptions.Default with { NotesInPerspective = true, Quality = quality };
+            Assert.True(options.NotesProjected);
+            Assert.False(options.LivePressTrails);
+            Assert.True((options with { LivePressTrails = true }).LivePressTrails);
+        }
+        Assert.False((ArOptions.Default with { NotesInPerspective = false, Quality = ArQualityTier.Ultra }).NotesProjected);
     }
 
     [Fact]

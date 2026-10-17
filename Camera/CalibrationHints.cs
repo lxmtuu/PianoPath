@@ -15,7 +15,7 @@ internal static class CalibrationHints
         "Step 4 of 4: click the front-left corner: the lowest key, at the near edge, closest to you.",
     ];
 
-    private const string AdjustStep = "The grid shows the keys. Use the Unity-style gizmo or sliders to move, rotate and uniformly scale the keyboard in 3D; drag corners for fine tuning. Aim the separate note-travel arrow on the preview, or use the tilt and azimuth controls. Tab and the arrow keys nudge one selected corner. Then press Done.";
+    private const string AdjustStep = "The grid shows the keys. Use the Unity-style gizmo or sliders to move, rotate and uniformly scale the keyboard in 3D; drag corners for fine tuning. The yellow note arrow shows Learn travel toward the keys; Perform rising MIDI notes go the other way. Aim it on the preview or use tilt and azimuth. Tab and the arrow keys nudge one selected corner. Then press Done.";
 
     internal const string RotationTitle = "3D keyboard pose";
     internal const string RotationTip = "These controls rotate the keyboard surface in 3D around its centre. Pitch, yaw and roll are independent of note travel; camera FOV adjusts the perspective estimate. The key corners remain the calibration anchor.";
@@ -31,13 +31,13 @@ internal static class CalibrationHints
     internal const string ToolTitle = "Gizmo";
     internal const string ToolTip = "Choose corner editing or a Unity-style Move, Rotate, Scale or note-direction gizmo. Drag its handles on the camera preview.";
     internal const string NoteDirectionTitle = "Note travel";
-    internal const string NoteDirectionTip = "Note travel is independent of the keyboard transform. Drag its yellow preview arrow to aim within the keyboard plane, or set its 3D tilt and azimuth. The resulting direction is saved with stage settings.";
+    internal const string NoteDirectionTip = "The yellow arrow marks Learn-note travel toward the keys. In Perform, rising MIDI notes move in the opposite direction, away from the keys. Drag the arrow or set 3D tilt and azimuth; note travel is independent of the keyboard transform and saved with stage settings.";
     internal const string TiltTitle = "Tilt";
     internal const string AzimuthTitle = "Azimuth";
     internal const string ScreenUpTitle = "Aim screen-up";
-    internal const string ScreenUpTip = "Set note travel to the 3D direction in the keyboard plane that projects straight up in this camera preview.";
+    internal const string ScreenUpTip = "Aim Perform's rising MIDI notes straight up in the preview. The yellow arrow shows Learn travel toward the keys, so this sets it downward; Perform rises in the opposite direction.";
     internal const string KeyDepthTitle = "Along key depth";
-    internal const string KeyDepthTip = "Set note travel along the keyboard's back-to-front depth axis, perpendicular to the row of keys.";
+    internal const string KeyDepthTip = "Set Learn-note travel along the keyboard's back-to-front depth axis, toward the keys and perpendicular to the row. Perform rising MIDI notes use the opposite direction.";
 
     /// <summary>The line above the picture for the step the wizard is at.</summary>
     internal static string ForStep(CalibrationWizard wizard) => wizard.Step switch
