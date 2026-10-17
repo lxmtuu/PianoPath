@@ -122,11 +122,12 @@ Phương pháp:
 
 | Chức năng cài đặt | Logic tiêu thụ |
 |---|---|
-| Tải / huỷ / xác minh lại Salamander | `Ui/MainWindow.xaml` (`SalamanderButton`, progress bar) → `MainWindow.xaml.cs` (`SalamanderButton_Click`) → `SalamanderPiano.DownloadAsync`; tiến độ báo theo byte đã xác minh, huỷ giữ lại tệp hoàn chỉnh để lần sau tiếp tục |
+| Tải / huỷ / xác minh lại Salamander | `Ui/MainWindow.xaml` (`SalamanderButton`, progress bar) → `MainWindow.xaml.cs` (`SalamanderButton_Click`) → `SalamanderPiano.DownloadAsync`; tiến độ báo theo byte đã xác minh, huỷ giữ lại tệp hoàn chỉnh để lần sau tiếp tục. Từng `.part` được đóng sau khi ghi/xác minh rồi mới `File.Move` sang mẫu cuối; `SalamanderPianoTests.A_verified_sample_writer_closes_its_file_before_the_caller_moves_it` khóa lỗi Windows “file is being used by another process” |
 | Nạp đàn đã cài | `SalamanderPlayButton` → `SalamanderPlay_Click` → `LoadSalamanderAsync` → `PianoAudioEngine.LoadSfzInstrument`; cùng luồng nạp chạy sau khi tải đủ và khi khởi động nếu mapping đã cài |
 | SFZ/Sample pipeline (instrument duy nhất) | `PianoAudioEngine.LoadSfzInstrument` → `SfzReader.Read` → `SfzSynthesizer`; engine chỉ nhận mapping SFZ do `SalamanderPiano` sinh, không có API nhập SF2 hoặc chọn nhạc cụ ngoài |
 | HALL REVERB | `ReverbToggle_Changed` → `PianoAudioEngine.ReverbEnabled`; bypass tác động lên pipeline live mà không cắt đột ngột đuôi reverb |
 | Reverb style / custom IR | `ReverbStyleCombo_SelectionChanged` / `ReverbImpulse_Click` → `SetReverbAsync` / `PianoAudioEngine.SetReverbAsync`; WAV/FLAC đọc trên worker, request cũ bị bỏ qua khi người dùng chọn phòng mới |
+| Reverb amount | `AudioReverbSlider_ValueChanged` → `AudioReverbAmount` (0–150%, lưu theo máy) → `PianoAudioEngine.ReverbAmount` → mix wet live trên hall/convolution; 100% giữ nguyên âm mặc định, không rebuild/reopen output |
 | STRING RESONANCE | `ResonanceToggle_Changed` → `PianoAudioEngine.StringResonanceEnabled` → bank 64 waveguide được bật/tắt theo pedal sustain |
 | Chọn đầu ra âm thanh | `AudioOutputCombo_SelectionChanged` lưu `AudioOutputMode` rồi gọi `ApplyAudioOutput` → `PianoAudioEngine.ConfigureOutput`; lựa chọn hỗ trợ Auto, WASAPI shared/exclusive (endpoint cụ thể), ASIO và waveOut |
 | Danh sách thiết bị | `RefreshAudioOutputCatalog` gọi `WasapiDeviceCatalog.GetActiveRenderEndpoints` trên worker; ASIO lấy từ `AsioDriverRegistry`; kết quả được gắn lại vào UI dispatcher và giữ ID ổn định |

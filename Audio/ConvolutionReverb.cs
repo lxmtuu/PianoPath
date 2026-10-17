@@ -6,6 +6,8 @@ namespace PianoPath;
 internal interface IStereoReverb
 {
     bool Enabled { get; set; }
+    /// <summary>Wet-effect multiplier, where 1 preserves the room's established default mix.</summary>
+    float Amount { get; set; }
     /// <summary>Processes interleaved stereo in place; output stays within [-1, 1].</summary>
     void Process(float[] interleaved, int frames);
 }
@@ -28,6 +30,7 @@ internal sealed class ConvolutionReverb : IStereoReverb
 
     private readonly Fft _fft = new(FftSize);
     private readonly float _wet;
+    private volatile float _amount = 1f;
     private readonly double _fadeStep;
     private readonly int _partitions;
     private readonly float[][][] _impulseRe; // [channel][partition][bin]
@@ -45,6 +48,7 @@ internal sealed class ConvolutionReverb : IStereoReverb
     private volatile bool _enabled = true;
 
     public bool Enabled { get => _enabled; set => _enabled = value; }
+    public float Amount { get => _amount; set => _amount = Math.Clamp(value, 0f, 1.5f); }
 
     public ConvolutionReverb(WavData impulse, int sampleRate, float wet)
     {
@@ -76,12 +80,13 @@ internal sealed class ConvolutionReverb : IStereoReverb
     public void Process(float[] interleaved, int frames)
     {
         var enabled = _enabled;
+        var amount = _amount;
         if (enabled) { _fade = 1; _ringing = true; }
         else if (!_ringing) return;
         for (var i = 0; i < frames; i++)
         {
             if (!enabled && _fade > 0) _fade = Math.Max(0, _fade - _fadeStep);
-            var gain = _wet * (float)_fade;
+            var gain = _wet * amount * (float)_fade;
             for (var channel = 0; channel < 2; channel++)
             {
                 var dry = interleaved[i * 2 + channel];

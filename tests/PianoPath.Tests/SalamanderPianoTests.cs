@@ -29,6 +29,30 @@ public class SalamanderPianoTests
     }
 
     [Fact]
+    public async Task A_verified_sample_writer_closes_its_file_before_the_caller_moves_it()
+    {
+        var sample = new byte[] { 0, 1, 2, 3, 127, 255 };
+        var header = System.Text.Encoding.ASCII.GetBytes($"blob {sample.Length}\0");
+        var gitBlob = header.Concat(sample).ToArray();
+        var entry = new SalamanderPiano.Entry(Convert.ToHexStringLower(System.Security.Cryptography.SHA1.HashData(gitBlob)), sample.Length, "Samples/test.flac");
+        var folder = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "pianopath-sample-write-" + Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(folder);
+        var temporary = System.IO.Path.Combine(folder, "sample.flac.part");
+        var target = System.IO.Path.Combine(folder, "sample.flac");
+        try
+        {
+            using var source = new System.IO.MemoryStream(sample);
+            await SalamanderPiano.DownloadSampleToTemporaryAsync(source, temporary, entry, CancellationToken.None);
+
+            // On Windows this move fails with “file is being used by another process” if the
+            // FileShare.None writer from the downloader is still alive at this point.
+            System.IO.File.Move(temporary, target);
+            Assert.Equal(sample, System.IO.File.ReadAllBytes(target));
+        }
+        finally { System.IO.Directory.Delete(folder, recursive: true); }
+    }
+
+    [Fact]
     public void The_generated_mapping_references_each_downloaded_sample_exactly_once()
     {
         var names = SalamanderPiano.ParseManifest().Select(e => e.Path["Samples/".Length..]).ToHashSet(StringComparer.Ordinal);

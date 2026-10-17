@@ -93,7 +93,7 @@ public partial class MainWindow
         var themeCards = _settingCards.Where(card => _settingsCardOrigins[card].Origin == nameof(ThemeSettingsHost)).ToArray();
         for (var i = themeCards.Length - 1; i >= 0; i--) { GeneralSettingsHost.Children.Remove(themeCards[i]); GeneralSettingsHost.Children.Insert(0, themeCards[i]); }
 
-        RegisterBusinessCard(AudioBusinessCard, SoundSettingsHost, "PIANO", "EFFECTS", "OUTPUT & LATENCY", "Piano sound", "Audio output", "Target latency", "Master piano level", "reverb resonance Salamander ASIO impulse audio output sound latency gain");
+        RegisterBusinessCard(AudioBusinessCard, SoundSettingsHost, "PIANO", "EFFECTS", "OUTPUT & LATENCY", "Piano sound", "Audio output", "Target latency", "Master piano level", "Reverb amount", "reverb resonance Salamander ASIO impulse audio output sound latency gain");
         RegisterBusinessCard(MidiBusinessCard, SoundSettingsHost, "DEVICES", "MIDI input", "MIDI output", "SONG TRACKS", "METRONOME", "midi devices track solo mute color refresh");
         RegisterBusinessCard(PracticeBusinessCard, SessionSettingsHost, "PRACTICE MODE", "Playback tempo", "Auto practice tempo", "Misses before slowing down", "LOOP RANGE", "SHORTCUTS", "practice loop tempo hands follow wait");
         RegisterBusinessCard(HistoryBusinessCard, SessionSettingsHost, "PRACTICE HISTORY", "PRACTICE CHART", "GHOST OF THIS SONG", "history chart ghost best latest export clear");
