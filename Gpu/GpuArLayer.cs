@@ -26,7 +26,7 @@ internal struct GpuArQuad
 /// <param name="KeyLight">0..1, how strongly a held key is tinted: the share of the camera picture that the key's colour replaces at full glow.</param>
 /// <param name="ShowNotes">Draw the notes to come (Learn), not only the lit keys (Perform).</param>
 /// <param name="DelaySeconds">How late the camera's picture is. The notes are drawn for the song's position this long ago; the render loop lights the keys as they were lit this long ago.</param>
-/// <param name="Quality">Which elements of the AR catalogue this frame may draw (Lite/Standard/Ultra); Lite draws the flat quads the overlay has always drawn.</param>
+/// <param name="Quality">Which AR lighting/transient elements this frame may draw (Lite/Standard/Ultra); note and live-bar projection geometry is independent of this tier.</param>
 /// <param name="ProjectedNotes">Build song notes from the calibrated keyboard-local 3D pose. Key-anchored live effects use the calibrated pose independently; ambient sprites stay screen-space.</param>
 /// <param name="MinAspect">The minimum note length as a fraction of its projected key width; 0 keeps each note's natural length.</param>
 /// <param name="ShowLiveTrails">Draw bars for keys the player presses, in flat or projected mode; key tint is separate.</param>
@@ -212,7 +212,7 @@ internal sealed partial class GpuArLayer
         var live = simulation.LivePresses;
         if (ar.ShowLiveTrails && live.Count > 0)
         {
-            var liveProjected = ar.Calibration.CameraPose is not null && ar.Quality != ArQualityTier.Lite;
+            var liveProjected = ar.Calibration.CameraPose is not null;
             if (liveProjected)
             {
                 Ar3DNoteProjection.BuildLive(ar.Calibration, view, live, ar.LivePressStyle, ar.NoteDirection, _projectedLiveBars, VelocityBand);

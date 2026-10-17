@@ -90,7 +90,7 @@ internal sealed partial class GpuStageSimulation
     /// <summary>One emitted AR note per MIDI Note On; it is independent of the optional held-key bar.</summary>
     private sealed class RisingMidiNote
     {
-        public int Pitch; public double Age, HeldSeconds; public float Strength; public bool Down;
+        public int Pitch; public double Age, HeldSeconds; public float Strength; public bool Down, BornThisStep;
     }
 
     private readonly Particle[] _particles = new Particle[MaxParticles];
@@ -222,9 +222,10 @@ internal sealed partial class GpuStageSimulation
         if (input.Generation != previousGeneration)
             sceneWidth *= (float)(Math.Max(120, input.StageHeightDip) / previousHeight);
         var look = _look = input.Look;
-        // A 2D trail is culled at the stage edge; a calibrated 3D bar stays in simulation until its own AR reach is consumed.
+        // A 2D trail is culled at the stage edge; a calibrated 3D bar stays in simulation until its own AR reach is consumed,
+        // whichever manual quality tier is selected.
         var arLiveReleaseSeconds = feed.Ar is { ShowLiveTrails: true } ar
-            && ar.Quality != ArQualityTier.Lite && ar.Calibration.CameraPose is not null && ar.Notes.IsUsable
+            && ar.Calibration.CameraPose is not null && ar.Notes.IsUsable
                 ? Math.Clamp(ar.LivePressStyle.Reach / ar.LivePressStyle.FallSpeed, 0, ArOptions.LivePressReachSeconds)
                 : 0;
         var risingMidiStyle = feed.Ar is { ShowRisingMidiNotes: true } midiAr
@@ -278,7 +279,7 @@ internal sealed partial class GpuStageSimulation
             {
                 _trails.Add(new LiveTrail { Pitch = live.Pitch, KeyDown = true, Strength = live.Strength });
                 if (risingMidiStyle is not null && live.Pitch is >= 0 and < 128)
-                    _risingMidiNotes.Add(new RisingMidiNote { Pitch = live.Pitch, Down = true, Strength = live.Strength });
+                    _risingMidiNotes.Add(new RisingMidiNote { Pitch = live.Pitch, Down = true, Strength = live.Strength, BornThisStep = true });
             }
             else
             {
@@ -469,8 +470,15 @@ internal sealed partial class GpuStageSimulation
             for (var i = _risingMidiNotes.Count - 1; i >= 0; i--)
             {
                 var note = _risingMidiNotes[i];
-                note.Age += frameDt;
-                if (note.Down) note.HeldSeconds = note.Age;
+                // A Note On first appears at the calibrated key plane. Age existing notes before the next draw,
+                // but do not advance a note in the same step that created it; otherwise the first rendered frame
+                // starts one frame-distance away from the key and depends on the output frame rate.
+                if (note.BornThisStep) note.BornThisStep = false;
+                else
+                {
+                    note.Age += frameDt;
+                    if (note.Down) note.HeldSeconds = note.Age;
+                }
                 if (note.Age >= life) { _risingMidiNotes.RemoveAt(i); continue; }
             }
             _arRisingMidiNotes.Clear();

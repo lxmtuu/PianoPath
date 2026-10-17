@@ -193,7 +193,7 @@ public class ArNotesTests
         var (blx, bly) = Out(centre - half, -length); var (brx, bry) = Out(centre + half, -length);
         Near(blx, bar.Patch.BackLeft.X); Near(bly, bar.Patch.BackLeft.Y); Near(brx, bar.Patch.BackRight.X); Near(bry, bar.Patch.BackRight.Y);
         Assert.True(bar.Held); Assert.Equal(60, bar.Pitch); Assert.Equal(1f, bar.Strength);
-        Near(1 - length / Style.Reach, bar.Fade, 1e-9);
+        Near(1, bar.Fade, 1e-9);                                         // a held key stays fully visible without an opt-in fade graph
         Assert.True(Keys(bar.Patch.FrontRight).U - Keys(bar.Patch.FrontLeft).U < Calibration.Layout.WhiteWidth, "a bar is narrower than its key, as a note is");
         // twice as long a press, twice as far from the key
         var later = Assert.Single(BuildLive([Down(60, 1)]));
@@ -250,11 +250,11 @@ public class ArNotesTests
     }
 
     [Fact]
-    public void A_bar_stops_at_the_reach_and_dims_as_it_stretches()
+    public void A_bar_stops_at_the_reach_and_stays_solid_while_the_key_is_held()
     {
         var bar = Assert.Single(BuildLive([Down(60, 20)]));
         Near(-Style.Reach, Keys(bar.Patch.BackLeft).V, 1e-6);
-        Near(.08, bar.Fade, 1e-9);                                          // the floor: a key still down still says so
+        Near(1, bar.Fade, 1e-9);
         Assert.True(bar.Held);
     }
 
@@ -280,7 +280,7 @@ public class ArNotesTests
     [Fact]
     public void A_lifetime_fade_walks_forward_while_the_key_is_held_and_the_default_style_is_untouched_by_it()
     {
-        // A legacy style (LiveFade null, the default) is pinned by the fade facts above; this one is about the graph.
+        // The graphless default stays fully solid while held; this test pins the explicit lifetime-graph walk.
         var style = Style with { LiveFade = new GraphVariable(Graph: true, Start: 0, Stop: 1, Min: .2, Max: 1) };
         var f = .5 * style.FallSpeed / style.Reach;
         var young = Assert.Single(BuildLive([Down(60, .5)], style: style));

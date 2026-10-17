@@ -2,11 +2,9 @@ namespace PianoPath;
 
 /// <summary>
 /// The fade-over-lifetime of a live press bar (AR‑6.2 of docs/AR-OVERLAY-ROADMAP.md §14, the Keysight keypress
-/// "fade over lifetime" graph that runs left→right while the key is held and right→left on release): how solid the
-/// bar is as a fraction of how far it has stretched, so a bar can arrive softly and stand at full strength only once
-/// it has a history, and after the finger leaves it plays that walk backwards instead of keeping a frozen value.
-/// A null graph keeps the legacy fade — shorter bars brighter, falling to a faint floor — so every stream that has
-/// never asked for this keeps its look.
+/// "fade over lifetime" graph that runs left→right while the key is held and right→left on release): an opted-in graph
+/// follows how far the bar has stretched, then walks backwards after the finger leaves. Without a graph, held bars stay
+/// fully visible regardless of how long the key is held, and the builders' release dim alone takes them away.
 /// </summary>
 internal static class ArLiveFade
 {
@@ -14,12 +12,13 @@ internal static class ArLiveFade
     /// The opacity factor of one live bar, multiplied by the builders' own release dim and velocity fade.
     /// <paramref name="heldFraction"/> is how far the bar has stretched towards its full reach (0 at the moment the key
     /// went down, 1 at full stretch); <paramref name="releaseFraction"/> is how far the release has travelled through its
-    /// life (only used when <paramref name="down"/> is false). An input that is not a number reads as zero.
+    /// life (only used when <paramref name="down"/> is false). An input that is not a number reads as zero. Without a
+    /// graph the bar stays fully solid; each builder applies release dim separately.
     /// </summary>
     internal static double Opacity(GraphVariable? lifetime, double heldFraction, bool down, double releaseFraction)
     {
         var held = double.IsFinite(heldFraction) ? Math.Clamp(heldFraction, 0, 1) : 0;
-        if (lifetime is not { } graph) return Math.Clamp(1 - held, .08, 1);
+        if (lifetime is not { } graph) return 1;
         graph = graph.Normalised();
         if (!graph.Graph) return Math.Clamp(graph.Max, 0, 1);
         // Held: the walk runs left→right with the bar's stretch. Released: it replays right→left from where the finger

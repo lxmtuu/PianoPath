@@ -1102,16 +1102,16 @@ internal static partial class VerificationSuite
                 Assert(directionPose.TryProjectDelta(directionPose.ToCamera(directionCentre), directionPose.DirectionToCamera(w.NoteDirection.Vector),
                     w.Wizard.View, out var screenDirection), "The chosen note direction should project at its keyboard centre.");
                 var screenLength = Math.Sqrt(screenDirection.X * screenDirection.X + screenDirection.Y * screenDirection.Y);
-                Assert(screenLength > 1e-6 && Math.Abs(screenDirection.X / screenLength) < 1e-3 && screenDirection.Y / screenLength < -.999
+                Assert(screenLength > 1e-6 && Math.Abs(screenDirection.X / screenLength) < 1e-3 && screenDirection.Y / screenLength > .999
                         && Math.Abs(w.NoteTiltSlider.Value - w.NoteDirection.TiltDegrees) < .001,
-                    "The preview arrow and direction sliders should agree on a 3D keyboard-plane direction projecting straight up.");
+                    "The screen-up button should aim Perform's rise upward by setting the Learn-travel arrow downward, with sliders synchronized.");
                 Assert(ScreenPoint(directionPose, directionCentre, w.Wizard.View, out var arrowOrigin),
                     "The note-direction arrow should have a projectable centre for free aiming.");
-                var up = new System.Windows.Vector(screenDirection.X / screenLength, screenDirection.Y / screenLength);
-                var dragStart = arrowOrigin + up * 56;
+                var arrow = new System.Windows.Vector(screenDirection.X / screenLength, screenDirection.Y / screenLength);
+                var dragStart = arrowOrigin + arrow * 56;
                 const double aimDragRadians = 35 * Math.PI / 180;
-                var aimed = new System.Windows.Vector(up.X * Math.Cos(aimDragRadians) - up.Y * Math.Sin(aimDragRadians),
-                    up.X * Math.Sin(aimDragRadians) + up.Y * Math.Cos(aimDragRadians));
+                var aimed = new System.Windows.Vector(arrow.X * Math.Cos(aimDragRadians) - arrow.Y * Math.Sin(aimDragRadians),
+                    arrow.X * Math.Sin(aimDragRadians) + arrow.Y * Math.Cos(aimDragRadians));
                 var dragTarget = arrowOrigin + aimed * 56;
                 Assert(w.Surface.HandlePress(dragStart), "Pressing the note-direction arrow should begin free 3D aiming.");
                 w.Surface.HandleMove(dragTarget);
@@ -1170,8 +1170,8 @@ internal static partial class VerificationSuite
                     "The final screen-up direction should still project through the final FOV pose.");
                 var finalScreenLength = Math.Sqrt(finalScreenDirection.X * finalScreenDirection.X + finalScreenDirection.Y * finalScreenDirection.Y);
                 Assert(finalScreenLength > 1e-6 && Math.Abs(finalScreenDirection.X / finalScreenLength) < 1e-3
-                        && finalScreenDirection.Y / finalScreenLength < -.999,
-                    "Screen-up aiming should be based on the currently saved FOV and keyboard pose.");
+                        && finalScreenDirection.Y / finalScreenLength > .999,
+                    "Screen-up aiming should set the Learn path down so Perform's rise goes up, based on the currently saved FOV and keyboard pose.");
                 w.Accept();
                 return w.Result is not null;
             });
@@ -1513,6 +1513,17 @@ internal static partial class VerificationSuite
             $"The AR quad pass should own one 3D patch per note ({renderer.ArObjectQuadCount} quads for {expected.Count} notes), not the legacy scene-note pass.");
         Assert(renderer.StageNoteCount == 0 && renderer.StageNoteTrailCount == 0,
             $"The camera must suppress stage-space note bodies and falling trails (notes {renderer.StageNoteCount}, trails {renderer.StageNoteTrailCount}).");
+
+        var noteFramesByQuality = new List<(ArQualityTier Tier, byte[] Pixels, int Shapes)>();
+        foreach (var tier in new[] { ArQualityTier.Lite, ArQualityTier.Standard, ArQualityTier.Ultra })
+        {
+            var tierInput = defaultInput with { Quality = tier, ShowDamperStrip = false };
+            var tierPixels = Render(MakeFeed(tierInput));
+            noteFramesByQuality.Add((tier, tierPixels, renderer.ArShapeCount));
+        }
+        Assert(noteFramesByQuality.All(frame => frame.Shapes == expected.Count)
+                && noteFramesByQuality.Skip(1).All(frame => frame.Pixels.AsSpan().SequenceEqual(noteFramesByQuality[0].Pixels)),
+            "Lite, Standard and Ultra must render the same calibrated 3D note geometry; only their lighting/effect budget may differ.");
         Assert(projectedPixels > 500,
             $"Projected AR note quads must change the camera frame; otherwise notes disappeared between input and the overlay pass ({projectedPixels} coloured pixels).");
         foreach (var shape in expected)
@@ -1748,9 +1759,48 @@ internal static partial class VerificationSuite
         Assert(tintPixels > 20,
             $"Turning bars off must not turn the independent held-key tint off ({tintPixels} pixels still respond to key-light strength).");
 
+        var liveBarsByQuality = new List<(ArQualityTier Tier, byte[] Pixels, int Bars)>();
+        foreach (var tier in new[] { ArQualityTier.Lite, ArQualityTier.Standard, ArQualityTier.Ultra })
+        {
+            var tierPixels = RenderFrames(PressFeed(showBars: true, keyLight: 0, quality: tier, showStrip: false), 12);
+            liveBarsByQuality.Add((tier, tierPixels, renderer.ArLiveBarCount));
+        }
+        Assert(liveBarsByQuality.All(frame => frame.Bars == 1)
+                && liveBarsByQuality.Skip(1).All(frame => frame.Pixels.AsSpan().SequenceEqual(liveBarsByQuality[0].Pixels)),
+            "Lite, Standard and Ultra must keep live press bars on identical calibrated 3D geometry.");
+
         // Perform-mode Note On objects are independent of the optional press-bar channel and remain available in Lite.
         var risingMidiInput = new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
             ShowNotes: false, Quality: ArQualityTier.Lite, NoteDirection: new ArNoteDirection(68, 37), ShowRisingMidiNotes: true);
+
+        // The Note On's first simulated/rendered frame is anchored at the calibrated key plane (age zero),
+        // and the Perform rise is the outward opposite of the selected Learn travel vector.
+        var onsetFeed = MakeFeed(risingMidiInput, song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
+        onsetFeed.LiveNote(60, true, .9f);
+        var onsetInput = new GpuFrameInput();
+        onsetFeed.Capture(onsetInput, GpuStageFeed.Now);
+        var onsetSimulation = new GpuStageSimulation(20260930);
+        onsetSimulation.Step(1 / 60.0, onsetInput, onsetFeed, width);
+        var firstOnset = onsetSimulation.ArRisingMidiNotes.Single();
+        var firstOnsetShape = new List<Ar3DLiveMidiNote>();
+        Ar3DNoteProjection.BuildRisingMidiNotes(calibration, view, onsetSimulation.ArRisingMidiNotes,
+            risingMidiInput.RisingMidiNoteStyle, risingMidiInput.NoteDirection, firstOnsetShape);
+        Assert(firstOnset.Age == 0 && firstOnset.HeldSeconds == 0 && firstOnset.Down
+                && firstOnsetShape.Count == 1 && firstOnsetShape[0].HeadDistance == 0
+                && firstOnsetShape[0].Fade >= .5,
+            $"A new Perform MIDI note must be visible at the calibrated key on its first frame (age {firstOnset.Age:0.000}, head {firstOnsetShape.FirstOrDefault().HeadDistance:0.000}, fade {firstOnsetShape.FirstOrDefault().Fade:0.00}).");
+        var travelCamera = calibration.CameraPose!.Value.DirectionToCamera(risingMidiInput.NoteDirection.Vector);
+        Assert(calibration.CameraPose.Value.TryProjectDelta(calibration.CameraPose.Value.ToCamera(firstOnsetShape[0].Target), travelCamera, view, out var learnTravelPixels),
+            "The selected Learn travel direction should project at the first MIDI note's target.");
+        var onsetLater = new List<Ar3DLiveMidiNote>();
+        Ar3DNoteProjection.BuildRisingMidiNotes(calibration, view,
+            [firstOnset with { Age = .1, HeldSeconds = .1 }], risingMidiInput.RisingMidiNoteStyle,
+            risingMidiInput.NoteDirection, onsetLater);
+        var firstCentre = Centre(firstOnsetShape[0].Patch);
+        var laterCentre = Centre(onsetLater.Single().Patch);
+        Assert((laterCentre.X - firstCentre.X) * learnTravelPixels.X + (laterCentre.Y - firstCentre.Y) * learnTravelPixels.Y < 0,
+            "Perform's rising note must travel outward, opposite the Learn arrow that points toward the key.");
+
         var risingMidiFeed = MakeFeed(risingMidiInput, song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
         risingMidiFeed.LiveNote(60, true, .45f);
         var risingMidiFrame = GpuRenderLoop.RenderFrames(renderer, risingMidiFeed, width, height, 22, 1 / 60.0, false,
@@ -1979,7 +2029,7 @@ internal static partial class VerificationSuite
         // Stage-space bars used to be culled as soon as their 2D tail left the canvas. A calibrated AR bar must
         // stay alive beyond that edge, keep travelling in its 3D direction, then disappear exactly at its AR reach.
         var releasePathFeed = MakeFeed(new GpuArInput(calibration, ArNoteStyle.Default, 1f, KeyLight: 0,
-                ShowNotes: false, ProjectedNotes: false, ShowLiveTrails: true),
+                ShowNotes: false, Quality: ArQualityTier.Lite, ProjectedNotes: false, ShowLiveTrails: true, ShowDamperStrip: false),
             song: Array.Empty<NoteEvent>(), position: 0, playing: false, pressed: new HashSet<int>());
         releasePathFeed.LiveNote(60, true, .9f);
         var releasePathInput = new GpuFrameInput();
@@ -1993,7 +2043,7 @@ internal static partial class VerificationSuite
             if (frame == 70) barsPastStageEdge = releasePathSimulation.LivePresses.Count;
         }
         Assert(barsPastStageEdge == 1 && releasePathSimulation.LivePresses.Count == 0,
-            $"A released calibrated bar should outlive the old ~1.1 s stage-edge cutoff, then expire at its {ArOptions.LivePressReachSeconds:0.00} s fixed AR reach ({barsPastStageEdge} past the old edge, {releasePathSimulation.LivePresses.Count} at the limit).");
+            $"A released calibrated bar must survive beyond the old ~1.1 s stage-edge cutoff in Lite, then expire at its {ArOptions.LivePressReachSeconds:0.00} s fixed AR reach ({barsPastStageEdge} past the old edge, {releasePathSimulation.LivePresses.Count} at the limit).");
 
         // A release is a separate effect phase and must be anchored to the source pitch, not flattened over camera.
         var releaseFeed = PressFeed(false, .6f, ArQualityTier.Ultra, visualSettings: liveFxLook, activePitches: new[] { 60 });
