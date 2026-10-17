@@ -100,7 +100,7 @@ internal static class ArProjection
 /// <param name="WidthShare">How much of its key's width a note fills at full size, 0..1.</param>
 /// <param name="WidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/> over the simulation's 0..1 activity): null or flat keeps every note the same width, a graph makes hard strikes wider. Lives in the look, so presets carry it.</param>
 /// <param name="FadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/> over the same input): null or flat keeps the fade the same for every note, a graph brings hard strikes in faster.</param>
-/// <param name="LiveFade">How a live press bar's solidity follows its own lifetime (a <see cref="GraphVariable"/> over how far the bar has stretched, walked forward while the key is held and backwards over the release — AR‑6.2 Keysight keypress parity): null keeps the legacy length fade, see <see cref="ArLiveFade"/>.</param>
+/// <param name="LiveFade">How a live press bar's solidity follows its own lifetime (a <see cref="GraphVariable"/> over how far the bar has stretched, walked forward while the key is held and backwards over the release — AR‑6.2 Keysight keypress parity): null keeps held bars fully solid, see <see cref="ArLiveFade"/>.</param>
 /// <param name="LiveBarCoverFraction">How far past the back edge of the keys a live bar's leading edge keeps travelling, as a fraction of the keys' depth (AR‑6.2 "coverage" of the Keysight keypress): 0 keeps today's look — the bar stops where the keys start; .6 covers the keys about three fifths of the way; 1 reaches the front edge for full coverage; negative values hold the bar a little free of the keys. Applied the same way by the flat overlay and the 3D route, where one unit of travel is one key depth.</param>
 internal sealed record ArNoteStyle(double FallSpeed = 1.5, double Reach = 4, double MinLength = .06, double Gap = .015, double WidthShare = .86,
     GraphVariable? WidthVelocity = null, GraphVariable? FadeVelocity = null, GraphVariable? LiveFade = null, double LiveBarCoverFraction = 0)
@@ -147,7 +147,7 @@ internal readonly record struct ArLiveMidiNote(int Pitch, double Age, double Hel
 /// <see cref="ArNoteShape"/> it carries no index into a song.</summary>
 /// <param name="Patch">Where on the output the bar goes: its leading edge on the back edge of the keys.</param>
 /// <param name="Pitch">The key it belongs to.</param>
-/// <param name="Fade">0..1: the opacity the bar is drawn with, falling as the bar stretches away from the key.</param>
+/// <param name="Fade">0..1: the opacity the bar is drawn with, including its optional lifetime graph, velocity fade and release dim; a held bar is fully solid by default.</param>
 /// <param name="Held">True while the key is still down.</param>
 /// <param name="Strength">How hard it was pressed, 0..1, for the colour.</param>
 internal readonly record struct ArLiveBar(ArPatch Patch, int Pitch, double Fade, bool Held, float Strength);
@@ -201,8 +201,8 @@ internal static class ArNotes
     /// Fills <paramref name="into"/> (cleared first) with a bar for every key the player is pressing, or has just let go
     /// of: the bar's leading edge sits on the back edge of the key (where the song's notes reach it) — or runs further
     /// onto the keys when the style's coverage asks for it — and its tail
-    /// stretches away along the keyboard's own direction as the key is held, up to <see cref="ArNoteStyle.Reach"/>, fading
-    /// as it stretches. Letting the key go stops the bar where the finger left it, dims it and takes it away
+    /// stretches away along the keyboard's own direction as the key is held, up to <see cref="ArNoteStyle.Reach"/>.
+    /// A held bar stays fully solid unless its optional lifetime graph says otherwise. Letting the key go stops the bar where the finger left it, dims it and takes it away
     /// <see cref="ReleaseLife"/> seconds later. It is the mark of the player's own hand, so it is drawn whatever the mode
     /// is — a song's notes to come are what Perform leaves out. A key the calibrated keyboard does not have is skipped.
     /// </summary>

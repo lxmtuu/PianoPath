@@ -1062,12 +1062,12 @@ internal static partial class VerificationSuite
         minKept.CopyFrom(new PianoVisualSettings { ArNoteMinScale = 0 });
         Assert(minKept.ArNoteMinScale == 80 && new PianoVisualSettings { ArNoteMinScale = 50 }.ArOptionsValue.NoteMinAspect == .5f,
             "The minimum note length is kept when a look is applied, and reaches the overlay as a fraction of the note's width.");
-        // AR-S4 remainder: the notes are drawn in perspective on Standard and Ultra; Lite keeps the flat notes it always had
-        foreach (var (quality, projected) in new[] { (ArQualityTiers.LiteName, false), (ArQualityTiers.StandardName, true), (ArQualityTiers.UltraName, true) })
+        // AR-S4: manual quality changes lighting/effects, never the calibrated note geometry.
+        foreach (var quality in new[] { ArQualityTiers.LiteName, ArQualityTiers.StandardName, ArQualityTiers.UltraName })
         {
             var tierSettings = new PianoVisualSettings { ArNotesInPerspective = true, ArQuality = quality };
-            Assert(tierSettings.ArNotesProjected == projected && tierSettings.ArOptionsValue.NotesProjected == projected,
-                $"With the notes in perspective the {quality} tier must {(projected ? "draw" : "not draw")} the notes through the camera's view.");
+            Assert(tierSettings.ArNotesProjected && tierSettings.ArOptionsValue.NotesProjected,
+                $"With perspective notes enabled, the {quality} tier must keep the same calibrated 3D note path.");
         }
         Assert(!new PianoVisualSettings { ArNotesInPerspective = false, ArQuality = ArQualityTiers.UltraName }.ArOptionsValue.NotesProjected,
             "With the notes in perspective switched off no tier draws them through the camera's view.");
@@ -1841,7 +1841,7 @@ internal static partial class VerificationSuite
         Assert(settings.ArNoteWidthSoft == 200, "Clamping should pull an out-of-range width slider back into range.");
         // The live-bar lifetime graph (AR-6.2): off by default, and its two sliders walk from birth to full reach.
         Assert(new PianoVisualSettings().ArOptionsValue.NoteStyle.LiveFade is null,
-            "The default overlay should keep the legacy length fade: no lifetime graph on the style.");
+            "The default overlay should omit the optional lifetime graph, leaving held bars fully solid.");
         var live = new PianoVisualSettings { ArLiveFadeByLifetime = true, ArLiveFadeStart = 60, ArLiveFadeEnd = 100 };
         var liveStyle = live.ArOptionsValue.NoteStyle;
         var liveGraph = liveStyle.LiveFade ?? default;
@@ -1853,8 +1853,8 @@ internal static partial class VerificationSuite
         Assert(Math.Abs(ArLiveFade.Opacity(liveGraph, .5, true, 0) - .8) < 1e-9
                 && Math.Abs(ArLiveFade.Opacity(liveGraph, .5, false, .5) - .7) < 1e-9,
             "Held should walk the graph forwards and the release should walk the same graph backwards.");
-        Assert(Math.Abs(ArLiveFade.Opacity(null, .92, true, 0) - .08) < 1e-9,
-            "Without the graph the legacy floor still stands.");
+        Assert(Math.Abs(ArLiveFade.Opacity(null, .92, true, 0) - 1) < 1e-9,
+            "Without the graph a held bar stays fully solid, regardless of its stretch.");
         // Coverage (AR-6.2): the slider is a percentage, 100 keeps the legacy edge and the style carries the fraction.
         Assert(Math.Abs(new PianoVisualSettings().ArOptionsValue.NoteStyle.LiveBarCoverFraction) < 1e-12,
             "The default overlay should keep the bar's leading edge at the keys, as it always was.");

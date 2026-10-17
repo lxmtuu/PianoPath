@@ -20,6 +20,10 @@ section and are not repeated here; the internal development roadmap is not part 
 
 ## Unreleased
 
+### AR overlay
+- Lite, Standard and Ultra now keep the same calibrated 3D projection for perspective notes and live press bars; quality changes lighting/effects, not their path. A fresh Perform MIDI note starts at the calibrated key on its first frame. The calibration UI now explains that its yellow arrow is Learn travel toward the keys while Perform rises the opposite way, and the screen-up helper aims the Perform rise upward.
+- Held live press bars stay fully visible by default instead of fading as they stretch; release dim remains, and the optional lifetime graph still gives explicit control over opacity while held.
+
 ## 2.1.1 — 2026-10-16
 
 ### Correct immutable package publication

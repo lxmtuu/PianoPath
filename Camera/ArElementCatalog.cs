@@ -1,6 +1,6 @@
 namespace PianoPath;
 
-/// <summary>The three quality tiers of the AR overlay (AR-S3 of docs/AR-OVERLAY-ROADMAP.md §14.8). A tier decides which elements of the catalogue may be drawn: <see cref="Lite"/> is what the overlay has always drawn (the keys, the flat notes, the bars of the keys the player presses), <see cref="Standard"/> adds the lights over the keys, <see cref="Ultra"/> adds everything that costs real fill.</summary>
+/// <summary>The three quality tiers of the AR overlay (AR-S3 of docs/AR-OVERLAY-ROADMAP.md §14.8). A tier decides which elements of the catalogue may be drawn: <see cref="Lite"/> keeps the calibrated note and keypress geometry but omits AR lighting/transients, <see cref="Standard"/> adds calibrated key lighting, and <see cref="Ultra"/> adds the remaining high-fill effects.</summary>
 internal enum ArQualityTier { Lite, Standard, Ultra }
 
 /// <summary>The tier names as stored in settings and shown in the picker.</summary>

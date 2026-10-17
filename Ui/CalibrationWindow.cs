@@ -65,7 +65,7 @@ internal sealed class CalibrationSurface : FrameworkElement
     internal bool SetNoteDirectionToScreenUp()
     {
         if (!TryGetPoseContext(out _, out _, out var pose, out var centre)
-            || !pose.TryDirectionForScreenDelta(centre, (0, -1), Wizard.View, out var direction)) return false;
+            || !pose.TryDirectionForScreenDelta(centre, (0, 1), Wizard.View, out var direction)) return false;
         SetNoteDirection(ArNoteDirection.FromVector(direction), notify: true);
         return true;
     }

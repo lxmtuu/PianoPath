@@ -28,13 +28,13 @@ internal static class ArModes
 /// <param name="NoteWidthVelocity">How a note's width follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps every note the same width.</param>
 /// <param name="NoteFadeVelocity">How a note's fade-in follows the strike's velocity (a <see cref="GraphVariable"/>); null or flat keeps the fade the same for every note.</param>
 /// <param name="Quality">The quality tier (Lite/Standard/Ultra); standard is the default so an upgrade never takes the key glow away.</param>
-/// <param name="NotesInPerspective">Build notes from the calibrated 3D keyboard pose and project their camera-facing quads into the picture; stage-space falling-note trails stay suppressed. Ambient petals, stars and transients remain flat. Off keeps the legacy flat note overlay.</param>
+/// <param name="NotesInPerspective">Build notes from the calibrated 3D keyboard pose and project their camera-facing quads into the picture at every manual quality tier; stage-space falling-note trails stay suppressed. Ambient petals, stars and transients remain flat. Off keeps the legacy flat note overlay.</param>
 /// <param name="NoteMinScale">Minimum note length, percent of the note's width (AR-S4, Keysight "minimum note scaling"); zero keeps every note at its own length.</param>
 /// <param name="LivePressTrails">Draw the player's growing press bars over the camera; independent of the lit-key tint.</param>
 /// <param name="NoteDirectionTilt">The independent 3D tilt of note travel away from the default back-to-keys axis.</param>
 /// <param name="NoteDirectionAzimuth">The independent 3D azimuth around that axis.</param>
-/// <param name="RisingMidiNotes">In Perform mode, create a separate calibrated 3D note on each MIDI Note On; Note Off freezes its length but does not stop its travel.</param>
-/// <param name="LiveFadeGraph">The fade-over-lifetime of live press bars (a <see cref="GraphVariable"/> walked forward while the key is held and backwards over the release, AR‑6.2 Keysight keypress parity); null keeps the legacy length fade.</param>
+/// <param name="RisingMidiNotes">In Perform mode, create a separate calibrated 3D note on each MIDI Note On; its body grows with hold duration to a short cap, Note Off freezes that length, and the note keeps travelling toward its fixed reach.</param>
+/// <param name="LiveFadeGraph">The fade-over-lifetime of live press bars (a <see cref="GraphVariable"/> walked forward while the key is held and backwards over the release, AR‑6.2 Keysight keypress parity); null keeps a held bar fully solid and lets the release dim remove it.</param>
 /// <param name="LiveBarCoverFraction">How far onto the keys a live bar runs, as a fraction of the keys' depth (AR‑6.2 coverage): 0 stops at the back edge — today's look; 1 reaches the front edge.</param>
 internal readonly record struct ArOptions(bool Enabled, string Mode, double Opacity, double Lookahead, double KeyLight, double Delay = 0,
     GraphVariable? NoteWidthVelocity = null, GraphVariable? NoteFadeVelocity = null, ArQualityTier Quality = ArQualityTier.Standard,
@@ -81,11 +81,8 @@ internal readonly record struct ArOptions(bool Enabled, string Mode, double Opac
         LiveBarCoverFraction = Fit(LiveBarCoverFraction, LiveBarCoverFractionMin, LiveBarCoverFractionMax, LiveBarCoverFractionDefault)
     };
 
-    /// <summary>
-    /// The AR layer builds notes from the calibrated 3D pose when the switch is on and the quality tier is not Lite.
-    /// Lite keeps the legacy flat overlay whatever the switch says.
-    /// </summary>
-    internal bool NotesProjected => NotesInPerspective && Quality != ArQualityTier.Lite;
+    /// <summary>The user toggle alone selects the note path; Lite/Standard/Ultra never change calibrated note geometry.</summary>
+    internal bool NotesProjected => NotesInPerspective;
 
     /// <summary>The minimum note length as a fraction of the note's width, 0..2 (see <see cref="ArNoteMinimum"/>).</summary>
     internal float NoteMinAspect => (float)(Fit(NoteMinScale, NoteMinScaleMin, NoteMinScaleMax, NoteMinScaleDefault) / 100);

@@ -170,6 +170,45 @@ public class Ar3DNoteProjectionTests
     }
 
     [Fact]
+    public void A_fresh_perform_note_starts_on_the_key_and_rises_opposite_the_learn_travel_arrow()
+    {
+        var direction = new ArNoteDirection(68, 37);
+        var first = Assert.Single(BuildRisingMidi([new ArLiveMidiNote(60, Age: 0, HeldSeconds: 0, Down: true, Strength: .9f)], direction));
+        var later = Assert.Single(BuildRisingMidi([new ArLiveMidiNote(60, Age: .1, HeldSeconds: .1, Down: true, Strength: .9f)], direction));
+
+        Assert.Equal(0, first.HeadDistance);
+        Assert.InRange((first.Travel - direction.Vector).Length, 0, 1e-9);
+        Assert.Equal(.5, first.Fade, 9); // visible on the first frame, then the short material fade-in completes
+        Assert.True(later.HeadDistance > first.HeadDistance);
+        Assert.True(later.TailDistance > later.HeadDistance);
+
+        var pose = Calibration.CameraPose!.Value;
+        Assert.True(pose.TryProjectDelta(pose.ToCamera(first.Target), pose.DirectionToCamera(direction.Vector), View, out var learnTravel));
+        var firstCentre = Centre(first.Patch);
+        var laterCentre = Centre(later.Patch);
+        var rise = (X: laterCentre.X - firstCentre.X, Y: laterCentre.Y - firstCentre.Y);
+        Assert.True(rise.X * learnTravel.X + rise.Y * learnTravel.Y < 0,
+            "The selected arrow is Learn's toward-key travel; a Perform note rises along its outward opposite.");
+    }
+
+    [Fact]
+    public void A_perform_note_body_grows_with_the_hold_then_freezes_at_its_quarter_reach_cap()
+    {
+        var direction = new ArNoteDirection(68, 37);
+        var shortHold = Assert.Single(BuildRisingMidi([new ArLiveMidiNote(60, .1, .1, true, .9f)], direction));
+        var longerHold = Assert.Single(BuildRisingMidi([new ArLiveMidiNote(60, .5, .5, true, .9f)], direction));
+        var cappedHold = Assert.Single(BuildRisingMidi([new ArLiveMidiNote(60, .8, 2, true, .9f)], direction));
+        var released = Assert.Single(BuildRisingMidi([new ArLiveMidiNote(60, 1.1, .5, false, .9f)], direction));
+        static double Length(Ar3DLiveMidiNote note) => note.TailDistance - note.HeadDistance;
+
+        Assert.True(Length(longerHold) > Length(shortHold), "A longer physical hold should create a longer note body.");
+        Assert.Equal(Style.Reach * .25, Length(cappedHold), 9);
+        Assert.Equal(Length(longerHold), Length(released), 9);
+        Assert.False(released.Held);
+        Assert.Equal(1, longerHold.Fade, 9);
+    }
+
+    [Fact]
     public void Each_midi_note_on_emits_a_separate_3d_note_that_keeps_travelling_after_note_off()
     {
         var direction = new ArNoteDirection(68, 37);
