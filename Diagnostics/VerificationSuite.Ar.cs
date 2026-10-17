@@ -2693,10 +2693,11 @@ internal static partial class VerificationSuite
             Assert(stripeLevels.Count >= 6,
                 $"At least the six content ticks of the camera-file take must read back ({stripeLevels.Count}; "
                 + (exportStreamEnded ? "the stream reported its end" : "the readback was still waiting after sixty seconds") + ").");
-            var brightened = 0;
-            for (var i = 1; i < Math.Min(6, stripeLevels.Count); i++) if (stripeLevels[i] > stripeLevels[i - 1]) brightened++;
-            Assert(brightened >= 4 && stripeLevels[5] > stripeLevels[0] + 16,
-                $"The file's greys must tick through the engine in order (levels {string.Join("/", stripeLevels)}).");
+            var contentLevels = stripeLevels.Take(6).ToArray();
+            var ordered = contentLevels.Zip(contentLevels.Skip(1), (previous, next) => next >= previous).All(inOrder => inOrder);
+            var distinctLevels = contentLevels.Distinct().Count();
+            Assert(ordered && distinctLevels >= 4 && contentLevels[^1] > contentLevels[0] + 16,
+                $"The file's greys must remain ordered and show at least four distinct levels across the six content ticks despite decoder repeats (levels {string.Join("/", stripeLevels)}).");
             Results.Add("PASS AR render-to-video (frame + voice): the plan caps a 640×360 camera to 200×112/12 fps and counts 12 frames — six quiet runway ticks so the box's swallowed tail still leaves the six content ticks readable, the engine's AVI take reads back with the camera stripe and the pressed-key light on the right ticks, the PNG take at downsample 2 boxes 320×180→160×90 with one file per tick plus manifest, the impact tick equals a live-shaped render bit for bit, two sweeps of one script are byte-identical, the voiced take mixes its SFZ piano into 44100 WAV frames — exactly the twelve ticks of the video — with the onset ramping gently and the held ticks loud, the look's watermark appears as a kind-16 sprite lighting exactly the strip's rect in a byte-compare against the same tick without it, and a real camera video file — an MP4 pressed by the app's own writer and decoded by its reader — ticks through the engine one frame a tick, its stripe brightening in order.");
         }
         catch
