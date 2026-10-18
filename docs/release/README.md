@@ -2,7 +2,7 @@
 
 > **Đây là kho phát hành, không phải kho mã nguồn.** Kho này chỉ chứa bản dựng và tài liệu
 > người dùng của Keyflow; mã nguồn nằm ở một kho riêng. Mọi tệp ở đây
-> do quy trình phát hành của kho nguồn sinh ra tại đúng tag `v2.1.1` — xem
+> do quy trình phát hành của kho nguồn sinh ra tại đúng tag `v2.2.0` — xem
 > **[Tải bản phát hành](#tải-bản-phát-hành)** bên dưới, hoặc
 > **[Releases](https://github.com/lxmtuu/KeyFlow/releases/latest)** cho bản mới nhất, và **[Issues](https://github.com/lxmtuu/KeyFlow/issues)** để báo lỗi.
 >
@@ -49,21 +49,21 @@ Keyflow là ứng dụng desktop Windows (C# · WPF · .NET 10) để **chơi đ
 
 ## Tải bản phát hành
 
-Mỗi mốc phát hành (`v2.1.1` và các bản sau) là một mục trong **[Releases](https://github.com/lxmtuu/KeyFlow/releases)**, kèm
+Mỗi mốc phát hành (`v2.2.0` và các bản sau) là một mục trong **[Releases](https://github.com/lxmtuu/KeyFlow/releases)**, kèm
 `SHA256SUMS.txt` của mọi tệp đính kèm. Bản mới nhất: **[https://github.com/lxmtuu/KeyFlow/releases/latest](https://github.com/lxmtuu/KeyFlow/releases/latest)**.
 
 | Tệp | Là gì | Máy đích cần gì |
 | --- | --- | --- |
-| `Keyflow-2.1.1-win-x64.zip` | Bản portable **self-contained**: giải nén là chạy `PianoPath.exe` | Không cần cài gì thêm |
-| `Keyflow-Setup-2.1.1.exe` | **Bộ cài** cho Windows x64: shortcut Start Menu/Desktop, mục gỡ cài đặt, wizard Anh/Việt | Không cần cài gì thêm |
-| `Keyflow-2.1.1-win-x64-fd.zip` | Bản **framework-dependent**, nhẹ hơn nhiều | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
-| `Keyflow-2.1.1-win-arm64.zip` | Windows on ARM, self-contained (CI publish; chưa máy ARM nào chạy thử) | Không cần cài gì thêm |
+| `Keyflow-2.2.0-win-x64.zip` | Bản portable **self-contained**: giải nén là chạy `PianoPath.exe` | Không cần cài gì thêm |
+| `Keyflow-Setup-2.2.0.exe` | **Bộ cài** cho Windows x64: shortcut Start Menu/Desktop, mục gỡ cài đặt, wizard Anh/Việt | Không cần cài gì thêm |
+| `Keyflow-2.2.0-win-x64-fd.zip` | Bản **framework-dependent**, nhẹ hơn nhiều | [.NET 10 Desktop Runtime (x64)](https://dotnet.microsoft.com/download/dotnet/10.0) |
+| `Keyflow-2.2.0-win-arm64.zip` | Windows on ARM, self-contained (CI publish; chưa máy ARM nào chạy thử) | Không cần cài gì thêm |
 
 Cài bằng bộ cài thì xong; dùng bản ZIP thì **giải nén cả thư mục rồi chạy `PianoPath.exe`** — đừng
 tách `.exe` khỏi `LICENSE.txt`:
 
 ```
-Keyflow-2.1.1-win-x64\
+Keyflow-2.2.0-win-x64\
 ├── PianoPath.exe              ← file chạy duy nhất
 └── LICENSE.txt                ← giấy phép MIT, phải đi kèm bản sao
 ```
@@ -73,7 +73,7 @@ Salamander Grand Piano V3 không nằm trong gói. Khi muốn có tiếng đàn,
 tin ghi công CC BY 3.0 được lưu cạnh bộ mẫu trong thư mục cài piano của người dùng.
 
 - **Kiểm tệp tải về**: mỗi release kèm `SHA256SUMS.txt`; đối chiếu bằng
-  `Get-FileHash .\Keyflow-2.1.1-win-x64.zip -Algorithm SHA256`. Các gói **chưa được ký mã số**; bảng hash vẫn là
+  `Get-FileHash .\Keyflow-2.2.0-win-x64.zip -Algorithm SHA256`. Các gói **chưa được ký mã số**; bảng hash vẫn là
   cách nhanh để chắc tệp nhận được đúng là tệp quy trình build ra.
 - **SmartScreen**: các gói **chưa được ký Authenticode**, nên Windows có thể hiện bảng *"Windows protected your PC"* khi cài đặt hay chạy lần đầu; bấm **More info → Run anyway**.
 - **Giữ giấy phép**: `LICENSE.txt` (MIT) phải đi cùng bản sao. Thông báo CC BY 3.0 của Salamander nằm
