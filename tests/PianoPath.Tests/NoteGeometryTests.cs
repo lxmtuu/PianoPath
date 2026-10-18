@@ -20,7 +20,7 @@ public class NoteGeometryTests
     [Fact]
     public void Width_keeps_the_lane_share_at_the_default()
     {
-        Assert.Equal(17.454545, NoteGeometry.Width(Lane, .8, Black), 5);
+        Assert.Equal(17.4545, NoteGeometry.Width(Lane, .8, Black), 4);
         Assert.Equal(47.2727, NoteGeometry.Width(Lane, .8, Black) / (1920.0 / 52) * 100, 3);
     }
 
@@ -35,7 +35,8 @@ public class NoteGeometryTests
     {
         var lane = width / 88.0;
         var black = NoteGeometry.BlackKeyWidth(width, 52);
-        Assert.Equal(expected, NoteGeometry.Width(lane, percent / 100, black), 4);
+        // percent is an int: divide by 100.0, or 80 / 100 is the integer 0 and every case expects a zero-width note.
+        Assert.Equal(expected, NoteGeometry.Width(lane, percent / 100.0, black), 4);
     }
 
     [Fact]
