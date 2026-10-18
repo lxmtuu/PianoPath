@@ -16,7 +16,8 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
   magnetism. Xem
   [phân tích SeeMusic](../../PARTICLE-MOTION-SEEMUSIC-REFERENCE.md).
 - **`damper.html`** — A/B ánh sáng thanh damper: mức pedal 0/1 không nội suy (trước D0) so với đường cong
-  cơ học, lõi sáng chạy và đèn damper từng phím. D0 bước 1–3, D1 và **D2** đã vào mã sản phẩm, nên cột
+  cơ học, lõi sáng chạy và đèn damper từng phím. D0–D3 đã vào mã sản phẩm (D3 thêm bloom ignition và nhịp thở,
+canvas 2D không mô phỏng hai thứ đó), nên cột
   "hiện tại" trong lab giờ là ảnh chụp lịch sử để so sánh; `damper.js` vẫn là mô hình tham chiếu mà sản phẩm
   được đối chiếu từng hằng số. Xem [phân tích damper](../../DAMPER-BAR-LIGHT-ANALYSIS.md).
 

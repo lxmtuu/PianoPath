@@ -317,6 +317,8 @@ internal sealed class GpuLook
     public bool AudioReactive { get; init; }
     public float AudioReactiveAmount { get; init; }
     public float PedalGlowIntensity { get; init; }
+    /// <summary>Set when the player or the system asked for less motion: the AR damper's idle breath is off.</summary>
+    public bool ReducedMotion { get; init; }
 
     // ---- colours (sRGB 0..1) ----
     public Vector3 BackgroundColor { get; init; }
@@ -443,6 +445,7 @@ internal sealed class GpuLook
             BloomIntensity = P(s.BloomIntensity), BloomSize = P(s.BloomSize),
             CameraZoom = P(s.CameraZoom), CameraOffset = P(s.CameraOffset), CameraParallax = P(s.CameraParallax),
             TempoSync = s.TempoSync, TempoSyncAmount = P(s.TempoSyncAmount), PedalGlow = s.PedalGlow, PedalGlowIntensity = P(s.PedalGlowIntensity),
+            ReducedMotion = s.ReducedMotion,
             AudioReactive = s.AudioReactive, AudioReactiveAmount = P(s.AudioReactiveAmount),
 
             BackgroundColor = ParseHex(s.BackgroundColor, Vector3.Zero),

@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10, damper strip 11 or damper cell/tick 12 (y=1 marks a flat stroke and x is the rim alpha); experimental held particle surface 17.</summary>
+    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10, damper strip 11 (y is the bloom ignition) or damper cell/tick 12 (y=1 marks a flat stroke and x is the rim alpha); experimental held particle surface 17.</summary>
     public Vector4 Misc;
 }
 
@@ -134,10 +134,14 @@ internal sealed partial class GpuArLayer
         // The damper strip is a scene element, so it packs before everything born with a strike: it hugs the key
         // back edge, waves only with the pedal level, and takes the look's halo colour (the Pedal Glow family).
         var damperLift = ArDampers.ClampLevel(simulation.SustainLift);
+        // D3: a held pedal breathes ±2% instead of standing perfectly still; with the pedal up the factor is
+        // exactly 1, so the D1 look is untouched, and the accessibility toggle turns the sway off.
+        var damperBreath = ArDampers.Breath(damperLift, simulation.Clock, look.ReducedMotion);
         if (ar.ShowDamperStrip && ArElementCatalog.CanDraw(ar.Quality, ArElement.Dampers)
             && ArDampers.TryPatch(ar.Calibration, view, damperLift, out var damperPatch))
         {
-            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4((float)damperLift, 0, 11f, (float)ArDampers.CorePositionFor(damperLift))));
+            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * damperBreath * opacity),
+                new Vector4((float)damperLift, (float)ArDampers.Ignition(damperLift), 11f, (float)ArDampers.CorePositionFor(damperLift))));
             DamperStripCount++;
 
             // One cell and one pin per key that is held or lifted by the pedal. They are scene elements like
@@ -155,8 +159,8 @@ internal sealed partial class GpuArLayer
                 if (!ArProjection.TryProject(ar.Calibration, view, centre - cellWidth / 2, centre + cellWidth / 2,
                         -damperDepth, 0, out var cell, out _, out _)) continue;
                 var tint = Vector3.Lerp(look.ArDamperColor, look.NoteColor(pitch, 0), .22f);
-                quads.Add(Pack(cell, tint, (float)(ArDampers.CellBodyAlpha(value) * opacity),
-                    new Vector4((float)(ArDampers.CellRimAlpha(value) * opacity), 0, 12f, 0)));
+                quads.Add(Pack(cell, tint, (float)(ArDampers.CellBodyAlpha(value) * damperBreath * opacity),
+                    new Vector4((float)(ArDampers.CellRimAlpha(value) * damperBreath * opacity), 0, 12f, 0)));
                 DamperCellCount++;
 
                 // The pin rises from the cell's back edge toward the falling notes with a 2 px crossbar for a
@@ -166,7 +170,7 @@ internal sealed partial class GpuArLayer
                 var cx = (float)((cell.BackLeft.X + cell.BackRight.X) * .5);
                 var baseY = (float)((cell.BackLeft.Y + cell.BackRight.Y) * .5);
                 var half = (float)(ArDampers.TickWidth * .5);
-                var alpha = (float)(ArDampers.TickAlpha(value) * opacity);
+                var alpha = (float)(ArDampers.TickAlpha(value) * damperBreath * opacity);
                 quads.Add(Pack(ScreenRect(cx - half, baseY - height, cx + half, baseY), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
                 var capHalf = half + 1.5f;
                 quads.Add(Pack(ScreenRect(cx - capHalf, baseY - height - 2, cx + capHalf, baseY - height), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));

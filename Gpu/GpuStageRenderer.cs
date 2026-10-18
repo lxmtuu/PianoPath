@@ -757,8 +757,10 @@ internal sealed class GpuStageRenderer : IDisposable
             RimColor = new Vector4(GpuStageSimulation.ToLinear(look.HaloColor), 40 + look.HorizonGlow * 260),
             Post = new Vector4(look.ShaderExposure, look.ShaderFilmic ? 1 : 0, 1, 1),
             // threshold 1.8: the lit white keys reach about 1.4 and must not bloom (their blur greys the
-            // black keys); notes, sparks, flares and pressed keys are emissive and sit well above it
-            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f, 1.8f, .8f / 255f),
+            // black keys); notes, sparks, flares and pressed keys are emissive and sit well above it. The
+            // damper strip's D3 ignition reads the same constant, so it wakes up at a known lift.
+            Post2 = new Vector4(look.Chroma ? 0 : look.Vignette * .9f, look.BloomIntensity * .85f,
+                (float)ArDampers.BloomThreshold, .8f / 255f),
             SceneFx = new Vector4(look.ShowBackground && !look.Chroma ? BackgroundMotionId(look.BackgroundMotion) : 0,
                 look.BackgroundMotionAmount, look.BackgroundMotionSpeed, simulation.Activity),
             SceneFxColor = new Vector4(GpuStageSimulation.ToLinear(look.BackgroundMotionColor), 1),

@@ -69,7 +69,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip, 12 damper cell/tick (y=1 flat stroke, x=rim alpha)
+    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip (y=ignition), 12 damper cell/tick (y=1 flat stroke, x=rim alpha)
 };
 
 struct KeyInstance
@@ -975,10 +975,13 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
         // uv.y runs from the fallboard side (0) to the key edge (1). Misc.x is the lift, Misc.w the hot core's
         // position (ArDampers.CorePositionFor); a faint contact line fades in on the edge as the core leaves, so
         // the strip reads as a damper rising rather than a line merely getting thicker. The u ends feather.
+        // Misc.y is the D3 ignition: 1 with the pedal up, 2.4 at full lift, so the hottest core crosses the
+        // composite's 1.8 bloom prefilter only once the pedal is well into its travel.
         float corePos = saturate(i.Misc.w);
         float lift = saturate(i.Misc.x);
+        float ignite = max(i.Misc.y, 1.0);
         float d = i.Uv.y - corePos;
-        float core = exp(-d * d * 38.0) * 2.1;
+        float core = exp(-d * d * 38.0) * 2.1 * ignite;
         float edge = 1.0 - i.Uv.y;
         float halo = exp(-edge * 5.0) * 0.55;
         // The contact line only fades in as the core leaves, so the pedal-up strip keeps its old look.

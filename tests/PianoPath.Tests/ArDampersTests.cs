@@ -92,6 +92,74 @@ public class ArDampersTests
     }
 
     [Fact]
+    public void The_core_ignites_bloom_only_well_into_the_pedal_travel()
+    {
+        // The ignition is exactly 1 while the pedal is up, so D1's look cannot regress.
+        Assert.Equal(1, ArDampers.Ignition(0), 12);
+        Assert.Equal(1, ArDampers.Ignition(.2), 12);
+        Assert.Equal(1, ArDampers.Ignition(.35), 12);
+        Assert.Equal(1 + ArDampers.CoreIgnition, ArDampers.Ignition(1), 9);
+        var previous = 0.0;
+        for (var lift = 0.0; lift <= 1.0001; lift += .01)
+        {
+            var value = ArDampers.Ignition(lift);
+            Assert.True(value >= previous - 1e-12, $"ignition must never fall back at lift {lift:0.00}");
+            previous = value;
+        }
+
+        // The strip's emitted brightest channel, mirroring the kind-11 shader at the core's own position.
+        static double Radiance(double lift)
+        {
+            static double SmoothStep(double edge0, double edge1, double x)
+            {
+                var t = Math.Clamp((x - edge0) / (edge1 - edge0), 0, 1);
+                return t * t * (3 - 2 * t);
+            }
+            var edge = 1 - ArDampers.CorePositionFor(lift);
+            var gain = 2.1 * ArDampers.Ignition(lift) + .55 * Math.Exp(-edge * 5)
+                + .25 * Math.Exp(-edge * edge * 90) * SmoothStep(0, .15, lift);
+            return gain * ArDampers.AlphaFor(lift);
+        }
+        Assert.Equal(.477, Radiance(0), 3);
+        Assert.Equal(2.569, Radiance(1), 3);
+        Assert.True(Radiance(0) < ArDampers.BloomThreshold, "the pedal-up strip must stay under the bloom threshold");
+        Assert.True(Radiance(1) > ArDampers.BloomThreshold, "the full pedal must cross the bloom threshold");
+        // the prefilter's 20% knee puts the soft start at 1.44, so the wake-up begins around lift 0.65
+        Assert.True(Radiance(.60) < ArDampers.BloomThreshold * .8);
+        Assert.True(Radiance(.70) > ArDampers.BloomThreshold * .8);
+        var low = 0.0; var high = 1.0;
+        for (var i = 0; i < 60; i++)
+        {
+            var mid = (low + high) / 2;
+            if (Radiance(mid) < ArDampers.BloomThreshold) low = mid; else high = mid;
+        }
+        Assert.InRange(low, .70, .78);
+    }
+
+    [Fact]
+    public void Idle_breath_is_two_percent_and_stops_without_the_pedal()
+    {
+        Assert.Equal(1, ArDampers.Breath(0, 1.234), 12);
+        Assert.Equal(1, ArDampers.Breath(.02, 1.234), 12);
+        var low = 1.0; var high = 1.0;
+        for (var t = 0.0; t < 3; t += .01)
+        {
+            var value = ArDampers.Breath(1, t);
+            Assert.InRange(value, 1 - ArDampers.BreathAmount, 1 + ArDampers.BreathAmount);
+            low = Math.Min(low, value); high = Math.Max(high, value);
+        }
+        Assert.True(high > 1 + ArDampers.BreathAmount * .9 && low < 1 - ArDampers.BreathAmount * .9,
+            $"the sway should use its whole band ({low:0.####} .. {high:0.####})");
+        // one period at 0.7 Hz returns to the same value, and the same call is deterministic
+        var period = 1 / ArDampers.BreathHertz;
+        Assert.Equal(ArDampers.Breath(1, .37), ArDampers.Breath(1, .37 + period), 9);
+        Assert.Equal(ArDampers.Breath(1, .37), ArDampers.Breath(1, .37), 12);
+        // reduced motion switches the sway off
+        Assert.Equal(1, ArDampers.Breath(1, .37, reducedMotion: true), 12);
+        Assert.Equal(1, ArDampers.Breath(1, double.NaN), 12);
+    }
+
+    [Fact]
     public void Tick_smoothing_answers_faster_than_the_bar()
     {
         Assert.Equal(1 - Math.Exp(-1), ArDampers.SmoothTick(0, 1, ArDampers.TickAttackSeconds), 9);

@@ -168,6 +168,8 @@ internal sealed partial class GpuStageSimulation
     internal float SustainLift => _sustainLift;
     /// <summary>One key's damper value (held or pedal-lifted) after its faster 30/40 ms tick smoother.</summary>
     internal float DamperTick(int pitch) => pitch is >= 0 and < 128 ? _damperTick[pitch] : 0;
+    /// <summary>Seconds of rendered time on the simulation clock; the AR damper's idle breath reads it.</summary>
+    internal double Clock => _time;
     private float _energy;
     /// <summary>Audio reactive: 1, or more after a run of note onsets (the software stage's EnergyBoost envelope).</summary>
     internal float EnergyBoost => _look.AudioReactive ? 1 + _energy * _look.AudioReactiveAmount : 1;

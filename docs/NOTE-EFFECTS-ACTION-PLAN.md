@@ -38,7 +38,8 @@ biệt có chủ ý** (0,35 s cho thanh phẳng nằm trên phím, 3,0 s cho tha
 vào mã**: CC64 liên tục tới hình, đường cong cơ học 0–25% chết / đầy ở 50%, Pedal Glow sáng theo mức pedal và
 một bộ làm mượt 55/75 ms dùng chung. D1 **đã vào mã**: lõi dải AR chạy theo lift, vạch WPF và halo GPU nhích
 lên cùng quy ước. D2 **đã vào mã**: mỗi phím có một ô LED và một pin trong dải AR (kind 12), tối đa 265 quad,
-tắt cùng dải ở Lite; còn D3.
+tắt cùng dải ở Lite. D3 **đã vào mã**: lõi chỉ vượt ngưỡng bloom 1,8 từ lift 0,74 (CC64 ≈ 53, ~42% hành trình),
+và dải/ô/pin thở ±2% ở 0,7 Hz khi pedal giữ (tắt theo Reduced Motion).
 
 ## 1. Đã kiểm tra gì
 
@@ -379,7 +380,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | D0 | CC64 liên tục vào hình | **đã xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%, mượt 55/75 ms | S | DAMPER §7 |
 | D1 | Lõi sáng chạy theo lift | **đã xong**: 8,2 px @45°, 6,6 px @90°; vạch WPF 6 px, halo GPU 5 px | S | DAMPER §7 |
 | D2 | 88 ô LED + tick theo phím | **đã xong**: ô `0,70/0,46` phím, thân `0,05+0,42v`, mép `0,16+0,54v`; pin `15v × 2,4 px` + crossbar, τ 30/40 ms; tối đa 265 quad, tắt ở Lite | M | DAMPER §7 |
-| D3 | Bloom threshold, thở, màu | chỉ khi pedal giữ; tắt được | S | DAMPER §7 |
+| D3 | Bloom threshold, thở, màu | **đã xong**: `ignite` 1 → 2,4 (lõi 0,48 → 2,57; cắt ngưỡng 1,8 tại lift 0,74 ≈ CC64 53); breath ±2% @ 0,7 Hz, đúng 1 khi pedal lên, tắt theo `ReducedMotion`; pin giữ màu dải | S | DAMPER §7 |
 | W0–W3 | Bốn lát cắt chuyển động hạt | theo bốn cổng trong PARTICLE-MOTION-REVIEW | M–L | PARTICLE §7 |
 | H1 | Cổng phần cứng + Adaptive Quality | đạt 8 ms p95 trên iGPU/dGPU thật | L | MASTER §11 |
 | H2 | Audio-reactive thật (FFT) | band/envelope có nguồn PCM, latency đo được | L | MASTER §5.12 |

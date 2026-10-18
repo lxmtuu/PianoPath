@@ -1,10 +1,10 @@
 # Thanh damper — phân tích ánh sáng chuyển động và đề xuất
 
 > **Ngày:** 2026-10-19 · **Nhánh:** `arena/efa69378-pianopath` · **Loại:** phân tích + prototype
-> **Cập nhật cùng ngày:** D0 bước 1–3, D1 và **D2** đã vào mã sản phẩm — CC64 liên tục tới hình, đường cong cơ học
+> **Cập nhật cùng ngày:** **D0–D3 đã vào mã sản phẩm** — CC64 liên tục tới hình, đường cong cơ học
 > `smoothstep(0,25; 0,50)`, một bộ làm mượt 55/75 ms dùng chung, lõi sáng chạy theo lift, vạch/halo stage
-> nhích lên cùng quy ước, và **một ô LED + một pin theo từng phím** trong dải AR. Các số đo ở §1–§4 mô tả
-> **trước** thay đổi, trừ khi ghi rõ "sau D0/D1/D2".
+> nhích lên cùng quy ước, **một ô LED + một pin theo từng phím**, và lõi **thức dậy qua bloom** khi pedal xuống
+> sâu. Các số đo ở §1–§4 mô tả **trước** thay đổi, trừ khi ghi rõ "sau D0–D3".
 > **Xem trước:** [damper.html](prototypes/particle-motion-lab/damper.html) — A/B *hiện tại ↔ đề xuất* trên cùng một
 > cử chỉ pedal.
 > **Liên quan:** [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) (ngữ pháp hạt),
@@ -27,7 +27,7 @@
 5. Đề xuất D0–D3: đưa CC64 liên tục vào hình, hiệu chỉnh theo đúng hành trình cơ học (chết 0–25%, đầy ở 50%),
    thống nhất một bộ làm mượt, cho **lõi sáng chạy** theo độ nhấc, và thêm **đèn damper theo từng phím** để thanh
    damper thật sự "động" theo ngón tay chứ không chỉ sáng lên.
-   **D0, D1 và D2 đã xong**; D3 (bloom threshold, thở, màu) còn lại.
+   **D0–D3 đã xong**: lõi chỉ vượt ngưỡng bloom 1,8 từ ~42% hành trình pedal, và dải thở ±2% khi pedal giữ.
 
 SeeMusic có một **thanh đèn LED theo từng phím** ở mép sau bàn phím (thấy rõ trong ảnh marketing), nhưng
 tài liệu của họ **không gọi nó là damper** và không mô tả nó phản ứng pedal (xem §5). PianoPath thì ngược lại:
@@ -144,7 +144,7 @@ phím, không có sóng chạy, không có nhịp thở khi pedal giữ — cả
 **Từ D2:** mỗi phím có một ô riêng trong dải, nên dọc thanh đã có biến thiên: phím đang giữ sáng 1, phím
 không giữ chỉ sáng theo pedal, phím đen có ô hẹp hơn, và mỗi ô có một pin cao theo damper của nó. Độ dày/alpha
 của **thanh nền** vẫn đều — đó là chủ ý: thanh là "pedal đang ở đâu", ô là "phím nào đang kêu".
-Sóng chạy ngang và nhịp thở vẫn chưa làm (D3).
+Sóng chạy ngang vẫn chưa làm; nhịp thở đã có từ D3 (±2% ở 0,7 Hz, tắt theo Reduced Motion).
 
 ## 4. Lỗ hổng half-pedal
 
@@ -302,12 +302,30 @@ tức `0,46/0,52` bề rộng phím đen để giữ đúng tỉ lệ), thân al
     Ngân sách GPU thật chưa đo lại trên máy có card (máy này không build được), nên 265 quad mới chỉ được
     kiểm bằng **số lượng**, không phải bằng thời gian khung.
 
-### D3 — Tinh chỉnh (tùy chọn)
+### D3 — Tinh chỉnh ✅ **đã xong**
 
-12. **Bloom threshold**: giữ lõi pedal-up dưới ngưỡng bloom, pedal-down vượt ngưỡng — ánh sáng "sống dậy" mềm
-    thay vì pop.
-13. **Idle breath** rất nhẹ (±2% alpha, 0,7 Hz) chỉ khi pedal giữ; tắt được.
-14. **Màu**: giữ màu halo; pin có thể lấy màu nốt ở cường độ thấp để không rối.
+12. **Bloom ignition.** Ngưỡng bloom của composite là **1,8** (`Post2.z`; giờ đọc từ `ArDampers.BloomThreshold`
+    để shader, renderer và test dùng chung một số). Với D1, kênh sáng nhất của lõi chỉ đạt **0,48** khi pedal
+    lên và **1,10** khi pedal xuống — bản thân dải **không bao giờ** chạm bloom. D3 nhân riêng lõi với:
+    ```
+    ignite = 1 + 1,4 · smoothstep(0,35; 0,95; lift)
+    ```
+    `= 1` khi pedal lên (hình D1 không đổi), `= 2,4` khi pedal xuống hết. Kênh sáng nhất của lõi thành
+    **0,48 → 2,57**. Prefilter có knee mềm 0,36 nên bloom bắt đầu từ ngưỡng hiệu dụng **1,44** tại **lift ≈ 0,65**
+    và vượt hẳn 1,8 tại **lift ≈ 0,74** — tức **CC64 ≈ 51–53**, khoảng **40–42% hành trình** pedal, ngay dưới
+    điểm catch 50%. Ô và pin **không** tăng HDR: chúng là lớp "phím nào kêu", không phải nguồn bloom.
+13. **Idle breath.** `Breath(lift, t) = 1 + 0,02 · engage(lift) · sin(2π · 0,7 · t)`, với `engage` chạy từ lift
+    0,02 đến 0,27. Pedal lên ⇒ **đúng 1,000** (không hồi quy); pedal giữ ⇒ alpha của dải, ô và pin cùng dao động
+    **±2% ở 0,7 Hz** (chu kỳ 1,43 s — không đủ nhanh để thành nháy). `ReducedMotion` của hệ accessibility tắt hẳn
+    nhịp thở; thời gian lấy từ `simulation.Clock` nên tất định và **không** chịu `PhysicsTimeFactor`. Nhịp thở chỉ
+    ở lớp AR (video overlay); vạch WPF và halo GPU giữ nguyên, vì chúng là ánh sáng của stage chứ không phải của
+    ảnh camera.
+14. **Màu.** Giữ màu halo cho dải, ô mix 22% về pitch, **pin giữ màu dải** — 88 pin tô màu nốt sẽ thành tiếng ồn
+    thị giác, trong khi mắt đã đọc màu qua ô. Không thêm màu mới, không thêm preset.
+
+Kiểm: 2 Fact mới trong `tests/PianoPath.Tests/ArDampersTests.cs` (ignition + quãng cắt bloom; biên độ, chu kỳ và
+việc tắt nhịp thở), tổng **6 Fact** cho damper. Chưa đo trên GPU thật (máy này không build được): quãng cắt
+bloom là tính từ đúng công thức shader, không phải ảnh chụp.
 
 ## 8. Tiêu chí nghiệm thu
 
@@ -323,6 +341,8 @@ tức `0,46/0,52` bề rộng phím đen để giữ đúng tỉ lệ), thân al
 | Ô theo phím | giữ phím rồi buông pedal | ô phím giữ vẫn sáng; ô khác tắt ≤ 200 ms |
 | Tick theo phím | giữ phím rồi buông pedal | tick phím giữ vẫn cao; phím khác rơi ≤ 200 ms |
 | Không hồi quy | pedal lên | dải giống ảnh cũ (sai khác ≤ 1 px / 1 alpha) |
+| Bloom thức dậy | kênh sáng nhất của lõi tại lift 0 / 1 so với ngưỡng 1,8 | 0,48 < 1,8 < 2,57; cắt tại lift ≈ 0,74 |
+| Nhịp thở | biên độ alpha khi pedal giữ | ±2% ở 0,7 Hz; đúng 1 khi pedal lên; tắt khi Reduced Motion |
 | Tất định | chạy lại cùng input | cùng kết quả từng frame |
 
 Hai hàng **ô theo phím** và **tick theo phím** giờ có đường kiểm tự động: `VerificationSuite.Ar` đếm ô/pin khi
@@ -344,6 +364,8 @@ http://localhost:8080/damper.html
 - Đồ thị bên dưới: CC64 (xám), mức hiện tại (hổ phách, bậc thang), `lift` đề xuất (xanh).
 - Thanh trượt CC64 để thử tay; nút "Nhấn nhanh" để thấy pop hiện tại.
 - HUD in số: số mức phân biệt trong vùng half-pedal, Δ lớn nhất mỗi frame, thời gian lên/xuống, quãng chạy của lõi.
+- Canvas 2D **không mô phỏng bloom composite** và không vẽ nhịp thở: D3 được kiểm bằng số trong test, không bằng
+  ảnh trong lab.
 
 Kiểm tra headless (**33** assertion: mô hình, half-pedal, tick, ô LED, khớp hằng số với mã sản phẩm, tất định,
 đường vẽ):

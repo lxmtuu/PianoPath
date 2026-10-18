@@ -126,6 +126,42 @@ internal static class ArDampers
     internal static double SmoothTick(double previous, double target, double dt)
         => Smooth(previous, target, dt, TickAttackSeconds, TickReleaseSeconds);
 
+    /// <summary>The composite pass's bloom threshold, shared by the renderer and the strip's ignition curve.</summary>
+    internal const double BloomThreshold = 1.8;
+
+    /// <summary>How much hotter the core burns at full lift than at rest (D3).</summary>
+    internal const double CoreIgnition = 1.4;
+
+    /// <summary>
+    /// The strip core's bloom ignition for a lift 0..1 (D3). It is exactly 1 with the pedal up, so the D1 look is
+    /// untouched, and reaches <c>1 + CoreIgnition</c> at full lift. With the strip's gains that puts the core's
+    /// brightest channel at 0.48 at rest and 2.57 at full lift, so it enters the prefilter's soft knee (1.44) at
+    /// lift 0.65 and crosses the 1.8 threshold at 0.74 (raw CC64 53, about 42% of travel): the light wakes up
+    /// through the half-pedal band instead of popping on.
+    /// </summary>
+    internal static double Ignition(double lift)
+    {
+        var t = Math.Clamp((ClampLevel(lift) - .35) / .60, 0, 1);
+        return 1 + CoreIgnition * t * t * (3 - 2 * t);
+    }
+
+    /// <summary>Idle breath: ±2% of the damper light at 0.7 Hz, only while the pedal holds something up.</summary>
+    internal const double BreathAmount = .02;
+    internal const double BreathHertz = .7;
+
+    /// <summary>
+    /// A deterministic alpha multiplier for the damper light (D3): 1 with the pedal up, and a slow ±2% sway once
+    /// the pedal lifts, so a held pedal feels alive without becoming a strobe. <paramref name="reducedMotion"/>
+    /// answers the accessibility toggle, where the sway is off entirely.
+    /// </summary>
+    internal static double Breath(double lift, double seconds, bool reducedMotion = false)
+    {
+        if (reducedMotion || !double.IsFinite(seconds)) return 1;
+        var engage = Math.Clamp((ClampLevel(lift) - .02) / .25, 0, 1);
+        if (engage <= 0) return 1;
+        return 1 + BreathAmount * engage * Math.Sin(seconds * 2 * Math.PI * BreathHertz);
+    }
+
     /// <summary>How far the strip reaches past the key back edge for a pedal lift 0..1.</summary>
     internal static double DepthFor(double lift) => BaseDepth + LiftDepth * Math.Clamp(lift, 0, 1);
 
