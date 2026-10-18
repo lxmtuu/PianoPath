@@ -443,11 +443,11 @@
       n.barSeconds.toFixed(2) + ' s' + (n.clipped ? ' <em>(bị cắt)</em>' : '');
     document.getElementById('flat-stats').innerHTML =
       '<b>' + s.arPx.toFixed(2) + ' px</b> · ' + (DEFAULTS.arShare * 100).toFixed(0) + '% phím · reach ' +
-      s.arSeconds.toFixed(1) + ' s · thanh 4 s → ' + (ar4 ? ar4.barSeconds.toFixed(2) : '0') + ' s · release ' +
+      s.arSeconds.toFixed(1) + ' s · thanh 4 s → ' + (ar4 ? ar4.barSeconds.toFixed(2) : '0') + ' s · live-bar release ' +
       DEFAULTS.releaseLife.toFixed(2) + ' s';
     document.getElementById('ar3d-stats').innerHTML =
       '<b>' + Math.round(s.arPx) + ' px</b> · min-aspect ' + (state.minAspect * 100).toFixed(0) + '% · reach ' +
-      s.arSeconds.toFixed(1) + ' s · thanh 4 s → ' + (ar4d ? ar4d.barSeconds.toFixed(2) : '0') + ' s · release ' +
+      s.arSeconds.toFixed(1) + ' s · thanh 4 s → ' + (ar4d ? ar4d.barSeconds.toFixed(2) : '0') + ' s · live-bar release ' +
       DEFAULTS.arLookahead.toFixed(1) + ' s';
 
     var rows = '';

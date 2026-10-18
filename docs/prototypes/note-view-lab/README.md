@@ -4,9 +4,9 @@ Ba đường vẽ nốt trong một trang, chạy cùng một bản nhạc và c
 
 1. **WPF / GPU stage** — một công thức chung: `lane = W/88`, bề rộng `lane × NoteWidth%`,
    chiều cao `clamp(duration·speed − gap, 16, 0,9·hitY)`.
-2. **AR phẳng** — mặc định của AR: bề rộng `span(phím) × 0,86`, đuôi cắt ở `Reach`, release 0,35 s.
+2. **AR phẳng** — mặc định của AR: bề rộng `span(phím) × 0,86`, đuôi cắt ở `Reach`, live-bar release 0,35 s.
 3. **AR 3D** — `Notes in perspective`: thêm ghost, landing glow, nhãn nốt, min-aspect, cắt nốt trùng pitch,
-   release 3,0 s.
+   live-bar release 3,0 s.
 
 Mục đích là nhìn thấy ba việc N1–N3 trong
 [NOTE-EFFECTS-ACTION-PLAN.md](../../NOTE-EFFECTS-ACTION-PLAN.md) trước khi sửa mã sản phẩm.
