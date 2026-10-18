@@ -69,7 +69,7 @@ struct ArQuadInstance
     float4 B;            // x2, y2, x3, y3: front-right and front-left corners (output px)
     float4 W;            // the four corner weights of the projective map
     float4 Color;        // rgb linear, a = opacity
-    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip
+    float4 Misc;         // note: x=sounding, y=seed, w=hold-bar; z = 0 note/bar, 1 key tint, 2 particle, 3 key light, 4 pulse, 5 ribbon, 6 flash, 7 beam, 8 note shimmer, 9 note trail, 10 note label, 11 damper strip, 12 damper cell/tick (y=1 flat stroke, x=rim alpha)
 };
 
 struct KeyInstance
@@ -987,6 +987,19 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
         float gain = (core + halo + contact) * ends;
         float alpha = saturate(gain * 0.5) * i.Color.a;
         return float4(i.Color.rgb * gain * i.Color.a, alpha);
+    }
+    if (kind > 11.5 && kind < 12.5)
+    {
+        // A per-key damper cell or its pin: Color.a is the body opacity, Misc.x the brighter 2 px band along
+        // uv.y = 0 (the cell's back edge, facing the notes) and Misc.y = 1 marks a flat stroke that has no rim.
+        // fwidth turns the band into two output pixels at any projection scale, so every cell matches.
+        float2 uvPerPixel = max(fwidth(i.Uv), float2(1e-6, 1e-6));
+        float rimMask = 1.0 - smoothstep(0.0, 2.0 * uvPerPixel.y, i.Uv.y);
+        float rim = saturate(i.Misc.x) * (1.0 - saturate(i.Misc.y));
+        float body = i.Color.a;
+        // The band composites over the body exactly as the prototype drew two rectangles.
+        float alpha = body + rim * (1.0 - body) * rimMask;
+        return float4(i.Color.rgb * alpha, alpha);
     }
 
     // Unknown future quad kinds remain readable; note bodies above use the shared SDF material.

@@ -17,6 +17,11 @@
   var AR = { baseDepth: .06, liftDepth: .10, alphaBase: .18, alphaLift: .32, coreTravel: .55 };
   var CURVE = { free: .25, full: .50 };
   var TAU = { attack: .055, release: .075, tickUp: .030, tickDown: .040 };
+  var CELL = {
+    whiteShare: .70, blackShare: .46,
+    bodyBase: .05, bodyLift: .42, rimBase: .16, rimLift: .54,
+    tickHeight: 15, tickWidth: 2.4, tickBase: .18, tickLift: .58
+  };
   var KEY_DEPTH_PX = 120;          // drawing scale: 0.06 depth = 7.2 px, 0.16 = 19.2 px
   var DURATION = 10.4;
   var FIRST = 21, LAST = 108;
@@ -260,12 +265,12 @@
     for (var p = FIRST; p <= LAST; p++) {
       var v = engine.tick[p];
       if (v < .02) continue;
-      var w = isBlack(p) ? g.whiteW * .46 : g.whiteW * .70;
+      var w = isBlack(p) ? g.whiteW * CELL.blackShare : g.whiteW * CELL.whiteShare;
       var x = keyX(g, p) + (isBlack(p) ? g.whiteW * .5 - w * .5 : (g.whiteW - w) * .5);
       var tint = mixColor(color, pitchColor(p), .22);
-      ctx.fillStyle = rgba(tint, .05 + .42 * v);
+      ctx.fillStyle = rgba(tint, CELL.bodyBase + CELL.bodyLift * v);
       ctx.fillRect(x, front - depth, w, depth);
-      ctx.fillStyle = rgba(tint, .16 + .54 * v);
+      ctx.fillStyle = rgba(tint, CELL.rimBase + CELL.rimLift * v);
       ctx.fillRect(x, front - depth, w, 2);
     }
   }
@@ -275,10 +280,10 @@
     for (var p = FIRST; p <= LAST; p++) {
       var v = engine.tick[p];
       if (v < .02) continue;
-      var h = 15 * v;
-      var w = 2.4;
+      var h = CELL.tickHeight * v;
+      var w = CELL.tickWidth;
       var x = keyX(g, p) + (isBlack(p) ? g.whiteW * .5 - w * .5 : (g.whiteW - w) * .5);
-      ctx.fillStyle = rgba(color, .18 + .58 * v);
+      ctx.fillStyle = rgba(color, CELL.tickBase + CELL.tickLift * v);
       ctx.fillRect(x, base - h, w, h);
       ctx.fillRect(x - 1.5, base - h - 2, w + 3, 2);
     }
@@ -429,7 +434,7 @@
 
   // ------------------------------------------------------------------ api
   var api = {
-    AR: AR, CURVE: CURVE, TAU: TAU, DURATION: DURATION, KEY_DEPTH_PX: KEY_DEPTH_PX,
+    AR: AR, CURVE: CURVE, TAU: TAU, CELL: CELL, DURATION: DURATION, KEY_DEPTH_PX: KEY_DEPTH_PX,
     GESTURE: GESTURE, NOTES: NOTES,
     createEngine: createEngine, step: step, shape: shape, measure: measure,
     sampleGesture: sampleGesture, heldAt: heldAt, smoothstep: smoothstep, isBlack: isBlack,

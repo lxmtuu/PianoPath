@@ -105,6 +105,7 @@ internal sealed partial class GpuStageSimulation
     private readonly float[] _press = new float[128], _glow = new float[128], _heat = new float[128], _spill = new float[128], _keyHold = new float[128];
     private readonly double[] _sparkBudget = new double[128], _wispBudget = new double[128], _flameBudget = new double[128];
     private readonly bool[] _active = new bool[128];
+    private readonly float[] _damperTick = new float[128];
     private readonly Vector3[] _keyColor = new Vector3[128];
     private readonly Random _random;
     private double _time;
@@ -165,6 +166,8 @@ internal sealed partial class GpuStageSimulation
     internal float PedalBoost => _pedalBoost;
     /// <summary>The damper's lift after the shared attack/release smoother; the AR strip and Pedal Glow read it.</summary>
     internal float SustainLift => _sustainLift;
+    /// <summary>One key's damper value (held or pedal-lifted) after its faster 30/40 ms tick smoother.</summary>
+    internal float DamperTick(int pitch) => pitch is >= 0 and < 128 ? _damperTick[pitch] : 0;
     private float _energy;
     /// <summary>Audio reactive: 1, or more after a run of note onsets (the software stage's EnergyBoost envelope).</summary>
     internal float EnergyBoost => _look.AudioReactive ? 1 + _energy * _look.AudioReactiveAmount : 1;
@@ -205,6 +208,7 @@ internal sealed partial class GpuStageSimulation
         _count = 0; _rings.Clear(); _flashes.Clear(); _trails.Clear(); _arImpacts.Clear();
         _risingMidiNotes.Clear(); _arRisingMidiNotes.Clear(); _livePresses.Clear();
         Array.Clear(_press); Array.Clear(_glow); Array.Clear(_heat); Array.Clear(_active);
+        Array.Clear(_damperTick);
         Array.Clear(_spill); Array.Clear(_keyHold); Array.Clear(_keyColor); Array.Clear(KeyColors);
         Array.Clear(_sparkBudget); Array.Clear(_wispBudget); Array.Clear(_flameBudget);
         _noteTrails.Clear(); _noteLabels.Clear(); _shimmerBars.Clear(); _landings.Clear();
@@ -244,6 +248,9 @@ internal sealed partial class GpuStageSimulation
         // The physics slow-motion control belongs to particles; the stage clock, notes and ambient layers
         // must keep their real tempo so changing it cannot slow the whole composition.
         _time += frameDt;
+        // One smoothed lift drives the pedal lights and the per-key damper cells.
+        _sustainLift = (float)ArDampers.Smooth(_sustainLift, input.SustainLevel, frameDt);
+        _pedalBoost = look.PedalGlow ? 1 + look.PedalGlowIntensity * _sustainLift : 1;
         _beatPulse = look.TempoSync ? input.BeatPulse : 0;
         _simWidth = Math.Max(1, sceneWidth);
         var layout = new GpuSceneLayout(_simWidth, (float)input.StageHeightDip, look.KeyboardFraction);
@@ -308,6 +315,8 @@ internal sealed partial class GpuStageSimulation
             _press[pitch] += (target - _press[pitch]) * (1 - MathF.Exp(-frameDt * (target > _press[pitch] ? 38 : 16)));
             _glow[pitch] = _active[pitch] ? Math.Max(_glow[pitch], Math.Min(1, _glow[pitch] + frameDt * 12)) : Math.Max(0, _glow[pitch] - frameDt * 3.2f);
             _heat[pitch] = _active[pitch] ? Math.Min(1, _heat[pitch] + frameDt * 7) : Math.Max(0, _heat[pitch] - frameDt * 2.4f);
+            _damperTick[pitch] = (float)ArDampers.SmoothTick(_damperTick[pitch],
+                ArDampers.TickTarget(_active[pitch], _sustainLift), frameDt);
             totalGlow += _glow[pitch];
             horizon += _keyColor[pitch] * _glow[pitch];
         }
@@ -320,9 +329,6 @@ internal sealed partial class GpuStageSimulation
             _spill[pitch] = Math.Min(1, spill);
         }
         _activity = Math.Min(1, totalGlow / 4);
-        // The strip and the stage glow share one smoothed lift, so half-pedalling moves them together.
-        _sustainLift = (float)ArDampers.Smooth(_sustainLift, input.SustainLevel, frameDt);
-        _pedalBoost = look.PedalGlow ? 1 + look.PedalGlowIntensity * _sustainLift : 1;
         _energy *= MathF.Exp(-2.2f * frameDt);
         // the theme's halo colour, as the software stage paints it, warmed a little by the keys that sound
         HorizonColor = ToLinear(totalGlow > .01f ? Vector3.Lerp(look.HaloColor, horizon / totalGlow, .35f * Math.Min(1, totalGlow)) : look.HaloColor);

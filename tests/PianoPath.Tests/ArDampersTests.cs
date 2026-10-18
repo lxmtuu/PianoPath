@@ -56,6 +56,52 @@ public class ArDampersTests
     }
 
     [Fact]
+    public void Cells_and_ticks_keep_the_prototype_widths_and_opacities()
+    {
+        var white = 1.0 / 52;
+        Assert.Equal(.70 * white, ArDampers.CellWidth(white, black: false), 9);
+        Assert.Equal(.46 * white, ArDampers.CellWidth(.52 * white, black: true), 9);
+        Assert.Equal(.05, ArDampers.CellBodyAlpha(0), 9);
+        Assert.Equal(.47, ArDampers.CellBodyAlpha(1), 9);
+        Assert.Equal(.16, ArDampers.CellRimAlpha(0), 9);
+        Assert.Equal(.70, ArDampers.CellRimAlpha(1), 9);
+        Assert.Equal(.18, ArDampers.TickAlpha(0), 9);
+        Assert.Equal(.76, ArDampers.TickAlpha(1), 9);
+    }
+
+    [Fact]
+    public void A_held_key_lifts_without_the_pedal_and_the_pedal_lifts_every_key()
+    {
+        Assert.Equal(1, ArDampers.TickTarget(held: true, 0), 9);
+        Assert.Equal(.4, ArDampers.TickTarget(held: false, .4), 9);
+        Assert.Equal(1, ArDampers.TickTarget(held: true, .4), 9);
+        // an out-of-range or missing lift must not push a cell past its ends
+        Assert.Equal(0, ArDampers.TickTarget(held: false, double.NaN), 9);
+        Assert.Equal(1, ArDampers.TickTarget(held: false, 3), 9);
+    }
+
+    [Fact]
+    public void A_damper_cell_settles_in_about_a_fifth_of_a_second()
+    {
+        // 30 ms attack: one 60 Hz frame covers 42.6% of the way, and ten frames are all but there
+        var one = ArDampers.SmoothTick(0, 1, 1.0 / 60);
+        Assert.InRange(one, .40, .44);
+        var ten = 0.0;
+        for (var i = 0; i < 10; i++) ten = ArDampers.SmoothTick(ten, 1, 1.0 / 60);
+        Assert.True(ten > .99, $"ten frames should have settled, got {ten:0.####}");
+    }
+
+    [Fact]
+    public void Tick_smoothing_answers_faster_than_the_bar()
+    {
+        Assert.Equal(1 - Math.Exp(-1), ArDampers.SmoothTick(0, 1, ArDampers.TickAttackSeconds), 9);
+        Assert.Equal(Math.Exp(-1), ArDampers.SmoothTick(1, 0, ArDampers.TickReleaseSeconds), 9);
+        // the same step moves a cell further than the bar, so the comb reads as a press and not a swell
+        Assert.True(ArDampers.SmoothTick(0, 1, .03) > ArDampers.Smooth(0, 1, .03));
+        Assert.True(ArDampers.SmoothTick(1, 0, .04) < ArDampers.Smooth(1, 0, .04));
+    }
+
+    [Fact]
     public void Half_travel_lifts_the_strip_halfway_through_its_band()
     {
         var lift = ArDampers.LiftFromPedal(.375);

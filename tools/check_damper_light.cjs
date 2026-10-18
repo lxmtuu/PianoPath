@@ -150,6 +150,38 @@ console.log('per-key cells (SeeMusic-style)');
   check('cells only appear where a damper is up', down.tick[108] > .9 && up.tick[108] < .02);
 }
 
+console.log('source parity (Camera/ArDampers.cs)');
+{
+  const source = fs.readFileSync(path.join(REPO, 'Camera', 'ArDampers.cs'), 'utf8');
+  const constant = name => {
+    const m = new RegExp(`\\b${name}\\s*=\\s*(-?(?:\\d+\\.?\\d*|\\.\\d+))`).exec(source);
+    return m ? Number(m[1]) : NaN;
+  };
+  const curve = name => {
+    const m = new RegExp(`static double ${name}\\(double value\\) => ` +
+      `(\\d*\\.?\\d+) \\+ (\\d*\\.?\\d+) \\* ClampLevel\\(value\\)`).exec(source);
+    return m ? [Number(m[1]), Number(m[2])] : [];
+  };
+  const same = (a, b) => a.length === b.length && a.every((v, i) => Math.abs(v - b[i]) < 1e-9);
+
+  check('the strip constants match the product',
+    constant('BaseDepth') === D.AR.baseDepth && constant('LiftDepth') === D.AR.liftDepth
+    && constant('AlphaBase') === D.AR.alphaBase && constant('AlphaLift') === D.AR.alphaLift
+    && constant('CoreTravel') === D.AR.coreTravel);
+  check('the shared smoothing matches the product',
+    constant('AttackSeconds') === D.TAU.attack && constant('ReleaseSeconds') === D.TAU.release);
+  check('the cell widths match the product',
+    constant('CellWhiteShare') === D.CELL.whiteShare && constant('CellBlackShare') === D.CELL.blackShare);
+  check('the cell body and rim curves match the product',
+    same(curve('CellBodyAlpha'), [D.CELL.bodyBase, D.CELL.bodyLift])
+    && same(curve('CellRimAlpha'), [D.CELL.rimBase, D.CELL.rimLift]));
+  check('the tick size, alpha and easing match the product',
+    constant('TickHeight') === D.CELL.tickHeight && constant('TickWidth') === D.CELL.tickWidth
+    && same(curve('TickAlpha'), [D.CELL.tickBase, D.CELL.tickLift])
+    && constant('TickAttackSeconds') === D.TAU.tickUp
+    && constant('TickReleaseSeconds') === D.TAU.tickDown);
+}
+
 console.log('determinism and draw path');
 {
   const a = D.createEngine(), b = D.createEngine();

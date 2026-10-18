@@ -15,7 +15,7 @@ internal struct GpuArQuad
     public Vector4 W;
     /// <summary>Linear rgb and opacity.</summary>
     public Vector4 Color;
-    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10 or damper strip 11; experimental held particle surface 17.</summary>
+    /// <summary>For notes, x=sounding, y=seed and w=hold-bar strength; z selects note 0, key tint 1, particle 2, key light 3, pulse 4, ribbon 5, flash 6, beam 7, shimmer 8, note trail 9, note label 10, damper strip 11 or damper cell/tick 12 (y=1 marks a flat stroke and x is the rim alpha); experimental held particle surface 17.</summary>
     public Vector4 Misc;
 }
 
@@ -86,6 +86,8 @@ internal sealed partial class GpuArLayer
     internal int BeamCount { get; private set; }
     internal int ReleaseEffectCount { get; private set; }
     internal int DamperStripCount { get; private set; }
+    internal int DamperCellCount { get; private set; }
+    internal int DamperTickCount { get; private set; }
 
     /// <summary>Guide line quads packed by the alignment check (roadmap §14.7 "Thêm 1"); verification reads it.</summary>
     internal int AlignmentGuideCount { get; private set; }
@@ -108,7 +110,7 @@ internal sealed partial class GpuArLayer
         KeyQuadCount = LiveBarCount = RisingMidiNoteCount = 0;
         NoteTrailQuadCount = GhostNoteQuadCount = LandingGlowCount = NoteLabelCount = 0;
         ImpactLightCount = NoteLightCount = PulseCount = ParticleFxCount = FlashCount = HoldArcCount = BeamCount = ReleaseEffectCount = 0;
-        DamperStripCount = 0;
+        DamperStripCount = DamperCellCount = DamperTickCount = 0;
         AlignmentGuideCount = 0;
         if (ar.Opacity <= 0) return;
 
@@ -137,6 +139,39 @@ internal sealed partial class GpuArLayer
         {
             quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4((float)damperLift, 0, 11f, (float)ArDampers.CorePositionFor(damperLift))));
             DamperStripCount++;
+
+            // One cell and one pin per key that is held or lifted by the pedal. They are scene elements like
+            // the strip, so they pack before everything born with a strike: they hug the key back edge, lift
+            // with the pedal (or the held key) and never occlude a note. Sostenuto is not in the GPU state yet;
+            // a sostenuto-caught key still shows through the held flag while it is physically down.
+            var damperDepth = ArDampers.DepthFor(damperLift);
+            for (var pitch = layout.FirstPitch; pitch <= layout.LastPitch; pitch++)
+            {
+                var value = simulation.DamperTick(pitch);
+                if (value < .02f) continue;
+                var (left, right) = layout.Span(pitch);
+                var cellWidth = ArDampers.CellWidth(right - left, KeyboardLayout.IsBlack(pitch));
+                var centre = (left + right) * .5;
+                if (!ArProjection.TryProject(ar.Calibration, view, centre - cellWidth / 2, centre + cellWidth / 2,
+                        -damperDepth, 0, out var cell, out _, out _)) continue;
+                var tint = Vector3.Lerp(look.ArDamperColor, look.NoteColor(pitch, 0), .22f);
+                quads.Add(Pack(cell, tint, (float)(ArDampers.CellBodyAlpha(value) * opacity),
+                    new Vector4((float)(ArDampers.CellRimAlpha(value) * opacity), 0, 12f, 0)));
+                DamperCellCount++;
+
+                // The pin rises from the cell's back edge toward the falling notes with a 2 px crossbar for a
+                // head. Both are flat screen-space strokes, so they ask the shader to skip the cell rim.
+                var height = (float)(ArDampers.TickHeight * value);
+                if (height < .5f) continue;
+                var cx = (float)((cell.BackLeft.X + cell.BackRight.X) * .5);
+                var baseY = (float)((cell.BackLeft.Y + cell.BackRight.Y) * .5);
+                var half = (float)(ArDampers.TickWidth * .5);
+                var alpha = (float)(ArDampers.TickAlpha(value) * opacity);
+                quads.Add(Pack(ScreenRect(cx - half, baseY - height, cx + half, baseY), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
+                var capHalf = half + 1.5f;
+                quads.Add(Pack(ScreenRect(cx - capHalf, baseY - height - 2, cx + capHalf, baseY - height), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
+                DamperTickCount += 2;
+            }
         }
 
         if (!suppressKeySpillForReview && ar.Calibration.CameraPose is { } keyPose && ar.Quality != ArQualityTier.Lite && keyLight > 0
@@ -339,6 +374,11 @@ internal sealed partial class GpuArLayer
         quads.Add(Pack(patch, linearColor, alpha,
             new Vector4(phase, look.NoteShimmerAmount, 8, 0)));
     }
+
+    /// <summary>A flat screen-space rectangle in output pixels: the AR layer's own strokes need no projection.</summary>
+    private static ArPatch ScreenRect(double left, double top, double right, double bottom) => new(
+        new ArCorner(left, top, 1), new ArCorner(right, top, 1),
+        new ArCorner(right, bottom, 1), new ArCorner(left, bottom, 1));
 
     private static GpuArQuad Pack(ArPatch patch, Vector3 color, float alpha, Vector4 misc) => new()
     {

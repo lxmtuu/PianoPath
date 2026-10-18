@@ -8,6 +8,14 @@ namespace PianoPath;
 /// look's halo colour, the same family the stage's Pedal Glow grows with, so the strip needs no knob of its own.
 ///
 /// <para>
+/// Since D2 the strip also carries one <em>cell</em> and one <em>pin</em> per key: the cell is the key's square of
+/// light at the strip's depth, tinted 22% toward the key's own colour, and the pin is the damper head standing on
+/// it. A key that is down lifts its own damper to 1 whatever the pedal does; otherwise the pedal lifts every key
+/// together, and each key follows through the same 30/40 ms smoother that gives the comb its release. The GPU packs
+/// them as <c>Misc.z = 12</c> quads next to the strip, so they are scene elements and never count as note quads.
+/// </para>
+///
+/// <para>
 /// All geometry is keyboard-plane space: the strip runs the full key-area width <c>u</c> 0..1 and reaches
 /// <see cref="DepthFor(double)"/> key-depth units past <c>v = 0</c> (negative v is behind the keys, over the piano
 /// body). On a 90° overhead camera exactly the whole band is in view, where it reads as the glowing strike line of
@@ -61,11 +69,14 @@ internal static class ArDampers
     /// real time (not the particle time factor); a missing or non-positive step keeps the previous value.
     /// </summary>
     internal static double Smooth(double previous, double target, double dt)
+        => Smooth(previous, target, dt, AttackSeconds, ReleaseSeconds);
+
+    private static double Smooth(double previous, double target, double dt, double attack, double release)
     {
         var p = ClampLevel(previous);
         if (!(dt > 0) || !double.IsFinite(dt)) return p;
         var t = ClampLevel(target);
-        var tau = t > p ? AttackSeconds : ReleaseSeconds;
+        var tau = t > p ? attack : release;
         return p + (t - p) * (1 - Math.Exp(-dt / tau));
     }
 
@@ -82,6 +93,38 @@ internal static class ArDampers
         var l = Math.Clamp(lift, 0, 1);
         return 1 - CoreTravel * (LiftDepth * l) / (BaseDepth + LiftDepth * l);
     }
+
+    /// <summary>Cell width as a share of a white key; a black key's cell is scaled to its narrower span.</summary>
+    internal const double CellWhiteShare = .70;
+    internal const double CellBlackShare = .46;
+
+    /// <summary>Damper ticks: they answer a press in 30 ms and fall back in 40 ms.</summary>
+    internal const double TickAttackSeconds = .030;
+    internal const double TickReleaseSeconds = .040;
+
+    /// <summary>How tall a fully lifted tick is, in output pixels, and how wide it is.</summary>
+    internal const double TickHeight = 15;
+    internal const double TickWidth = 2.4;
+
+    /// <summary>The per-key cell's body and rim opacity for a damper value 0..1.</summary>
+    internal static double CellBodyAlpha(double value) => .05 + .42 * ClampLevel(value);
+    internal static double CellRimAlpha(double value) => .16 + .54 * ClampLevel(value);
+    internal static double TickAlpha(double value) => .18 + .58 * ClampLevel(value);
+
+    /// <summary>The cell's width for a key span; black keys keep SeeMusic's narrower cell.</summary>
+    internal static double CellWidth(double keyWidth, bool black)
+        => keyWidth * (black ? CellBlackShare / KeyboardLayout.BlackWidthShare : CellWhiteShare);
+
+    /// <summary>
+    /// How far one key's damper is lifted: a key that is down is fully lifted whatever the pedal does, otherwise
+    /// the pedal lifts every key together. The step into the smoother happens per key so the cells answer a chord
+    /// key by key instead of the whole board at once.
+    /// </summary>
+    internal static double TickTarget(bool held, double sustainLift) => held ? 1 : ClampLevel(sustainLift);
+
+    /// <summary>A key's damper tick fades in and out faster than the bar itself.</summary>
+    internal static double SmoothTick(double previous, double target, double dt)
+        => Smooth(previous, target, dt, TickAttackSeconds, TickReleaseSeconds);
 
     /// <summary>How far the strip reaches past the key back edge for a pedal lift 0..1.</summary>
     internal static double DepthFor(double lift) => BaseDepth + LiftDepth * Math.Clamp(lift, 0, 1);

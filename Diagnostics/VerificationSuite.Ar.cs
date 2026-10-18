@@ -1879,16 +1879,21 @@ internal static partial class VerificationSuite
         // sustain level 0..1 and takes the look's halo colour; Lite must never draw it.
         var damperDown = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true), 8);
         var damperStripCount = renderer.ArDamperStripCount;
+        // D2 adds one cell per lifted key and one pin per cell (its stroke plus the 2 px crossbar).
+        var damperCellCount = renderer.ArDamperCellCount;
+        var damperTickCount = renderer.ArDamperTickCount;
         var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 8);
         var damperLiftPixels = ChangedPixels(damperUp, damperDown, threshold: 4);
         RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, sustain: true), 4);
-        Assert(damperStripCount == 1 && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0,
-            $"Sustain must lift the damper strip over the key back edge at Standard and the strip must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {renderer.ArDamperStripCount} strips at Lite).");
+        Assert(damperStripCount == 1 && damperCellCount > 0 && damperTickCount == damperCellCount * 2
+                && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0 && renderer.ArDamperCellCount == 0,
+            $"Sustain must lift the damper strip over the key back edge at Standard and draw a cell with a pin for every key, and the strip with its cells must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {damperCellCount} cells and {damperTickCount} pin quads, {renderer.ArDamperStripCount} strips and {renderer.ArDamperCellCount} cells at Lite).");
 
         // The strip follows the player's choice too (2026-10-12): the toggle removes its quad entirely, and a Custom
         // colour mode repaints the same strip away from the look's halo family.
         var stripOff = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: true, showStrip: false), 8);
-        Assert(renderer.ArDamperStripCount == 0, "The damper strip toggle must remove the strip quad.");
+        Assert(renderer.ArDamperStripCount == 0 && renderer.ArDamperCellCount == 0 && renderer.ArDamperTickCount == 0,
+            "The damper strip toggle must remove the strip quad and every per-key cell and pin.");
         var damperColorLook = settings.Clone();
         damperColorLook.ArDamperStripColorMode = "Custom";
         damperColorLook.ArDamperStripColor = "#00C8FF";

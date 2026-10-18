@@ -1,9 +1,10 @@
 # Thanh damper — phân tích ánh sáng chuyển động và đề xuất
 
 > **Ngày:** 2026-10-19 · **Nhánh:** `arena/efa69378-pianopath` · **Loại:** phân tích + prototype
-> **Cập nhật cùng ngày:** D0 bước 1–3 và D1 đã vào mã sản phẩm — CC64 liên tục tới hình, đường cong cơ học
-> `smoothstep(0,25; 0,50)`, một bộ làm mượt 55/75 ms dùng chung, lõi sáng chạy theo lift và vạch/halo stage
-> nhích lên cùng quy ước. Các số đo ở §1–§4 mô tả **trước** thay đổi, trừ khi ghi rõ "sau D0/D1".
+> **Cập nhật cùng ngày:** D0 bước 1–3, D1 và **D2** đã vào mã sản phẩm — CC64 liên tục tới hình, đường cong cơ học
+> `smoothstep(0,25; 0,50)`, một bộ làm mượt 55/75 ms dùng chung, lõi sáng chạy theo lift, vạch/halo stage
+> nhích lên cùng quy ước, và **một ô LED + một pin theo từng phím** trong dải AR. Các số đo ở §1–§4 mô tả
+> **trước** thay đổi, trừ khi ghi rõ "sau D0/D1/D2".
 > **Xem trước:** [damper.html](prototypes/particle-motion-lab/damper.html) — A/B *hiện tại ↔ đề xuất* trên cùng một
 > cử chỉ pedal.
 > **Liên quan:** [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) (ngữ pháp hạt),
@@ -26,6 +27,7 @@
 5. Đề xuất D0–D3: đưa CC64 liên tục vào hình, hiệu chỉnh theo đúng hành trình cơ học (chết 0–25%, đầy ở 50%),
    thống nhất một bộ làm mượt, cho **lõi sáng chạy** theo độ nhấc, và thêm **đèn damper theo từng phím** để thanh
    damper thật sự "động" theo ngón tay chứ không chỉ sáng lên.
+   **D0, D1 và D2 đã xong**; D3 (bloom threshold, thở, màu) còn lại.
 
 SeeMusic có một **thanh đèn LED theo từng phím** ở mép sau bàn phím (thấy rõ trong ảnh marketing), nhưng
 tài liệu của họ **không gọi nó là damper** và không mô tả nó phản ứng pedal (xem §5). PianoPath thì ngược lại:
@@ -55,6 +57,8 @@ Tài liệu này gọi chung nhóm này là **damper light**; "thanh damper" là
 | Alpha khi lên / xuống | `0,18` → `0,50` | `AlphaBase`, `AlphaLift` |
 | Màu | màu halo của look, hoặc màu tự chọn `#8FE8FF` | `GpuLook.cs:371-373` |
 | Hình dạng | một quad phủ **toàn bộ** phím, `u` 0..1 | `TryPatch` |
+| Ô theo phím (D2) | 88 ô rộng `0,70` phím trắng (`0,46` phím đen), alpha `0,05+0,42v`, mép `0,16+0,54v`; màu mix 22% về pitch | `GpuArLayer.cs`, shader kind 12 |
+| Pin theo phím (D2) | cao `15·v` px, rộng 2,4 px, alpha `0,18+0,58v`, crossbar 5,4×2 px | `ArDampers.TickHeight/TickWidth` |
 | Lõi sáng | chạy từ `uv.y = 1` tới `uv.y ≈ 0,656` theo lift; đường tiếp xúc mờ ở mép phím | `StageShaders.hlsl:972-989` |
 | Thời gian | **55 ms xuống / 75 ms lên**, dùng chung với stage | `ArDampers.Smooth`, `GpuStageSimulation.cs:322` |
 | Mặc định | **bật** | `PianoVisualSettings.cs:518` |
@@ -97,7 +101,7 @@ và lõi **chạy theo**; mép phím vẫn còn một đường tiếp xúc mờ
 | Làm mượt | **55/75 ms** | **55/75 ms** | **55/75 ms** |
 | Nguồn mức pedal | lift 0..1 (sau D0) | lift 0..1 (sau D0) | lift 0..1 (sau D0) |
 | Mặc định bật | **có** | **không** (`PedalGlow = false`) | **không** |
-| Có theo từng phím | không | không (halo theo phím là của nốt) | không |
+| Có theo từng phím | **có** (ô + pin, D2; thanh nền vẫn đều) | không (halo theo phím là của nốt) | không |
 
 ## 3. Chuyển động đo được
 
@@ -134,8 +138,13 @@ overshoot. Bảng đo thời gian chi tiết nằm trong `damper.js`/`check_damp
 
 ### 3.4 Dọc theo thanh
 
-Hiện tại: **không có**. Dải phủ `u` 0..1 với cùng độ dày/alpha ở mọi phím; **trên thanh** không có đèn theo
-phím, không có sóng chạy, không có nhịp thở khi pedal giữ. Ba đường đều là "một thanh, một độ sáng".
+**Trước D2: không có.** Dải phủ `u` 0..1 với cùng độ dày/alpha ở mọi phím; **trên thanh** không có đèn theo
+phím, không có sóng chạy, không có nhịp thở khi pedal giữ — cả ba đường đều là "một thanh, một độ sáng".
+
+**Từ D2:** mỗi phím có một ô riêng trong dải, nên dọc thanh đã có biến thiên: phím đang giữ sáng 1, phím
+không giữ chỉ sáng theo pedal, phím đen có ô hẹp hơn, và mỗi ô có một pin cao theo damper của nó. Độ dày/alpha
+của **thanh nền** vẫn đều — đó là chủ ý: thanh là "pedal đang ở đâu", ô là "phím nào đang kêu".
+Sóng chạy ngang và nhịp thở vẫn chưa làm (D3).
 
 ## 4. Lỗ hổng half-pedal
 
@@ -192,7 +201,8 @@ Kết luận có bằng chứng:
 - Đây là **keyboard lights** (có thể có lớp saber phủ lên; tài liệu không tách bạch trong ảnh) — 88 ô sáng,
   mỗi ô theo phím/nốt, màu theo pitch hoặc track, bloom biến chuỗi ô thành một thanh liền. Nó **không nhấc
   lên** và không được mô tả là phản ứng pedal.
-- PianoPath có thứ ngược lại: **một** thanh damper đơn sắc, **nhấc theo pedal**, không chia theo phím.
+- PianoPath (trước D2) có thứ ngược lại: **một** thanh damper đơn sắc, **nhấc theo pedal**, không chia theo
+  phím. Từ D2 nó có thêm ô theo phím, nhưng vẫn **nhấc theo pedal** — đó là chỗ hai ngữ pháp gặp nhau.
 - Hai ngữ pháp trả lời hai câu hỏi khác nhau: SeeMusic trả lời "phím nào đang kêu"; PianoPath trả lời "pedal
   đang ở đâu". Cả hai đều đúng — và có thể **cộng lại**.
 
@@ -208,12 +218,12 @@ thêm cách chia ô theo phím của LED. Nếu cậu có một clip SeeMusic c�
 | # | Chuyển động | Hiện tại | Đề xuất |
 |---|---|---|---|
 | 1 | **Lift** — dải dày lên | có (AR, 14,8 px) | giữ, nhưng theo đường cong cơ học |
-| 2 | **Core travel** — lõi sáng đi lên | **không** (ghim ở mép phím) | **có** (D1) |
+| 2 | **Core travel** — lõi sáng đi lên | **không** (ghim ở mép phím) | **có** (D1, đã vào mã) |
 | 3 | **Brightness swell** — sáng lên | có, nhưng bật/tắt | có, có làm mượt |
 | 4 | **Width swell** — vạch WPF rộng ra | có (12 → 19,2 px) | giữ, cùng thời gian với AR |
-| 5 | **Release fall** — buông pedal | tức thì | rơi nhanh hơn lúc nhấn (D0) |
-| 6 | **Per-key cells** — 88 ô sáng theo phím (kiểu SeeMusic) | **không** | có (D2) |
-| 7 | **Damper heads** — tick nhô lên theo từng phím | **không** | có (D2, tùy chọn) |
+| 5 | **Release fall** — buông pedal | tức thì | rơi **chậm hơn** lúc nhấn một chút (D0: 75 vs 55 ms) |
+| 6 | **Per-key cells** — 88 ô sáng theo phím (kiểu SeeMusic) | **không** | **có** (D2, đã vào mã) |
+| 7 | **Damper heads** — pin nhô lên theo từng phím | **không** | **có** (D2, đã vào mã) |
 | 8 | **Sweep along bar** — sóng chạy ngang | **không** | tùy chọn, không ưu tiên |
 | 9 | **Idle breath** — thở khi giữ pedal | **không** | tùy chọn, rất nhẹ |
 | 10 | **Màu theo phím** — pitch/track tint | **không** (một màu halo) | tùy chọn, mix thấp |
@@ -257,35 +267,47 @@ thêm cách chia ô theo phím của LED. Nếu cậu có một clip SeeMusic c�
 6. **WPF/GPU theo cùng quy ước**: vạch WPF dịch lên `6 · lift` DIP; halo GPU dịch lên `5 · lift` DIP. ✅ **đã
    xong**; cả hai chỉ dịch khi Pedal Glow bật, để preset không có pedal glow giữ nguyên hình.
 
-### D2 — Hai lớp trên cùng một thanh
+### D2 — Hai lớp trên cùng một thanh ✅ **đã xong**
 
-**Lớp 1 — ô LED theo phím (kiểu SeeMusic).** Chia dải thành 88 ô, mỗi ô sáng theo trạng thái damper của phím
-đó; bloom của sản phẩm sẽ làm các ô liền lại thành thanh, đúng như ảnh SeeMusic. Ô rộng 0,70 bề rộng phím
-trắng (phím đen 0,46), thân alpha `0,05 + 0,42·v`, cạnh trên 2 px alpha `0,16 + 0,54·v`; ở `v = 1` đo được
-**0,470 / 0,700**. Màu = màu halo mix **22%** về màu pitch. Đây là lớp trả lời "phím nào đang kêu / đang được
-giữ".
+**Lớp 1 — ô LED theo phím (kiểu SeeMusic).** Mỗi phím có một ô trong dải, sáng theo trạng thái damper của
+chính phím đó: phím đang giữ, hoặc cả bàn khi pedal nhấc. Ô rộng **0,70** bề rộng phím trắng (phím đen **0,46**,
+tức `0,46/0,52` bề rộng phím đen để giữ đúng tỉ lệ), thân alpha `0,05 + 0,42·v`, dải mép sau 2 px alpha
+`0,16 + 0,54·v`; ở `v = 1` là **0,470 / 0,700**. Màu = màu halo mix **22%** về màu pitch. Đây là lớp trả lời
+"phím nào đang kêu / đang được giữ".
 
-**Lớp 2 — đầu damper (tùy chọn).** Một **tick** nhô lên 0 → 15 px cho mỗi phím, đọc như đầu damper thật:
+**Lớp 2 — đầu damper.** Mỗi ô có một **pin** nhô lên `0 → 15 px`, rộng 2,4 px, alpha `0,18 + 0,58·v`, cộng một
+**crossbar** 5,4 × 2 px ở đầu pin — đúng hình đầu damper trong prototype.
 
-7. **Trạng thái damper của mỗi phím** đã có sẵn trong mô hình: damper rời dây khi
-   `held || sostenutoCaught || sustain > ngưỡng`. Tick:
+7. **Cách vẽ trong sản phẩm.** Ô và pin đi cùng `PsArQuad` với kind **12**, không thêm draw call. Ô mang
+   `Misc = (rimAlpha, 0, 12, 0)`; shader vẽ thân phẳng và dải 2 px ở `uv.y = 0` (mép sau) bằng `fwidth` —
+   đúng 2 px ở mọi tỉ lệ chiếu — rồi composite `rim over body` đúng như prototype vẽ hai hình chữ nhật.
+   Pin và crossbar mang `Misc = (0, 1, 12, 0)` để shader bỏ dải mép; chúng là hình chữ nhật màn hình
+   2,4 × `15·v` và 5,4 × 2 px đặt tại tâm mép sau của ô.
+8. **Trạng thái damper theo phím** (D2):
    ```
-   tickTarget[p] = max(held[p] ? 1 : 0, caught[p] ? 1 : 0, lift)
-   tick += (tickTarget − tick) · (1 − exp(−dt / τ_tick))
-   τ_tick = 30 ms lên, 40 ms xuống
+   tickTarget[p] = held[p] ? 1 : lift        // ArDampers.TickTarget
+   tick += (tickTarget − tick) · (1 − exp(−dt/τ_tick))
+   τ_tick = 30 ms lên, 40 ms xuống            // nhanh hơn thanh 55/75 ms
    ```
-   - Pedal lên: chỉ phím đang giữ sáng — một **lược sáng chạy theo ngón tay**.
-   - Pedal xuống: cả 88 phím sáng.
-   - Buông pedal: tất cả rơi trong ~150 ms, trừ phím còn giữ (đúng vật lý).
-8. **Chi phí**: 88 quad (ô LED) + 88 quad (tick) thêm vào cùng `PsArQuad`, không thêm draw call; ở Lite vẫn bị
-   cắt cùng `Dampers`. WPF: 88 `DrawLine` + 88 rect mỗi frame, có thể gộp thành một `StreamGeometry`.
+   Pedal lên: chỉ phím đang giữ sáng — một **lược sáng chạy theo ngón tay**. Pedal xuống: cả bàn sáng. Buông
+   pedal: các phím không giữ rơi hết trong ≈ 150 ms; phím còn giữ vẫn sáng. Sostenuto **chưa** nối vào hình
+   (mô hình âm thanh đã có trong `PianoSimulation`); khi cần chỉ phải mở rộng `TickTarget`.
+9. **Chi phí**: tối đa **265 quad** (88 ô + 88 pin × 2 quad + 1 dải), không thêm draw call. Ở Lite hoặc khi tắt
+   `ShowDamperStrip`, ô và pin biến mất cùng dải. `ArObjectQuadCount` trừ `ArDamperCellCount` +
+   `ArDamperTickCount`, nên mọi assert "một quad mỗi nốt" giữ nguyên.
+10. **Kiểm**: 4 Fact mới trong `tests/PianoPath.Tests/ArDampersTests.cs` (chiều rộng/alpha, `TickTarget`, độ tụ
+    sau 10 frame, và so sánh tốc độ với thanh); `VerificationSuite.Ar` đòi mỗi ô có đúng 2 quad pin, và ô/pin biến mất ở Lite và khi tắt
+    strip; `tools/check_damper_light.cjs` (**33** assertion) đối chiếu từng hằng số với `Camera/ArDampers.cs`.
+11. **Chưa làm**: stage WPF **chưa** có ô theo phím — D2 mới ở lớp AR, đúng phạm vi của dải damper hiện tại.
+    Ngân sách GPU thật chưa đo lại trên máy có card (máy này không build được), nên 265 quad mới chỉ được
+    kiểm bằng **số lượng**, không phải bằng thời gian khung.
 
 ### D3 — Tinh chỉnh (tùy chọn)
 
-9. **Bloom threshold**: giữ lõi pedal-up dưới ngưỡng bloom, pedal-down vượt ngưỡng — ánh sáng "sống dậy" mềm
-   thay vì pop.
-10. **Idle breath** rất nhẹ (±2% alpha, 0,7 Hz) chỉ khi pedal giữ; tắt được.
-11. **Màu**: giữ màu halo; tick có thể lấy màu nốt ở cường độ thấp để không rối.
+12. **Bloom threshold**: giữ lõi pedal-up dưới ngưỡng bloom, pedal-down vượt ngưỡng — ánh sáng "sống dậy" mềm
+    thay vì pop.
+13. **Idle breath** rất nhẹ (±2% alpha, 0,7 Hz) chỉ khi pedal giữ; tắt được.
+14. **Màu**: giữ màu halo; pin có thể lấy màu nốt ở cường độ thấp để không rối.
 
 ## 8. Tiêu chí nghiệm thu
 
@@ -303,6 +325,11 @@ giữ".
 | Không hồi quy | pedal lên | dải giống ảnh cũ (sai khác ≤ 1 px / 1 alpha) |
 | Tất định | chạy lại cùng input | cùng kết quả từng frame |
 
+Hai hàng **ô theo phím** và **tick theo phím** giờ có đường kiểm tự động: `VerificationSuite.Ar` đếm ô/pin khi
+sustain xuống và đòi chúng về 0 ở Lite và khi tắt strip; thời gian rơi ≤ 200 ms được ghim bằng τ 40 ms
+(10–90% ≈ 88 ms, 95% ≈ 120 ms). Các hàng số học (half-pedal, dead zone, thời gian nhấn/nhả, lõi chạy) đã được
+ghim bằng test và checker từ D0/D1.
+
 ## 9. Prototype
 
 ```bash
@@ -318,7 +345,8 @@ http://localhost:8080/damper.html
 - Thanh trượt CC64 để thử tay; nút "Nhấn nhanh" để thấy pop hiện tại.
 - HUD in số: số mức phân biệt trong vùng half-pedal, Δ lớn nhất mỗi frame, thời gian lên/xuống, quãng chạy của lõi.
 
-Kiểm tra headless (**28** assertion: mô hình, half-pedal, tick, ô LED, tất định, đường vẽ):
+Kiểm tra headless (**33** assertion: mô hình, half-pedal, tick, ô LED, khớp hằng số với mã sản phẩm, tất định,
+đường vẽ):
 
 ```bash
 node tools/check_damper_light.cjs

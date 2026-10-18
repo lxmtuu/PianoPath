@@ -16,9 +16,9 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
   magnetism. Xem
   [phân tích SeeMusic](../../PARTICLE-MOTION-SEEMUSIC-REFERENCE.md).
 - **`damper.html`** — A/B ánh sáng thanh damper: mức pedal 0/1 không nội suy (trước D0) so với đường cong
-  cơ học, lõi sáng chạy và đèn damper từng phím (đề xuất). D0 bước 1–3 và D1 đã vào mã sản phẩm, nên cột
-  "hiện tại" trong lab giờ là ảnh chụp lịch sử để so sánh. Xem
-  [phân tích damper](../../DAMPER-BAR-LIGHT-ANALYSIS.md).
+  cơ học, lõi sáng chạy và đèn damper từng phím. D0 bước 1–3, D1 và **D2** đã vào mã sản phẩm, nên cột
+  "hiện tại" trong lab giờ là ảnh chụp lịch sử để so sánh; `damper.js` vẫn là mô hình tham chiếu mà sản phẩm
+  được đối chiếu từng hằng số. Xem [phân tích damper](../../DAMPER-BAR-LIGHT-ANALYSIS.md).
 
 `lab.js` vẽ sân khấu cho hai trang hạt; `damper.js` là mô hình + cách vẽ riêng của trang damper.
 
@@ -48,9 +48,10 @@ node tools/check_damper_light.cjs
 
 Hai script chạy headless: `check_particle_motion_lab.cjs` (36 assertions) kiểm tra lịch phát, tính tất định
 theo seed, độ ổn định 8 s cho cả năm họ hạt, độ nhạy của slider, các tính năng v2, đường vẽ, và playground
-SeeMusic (tám preset, ba lớp, magnetism, wind, twirl). `check_damper_light.cjs` (28 assertions) khoá các con số
+SeeMusic (tám preset, ba lớp, magnetism, wind, twirl). `check_damper_light.cjs` (33 assertions) khoá các con số
 của [DAMPER-BAR-LIGHT-ANALYSIS.md](../../DAMPER-BAR-LIGHT-ANALYSIS.md): hai mức trước D0 vs 51 mức đề xuất, dead
-zone, thời gian lên/xuống, quãng chạy của lõi, và lớp ô LED theo phím. Script hạt cố ý **thất bại** nếu hai mô
+zone, thời gian lên/xuống, quãng chạy của lõi, lớp ô LED theo phím, và **khớp từng hằng số** với
+`Camera/ArDampers.cs`. Script hạt cố ý **thất bại** nếu hai mô
 hình trở nên giống hệt nhau — prototype mà A/B không khác gì thì không chứng minh được gì.
 
 ## Giới hạn
