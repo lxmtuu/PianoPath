@@ -25,6 +25,26 @@ public class ArDampersTests
     }
 
     [Fact]
+    public void LiftFromPedal_keeps_the_first_quarter_dark_and_is_full_at_half_travel()
+    {
+        Assert.Equal(0, ArDampers.LiftFromPedal(0));
+        Assert.Equal(0, ArDampers.LiftFromPedal(.25));
+        Assert.Equal(.5, ArDampers.LiftFromPedal(.375), 6);
+        Assert.Equal(1, ArDampers.LiftFromPedal(.5));
+        Assert.Equal(1, ArDampers.LiftFromPedal(1));
+        Assert.Equal(0, ArDampers.LiftFromPedal(double.NaN));
+        Assert.Equal(0, ArDampers.LiftFromPedal(-2));
+    }
+
+    [Fact]
+    public void Half_travel_lifts_the_strip_halfway_through_its_band()
+    {
+        var lift = ArDampers.LiftFromPedal(.375);
+        Assert.Equal(ArDampers.BaseDepth + ArDampers.LiftDepth * .5, ArDampers.DepthFor(lift), 9);
+        Assert.Equal(ArDampers.AlphaBase + ArDampers.AlphaLift * .5, ArDampers.AlphaFor(lift), 9);
+    }
+
+    [Fact]
     public void DepthAndAlpha_walk_with_the_pedal_and_never_leave_the_catalogue_bands()
     {
         Assert.Equal(ArDampers.BaseDepth, ArDampers.DepthFor(0));

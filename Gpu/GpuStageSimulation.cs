@@ -318,7 +318,7 @@ internal sealed partial class GpuStageSimulation
             _spill[pitch] = Math.Min(1, spill);
         }
         _activity = Math.Min(1, totalGlow / 4);
-        var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity : 1;
+        var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity * input.SustainLevel : 1;
         _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-frameDt * 10));
         _energy *= MathF.Exp(-2.2f * frameDt);
         // the theme's halo colour, as the software stage paints it, warmed a little by the keys that sound

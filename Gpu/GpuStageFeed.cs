@@ -22,7 +22,7 @@ internal sealed class GpuFrameInput
     public GpuLook Look = new();
     public float BeatPulse;
     public bool Sustain;
-    /// <summary>Continuous sustain pedal level 0..1 (0 whenever <see cref="Sustain"/> is false); the AR damper strip lifts by it, so half-pedalling shows wherever the host reports it.</summary>
+    /// <summary>Continuous sustain pedal lift 0..1 after <see cref="ArDampers.LiftFromPedal"/> (0 whenever <see cref="Sustain"/> is false); the AR strip and the stage glow both use it, so half-pedalling shows wherever the host reports it.</summary>
     public float SustainLevel;
     public float PointerX = .5f, PointerY = .5f;
     public double StageHeightDip = 720;
@@ -104,17 +104,17 @@ internal sealed class GpuStageFeed
     /// <summary>The «KEYFLOW» strip for the GPU watermark (sprite kind 16); built once on the UI thread.</summary>
     internal GpuBackgroundImage? Watermark { get => Volatile.Read(ref _watermark); set => Volatile.Write(ref _watermark, value); }
 
-    /// <summary>Sustain pedal state (drives Pedal Glow). Releasing also drops the stored continuous level.</summary>
+    /// <summary>Sustain pedal state without a measured level: a press means a fully lifted damper. Releasing drops the level.</summary>
     internal void SetSustain(bool down)
     {
-        lock (_gate) { _sustain = down; if (!down) _sustainLevel = 0; }
+        lock (_gate) { _sustain = down; _sustainLevel = down ? 1 : 0; }
     }
 
     /// <summary>Sustain pedal state together with its continuous level 0..1; the AR damper strip lifts by it, so
     /// half-pedalling shows wherever the host measures it (0..1, not a boolean; the level reads 0 when released).</summary>
     internal void SetSustainLevel(bool down, double level)
     {
-        lock (_gate) { _sustain = down; _sustainLevel = down ? ArDampers.ClampLevel(level) : 0; }
+        lock (_gate) { _sustain = down; _sustainLevel = down ? ArDampers.LiftFromPedal(level) : 0; }
     }
     internal void SetStageHeight(double dips)
     {

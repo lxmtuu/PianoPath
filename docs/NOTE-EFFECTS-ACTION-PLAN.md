@@ -7,7 +7,7 @@
 > [DAMPER-BAR-LIGHT-ANALYSIS.md](DAMPER-BAR-LIGHT-ANALYSIS.md) (D0–D3) ·
 > [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) (W0–W3).
 > **Prototype:** [note-view-lab](prototypes/note-view-lab/index.html) — ba panel WPF/GPU, AR phẳng, AR 3D,
-> cùng một đồng hồ; 44 kiểm tra headless trong `tools/check_note_view_lab.cjs`.
+> cùng một đồng hồ; 53 kiểm tra headless trong `tools/check_note_view_lab.cjs`.
 
 ## 0. Tóm tắt
 
@@ -19,8 +19,9 @@
    1440p**, chỉ phần viewport nhìn thấy khác nhau; trần an toàn **20 s**. Trước sửa, cùng nốt đó chỉ còn
    2,50/3,00/4,00 s tùy khung. AR vẫn cắt ở **3,0 s** vì đó là *vùng nhìn* (reach), không phải giới hạn duration.
 3. **AR mặc định là đường phẳng** (`ArNotesInPerspective = false`): trail, ghost, landing glow, nhãn nốt và
-   min-aspect **không chạy** dù setting đang bật; chỉ pulse, shimmer và vật liệu nốt hoạt động. Người dùng không
-   được báo.
+   min-aspect **không chạy** dù setting đang bật; chỉ pulse, shimmer và vật liệu nốt hoạt động. **Đã chốt (b):**
+   giữ phẳng làm mặc định vì không cần calibration, và tooltip giờ nói rõ lớp phẳng bỏ qua những gì; 3D là đường
+   khuyến nghị khi đã calibration.
 4. **Ngân sách hiệu ứng giữa hai renderer lệch lớn**: hạt tối đa **2.600 (WPF) vs 24.000 (GPU)** — 9,23×; vòng
    sóng 64 vs 96; flash 32 vs 48; flash sống **0,18 s** (WPF) vs **0,38 s** (Flash) / **0,26 s** (Lightning,
    Plasma) trên GPU. Cùng preset có thể ra mật độ và nhịp khác nhau.
@@ -31,9 +32,11 @@
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
    cache, seed tất định. Vấn đề nằm ở **hợp đồng giữa các đường vẽ**, không phải ở chất lượng một đường.
 
-**Trạng thái:** N1 và N2 **đã sửa** trong mã sản phẩm (helper `Stage/NoteGeometry.cs`, test
-`tests/PianoPath.Tests/NoteGeometryTests.cs`). Việc P0 còn lại: **N3** (AR phẳng phải báo hoặc bật 3D mặc
-định); N4 (release AR) và D0 (half-pedal) làm cùng đợt vì đều là sửa hợp đồng nhỏ.
+**Trạng thái P0:** N1 và N2 **đã sửa** trong mã sản phẩm (helper `Stage/NoteGeometry.cs`, test
+`tests/PianoPath.Tests/NoteGeometryTests.cs`). N3 **đã chốt (b)** và sửa ở mức cảnh báo. N4 **đã chốt là khác
+biệt có chủ ý** (0,35 s cho thanh phẳng nằm trên phím, 3,0 s cho thanh 3D bay vào chiều sâu). D0 bước 1–2 **đã
+vào mã**: CC64 liên tục tới hình, đường cong cơ học 0–25% chết / đầy ở 50%, Pedal Glow sáng theo mức pedal;
+bước làm mượt dùng chung còn lại.
 
 ## 1. Đã kiểm tra gì
 
@@ -187,7 +190,7 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
 
 #### N2. Thanh nốt dài bị cắt ngắn, độ cắt đổi theo cửa sổ
 
-- **Hiện tượng:** bảng §3.3. Nốt 4 s chỉ vẽ dài 2,5 s ở 900p, 3,0 s ở 1080p, 4,0 s ở 1440p; AR cắt ở 3,0 s.
+- **Hiện tượng (trước sửa):** bảng §3.3. Nốt 4 s chỉ vẽ dài 2,5 s ở 900p, 3,0 s ở 1080p, 4,0 s ở 1440p; AR cắt ở 3,0 s.
   Nốt vẫn vào đúng lookahead, nhưng phần đuôi (thời gian còn lại) không bao giờ hiện, và 10% trên cùng của
   stage trống ở thời điểm chạm phím.
 - **Nguồn:** `Math.Clamp(..., hitY * .9)` (`PianoStage.cs:1242`, `GpuStageSimulation.cs:650`); AR cắt tại
@@ -210,7 +213,7 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   (Shimmer thì vẫn có: `AddSongNote` tự gọi `AddNoteShimmer` — xem bảng §2.)
 - **Nguồn:** nhánh projected `:149–168` (gọi `BuildProjectedSongNoteEffects` :159) vs nhánh phẳng `:170–178`
   (chỉ `AddSongNote`); `ArNotesProjected => ArNotesInPerspective` (`PianoVisualSettings.cs:596`).
-- **Đã sửa (mức tối thiểu, chọn b):** các control chỉ có ở 3D (tilt, azimuth, minimum length) đã bị ẩn khi
+- **Đã chốt (b) và đã sửa:** các control chỉ có ở 3D (tilt, azimuth, minimum length) đã bị ẩn khi
   `ArNotesProjected` tắt; tooltip "Notes in perspective" ở cả hai bảng Strings giờ nói rõ lớp phẳng **bỏ qua
   trail, ghost, landing glow và tên nốt**. Không đổi mặc định, không đổi hình ảnh của ai.
 - **Còn lại (cần quyết định sản phẩm):** (a) bật 3D mặc định khi đã calibration — đổi hình ảnh của mọi người
@@ -223,11 +226,13 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
 
 - **Hiện tượng:** buông phím, AR phẳng giữ thanh thêm 0,35 s rồi bỏ; AR 3D cho thanh trôi hết reach = 3,0 s,
   cùng một setting. Chênh **8,6×**.
+- **Đã chốt: giữ khác biệt có chủ ý.** Thanh phẳng nằm trên mặt phím; kéo dài 3 s sẽ giống phím bị kẹt. Thanh 3D
+  rời khỏi phím và bay vào chiều sâu; 3,0 s là quãng đường của nó, không phải thời gian sống tuỳ ý. Hai đường
+  không cần bằng nhau; tooltip/tài liệu ghi rõ để không ai đọc 8,6× như lỗi.
 - **Nguồn:** `ArProjection.cs:159`, `ArNotes.BuildLive` :229–232 vs `Ar3DNoteProjection.BuildLive` :141–147;
   `LivePressReachSeconds = 3` (`ArOptions.cs:54`).
-- **Việc cần làm:** chốt một hợp đồng, tốt nhất đưa `ReleaseLife` vào `ArNoteStyle` (một số duy nhất cho cả hai
-  đường), hoặc nếu muốn "trôi" thì bỏ hẳn nhánh 0,35 s và dùng reach cho cả hai. Ghi vào tài liệu AR.
-- **Nghiệm thu:** test thời gian (fake clock) cho cả hai đường, cùng input cho cùng thời điểm biến mất ±1 frame.
+- **Đã ghi:** không thêm test parity cho hai con số này; test hiện có của mỗi đường giữ hành vi riêng. Nếu sau
+  này muốn đổi, chỉ cần sửa `ArNotes.ReleaseLife` hoặc `ArOptions.LivePressReachSeconds`, không đụng hình học.
 - **Cỡ:** S · **Phụ thuộc:** không.
 
 ### P1 — parity và chất lượng
@@ -356,8 +361,8 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 |---|---|---|---|---|
 | N1 | Chốt quy ước bề rộng, kẹp tràn | **đã xong**: lane + kẹp 98% phím đen, tooltip mới, test | S/M | tài liệu này |
 | N2 | Bỏ clamp `0,9·hitY`, chốt `MaxNoteSeconds` | **đã xong**: trần 20 s, thanh 4 s = 4,00 s ở mọi khung | M | tài liệu này |
-| N3 | AR phẳng: bật 3D mặc định hoặc vô hiệu hoá control | **một phần**: ẩn control 3D + tooltip nói rõ; (a)/(c) để sau | S/M | tài liệu này |
-| N4 | Thống nhất release live bar AR | 0,35 s hoặc 3,0 s cho cả hai đường | S | tài liệu này |
+| N3 | AR phẳng: bật 3D mặc định hoặc vô hiệu hoá control | **đã chốt (b)**: giữ phẳng mặc định, ẩn control 3D, tooltip nói rõ; (a)/(c) để sau | S/M | tài liệu này |
+| N4 | Thống nhất release live bar AR | **đã chốt: khác có chủ ý** — 0,35 s phẳng, 3,0 s 3D | S | tài liệu này |
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | cùng nhịp flash/mật độ hạt, có bảng | S/M | tài liệu này |
 | N6 | GPU-only effects khi ghi/ở WPF | có hiệu ứng hoặc cảnh báo rõ | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | mép trên mềm ở 1000%, 30/60 fps | S | tài liệu này |
@@ -369,7 +374,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N13 | Lookahead stage ↔ AR | lệch ≤0,1 s khi chuyển chế độ | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | đọc được trên 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | audit/roadmap khớp; tool trong CI | S | tài liệu này |
-| D0 | CC64 liên tục vào hình | 51 mức lift, dead zone 25%, đầy ở 50% | S | DAMPER §7 |
+| D0 | CC64 liên tục vào hình | **bước 1–2 xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%; smoothing còn lại | S | DAMPER §7 |
 | D1 | Lõi sáng chạy theo lift | 8,1 px @45°, 6,6 px @90° | S | DAMPER §7 |
 | D2 | 88 ô LED + tick theo phím | giữ phím qua pedal; rơi ≤200 ms | M | DAMPER §7 |
 | D3 | Bloom threshold, thở, màu | chỉ khi pedal giữ; tắt được | S | DAMPER §7 |

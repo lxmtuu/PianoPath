@@ -39,6 +39,17 @@ internal static class ArDampers
     internal static double ClampLevel(double sustain) =>
         double.IsFinite(sustain) ? Math.Clamp(sustain, 0, 1) : 0;
 
+    /// <summary>
+    /// The damper's visible lift for a raw pedal 0..1: nothing happens through the first quarter of travel,
+    /// the felt catches between a quarter and a half, and the last half is already fully lifted — the same
+    /// shape the audio's own damper uses, so light half-pedalling neither lights up nor silently does nothing.
+    /// </summary>
+    internal static double LiftFromPedal(double sustain)
+    {
+        var t = Math.Clamp((ClampLevel(sustain) - .25) / .25, 0, 1);
+        return t * t * (3 - 2 * t);
+    }
+
     /// <summary>How far the strip reaches past the key back edge for a pedal lift 0..1.</summary>
     internal static double DepthFor(double lift) => BaseDepth + LiftDepth * Math.Clamp(lift, 0, 1);
 

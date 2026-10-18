@@ -1,6 +1,9 @@
 # Thanh damper — phân tích ánh sáng chuyển động và đề xuất
 
-> **Ngày:** 2026-10-19 · **Nhánh:** `arena/efa69378-pianopath` · **Loại:** phân tích + prototype, **không sửa mã sản phẩm**
+> **Ngày:** 2026-10-19 · **Nhánh:** `arena/efa69378-pianopath` · **Loại:** phân tích + prototype
+> **Cập nhật cùng ngày:** D0 bước 1–2 đã vào mã sản phẩm — CC64 liên tục tới hình, đường cong cơ học
+> `smoothstep(0,25; 0,50)`, Pedal Glow dùng chung mức lift. Các số đo ở §1–§4 mô tả **trước** thay đổi;
+> bước 3 (một bộ làm mượt dùng chung) còn lại.
 > **Xem trước:** [damper.html](prototypes/particle-motion-lab/damper.html) — A/B *hiện tại ↔ đề xuất* trên cùng một
 > cử chỉ pedal.
 > **Liên quan:** [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) (ngữ pháp hạt),
@@ -13,9 +16,9 @@
    và hai trong ba mặc định **tắt**.
 2. Dải AR **không có chuyển động dọc theo thanh**. Nó chỉ dày lên 9,0 → 23,8 px (góc 45°, ở 1280×720) và đậm lên
    0,18 → 0,50 alpha. **Lõi sáng bị ghim ở mép phím**, nên mắt thấy "bật sáng", không thấy "nhấc lên".
-3. Đường MIDI thật **làm mất half-pedal trước khi tới hình**: CC64 liên tục chỉ đi vào âm thanh; phần hình chỉ
-   nhận một `bool` ở ngưỡng 64. Vì vậy `SustainLevel` 0..1 mà `ArDampers` và tài liệu mô tả **không bao giờ có
-   giá trị trung gian** trong ứng dụng đang chạy.
+3. Đường MIDI thật **từng làm mất half-pedal trước khi tới hình**: CC64 liên tục chỉ đi vào âm thanh; phần hình
+   chỉ nhận một `bool` ở ngưỡng 64. **Đã sửa (D0 bước 1–2):** `PedalLevelChanged` giờ cũng đưa mức 0..1 tới
+   `PianoStage.SetSustainLevel`, và cả dải AR lẫn Pedal Glow dùng chung `ArDampers.LiftFromPedal`.
 4. Ba tốc độ: WPF đổi **trong một frame**; GPU làm mượt **τ = 100 ms**; dải AR đổi **trong một frame**. WPF và
    GPU còn khác nhau về độ rộng vạch (12 → 19,2 px so với hình học cố định).
 5. Đề xuất D0–D3: đưa CC64 liên tục vào hình, hiệu chỉnh theo đúng hành trình cơ học (chết 0–25%, đầy ở 50%),
@@ -66,14 +69,16 @@ nằm sát mép phím; khi pedal xuống, quad chỉ **dài thêm về phía fal
 - **Halo rộng** `DrawImpactLine` tại `keyTop`: dải cao `(6 + BloomSize/5)·6` = **120 px**, alpha
   `(24 + BloomIntensity·0,75) · intensity` = **76 → 121**, cộng spill 60 px xuống mặt phím
   (`PianoStage.cs:2894-2910`).
-- `PedalBoost()` = `1 + PedalGlowIntensity/100` khi pedal xuống, **không nội suy** (`PianoStage.cs:1689`).
-  Mặc định `PedalGlow = false`, `PedalGlowIntensity = 60` (`PianoVisualSettings.cs:318-319`).
+- `PedalBoost()` = `1 + PedalGlowIntensity/100 · lift` khi pedal xuống, **không nội suy** (`PianoStage.cs:1719`);
+  nhờ D0, `lift` đi từ 0 tới 1 theo hành trình pedal chứ không còn là bậc 0/1. Mặc định `PedalGlow = false`,
+  `PedalGlowIntensity = 60` (`PianoVisualSettings.cs:318-319`).
 - Felt strip (`DrawFelt`) **không** đổi theo pedal: nó là vật liệu, không phải đèn.
 
 ### 2.3 Stage GPU
 
-- `_pedalBoost` chạy về `1 + PedalGlowIntensity` với `1 − exp(−frameDt · 10)` (`GpuStageSimulation.cs:321-322`),
-  tức **τ = 100 ms**; `GlowBoost = _pedalBoost · EnergyBoost` (`:170`).
+- `_pedalBoost` chạy về `1 + PedalGlowIntensity · SustainLevel` với `1 − exp(−frameDt · 10)`
+  (`GpuStageSimulation.cs:321-322`), tức **τ = 100 ms**; `GlowBoost = _pedalBoost · EnergyBoost` (`:170`).
+  `SustainLevel` giờ là lift 0..1 đã qua `LiftFromPedal`, nên nửa pedal cho nửa độ sáng.
 - `GlowBoost` nhân vào halo tại `hitY` (`:1013`) và vào halo từng phím đang kêu (`:1007`).
 - Độ sáng phím: `KeyB.y = ShaderEmissive · 1,7 · PedalBoost` (`GpuStageRenderer.cs:751`).
 - Hình học halo **không đổi**; felt box không đổi màu (`GpuStageSimulation.cs:785-792`).
@@ -86,7 +91,7 @@ nằm sát mép phím; khi pedal xuống, quad chỉ **dài thêm về phía fal
 | Hình học đổi | dày 0,06 → 0,16 key-depth | vạch 12 → 19,2 px; halo 120 px không đổi | không đổi |
 | Độ sáng đổi | alpha 0,18 → 0,50 (2,78×) | +60% (alpha 60 → 97, halo 76 → 121) | ×1,6 |
 | Làm mượt | **không** | **không** | **τ = 100 ms** |
-| Nguồn mức pedal | `SustainLevel` (0/1 trên thực tế) | `bool` | `bool` |
+| Nguồn mức pedal | lift 0..1 (sau D0) | lift 0..1 (sau D0) | lift 0..1 (sau D0) |
 | Mặc định bật | **có** | **không** (`PedalGlow = false`) | **không** |
 | Có theo từng phím | không | không (halo theo phím là của nốt) | không |
 
@@ -135,25 +140,30 @@ phím, không có sóng chạy, không có nhịp thở khi pedal giữ. Ba đư
 
 ```
 MIDI CC64 (0..127)
-  ├─ PedalLevelChanged ──► _audio.ControlChange(64, value)      (âm thanh, liên tục)
-  └─ PedalChanged (>=64) ─► SetPedalState(bool)                 (hình, nhị phân)
+  ├─ PedalLevelChanged ──► _audio.ControlChange(64, value)       (âm thanh, liên tục)
+  │                     └► Stage.SetSustainLevel(value / 127)   (hình, liên tục — D0)
+  └─ PedalChanged (>=64) ─► SetPedalState(bool)                  (edge cho toggle UI)
                               └─ Stage.SetSustainPedal(bool)
-                                   ├─ _simulation.SetSustain(down ? 1 : 0)
-                                   └─ _gpu.SetSustain(down)     → _sustainLevel ∈ {0,1}
+                                   ├─ lift = smoothstep(.25, .50, raw)
+                                   ├─ _simulation.SetSustain(lift)
+                                   └─ _gpu.SetSustainLevel(down, raw)
 ```
 
-`Ui/MainWindow.xaml.cs:129-130`; `Stage/PianoStage.cs:256-262`; `Gpu/GpuStageFeed.cs:113-117`.
+`Ui/MainWindow.xaml.cs:129-136`; `Stage/PianoStage.cs:256-296`; `Gpu/GpuStageFeed.cs:113-120`.
 
-Hệ quả:
+Trước D0, phần hình chỉ nhận `bool`; **hiện tại** cả ba đường đi qua cùng một `lift`. Hệ quả còn lại là
+nhịp làm mượt (bước 3 của D0), không còn là mất half-pedal.
 
-- `ArDampers.ClampLevel` và `GpuStageFeed.SetSustainLevel` **hỗ trợ** 0..1, test cũng kiểm tra, nhưng **không có
-  caller nào** truyền giá trị trung gian trong ứng dụng thật.
-- Ngưỡng hình là **64/127 = 0,504**; mô hình âm thanh có vùng tự do `< 0,25` và catch `>= 0,5`
-  (`SfzSynthesizer.cs:31-32,152-159`). Trong khoảng CC64 **0,25–0,50**, âm thanh đã ngân một phần nhưng đèn
-  damper **vẫn tắt hoàn toàn**.
-- UI ghi "level 0..1" (`MainWindow.Settings.cs:629`) và "half-pedalling shows" (`GpuStageFeed.cs:25`), trong khi
-  hình chỉ có hai trạng thái. Đây là **lỗi hợp đồng**, cùng loại với lỗi `PhysicsTimeFactor` đã ghi ở
-  [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md).
+Hệ quả trước D0:
+
+- **Trước D0**, `ArDampers.ClampLevel` và `GpuStageFeed.SetSustainLevel` hỗ trợ 0..1 nhưng **không có caller nào**
+  truyền giá trị trung gian trong ứng dụng thật; giờ `MainWindow` gọi `Stage.SetSustainLevel` từ CC64.
+- **Trước D0**, ngưỡng hình là **64/127 = 0,504**, trong khi âm thanh có vùng tự do `< 0,25` và catch `>= 0,5`;
+  khoảng CC64 **0,25–0,50** đã ngân một phần nhưng đèn damper tắt hoàn toàn. Nay `LiftFromPedal` cho đúng vùng
+  chết 0–25% và đầy ở 50%, khớp mô hình âm thanh.
+- UI ghi "level 0..1" (`MainWindow.Settings.cs:629`) và "half-pedalling shows" (`GpuStageFeed.cs:25`); trước D0
+  hình chỉ có hai trạng thái. Đây từng là **lỗi hợp đồng**, cùng loại với lỗi `PhysicsTimeFactor` đã ghi ở
+  [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md); D0 bước 1–2 đã đóng phần mất half-pedal.
 
 ## 5. SeeMusic: thanh LED theo phím, không phải damper rail
 
@@ -209,13 +219,15 @@ thêm cách chia ô theo phím của LED. Nếu cậu có một clip SeeMusic c�
 
 ### D0 — Sự thật trước (bắt buộc)
 
-1. **Nối CC64 liên tục vào hình**: `PedalLevelChanged` cập nhật `PianoSimulation.Sustain` và
-   `GpuStageFeed.SetSustainLevel`; `PedalChanged` chỉ còn là edge cho toggle UI.
+1. **Nối CC64 liên tục vào hình** — ✅ **đã xong**: `PedalLevelChanged` gọi `Stage.SetSustainLevel`;
+   `PedalChanged` vẫn là edge cho toggle UI. `PianoSimulation.Sustain` và `GpuStageFeed.SetSustainLevel`
+   nhận mức đã hiệu chỉnh.
 2. **Đường cong cơ học**:
    ```
    raw   = clamp(cc64 / 127, 0, 1)
    lift  = smoothstep(0.25, 0.50, raw)
    ```
+   ✅ **đã xong:** `ArDampers.LiftFromPedal`, dùng bởi `PianoStage`, `GpuStageFeed` và test.
    Không đèn dưới 25% hành trình; đầy ở 50% — đúng bằng ngưỡng `DamperCatch` của âm thanh. Khoảng 25–50% là
    vùng half-pedal nhìn thấy được.
 3. **Một bộ làm mượt dùng chung** (AR, WPF, GPU):
@@ -225,7 +237,10 @@ thêm cách chia ô theo phím của LED. Nếu cậu có một clip SeeMusic c�
    x += (target − x) · (1 − exp(−dt / τ))
    ```
    Nhả chậm hơn nhấn một chút vì bàn đạp có đà; nhưng không có overshoot (felt không nảy).
-4. **Cùng một giá trị `lift` cho depth và alpha**, thay vì mỗi nơi tự tính.
+   **Còn lại:** thanh AR và WPF đang theo từng mức CC64 (mượt sẵn ở nguồn), Glow GPU đã có τ = 100 ms; bước này
+   gộp cả ba về một bộ lọc khi có dịp.
+4. **Cùng một giá trị `lift` cho depth và alpha** — ✅ **đã có** (`DepthFor`/`AlphaFor` cùng nhận `lift`, và
+   cả hai đường lấy cùng `SustainLevel`).
 
 ### D1 — Cho thanh damper thật sự chuyển động
 

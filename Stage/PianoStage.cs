@@ -94,6 +94,8 @@ internal sealed partial class PianoStage : FrameworkElement
     private double _releaseScanPos;
     private double _beatPulse, _energyLevel;
     private bool _sustainPedal;
+    private double _sustainRaw, _sustainLift;
+    private bool _sustainLevelSeen;
     private readonly PianoSimulation _simulation = new();
     private bool _playing, _anyHeat;
     private bool _mouseDown;
@@ -257,8 +259,36 @@ internal sealed partial class PianoStage : FrameworkElement
     {
         if (_sustainPedal == down) return;
         _sustainPedal = down;
-        _simulation.SetSustain(down ? 1 : 0);
-        _gpu?.SetSustain(down);
+        if (!down)
+        {
+            _sustainRaw = 0;
+            _sustainLevelSeen = false;        // the next press without a CC64 value is a full pedal
+        }
+        else if (!_sustainLevelSeen)
+        {
+            _sustainRaw = 1;
+        }
+        ApplySustain();
+    }
+
+    /// <summary>
+    /// Continuous CC64 level 0..1 for the same pedal. The visual damper takes its lift from
+    /// <see cref="ArDampers.LiftFromPedal(double)"/>, so half-pedalling changes both the stage glow and the AR strip
+    /// instead of snapping between off and full. The level is remembered even when it arrives just before the
+    /// pedal's on/off edge, which is the usual MIDI ordering.
+    /// </summary>
+    public void SetSustainLevel(double level)
+    {
+        _sustainRaw = ArDampers.ClampLevel(level);
+        _sustainLevelSeen = true;
+        ApplySustain();
+    }
+
+    private void ApplySustain()
+    {
+        _sustainLift = _sustainPedal ? ArDampers.LiftFromPedal(_sustainRaw) : 0;
+        _simulation.SetSustain(_sustainLift);
+        _gpu?.SetSustainLevel(_sustainPedal, _sustainRaw);
         InvalidateVisual();
     }
 
@@ -1686,8 +1716,8 @@ internal sealed partial class PianoStage : FrameworkElement
     private double BeatBoost() => _visual.TempoSync ? 1 + _beatPulse * _visual.TempoSyncAmount / 100 : 1;
     /// <summary>Audio Reactive: 1 normally, surging with the musical energy envelope while enabled.</summary>
     private double EnergyBoost() => _visual.AudioReactive ? 1 + _energyLevel * _visual.AudioReactiveAmount / 100 : 1;
-    /// <summary>Pedal Glow: 1 normally, brighter while the sustain pedal is held down.</summary>
-    private double PedalBoost() => _sustainPedal && _visual.PedalGlow ? 1 + _visual.PedalGlowIntensity / 100 : 1;
+    /// <summary>Pedal Glow: 1 normally, brighter with the damper's lift while the sustain pedal is held down.</summary>
+    private double PedalBoost() => _visual.PedalGlow ? 1 + _visual.PedalGlowIntensity / 100 * _sustainLift : 1;
 
     internal Color AdjustColor(Color input)
     {

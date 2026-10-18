@@ -125,8 +125,14 @@ public partial class MainWindow : Window
             QueueMidiUiEvent(new PendingMidiUiEvent(pitch, velocity, on, direct));
         };
         // The raw controller value reaches the synthesiser so a continuous pedal can half-pedal; it is sent
-        // from the MIDI thread for the same latency reason as the notes above.
-        _midi.PedalLevelChanged += (pedal, value) => _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), value);
+        // from the MIDI thread for the same latency reason as the notes above. The sustain level also reaches
+        // the stage so its glow and the AR strip follow a half-pedal instead of snapping on and off.
+        _midi.PedalLevelChanged += (pedal, value) =>
+        {
+            _audio.ControlChange(MidiDeviceService.ControllerFor(pedal), value);
+            if (pedal == PianoPedal.Sustain)
+                Dispatcher.BeginInvoke(() => Stage.SetSustainLevel(value / 127.0));
+        };
         _midi.PedalChanged += (pedal, down) => Dispatcher.BeginInvoke(() =>
         {
             _liveAudioSent = true;
