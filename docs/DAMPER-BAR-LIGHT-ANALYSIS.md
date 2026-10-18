@@ -299,7 +299,7 @@ mà phép kiểm AR bắt được (xem §7, mục 10).
    `ShowDamperStrip`, ô và pin biến mất cùng dải. `ArObjectQuadCount` trừ `ArDamperCellCount` +
    `ArDamperTickCount`, nên mọi assert "một quad mỗi nốt" giữ nguyên.
 10. **Kiểm**: 5 Fact mới trong `tests/PianoPath.Tests/ArDampersTests.cs` (chiều rộng/alpha, `TickTarget`, độ tụ
-    sau 10 frame, và so sánh tốc độ với thanh); `VerificationSuite.Ar` đòi mỗi ô có đúng 2 quad pin, và ô/pin biến mất ở Lite và khi tắt
+    sau 10 frame, so sánh tốc độ với thanh, và tỉ lệ pin theo phép chiếu ở 1080p/320×180); `VerificationSuite.Ar` đòi mỗi ô có đúng 2 quad pin, và ô/pin biến mất ở Lite và khi tắt
     strip; `tools/check_damper_light.cjs` (**33** assertion) đối chiếu từng hằng số với `Camera/ArDampers.cs`.
 11. **Chưa làm**: stage WPF **chưa** có ô theo phím — D2 mới ở lớp AR, đúng phạm vi của dải damper hiện tại.
     Ngân sách GPU thật chưa đo lại trên máy có card (máy này không build được), nên 265 quad mới chỉ được
