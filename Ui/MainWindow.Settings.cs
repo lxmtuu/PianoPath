@@ -377,7 +377,7 @@ public partial class MainWindow
         Choice(impact, "Note morph", nameof(PianoVisualSettings.ImpactMorph), "What the note itself becomes when it lands.",
             ("None", "None"), ("Shatter", "Shatter"), ("Melt", "Melt"), ("Absorb", "Absorb"), ("Bounce", "Bounce"), ("Morph", "Star morph")).VisibleWhen = () => _visualSettings.ShowImpactRings;
         SliderRow(impact, "Morph intensity", nameof(PianoVisualSettings.ImpactMorphIntensity), 0, 100, "Strength of the morph.").VisibleWhen = () => _visualSettings.ShowImpactRings && _visualSettings.ImpactMorph != "None";
-        Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading in about 180 ms.");
+        Toggle(impact, "Impact flash", nameof(PianoVisualSettings.ShowImpactFlash), "White-hot flare at the hit point, fading over 260–380 ms depending on the style.");
         Choice(impact, "Flash style", nameof(PianoVisualSettings.ImpactFlashStyle), "A white-hot flare, a lightning strike or a plasma ball.",
             ("Flash", "Flash"), ("Lightning", "Lightning"), ("Plasma", "Plasma")).VisibleWhen = () => _visualSettings.ShowImpactFlash;
         SliderRow(impact, "Flash intensity", nameof(PianoVisualSettings.ImpactFlashIntensity), 0, 100, "Brightness of the hit flash.").VisibleWhen = () => _visualSettings.ShowImpactFlash;
@@ -1404,7 +1404,8 @@ public partial class MainWindow
         // The recording rows describe what the next take will be, so they are written again when one changes.
         if (property is nameof(PianoVisualSettings.RecordAudio) or nameof(PianoVisualSettings.RecordingFormat)
             or nameof(PianoVisualSettings.RecordingResolution) or nameof(PianoVisualSettings.RecordingFrameRate)
-            or nameof(PianoVisualSettings.RecordingTransparent)) UpdateRecordingInfo();
+            or nameof(PianoVisualSettings.RecordingTransparent) or nameof(PianoVisualSettings.NoteShimmer)
+            or nameof(PianoVisualSettings.NoteLandingGlow) or nameof(PianoVisualSettings.ShootingStars)) UpdateRecordingInfo();
         var label = check.Content as string ?? check.Tag as string ?? Loc.T("Setting");
         ApplyVisualSettings(check.IsChecked == true ? "{0} on" : "{0} off", false, label);
     }
@@ -2196,8 +2197,18 @@ public partial class MainWindow
             : (sequence || webm) && _visualSettings.RecordingTransparent && _gpuLoop is not null
                 ? Loc.T("Transparent frames are drawn by the software stage (the GPU frame is opaque).")
                 : Loc.T("Frames are drawn by the software stage.");
+        // The three GPU-only effects say so in their own help, but a preset can still switch them on; the take
+        // must say what it will leave out instead of dropping the effect silently.
+        if (!gpuTake && MissingGpuOnlyEffects() is { Length: > 0 } omitted) engine += " " + omitted;
         Loc.Format(RecordingInfoLabel, "Next recording: {0} × {1} @ {2:0} fps · {3} · {4}. {5}", width, height, _visualSettings.RecordingFrameRate, format, audio, engine);
     }
+
+    /// <summary>
+    /// The GPU-only effects a software-rendered take will omit, as one localized sentence, or an empty string.
+    /// </summary>
+    private string MissingGpuOnlyEffects() => GpuOnlyEffects.Omitted(_visualSettings) is { Count: > 0 } missing
+        ? Loc.F("Software frames leave out {0}.", string.Join(", ", missing.Select(Loc.T)))
+        : string.Empty;
 
     private (int Width, int Height) RecordingSize()
     {

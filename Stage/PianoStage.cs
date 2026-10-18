@@ -10,7 +10,7 @@ namespace PianoPath;
 /// <summary>Immersive piano-roll renderer: live key trails, optional MIDI playback notes, sparks, wisps, flames and a lit keyboard.</summary>
 internal sealed partial class PianoStage : FrameworkElement
 {
-    internal const int MaxParticles = 2600;
+    internal const int MaxParticles = EffectBudget.WpfParticleCap;
     /// <summary>Lowest key of the keyboard being drawn (<see cref="KeyboardLayout.Active"/>); A0 on the full keyboard.</summary>
     internal static int FirstPitch => KeyboardLayout.Active.FirstPitch;
     /// <summary>How many keys the keyboard being drawn has; 88 on the full keyboard.</summary>
@@ -463,7 +463,7 @@ internal sealed partial class PianoStage : FrameworkElement
                 break;
             }
             case "Absorb": // The key sucks the note in: a ring collapsing into the hit point.
-                if (_rings.Count <= 64) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .3, Implode = true, Strength = strength });
+                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .3, Implode = true, Strength = strength });
                 break;
             case "Bounce": // The hit bounces back up: a narrow jet plus a small kick ring.
             {
@@ -480,11 +480,11 @@ internal sealed partial class PianoStage : FrameworkElement
                         Color = i % 3 == 0 ? Colors.White : color
                     });
                 }
-                if (_rings.Count <= 64) _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .3, Strength = .6 * strength });
+                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .3, Strength = .6 * strength });
                 break;
             }
             case "Morph": // The note head becomes a star that pops at the hit point.
-                if (_flashes.Count <= 32) _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .3, Strength = strength, Style = 3 });
+                if (_flashes.Count < EffectBudget.WpfFlashCap) _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .3, Strength = strength, Style = 3 });
                 break;
         }
         InvalidateVisual();
@@ -494,7 +494,7 @@ internal sealed partial class PianoStage : FrameworkElement
     private void SpawnImpactWave(double x, double y, Color color, double strength)
     {
         if (!_visual.ShowImpactRings || _visual.ImpactWave == "None" || _visual.RingSize <= 0 || ActualWidth < 1) return;
-        if (_rings.Count > 64) _rings.RemoveAt(0);
+        if (_rings.Count >= EffectBudget.WpfRingCap) _rings.RemoveAt(0);
         _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .55, Shock = _visual.ImpactWave == "Shockwave", Ripple = _visual.ImpactWave == "Ripple", Strength = strength });
         InvalidateVisual();
     }
@@ -503,8 +503,12 @@ internal sealed partial class PianoStage : FrameworkElement
     private void SpawnImpactFlash(double x, double y, Color color, double strength)
     {
         if (!_visual.ShowImpactFlash || _visual.ImpactFlashIntensity <= 0 || ActualWidth < 1) return;
-        if (_flashes.Count > 32) _flashes.RemoveAt(0);
-        _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = .18, Strength = strength, Style = _visual.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 } });
+        if (_flashes.Count >= EffectBudget.WpfFlashCap) _flashes.RemoveAt(0);
+        var style = _visual.ImpactFlashStyle switch { "Lightning" => 1, "Plasma" => 2, _ => 0 };
+        // The default anamorphic flare lives longer than the sharp lightning / plasma flashes; both numbers
+        // come from EffectBudget, so the software and GPU stages cannot drift apart.
+        var life = style == 0 ? EffectBudget.FlareLifeSeconds : EffectBudget.StyledFlashLifeSeconds;
+        _flashes.Add(new Flash { X = x, Y = y, Color = color, Life = life, Strength = strength, Style = style });
         InvalidateVisual();
     }
 
@@ -565,10 +569,10 @@ internal sealed partial class PianoStage : FrameworkElement
                 break;
             }
             case "Snap Back": // The note snaps back into the key.
-                if (_rings.Count <= 64) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .25, Implode = true, Strength = strength });
+                if (_rings.Count < EffectBudget.WpfRingCap) _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .25, Implode = true, Strength = strength });
                 break;
             case "Echo Rings": // Two soft rings echo the ending.
-                if (_rings.Count <= 63)
+                if (_rings.Count <= EffectBudget.WpfRingCap - 2)
                 {
                     _rings.Add(new Ring { X = x, Y = y, Color = color, Life = .5, Strength = .8 * strength });
                     _rings.Add(new Ring { X = x, Y = y, Color = Colors.White, Life = .5, Strength = .4 * strength });
@@ -2003,7 +2007,7 @@ internal sealed partial class PianoStage : FrameworkElement
         dc.DrawEllipse(null, rim, new Point(ring.X, ring.Y), radius, radius * .34);
     }
 
-    /// <summary>Impact phase, flash channel: white-hot flares fading within ~180 ms of the hit.</summary>
+    /// <summary>Impact phase, flash channel: white-hot flares fading over the shared 260–380 ms budget.</summary>
     private void DrawImpactFlashes(DrawingContext dc)
     {
         var intensity = _visual.ImpactFlashIntensity / 100;

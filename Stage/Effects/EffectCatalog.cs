@@ -55,7 +55,7 @@ internal static class EffectCatalog
             new("impact.ember-burst", "Ember Burst", "Than hồng bắn", "Hot ember sparks with blackbody cooling.", EffectStatus.Available, "impact.burst"),
             new("impact.ripple-ring", "Ripple Ring", "Vòng sóng", "Hollow acoustic ring expanding from the key.", EffectStatus.Available, "impact.wave"),
             new("impact.shockwave", "Shockwave", "Sóng xung kích", "Filled blast wave with a bright leading rim.", EffectStatus.Available, "impact.wave"),
-            new("impact.flash", "Flash", "Chớp sáng", "White-hot flare at the hit point, fading in ~180 ms.", EffectStatus.Available, "impact.flash"),
+            new("impact.flash", "Flash", "Chớp sáng", "White-hot flare at the hit point; the default flare fades over 380 ms, Lightning and Plasma over 260 ms.", EffectStatus.Available, "impact.flash"),
             new("impact.key-glow", "Key Press Glow", "Phím rực sáng", "Key flares up on impact, then cools down.", EffectStatus.Available, "hold.glow"),
             new("impact.splash", "Splash", "Bắn tung tóe", "Liquid-like droplets scattering like splashed water.", EffectStatus.Available, "impact.burst"),
             new("impact.firework", "Firework", "Pháo hoa mini", "Mini firework rocket bursting above the key.", EffectStatus.Available, "impact.burst"),

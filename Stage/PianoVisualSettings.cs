@@ -251,7 +251,7 @@ internal sealed class PianoVisualSettings
     public string ImpactWave { get; set; } = "Ring";
     /// <summary>Brightness of the impact wave (0-150 %).</summary>
     public double ImpactWaveIntensity { get; set; } = 100;
-    /// <summary>White-hot flare at the hit point, fading in about 180 ms.</summary>
+    /// <summary>White-hot flare at the hit point, fading over 260–380 ms depending on the style.</summary>
     public bool ShowImpactFlash { get; set; } = true;
     /// <summary>Brightness of the impact flash (0-100 %).</summary>
     public double ImpactFlashIntensity { get; set; } = 80;

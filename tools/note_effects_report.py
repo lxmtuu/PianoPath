@@ -37,11 +37,12 @@ AR_PROJECTION = read("Camera/ArProjection.cs")
 AR_OPTIONS = read("Camera/ArOptions.cs")
 CATALOG = read("Stage/Effects/EffectCatalog.cs")
 NOTE_GEOMETRY = read("Stage/NoteGeometry.cs")
+EFFECT_BUDGET = read("Stage/Effects/EffectBudget.cs")
 
 V = {
     "fall_speed": float(one(r"internal const double FallSpeed = ([0-9.]+);", STAGE, "stage fall speed")),
-    "wpf_particles": int(one(r"internal const int MaxParticles = (\d+);", STAGE, "WPF particle cap")),
-    "gpu_particles": int(one(r"internal const int MaxParticles = (\d+);", GPU_SIM, "GPU particle cap")),
+    "wpf_particles": int(one(r"internal const int WpfParticleCap = (\d+);", EFFECT_BUDGET, "WPF particle cap")),
+    "gpu_particles": int(one(r"internal const int GpuParticleCap = (\d+);", EFFECT_BUDGET, "GPU particle cap")),
     "note_width": float(one(r"public double NoteWidth \{ get; set; \} = ([0-9.]+);", STAGE_SETTINGS, "NoteWidth")),
     "note_min": float(one(r"public double NoteMinLength \{ get; set; \} = ([0-9.]+);", STAGE_SETTINGS, "NoteMinLength")),
     "note_gap": float(one(r"public double NoteGap \{ get; set; \} = ([0-9.]+);", STAGE_SETTINGS, "NoteGap")),
@@ -60,16 +61,14 @@ V["ids"] = len(entries)
 V["planned"] = sum("EffectStatus.Planned" in line for line in entries)
 V["available"] = sum("EffectStatus.Available" in line for line in entries)
 
-# Effect lives / caps (first occurrence is WPF, second is the GPU simulation).
-wpf_flash = float(one(r"Life = (\.\d+), Strength = strength, Style = _visual\.ImpactFlashStyle", STAGE, "WPF flash life"))
-gpu_flash = [float(x) for x in re.findall(r"Life = (\.\d+)f, Size = layout\.Lane|Life = (\.\d+)f, Color = color, Strength = strength, Style", GPU_SIM) for x in [x[0] or x[1]]]
-V["wpf_ring_cap"] = int(one(r"_rings\.Count <= (\d+)\) _rings\.Add", STAGE, "WPF ring cap"))
-V["wpf_flash_cap"] = int(one(r"_flashes\.Count <= (\d+)\) _flashes\.Add", STAGE, "WPF flash cap"))
-V["gpu_ring_cap"] = int(one(r"_rings\.Count < (\d+)\)", GPU_SIM, "GPU ring cap"))
-V["gpu_flash_cap"] = int(one(r"_flashes\.Count < (\d+)\)", GPU_SIM, "GPU flash cap"))
-V["wpf_flash_life"] = wpf_flash
-V["gpu_flash_life_0"] = gpu_flash[0] if gpu_flash else 0.0
-V["gpu_flash_life_other"] = gpu_flash[1] if len(gpu_flash) > 1 else 0.0
+# The look is shared through EffectBudget; each renderer keeps its own frame-time ceilings.
+V["wpf_flash_life"] = float(one(r"FlareLifeSeconds = (\.\d+);", EFFECT_BUDGET, "flare life"))
+V["gpu_flash_life_0"] = V["wpf_flash_life"]
+V["gpu_flash_life_other"] = float(one(r"StyledFlashLifeSeconds = (\.\d+);", EFFECT_BUDGET, "styled flash life"))
+V["wpf_ring_cap"] = int(one(r"WpfRingCap = (\d+);", EFFECT_BUDGET, "WPF ring cap"))
+V["wpf_flash_cap"] = int(one(r"WpfFlashCap = (\d+);", EFFECT_BUDGET, "WPF flash cap"))
+V["gpu_ring_cap"] = int(one(r"GpuRingCap = (\d+);", EFFECT_BUDGET, "GPU ring cap"))
+V["gpu_flash_cap"] = int(one(r"GpuFlashCap = (\d+);", EFFECT_BUDGET, "GPU flash cap"))
 
 
 def layout(width: int, height: int) -> dict[str, float]:
@@ -139,7 +138,7 @@ def main() -> int:
             "note_width": 80.0, "note_min": 16.0, "note_gap": 2.0, "note_fall": 550.0,
             "ar_fall": 1.5, "ar_reach": 4.0, "ar_width": .86, "ar_release": .35, "ar_live_reach_s": 3.0, "ar_lookahead_s": 3.0,
             "wpf_ring_cap": 64, "wpf_flash_cap": 32, "gpu_ring_cap": 96, "gpu_flash_cap": 48,
-            "wpf_flash_life": .18, "gpu_flash_life_0": .38, "gpu_flash_life_other": .26,
+            "wpf_flash_life": .38, "gpu_flash_life_0": .38, "gpu_flash_life_other": .26,
             "ids": 87, "available": 86, "planned": 1,
             "max_note_seconds": 20.0, "black_fill": .98,
         }

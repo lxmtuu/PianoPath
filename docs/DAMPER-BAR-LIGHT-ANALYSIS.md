@@ -324,7 +324,8 @@ tức `0,46/0,52` bề rộng phím đen để giữ đúng tỉ lệ), thân al
     thị giác, trong khi mắt đã đọc màu qua ô. Không thêm màu mới, không thêm preset.
 
 Kiểm: 2 Fact mới trong `tests/PianoPath.Tests/ArDampersTests.cs` (ignition + quãng cắt bloom; biên độ, chu kỳ và
-việc tắt nhịp thở), tổng **6 Fact** cho damper. Chưa đo trên GPU thật (máy này không build được): quãng cắt
+việc tắt nhịp thở); cùng 9 Fact của D0–D2, `ArDampersTests` giờ có **11 Fact** cho damper (thông điệp commit
+`e048a0d` ghi nhầm "six facts" — con số đúng là 11). Chưa đo trên GPU thật (máy này không build được): quãng cắt
 bloom là tính từ đúng công thức shader, không phải ảnh chụp.
 
 ## 8. Tiêu chí nghiệm thu

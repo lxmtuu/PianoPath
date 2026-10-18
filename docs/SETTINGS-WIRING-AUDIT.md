@@ -84,7 +84,7 @@ Phương pháp:
 | Wisp density / rise / height / width / turbulence / glow | `WispAmount…WispGlow` | `PianoStage.cs:239` (spawn gate), `:283-291` (SpawnWisps), `:247` (turbulence), `:663` (glow) |
 | Flame intensity / height / color | `FlameIntensity`, `FlameHeight`, `FlameColorMode` | `PianoStage.cs:1004-1005` |
 | Impact wave (Ring/Shockwave/None) · size · intensity | `ShowImpactRings`, `ImpactWave`, `RingSize`, `ImpactWaveIntensity` | `PianoStage.cs` SpawnImpactWave → DrawRings/DrawShockwave (size and brightness follow hit strength) |
-| Impact flash · intensity | `ShowImpactFlash`, `ImpactFlashIntensity` | `PianoStage.cs` SpawnImpactFlash → DrawImpactFlashes (~180 ms white-hot flare, strength-scaled) |
+| Impact flash · intensity | `ShowImpactFlash`, `ImpactFlashIntensity` | `PianoStage.cs` SpawnImpactFlash → DrawImpactFlashes (flare 380 ms / Lightning, Plasma 260 ms, strength-scaled) |
 
 ## 4. Trang Keyboard (hiện ra, lighting, ray-traced shading)
 

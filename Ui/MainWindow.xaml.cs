@@ -1188,6 +1188,8 @@ public partial class MainWindow : Window
             // opaque background while either runs; the switch is the user's and honoured only there.
             Stage.TransparentBackdrop = (sequence || webm) && _visualSettings.RecordingTransparent;
             StartGpuRecording(_videoRecorder);
+            if (!RecordingFromGpu && MissingGpuOnlyEffects() is { Length: > 0 } missingGpuEffects)
+                Trace.WriteLine($"Keyflow: {missingGpuEffects}");
             _audioTrackStarted = BeginAudioTrack();
             // Poll twice per frame; frames are paced by the recording clock inside RecordTimer_Tick, not by timer ticks.
             _recordClock.Restart(); _recordTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1000.0 / (_videoRecorder.FrameRate * 2)) };

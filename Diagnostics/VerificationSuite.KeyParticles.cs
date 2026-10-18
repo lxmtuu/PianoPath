@@ -65,6 +65,7 @@ internal static partial class VerificationSuite
             }
             VerifyHeldParticleArt(layer, ar, view, sprites, quads);
             VerifyRingChannelRouting(layer, ar, view, sprites, quads);
+            VerifyEffectBudget();
             VerifyAuxParticleLifecycle(layer, ar, view, sprites, quads);
             VerifyEmitterClockAndClear();
             VerifyTransientFrameEpoch();

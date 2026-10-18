@@ -57,7 +57,7 @@ internal readonly struct GpuSceneLayout
 /// </summary>
 internal sealed partial class GpuStageSimulation
 {
-    internal const int MaxParticles = 24000;
+    internal const int MaxParticles = EffectBudget.GpuParticleCap;
     /// <summary>The keyboard being drawn (<see cref="KeyboardLayout.Active"/>); read on the render thread, one reference at a time.</summary>
     private static int FirstPitch => KeyboardLayout.Active.FirstPitch;
     private static int KeyCount => KeyboardLayout.Active.KeyCount;
@@ -548,16 +548,20 @@ internal sealed partial class GpuStageSimulation
         _arImpacts.Add(new GpuArImpact(clamped, 0, Math.Clamp(strength, 0, 1), color));
         _glow[clamped] = Math.Max(_glow[clamped], Math.Min(1, .6f + strength * .4f));
         _energy = Math.Min(1.5f, _energy + .22f * strength); // audio reactive envelope attack
-        // wave channel
-        if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0 && _rings.Count < 96)
-            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Pitch = clamped, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }), Channel = 0, Origin = 0 });
-        // flash channel: the anamorphic flare, a lightning strike or a plasma ball
-        if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0 && _flashes.Count < 48)
+        // wave channel: at the ceiling the oldest wave leaves, so the newest hit always shows (EffectBudget).
+        if (look.ShowImpactRings && look.ImpactWave != "None" && look.RingSizeRaw > 0)
         {
+            if (_rings.Count >= EffectBudget.GpuRingCap) _rings.RemoveAt(0);
+            _rings.Add(new Ring { X = x, Y = y, Life = .55f, Strength = strength, Color = color, Pitch = clamped, Kind = (byte)(look.ImpactWave switch { "Shockwave" => 1, "Ripple" => 2, _ => 0 }), Channel = 0, Origin = 0 });
+        }
+        // flash channel: the anamorphic flare, a lightning strike or a plasma ball; same oldest-leaves rule
+        if (look.ShowImpactFlash && look.ImpactFlashIntensity > 0)
+        {
+            if (_flashes.Count >= EffectBudget.GpuFlashCap) _flashes.RemoveAt(0);
             if (look.ImpactFlashStyle == 0)
-                _flashes.Add(new Flash { X = x, Y = y, Life = .38f, Size = layout.Lane * StageLightCurves.ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * StageLightCurves.ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = (float)EffectBudget.FlareLifeSeconds, Size = layout.Lane * StageLightCurves.ImpactSizeBoost(strength) * (.5f + look.ImpactFlashIntensity), Color = Vector3.Lerp(color, Vector3.One, .35f), Intensity = 2.4f * look.ImpactFlashIntensity * StageLightCurves.ImpactDynamic(strength), Strength = strength, Pitch = clamped, Channel = 0, Origin = 0 });
             else
-                _flashes.Add(new Flash { X = x, Y = y, Life = .26f, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
+                _flashes.Add(new Flash { X = x, Y = y, Life = (float)EffectBudget.StyledFlashLifeSeconds, Color = color, Strength = strength, Style = (byte)look.ImpactFlashStyle, Intensity = look.ImpactFlashIntensity, Pitch = clamped, Channel = 0, Origin = 0 });
         }
         SpawnImpactMorph(clamped, x, y, color, strength);
         if (!look.ShowEmbers || look.ParticleAmount < 1) return;

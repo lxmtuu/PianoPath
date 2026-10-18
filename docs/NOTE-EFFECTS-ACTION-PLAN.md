@@ -22,9 +22,10 @@
    min-aspect **không chạy** dù setting đang bật; chỉ pulse, shimmer và vật liệu nốt hoạt động. **Đã chốt (b):**
    giữ phẳng làm mặc định vì không cần calibration, và tooltip giờ nói rõ lớp phẳng bỏ qua những gì; 3D là đường
    khuyến nghị khi đã calibration.
-4. **Ngân sách hiệu ứng giữa hai renderer lệch lớn**: hạt tối đa **2.600 (WPF) vs 24.000 (GPU)** — 9,23×; vòng
-   sóng 64 vs 96; flash 32 vs 48; flash sống **0,18 s** (WPF) vs **0,38 s** (Flash) / **0,26 s** (Lightning,
-   Plasma) trên GPU. Cùng preset có thể ra mật độ và nhịp khác nhau.
+4. **Ngân sách hiệu ứng: một hợp đồng, hai trần (N5 đã xong)**: hạt tối đa vẫn **2.600 (WPF) vs 24.000 (GPU)** —
+   9,23× vì mỗi hạt WPF là một `Drawing`; vòng sóng **64 vs 96** và flash **32 vs 48** cũng giữ nguyên vì đó là
+   ngân sách khung hình. Nhưng **thời gian sống đã thống nhất**: flare **0,38 s**, Lightning/Plasma **0,26 s** ở
+   cả hai engine (trước đây WPF 0,18/0,30). Khi chạm trần, cả hai cùng **bỏ cái cũ nhất**.
 5. **Độ phủ hiệu ứng đã rộng nhưng bằng chứng còn mỏng**: 87 mục, 86 `Available`, 1 `Planned`; AR có 24 family
    (6 `Native`, 14 `Unverified`, 4 `Unsupported`); kiểm thử theo family, chưa theo từng option; cổng phần cứng
    vẫn chưa đạt.
@@ -146,15 +147,21 @@ AR vẫn 3,0 s vì reach là giới hạn *nhìn*, nhưng được ghi rõ trong
 
 ### 3.4 Ngân sách hiệu ứng
 
-| | WPF | GPU | Tỉ lệ |
-|---|---|---|---|
-| Hạt tối đa | **2.600** (`PianoStage.cs:13`) | **24.000** (`GpuStageSimulation.cs:60`) | 9,23× |
-| Vòng sóng tối đa | 64 | 96 | 1,50× |
-| Flash tối đa | 32 | 48 | 1,50× |
-| Flash sống | **0,18 s** (`:472`) | **0,38 s** Flash / **0,26 s** Lightning, Plasma | 2,11× / 1,44× |
+Từ P1, **thời gian sống là hợp đồng chung** (`Stage/Effects/EffectBudget.cs`), còn **trần số lượng là ngân sách
+khung hình của từng renderer**. Một hạt WPF là một `Drawing`, một hạt GPU là một điểm trong một lệnh instanced
+duy nhất: cùng một trần sẽ hoặc làm chậm máy yếu, hoặc bỏ phí GPU.
 
-Khi chạm trần, cả hai đều **bỏ lượt sinh mới** (không đẩy cái cũ ra), nhưng trần khác nhau nên cùng một đoạn
-nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
+| | WPF | GPU | Ghi chú |
+|---|---|---|---|
+| Hạt tối đa | **2.600** (`WpfParticleCap`) | **24.000** (`GpuParticleCap`) | 9,23×, giữ nguyên |
+| Vòng sóng tối đa | 64 (`WpfRingCap`) | 96 (`GpuRingCap`) | ngân sách khung hình |
+| Flash tối đa | 32 (`WpfFlashCap`) | 48 (`GpuFlashCap`) | ngân sách khung hình |
+| Flash sống | **0,38 s** flare / **0,26 s** Lightning, Plasma | như WPF | **đã thống nhất** (trước: 0,18 / 0,30) |
+| Khi chạm trần | bỏ cái **cũ nhất** | bỏ cái **cũ nhất** | nốt mới nhất luôn có hiệu ứng |
+
+Ở kịch bản 16 nốt cùng lúc, cả hai engine đều ở **16 flash và 16 vòng** — dưới cả hai trần — nên phần flash và
+vòng giống nhau; khác biệt chỉ còn ở đoạn dày hơn (glissando), nơi WPF cần trần thấp hơn để giữ 60 fps. Hạt vẫn
+có trần riêng theo ngân sách khung hình, và đó là lý do bảng này tồn tại.
 
 ### 3.5 AR: phẳng vs 3D
 
@@ -242,15 +249,19 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
 
 #### N5. Ngân sách hiệu ứng khác nhau giữa WPF và GPU
 
-- **Hiện tượng/số đo:** §3.4. Hệ quả: preset dày (Concert Gold, Prism Flow) cho cảm giác khác khi tắt GPU;
-  flash trên GPU sống lâu hơn 1,4–2,1×.
-- **Nguồn:** `PianoStage.cs:13,431,448,452,472,533,538`; `GpuStageSimulation.cs:60,541,544,547,549`.
-- **Việc cần làm:** lập bảng "effect budget" chính thức cho từng backend; hoặc kéo hai bên về cùng trần/thời
-  gian sống, hoặc ghi rõ trong UI/tài liệu rằng WPF là bản rút gọn. Không cần ép giống pixel, nhưng **nhịp flash
-  và mật độ hạt** phải có cùng hợp đồng.
-- **Nghiệm thu:** cùng preset, 16 nốt cùng lúc: số flash/vòng tối đa và thời gian sống đo được nằm trong bảng;
-  ảnh A/B có chú thích.
-- **Cỡ:** S (bảng) / M (đồng bộ) · **Phụ thuộc:** N9 (cần benchmark trước khi chọn trần).
+- **Hiện tượng/số đo:** §3.4. Trước P1, preset dày (Concert Gold, Prism Flow) cho cảm giác khác khi tắt GPU;
+  flash trên GPU sống lâu hơn **1,44–2,11×**.
+- **Nguồn:** `Stage/Effects/EffectBudget.cs`; `PianoStage.cs:13`; `GpuStageSimulation.cs:60`.
+- **Đã chốt (P1) — một hợp đồng, hai trần:** thời gian sống gom về `EffectBudget.FlareLifeSeconds = 0,38` và
+  `StyledFlashLifeSeconds = 0,26`, dùng chung cho WPF và GPU; trần giữ nguyên theo từng backend (bảng §3.4) vì
+  đó là ngân sách khung hình. Luật khi chạm trần thống nhất: **bỏ cái cũ nhất rồi thêm cái mới**, nên trần là số
+  tối đa thật (WPF trước đây giữ được 33 flash / 65 vòng do so sánh lệch).
+- **Không nâng trần WPF:** ở 16 nốt cùng lúc hai engine đã giống nhau; nâng 32→48 chỉ đổi hành vi ở glissando —
+  nơi WPF chậm nhất — mà không thêm gì nhìn thấy. Muốn nâng phải có N9 đo trước.
+- **Nghiệm thu:** `python3 tools/note_effects_report.py --check` ghim bảng §3.4 vào mã; `--verify` có khối
+  `VerifyEffectBudget` (16 nốt ⇒ 16 vòng + 16 flash, flash tắt trước 0,40 s, vòng 0,55 s còn sống); ảnh
+  [`docs/figures/effect-budget.svg`](figures/effect-budget.svg) chú thích ba đường thời gian sống và hai trần.
+- **Cỡ:** S (bảng) / M (đồng bộ) · **Phụ thuộc:** N9 chỉ còn cần nếu muốn nâng trần WPF.
 
 #### N6. Hiệu ứng chỉ có trên GPU bị mất im lặng khi ghi/ở chế độ WPF
 
@@ -259,11 +270,13 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   bản ghi/export dùng WPF fallback sẽ mất các hiệu ứng này mà không cảnh báo.
 - **Nguồn:** `PianoVisualSettings.cs:153,207`; `GpuStageSimulation.cs:684,1146`; `Ui/MainWindow.Settings.cs:350,370,533`;
   `EffectContracts.cs` (hai family WPF `Unsupported`).
-- **Việc cần làm:** (a) vẽ được ở WPF cho shimmer/landing (shooting stars có thể giữ GPU-only), hoặc (b) trước khi
-  ghi, kiểm tra backend và hiện cảnh báo "hiệu ứng X sẽ không có trong video"; hoặc (c) khoá ba toggle khi
-  backend là WPF/recording. Kèm test ghi 3 s với từng toggle.
-- **Nghiệm thu:** bản ghi 5 s từ WPF fallback với 3 toggle bật: hoặc hiệu ứng có mặt, hoặc có cảnh báo + log;
-  không im lặng.
+- **Đã chốt (b) và đã làm (P1):** `GpuOnlyEffects.Omitted` liệt kê ba hiệu ứng đang bật; dòng "Next recording"
+  thêm câu **"Software frames leave out …"** khi take sẽ do software vẽ, và lúc bắt đầu ghi ghi đúng câu đó vào
+  `Trace`. Không khoá toggle: cùng preset vẫn có thể chiếu bằng GPU, chỉ bản ghi software/alpha mất ba hiệu ứng.
+- **Test:** `GpuOnlyEffectsTests` (4 Fact) ghim danh sách, thứ tự và việc Landing glow mặc định phải được báo;
+  chuỗi UI có trong cả hai bảng Strings.
+- **Còn lại (thủ công):** quay 5 s từ WPF fallback với ba toggle bật, xác nhận dòng recording + log. Không chạy
+  được trong CI headless vì cần WPF và một bộ ghi thật.
 - **Cỡ:** M · **Phụ thuộc:** không.
 
 #### N7. Nốt vào màn hình bằng một lát cắt cứng, không fade
@@ -366,8 +379,8 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N2 | Bỏ clamp `0,9·hitY`, chốt `MaxNoteSeconds` | **đã xong**: trần 20 s, thanh 4 s = 4,00 s ở mọi khung | M | tài liệu này |
 | N3 | AR phẳng: bật 3D mặc định hoặc vô hiệu hoá control | **đã chốt (b)**: giữ phẳng mặc định, ẩn control 3D, tooltip nói rõ; (a)/(c) để sau | S/M | tài liệu này |
 | N4 | Thống nhất release live bar AR | **đã chốt: khác có chủ ý** — 0,35 s phẳng, 3,0 s 3D | S | tài liệu này |
-| N5 | Bảng ngân sách hiệu ứng WPF/GPU | cùng nhịp flash/mật độ hạt, có bảng | S/M | tài liệu này |
-| N6 | GPU-only effects khi ghi/ở WPF | có hiệu ứng hoặc cảnh báo rõ | M | tài liệu này |
+| N5 | Bảng ngân sách hiệu ứng WPF/GPU | **đã xong**: hợp đồng thời gian sống, bảng §3.4, tool + `--verify` ghim | S/M | tài liệu này |
+| N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; test 4 Fact | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | mép trên mềm ở 1000%, 30/60 fps | S | tài liệu này |
 | N8 | Refraction/texture parity | bảng giống/khác có chủ ý | M | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
@@ -406,7 +419,7 @@ khung hình.
 - **Unit test thuần:** tách `NoteGeometry` (bề rộng theo span, chiều cao theo chính sách N2) khỏi `DrawingContext`
   để test 88/76/61 phím × 900p/1080p/1440p × `NoteWidth` 30–100; AR flat/projected dùng cùng hàm.
 - **Golden frames:** 6 style × 3 mức `NoteRefraction`; 4 đoạn MIDI (2/3/4/6 s) ở 3 khung; AR phẳng vs 3D.
-- **Ngân sách:** bảng §3.4 trở thành test: cùng preset, đếm flash/ring/particle tối đa, thời gian sống.
+- **Ngân sách:** **đã làm** — `tools/note_effects_report.py --check` đọc `EffectBudget.cs`; khối `VerifyEffectBudget` đo 16 nốt cùng lúc trên simulation thật.
 - **Hiệu năng:** p95 khung hình 12 tổ hợp; ghi rõ CPU/GPU, WARP hay hardware.
 - **AR/recording:** ảnh capture từng option; video 10 s có tay; bản ghi WPF fallback với 3 toggle GPU-only.
 - **Tài liệu:** `python3 tools/note_effects_report.py --check` trong CI tĩnh cùng `tools/check_sources.py`.
