@@ -35,6 +35,7 @@ internal sealed class PianoAudioEngine : IDisposable
     private double _latencyMilliseconds = 5;
     private IntPtr _asioSystemHandle;
     private float _masterGain = 1.25f;
+    private float _reverbAmount = 1f;
     private string? _rebuildError;
     private int _tapClockEnabled, _rebuildVersion, _rebuildPosted, _disposed;
     private int _appliedRebuildVersion = -1;
@@ -44,7 +45,7 @@ internal sealed class PianoAudioEngine : IDisposable
     private readonly record struct AudioCommand(AudioCommandKind Kind, int Channel, int Data1, int Data2);
     private readonly record struct PipelineConfiguration(
         SfzInstrumentData? Instrument, bool ReverbEnabled, PianoReverbStyle ReverbStyle, WavData? CustomImpulse,
-        bool ResonanceEnabled, AudioOutputChoice OutputChoice, double LatencyMilliseconds,
+        bool ResonanceEnabled, float ReverbAmount, AudioOutputChoice OutputChoice, double LatencyMilliseconds,
         IntPtr AsioSystemHandle);
 
     /// <summary>Raised after an async output/effect rebuild so the settings page can refresh its live status.</summary>
@@ -80,6 +81,18 @@ internal sealed class PianoAudioEngine : IDisposable
     {
         get => Volatile.Read(ref _masterGain);
         set => Volatile.Write(ref _masterGain, (float)Math.Clamp(value, .5, 2));
+    }
+
+    /// <summary>Wet reverb amount; 1 preserves the room's established default mix, without rebuilding the pipeline.</summary>
+    public double ReverbAmount
+    {
+        get => Volatile.Read(ref _reverbAmount);
+        set
+        {
+            var amount = (float)Math.Clamp(value, 0, 1.5);
+            Volatile.Write(ref _reverbAmount, amount);
+            Volatile.Read(ref _pipeline)?.SetReverbAmount(amount);
+        }
     }
 
     /// <summary>Mute only the app's playback device; the recording tap and outgoing MIDI remain untouched.</summary>
@@ -256,7 +269,7 @@ internal sealed class PianoAudioEngine : IDisposable
     {
         lock (_configurationGate)
             return new PipelineConfiguration(_instrument, ReverbEnabled, _reverbStyle, _customImpulse,
-                StringResonanceEnabled, _outputChoice, _latencyMilliseconds, _asioSystemHandle);
+                StringResonanceEnabled, (float)ReverbAmount, _outputChoice, _latencyMilliseconds, _asioSystemHandle);
     }
 
     private void RequestRebuild(bool wait)
@@ -362,7 +375,7 @@ internal sealed class PianoAudioEngine : IDisposable
     {
         var synth = new SfzSynthesizer(configuration.Instrument!, SampleRate);
         return new Pipeline(this, synth, configuration.ReverbEnabled, configuration.ReverbStyle,
-            configuration.CustomImpulse, configuration.ResonanceEnabled);
+            configuration.CustomImpulse, configuration.ResonanceEnabled, configuration.ReverbAmount);
     }
 
     public void NoteOn(int pitch, int velocity = 96, int channel = 0) =>
@@ -470,7 +483,7 @@ internal sealed class PianoAudioEngine : IDisposable
         internal bool HasAudioOutput => Sink is not null && Sink.StreamFailure is null;
 
         public Pipeline(PianoAudioEngine owner, IPianoSynthesizer synth, bool reverbEnabled,
-            PianoReverbStyle reverbStyle, WavData? customImpulse, bool resonanceEnabled)
+            PianoReverbStyle reverbStyle, WavData? customImpulse, bool resonanceEnabled, float reverbAmount)
         {
             _owner = owner;
             Synth = synth;
@@ -482,6 +495,7 @@ internal sealed class PianoAudioEngine : IDisposable
                 _ => new StereoHallReverb(SampleRate)
             };
             _reverb.Enabled = reverbEnabled;
+            _reverb.Amount = reverbAmount;
             _resonance.Enabled = resonanceEnabled;
         }
 
@@ -499,6 +513,7 @@ internal sealed class PianoAudioEngine : IDisposable
         }
 
         public void SetReverbEnabled(bool enabled) => _reverb.Enabled = enabled;
+        public void SetReverbAmount(float amount) => _reverb.Amount = amount;
         public void SetResonanceEnabled(bool enabled) => _resonance.Enabled = enabled;
 
         /// <summary>Device callback: the recorder taps the mixed signal before the optional output mute.</summary>
@@ -516,6 +531,9 @@ internal sealed class PianoAudioEngine : IDisposable
             _owner.DrainCommands(Synth);
             Synth.Render(interleaved, frames);
             _resonance.Process(interleaved, frames, Synth.DamperLevel);
+            // Read the machine-local mix on the render thread as well: a room rebuild racing a slider move
+            // must still pick up the latest amount on its very next block.
+            _reverb.Amount = Volatile.Read(ref _owner._reverbAmount);
             _reverb.Process(interleaved, frames);
             var gain = Volatile.Read(ref _owner._masterGain);
             for (var i = 0; i < frames * 2; i++) interleaved[i] = LimitOutput(interleaved[i] * gain);
@@ -617,7 +635,9 @@ internal sealed class StereoHallReverb : IStereoReverb
     private bool _wetActive;
     private readonly double _fadeStep;
     private volatile bool _enabled = true;
+    private volatile float _amount = 1f;
     public bool Enabled { get => _enabled; set => _enabled = value; }
+    public float Amount { get => _amount; set => _amount = Math.Clamp(value, 0f, 1.5f); }
 
     public StereoHallReverb(int sampleRate)
     {
@@ -676,6 +696,7 @@ internal sealed class StereoHallReverb : IStereoReverb
     private void ProcessFrame(ref float dryLeft, ref float dryRight)
     {
         // While fading out the delay lines keep ringing but no new energy is fed in.
+        var amount = _amount;
         var sendLeft = Enabled ? dryLeft + dryRight * .16f : 0f;
         var sendRight = Enabled ? dryRight + dryLeft * .16f : 0f;
         var wetLeft = 0f; var wetRight = 0f;
@@ -686,9 +707,10 @@ internal sealed class StereoHallReverb : IStereoReverb
         foreach (var diffuser in _rightDiffusers) wetRight = diffuser.Process(wetRight);
         // The enabled path keeps dry at .91 to leave headroom for the wet sum; while the tail
         // fades, ramp dry back to unity so bypassing never clicks.
-        var dryGain = Enabled ? .91f : .91f + .09f * (1 - (float)_fade);
-        dryLeft = dryLeft * dryGain + wetLeft * .38f;
-        dryRight = dryRight * dryGain + wetRight * .38f;
+        var dryGain = Enabled ? 1f - .09f * Math.Min(amount, 1f) : .91f + .09f * (1 - (float)_fade);
+        var wetGain = .38f * amount;
+        dryLeft = dryLeft * dryGain + wetLeft * wetGain;
+        dryRight = dryRight * dryGain + wetRight * wetGain;
         if (!Enabled) _fade = Math.Max(0, _fade - _fadeStep);
     }
 

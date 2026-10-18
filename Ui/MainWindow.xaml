@@ -197,6 +197,12 @@
                                         <ComboBox x:Name="ReverbStyleCombo" MinWidth="230" VerticalAlignment="Center" Margin="0,0,8,0" SelectionChanged="ReverbStyleCombo_SelectionChanged" ToolTip="Which room the reverb renders: the classic hall, a convolution concert hall or soundboard, or your own impulse response" local:Loc.Localize="True"/>
                                         <Button x:Name="ReverbImpulseButton" Style="{StaticResource GlyphButtonStyle}" Tag="{StaticResource IconWaveform}" Click="ReverbImpulse_Click" ToolTip="Load an impulse response (.wav or .flac) recorded in a real room" VerticalAlignment="Center" local:Loc.Localize="True"/>
                                     </WrapPanel>
+                                    <TextBlock Text="Reverb amount" local:Loc.Localize="True" Style="{StaticResource LabelTextStyle}" Margin="0,10,0,4"/>
+                                    <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                        <Slider x:Name="AudioReverbSlider" Width="190" Minimum="0" Maximum="150" Value="100" TickFrequency="5" SmallChange="5" LargeChange="10" IsSnapToTickEnabled="True" ValueChanged="AudioReverbSlider_ValueChanged" AutomationProperties.Name="Reverb amount"/>
+                                        <TextBlock x:Name="AudioReverbValue" Text="100%" MinWidth="52" Margin="10,0,0,0" VerticalAlignment="Center" Style="{StaticResource LabelTextStyle}"/>
+                                    </StackPanel>
+                                    <TextBlock Text="Sets the wet room sound from dry to 150% of the selected room preset. It updates live without reopening your audio device." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" FontSize="9.5" Margin="0,2,0,0"/>
                                     <TextBlock Text="OUTPUT &amp; LATENCY" local:Loc.Localize="True" Style="{StaticResource SectionTitleStyle}"/>
                                     <TextBlock Text="Auto uses the Windows default. Choose any active Windows output (including Voicemeeter VAIO/AUX/VAIO3) or an ASIO driver. The latency target requests the smallest supported buffer; the live status shows what the driver granted." local:Loc.Localize="True" Style="{StaticResource MutedTextStyle}" Margin="0,0,0,8"/>
                                     <WrapPanel Margin="0,2,0,8">

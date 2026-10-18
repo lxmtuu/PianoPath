@@ -49,6 +49,7 @@
     "AudioOutputMode": "auto",
     "AudioLatencyMs": 5.0,
     "AudioMasterGain": 1.25,
+    "AudioReverbAmount": 100.0,
     "PianoSoundEnabled": true,
     "ReverbStyle": "hall",
     "ReverbImpulseFile": "",

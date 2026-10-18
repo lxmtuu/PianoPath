@@ -343,12 +343,14 @@ internal static partial class VerificationSuite
             "Visual settings should clamp unsafe ranges, reject unknown palettes, styles, shading levels and modes, and pad the track palette.");
         var restored = PianoVisualSettings.FromJson(settings.ToJson());
         Assert(restored.NoteGlow == 126.5 && restored.ParticleAmount == 120 && restored.Palette == "Spectrum" && restored.NoteDirection == "Down" && restored.TrackColors.SequenceEqual(settings.TrackColors), "Visual settings should round-trip through the persisted JSON format.");
-        var mutedSound = PianoVisualSettings.FromJson(new PianoVisualSettings { PianoSoundEnabled = false }.ToJson());
-        var localSound = new PianoVisualSettings { PianoSoundEnabled = false };
-        localSound.CopyFrom(new PianoVisualSettings { PianoSoundEnabled = true });
-        var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false }), out var sharedLook, out _);
-        Assert(!mutedSound.PianoSoundEnabled && !localSound.PianoSoundEnabled && sharedSound && sharedLook.PianoSoundEnabled,
-            "The mute preference should persist locally, stay machine-local when applying a look, and never travel in a shared preset.");
+        var mutedSound = PianoVisualSettings.FromJson(new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 }.ToJson());
+        var localSound = new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 };
+        localSound.CopyFrom(new PianoVisualSettings { PianoSoundEnabled = true, AudioReverbAmount = 125 });
+        var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 }), out var sharedLook, out _);
+        Assert(!mutedSound.PianoSoundEnabled && mutedSound.AudioReverbAmount == 37
+                && !localSound.PianoSoundEnabled && localSound.AudioReverbAmount == 37
+                && sharedSound && sharedLook.PianoSoundEnabled && sharedLook.AudioReverbAmount == 100,
+            "Playback mute and room mix should persist locally, stay machine-local when applying a look, and never travel in a shared preset.");
         var legacyStyleIds = new[] { "Solid", "Neon", "Glass", "Fire" };
         Assert(PianoVisualSettings.NoteStyles.Take(legacyStyleIds.Length).SequenceEqual(legacyStyleIds)
                 && PianoVisualSettings.NoteStyles.SequenceEqual([.. legacyStyleIds, "Gem", "CrystalOutline"]),
@@ -2229,12 +2231,17 @@ internal static partial class VerificationSuite
         var endpointChoice = AudioOutputChoice.ForWasapiEndpoint(endpointId, exclusive: true);
         Assert(AudioOutputChoice.Parse(endpointChoice.Id) is { Kind: AudioBackendKind.WasapiExclusive, EndpointId: endpointId }, "A named Windows/Voicemeeter endpoint should round-trip by stable id.");
         Assert(AudioOutputChoice.Parse("qwancy").Kind == AudioBackendKind.Auto && AudioOutputChoice.Parse(null).Id == AudioOutputChoice.AutoId && AudioOutputChoice.Parse("asio:").Kind == AudioBackendKind.Auto, "Unknown or empty output ids must parse as Auto, never throw.");
-        var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400, AudioMasterGain = 8 };
+        var settings = new PianoVisualSettings { AudioOutputMode = "not-a-backend", AudioLatencyMs = 400, AudioMasterGain = 8, AudioReverbAmount = 240 };
         settings.Clamp();
-        Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50 && settings.AudioMasterGain == 2, "The settings clamp should normalize the backend, latency target and output gain.");
+        Assert(settings.AudioOutputMode == AudioOutputChoice.AutoId && settings.AudioLatencyMs == 50 && settings.AudioMasterGain == 2 && settings.AudioReverbAmount == 150, "The settings clamp should normalize the backend, latency target, output gain and room mix.");
         using (var engine = new PianoAudioEngine())
         {
             Assert(engine.PlaybackEnabled, "The piano playback output should default on.");
+            Assert(engine.ReverbAmount == 1, "The room amount should preserve the established sound by default.");
+            engine.ReverbAmount = .35;
+            Assert(Math.Abs(engine.ReverbAmount - .35) < .001, "The room amount should update live without rebuilding audio.");
+            engine.ReverbAmount = 2;
+            Assert(engine.ReverbAmount == 1.5, "The room amount should clamp before it reaches the mix.");
             engine.PlaybackEnabled = false;
             Assert(!engine.PlaybackEnabled, "The piano playback-mute state should turn off.");
             engine.PlaybackEnabled = true;
@@ -2719,6 +2726,7 @@ internal static partial class VerificationSuite
             (nameof(PianoVisualSettings.AudioOutputMode), "AudioOutputCombo"),
             (nameof(PianoVisualSettings.AudioLatencyMs), "AudioLatencyCombo"),
             (nameof(PianoVisualSettings.AudioMasterGain), "AudioGainSlider"),
+            (nameof(PianoVisualSettings.AudioReverbAmount), "AudioReverbSlider"),
             (nameof(PianoVisualSettings.PianoSoundEnabled), "PianoSoundToggle"),
             (nameof(PianoVisualSettings.ReverbStyle), "ReverbStyleCombo"),
             (nameof(PianoVisualSettings.ReverbImpulseFile), "ReverbImpulseButton"),

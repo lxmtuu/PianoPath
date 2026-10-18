@@ -73,6 +73,29 @@ public class ConvolutionReverbTests
     }
 
     [Fact]
+    public void Room_amount_scales_only_the_wet_return_and_zero_is_dry()
+    {
+        var dirac = new WavData { SampleRate = 44100, Channels = 2, Samples = new short[] { 32767, 32767 } };
+        var input = new float[1400 * 2];
+        input[0] = input[1] = .4f;
+        var reverb = new ConvolutionReverb(dirac, 44100, wet: .5f) { Amount = .5f };
+        reverb.Process(input, 1400);
+        Assert.Equal(.4f, input[0]); // The dry path is untouched at the original sample.
+        Assert.Equal(.4f, input[1]);
+        Assert.InRange(Math.Abs(input[512 * 2] - .1f), 0, .002);
+        Assert.InRange(Math.Abs(input[512 * 2 + 1] - .1f), 0, .002);
+
+        var dryOnly = new float[1400 * 2];
+        dryOnly[0] = dryOnly[1] = .4f;
+        reverb = new ConvolutionReverb(dirac, 44100, wet: .5f) { Amount = 0 };
+        reverb.Process(dryOnly, 1400);
+        Assert.Equal(.4f, dryOnly[0]);
+        Assert.Equal(.4f, dryOnly[1]);
+        Assert.Equal(0f, dryOnly[512 * 2]);
+        Assert.Equal(0f, dryOnly[512 * 2 + 1]);
+    }
+
+    [Fact]
     public void Partitioned_convolution_matches_direct_time_domain_convolution()
     {
         // A 1 200-frame impulse spans three partitions, one of them partial, so the spectrum ring and the

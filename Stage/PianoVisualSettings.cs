@@ -103,6 +103,8 @@ internal sealed class PianoVisualSettings
     public double AudioLatencyMs { get; set; } = 5;
     /// <summary>Master piano output gain, 0.5–2.0; applied before the output limiter and the recording tap.</summary>
     public double AudioMasterGain { get; set; } = 1.25;
+    /// <summary>Machine-local wet reverb amount, as a percentage of each room preset's established mix (0–150%).</summary>
+    public double AudioReverbAmount { get; set; } = 100;
     /// <summary>Whether this app's piano reaches the selected playback device; MIDI output and recorded audio remain independent.</summary>
     public bool PianoSoundEnabled { get; set; } = true;
     /// <summary>Reverb character: <c>hall</c> (classic algorithmic), <c>concert</c> or <c>soundboard</c>
@@ -722,9 +724,9 @@ internal sealed class PianoVisualSettings
             // picked (the link is a Windows device path, the file path would not exist elsewhere), and the AR key area is
             // stored per camera, so a different camera would also mean marking the keys again.
             if (property.Name is nameof(CameraSourceLink) or nameof(CameraVideoPath)) continue;
-            // Audio output and the piano sound switch belong to this machine, not to a visual look;
-            // applying a community preset can never change the player's device or mute their instrument.
-            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain) or nameof(PianoSoundEnabled)) continue;
+            // Audio output and tone controls belong to this machine, not to a visual look; applying a
+            // community preset can never switch the player's device, mute the instrument or alter its room mix.
+            if (property.Name is nameof(AudioOutputMode) or nameof(AudioLatencyMs) or nameof(AudioMasterGain) or nameof(AudioReverbAmount) or nameof(PianoSoundEnabled)) continue;
             // The reverb room and its impulse file follow the machine too: the file path would not exist
             // on another computer, and a look should not silently change how the piano sounds.
             if (property.Name is nameof(ReverbStyle) or nameof(ReverbImpulseFile)) continue;
@@ -749,6 +751,7 @@ internal sealed class PianoVisualSettings
         ArAlignmentGuideColor = ArAlignmentGuides.DefaultColorId;   // the check's colour follows it onto the machine list
         ArDriftWatch = true;                // the watch is this machine's own assistant, kept on until the player says otherwise
         PianoSoundEnabled = true;             // a shared look never carries this machine's playback preference
+        AudioReverbAmount = 100;               // nor this machine's room-mix preference
     }
 
     internal void Clamp()
@@ -788,6 +791,7 @@ internal sealed class PianoVisualSettings
         AudioReactiveAmount = Math.Clamp(AudioReactiveAmount, 0, 100);
         AudioLatencyMs = Math.Clamp(AudioLatencyMs, 2, 50);
         AudioMasterGain = Math.Clamp(AudioMasterGain, .5, 2);
+        AudioReverbAmount = Math.Clamp(AudioReverbAmount, 0, 150);
         // An id this build does not know (hand-edited file, newer profile) normalises to Auto now instead
         // of surprising whoever later parses it.
         AudioOutputMode = AudioOutputChoice.Parse(AudioOutputMode).Id;

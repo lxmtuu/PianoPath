@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         // immediately rebuilding.
         _audio.ConfigureOutput(AudioOutputChoice.Parse(_visualSettings.AudioOutputMode), _visualSettings.AudioLatencyMs);
         _audio.MasterGain = _visualSettings.AudioMasterGain;
+        _audio.ReverbAmount = _visualSettings.AudioReverbAmount / 100.0;
         _audio.PlaybackEnabled = _visualSettings.PianoSoundEnabled;
         SyncPianoSoundControls();
         _audio.OutputChanged += AudioEngine_OutputChanged;
@@ -2046,6 +2047,8 @@ public partial class MainWindow : Window
             AudioLatencyCombo.SelectedIndex = latencyIndex >= 0 ? latencyIndex : 2;
             AudioGainSlider.Value = Math.Clamp(_visualSettings.AudioMasterGain * 100, 50, 200);
             AudioGainValue.Text = $"{AudioGainSlider.Value:0}%";
+            AudioReverbSlider.Value = Math.Clamp(_visualSettings.AudioReverbAmount, 0, 150);
+            AudioReverbValue.Text = $"{AudioReverbSlider.Value:0}%";
         }
         finally { _suppressDevices = false; }
         UpdateAudioOutputHint();
@@ -2103,6 +2106,16 @@ public partial class MainWindow : Window
         _visualSettings.AudioMasterGain = percent / 100.0;
         _audio.MasterGain = _visualSettings.AudioMasterGain;
         if (AudioGainValue is not null) AudioGainValue.Text = $"{percent}%";
+        if (_uiReady) { _settingsSaveTimer.Stop(); _settingsSaveTimer.Start(); }
+    }
+
+    private void AudioReverbSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (_suppressDevices || sender is not Slider slider) return;
+        var percent = (int)Math.Round(slider.Value);
+        _visualSettings.AudioReverbAmount = percent;
+        _audio.ReverbAmount = percent / 100.0;
+        if (AudioReverbValue is not null) AudioReverbValue.Text = $"{percent}%";
         if (_uiReady) { _settingsSaveTimer.Stop(); _settingsSaveTimer.Start(); }
     }
 
