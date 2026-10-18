@@ -259,8 +259,10 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
 - **Không nâng trần WPF:** ở 16 nốt cùng lúc hai engine đã giống nhau; nâng 32→48 chỉ đổi hành vi ở glissando —
   nơi WPF chậm nhất — mà không thêm gì nhìn thấy. Muốn nâng phải có N9 đo trước.
 - **Nghiệm thu:** `python3 tools/note_effects_report.py --check` ghim bảng §3.4 vào mã; `--verify` có khối
-  `VerifyEffectBudget` (16 nốt ⇒ 16 vòng + 16 flash, flash tắt trước 0,40 s, vòng 0,55 s còn sống); ảnh
-  [`docs/figures/effect-budget.svg`](figures/effect-budget.svg) chú thích ba đường thời gian sống và hai trần.
+  `VerifyEffectBudget` (16 nốt ⇒ 16 vòng + 16 flash, flash tắt trước 0,40 s, vòng 0,55 s còn sống). Ảnh A/B
+  dưới đây chú thích ngay trong hình: ba đường thời gian sống và số hiệu ứng của hợp âm 16 nốt so với hai trần.
+
+![Thời gian sống của flash trước và sau P1, và số flash/vòng của 16 nốt cùng lúc theo từng backend](figures/effect-budget.svg)
 - **Cỡ:** S (bảng) / M (đồng bộ) · **Phụ thuộc:** N9 chỉ còn cần nếu muốn nâng trần WPF.
 
 #### N6. Hiệu ứng chỉ có trên GPU bị mất im lặng khi ghi/ở chế độ WPF
