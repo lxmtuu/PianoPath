@@ -20,9 +20,15 @@ section and are not repeated here; the open work lives in [`docs/ROADMAP.md`](do
 
 ## Unreleased
 
+## 2.2.0 — 2026-10-18
+
 ### AR overlay
 - Lite, Standard and Ultra now keep the same calibrated 3D projection for perspective notes and live press bars; quality changes lighting/effects, not their path. A fresh Perform MIDI note starts at the calibrated key on its first frame. The calibration UI now explains that its yellow arrow is Learn travel toward the keys while Perform rises the opposite way, and the screen-up helper aims the Perform rise upward.
 - Held live press bars stay fully visible by default instead of fading as they stretch; release dim remains, and the optional lifetime graph still gives explicit control over opacity while held.
+
+### Audio
+- Fix the Windows Salamander install failure by closing the exclusive `.part` writer after download and verification and before `File.Move`; add a regression test that moves the verified sample.
+- Add a live 0–150% Reverb amount slider (100% by default), applied to hall and convolution reverb. The value is saved locally and is not changed by presets or share codes.
 
 ## 2.1.1 — 2026-10-16
 

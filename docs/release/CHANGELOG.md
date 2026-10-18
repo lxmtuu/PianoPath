@@ -19,9 +19,15 @@ và không được lặp lại ở đây; tài liệu kế hoạch phát triể
 
 ## Unreleased
 
+## 2.2.0 — 2026-10-18
+
 ### AR overlay
 - Lite, Standard và Ultra dùng cùng đường chiếu 3D đã hiệu chỉnh cho nốt phối cảnh và thanh nhấn; Quality chỉ đổi ánh sáng/hiệu ứng, không đổi đường đi. Nốt MIDI Perform mới xuất hiện ngay tại phím ở frame đầu. Giao diện Calibrate nói rõ mũi tên vàng là hướng Learn chạy về phím, còn nốt Perform đi lên theo hướng ngược lại; nút căn lên màn hình đặt hướng đi lên cho Perform.
 - Thanh nhấn giữ phím luôn rõ theo mặc định, không tự mờ dần khi dài ra; pha nhả vẫn giảm sáng để thanh biến mất. Graph vòng đời tùy chọn vẫn cho phép chỉnh độ mờ khi đang giữ phím.
+
+### Âm thanh
+- Sửa lỗi cài Salamander trên Windows: đóng stream ghi độc quyền của file `.part` sau khi tải và xác minh, trước khi gọi `File.Move`; thêm regression test bảo đảm file đã xác minh có thể được chuyển đi.
+- Thêm thanh **Reverb amount** 0–150% (mặc định 100%), cập nhật trực tiếp cho hall và convolution reverb. Giá trị được lưu cục bộ, không bị preset hay mã chia sẻ thay đổi.
 
 ## 2.1.1 — 2026-10-16
 
