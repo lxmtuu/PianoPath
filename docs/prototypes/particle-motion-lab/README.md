@@ -7,15 +7,18 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
 `Stage/PianoStage.Advance()`) bằng JavaScript, để so sánh nhanh trước khi sửa mã C#. Nó **không phải**
 ảnh chụp từ ứng dụng, không dùng shader, không đo hiệu năng GPU thật.
 
-## Hai trang
+## Ba trang
 
 - **`index.html`** — A/B *hiện tại ↔ v2* (và chế độ *GPU ↔ WPF*) cho hệ hạt của chính PianoPath.
 - **`seemusic.html`** — playground các *kiểu chuyển động* theo ngữ pháp SeeMusic công bố: ba lớp
   Particles / Streaklets / Smoke, chín preset (Default, explode, fast playing, high count, high
   turbulence, long streaklets, straight, twirl, smoke), cùng wind / turbulence / magnetism. Xem
   [phân tích SeeMusic](../../PARTICLE-MOTION-SEEMUSIC-REFERENCE.md).
+- **`damper.html`** — A/B ánh sáng thanh damper: mức pedal 0/1 không nội suy (hiện tại) so với đường cong
+  cơ học, lõi sáng chạy và đèn damper từng phím (đề xuất). Xem
+  [phân tích damper](../../DAMPER-BAR-LIGHT-ANALYSIS.md).
 
-Dùng chung `lab.js` để vẽ sân khấu; `seemusic.js` chỉ chứa mô hình chuyển động.
+`lab.js` vẽ sân khấu cho hai trang hạt; `damper.js` là mô hình + cách vẽ riêng của trang damper.
 
 ## Hai chế độ
 
@@ -38,12 +41,15 @@ Dùng chung `lab.js` để vẽ sân khấu; `seemusic.js` chỉ chứa mô hìn
 
 ```bash
 node tools/check_particle_motion_lab.cjs
+node tools/check_damper_light.cjs
 ```
 
-Script chạy headless (36 assertions): kiểm tra lịch phát, tính tất định theo seed, độ ổn định 8 s cho cả năm
-họ hạt, độ nhạy của slider, các tính năng v2, đường vẽ, và playground SeeMusic (chín preset, ba lớp, magnetism,
-wind, twirl). Nó cố ý **thất bại** nếu hai mô hình trở nên giống hệt nhau — prototype mà A/B không khác gì thì
-không chứng minh được gì.
+Hai script chạy headless: `check_particle_motion_lab.cjs` (36 assertions) kiểm tra lịch phát, tính tất định
+theo seed, độ ổn định 8 s cho cả năm họ hạt, độ nhạy của slider, các tính năng v2, đường vẽ, và playground
+SeeMusic (chín preset, ba lớp, magnetism, wind, twirl). `check_damper_light.cjs` (28 assertions) khoá các con số
+của [DAMPER-BAR-LIGHT-ANALYSIS.md](../../DAMPER-BAR-LIGHT-ANALYSIS.md): hai mức hiện tại vs 51 mức đề xuất, dead
+zone, thời gian lên/xuống, quãng chạy của lõi, và lớp ô LED theo phím. Script hạt cố ý **thất bại** nếu hai mô
+hình trở nên giống hệt nhau — prototype mà A/B không khác gì thì không chứng minh được gì.
 
 ## Giới hạn
 
