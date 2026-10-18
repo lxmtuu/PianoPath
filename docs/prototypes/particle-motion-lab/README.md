@@ -7,6 +7,16 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
 `Stage/PianoStage.Advance()`) bằng JavaScript, để so sánh nhanh trước khi sửa mã C#. Nó **không phải**
 ảnh chụp từ ứng dụng, không dùng shader, không đo hiệu năng GPU thật.
 
+## Hai trang
+
+- **`index.html`** — A/B *hiện tại ↔ v2* (và chế độ *GPU ↔ WPF*) cho hệ hạt của chính PianoPath.
+- **`seemusic.html`** — playground các *kiểu chuyển động* theo ngữ pháp SeeMusic công bố: ba lớp
+  Particles / Streaklets / Smoke, chín preset (Default, explode, fast playing, high count, high
+  turbulence, long streaklets, straight, twirl, smoke), cùng wind / turbulence / magnetism. Xem
+  [phân tích SeeMusic](../../PARTICLE-MOTION-SEEMUSIC-REFERENCE.md).
+
+Dùng chung `lab.js` để vẽ sân khấu; `seemusic.js` chỉ chứa mô hình chuyển động.
+
 ## Hai chế độ
 
 - **Hiện tại ↔ v2** — hai panel nhận *cùng một chuỗi phát* (same seed, same birth times, same angles,
@@ -18,7 +28,7 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
 
 `Curl field`, `Drag curve`, `Life curves`, `Diffusion`, `Spin`, `Stagger birth`, `Depth`, `Floor bounce`,
 `Flame physics`, `Wisp in sim` — mỗi cái tương ứng một mục trong
-[PARTICLE-MOTION-REVIEW.md](../PARTICLE-MOTION-REVIEW.md) §5.
+[PARTICLE-MOTION-REVIEW.md](../../PARTICLE-MOTION-REVIEW.md) §5.
 
 ## Phím tắt
 
@@ -30,9 +40,10 @@ Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()
 node tools/check_particle_motion_lab.cjs
 ```
 
-Script chạy headless: kiểm tra lịch phát, tính tất định theo seed, độ ổn định 8 s cho cả năm họ hạt,
-độ nhạy của slider, các tính năng v2 và đường vẽ. Nó cố ý **thất bại** nếu hai mô hình trở nên giống hệt
-nhau — prototype mà A/B không khác gì thì không chứng minh được gì.
+Script chạy headless (36 assertions): kiểm tra lịch phát, tính tất định theo seed, độ ổn định 8 s cho cả năm
+họ hạt, độ nhạy của slider, các tính năng v2, đường vẽ, và playground SeeMusic (chín preset, ba lớp, magnetism,
+wind, twirl). Nó cố ý **thất bại** nếu hai mô hình trở nên giống hệt nhau — prototype mà A/B không khác gì thì
+không chứng minh được gì.
 
 ## Giới hạn
 

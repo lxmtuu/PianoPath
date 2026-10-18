@@ -49,7 +49,9 @@ global.document = {
   }
 };
 
-const lab = require(path.join(__dirname, '..', 'docs', 'prototypes', 'particle-motion-lab', 'lab.js'));
+const PROTOTYPE = path.join(__dirname, '..', 'docs', 'prototypes', 'particle-motion-lab');
+const lab = require(path.join(PROTOTYPE, 'lab.js'));
+const seeMusic = require(path.join(PROTOTYPE, 'seemusic.js'));
 
 const LOOK = Object.assign({}, lab.DEFAULT_LOOK);
 const STEP = 1 / 120;
@@ -243,6 +245,102 @@ console.log('draw path');
   } catch (error) { threw = error; }
   check(`draws ${panel.particles.length} particles without throwing`,
     threw === null && panel.sprites > 0, threw && threw.message);
+}
+
+// ---------------------------------------------------------------- 8. see-style playground
+console.log('see-style motion playground');
+{
+  const presets = seeMusic.PRESET_ORDER;
+  check(`nine documented-style presets (${presets.length})`, presets.length === 9,
+    presets.join(', '));
+  check('every preset exists in the recipe table',
+    presets.every(name => seeMusic.PRESETS[name]));
+
+  function run(preset, seconds, mutate) {
+    const engine = seeMusic.createEngine({ seed: 20261019, preset });
+    if (mutate) mutate(engine);
+    const dt = 1 / 120;
+    for (let i = 0; i < Math.round(seconds / dt); i++) seeMusic.step(engine, dt);
+    return engine;
+  }
+
+  // Sample through the whole loop: short-lived presets are empty at some instants by design.
+  let bad = 0;
+  const peaks = [];
+  for (const preset of presets) {
+    let peak = 0;
+    const engine = seeMusic.createEngine({ seed: 20261019, preset });
+    for (let i = 0; i < Math.round(5.8 / (1 / 120)); i++) {
+      seeMusic.step(engine, 1 / 120);
+      peak = Math.max(peak, engine.particles.length);
+      for (const p of engine.particles) {
+        if (![p.x, p.y, p.age].every(Number.isFinite)) bad++;
+      }
+    }
+    peaks.push(`${preset}:${peak}`);
+  }
+  check(`all presets stay finite and emit (${peaks.join(' ')})`, bad === 0);
+
+  const straight = run('Straight', 2.0);
+  const twirl = run('Twirl', 2.0);
+  function spread(engine) {
+    const xs = engine.particles.filter(p => p.layer === 'particle').map(p => p.x);
+    if (xs.length < 4) return 0;
+    const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
+    return Math.sqrt(xs.reduce((a, b) => a + (b - mean) ** 2, 0) / xs.length);
+  }
+  check(`twirl widens the cloud against straight (${spread(straight).toFixed(1)} px -> ${spread(twirl).toFixed(1)} px)`,
+    spread(twirl) > spread(straight) * 1.15);
+
+  const noParticles = run('Default', 2.0, e => { e.particlesOn = false; });
+  check('the Particles layer can be switched off on its own',
+    noParticles.particles.every(p => p.layer !== 'particle'));
+
+  const streakOnly = run('Long streaklets', 2.0);
+  check('Long streaklets really removes the small particles',
+    streakOnly.particles.every(p => p.layer !== 'particle') &&
+    streakOnly.particles.some(p => p.layer === 'streaklet'));
+
+  // Magnetism needs two or more keys sounding at once, so sample inside the chord.
+  const still = run('Default', 2.6, e => { e.magnetism = 0; });
+  const pulled = run('Default', 2.6, e => { e.magnetism = 1; });
+  // Magnetism means "particles of one key curve toward the other sounding keys",
+  // so measure how close a particle gets to a *different* sounding key.
+  function meanDistanceToOtherKey(engine) {
+    const anchors = engine.activeAnchors || [];
+    const parts = engine.particles.filter(p => p.layer === 'particle');
+    if (!parts.length || anchors.length < 2) return 0;
+    let total = 0, n = 0;
+    for (const p of parts) {
+      let best = Infinity;
+      for (const a of anchors) if (a.pitch !== p.pitch) best = Math.min(best, Math.abs(a.x - p.x));
+      if (Number.isFinite(best)) { total += best; n++; }
+    }
+    return n ? total / n : 0;
+  }
+  const dStill = meanDistanceToOtherKey(still), dPulled = meanDistanceToOtherKey(pulled);
+  check(`magnetism curves particles toward the other keys (${dStill.toFixed(1)} -> ${dPulled.toFixed(1)} px)`,
+    dStill > 0 && dPulled < dStill * .9);
+
+  function meanDrift(engine) {
+    return engine.particles
+      .filter(p => p.layer === 'particle')
+      .reduce((a, p) => a + Math.abs(p.x - p.anchorX), 0) / Math.max(1, engine.particles.length);
+  }
+  const fast = run('Default', 1.0, e => { e.speed = 2; });
+  const slow = run('Default', 1.0, e => { e.speed = .5; });
+  check(`speed changes how far a particle travels (${meanDrift(slow).toFixed(1)} -> ${meanDrift(fast).toFixed(1)} px)`,
+    meanDrift(fast) > meanDrift(slow) * 1.5);
+
+  const a = run('High turbulence', 2.0);
+  const b = run('High turbulence', 2.0);
+  const sig = e => e.particles.map(p => `${p.x.toFixed(4)},${p.y.toFixed(4)}`).join('|');
+  check('the playground is deterministic for a seed', sig(a) === sig(b));
+
+  const ctx = makeCtx();
+  let drawThrew = null;
+  try { seeMusic.draw(ctx, run('Smoke', 3.0)); } catch (error) { drawThrew = error; }
+  check('draws every layer without throwing', drawThrew === null, drawThrew && drawThrew.message);
 }
 
 // ---------------------------------------------------------------- summary

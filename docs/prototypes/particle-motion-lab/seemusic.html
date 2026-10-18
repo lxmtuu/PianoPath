@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090c12">
+<title>SeeMusic-style motion playground · PianoPath</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --void: #090c12;
+    --panel: #111722;
+    --raised: #182130;
+    --hairline: #2a3545;
+    --text: #f1f4f8;
+    --muted: #a7b1c0;
+    --quiet: #737f91;
+    --violet: #9b83ff;
+    --cyan: #57d7e5;
+    --amber: #ffc66d;
+    font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-width: 320px;
+    background: radial-gradient(70rem 48rem at 58% -22%, rgba(96, 76, 180, .17), transparent 65%), var(--void);
+    color: var(--text);
+  }
+  button, input, select { font: inherit; }
+  button { color: inherit; }
+  button:focus-visible, input:focus-visible { outline: 2px solid var(--cyan); outline-offset: 2px; }
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 22px; border-bottom: 1px solid rgba(126, 143, 167, .17);
+    background: rgba(12, 16, 24, .82); backdrop-filter: blur(18px);
+  }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 11px; flex: none;
+    display: grid; place-items: center;
+    border: 1px solid rgba(155, 131, 255, .4);
+    background: linear-gradient(145deg, rgba(155, 131, 255, .23), rgba(87, 215, 229, .08));
+  }
+  .titles h1 { margin: 0; font-size: 15px; }
+  .titles p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+  .badge {
+    margin-left: auto; flex: none; font-size: 11px; color: var(--amber);
+    border: 1px solid rgba(255, 198, 109, .35); background: rgba(255, 198, 109, .08);
+    border-radius: 999px; padding: 5px 11px;
+  }
+  .layout { display: grid; gap: 18px; grid-template-columns: 292px minmax(0, 1fr); padding: 18px 22px 26px; align-items: start; }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+  .card {
+    background: linear-gradient(180deg, rgba(24, 33, 48, .72), rgba(17, 23, 34, .72));
+    border: 1px solid var(--hairline); border-radius: 14px;
+  }
+  .controls { padding: 14px; display: flex; flex-direction: column; gap: 13px; position: sticky; top: 14px; }
+  @media (max-width: 980px) { .controls { position: static; } }
+  .group-title { font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; color: var(--quiet); margin: 0 0 6px; }
+  .presets { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .presets button {
+    border: 1px solid var(--hairline); background: var(--raised); border-radius: 9px;
+    padding: 8px 7px; font-size: 11.5px; cursor: pointer; color: var(--muted); text-align: left;
+  }
+  .presets button[aria-pressed="true"] { border-color: rgba(155, 131, 255, .6); background: rgba(155, 131, 255, .18); color: var(--text); }
+  .presets button.missing::after, .presets button.partial::after {
+    display: block; font-size: 9.5px; margin-top: 3px;
+  }
+  .presets button.missing::after { content: "chưa có"; color: var(--amber); }
+  .presets button.partial::after { content: "một phần"; color: var(--quiet); }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .row output { color: var(--text); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  input[type="range"] { width: 100%; accent-color: var(--violet); height: 18px; }
+  .checks { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--muted); }
+  .checks label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+  input[type="checkbox"] { accent-color: var(--cyan); }
+  .transport { display: flex; gap: 6px; }
+  .transport button { flex: 1; border-radius: 9px; border: 1px solid var(--hairline); background: var(--raised); padding: 9px 6px; cursor: pointer; font-size: 12px; }
+  .transport button.primary { background: rgba(155, 131, 255, .2); border-color: rgba(155, 131, 255, .55); }
+  .stage-wrap { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .stage { padding: 12px; }
+  canvas { width: 100%; height: auto; display: block; border-radius: 10px; background: #070a12; }
+  .metrics { display: flex; gap: 12px; flex-wrap: wrap; font-size: 11px; color: var(--quiet); margin-top: 8px; font-variant-numeric: tabular-nums; }
+  .metrics b { color: var(--muted); font-weight: 500; }
+  .note { padding: 13px 15px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+  .note strong { color: var(--text); }
+  .note .src { color: var(--quiet); font-size: 11.5px; display: block; margin-top: 6px; }
+  .keyhint { color: var(--quiet); font-size: 11.5px; margin: 8px 0 0; }
+  kbd { font: inherit; font-size: 10.5px; padding: 1px 5px; border-radius: 5px; border: 1px solid var(--hairline); background: var(--raised); color: var(--muted); }
+  .back { color: var(--quiet); font-size: 11.5px; text-decoration: none; }
+  .back:hover { color: var(--cyan); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand-mark" aria-hidden="true">◑</div>
+    <div class="titles">
+      <h1>SeeMusic-style motion playground</h1>
+      <p>PianoPath dựng lại <em>ngữ pháp chuyển động</em> mà SeeMusic mô tả — không phải bản sao của app đó.</p>
+    </div>
+    <span class="badge">interpretation · not a capture</span>
+  </header>
+
+  <div class="layout">
+    <aside class="card controls" aria-label="Điều khiển">
+      <div>
+        <p class="group-title">Preset (theo tên SeeMusic công bố)</p>
+        <div class="presets" id="presets"></div>
+      </div>
+
+      <div>
+        <p class="group-title">Lớp (bật/tắt độc lập)</p>
+        <div class="checks">
+          <label><input type="checkbox" id="layer-particles" checked> Particles</label>
+          <label><input type="checkbox" id="layer-streaklets" checked> Streaklets</label>
+          <label><input type="checkbox" id="layer-smoke" checked> Smoke</label>
+        </div>
+      </div>
+
+      <div>
+        <p class="group-title">Tham số</p>
+        <div class="row"><label for="f-count">Count</label><output id="o-count"></output></div>
+        <input id="f-count" type="range" min="0" max="250" step="5" value="100">
+        <div class="row"><label for="f-speed">Speed</label><output id="o-speed"></output></div>
+        <input id="f-speed" type="range" min="25" max="200" step="5" value="100">
+        <div class="row"><label for="f-turb">Turbulence</label><output id="o-turb"></output></div>
+        <input id="f-turb" type="range" min="0" max="250" step="5" value="100">
+        <div class="row"><label for="f-wind">Wind</label><output id="o-wind"></output></div>
+        <input id="f-wind" type="range" min="-100" max="100" step="5" value="0">
+        <div class="row"><label for="f-magnet">Magnetism</label><output id="o-magnet"></output></div>
+        <input id="f-magnet" type="range" min="-100" max="100" step="5" value="0">
+      </div>
+
+      <div>
+        <div class="transport">
+          <button id="play" class="primary">Tạm dừng</button>
+          <button id="replay">Chơi lại</button>
+        </div>
+        <p class="keyhint"><kbd>Space</kbd> phát/dừng · <kbd>R</kbd> chơi lại · <kbd>1…9</kbd> đổi preset</p>
+        <a class="back" href="index.html">← Particle Motion Lab (A/B hiện tại ↔ v2)</a>
+      </div>
+    </aside>
+
+    <main class="stage-wrap">
+      <section class="card stage">
+        <canvas id="stage" width="960" height="540" aria-label="Sân khấu mô phỏng"></canvas>
+        <div class="metrics">
+          <span>preset <b id="m-preset">Default</b></span>
+          <span>hạt <b id="m-count">0</b></span>
+          <span>fps <b id="m-fps">–</b></span>
+        </div>
+      </section>
+
+      <div class="card note" id="explain"></div>
+    </main>
+  </div>
+</div>
+
+<script src="lab.js"></script>
+<script src="seemusic.js"></script>
+<script>
+(function () {
+  'use strict';
+  var lab = window.ParticleLab;
+  var sm = window.SeeMusicLab;
+
+  var engine = sm.createEngine({ seed: 20261019 });
+  var playing = true;
+  var buildBackdrop = null;
+
+  // How much of each documented style PianoPath already has, so the playground
+  // doubles as a gap list. 'have' · 'partial' · 'missing'.
+  var STATUS = {
+    'Default': 'have',
+    'Explode': 'missing',
+    'Fast playing': 'partial',
+    'High count': 'have',
+    'High turbulence': 'partial',
+    'Long streaklets': 'partial',
+    'Straight': 'partial',
+    'Twirl': 'missing',
+    'Smoke': 'partial'
+  };
+  var STATUS_LABEL = {
+    missing: 'PianoPath chưa có',
+    partial: 'PianoPath có một phần'
+  };
+
+  var presetsHost = document.getElementById('presets');
+  sm.PRESET_ORDER.forEach(function (name, index) {
+    var b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = name;
+    b.setAttribute('aria-pressed', name === engine.preset ? 'true' : 'false');
+    if (STATUS[name] !== 'have') {
+      b.classList.add(STATUS[name]);
+      b.title = STATUS_LABEL[STATUS[name]];
+    }
+    b.addEventListener('click', function () { choose(name); });
+    b.dataset.preset = name;
+    presetsHost.appendChild(b);
+  });
+
+  function choose(name) {
+    engine.preset = name;
+    Array.prototype.forEach.call(presetsHost.children, function (b) {
+      b.setAttribute('aria-pressed', b.dataset.preset === name ? 'true' : 'false');
+    });
+    engine.clock = 0; engine.nextNote = 0; engine.particles.length = 0;
+    engine.rnd = sm.createEngine({ seed: 20261019 }).rnd;
+    document.getElementById('m-preset').textContent = name;
+    var p = sm.PRESETS[name];
+    document.getElementById('explain').innerHTML =
+      '<strong>' + name + '.</strong> ' + p.note +
+      (STATUS[name] === 'missing'
+        ? ' <span style="color:var(--amber)">PianoPath chưa có kiểu chuyển động này.</span>'
+        : STATUS[name] === 'partial'
+          ? ' <span style="color:var(--quiet)">PianoPath đã có một phần.</span>'
+          : ' <span style="color:var(--quiet)">PianoPath đã có.</span>') +
+      '<span class="src">Mô tả preset dựa trên transcript hướng dẫn chính thức của SeeMusic; '
+      + 'số hạt, công thức và hình ảnh ở đây là của PianoPath, không phải của SeeMusic.</span>';
+  }
+
+  function bindSlider(id, key, scale) {
+    var input = document.getElementById(id);
+    var out = document.getElementById('o-' + key);
+    function apply() {
+      var v = +input.value;
+      engine[key] = scale ? scale(v) : v;
+      if (out) out.textContent = v;
+    }
+    input.addEventListener('input', apply);
+    apply();
+  }
+
+  bindSlider('f-count', 'density', function (v) { return v / 100; });
+  bindSlider('f-speed', 'speed', function (v) { return v / 100; });
+  bindSlider('f-turb', 'turbulence', function (v) { return v / 100; });
+  bindSlider('f-wind', 'wind', function (v) { return v / 100; });
+  bindSlider('f-magnet', 'magnetism', function (v) { return v / 100; });
+
+  document.getElementById('layer-particles').addEventListener('change', function (e) { engine.particlesOn = e.target.checked; });
+  document.getElementById('layer-streaklets').addEventListener('change', function (e) { engine.streakletsOn = e.target.checked; });
+  document.getElementById('layer-smoke').addEventListener('change', function (e) { engine.smokeOn = e.target.checked; });
+
+  var playButton = document.getElementById('play');
+  playButton.addEventListener('click', function () {
+    playing = !playing;
+    playButton.textContent = playing ? 'Tạm dừng' : 'Tiếp tục';
+  });
+  document.getElementById('replay').addEventListener('click', function () {
+    engine.clock = 0; engine.nextNote = 0; engine.particles.length = 0;
+    engine.rnd = sm.createEngine({ seed: 20261019 }).rnd;
+  });
+
+  document.addEventListener('keydown', function (e) {
+    if (e.code === 'Space') { e.preventDefault(); playButton.click(); }
+    if (e.key === 'r' || e.key === 'R') document.getElementById('replay').click();
+    var n = parseInt(e.key, 10);
+    if (n >= 1 && n <= sm.PRESET_ORDER.length) choose(sm.PRESET_ORDER[n - 1]);
+  });
+
+  var last = null;
+  var fps = 60;
+  var statsTimer = 0;
+
+  function backdrop() {
+    if (buildBackdrop) return buildBackdrop;
+    var c = document.createElement('canvas');
+    c.width = lab.STAGE_W; c.height = lab.STAGE_H;
+    lab.paintScene(c.getContext('2d'), lab.DEFAULT_LOOK);
+    buildBackdrop = c;
+    return c;
+  }
+
+  function frame(now) {
+    if (last === null) last = now;
+    var dt = Math.min(.05, Math.max(0, (now - last) / 1000));
+    last = now;
+    fps += (1 / Math.max(dt, 1e-4) - fps) * .06;
+
+    if (playing) sm.step(engine, dt);
+
+    var canvas = document.getElementById('stage');
+    var ctx = canvas.getContext('2d');
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.drawImage(backdrop(), 0, 0);
+    lab.drawNotes(ctx, { notes: sm.NOTES }, engine.clock, lab.DEFAULT_LOOK);
+    sm.draw(ctx, engine);
+
+    statsTimer += dt;
+    if (statsTimer > .2) {
+      statsTimer = 0;
+      document.getElementById('m-count').textContent = engine.particles.length;
+      document.getElementById('m-fps').textContent = fps.toFixed(0);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  choose('Default');
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

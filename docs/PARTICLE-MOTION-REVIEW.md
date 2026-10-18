@@ -5,6 +5,8 @@
 > và bản sao dùng cho AR (`Gpu/GpuArLayer.Effects.cs`). Không đánh giá lại shader vật liệu, bloom hay preset.
 > **Kèm theo:** [Particle Motion Lab](prototypes/particle-motion-lab/index.html) — bản mô phỏng lại công thức
 > trong repo, chạy bằng trình duyệt, để nhìn A/B trước khi động vào mã.
+> **Xem thêm:** [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) — SeeMusic có
+> những kiểu chuyển động hạt nào, và PianoPath còn thiếu gì so với nó.
 
 ## 1. Kết luận ngắn
 
@@ -32,7 +34,7 @@ Ngoài ra có một lỗi hợp đồng rõ ràng: **"Physics time factor" ở �
 | Seed | `20261019`; mỗi panel nhận **cùng chuỗi phát** (cùng thời điểm, góc, tốc độ, life) nên khác biệt chỉ do mô hình |
 | Bước thời gian | 1/120 s (đo thêm 30 / 60 / 144 / 240 fps) |
 | Thang | 960×540, bàn phím chiếm 20,5% chiều cao, `HitY` = 429,3 px, lane = 10,9 px |
-| Kiểm tra tự động | `node tools/check_particle_motion_lab.cjs` — 26 assertions, gồm cả kiểm tra lab *không* làm hai mô hình trùng nhau |
+| Kiểm tra tự động | `node tools/check_particle_motion_lab.cjs` — 36 assertions, gồm cả kiểm tra lab *không* làm hai mô hình trùng nhau |
 
 **Giới hạn phải nói rõ:** đây là **bản mô phỏng lại**, không phải ảnh chụp từ ứng dụng. Sandbox không có
 Windows, Direct3D hay `dotnet`, nên **không có** build, không có `--verify`, không có ảnh WARP, không đo FPS
@@ -260,6 +262,6 @@ render đang có — cho thấy lệch ở mục 4.3). Cột trái bật/tắt t
 | `docs/prototypes/particle-motion-lab/index.html` | Lab A/B chạy bằng trình duyệt |
 | `docs/prototypes/particle-motion-lab/lab.js` | Mô hình hiện tại, WPF, và v2; renderer 2D tối giản |
 | `docs/prototypes/particle-motion-lab/README.md` | Cách chạy và giới hạn của prototype |
-| `tools/check_particle_motion_lab.cjs` | 26 assertions headless cho lab |
+| `tools/check_particle_motion_lab.cjs` | 36 assertions headless cho hai prototype |
 
 Không tệp mã sản phẩm nào bị sửa.

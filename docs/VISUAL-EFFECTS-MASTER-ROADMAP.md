@@ -609,3 +609,5 @@ Kết luận rút ra:
 **Chưa có kết quả hardware sau thay đổi.** `--bench` hiện vẫn đo baseline Full quality; Windows CI/WARP chỉ có thể xác nhận build/correctness, không chứng minh iGPU nhanh hơn hoặc tier nào đạt 8 ms. Kết quả vật lý của Adaptive Quality vẫn **Unmeasured**; cần đo lại iGPU với tier/runtime state và xem lại fixed-scene gallery trước khi kết luận hình ảnh/performance.
 
 **Review chuyển động hạt (2026-10-19):** [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) — số đo cho trường gió, nón phát của sustain và lệch wisp GPU/WPF; prototype [Particle Motion Lab](prototypes/particle-motion-lab/index.html) để review A/B trước khi động vào mã; lộ trình W0–W3. Tài liệu này **không** thay đổi trạng thái kiểm chứng nào ở trên.
+
+**Tham chiếu SeeMusic (2026-10-19):** [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) — kiểu chuyển động hạt của một sản phẩm cùng loại, đối chiếu từng kiểu với PianoPath. Chỉ là tham chiếu ý tưởng; không sao chép giá trị, tên preset hay asset.
