@@ -275,7 +275,8 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
 - **Đã chốt (b) và đã làm (P1):** `GpuOnlyEffects.Omitted` liệt kê ba hiệu ứng đang bật; dòng "Next recording"
   thêm câu **"Software frames leave out …"** khi take sẽ do software vẽ, và lúc bắt đầu ghi ghi đúng câu đó vào
   `Trace`. Không khoá toggle: cùng preset vẫn có thể chiếu bằng GPU, chỉ bản ghi software/alpha mất ba hiệu ứng.
-- **Test:** `GpuOnlyEffectsTests` (4 Fact) ghim danh sách, thứ tự và việc Landing glow mặc định phải được báo;
+- **Test:** `GpuOnlyEffectsTests` (3 Fact) ghim danh sách và thứ tự trên nửa thuần của helper; việc Landing glow
+  mặc định phải được báo nằm trong `--verify` (`VerifyVisualSettings`) vì nó cần kiểu settings WPF;
   chuỗi UI có trong cả hai bảng Strings.
 - **Còn lại (thủ công):** quay 5 s từ WPF fallback với ba toggle bật, xác nhận dòng recording + log. Không chạy
   được trong CI headless vì cần WPF và một bộ ghi thật.
@@ -397,7 +398,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N3 | AR phẳng: bật 3D mặc định hoặc vô hiệu hoá control | **đã chốt (b)**: giữ phẳng mặc định, ẩn control 3D, tooltip nói rõ; (a)/(c) để sau | S/M | tài liệu này |
 | N4 | Thống nhất release live bar AR | **đã chốt: khác có chủ ý** — 0,35 s phẳng, 3,0 s 3D | S | tài liệu này |
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | **đã xong**: hợp đồng thời gian sống, bảng §3.4, tool + `--verify` ghim | S/M | tài liệu này |
-| N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; test 4 Fact | M | tài liệu này |
+| N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; 3 Fact + một assert `--verify` | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, test + tool ghim; motion blur để sau | S | tài liệu này |
 | N8 | Refraction/texture parity | bảng giống/khác có chủ ý | M | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
@@ -409,7 +410,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N15 | Nợ tài liệu/trạng thái | audit/roadmap khớp; tool trong CI | S | tài liệu này |
 | D0 | CC64 liên tục vào hình | **đã xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%, mượt 55/75 ms | S | DAMPER §7 |
 | D1 | Lõi sáng chạy theo lift | **đã xong**: 8,2 px @45°, 6,6 px @90°; vạch WPF 6 px, halo GPU 5 px | S | DAMPER §7 |
-| D2 | 88 ô LED + tick theo phím | **đã xong**: ô `0,70/0,46` phím, thân `0,05+0,42v`, mép `0,16+0,54v`; pin `15v × 2,4 px` + crossbar, τ 30/40 ms; tối đa 265 quad, tắt ở Lite | M | DAMPER §7 |
+| D2 | 88 ô LED + tick theo phím | **đã xong**: ô `0,70/0,46` phím, thân `0,05+0,42v`, mép `0,16+0,54v`; pin co theo phép chiếu (`≤15 px`, `≤2,4 px` ở 1080p) + crossbar, τ 30/40 ms; tối đa 265 quad, tắt ở Lite | M | DAMPER §7 |
 | D3 | Bloom threshold, thở, màu | **đã xong**: `ignite` 1 → 2,4 (lõi 0,48 → 2,57; cắt ngưỡng 1,8 tại lift 0,74 ≈ CC64 53); breath ±2% @ 0,7 Hz, đúng 1 khi pedal lên, tắt theo `ReducedMotion`; pin giữ màu dải | S | DAMPER §7 |
 | W0–W3 | Bốn lát cắt chuyển động hạt | theo bốn cổng trong PARTICLE-MOTION-REVIEW | M–L | PARTICLE §7 |
 | H1 | Cổng phần cứng + Adaptive Quality | đạt 8 ms p95 trên iGPU/dGPU thật | L | MASTER §11 |

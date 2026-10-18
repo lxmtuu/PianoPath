@@ -58,7 +58,7 @@ Tài liệu này gọi chung nhóm này là **damper light**; "thanh damper" là
 | Màu | màu halo của look, hoặc màu tự chọn `#8FE8FF` | `GpuLook.cs:371-373` |
 | Hình dạng | một quad phủ **toàn bộ** phím, `u` 0..1 | `TryPatch` |
 | Ô theo phím (D2) | 88 ô rộng `0,70` phím trắng (`0,46` phím đen), alpha `0,05+0,42v`, mép `0,16+0,54v`; màu mix 22% về pitch | `GpuArLayer.cs`, shader kind 12 |
-| Pin theo phím (D2) | cao `15·v` px, rộng 2,4 px, alpha `0,18+0,58v`, crossbar 5,4×2 px | `ArDampers.TickHeight/TickWidth` |
+| Pin theo phím (D2) | cao `min(bề dày dải, 15)·v`, rộng `clamp(0,10·bề rộng ô, 1, 2,4)` px, alpha `0,18+0,58v`, crossbar `2,25×` rộng và `0,13×` cao | `ArDampers.PinHeight/PinWidth` |
 | Lõi sáng | chạy từ `uv.y = 1` tới `uv.y ≈ 0,656` theo lift; đường tiếp xúc mờ ở mép phím | `StageShaders.hlsl:972-989` |
 | Thời gian | **55 ms xuống / 75 ms lên**, dùng chung với stage | `ArDampers.Smooth`, `GpuStageSimulation.cs:322` |
 | Mặc định | **bật** | `PianoVisualSettings.cs:518` |
@@ -275,14 +275,17 @@ tức `0,46/0,52` bề rộng phím đen để giữ đúng tỉ lệ), thân al
 `0,16 + 0,54·v`; ở `v = 1` là **0,470 / 0,700**. Màu = màu halo mix **22%** về màu pitch. Đây là lớp trả lời
 "phím nào đang kêu / đang được giữ".
 
-**Lớp 2 — đầu damper.** Mỗi ô có một **pin** nhô lên `0 → 15 px`, rộng 2,4 px, alpha `0,18 + 0,58·v`, cộng một
-**crossbar** 5,4 × 2 px ở đầu pin — đúng hình đầu damper trong prototype.
+**Lớp 2 — đầu damper.** Mỗi ô có một **pin** nhô lên `0 → 15 px` ở 1080p, rộng 2,4 px, alpha `0,18 + 0,58·v`, cộng
+một **crossbar** 5,4 × 2 px ở đầu pin — đúng hình đầu damper trong prototype. Kích thước pin **co theo phép
+chiếu**: cao tối đa một bề dày dải và không quá 15 px, rộng 1/10 bề rộng ô và không quá 2,4 px (sàn 2 × 1 px).
+Hằng số pixel cố định đúng ở 1080p nhưng biến pin thành cột cao nửa bàn phím trong take 320×180 — chính lỗi
+mà phép kiểm AR bắt được (xem §7, mục 10).
 
 7. **Cách vẽ trong sản phẩm.** Ô và pin đi cùng `PsArQuad` với kind **12**, không thêm draw call. Ô mang
    `Misc = (rimAlpha, 0, 12, 0)`; shader vẽ thân phẳng và dải 2 px ở `uv.y = 0` (mép sau) bằng `fwidth` —
    đúng 2 px ở mọi tỉ lệ chiếu — rồi composite `rim over body` đúng như prototype vẽ hai hình chữ nhật.
    Pin và crossbar mang `Misc = (0, 1, 12, 0)` để shader bỏ dải mép; chúng là hình chữ nhật màn hình
-   2,4 × `15·v` và 5,4 × 2 px đặt tại tâm mép sau của ô.
+   đặt tại tâm mép sau của ô, kích thước suy từ chính ô được chiếu (bảng trên) chứ không phải hằng số pixel.
 8. **Trạng thái damper theo phím** (D2):
    ```
    tickTarget[p] = held[p] ? 1 : lift        // ArDampers.TickTarget
@@ -295,7 +298,7 @@ tức `0,46/0,52` bề rộng phím đen để giữ đúng tỉ lệ), thân al
 9. **Chi phí**: tối đa **265 quad** (88 ô + 88 pin × 2 quad + 1 dải), không thêm draw call. Ở Lite hoặc khi tắt
    `ShowDamperStrip`, ô và pin biến mất cùng dải. `ArObjectQuadCount` trừ `ArDamperCellCount` +
    `ArDamperTickCount`, nên mọi assert "một quad mỗi nốt" giữ nguyên.
-10. **Kiểm**: 4 Fact mới trong `tests/PianoPath.Tests/ArDampersTests.cs` (chiều rộng/alpha, `TickTarget`, độ tụ
+10. **Kiểm**: 5 Fact mới trong `tests/PianoPath.Tests/ArDampersTests.cs` (chiều rộng/alpha, `TickTarget`, độ tụ
     sau 10 frame, và so sánh tốc độ với thanh); `VerificationSuite.Ar` đòi mỗi ô có đúng 2 quad pin, và ô/pin biến mất ở Lite và khi tắt
     strip; `tools/check_damper_light.cjs` (**33** assertion) đối chiếu từng hằng số với `Camera/ArDampers.cs`.
 11. **Chưa làm**: stage WPF **chưa** có ô theo phím — D2 mới ở lớp AR, đúng phạm vi của dải damper hiện tại.

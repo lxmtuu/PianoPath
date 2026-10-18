@@ -347,6 +347,8 @@ internal static partial class VerificationSuite
         var localSound = new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 };
         localSound.CopyFrom(new PianoVisualSettings { PianoSoundEnabled = true, AudioReverbAmount = 125 });
         var sharedSound = VisualPresetShare.TryDecode(VisualPresetShare.Encode(new PianoVisualSettings { PianoSoundEnabled = false, AudioReverbAmount = 37 }), out var sharedLook, out _);
+        Assert(new PianoVisualSettings().NoteLandingGlow && GpuOnlyEffects.Omitted(new PianoVisualSettings()).Contains("Landing glow"),
+            "N6: landing glow ships on, so a software-rendered take has to name it instead of dropping it silently.");
         Assert(!mutedSound.PianoSoundEnabled && mutedSound.AudioReverbAmount == 37
                 && !localSound.PianoSoundEnabled && localSound.AudioReverbAmount == 37
                 && sharedSound && sharedLook.PianoSoundEnabled && sharedLook.AudioReverbAmount == 100,

@@ -163,17 +163,20 @@ internal sealed partial class GpuArLayer
                     new Vector4((float)(ArDampers.CellRimAlpha(value) * damperBreath * opacity), 0, 12f, 0)));
                 DamperCellCount++;
 
-                // The pin rises from the cell's back edge toward the falling notes with a 2 px crossbar for a
-                // head. Both are flat screen-space strokes, so they ask the shader to skip the cell rim.
-                var height = (float)(ArDampers.TickHeight * value);
+                // The pin rises from the cell's back edge toward the falling notes with a crossbar for a head.
+                // Its height and width follow the projection (one band deep, a tenth of the cell wide) so the same
+                // six lines of code reads correctly at 1080p and in a 320x180 preview instead of the pin filling
+                // half the keyboard there. Both are flat screen-space strokes, so they ask for no cell rim.
+                var height = (float)(ArDampers.PinHeight(Math.Abs(cell.FrontLeft.Y - cell.BackLeft.Y)) * value);
                 if (height < .5f) continue;
                 var cx = (float)((cell.BackLeft.X + cell.BackRight.X) * .5);
                 var baseY = (float)((cell.BackLeft.Y + cell.BackRight.Y) * .5);
-                var half = (float)(ArDampers.TickWidth * .5);
+                var half = (float)(ArDampers.PinWidth(cell.BackRight.X - cell.BackLeft.X) * .5);
                 var alpha = (float)(ArDampers.TickAlpha(value) * damperBreath * opacity);
                 quads.Add(Pack(ScreenRect(cx - half, baseY - height, cx + half, baseY), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
-                var capHalf = half + 1.5f;
-                quads.Add(Pack(ScreenRect(cx - capHalf, baseY - height - 2, cx + capHalf, baseY - height), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
+                var capHalf = half * 2.25f;
+                var capHeight = Math.Max(1f, height * .13f);
+                quads.Add(Pack(ScreenRect(cx - capHalf, baseY - height - capHeight, cx + capHalf, baseY - height), look.ArDamperColor, alpha, new Vector4(0, 1, 12f, 0)));
                 DamperTickCount += 2;
             }
         }

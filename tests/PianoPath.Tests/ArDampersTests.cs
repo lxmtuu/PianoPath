@@ -70,6 +70,22 @@ public class ArDampersTests
     }
 
     [Fact]
+    public void Pins_follow_the_projection_so_a_small_take_keeps_its_proportions()
+    {
+        // 1080p: the prototype's 15 px pin and its 2.4 px width.
+        Assert.Equal(ArDampers.TickHeight, ArDampers.PinHeight(26), 9);
+        Assert.Equal(ArDampers.TickWidth, ArDampers.PinWidth(24), 9);
+        // 320x180: one band deep and a tenth of the cell wide, never thinner than a pixel.
+        Assert.Equal(6.2, ArDampers.PinHeight(6.2), 9);
+        Assert.Equal(1, ArDampers.PinWidth(4.3), 9);
+        Assert.Equal(2, ArDampers.PinHeight(.4), 9);
+        Assert.Equal(1, ArDampers.PinWidth(4), 9);
+        // a missing measurement falls back to the measured prototype, not to zero
+        Assert.Equal(ArDampers.TickHeight, ArDampers.PinHeight(double.NaN), 9);
+        Assert.Equal(ArDampers.TickWidth, ArDampers.PinWidth(double.NaN), 9);
+    }
+
+    [Fact]
     public void A_held_key_lifts_without_the_pedal_and_the_pedal_lifts_every_key()
     {
         Assert.Equal(1, ArDampers.TickTarget(held: true, 0), 9);

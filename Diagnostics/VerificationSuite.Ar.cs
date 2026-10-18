@@ -358,7 +358,8 @@ internal static partial class VerificationSuite
         (string What, (double X, double Y) At)[] shouldStay =
         [
             ("G5, far from any held key", KeyPoint(layout.CenterX(79), .85)),
-            ("the air above C4", KeyPoint(layout.CenterX(60), -.3)),
+            // D2: a held key legitimately lights its own damper cell and pin, so the air probe sits past both.
+            ("the air above C4's damper pin", KeyPoint(layout.CenterX(60), -.55)),
         ];
         foreach (var (what, at) in shouldStay)
             Assert(Change(at) <= 2, $"Only held keys light up: {what} changed by {Change(at)}.");
@@ -666,7 +667,7 @@ internal static partial class VerificationSuite
             }
             foreach (var (name, at) in new[] { ("C4 front", At(layout.CenterX(60), .85)), ("C#4 black key", At(layout.CenterX(61), .3)), ("E4 front", At(layout.CenterX(64), .85)) })
                 Assert(Change(at) > 25, $"A held key must be tinted in a take of {what}: {name} changed by {Change(at)}.");
-            foreach (var (name, at) in new[] { ("D4 front", At(layout.CenterX(62), .85)), ("G5 front", At(layout.CenterX(79), .85)), ("the air above C4", At(layout.CenterX(60), -.3)), ("the sky", ((int)sky.X, (int)sky.Y)) })
+            foreach (var (name, at) in new[] { ("D4 front", At(layout.CenterX(62), .85)), ("G5 front", At(layout.CenterX(79), .85)), ("the air above C4's damper pin", At(layout.CenterX(60), -.55)), ("the sky", ((int)sky.X, (int)sky.Y)) })
                 Assert(Change(at) <= 4, $"Only held keys light up in a take of {what}: {name} changed by {Change(at)}.");
         }
         Assert(loop.CameraAge.Frames >= 3 && loop.CameraAge.WorstMilliseconds >= 80, $"The render loop should have counted the pictures it drew ({loop.CameraAge.Frames} frames, worst {loop.CameraAge.WorstMilliseconds:0} ms).");

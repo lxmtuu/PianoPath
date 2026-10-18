@@ -107,6 +107,7 @@
     <Compile Include="..\..\Stage\Effects\EffectContracts.cs" Link="Product\Stage\Effects\EffectContracts.cs" />
     <Compile Include="..\..\Stage\Effects\AccessibilityContracts.cs" Link="Product\Stage\Effects\AccessibilityContracts.cs" />
     <Compile Include="..\..\Stage\Effects\MotionBudget.cs" Link="Product\Stage\Effects\MotionBudget.cs" />
+    <Compile Include="..\..\Stage\GpuOnlyEffects.cs" Link="Product\Stage\GpuOnlyEffects.cs" />
     <Compile Include="..\..\Gpu\GpuAdapterSelection.cs" Link="Product\Gpu\GpuAdapterSelection.cs" />
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
     <Compile Include="..\..\Stage\NoteGeometry.cs" Link="Product\Stage\NoteGeometry.cs" />

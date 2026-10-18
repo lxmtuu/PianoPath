@@ -4,8 +4,8 @@ namespace PianoPath;
 /// The small set of motion rules both renderers share, and the numbers the accessibility audit quotes.
 ///
 /// <para>
-/// The accessibility toggles already stand the intrinsic animation down (see
-/// <see cref="PianoVisualSettings.WithAccessibilityTogglesApplied"/>); what remains here is the one pulse
+/// The accessibility toggles already stand the intrinsic animation down (PianoVisualSettings applies them to
+/// every family before the stage draws); what remains here is the one pulse
 /// that is part of the note itself. The falling pulse is a sine whose angular rate is
 /// <c>1.5 + 9 * rate</c> rad/s, so even the fastest setting is 1.67 Hz - well under the three-flashes-
 /// per-second line, and the preset audit can prove that instead of trusting it.

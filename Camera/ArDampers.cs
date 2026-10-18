@@ -102,9 +102,21 @@ internal static class ArDampers
     internal const double TickAttackSeconds = .030;
     internal const double TickReleaseSeconds = .040;
 
-    /// <summary>How tall a fully lifted tick is, in output pixels, and how wide it is.</summary>
+    /// <summary>How tall a fully lifted tick is on a 1080p take, in output pixels, and how wide it is.</summary>
     internal const double TickHeight = 15;
     internal const double TickWidth = 2.4;
+
+    /// <summary>
+    /// A pin's height for the strip's projected depth, in output pixels: one band deep at most and never taller
+    /// than <see cref="TickHeight"/>. A fixed 15 px pin is right at 1080p and enormous in a 320x180 take, where
+    /// the whole keyboard is barely forty pixels deep; tying it to the projection keeps the same shape at every size.
+    /// </summary>
+    internal static double PinHeight(double bandPixels) =>
+        double.IsFinite(bandPixels) ? Math.Clamp(bandPixels, 2, TickHeight) : TickHeight;
+
+    /// <summary>A pin's width for the cell's projected width: 2.4 px on a 1080p cell, never under one pixel.</summary>
+    internal static double PinWidth(double cellPixels) =>
+        double.IsFinite(cellPixels) ? Math.Clamp(cellPixels * .10, 1, TickWidth) : TickWidth;
 
     /// <summary>The per-key cell's body and rim opacity for a damper value 0..1.</summary>
     internal static double CellBodyAlpha(double value) => .05 + .42 * ClampLevel(value);
