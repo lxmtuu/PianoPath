@@ -694,7 +694,7 @@ internal sealed partial class GpuStageSimulation
                         top = (float)extended.Top; bottom = (float)extended.Bottom;
                     }
                     if (bottom - top < 1) continue;
-                    AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction, (float)NoteGeometry.EnterFade(top, hitY));
+                    AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction);
                     // landing glow: a gathering light where the note is about to strike (GPU-exclusive)
                     var until = (float)(note.Start - input.Position);
                     if (look.NoteLandingGlow && !look.Chroma && !played && !missed && until > 0 && until <= landingWindow)
