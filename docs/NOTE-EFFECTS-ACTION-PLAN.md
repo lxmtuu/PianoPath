@@ -13,11 +13,11 @@
 
 1. **Hình học nốt của WPF và GPU giống hệt nhau**, nhưng **AR dùng quy ước khác**: một nốt trên phím trắng rộng
    **31,75 px (86% phím)** trong AR so với **17,45 px (47,3% phím)** trên stage ở 1920×1080 — **1,82×**.
-   Trên phím đen thì ngược lại: stage 90,9%, AR 86%.
-2. **Thanh nốt dài bị cắt ngắn, và mức cắt phụ thuộc kích thước cửa sổ**: chiều cao nốt bị kẹp `0,9·hitY`
-   nên một nốt 4 s chỉ được vẽ dài **2,5 s ở 900p**, **3,0 s ở 1080p**, **4,0 s ở 1440p**; AR luôn cắt ở **3,0 s**
-   (reach). Cùng một bản nhạc, cùng setting, đổi cửa sổ là đổi độ dài thanh. Nốt vẫn *xuất hiện* đúng lookahead,
-   nhưng phần đuôi tương ứng với thời gian còn lại không bao giờ được vẽ.
+   Trên phím đen thì ngược lại: stage 90,9%, AR 86%. **N1 đã chốt:** giữ lane cho stage và kẹp ở 98% phím đen;
+   ở 100% nốt còn **18,82 px**, không còn tràn 13,6%.
+2. **Thanh nốt dài đã được sửa (N2):** bỏ clamp `0,9·hitY`; nốt 4 s là thanh **4,00 s ở cả 900p, 1080p và
+   1440p**, chỉ phần viewport nhìn thấy khác nhau; trần an toàn **20 s**. Trước sửa, cùng nốt đó chỉ còn
+   2,50/3,00/4,00 s tùy khung. AR vẫn cắt ở **3,0 s** vì đó là *vùng nhìn* (reach), không phải giới hạn duration.
 3. **AR mặc định là đường phẳng** (`ArNotesInPerspective = false`): trail, ghost, landing glow, nhãn nốt và
    min-aspect **không chạy** dù setting đang bật; chỉ pulse, shimmer và vật liệu nốt hoạt động. Người dùng không
    được báo.
@@ -31,8 +31,9 @@
    nốt dùng chung `ShadeNoteMaterial` cho stage và AR, công thức hình học WPF/GPU trùng nhau, brush/pen đã được
    cache, seed tất định. Vấn đề nằm ở **hợp đồng giữa các đường vẽ**, không phải ở chất lượng một đường.
 
-**Ba việc làm ngay (P0):** N1 (chốt quy ước bề rộng + kẹp tràn), N2 (bỏ clamp độ dài thanh), N3 (AR phẳng phải
-báo hoặc bật 3D mặc định). N4 (release AR) và D0 (half-pedal) làm cùng đợt vì đều là sửa hợp đồng nhỏ.
+**Trạng thái:** N1 và N2 **đã sửa** trong mã sản phẩm (helper `Stage/NoteGeometry.cs`, test
+`tests/PianoPath.Tests/NoteGeometryTests.cs`). Việc P0 còn lại: **N3** (AR phẳng phải báo hoặc bật 3D mặc
+định); N4 (release AR) và D0 (half-pedal) làm cùng đợt vì đều là sửa hợp đồng nhỏ.
 
 ## 1. Đã kiểm tra gì
 
@@ -62,8 +63,8 @@ Giới hạn: số px tính với layout 88 phím, `KeyboardScale = 100`, 1 DIP 
 | | WPF | GPU | AR phẳng (mặc định) | AR 3D (bật "Notes in perspective") |
 |---|---|---|---|---|
 | Hàm dựng | `DrawNotes` :1227 | `BuildNotes` :623 | `ArNotes.Build` :169 | `Ar3DNoteProjection.Build` :66 |
-| Bề rộng | `lane · NoteWidth%` :1234 | `Lane · NoteWidth` :633 | `span(phím) · 0,86` | `span(phím) · 0,86` |
-| Chiều cao | `clamp(dur·speed − gap, 16, 0,9·hitY)` :1242 | như WPF :650 | `dur·1,5 − 0,015`, min 0,06 key-depth | tự nhiên + min-aspect, cắt tại reach |
+| Bề rộng | `min(lane · pct, 0,98·phím đen)` :1234 | như WPF :633 | `span(phím) · 0,86` | `span(phím) · 0,86` |
+| Chiều cao | `max(min(dur, 20)·speed − gap, 16)` :1242 | như WPF :650 | `dur·1,5 − 0,015`, min 0,06 key-depth | tự nhiên + min-aspect, cắt tại reach |
 | Tốc độ | `258 · NoteFallSpeed/550` | như WPF | 1,5 key-depth/s | 1,5 key-depth/s |
 | Lookahead | `hitY / speed` = **2,77–4,70 s** | như WPF | `ArLookahead` = **3,0 s** | 3,0 s |
 | Fade vào | không (bị cắt ở mép trên) | không | 25% cuối của reach | 25% cuối của reach |
@@ -85,13 +86,14 @@ nghèo hơn.
 `keyTop = H − clamp(max(110, min(228, 0,205·H))·KeyboardScale/100, 80, 300)`;
 `lane = W / 88`; `speed = 258·NoteFallSpeed/550`.
 
-| Khung | keyTop | lane | nốt stage (80%) | % phím trắng | % phím đen | nốt AR (phím trắng) | lookahead | thanh dài nhất (giây) |
+| Khung | keyTop | lane | nốt stage (80%) | % phím trắng | % phím đen | nốt AR (phím trắng) | lookahead | trần thanh (sau N2) |
 |---|---|---|---|---|---|---|---|---|
-| 900p (1600×900) | 715,5 | 18,18 | 14,55 | 47,3% | 90,9% | 26,46 | 2,77 s | **2,50 s** |
-| 1080p (1920×1080) | 858,6 | 21,82 | 17,45 | 47,3% | 90,9% | 31,75 | 3,33 s | **3,00 s** |
-| 1440p (2560×1440) | 1212,0 | 29,09 | 23,27 | 47,3% | 90,9% | 42,34 | 4,70 s | **4,23 s** |
+| 900p (1600×900) | 715,5 | 18,18 | 14,55 | 47,3% | 90,9% | 26,46 | 2,77 s | **20,00 s** |
+| 1080p (1920×1080) | 858,6 | 21,82 | 17,45 | 47,3% | 90,9% | 31,75 | 3,33 s | **20,00 s** |
+| 1440p (2560×1440) | 1212,0 | 29,09 | 23,27 | 47,3% | 90,9% | 42,34 | 4,70 s | **20,00 s** |
 
-Đơn vị px (DIP). Phím trắng rộng `W/52`, phím đen `0,52·W/52`.
+Đơn vị px (DIP). Phím trắng rộng `W/52`, phím đen `0,52·W/52`. Trước N2, trần thanh phụ thuộc khung:
+2,50 / 3,00 / 4,23 s (xem §3.3).
 
 ### 3.2 Cùng một phím, hai bề rộng
 
@@ -103,14 +105,14 @@ nghèo hơn.
 | AR (86% span) | **31,75 px (86,0%)** | 16,51 px (86,0%) |
 | Chênh | AR **1,82×** rộng hơn | stage 1,06× rộng hơn |
 
-Nếu người dùng kéo `NoteWidth` lên 100: nốt stage trên phím trắng = 59,1%, trên phím đen = **113,6%** (tràn
-sang hai bên phím đen); AR vẫn 86% vì `WidthShare` bị chặn ở 0,86. Đây là **hai quy ước**: stage giữ bề rộng
-đều cho mọi pitch, AR phủ theo phím thật. Tỉ lệ 1,82× là hệ quả của hai quy ước, không phải lỗi pixel; việc cần
-chốt là nhãn/giới hạn (N1).
+Trước N1, kéo `NoteWidth` lên 100 cho nốt stage trên phím trắng 59,1%, trên phím đen **113,6%** (tràn sang hai
+bên phím đen); AR vẫn 86% vì `WidthShare` bị chặn ở 0,86. Đây là **hai quy ước**: stage giữ bề rộng đều cho mọi
+pitch, AR phủ theo phím thật. Tỉ lệ 1,82× là hệ quả của hai quy ước, không phải lỗi pixel. Sau N1, stage kẹp ở
+98% phím đen nên 100% chỉ còn 18,82 px (59,1% phím trắng, 98% phím đen).
 
-### 3.3 Nốt dài: thanh bị cắt ngắn
+### 3.3 Nốt dài: thanh từng bị cắt ngắn (đã sửa)
 
-Nốt **xuất hiện** ở đúng lookahead cho mọi độ dài (`bottom = 0` khi `start − position = hitY/speed`), nhưng
+Nốt **xuất hiện** ở đúng lookahead cho mọi độ dài (`bottom = 0` khi `start − position = hitY/speed`). Trước N2,
 **chiều dài thanh** bị kẹp ở `0,9·hitY`. Nghĩa là phần đuôi của nốt dài không bao giờ được vẽ; thanh trông như
 một nốt ngắn hơn. AR cắt đuôi tại `Reach = Lookahead·FallSpeed`, tức **3,0 s cố định**, và neo đuôi ở reach nên
 thanh trượt vào từ xa thay vì mọc lên từ mép trên.
@@ -126,6 +128,15 @@ thanh trượt vào từ xa thay vì mọc lên từ mép trên.
 Hệ quả phụ: thanh dài tối đa chạm `0,1·hitY` phía dưới mép trên tại lúc chạm phím, nên **10% trên cùng của
 stage không bao giờ có đuôi nốt**; nốt ngắn hơn thì đuôi nằm thấp hơn nữa. Đây là lý do nên bỏ hẳn clamp theo
 `hitY` thay vì chỉnh nó.
+
+**Sau khi sửa (N2):** chiều cao không còn phụ thuộc `hitY`; bảng dưới là cùng các nốt đó, và 10% trống biến mất.
+AR vẫn 3,0 s vì reach là giới hạn *nhìn*, nhưng được ghi rõ trong tooltip/tài liệu thay vì ngầm hiểu.
+
+| Độ dài nốt | 900p | 1080p | 1440p | AR (reach 3,0 s) |
+|---|---|---|---|---|
+| 4 s | **4,00** | **4,00** | **4,00** | 3,00 (cắt 1,00) |
+| 6 s | **6,00** | **6,00** | **6,00** | 3,00 (cắt 3,00) |
+| 30 s | **20,00** (trần) | **20,00** | **20,00** | 3,00 (cắt 27,00) |
 
 ### 3.4 Ngân sách hiệu ứng
 
@@ -162,13 +173,14 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   setting lại có hai nghĩa, và giới hạn trên của slider không an toàn.
 - **Nguồn:** `lane = width / KeyCount` (`PianoStage.cs:710`, `GpuStageSimulation.cs:40`) rồi nhân `NoteWidth/100`
   (`PianoStage.cs:1234`, `GpuStageSimulation.cs:633`); AR dùng `layout.Span(pitch) · WidthShare` (`ArProjection.cs:191`).
-- **Việc cần làm:** chốt quy ước trước khi sửa số. (a) **Giữ bề rộng đều** kiểu piano-roll (khuyến nghị cho
-  stage) nhưng kẹp `min(lane·pct, 0,98·phím đen)` để không bao giờ tràn, và đổi nhãn UI thành "% của lane trung
-  bình"; (b) thêm chế độ "Fit keys" dùng span như AR cho người muốn nốt phủ kín phím; (c) hợp nhất cả ba đường
-  theo span — nhưng khi đó nốt phím đen trên stage sẽ hẹp còn ~88% hiện tại, một thay đổi thẩm mỹ lớn. Ghi rõ
-  lựa chọn trong tài liệu và UI.
-- **Nghiệm thu:** `NoteWidth = 100` không tràn phím ở cả ba đường; nhãn UI khớp công thức; ảnh A/B 30/60/80/100%
-  ở 1080p; nếu giữ hai quy ước thì có một dòng giải thích trong tooltip và tài liệu.
+- **Đã chốt và đã sửa:** stage giữ bề rộng đều theo lane, kẹp `min(lane·pct, 0,98·phím đen)` trong helper
+  `Stage/NoteGeometry.cs`; WPF và GPU cùng gọi helper. Ở 100% nốt còn **18,82 px = 98% phím đen** (trước sửa
+  21,82 px, tràn 13,6%). AR giữ nguyên `0,86·span`; "Fit keys" không làm cho stage.
+- **Đã làm:** tooltip mới ở cả hai bảng Strings: "% của lane trung bình, tối đa 98% phím đen; 80% ≈ 47% phím
+  trắng và 91% phím đen; AR phủ 86% mỗi phím". Unit test `NoteGeometryTests` ghim 80/100% ở cả 900/1080/1440p
+  và mốc kẹp 86/87% ở 1080p.
+- **Nghiệm thu:** `NoteWidth = 100` không tràn phím trên stage; nhãn UI khớp công thức; lab mặc định chế độ
+  "đã sửa" và vẫn cho chọn "trước sửa" để so sánh.
 - **Xem trước:** [note-view-lab](prototypes/note-view-lab/index.html) — đổi "Quy ước bề rộng" giữa Lane, Lane + kẹp,
   Theo phím.
 - **Cỡ:** S (kẹp + nhãn) / M (Fit keys) · **Phụ thuộc:** không.
@@ -180,12 +192,12 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   stage trống ở thời điểm chạm phím.
 - **Nguồn:** `Math.Clamp(..., hitY * .9)` (`PianoStage.cs:1242`, `GpuStageSimulation.cs:650`); AR cắt tại
   `Reach` (`ArNotes.Build` :201–203, `Ar3DNoteProjection.Build` :98–105) và neo đuôi khác.
-- **Việc cần làm:** bỏ clamp theo `hitY` ở cả WPF/GPU — để thanh dài đúng bằng `duration·speed`; phần vượt mép
-  trên đã được clip tự nhiên. Nếu muốn giới hạn để tránh thanh phủ kín màn hình, dùng **một `MaxNoteSeconds`
-  cố định** (ví dụ 8 s) chia sẻ cho WPF/GPU/AR, và ghi rõ trong tài liệu. Thống nhất cách neo: stage neo đầu nốt
-  ở lookahead, AR neo đuôi ở reach — chọn một kiểu cho cả hai hoặc ghi rõ là khác có chủ ý.
-- **Nghiệm thu:** nốt 4 s và 6 s phát ở 900p/1080p/1440p: chiều dài thanh (đo bằng px/speed) giống nhau và bằng
-  `min(duration, MaxNoteSeconds)`; đầu nốt vào đúng lookahead; không còn 10% trống; có unit test cho hàm thuần.
+- **Đã sửa:** bỏ clamp theo `hitY` ở cả WPF/GPU; chiều cao là
+  `max(min(duration, MaxNoteSeconds)·speed − gap, NoteMinLength)` trong `NoteGeometry.Height`. Trần
+  **`MaxNoteSeconds = 20 s`** (người dùng đã duyệt), không chia sẻ với AR: AR giữ `Reach = 3,0 s` vì đó là
+  **vùng nhìn** chứ không phải giới hạn duration — khác biệt có chủ ý, đã ghi trong tooltip/tài liệu.
+- **Nghiệm thu:** nốt 4 s và 6 s ở 900p/1080p/1440p cho thanh 4,00/6,00 s giống nhau; nốt 30 s dừng ở 20,00 s;
+  đầu nốt vẫn vào đúng lookahead; không còn 10% trống; unit test `NoteGeometryTests` ghim các mốc này.
 - **Xem trước:** [note-view-lab](prototypes/note-view-lab/index.html) — đổi 900p/1080p/1440p và nhìn dòng
   "thanh 4 s →" của panel stage.
 - **Cỡ:** M · **Phụ thuộc:** N1 (cùng đụng `DrawNotes`/`BuildNotes`).
@@ -198,11 +210,12 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   (Shimmer thì vẫn có: `AddSongNote` tự gọi `AddNoteShimmer` — xem bảng §2.)
 - **Nguồn:** nhánh projected `:149–168` (gọi `BuildProjectedSongNoteEffects` :159) vs nhánh phẳng `:170–178`
   (chỉ `AddSongNote`); `ArNotesProjected => ArNotesInPerspective` (`PianoVisualSettings.cs:596`).
-- **Việc cần làm:** chọn một — (a) bật 3D mặc định khi đã calibration (và giữ phẳng làm fallback có nhãn);
-  (b) vô hiệu hoá/ẩn các control chỉ có ở 3D khi đang phẳng, kèm lý do; (c) cài hiệu ứng tương đương cho đường
-  phẳng. Không để setting "bật mà không có tác dụng".
-- **Nghiệm thu:** bật/tắt từng control (trail, ghost, landing, min-aspect, nhãn) ở cả hai chế độ đều có kết quả
-  hoặc bị vô hiệu hoá rõ ràng; ảnh chụp A/B cho từng control.
+- **Đã sửa (mức tối thiểu, chọn b):** các control chỉ có ở 3D (tilt, azimuth, minimum length) đã bị ẩn khi
+  `ArNotesProjected` tắt; tooltip "Notes in perspective" ở cả hai bảng Strings giờ nói rõ lớp phẳng **bỏ qua
+  trail, ghost, landing glow và tên nốt**. Không đổi mặc định, không đổi hình ảnh của ai.
+- **Còn lại (cần quyết định sản phẩm):** (a) bật 3D mặc định khi đã calibration — đổi hình ảnh của mọi người
+  dùng AR; (c) cài hiệu ứng tương đương cho đường phẳng — nhiều việc nhất. Để sau, ghi ở N3.
+- **Nghiệm thu:** mọi control bật mà không có tác dụng đều có ghi chú hoặc bị ẩn; tooltip khớp hành vi.
 - **Xem trước:** [note-view-lab](prototypes/note-view-lab/index.html) — bật/tắt "Hiệu ứng AR 3D" để so panel phẳng.
 - **Cỡ:** S cho (a)/(b), M cho (c) · **Phụ thuộc:** không.
 
@@ -341,9 +354,9 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 
 | ID | Việc | Kết quả cần đạt | Cỡ | Nguồn |
 |---|---|---|---|---|
-| N1 | Chốt quy ước bề rộng, kẹp tràn | nhãn UI khớp, không tràn phím ở 100% | S/M | tài liệu này |
-| N2 | Bỏ clamp `0,9·hitY`, chốt `MaxNoteSeconds` | cùng độ dài thanh ở mọi khung, khớp AR | M | tài liệu này |
-| N3 | AR phẳng: bật 3D mặc định hoặc vô hiệu hoá control | không còn setting "bật mà không tác dụng" | S/M | tài liệu này |
+| N1 | Chốt quy ước bề rộng, kẹp tràn | **đã xong**: lane + kẹp 98% phím đen, tooltip mới, test | S/M | tài liệu này |
+| N2 | Bỏ clamp `0,9·hitY`, chốt `MaxNoteSeconds` | **đã xong**: trần 20 s, thanh 4 s = 4,00 s ở mọi khung | M | tài liệu này |
+| N3 | AR phẳng: bật 3D mặc định hoặc vô hiệu hoá control | **một phần**: ẩn control 3D + tooltip nói rõ; (a)/(c) để sau | S/M | tài liệu này |
 | N4 | Thống nhất release live bar AR | 0,35 s hoặc 3,0 s cho cả hai đường | S | tài liệu này |
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | cùng nhịp flash/mật độ hạt, có bảng | S/M | tài liệu này |
 | N6 | GPU-only effects khi ghi/ở WPF | có hiệu ứng hoặc cảnh báo rõ | M | tài liệu này |

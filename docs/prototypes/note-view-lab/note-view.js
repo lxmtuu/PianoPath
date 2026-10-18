@@ -21,7 +21,8 @@
   var DEFAULTS = {
     noteWidth: 80, noteFall: 550, fallSpeed: 258, noteGap: 2, noteMinLength: 16,
     keyboardScale: 100, arFall: 1.5, arLookahead: 3, arShare: .86,
-    arGap: .015, arMinLength: .06, keyboardAspect: 8.4, releaseLife: .35
+    arGap: .015, arMinLength: .06, keyboardAspect: 8.4, releaseLife: .35,
+    maxNoteSeconds: 20, blackKeyFill: .98
   };
 
   var MODELS = { STAGE: 'stage', FLAT: 'flat', AR3D: '3d' };
@@ -99,9 +100,10 @@
 
   function noteWidthPixels(pitch, pct, mode, layout) {
     pct = pct == null ? DEFAULTS.noteWidth : pct;
+    mode = mode || 'clamped';
     var laneWidth = layout.lane * pct / 100;
     if (mode === 'span') return KEYBOARD.span(pitch).width * layout.width * pct / 100;
-    if (mode === 'clamped') return Math.min(laneWidth, .98 * layout.blackWidth);
+    if (mode === 'clamped') return Math.min(laneWidth, DEFAULTS.blackKeyFill * layout.blackWidth);
     return laneWidth;
   }
 
@@ -110,17 +112,21 @@
     var speed = L.speed;
     var gap = state.noteGap == null ? DEFAULTS.noteGap : state.noteGap;
     var minLength = state.noteMinLength == null ? DEFAULTS.noteMinLength : state.noteMinLength;
-    var height = clamp(note.duration * speed - gap, minLength, L.hitY * .9);
+    var old = state.lengthMode === 'old';
+    var height = old
+      ? clamp(note.duration * speed - gap, minLength, L.hitY * .9)
+      : Math.max(Math.min(note.duration, DEFAULTS.maxNoteSeconds) * speed - gap, minLength);
     var bottom = L.hitY - (note.start - position) * speed;
     var top = bottom - height;
     var width = noteWidthPixels(note.pitch, state.widthPct, state.widthMode, L);
+    var barSeconds = (height + gap) / speed;
     return {
       x: KEYBOARD.center(note.pitch) * L.width - width / 2,
       top: top, bottom: bottom, width: width, height: height,
       visible: top <= L.hitY && bottom >= 0,
       sounding: position >= note.start && position < note.start + note.duration,
-      barSeconds: (height + gap) / speed,
-      clipped: Math.abs(height - L.hitY * .9) < 1e-9,
+      barSeconds: barSeconds,
+      clipped: barSeconds < note.duration - 1e-9,
       headY: Math.min(bottom, L.hitY)
     };
   }
@@ -176,14 +182,15 @@
 
   function longestStageSeconds(layout, state) {
     var gap = state && state.noteGap != null ? state.noteGap : DEFAULTS.noteGap;
-    return (layout.hitY * .9 + gap) / layout.speed;
+    if (state && state.lengthMode === 'old') return (layout.hitY * .9 + gap) / layout.speed;
+    return DEFAULTS.maxNoteSeconds;
   }
 
   function statsFor(height, state) {
     state = state || {};
     var L = layoutFor({ height: height, width: height * 16 / 9, noteFall: state.noteFall, keyboardScale: state.keyboardScale });
     var widthPct = state.widthPct == null ? DEFAULTS.noteWidth : state.widthPct;
-    var mode = state.widthMode || 'lane';
+    var mode = state.widthMode || 'clamped';
     var notePx = noteWidthPixels(60, widthPct, mode, L);
     var arPx = KEYBOARD.span(60).width * L.width * (state.arShare == null ? DEFAULTS.arShare : state.arShare);
     return {
@@ -194,6 +201,8 @@
       arPx: arPx, ratio: arPx / notePx,
       lookahead: L.lookahead,
       longest: longestStageSeconds(L, state),
+      bar4: stageNote({ pitch: 60, start: 0, duration: 4 }, 0,
+        Object.assign({}, state, { layout: L, widthPct: widthPct, widthMode: mode })).barSeconds,
       arSeconds: arReach(state) / (state.arFall == null ? DEFAULTS.arFall : state.arFall)
     };
   }
@@ -385,7 +394,7 @@
 
   var state = {
     height: 1080, width: 1920, keyboardScale: 100,
-    widthPct: 80, widthMode: 'lane', minAspect: 0, effects: true,
+    widthPct: 80, widthMode: 'clamped', lengthMode: 'fixed', minAspect: 0, effects: true,
     position: 0, playing: true, loop: 18
   };
   var canvases = { stage: null, flat: null, '3d': null };
@@ -433,7 +442,8 @@
   function updateStats() {
     var s = statsFor(state.height, state);
     var L = layoutFor(state);
-    var n = stageNote({ pitch: 60, start: 0, duration: 4 }, 0, { layout: L, widthPct: state.widthPct, widthMode: state.widthMode });
+    var n = stageNote({ pitch: 60, start: 0, duration: 4 }, 0,
+      { layout: L, widthPct: state.widthPct, widthMode: state.widthMode, lengthMode: state.lengthMode });
     var ar4 = arNote({ pitch: 60, start: 0, duration: 4 }, 0, { layout: L, model: MODELS.FLAT, arShare: DEFAULTS.arShare });
     var ar4d = arNote({ pitch: 60, start: 0, duration: 4 }, 0, { layout: L, model: MODELS.AR3D, arShare: DEFAULTS.arShare, minAspect: state.minAspect });
 
@@ -455,7 +465,7 @@
       var r = statsFor(h, state);
       rows += '<tr' + (h === state.height ? ' class="on"' : '') + '><td>' + h + 'p</td><td>' + r.notePx.toFixed(2) +
         '</td><td>' + r.pctWhite.toFixed(1) + '%</td><td>' + r.pctBlack.toFixed(1) + '%</td><td>' +
-        r.arPx.toFixed(2) + '</td><td>' + r.lookahead.toFixed(2) + ' s</td><td>' + r.longest.toFixed(2) +
+        r.arPx.toFixed(2) + '</td><td>' + r.lookahead.toFixed(2) + ' s</td><td>' + r.bar4.toFixed(2) +
         '</td><td>' + r.arSeconds.toFixed(2) + '</td></tr>';
     });
     document.getElementById('measure-rows').innerHTML = rows;
@@ -516,6 +526,11 @@
 
     var mode = document.getElementById('width-mode');
     if (mode) mode.addEventListener('change', function () { state.widthMode = mode.value; updateStats(); render(); });
+
+    var lengthMode = document.getElementById('length-mode');
+    if (lengthMode) lengthMode.addEventListener('change', function () {
+      state.lengthMode = lengthMode.value; updateStats(); render();
+    });
 
     var minAspect = document.getElementById('min-aspect');
     if (minAspect) minAspect.addEventListener('input', function () {

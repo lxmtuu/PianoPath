@@ -136,9 +136,16 @@
       <div class="control">
         <label for="width-mode">Quy ước bề rộng</label>
         <select id="width-mode">
-          <option value="lane">Lane (hiện tại)</option>
-          <option value="clamped">Lane + kẹp 98% phím đen</option>
+          <option value="clamped" selected>Đã sửa: lane + kẹp 98% phím đen</option>
+          <option value="lane">Trước sửa: lane (tràn ở 100%)</option>
           <option value="span">Theo phím (Fit keys)</option>
+        </select>
+      </div>
+      <div class="control">
+        <label for="length-mode">Độ dài thanh</label>
+        <select id="length-mode">
+          <option value="fixed" selected>Đã sửa: trần 20 s</option>
+          <option value="old">Trước sửa: 0,9·hitY</option>
         </select>
       </div>
       <div class="control">
@@ -194,7 +201,7 @@
     <thead>
       <tr>
         <th>Khung</th><th>Nốt stage (px)</th><th>% phím trắng</th><th>% phím đen</th>
-        <th>Nốt AR (px)</th><th>Lookahead</th><th>Thanh dài nhất</th><th>AR reach</th>
+        <th>Nốt AR (px)</th><th>Lookahead</th><th>Thanh 4 s</th><th>AR reach</th>
       </tr>
     </thead>
     <tbody id="measure-rows"></tbody>
@@ -203,13 +210,13 @@
   <h2>Đọc gì ở đây</h2>
   <div class="note">
     <b>N1 — bề rộng.</b> Ở 1080p và 80%, nốt stage rộng 17,45 px: 47,3% phím trắng nhưng 90,9% phím đen.
-    AR phủ 86% span phím thật nên nốt trắng rộng gấp 1,82×. Đổi “Quy ước bề rộng” sang <em>Fit keys</em> để thấy
-    phương án dùng span; sang <em>Lane + kẹp</em> để thấy cách chặn tràn ở 100%.
+    AR phủ 86% span phím thật nên nốt trắng rộng gấp 1,82×. Bản đã sửa kẹp ở 98% phím đen: kéo lên 100% thì nốt
+    còn 18,82 px thay vì tràn 13,6%. Chọn <em>Trước sửa</em> để thấy cái cũ; <em>Fit keys</em> để thấy phương án span.
   </div>
   <div class="note warn" style="margin-top:10px">
-    <b>N2 — độ dài thanh.</b> Thanh bị kẹp ở 0,9·hitY, nên nốt 4 s chỉ vẽ dài 2,50 s (900p), 3,00 s (1080p),
-    4,00 s (1440p); AR luôn cắt ở 3,0 s. Đổi “Khung hình” và nhìn cột <em>thanh 4 s →</em> dưới panel stage.
-    Nốt vẫn vào đúng lookahead — phần đuôi mới bị mất.
+    <b>N2 — độ dài thanh.</b> Bản đã sửa bỏ clamp theo cửa sổ: nốt 4 s là thanh 4,00 s ở cả 900p, 1080p và
+    1440p, chỉ phần nhìn thấy khác nhau; trần an toàn là 20 s. Chọn <em>Trước sửa</em> để thấy 2,50 / 3,00 / 4,00 s
+    và 10% trống trên cùng. AR vẫn cắt ở 3,0 s vì đó là <em>vùng nhìn</em>, không phải giới hạn duration.
   </div>
   <div class="note" style="margin-top:10px">
     <b>N3 — AR phẳng.</b> Tắt/bật “Hiệu ứng AR 3D”: panel phẳng không có ghost, landing glow hay nhãn; panel 3D có.
@@ -220,7 +227,8 @@
   <p class="sub" style="margin-bottom:0">
     Đây là hình học và thời gian, không phải render thật: màu, bloom và vật liệu được đơn giản hoá; AR dùng phép
     chiếu phẳng/lược đồ với một key-depth bằng chiều cao bàn phím, không đi qua calibration camera. Nốt dùng chung
-    một danh sách demo; nhịp và vị trí là giả lập. Muốn con số chính xác của từng hằng số, chạy
+    một danh sách demo; nhịp và vị trí là giả lập. Các nút <em>Trước sửa</em> chỉ để so sánh lịch sử; mặc định là
+    hình học đã sửa. Muốn con số chính xác của từng hằng số, chạy
     <code>python3 tools/note_effects_report.py --check</code>.
   </p>
 

@@ -36,6 +36,7 @@ GPU_LOOK = read("Gpu/GpuLook.cs")
 AR_PROJECTION = read("Camera/ArProjection.cs")
 AR_OPTIONS = read("Camera/ArOptions.cs")
 CATALOG = read("Stage/Effects/EffectCatalog.cs")
+NOTE_GEOMETRY = read("Stage/NoteGeometry.cs")
 
 V = {
     "fall_speed": float(one(r"internal const double FallSpeed = ([0-9.]+);", STAGE, "stage fall speed")),
@@ -51,6 +52,8 @@ V = {
     "ar_release": float(one(r"internal const double ReleaseLife = ([0-9.]+);", AR_PROJECTION, "AR release life")),
     "ar_live_reach_s": float(one(r"LivePressReachSeconds = ([0-9.]+);", AR_OPTIONS, "AR live reach seconds")),
     "ar_lookahead_s": float(one(r"LookaheadDefault = ([0-9.]+)", AR_OPTIONS, "AR lookahead default")),
+    "max_note_seconds": float(one(r"MaxNoteSeconds = ([0-9.]+);", NOTE_GEOMETRY, "max note seconds")),
+    "black_fill": float(one(r"BlackKeyFill = ([0-9.]+);", NOTE_GEOMETRY, "black key fill")),
 }
 entries = [line for line in CATALOG.splitlines() if line.lstrip().startswith('new("')]
 V["ids"] = len(entries)
@@ -76,6 +79,7 @@ def layout(width: int, height: int) -> dict[str, float]:
     white = width / 52
     black = white * .52
     speed = V["fall_speed"] * V["note_fall"] / 550
+    note_px = min(lane * V["note_width"] / 100, black * V["black_fill"])
     return {
         "height": height,
         "keyboard": keyboard,
@@ -83,11 +87,11 @@ def layout(width: int, height: int) -> dict[str, float]:
         "lane": lane,
         "white": white,
         "black": black,
-        "note_px": lane * V["note_width"] / 100,
-        "note_pct_white": lane * V["note_width"] / 100 / white * 100,
-        "note_pct_black": lane * V["note_width"] / 100 / black * 100,
+        "note_px": note_px,
+        "note_pct_white": note_px / white * 100,
+        "note_pct_black": note_px / black * 100,
         "ar_px": white * V["ar_width"],
-        "ar_white_vs_stage": (white * V["ar_width"]) / (lane * V["note_width"] / 100),
+        "ar_white_vs_stage": (white * V["ar_width"]) / note_px,
         "speed": speed,
         "lookahead_s": hit / speed,
         "longest_note_s": hit * .9 / speed,
@@ -114,21 +118,19 @@ def main() -> int:
     print(f"AR live release: {V['ar_release']} s flat vs {V['ar_live_reach_s']} s projected = {ratios['ar_release']:.1f}x")
     print(f"AR width share {V['ar_width']:.2f} vs stage {V['note_width'] / 100:.2f} (note width %): a white-key AR note is {rows[0]['ar_white_vs_stage']:.2f}x the stage note")
     print()
-    print("| khung | keyTop | lane | nốt WPF/GPU | % phím trắng | % phím đen | nốt AR (phím trắng) | lookahead | thanh dài nhất (giây) |")
+    print("| khung | keyTop | lane | nốt WPF/GPU | % phím trắng | % phím đen | nốt AR (phím trắng) | lookahead | thanh 4 s |")
     print("|---|---|---|---|---|---|---|---|---|")
     for r in rows:
-        print(f"| {r['height']}p | {r['hit']:.1f} | {r['lane']:.2f} | {r['note_px']:.2f} | {r['note_pct_white']:.1f}% | {r['note_pct_black']:.1f}% | {r['ar_px']:.2f} | {r['lookahead_s']:.2f} s | {r['longest_note_s']:.2f} s |")
+        print(f"| {r['height']}p | {r['hit']:.1f} | {r['lane']:.2f} | {r['note_px']:.2f} | {r['note_pct_white']:.1f}% | {r['note_pct_black']:.1f}% | {r['ar_px']:.2f} | {r['lookahead_s']:.2f} s | {min(4.0, V['max_note_seconds']):.2f} s |")
 
     print()
-    print(f"| độ dài nốt | 900p: thanh dài | 1080p | 1440p | AR (Reach {V['ar_lookahead_s']:.1f} s) |")
+    print(f"| độ dài nốt | 900p | 1080p | 1440p | AR (Reach {V['ar_lookahead_s']:.1f} s) |")
     print("|---|---|---|---|---|")
-    for duration in (0.5, 2.0, 3.0, 4.0, 6.0):
-        cells = []
-        for r in sorted(rows, key=lambda row: row["height"]):
-            shown = min(duration, r["longest_note_s"])
-            cells.append(f"{shown:.2f} s" + (f" (hụt {duration - shown:.2f})" if duration - shown > 1e-3 else ""))
+    for duration in (0.5, 2.0, 3.0, 4.0, 6.0, 30.0):
+        shown = min(duration, V["max_note_seconds"])
+        cells = [f"{shown:.2f} s" for _ in rows]
         ar = min(duration, V["ar_lookahead_s"])
-        cells.append(f"{ar:.2f} s" + (f" (hụt {duration - ar:.2f})" if duration - ar > 1e-3 else ""))
+        cells.append(f"{ar:.2f} s" + (f" (cắt {duration - ar:.2f})" if duration - ar > 1e-3 else ""))
         print(f"| {duration:g} s | " + " | ".join(cells) + " |")
 
     if "--check" in sys.argv:
@@ -139,6 +141,7 @@ def main() -> int:
             "wpf_ring_cap": 64, "wpf_flash_cap": 32, "gpu_ring_cap": 96, "gpu_flash_cap": 48,
             "wpf_flash_life": .18, "gpu_flash_life_0": .38, "gpu_flash_life_other": .26,
             "ids": 87, "available": 86, "planned": 1,
+            "max_note_seconds": 20.0, "black_fill": .98,
         }
         bad = {k: (V[k], v) for k, v in pinned.items() if abs(float(V[k]) - float(v)) > 1e-9}
         if bad:

@@ -1231,7 +1231,8 @@ internal sealed partial class PianoStage : FrameworkElement
         var lookBehind = hitY / noteSpeed + 1;
         // Notes are sorted by start time: anything still on screen started no earlier than (position - 1 s - longest note).
         var latestStart = _position + lookBehind;
-        var noteWidth = lane * _visual.NoteWidth / 100;
+        var noteWidth = NoteGeometry.Width(lane, _visual.NoteWidth / 100,
+            NoteGeometry.BlackKeyWidth(width, KeyboardLayout.Active.WhiteCount));
         var gap = Math.Min(_visual.NoteGap, 12);
         var rising = _visual.NoteDirection == "Up";
         for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _position - 1 - _maxNoteDuration); i < _notes.Count; i++)
@@ -1239,7 +1240,7 @@ internal sealed partial class PianoStage : FrameworkElement
             var note = _notes[i];
             if (note.Start > latestStart) break;
             if (note.Pitch < FirstPitch || note.Pitch >= FirstPitch + KeyCount || note.End < _position - 1) continue;
-            var noteHeight = Math.Clamp(note.Duration * noteSpeed - gap, _visual.NoteMinLength, hitY * .9);
+            var noteHeight = NoteGeometry.Height(note.Duration, noteSpeed, gap, _visual.NoteMinLength);
             var color = note.Played ? Color.FromRgb(82, 237, 208) : note.Missed ? Color.FromRgb(255, 83, 113) : NoteColor(note.Pitch, note.Track);
             if (_visual.VelocityColor && !note.Played && !note.Missed) // Velocity → Color on song notes.
                 color = Blend(color, VelocityTint(note.Velocity / 127.0), _visual.VelocityColorAmount / 100);
@@ -1770,7 +1771,8 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void DrawLiveTrails(DrawingContext dc, double width, double hitY, double lane)
     {
-        var noteWidth = lane * Math.Max(_visual.NoteWidth, 60) / 100;
+        var noteWidth = NoteGeometry.Width(lane, Math.Max(_visual.NoteWidth, 60) / 100,
+            NoteGeometry.BlackKeyWidth(width, KeyboardLayout.Active.WhiteCount));
         var rising = _visual.NoteDirection == "Up";
         foreach (var trail in _liveTrails)
         {

@@ -108,6 +108,7 @@
     <Compile Include="..\..\Stage\Effects\AccessibilityContracts.cs" Link="Product\Stage\Effects\AccessibilityContracts.cs" />
     <Compile Include="..\..\Gpu\GpuAdapterSelection.cs" Link="Product\Gpu\GpuAdapterSelection.cs" />
     <Compile Include="..\..\Stage\KeyboardLayout.cs" Link="Product\Stage\KeyboardLayout.cs" />
+    <Compile Include="..\..\Stage\NoteGeometry.cs" Link="Product\Stage\NoteGeometry.cs" />
     <Compile Include="..\..\Camera\Homography.cs" Link="Product\Camera\Homography.cs" />
     <Compile Include="..\..\Camera\ArCalibration.cs" Link="Product\Camera\ArCalibration.cs" />
     <Compile Include="..\..\Camera\ArCameraPose.cs" Link="Product\Camera\ArCameraPose.cs" />

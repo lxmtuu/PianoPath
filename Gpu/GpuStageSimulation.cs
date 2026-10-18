@@ -630,7 +630,8 @@ internal sealed partial class GpuStageSimulation
         var look = input.Look;
         // Over the camera, the AR layer owns song notes in both flat and projected modes; suppress stage-space notes and trails.
         if (!look.ShowNotes || !onStage) return;
-        var noteWidth = layout.Lane * look.NoteWidth;
+        var noteWidth = (float)NoteGeometry.Width(layout.Lane, look.NoteWidth,
+            NoteGeometry.BlackKeyWidth(layout.Width, layout.Keys.WhiteCount));
         var hitY = layout.HitY;
         const float landingWindow = .55f;
         if (songNotes && input.Playing && input.Notes.Count > 0)
@@ -647,7 +648,7 @@ internal sealed partial class GpuStageSimulation
                     var note = list[i];
                     if (note.Start > latestStart) break;
                     if (!OnKeyboard(note.Pitch) || note.End < input.Position - 1) continue;
-                    var height = (float)Math.Clamp(note.Duration * speed - look.NoteGap, look.NoteMinLength, hitY * .9);
+                    var height = (float)NoteGeometry.Height(note.Duration, speed, look.NoteGap, look.NoteMinLength);
                     var played = note.Played; var missed = note.Missed;
                     var color = played ? new Vector3(82 / 255f, 237 / 255f, 208 / 255f) : missed ? new Vector3(1f, 83 / 255f, 113 / 255f) : look.NoteColor(note.Pitch, note.Track);
                     if (look.VelocityColor && !played && !missed) color = Vector3.Lerp(color, VelocityTint(note.Velocity / 127f), look.VelocityColorAmount);

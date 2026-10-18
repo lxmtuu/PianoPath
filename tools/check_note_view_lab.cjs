@@ -25,7 +25,7 @@ const M = LAB.MODELS;
 
 function state(over) {
   return Object.assign({
-    height: 1080, width: 1920, keyboardScale: 100, widthPct: 80, widthMode: 'lane',
+    height: 1080, width: 1920, keyboardScale: 100, widthPct: 80, widthMode: 'clamped', lengthMode: 'fixed',
     minAspect: 0, effects: true, arFall: D.arFall, arLookahead: D.arLookahead, arShare: D.arShare
   }, over || {});
 }
@@ -58,28 +58,48 @@ check('span mode black 15.36 px at 80%', near(LAB.noteWidthPixels(61, 80, 'span'
 check('clamp leaves 80% unchanged', near(LAB.noteWidthPixels(60, 80, 'clamped', L), nw));
 check('clamp stops 100% at 98% of the black key',
   near(LAB.noteWidthPixels(60, 100, 'clamped', L), .98 * L.blackWidth));
+check('before the fix, lane 100% was 21.818 px',
+  near(LAB.noteWidthPixels(60, 100, 'lane', L), L.lane, 1e-9));
+check('stats default (clamped) at 100% is 18.816 px',
+  near(LAB.statsFor(1080, { widthPct: 100, widthMode: 'clamped' }).notePx, .98 * L.blackWidth, 1e-9));
 
-console.log('bar length: the 0.9*hiY clamp');
+console.log('bar length: fixed policy vs the old 0.9*hiY clamp');
 const st = LAB.statsFor(1080, state());
-check('longest stage bar at 1080p is 3.003 s', near(st.longest, 3.00287, 1e-4));
-check('longest stage bar at 900p is 2.504 s', near(LAB.statsFor(900, state()).longest, 2.50368, 1e-4));
-check('longest stage bar at 1440p is 4.236 s', near(LAB.statsFor(1440, state()).longest, 4.23566, 1e-4));
+check('fixed: longest bar is the 20 s cap', near(st.longest, 20, 1e-9));
+check('fixed: a 4 s note is a 4.000 s bar at 1080p', near(st.bar4, 4, 1e-9));
+check('fixed: a 4 s note is a 4.000 s bar at 900p',
+  near(LAB.statsFor(900, state()).bar4, 4, 1e-9));
+check('fixed: a 4 s note is a 4.000 s bar at 1440p',
+  near(LAB.statsFor(1440, state()).bar4, 4, 1e-9));
+const old1 = LAB.statsFor(1080, { lengthMode: 'old' });
+const old9 = LAB.statsFor(900, { lengthMode: 'old' });
+const old14 = LAB.statsFor(1440, { lengthMode: 'old' });
+check('old: longest 3.003 s at 1080p', near(old1.longest, 3.00287, 1e-4));
+check('old: longest 2.504 s at 900p', near(old9.longest, 2.50368, 1e-4));
+check('old: longest 4.236 s at 1440p', near(old14.longest, 4.23566, 1e-4));
 const n4 = LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 0, Object.assign(state(), { layout: L }));
-check('4 s note at 1080p is clamped to 3.003 s', near(n4.barSeconds, 3.00287, 1e-4) && n4.clipped);
-check('4 s note at 1440p keeps 4.000 s',
-  near(LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 0, Object.assign(state({ height: 1440, width: 2560 }), { layout: LAB.layoutFor(state({ height: 1440, width: 2560 })) })).barSeconds, 4, 1e-9));
-check('4 s note at 900p is clamped to 2.504 s',
-  near(LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 0, Object.assign(state({ height: 900, width: 1600 }), { layout: LAB.layoutFor(state({ height: 900, width: 1600 })) })).barSeconds, 2.50368, 1e-4));
-const topAtOnset = L.hitY - n4.height;
-check('clamped bar keeps a 10% gap at the top', near(topAtOnset, L.hitY * .1, 1e-6));
+check('fixed: 4 s note is not clipped at 1080p', !n4.clipped && near(n4.barSeconds, 4, 1e-9));
+const n4Old = LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 0, Object.assign(state({ lengthMode: 'old' }), { layout: L }));
+check('old: 4 s note is 3.003 s at 1080p', near(n4Old.barSeconds, 3.00287, 1e-4) && n4Old.clipped);
+check('old: 4 s note is 2.504 s at 900p',
+  near(LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 0,
+    Object.assign(state({ height: 900, width: 1600, lengthMode: 'old' }),
+      { layout: LAB.layoutFor(state({ height: 900, width: 1600 })) })).barSeconds, 2.50368, 1e-4));
+const oldTop = L.hitY - n4Old.height;
+check('old: clamped bar keeps a 10% gap at the top', near(oldTop, L.hitY * .1, 1e-6));
+check('fixed: a 4 s bar starts above the viewport', L.hitY - n4.height < 0);
+check('fixed: a 6 s note keeps 6.000 s',
+  near(LAB.stageNote({ pitch: 60, start: 0, duration: 6 }, 0, Object.assign(state(), { layout: L })).barSeconds, 6, 1e-9));
+check('fixed: a 30 s note stops at 20.000 s',
+  near(LAB.stageNote({ pitch: 60, start: 0, duration: 30 }, 0, Object.assign(state(), { layout: L })).barSeconds, 20, 1e-9));
 
 console.log('entry and exit timing');
 const appear = LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, -L.lookahead, Object.assign(state(), { layout: L }));
 check('stage note enters with bottom at 0', near(appear.bottom, 0, 1e-9));
 const before = LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, -L.lookahead - .01, Object.assign(state(), { layout: L }));
 check('stage note is absent just before lookahead', !before.visible);
-const after = LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 3.1, Object.assign(state(), { layout: L }));
-check('stage 4 s bar is gone 3.1 s after onset', !after.visible);
+const after = LAB.stageNote({ pitch: 60, start: 0, duration: 4 }, 4.05, Object.assign(state(), { layout: L }));
+check('stage 4 s bar is gone 4.05 s after onset', !after.visible);
 
 console.log('AR flat and 3D');
 const reach = LAB.arReach(state());
