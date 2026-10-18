@@ -50,6 +50,39 @@ internal static class ArDampers
         return t * t * (3 - 2 * t);
     }
 
+    /// <summary>Time constant for a pedal moving down: about 121 ms from 10% to 90%.</summary>
+    internal const double AttackSeconds = .055;
+
+    /// <summary>Time constant for a pedal coming up: a little slower, because the real pedal has weight.</summary>
+    internal const double ReleaseSeconds = .075;
+
+    /// <summary>
+    /// One exponential smoother for every pedal-driven light. <paramref name="dt"/> is the rendered frame's
+    /// real time (not the particle time factor); a missing or non-positive step keeps the previous value.
+    /// </summary>
+    internal static double Smooth(double previous, double target, double dt)
+    {
+        var p = ClampLevel(previous);
+        if (!(dt > 0) || !double.IsFinite(dt)) return p;
+        var t = ClampLevel(target);
+        var tau = t > p ? AttackSeconds : ReleaseSeconds;
+        return p + (t - p) * (1 - Math.Exp(-dt / tau));
+    }
+
+    /// <summary>How much of the strip's extra depth the glowing core travels across.</summary>
+    internal const double CoreTravel = .55;
+
+    /// <summary>
+    /// The core's uv.y for a pedal lift: 1 on the key edge with the pedal up, moving toward the fallboard by
+    /// <see cref="CoreTravel"/> of the strip's extra depth, so it never leaves the lit band. Kept here rather
+    /// than in the shader so the prototype, the test and the shader share one number.
+    /// </summary>
+    internal static double CorePositionFor(double lift)
+    {
+        var l = Math.Clamp(lift, 0, 1);
+        return 1 - CoreTravel * (LiftDepth * l) / (BaseDepth + LiftDepth * l);
+    }
+
     /// <summary>How far the strip reaches past the key back edge for a pedal lift 0..1.</summary>
     internal static double DepthFor(double lift) => BaseDepth + LiftDepth * Math.Clamp(lift, 0, 1);
 

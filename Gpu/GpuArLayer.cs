@@ -131,11 +131,11 @@ internal sealed partial class GpuArLayer
 
         // The damper strip is a scene element, so it packs before everything born with a strike: it hugs the key
         // back edge, waves only with the pedal level, and takes the look's halo colour (the Pedal Glow family).
-        var damperLift = ArDampers.ClampLevel(input.SustainLevel);
+        var damperLift = ArDampers.ClampLevel(simulation.SustainLift);
         if (ar.ShowDamperStrip && ArElementCatalog.CanDraw(ar.Quality, ArElement.Dampers)
             && ArDampers.TryPatch(ar.Calibration, view, damperLift, out var damperPatch))
         {
-            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4(0, 0, 11f, 0)));
+            quads.Add(Pack(damperPatch, look.ArDamperColor, (float)(ArDampers.AlphaFor(damperLift) * opacity), new Vector4((float)damperLift, 0, 11f, (float)ArDampers.CorePositionFor(damperLift))));
             DamperStripCount++;
         }
 

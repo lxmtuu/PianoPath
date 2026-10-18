@@ -160,9 +160,11 @@ internal sealed partial class GpuStageSimulation
     internal bool IsActive(int pitch) => pitch is >= 0 and < 128 && _active[pitch];
     internal Vector3 HorizonColor { get; private set; }
     internal float Activity => _activity;
-    private float _pedalBoost = 1;
-    /// <summary>Pedal Glow: 1, or up to 2 while the sustain pedal is down (eased so the glow swells and settles).</summary>
+    private float _pedalBoost = 1, _sustainLift;
+    /// <summary>Pedal Glow: 1, or up to 2 while the sustain pedal is down, following the shared smoothed lift.</summary>
     internal float PedalBoost => _pedalBoost;
+    /// <summary>The damper's lift after the shared attack/release smoother; the AR strip and Pedal Glow read it.</summary>
+    internal float SustainLift => _sustainLift;
     private float _energy;
     /// <summary>Audio reactive: 1, or more after a run of note onsets (the software stage's EnergyBoost envelope).</summary>
     internal float EnergyBoost => _look.AudioReactive ? 1 + _energy * _look.AudioReactiveAmount : 1;
@@ -318,8 +320,9 @@ internal sealed partial class GpuStageSimulation
             _spill[pitch] = Math.Min(1, spill);
         }
         _activity = Math.Min(1, totalGlow / 4);
-        var pedalTarget = look.PedalGlow && input.Sustain ? 1 + look.PedalGlowIntensity * input.SustainLevel : 1;
-        _pedalBoost += (pedalTarget - _pedalBoost) * (1 - MathF.Exp(-frameDt * 10));
+        // The strip and the stage glow share one smoothed lift, so half-pedalling moves them together.
+        _sustainLift = (float)ArDampers.Smooth(_sustainLift, input.SustainLevel, frameDt);
+        _pedalBoost = look.PedalGlow ? 1 + look.PedalGlowIntensity * _sustainLift : 1;
         _energy *= MathF.Exp(-2.2f * frameDt);
         // the theme's halo colour, as the software stage paints it, warmed a little by the keys that sound
         HorizonColor = ToLinear(totalGlow > .01f ? Vector3.Lerp(look.HaloColor, horizon / totalGlow, .35f * Math.Min(1, totalGlow)) : look.HaloColor);
@@ -1012,7 +1015,8 @@ internal sealed partial class GpuStageSimulation
         if (look.ShowHalo)
         {
             var c = ToLinear(look.HaloColor) * (.5f + look.HaloIntensity * .9f) * (1 + _activity * .6f) * GlowBoost;
-            sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, hitY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
+            var haloY = hitY - (look.PedalGlow ? 5 * _sustainLift : 0);   // same rise as the WPF line, in stage DIPs
+            sprites.Add(new GpuSpriteInstance { PosSize = new Vector4(layout.Width / 2, haloY, layout.Width / 2, 6), Color = new Vector4(c, 1), Dir = new Vector4(1, 0, 3.2f, 0) });
             if (look.HaloPulse && look.HaloPulseIntensity > 0) AddHaloPulses(sprites, look, layout);
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);

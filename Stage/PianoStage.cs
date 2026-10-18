@@ -94,7 +94,7 @@ internal sealed partial class PianoStage : FrameworkElement
     private double _releaseScanPos;
     private double _beatPulse, _energyLevel;
     private bool _sustainPedal;
-    private double _sustainRaw, _sustainLift;
+    private double _sustainRaw, _sustainTarget, _sustainLift;
     private bool _sustainLevelSeen;
     private readonly PianoSimulation _simulation = new();
     private bool _playing, _anyHeat;
@@ -286,8 +286,13 @@ internal sealed partial class PianoStage : FrameworkElement
 
     private void ApplySustain()
     {
-        _sustainLift = _sustainPedal ? ArDampers.LiftFromPedal(_sustainRaw) : 0;
-        _simulation.SetSustain(_sustainLift);
+        _sustainTarget = _sustainPedal ? ArDampers.LiftFromPedal(_sustainRaw) : 0;
+        if (!_playing)
+        {
+            // Nothing is advancing while stopped, so a pedal pressed at the bench must still light at once.
+            _sustainLift = _sustainTarget;
+            _simulation.SetSustain(_sustainLift);
+        }
         _gpu?.SetSustainLevel(_sustainPedal, _sustainRaw);
         InvalidateVisual();
     }
@@ -629,7 +634,10 @@ internal sealed partial class PianoStage : FrameworkElement
 
     public void Advance(double seconds)
     {
-        var dt = Math.Clamp(seconds, 0, .05) * _visual.PhysicsTimeFactor / 100; _elapsed += dt;
+        var frameSeconds = Math.Clamp(seconds, 0, .05);
+        _sustainLift = ArDampers.Smooth(_sustainLift, _sustainTarget, frameSeconds);
+        _simulation.SetSustain(_sustainLift);
+        var dt = frameSeconds * _visual.PhysicsTimeFactor / 100; _elapsed += dt;
         _simulation.Advance(dt);
         _beatPulse *= Math.Exp(-6 * dt); _energyLevel *= Math.Exp(-2.2 * dt); // smart-modulator envelopes decay
         if (seconds > 0) _fps += (1 / seconds - _fps) * .08;
@@ -3042,8 +3050,10 @@ internal sealed partial class PianoStage : FrameworkElement
                 dc.DrawEllipse(glowBrush, null, new Point(x, top + 2), radiusX, radiusY);
             }
         }
-        var pedalGlow = PedalBoost(); var glowPen = Pen(Color.FromArgb((byte)Math.Clamp((30 + _visual.KeyLighting * .95) * pedalGlow, 0, 255), halo.R, halo.G, halo.B), (5 + _visual.BloomSize / 10) * pedalGlow);
-        dc.DrawLine(glowPen, new Point(0, top + 1), new Point(width, top + 1));
+        var pedalGlow = PedalBoost();
+        var pedalRise = _visual.PedalGlow ? 6 * _sustainLift : 0;   // the line climbs with the damper, AR strip's core does the same
+        var glowPen = Pen(Color.FromArgb((byte)Math.Clamp((30 + _visual.KeyLighting * .95) * pedalGlow, 0, 255), halo.R, halo.G, halo.B), (5 + _visual.BloomSize / 10) * pedalGlow);
+        dc.DrawLine(glowPen, new Point(0, top + 1 - pedalRise), new Point(width, top + 1 - pedalRise));
         if (TryDrawShadedKeyboard(dc, width, height - top, top))
         {
             // The bake already carries its own shadows, occlusion and press animation, so only the

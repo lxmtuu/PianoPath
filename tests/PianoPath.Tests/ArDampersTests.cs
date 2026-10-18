@@ -37,6 +37,25 @@ public class ArDampersTests
     }
 
     [Fact]
+    public void Smooth_uses_the_shared_attack_and_release_times()
+    {
+        Assert.Equal(1 - Math.Exp(-1), ArDampers.Smooth(0, 1, ArDampers.AttackSeconds), 9);
+        Assert.Equal(Math.Exp(-1), ArDampers.Smooth(1, 0, ArDampers.ReleaseSeconds), 9);
+        Assert.Equal(.3, ArDampers.Smooth(.3, .3, .02), 9);
+        Assert.Equal(.3, ArDampers.Smooth(.3, 1, 0), 9);           // a paused frame never moves the pedal
+        Assert.Equal(0, ArDampers.Smooth(0, 1, double.NaN), 9);    // no real time, no change
+    }
+
+    [Fact]
+    public void Core_stays_on_the_edge_with_the_pedal_up_and_runs_partway_back_at_full_lift()
+    {
+        Assert.Equal(1, ArDampers.CorePositionFor(0), 9);
+        Assert.Equal(1 - .55 * .05 / .11, ArDampers.CorePositionFor(.5), 9);
+        Assert.Equal(1 - .55 * .10 / .16, ArDampers.CorePositionFor(1), 9);
+        Assert.Equal(.65625, ArDampers.CorePositionFor(1), 9);   // 8.18 px of travel at 45 degrees
+    }
+
+    [Fact]
     public void Half_travel_lifts_the_strip_halfway_through_its_band()
     {
         var lift = ArDampers.LiftFromPedal(.375);

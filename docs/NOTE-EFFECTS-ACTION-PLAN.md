@@ -34,9 +34,10 @@
 
 **Trạng thái P0:** N1 và N2 **đã sửa** trong mã sản phẩm (helper `Stage/NoteGeometry.cs`, test
 `tests/PianoPath.Tests/NoteGeometryTests.cs`). N3 **đã chốt (b)** và sửa ở mức cảnh báo. N4 **đã chốt là khác
-biệt có chủ ý** (0,35 s cho thanh phẳng nằm trên phím, 3,0 s cho thanh 3D bay vào chiều sâu). D0 bước 1–2 **đã
-vào mã**: CC64 liên tục tới hình, đường cong cơ học 0–25% chết / đầy ở 50%, Pedal Glow sáng theo mức pedal;
-bước làm mượt dùng chung còn lại.
+biệt có chủ ý** (0,35 s cho thanh phẳng nằm trên phím, 3,0 s cho thanh 3D bay vào chiều sâu). D0 bước 1–3 **đã
+vào mã**: CC64 liên tục tới hình, đường cong cơ học 0–25% chết / đầy ở 50%, Pedal Glow sáng theo mức pedal và
+một bộ làm mượt 55/75 ms dùng chung. D1 **đã vào mã**: lõi dải AR chạy theo lift, vạch WPF và halo GPU nhích
+lên cùng quy ước.
 
 ## 1. Đã kiểm tra gì
 
@@ -374,8 +375,8 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N13 | Lookahead stage ↔ AR | lệch ≤0,1 s khi chuyển chế độ | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | đọc được trên 3 nền | S | tài liệu này |
 | N15 | Nợ tài liệu/trạng thái | audit/roadmap khớp; tool trong CI | S | tài liệu này |
-| D0 | CC64 liên tục vào hình | **bước 1–2 xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%; smoothing còn lại | S | DAMPER §7 |
-| D1 | Lõi sáng chạy theo lift | 8,1 px @45°, 6,6 px @90° | S | DAMPER §7 |
+| D0 | CC64 liên tục vào hình | **đã xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%, mượt 55/75 ms | S | DAMPER §7 |
+| D1 | Lõi sáng chạy theo lift | **đã xong**: 8,2 px @45°, 6,6 px @90°; vạch WPF 6 px, halo GPU 5 px | S | DAMPER §7 |
 | D2 | 88 ô LED + tick theo phím | giữ phím qua pedal; rơi ≤200 ms | M | DAMPER §7 |
 | D3 | Bloom threshold, thở, màu | chỉ khi pedal giữ; tắt được | S | DAMPER §7 |
 | W0–W3 | Bốn lát cắt chuyển động hạt | theo bốn cổng trong PARTICLE-MOTION-REVIEW | M–L | PARTICLE §7 |

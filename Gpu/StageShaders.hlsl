@@ -972,13 +972,19 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
     if (kind > 10.5 && kind < 11.5)
     {
         // The damper strip (roadmap §14.3, the Dampers element): a soft glowing line glued to the key back edge.
-        // uv.y runs from the fallboard side (0) to the key edge (1): a hot core hugs the key edge while a broad
-        // halo falls away across the strip; the two u ends feather so the line never hard-cuts at the frame.
-        float feather = 1.0 - i.Uv.y;
-        float core = exp(-feather * feather * 38.0) * 2.1;
-        float halo = exp(-feather * 5.0) * 0.55;
+        // uv.y runs from the fallboard side (0) to the key edge (1). Misc.x is the lift, Misc.w the hot core's
+        // position (ArDampers.CorePositionFor); a faint contact line fades in on the edge as the core leaves, so
+        // the strip reads as a damper rising rather than a line merely getting thicker. The u ends feather.
+        float corePos = saturate(i.Misc.w);
+        float lift = saturate(i.Misc.x);
+        float d = i.Uv.y - corePos;
+        float core = exp(-d * d * 38.0) * 2.1;
+        float edge = 1.0 - i.Uv.y;
+        float halo = exp(-edge * 5.0) * 0.55;
+        // The contact line only fades in as the core leaves, so the pedal-up strip keeps its old look.
+        float contact = exp(-edge * edge * 90.0) * 0.25 * smoothstep(0.0, 0.15, lift);
         float ends = smoothstep(0.0, 0.004, i.Uv.x) * (1.0 - smoothstep(0.996, 1.0, i.Uv.x));
-        float gain = (core + halo) * ends;
+        float gain = (core + halo + contact) * ends;
         float alpha = saturate(gain * 0.5) * i.Color.a;
         return float4(i.Color.rgb * gain * i.Color.a, alpha);
     }
