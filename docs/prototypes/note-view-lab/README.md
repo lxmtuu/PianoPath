@@ -14,9 +14,9 @@ Mục đích là nhìn thấy ba việc N1–N3 trong
 ## Chạy
 
 ```bash
-# từ thư mục gốc repo
-python3 -m http.server 8081 --bind 0.0.0.0 --directory docs/prototypes
-# mở http://localhost:8081/note-view-lab/
+# từ thư mục gốc repo — phục vụ cả repo để link tới docs/ hoạt động
+python3 -m http.server 8081 --bind 0.0.0.0
+# mở http://localhost:8081/docs/prototypes/note-view-lab/
 ```
 
 Trang tĩnh, không cần build, không gọi mạng.
