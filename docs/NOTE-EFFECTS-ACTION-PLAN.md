@@ -6,6 +6,8 @@
 > [VISUAL-EFFECTS-MASTER-ROADMAP.md](VISUAL-EFFECTS-MASTER-ROADMAP.md) (phase và cổng phần cứng) ·
 > [DAMPER-BAR-LIGHT-ANALYSIS.md](DAMPER-BAR-LIGHT-ANALYSIS.md) (D0–D3) ·
 > [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) (W0–W3).
+> **Prototype:** [note-view-lab](prototypes/note-view-lab/index.html) — ba panel WPF/GPU, AR phẳng, AR 3D,
+> cùng một đồng hồ; 44 kiểm tra headless trong `tools/check_note_view_lab.cjs`.
 
 ## 0. Tóm tắt
 
@@ -167,6 +169,8 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   lựa chọn trong tài liệu và UI.
 - **Nghiệm thu:** `NoteWidth = 100` không tràn phím ở cả ba đường; nhãn UI khớp công thức; ảnh A/B 30/60/80/100%
   ở 1080p; nếu giữ hai quy ước thì có một dòng giải thích trong tooltip và tài liệu.
+- **Xem trước:** [note-view-lab](prototypes/note-view-lab/index.html) — đổi "Quy ước bề rộng" giữa Lane, Lane + kẹp,
+  Theo phím.
 - **Cỡ:** S (kẹp + nhãn) / M (Fit keys) · **Phụ thuộc:** không.
 
 #### N2. Thanh nốt dài bị cắt ngắn, độ cắt đổi theo cửa sổ
@@ -182,6 +186,8 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   ở lookahead, AR neo đuôi ở reach — chọn một kiểu cho cả hai hoặc ghi rõ là khác có chủ ý.
 - **Nghiệm thu:** nốt 4 s và 6 s phát ở 900p/1080p/1440p: chiều dài thanh (đo bằng px/speed) giống nhau và bằng
   `min(duration, MaxNoteSeconds)`; đầu nốt vào đúng lookahead; không còn 10% trống; có unit test cho hàm thuần.
+- **Xem trước:** [note-view-lab](prototypes/note-view-lab/index.html) — đổi 900p/1080p/1440p và nhìn dòng
+  "thanh 4 s →" của panel stage.
 - **Cỡ:** M · **Phụ thuộc:** N1 (cùng đụng `DrawNotes`/`BuildNotes`).
 
 #### N3. AR mặc định (phẳng) làm rơi hiệu ứng nốt mà không báo
@@ -197,6 +203,7 @@ nhạc dày có thể "đầy" ở WPF trong khi GPU vẫn còn 90% ngân sách.
   phẳng. Không để setting "bật mà không có tác dụng".
 - **Nghiệm thu:** bật/tắt từng control (trail, ghost, landing, min-aspect, nhãn) ở cả hai chế độ đều có kết quả
   hoặc bị vô hiệu hoá rõ ràng; ảnh chụp A/B cho từng control.
+- **Xem trước:** [note-view-lab](prototypes/note-view-lab/index.html) — bật/tắt "Hiệu ứng AR 3D" để so panel phẳng.
 - **Cỡ:** S cho (a)/(b), M cho (c) · **Phụ thuộc:** không.
 
 #### N4. Release của live bar AR: 0,35 s hay 3,0 s?
