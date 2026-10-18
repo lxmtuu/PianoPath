@@ -759,7 +759,7 @@ internal sealed partial class GpuStageSimulation
     private Vector3 AddNote(GpuInstanceList<GpuNoteInstance> notes, GpuLook look, float x, float y, float w, float h, Vector3 color, float opacity, bool sounding, int pitch, int seed, float direction, float holdBar, float brightness)
     {
         if (sounding && look.HoldColorCycle) color = Vector3.Lerp(color, ColorFromHue(Hue188(pitch) + _time * look.HoldColorCycleSpeed * 3), .8f);
-        if (look.FallingPulse && !sounding) opacity *= .62f + .38f * MathF.Sin((float)_time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f);
+        if (look.FallingPulse && !sounding) opacity *= .62f + .38f * MathF.Sin((float)_time * (float)MotionBudget.PulseAngularRate(look.FallingPulseRate) + pitch * .7f);
         if (look.RainbowTrail) color = ColorFromHue(_time * look.RainbowHueSpeed + pitch * 9);
         var linear = ToLinear(color) * brightness;
         notes.Add(new GpuNoteInstance

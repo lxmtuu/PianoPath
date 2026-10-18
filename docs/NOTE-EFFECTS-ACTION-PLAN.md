@@ -330,14 +330,23 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
 
 #### N11. Accessibility: chưa có "giảm chuyển động/giảm flash" toàn cục
 
-- **Hiện tượng:** từng effect có thể tắt riêng, nhưng không có một công tắc chung; flash dày, 24.000 hạt, pulse
-  và shimmer có thể gây mỏi mắt/nhạy cảm.
-- **Nguồn:** `docs/VISUAL-EFFECTS-MASTER-ROADMAP.md` §5.12; `EffectContracts.cs` có `EffectFlashRisk` nhưng chưa
-  có policy runtime.
-- **Việc cần làm:** một `ReducedMotion` toàn cục (tắt pulse/shimmer/ghost/particles, giảm flash), giới hạn flash
-  theo diện tích/tần số, lưu vào preset; test mọi preset.
-- **Nghiệm thu:** bật công tắc, mọi preset không còn nhấp nháy >3 Hz; ảnh trước/sau; setting round-trip.
-- **Cỡ:** M · **Phụ thuộc:** N5.
+- **Hiện tượng (theo audit gốc):** từng effect có thể tắt riêng, nhưng không có một công tắc chung; flash dày,
+  24.000 hạt, pulse và shimmer có thể gây mỏi mắt/nhạy cảm.
+- **Nguồn:** `docs/VISUAL-EFFECTS-MASTER-ROADMAP.md` §5.12; `Stage/Effects/AccessibilityContracts.cs`.
+- **Thực tế khi làm P1:** phần runtime **đã có trong mã** — ba toggle (Reduced motion, Reduce flashes, High
+  contrast) ở `MainWindow.Settings.cs:965–967`, resolver theo family trong `Stage/Effects/AccessibilityContracts.cs`,
+  và `WithAccessibilityTogglesApplied` (PianoStage áp một lần nên GPU/AR thừa hưởng). Audit gốc coi là chưa có; việc
+  còn thiếu thật sự là **bằng chứng ở mức preset** và chốt tần số.
+- **Đã làm:** `MotionBudget` gom nhịp pulse của nốt (`1,5 + 9·rate` rad/s) cho WPF/GPU/AR — nhanh nhất **1,67 Hz**,
+  dưới mốc 3 Hz (`MotionBudgetTests`, 2 Fact); `VerifyAccessibilityTogglePolicy` quét **cả 14 preset built-in**:
+  Reduced motion tắt pulse, vibration, colour cycle, breath, shimmer, sao băng, halo, sao/mote/beam và bốn lớp
+  ambient, background về `None`; Reduce flashes tắt hẳn impact flash; hai toggle **idempotent**, và nốt vẫn rơi
+  đúng `NoteFallSpeed`/`NoteDirection`/`ShowNotes`.
+- **Ghi chú:**`CopyFrom` vẫn mang ba toggle khi áp preset (vì cùng hàm đó khôi phục undo); muốn tách chúng thành
+  thuộc tính của máy thì phải thêm tham số riêng cho đường preset và kiểm lại undo — để đợt sau, không gộp vào N11.
+- **Nghiệm thu:** mọi preset sau khi bật toggle không còn kênh nhấp nháy >3 Hz; 2 Fact cho nhịp pulse + vòng quét
+  14 preset trong `--verify`; round-trip settings do cùng vòng quét giữ.
+- **Cỡ:** S (kiểm chứng) · **Phụ thuộc:** không.
 
 #### N12. Bằng chứng hiệu ứng mới ở mức family, chưa mức option
 
@@ -393,7 +402,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N8 | Refraction/texture parity | bảng giống/khác có chủ ý | M | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
-| N11 | Reduced Motion/giảm flash toàn cục | preset không nhấp nháy >3 Hz | M | master roadmap |
+| N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
 | N12 | Ma trận capture từng option | 87 ID có ảnh; CI xanh | L | audit |
 | N13 | Lookahead stage ↔ AR | lệch ≤0,1 s khi chuyển chế độ | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | đọc được trên 3 nền | S | tài liệu này |

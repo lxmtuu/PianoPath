@@ -845,7 +845,39 @@ internal static partial class VerificationSuite
                 && busy.HaloPulse && busy.FallingPulse && busy.HoldBreath,
             "Applying the accessibility policy must never mutate the user's own settings object.");
 
-        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion freezes every catalogued self-animated family (pulses, shimmer, ambient sky, stars, petals, meteors, beams, vibration, colour cycle, arc) while Reduce Flashes silences the flash channel and suppresses the un-analysed burst and star twinkle, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
+        // N11: every shipped look, not a hand-built sample. A listener who turns Reduced Motion on must get a
+        // calm stage whichever preset they picked, while the notes still fall at the speed and direction they
+        // chose; Reduce Flashes must clear the flash channel; and with both off the look must come back untouched
+        // and a second application must change nothing.
+        foreach (var preset in VisualPresets.BuiltIn)
+        {
+            var look = preset.Settings.Clone();
+            look.ReducedMotion = true;
+            var calm = look.WithAccessibilityTogglesApplied();
+            Assert(calm.BackgroundMotion == "None" && !calm.FallingPulse && !calm.HoldVibration && !calm.HoldColorCycle
+                    && !calm.HoldBreath && !calm.NoteShimmer && !calm.ShootingStars && !calm.HaloPulse
+                    && !calm.ShowStars && !calm.ShowPetals && !calm.ShowLightBeams
+                    && calm.AmbientEnergyAmount == 0 && calm.AmbientNatureAmount == 0
+                    && calm.AmbientLightAmount == 0 && calm.AmbientCosmicAmount == 0,
+                $"{preset.Name}: Reduced Motion must freeze every self-animated family in every shipped look, not only in the default one.");
+            Assert(calm.NoteFallSpeed == look.NoteFallSpeed && calm.NoteDirection == look.NoteDirection && calm.ShowNotes == look.ShowNotes,
+                $"{preset.Name}: Reduced Motion must never stop the notes or change how they fall; it removes decoration, not the music.");
+            Assert(calm.WithAccessibilityTogglesApplied().ToJson() == calm.ToJson(),
+                $"{preset.Name}: applying Reduced Motion twice must be the same as applying it once.");
+
+            look.ReducedMotion = false; look.ReduceFlashes = true;
+            var unflashedLook = look.WithAccessibilityTogglesApplied();
+            Assert(!unflashedLook.ShowImpactFlash && unflashedLook.ImpactFlashIntensity == 0,
+                $"{preset.Name}: Reduce Flashes must clear the flash channel in every shipped look.");
+            Assert(unflashedLook.FallingPulse == look.FallingPulse && unflashedLook.BackgroundMotion == look.BackgroundMotion,
+                $"{preset.Name}: Reduce Flashes must leave motion-only layers exactly as the look set them.");
+
+            look.ReduceFlashes = false;
+            Assert(look.WithAccessibilityTogglesApplied().ToJson() == look.ToJson(),
+                $"{preset.Name}: with both toggles off the applied look must be the preset untouched.");
+        }
+
+        Results.Add("PASS accessibility toggle policy: legacy JSON loads toggles-off, toggles-off keep the saved look byte-for-byte, Reduced Motion freezes every catalogued self-animated family (pulses, shimmer, ambient sky, stars, petals, meteors, beams, vibration, colour cycle, arc) while Reduce Flashes silences the flash channel and suppresses the un-analysed burst and star twinkle, High Contrast lifts the note outline to its shape-cue floors without weakening stronger looks, and user settings are never mutated. All fourteen shipped looks pass the same Reduced Motion, Reduce Flashes and untouched-when-off checks, and the pulse the note itself carries is capped at 1.67 Hz by MotionBudget. The stage chokepoint applies this policy to both renderers; the dock probe in the settings check proves the live wiring.");
     }
 
     /// <summary>

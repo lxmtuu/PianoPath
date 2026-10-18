@@ -322,7 +322,7 @@ internal sealed partial class GpuArLayer
         var color = SongNoteColor(pitch, note, sounding, look, time);
         var noteOpacity = played ? .42f : 1f;
         var pulse = look.FallingPulse && !sounding
-            ? .62f + .38f * MathF.Sin((float)time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f) : 1f;
+            ? .62f + .38f * MathF.Sin((float)time * (float)MotionBudget.PulseAngularRate(look.FallingPulseRate) + pitch * .7f) : 1f;
         var breath = sounding && look.HoldBreath
             ? .72f + .28f * MathF.Sin((float)time * (1 + look.HoldBreathRate * 5)) : 1f;
         var linear = GpuStageSimulation.ToLinear(color) * breath;
@@ -353,7 +353,7 @@ internal sealed partial class GpuArLayer
         color = LiveNoteColor(pitch, held, strength, color, look, time);
 
         var pulse = look.FallingPulse && !held
-            ? .62f + .38f * MathF.Sin((float)time * (1.5f + look.FallingPulseRate * 9) + pitch * .7f) : 1f;
+            ? .62f + .38f * MathF.Sin((float)time * (float)MotionBudget.PulseAngularRate(look.FallingPulseRate) + pitch * .7f) : 1f;
         var linear = GpuStageSimulation.ToLinear(color) * breath;
         var alpha = opacity * (float)Math.Clamp(fade, 0, 1) * pulse;
         var holdBar = held && look.HoldBar ? look.HoldBarIntensity * opacity * (float)Math.Clamp(fade, 0, 1) : 0;

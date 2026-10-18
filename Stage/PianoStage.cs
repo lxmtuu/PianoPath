@@ -1349,7 +1349,7 @@ internal sealed partial class PianoStage : FrameworkElement
         if (sounding && !ghostPass && _visual.HoldColorCycle) // Color Cycle: the held note keeps shifting hue.
             color = Blend(color, ColorFromHue(Hue(pitch) + _elapsed * _visual.HoldColorCycleSpeed * 3), .8);
         if (_visual.FallingPulse && !sounding && !ghostPass) // Pulsing: the note breathes bright/dim while it travels.
-            opacity *= .62 + .38 * Math.Sin(_elapsed * (1.5 + _visual.FallingPulseRate / 100 * 9) + pitch * .7);
+            opacity *= .62 + .38 * Math.Sin(_elapsed * MotionBudget.PulseAngularRate(_visual.FallingPulseRate / 100) + pitch * .7);
         if (_visual.FallingTrail == "Rainbow" && !ghostPass) // Rainbow Shift: the note body cycles through the rainbow.
             color = ColorFromHue(_elapsed * (20 + _visual.FallingTrailIntensity * .8) + pitch * 9);
         color = AdjustColor(color);
