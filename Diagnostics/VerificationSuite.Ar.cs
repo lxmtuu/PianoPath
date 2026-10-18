@@ -1882,12 +1882,16 @@ internal static partial class VerificationSuite
         // D2 adds one cell per lifted key and one pin per cell (its stroke plus the 2 px crossbar).
         var damperCellCount = renderer.ArDamperCellCount;
         var damperTickCount = renderer.ArDamperTickCount;
-        var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 8);
+        // Long enough for the pedal-only cells to fall: the one held key must keep its cell and pin.
+        var damperUp = RenderFrames(PressFeed(false, .6f, ArQualityTier.Standard, sustain: false), 30);
+        var damperHeldCells = renderer.ArDamperCellCount;
+        var damperHeldTicks = renderer.ArDamperTickCount;
         var damperLiftPixels = ChangedPixels(damperUp, damperDown, threshold: 4);
         RenderFrames(PressFeed(false, .6f, ArQualityTier.Lite, sustain: true), 4);
         Assert(damperStripCount == 1 && damperCellCount > 0 && damperTickCount == damperCellCount * 2
+                && damperHeldCells == 1 && damperHeldTicks == 2
                 && damperLiftPixels > 20 && renderer.ArDamperStripCount == 0 && renderer.ArDamperCellCount == 0,
-            $"Sustain must lift the damper strip over the key back edge at Standard and draw a cell with a pin for every key, and the strip with its cells must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {damperCellCount} cells and {damperTickCount} pin quads, {renderer.ArDamperStripCount} strips and {renderer.ArDamperCellCount} cells at Lite).");
+            $"Sustain must lift the damper strip over the key back edge at Standard and draw a cell with a pin for every key; the panel must keep one cell and two pin quads for the held key after the pedal is released; the strip with its cells must vanish at Lite ({damperLiftPixels} changed pixels at Standard, {damperCellCount} cells and {damperTickCount} pin quads, {damperHeldCells} held cells and {damperHeldTicks} pin quads after release, {renderer.ArDamperStripCount} strips and {renderer.ArDamperCellCount} cells at Lite).");
 
         // The strip follows the player's choice too (2026-10-12): the toggle removes its quad entirely, and a Custom
         // colour mode repaints the same strip away from the look's halo family.
