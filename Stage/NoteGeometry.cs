@@ -48,4 +48,16 @@ internal static class NoteGeometry
     /// stage from collapsing the ramp to nothing; the shader has the same one-DIP floor.
     /// </summary>
     internal static double EnterFadePixels(double hitY) => Math.Max(1, hitY * EnterFadeShare);
+
+    /// <summary>
+    /// The share of the entrance ramp a bar whose top sits at <paramref name="sceneY"/> has reached, 0..1.
+    /// The note body is a gradient inside <c>PsNote</c>; this copy is for the sprites that belong to a note
+    /// (its trail, label and shimmer), which a different shader draws and which would otherwise pop in at
+    /// full opacity while the body they hang on was still fading.
+    /// </summary>
+    internal static double EnterFade(double sceneY, double hitY)
+    {
+        if (!double.IsFinite(sceneY) || !double.IsFinite(hitY)) return 1;
+        return Math.Clamp(sceneY / EnterFadePixels(hitY), 0, 1);
+    }
 }

@@ -294,8 +294,11 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
   `PsNote` theo `ScreenTime.w`; cả hai dùng đúng 6% nên hình khớp. Thời điểm/chiều cao/tốc độ không đổi.
   Ở 1080p dải mờ là **51,5 px** (900p 42,9; 1440p 72,7); nốt 258 px/s đi qua trong ~0,2 s, nốt 1000 px/s trong
   ~0,05 s. Nốt đi lên (Direction = Up) cũng mờ dần khi rời mép trên.
-- **Kiểm:** `NoteGeometryTests` ghim dải mờ ở 900/1080/1440p và sàn 1 px; `note_effects_report.py --check` đọc cả
-  `EnterFadeShare` lẫn hằng 0,06 trong shader, nên hai bên không lệch được.
+  Ba lớp sprite của nốt — trail, nhãn, shimmer — do `PsSprite` vẽ nên không đi qua gradient đó; chúng nhân cùng
+  `NoteGeometry.EnterFade` **tại vị trí của chính mình**: trail theo đầu nốt, nhãn theo đáy (nốt 4 s vẫn hiện
+  nhãn khi đỉnh còn trong dải), shimmer theo tâm. Trước P1 chúng hiện đột ngột trên một thân còn trong suốt.
+- **Kiểm:** `NoteGeometryTests` ghim dải mờ ở 900/1080/1440p, sàn 1 px và `EnterFade` tại 0/50/100% dải;
+  `note_effects_report.py --check` đọc cả `EnterFadeShare` lẫn hằng 0,06 trong shader, nên hai bên không lệch được.
 - **Còn lại (thủ công):** quay 1000% ở 30/60 fps, so sánh trước/sau ở 3 tốc độ (cần máy build được WPF + GPU).
   Motion blur theo `fall speed` vẫn để sau, không thuộc N7.
 - **Cỡ:** S · **Phụ thuộc:** N2 (cùng sửa đường vẽ nốt).
@@ -399,7 +402,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N4 | Thống nhất release live bar AR | **đã chốt: khác có chủ ý** — 0,35 s phẳng, 3,0 s 3D | S | tài liệu này |
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | **đã xong**: hợp đồng thời gian sống, bảng §3.4, tool + `--verify` ghim | S/M | tài liệu này |
 | N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; 3 Fact + một assert `--verify` | M | tài liệu này |
-| N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, test + tool ghim; motion blur để sau | S | tài liệu này |
+| N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, trail/nhãn/shimmer cùng hệ số; test + tool ghim; motion blur để sau | S | tài liệu này |
 | N8 | Refraction/texture parity | bảng giống/khác có chủ ý | M | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |

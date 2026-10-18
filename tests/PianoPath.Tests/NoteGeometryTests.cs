@@ -68,6 +68,19 @@ public class NoteGeometryTests
         Assert.Equal(expected, NoteGeometry.EnterFadePixels(hitY), 2);
 
     [Fact]
+    public void Enter_fade_matches_the_shader_band_and_is_shared_with_the_note_sprites()
+    {
+        Assert.Equal(0, NoteGeometry.EnterFade(0, 1000), 9);
+        Assert.Equal(.5, NoteGeometry.EnterFade(30, 1000), 9);   // 6% of 1000 DIPs = 60
+        Assert.Equal(1, NoteGeometry.EnterFade(60, 1000), 9);
+        Assert.Equal(1, NoteGeometry.EnterFade(500, 1000), 9);
+        Assert.Equal(0, NoteGeometry.EnterFade(-20, 1000), 9);
+        Assert.Equal(0, NoteGeometry.EnterFade(0, 0), 9);        // the one-DIP floor
+        Assert.Equal(1, NoteGeometry.EnterFade(1, 0), 9);
+        Assert.Equal(1, NoteGeometry.EnterFade(double.NaN, 1000), 9);
+    }
+
+    [Fact]
     public void Enter_fade_never_collapses_on_a_tiny_stage() =>
         Assert.Equal(1, NoteGeometry.EnterFadePixels(0));
 

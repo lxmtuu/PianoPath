@@ -694,7 +694,7 @@ internal sealed partial class GpuStageSimulation
                         top = (float)extended.Top; bottom = (float)extended.Bottom;
                     }
                     if (bottom - top < 1) continue;
-                    AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction);
+                    AddNoteWithFx(notes, look, layout.X(note.Pitch) - noteWidth / 2, top, noteWidth, bottom - top, color, opacity, sounding, note.Pitch, i, direction, (float)NoteGeometry.EnterFade(top, hitY));
                     // landing glow: a gathering light where the note is about to strike (GPU-exclusive)
                     var until = (float)(note.Start - input.Position);
                     if (look.NoteLandingGlow && !look.Chroma && !played && !missed && until > 0 && until <= landingWindow)
@@ -1032,8 +1032,8 @@ internal sealed partial class GpuStageSimulation
             if (look.HaloPulse && look.HaloPulseIntensity > 0) AddHaloPulses(sprites, look, layout);
         }
         if (look.ShowKeys && look.KeyLabels > 0) AddKeyLabels(sprites, look, layout);
-        foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label);
-        foreach (var bar in _shimmerBars) AddNoteShimmer(sprites, look, bar);
+        foreach (var label in _noteLabels) AddNoteLabel(sprites, look, label, layout.HitY);
+        foreach (var bar in _shimmerBars) AddNoteShimmer(sprites, look, bar, layout.HitY);
     }
 
     /// <summary>
@@ -1042,9 +1042,10 @@ internal sealed partial class GpuStageSimulation
     /// colour-cycling look shimmers in its current hue. Two bands at different speeds give the surface
     /// depth; the additive pass over the note turns them into moving gloss.
     /// </summary>
-    private void AddNoteShimmer(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n)
+    private void AddNoteShimmer(GpuInstanceList<GpuSpriteInstance> sprites, GpuLook look, NoteTrail n, float hitY)
     {
-        var strength = look.NoteShimmerAmount * Math.Clamp(n.Opacity, 0, 1);
+        var strength = look.NoteShimmerAmount * Math.Clamp(n.Opacity, 0, 1)
+            * (float)NoteGeometry.EnterFade(n.Y + n.H * .5, hitY);
         if (strength <= .01f || n.W < 5 || n.H < 6) return;
         var e = (float)_time;
         var center = n.Y + n.H * .5f;
