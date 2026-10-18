@@ -59,6 +59,17 @@ public class NoteGeometryTests
         Assert.Equal(4.0, (NoteGeometry.Height(4, Speed, Gap, 16) + Gap) / Speed, 9);
     }
 
+    [Theory]
+    [InlineData(715.5, 42.93)]    // 900p
+    [InlineData(858.6, 51.516)]   // 1080p
+    [InlineData(1212.0, 72.72)]   // 1440p
+    public void Enter_fade_covers_six_percent_of_the_fall_height(double hitY, double expected) =>
+        Assert.Equal(expected, NoteGeometry.EnterFadePixels(hitY), 2);
+
+    [Fact]
+    public void Enter_fade_never_collapses_on_a_tiny_stage() =>
+        Assert.Equal(1, NoteGeometry.EnterFadePixels(0));
+
     [Fact]
     public void Height_stops_at_twenty_seconds()
     {

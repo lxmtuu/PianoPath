@@ -971,7 +971,7 @@ float4 PsArQuad(ArQuadOut i) : SV_Target
     }
     if (kind > 10.5 && kind < 11.5)
     {
-        // The damper strip (roadmap §14.3, the Dampers element): a soft glowing line glued to the key back edge.
+        // The damper strip (roadmap section 14.3, the Dampers element): a soft glowing line glued to the key back edge.
         // uv.y runs from the fallboard side (0) to the key edge (1). Misc.x is the lift, Misc.w the hot core's
         // position (ArDampers.CorePositionFor); a faint contact line fades in on the edge as the core leaves, so
         // the strip reads as a damper rising rather than a line merely getting thicker. The u ends feather.
@@ -1067,7 +1067,11 @@ float4 PsNote(NoteOut note) : SV_Target
     material.Color = note.Color;
     material.Misc = note.Misc;
     material.SceneY = note.SceneY;
-    return ShadeNoteMaterial(material);
+    float4 shaded = ShadeNoteMaterial(material);
+    // N7: the first 6% of the fall height is a linear alpha ramp, so a bar slides in from the top
+    // instead of popping in at full opacity. The software stage masks the same band (NoteGeometry).
+    float enter = saturate(note.SceneY / max(ScreenTime.w * 0.06, 1.0));
+    return float4(shaded.rgb * enter, shaded.a * enter);
 }
 
 float4 ShadeNoteMaterial(NoteMaterialInput v)
@@ -1764,7 +1768,7 @@ float4 SpriteShape(SpriteOut v)
         float grad = lerp(v.Params.z, v.Params.y, v.Local.y * 0.5 + 0.5);
         return float4(c * a * grad * mask, 0.0);
     }
-    // 16: the watermark strip — the whole line of text lives in MarkTex; the instance colour tints it.
+    // 16: the watermark strip - the whole line of text lives in MarkTex; the instance colour tints it.
     float2 markUv = v.Local * 0.5 + 0.5;
     float mark = MarkTex.SampleLevel(LinearClamp, markUv, 0).a;
     return float4(c * a * mark, a * mark);

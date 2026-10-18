@@ -74,7 +74,7 @@ Giới hạn: số px tính với layout 88 phím, `KeyboardScale = 100`, 1 DIP 
 | Chiều cao | `max(min(dur, 20)·speed − gap, 16)` :1242 | như WPF :650 | `dur·1,5 − 0,015`, min 0,06 key-depth | tự nhiên + min-aspect, cắt tại reach |
 | Tốc độ | `258 · NoteFallSpeed/550` | như WPF | 1,5 key-depth/s | 1,5 key-depth/s |
 | Lookahead | `hitY / speed` = **2,77–4,70 s** | như WPF | `ArLookahead` = **3,0 s** | 3,0 s |
-| Fade vào | không (bị cắt ở mép trên) | không | 25% cuối của reach | 25% cuối của reach |
+| Fade vào | **6% đầu của roll** (N7) | **6% đầu của roll** (N7) | 25% cuối của reach | 25% cuối của reach |
 | Vật liệu | 6 style + satin | `ShadeNoteMaterial` | `ShadeNoteMaterial` | `ShadeNoteMaterial` |
 | Trail/ghost/landing | có | có | **không** | có |
 | Shimmer | **không** | có | có | có |
@@ -288,9 +288,15 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
   25% reach (~0,75 s) nên mềm hơn nhiều. Đây là **đánh bóng**, không phải lỗi hợp đồng: nốt vẫn vào đúng
   lookahead (xem N2) và không có chuyện "pop" toàn thanh.
 - **Nguồn:** `DrawNotes` :1248–1260 (không alpha theo mép), AR `fade` :111.
-- **Việc cần làm:** thêm alpha ramp theo 5–8% chiều cao roll ở mép trên (cả WPF/GPU, giữ nguyên vị trí), tuỳ chọn
-  motion blur theo `fall speed`; không đổi tốc độ/thời điểm.
-- **Nghiệm thu:** quay 1000% ở 30/60 fps, mép trên mềm, không nháy; so sánh trước/sau ở 3 tốc độ.
+- **Đã làm (P1):** `NoteGeometry.EnterFadeShare = 0,06` và `EnterFadePixels(hitY)`; WPF đẩy một
+  `PushOpacityMask` tuyến tính **chỉ cho nốt chạm dải trên** (16 DIP dư để bloom cùng mờ), GPU nhân alpha trong
+  `PsNote` theo `ScreenTime.w`; cả hai dùng đúng 6% nên hình khớp. Thời điểm/chiều cao/tốc độ không đổi.
+  Ở 1080p dải mờ là **51,5 px** (900p 42,9; 1440p 72,7); nốt 258 px/s đi qua trong ~0,2 s, nốt 1000 px/s trong
+  ~0,05 s. Nốt đi lên (Direction = Up) cũng mờ dần khi rời mép trên.
+- **Kiểm:** `NoteGeometryTests` ghim dải mờ ở 900/1080/1440p và sàn 1 px; `note_effects_report.py --check` đọc cả
+  `EnterFadeShare` lẫn hằng 0,06 trong shader, nên hai bên không lệch được.
+- **Còn lại (thủ công):** quay 1000% ở 30/60 fps, so sánh trước/sau ở 3 tốc độ (cần máy build được WPF + GPU).
+  Motion blur theo `fall speed` vẫn để sau, không thuộc N7.
 - **Cỡ:** S · **Phụ thuộc:** N2 (cùng sửa đường vẽ nốt).
 
 #### N8. Refraction và texture chưa tương đương giữa WPF và GPU
@@ -383,7 +389,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N4 | Thống nhất release live bar AR | **đã chốt: khác có chủ ý** — 0,35 s phẳng, 3,0 s 3D | S | tài liệu này |
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | **đã xong**: hợp đồng thời gian sống, bảng §3.4, tool + `--verify` ghim | S/M | tài liệu này |
 | N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; test 4 Fact | M | tài liệu này |
-| N7 | Fade mép trên/motion blur | mép trên mềm ở 1000%, 30/60 fps | S | tài liệu này |
+| N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, test + tool ghim; motion blur để sau | S | tài liệu này |
 | N8 | Refraction/texture parity | bảng giống/khác có chủ ý | M | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |

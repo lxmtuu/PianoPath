@@ -43,6 +43,8 @@ internal sealed partial class PianoStage : FrameworkElement
     private static readonly double[] SpotlightGaussianRadii = [3.0, 2.4, 1.9, 1.5, 1.1, .8, .55, .32, .14, .04, 0];
     private readonly Dictionary<uint, SolidColorBrush> _brushCache = [];
     private readonly Dictionary<ulong, Brush> _gradientCache = [];
+    private LinearGradientBrush? _enterMask;
+    private double _enterMaskFade;
     private readonly List<Star> _stars = [];
     private readonly List<Petal> _petals = [];
     /// <summary>Seed of the blossom field, and of the particle stream. Fixed so a screenshot run repeats.</summary>
@@ -1277,6 +1279,7 @@ internal sealed partial class PianoStage : FrameworkElement
             NoteGeometry.BlackKeyWidth(width, KeyboardLayout.Active.WhiteCount));
         var gap = Math.Min(_visual.NoteGap, 12);
         var rising = _visual.NoteDirection == "Up";
+        var enterFade = NoteGeometry.EnterFadePixels(hitY);
         for (var i = NoteTimeline.FirstIndexAtOrAfter(_notes, _position - 1 - _maxNoteDuration); i < _notes.Count; i++)
         {
             var note = _notes[i];
@@ -1293,16 +1296,50 @@ internal sealed partial class PianoStage : FrameworkElement
                 // pre-onset part of the bar sits behind the keyboard and the clip keeps it hidden.
                 var headY = hitY + (note.Start - _position) * noteSpeed;
                 if (headY > hitY || headY + noteHeight < 0) continue;
-                DrawConfiguredNote(dc, new Rect(KeyCenter(note.Pitch) * width - noteWidth / 2, headY, noteWidth, noteHeight), color, note.Played ? .42 : 1, sounding, note.Pitch, true);
+                var rect = new Rect(KeyCenter(note.Pitch) * width - noteWidth / 2, headY, noteWidth, noteHeight);
+                DrawEnteringNote(dc, rect, enterFade, color, note.Played ? .42 : 1, sounding, note.Pitch, rising: true);
             }
             else
             {
                 var bottom = hitY - (note.Start - _position) * noteSpeed;
                 var top = bottom - noteHeight;
                 if (top > hitY || bottom < 0) continue;
-                DrawConfiguredNote(dc, new Rect(KeyCenter(note.Pitch) * width - noteWidth / 2, top, noteWidth, noteHeight), color, note.Played ? .42 : 1, sounding, note.Pitch);
+                var rect = new Rect(KeyCenter(note.Pitch) * width - noteWidth / 2, top, noteWidth, noteHeight);
+                DrawEnteringNote(dc, rect, enterFade, color, note.Played ? .42 : 1, sounding, note.Pitch);
             }
         }
+    }
+
+    /// <summary>
+    /// N7: draws a note through the entrance ramp when it touches the top band of the roll. Only a note
+    /// in that band pays for an opacity layer, and every note in one frame shares the same frozen brush.
+    /// </summary>
+    private void DrawEnteringNote(DrawingContext dc, Rect r, double fade, Color color, double opacity, bool sounding, int pitch, bool rising = false)
+    {
+        // 16 DIPs of slack covers the bloom shells above the body, so their light fades with the bar.
+        var masked = r.Bottom > 0 && r.Top < fade + 16;
+        if (masked) dc.PushOpacityMask(EnterMask(fade));
+        DrawConfiguredNote(dc, r, color, opacity, sounding, pitch, rising);
+        if (masked) dc.Pop();
+    }
+
+    /// <summary>A linear alpha ramp from the top of the roll to <paramref name="fade"/> DIPs below it.</summary>
+    private Brush EnterMask(double fade)
+    {
+        if (_enterMask is { } cached && Math.Abs(_enterMaskFade - fade) < .5) return cached;
+        var brush = new LinearGradientBrush
+        {
+            StartPoint = new Point(0, 0),
+            EndPoint = new Point(0, fade),
+            MappingMode = BrushMappingMode.Absolute,
+            SpreadMethod = GradientSpreadMethod.Pad
+        };
+        brush.GradientStops.Add(new GradientStop(Color.FromArgb(0, 0, 0, 0), 0));
+        brush.GradientStops.Add(new GradientStop(Colors.Black, 1));
+        brush.Freeze();
+        _enterMask = brush;
+        _enterMaskFade = fade;
+        return brush;
     }
 
     private void DrawConfiguredNote(DrawingContext dc, Rect r, Color color, double opacity, bool sounding, int pitch, bool rising = false, bool ghostPass = false)

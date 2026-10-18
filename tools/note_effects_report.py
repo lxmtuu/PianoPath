@@ -38,6 +38,7 @@ AR_OPTIONS = read("Camera/ArOptions.cs")
 CATALOG = read("Stage/Effects/EffectCatalog.cs")
 NOTE_GEOMETRY = read("Stage/NoteGeometry.cs")
 EFFECT_BUDGET = read("Stage/Effects/EffectBudget.cs")
+SHADERS = read("Gpu/StageShaders.hlsl")
 
 V = {
     "fall_speed": float(one(r"internal const double FallSpeed = ([0-9.]+);", STAGE, "stage fall speed")),
@@ -55,6 +56,8 @@ V = {
     "ar_lookahead_s": float(one(r"LookaheadDefault = ([0-9.]+)", AR_OPTIONS, "AR lookahead default")),
     "max_note_seconds": float(one(r"MaxNoteSeconds = ([0-9.]+);", NOTE_GEOMETRY, "max note seconds")),
     "black_fill": float(one(r"BlackKeyFill = ([0-9.]+);", NOTE_GEOMETRY, "black key fill")),
+    "enter_fade_share": float(one(r"EnterFadeShare = (\.[0-9]+);", NOTE_GEOMETRY, "enter fade share")),
+    "shader_enter_share": float(one(r"ScreenTime\.w \* (0\.[0-9]+)", SHADERS, "shader enter fade")),
 }
 entries = [line for line in CATALOG.splitlines() if line.lstrip().startswith('new("')]
 V["ids"] = len(entries)
@@ -114,6 +117,7 @@ def main() -> int:
     print(f"caps: particles {V['wpf_particles']} (WPF) vs {V['gpu_particles']} (GPU) = {ratios['particles']:.2f}x")
     print(f"      rings {V['wpf_ring_cap']} vs {V['gpu_ring_cap']}; flashes {V['wpf_flash_cap']} vs {V['gpu_flash_cap']}")
     print(f"flash life: WPF {V['wpf_flash_life']} s; GPU {V['gpu_flash_life_0']} s (Flash) / {V['gpu_flash_life_other']} s (other styles)")
+    print(f"note entrance fade: {V['enter_fade_share']*100:.0f}% of the fall height (shader {V['shader_enter_share']*100:.0f}%)")
     print(f"AR live release: {V['ar_release']} s flat vs {V['ar_live_reach_s']} s projected = {ratios['ar_release']:.1f}x")
     print(f"AR width share {V['ar_width']:.2f} vs stage {V['note_width'] / 100:.2f} (note width %): a white-key AR note is {rows[0]['ar_white_vs_stage']:.2f}x the stage note")
     print()
@@ -141,6 +145,7 @@ def main() -> int:
             "wpf_flash_life": .38, "gpu_flash_life_0": .38, "gpu_flash_life_other": .26,
             "ids": 87, "available": 86, "planned": 1,
             "max_note_seconds": 20.0, "black_fill": .98,
+            "enter_fade_share": .06, "shader_enter_share": .06,
         }
         bad = {k: (V[k], v) for k, v in pinned.items() if abs(float(V[k]) - float(v)) > 1e-9}
         if bad:
