@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#090c12">
+<title>Particle Motion Lab · PianoPath</title>
+<style>
+  :root {
+    color-scheme: dark;
+    --void: #090c12;
+    --panel: #111722;
+    --raised: #182130;
+    --raised-2: #202a39;
+    --hairline: #2a3545;
+    --text: #f1f4f8;
+    --muted: #a7b1c0;
+    --quiet: #737f91;
+    --violet: #9b83ff;
+    --cyan: #57d7e5;
+    --amber: #ffc66d;
+    --danger: #ff6b78;
+    --left-note: #63d7de;
+    --right-note: #f3c56e;
+    font-family: Inter, "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-width: 320px;
+    background:
+      radial-gradient(70rem 48rem at 58% -22%, rgba(96, 76, 180, .17), transparent 65%),
+      var(--void);
+    color: var(--text);
+  }
+  button, input, select { font: inherit; }
+  button { color: inherit; }
+  button:focus-visible, input:focus-visible, select:focus-visible {
+    outline: 2px solid var(--cyan); outline-offset: 2px;
+  }
+  .app { min-height: 100vh; display: flex; flex-direction: column; }
+  .topbar {
+    display: flex; align-items: center; gap: 16px;
+    padding: 16px 22px; border-bottom: 1px solid rgba(126, 143, 167, .17);
+    background: rgba(12, 16, 24, .82); backdrop-filter: blur(18px);
+  }
+  .brand-mark {
+    width: 34px; height: 34px; border-radius: 11px; flex: none;
+    display: grid; place-items: center;
+    border: 1px solid rgba(155, 131, 255, .4);
+    background: linear-gradient(145deg, rgba(155, 131, 255, .23), rgba(87, 215, 229, .08));
+    font-size: 16px;
+  }
+  .titles h1 { margin: 0; font-size: 15px; letter-spacing: .01em; }
+  .titles p { margin: 3px 0 0; font-size: 12px; color: var(--muted); }
+  .badge {
+    margin-left: auto; flex: none;
+    font-size: 11px; color: var(--amber);
+    border: 1px solid rgba(255, 198, 109, .35);
+    background: rgba(255, 198, 109, .08);
+    border-radius: 999px; padding: 5px 11px;
+  }
+  .layout {
+    flex: 1; display: grid; gap: 18px;
+    grid-template-columns: 268px minmax(0, 1fr);
+    padding: 18px 22px 26px; align-items: start;
+  }
+  @media (max-width: 980px) { .layout { grid-template-columns: 1fr; } }
+
+  .card {
+    background: linear-gradient(180deg, rgba(24, 33, 48, .72), rgba(17, 23, 34, .72));
+    border: 1px solid var(--hairline);
+    border-radius: 14px;
+  }
+  .controls { padding: 14px 14px 16px; display: flex; flex-direction: column; gap: 14px; position: sticky; top: 14px; }
+  @media (max-width: 980px) { .controls { position: static; } }
+  .group-title {
+    font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase;
+    color: var(--quiet); margin: 2px 0 0;
+  }
+  .segments { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .segments button {
+    border: 1px solid var(--hairline); background: var(--raised);
+    border-radius: 9px; padding: 8px 6px; font-size: 11.5px; cursor: pointer;
+    color: var(--muted);
+  }
+  .segments button[aria-pressed="true"] {
+    border-color: rgba(155, 131, 255, .6);
+    background: rgba(155, 131, 255, .18); color: var(--text);
+  }
+  .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+  .row output { color: var(--text); font-variant-numeric: tabular-nums; font-size: 11.5px; }
+  input[type="range"] { width: 100%; accent-color: var(--violet); height: 18px; }
+  select {
+    width: 100%; background: var(--raised); color: var(--text);
+    border: 1px solid var(--hairline); border-radius: 9px; padding: 8px 10px;
+  }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .chips button {
+    border: 1px solid var(--hairline); background: rgba(24, 33, 48, .6);
+    color: var(--quiet); border-radius: 999px; padding: 5px 9px; font-size: 11px; cursor: pointer;
+  }
+  .chips button[aria-pressed="true"] {
+    color: var(--text); border-color: rgba(87, 215, 229, .45);
+    background: rgba(87, 215, 229, .12);
+  }
+  .chips button:disabled { opacity: .35; cursor: not-allowed; }
+  .transport { display: flex; gap: 6px; }
+  .transport button {
+    flex: 1; border-radius: 9px; border: 1px solid var(--hairline);
+    background: var(--raised); padding: 9px 6px; cursor: pointer; font-size: 12px;
+  }
+  .transport button.primary { background: rgba(155, 131, 255, .2); border-color: rgba(155, 131, 255, .55); }
+
+  .stage-wrap { display: flex; flex-direction: column; gap: 14px; min-width: 0; }
+  .stages { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 760px) { .stages { grid-template-columns: 1fr; } }
+  .stage { padding: 12px; display: flex; flex-direction: column; gap: 9px; min-width: 0; }
+  .stage-head { display: flex; align-items: baseline; gap: 8px; }
+  .stage-head h2 { margin: 0; font-size: 12.5px; font-weight: 600; }
+  .stage-head .tag {
+    font-size: 10px; padding: 2px 7px; border-radius: 999px;
+    border: 1px solid var(--hairline); color: var(--muted);
+  }
+  .stage-head .tag.live { border-color: rgba(99, 215, 222, .4); color: var(--left-note); }
+  .stage-head .tag.propose { border-color: rgba(243, 197, 110, .4); color: var(--right-note); }
+  .stage canvas { width: 100%; height: auto; display: block; border-radius: 10px; background: #070a12; }
+  .stage-metrics {
+    display: flex; gap: 12px; flex-wrap: wrap;
+    font-size: 11px; color: var(--quiet); font-variant-numeric: tabular-nums;
+  }
+  .stage-metrics b { color: var(--muted); font-weight: 500; }
+  .note {
+    padding: 13px 15px; font-size: 12.5px; line-height: 1.6; color: var(--muted);
+  }
+  .note strong { color: var(--text); font-weight: 600; }
+  .keyhint { color: var(--quiet); font-size: 11.5px; }
+  kbd {
+    font: inherit; font-size: 10.5px; padding: 1px 5px; border-radius: 5px;
+    border: 1px solid var(--hairline); background: var(--raised); color: var(--muted);
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="topbar">
+    <div class="brand-mark" aria-hidden="true">◐</div>
+    <div class="titles">
+      <h1>Particle Motion Lab</h1>
+      <p>Mô phỏng lại công thức trong <code>Gpu/GpuStageSimulation.cs</code> — không phải bản dựng từ app.</p>
+    </div>
+    <span class="badge">prototype · design review</span>
+  </header>
+
+  <div class="layout">
+    <aside class="card controls" aria-label="Điều khiển">
+      <div>
+        <p class="group-title">So sánh</p>
+        <div class="segments" role="group" aria-label="Chế độ so sánh">
+          <button id="mode-ab" aria-pressed="true">Hiện tại ↔ v2</button>
+          <button id="mode-parity" aria-pressed="false">GPU ↔ WPF</button>
+        </div>
+      </div>
+
+      <div>
+        <p class="group-title">Họ hạt</p>
+        <select id="family" aria-label="Họ hạt">
+          <option>Embers</option>
+          <option>Splash</option>
+          <option>Fireworks</option>
+          <option>Confetti</option>
+          <option>Dust</option>
+        </select>
+      </div>
+
+      <div id="toggles">
+        <p class="group-title">Thành phần v2 (bật/tắt để xem riêng)</p>
+        <div class="chips" id="chips"></div>
+      </div>
+
+      <div>
+        <p class="group-title">Vật lý</p>
+        <div class="row"><label for="f-drag">Drag</label><output id="o-drag"></output></div>
+        <input id="f-drag" type="range" min="0" max="100" step="1" value="26">
+        <div class="row"><label for="f-wind">Vector field</label><output id="o-wind"></output></div>
+        <input id="f-wind" type="range" min="0" max="1000" step="10" value="36">
+        <div class="row"><label for="f-gravity">Gravity</label><output id="o-gravity"></output></div>
+        <input id="f-gravity" type="range" min="-600" max="1200" step="10" value="290">
+        <div class="row"><label for="f-turb">Wisp turbulence</label><output id="o-turb"></output></div>
+        <input id="f-turb" type="range" min="0" max="100" step="1" value="55">
+      </div>
+
+      <div>
+        <p class="group-title">Phát</p>
+        <div class="row"><label for="f-speed">Tốc độ</label><output id="o-speed"></output></div>
+        <input id="f-speed" type="range" min="25" max="200" step="5" value="100">
+        <div class="transport" style="margin-top:8px">
+          <button id="play" class="primary">Tạm dừng</button>
+          <button id="replay">Chơi lại</button>
+        </div>
+        <p class="keyhint" style="margin:8px 0 0">Phím tắt: <kbd>Space</kbd> phát/dừng · <kbd>R</kbd> chơi lại</p>
+      </div>
+    </aside>
+
+    <main class="stage-wrap">
+      <div class="stages">
+        <section class="card stage">
+          <div class="stage-head">
+            <h2 id="left-title">Hiện tại · GPU</h2>
+            <span class="tag live" id="left-tag">shipping</span>
+          </div>
+          <canvas id="left" width="960" height="540" aria-label="Mô hình bên trái"></canvas>
+          <div class="stage-metrics">
+            <span>hạt <b id="left-count">0</b></span>
+            <span>sprite <b id="left-sprites">0</b></span>
+            <span>fps <b id="left-fps">–</b></span>
+          </div>
+        </section>
+
+        <section class="card stage">
+          <div class="stage-head">
+            <h2 id="right-title">Đề xuất · Motion v2</h2>
+            <span class="tag propose" id="right-tag">proposal</span>
+          </div>
+          <canvas id="right" width="960" height="540" aria-label="Mô hình bên phải"></canvas>
+          <div class="stage-metrics">
+            <span>hạt <b id="right-count">0</b></span>
+            <span>sprite <b id="right-sprites">0</b></span>
+            <span>fps <b id="right-fps">–</b></span>
+          </div>
+        </section>
+      </div>
+
+      <div class="card note" id="explain">
+        <strong>Đang xem gì:</strong> hai panel nhận <em>cùng một chuỗi phát</em> (cùng seed, cùng thời điểm,
+        cùng góc/tốc độ/life), nên khác biệt nhìn thấy chỉ đến từ mô hình chuyển động.
+      </div>
+    </main>
+  </div>
+</div>
+
+<script src="lab.js"></script>
+<script>
+(function () {
+  'use strict';
+  var lab = window.ParticleLab;
+  var look = {};
+
+  var CHIPS = [
+    ['curlField', 'Curl field'],
+    ['dragCurve', 'Drag curve'],
+    ['lifeCurves', 'Life curves'],
+    ['diffusion', 'Diffusion'],
+    ['spin', 'Per-particle spin'],
+    ['stagger', 'Stagger birth'],
+    ['depth', 'Depth'],
+    ['floor', 'Floor bounce'],
+    ['flamePhysics', 'Flame physics'],
+    ['wispInSim', 'Wisp in sim']
+  ];
+
+  var state = {
+    mode: 'ab', family: 'Embers', playing: true, speed: 1,
+    flags: lab.v2Flags ? lab.v2Flags() : null
+  };
+
+  var ctl = {
+    family: document.getElementById('family'),
+    drag: document.getElementById('f-drag'),
+    wind: document.getElementById('f-wind'),
+    gravity: document.getElementById('f-gravity'),
+    turb: document.getElementById('f-turb'),
+    speed: document.getElementById('f-speed'),
+    play: document.getElementById('play'),
+    replay: document.getElementById('replay'),
+    chips: document.getElementById('chips')
+  };
+
+  CHIPS.forEach(function (entry) {
+    var key = entry[0];
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.textContent = entry[1];
+    button.dataset.flag = key;
+    button.setAttribute('aria-pressed', state.flags[key] === false ? 'false' : 'true');
+    button.addEventListener('click', function () {
+      var on = button.getAttribute('aria-pressed') !== 'true';
+      button.setAttribute('aria-pressed', on ? 'true' : 'false');
+      state.flags[key] = on;
+      reset();
+    });
+    ctl.chips.appendChild(button);
+  });
+
+  function setLook() {
+    look = Object.assign({}, lab.DEFAULT_LOOK, {
+      drag: +ctl.drag.value,
+      vectorField: +ctl.wind.value,
+      gravity: +ctl.gravity.value,
+      wispTurbulence: +ctl.turb.value / 100
+    });
+    document.getElementById('o-drag').textContent = ctl.drag.value;
+    document.getElementById('o-wind').textContent = ctl.wind.value;
+    document.getElementById('o-gravity').textContent = ctl.gravity.value;
+    document.getElementById('o-turb').textContent = ctl.turb.value;
+    document.getElementById('o-speed').textContent = ctl.speed.value + '%';
+  }
+
+  var engine = null;
+  var backdrops = {};
+
+  function backdrop() {
+    if (backdrops.cached) return backdrops.cached;
+    var c = document.createElement('canvas');
+    c.width = lab.STAGE_W; c.height = lab.STAGE_H;
+    lab.paintScene(c.getContext('2d'), look);
+    backdrops.cached = c;
+    return c;
+  }
+
+  function reset() {
+    setLook();
+    engine = lab.createLab({ family: state.family, seed: 20261019, mode: state.mode });
+    engine.look = Object.assign({}, look);
+    // keep the v2 flags the user chose, then rebuild the schedule with this look
+    engine.panels[1].flags = Object.assign({}, state.flags);
+    engine.rebuild();
+    engine.playing = state.playing;
+    engine.speed = state.speed;
+    applyLabels();
+  }
+
+  function applyLabels() {
+    var parity = state.mode === 'parity';
+    document.getElementById('mode-ab').setAttribute('aria-pressed', parity ? 'false' : 'true');
+    document.getElementById('mode-parity').setAttribute('aria-pressed', parity ? 'true' : 'false');
+    document.getElementById('left-title').textContent = 'Hiện tại · GPU';
+    document.getElementById('left-tag').textContent = 'shipping';
+    document.getElementById('left-tag').className = 'tag live';
+    if (parity) {
+      document.getElementById('right-title').textContent = 'Hiện tại · WPF fallback';
+      document.getElementById('right-tag').textContent = 'shipping';
+      document.getElementById('right-tag').className = 'tag live';
+      document.getElementById('explain').innerHTML =
+        '<strong>Đang xem gì:</strong> cùng một preset, cùng một seed, hai đường render đang có trong sản phẩm. ' +
+        'GPU cộng dao động của wisp <em>lúc vẽ</em>, WPF lại cộng nó <em>vào vận tốc</em> — biên độ và tần số khác nhau, ' +
+        'nên luồng khói đứng cạnh nhau trông như hai preset khác nhau. Hạt không phải wisp giống hệt nhau.';
+    } else {
+      document.getElementById('right-title').textContent = 'Đề xuất · Motion v2';
+      document.getElementById('right-tag').textContent = 'proposal';
+      document.getElementById('right-tag').className = 'tag propose';
+      document.getElementById('explain').innerHTML =
+        '<strong>Đang xem gì:</strong> hai panel nhận <em>cùng một chuỗi phát</em> (cùng seed, cùng thời điểm, ' +
+        'cùng góc/tốc độ/life), nên khác biệt nhìn thấy chỉ đến từ mô hình chuyển động: trường gió xoáy, ' +
+        'đường cong drag, life curve, spin riêng từng hạt, trễ sinh và chiều sâu. Bỏ tick từng mục ở cột trái để xem riêng.';
+    }
+    var disable = parity;
+    Array.prototype.forEach.call(ctl.chips.children, function (b) { b.disabled = disable; });
+    document.getElementById('toggles').style.opacity = disable ? '.35' : '1';
+  }
+
+  var last = performance.now();
+  var fps = 60, statsTimer = 0;
+
+  function frame(now) {
+    var dt = Math.min(.05, Math.max(0, (now - last) / 1000));
+    last = now;
+    fps += (1 / Math.max(dt, 1e-4) - fps) * .06;
+
+    if (engine.playing) engine.step(dt);
+
+    var bg = backdrop();
+    ['left', 'right'].forEach(function (id, index) {
+      var canvas = document.getElementById(id);
+      var ctx = canvas.getContext('2d');
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.drawImage(bg, 0, 0);
+      var panel = engine.panels[index];
+      lab.drawNotes(ctx, panel.scenario, panel.clock, look);
+      lab.drawPanel(ctx, panel, look);
+    });
+
+    statsTimer += dt;
+    if (statsTimer > .2) {
+      statsTimer = 0;
+      document.getElementById('left-count').textContent = engine.panels[0].particles.length;
+      document.getElementById('right-count').textContent = engine.panels[1].particles.length;
+      document.getElementById('left-sprites').textContent = engine.panels[0].sprites;
+      document.getElementById('right-sprites').textContent = engine.panels[1].sprites;
+      document.getElementById('left-fps').textContent = fps.toFixed(0);
+      document.getElementById('right-fps').textContent = fps.toFixed(0);
+    }
+    requestAnimationFrame(frame);
+  }
+
+  ctl.family.addEventListener('change', function () { state.family = ctl.family.value; reset(); });
+  [ctl.drag, ctl.wind, ctl.gravity, ctl.turb].forEach(function (input) {
+    input.addEventListener('input', function () {
+      setLook();
+      engine.look = Object.assign({}, look);
+      engine.rebuild();
+    });
+  });
+  ctl.speed.addEventListener('input', function () {
+    state.speed = +ctl.speed.value / 100;
+    engine.speed = state.speed;
+    setLook();
+  });
+  ctl.play.addEventListener('click', function () {
+    state.playing = !state.playing;
+    engine.playing = state.playing;
+    ctl.play.textContent = state.playing ? 'Tạm dừng' : 'Tiếp tục';
+  });
+  ctl.replay.addEventListener('click', reset);
+  document.getElementById('mode-ab').addEventListener('click', function () { state.mode = 'ab'; reset(); });
+  document.getElementById('mode-parity').addEventListener('click', function () { state.mode = 'parity'; reset(); });
+
+  document.addEventListener('keydown', function (event) {
+    if (event.code === 'Space') { event.preventDefault(); ctl.play.click(); }
+    if (event.key === 'r' || event.key === 'R') reset();
+  });
+
+  reset();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

@@ -607,3 +607,5 @@ Kết luận rút ra:
 - `--bench`, note-material probe và deterministic/WARP screenshots luôn chạy Full quality để baseline/golden không tự đổi theo tải. Unit tests kiểm tra budget theo VSync, thứ tự tier, outlier, hysteresis, reset và phép compact ambient giữ nguyên note-trail tail.
 
 **Chưa có kết quả hardware sau thay đổi.** `--bench` hiện vẫn đo baseline Full quality; Windows CI/WARP chỉ có thể xác nhận build/correctness, không chứng minh iGPU nhanh hơn hoặc tier nào đạt 8 ms. Kết quả vật lý của Adaptive Quality vẫn **Unmeasured**; cần đo lại iGPU với tier/runtime state và xem lại fixed-scene gallery trước khi kết luận hình ảnh/performance.
+
+**Review chuyển động hạt (2026-10-19):** [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) — số đo cho trường gió, nón phát của sustain và lệch wisp GPU/WPF; prototype [Particle Motion Lab](prototypes/particle-motion-lab/index.html) để review A/B trước khi động vào mã; lộ trình W0–W3. Tài liệu này **không** thay đổi trạng thái kiểm chứng nào ở trên.

@@ -324,3 +324,5 @@ Thực hiện **P0 → P1 → review ảnh hai mode**, rồi **P2 → review tex
 Tiêu chuẩn cuối: **nhìn đẹp ngay khi đứng yên, chuyển động đẹp khi chơi, vẫn đọc được nốt khi nhạc dày và vẫn sạch sau khi nén video**.
 
 Follow-up P3b: [held lighting/palette/chord/pose controls](KEY-PARTICLES-HELD-CONTROLS.md) đã có harness 72 cảnh × 4 tổ hợp, shader v2 không đổi. Source `edce79d` PASS final run `38659928167` (6.056 assertions / 1 skipped group), preview/evidence `0a3214e`; 72 quartet và 16 full scenes đã có, xem sampled static review. Key-light tạo dải sáng riêng nhưng particle-only còn ivory contrast; Wisps chord chạm projected cap 192 so với Stage 304. Tiếp tục contrast/budget controls trước material v3; không đổi acceptance, opt-in hoặc thứ tự menu cuối cùng.
+
+Review chuyển động hạt (2026-10-19): [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) — đánh giá công thức hiện tại bằng số đo, prototype A/B chạy bằng trình duyệt ([Particle Motion Lab](prototypes/particle-motion-lab/index.html)) và lộ trình bốn lát cắt W0–W3 cho phần motion của P3b. Chưa sửa mã sản phẩm, chưa nghiệm thu hình ảnh.
