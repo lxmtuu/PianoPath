@@ -174,6 +174,23 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
 | Cắt nốt trùng pitch | không | có |
 | Vật liệu 6 style | có | có |
 
+### 3.6 WPF và GPU: khác biệt có chủ ý
+
+Hai đường vẽ dùng chung hình học, màu và nhịp, nhưng không phải mọi thứ đều giống: WPF là vector + brush, GPU là
+shader thủ tục. Bảng này chốt phần **cố ý khác**, để lần sau không ai "sửa" cho đồng bộ rồi làm hỏng một bên.
+
+| Lớp | WPF | GPU | Khác biệt |
+|---|---|---|---|
+| Khúc xạ `NoteRefraction` | viền fringe vẽ thật (`PianoStage.cs:1496–1499`) + sheen (`:1668`) | `NoteB.w` nhân sheen/spec ở 4 nhánh vật liệu (`StageShaders.hlsl:1128/1145/1169/1215`) | **chỉ hình viền là WPF-only**; tham số vẫn đổi cả hai |
+| Satin `NoteSatin` | `DrawSatinNote` — "xấp xỉ GPU" (`:1641`) | dựng thủ tục trong `ShadeNoteMaterial` | cố ý: brush không làm được grain của shader |
+| Texture lửa/giấy | gradient + grain (`:1396–1399`) | thủ tục | cố ý |
+| Nhãn nốt trên stage | chữ WPF | sprite atlas (`GpuStageSimulation.Effects.cs:36`), cùng ngưỡng 11×15 px | cùng ngưỡng |
+| Nhãn nốt AR | — | chỉ AR 3D (`GpuArLayer.Effects.cs:149`); phẳng bỏ qua | đã ghi trong tooltip Perspective |
+| Lookahead | `hitY/speed + 1` giây (`GpuStageSimulation.cs:655`) — 1080p, 258 px/s ≈ 4,3 s | `ArLookahead`, mặc định 3 s, slider 1–6 s (`ArOptions.cs:46`) | cố ý: AR là cửa sổ chiếu có slider riêng |
+
+Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; việc còn lại chỉ là ảnh nghiệm thu trên máy có GPU
+(6 style × 3 mức khúc xạ; 3 nền sáng/tối cho nhãn AR).
+
 ## 4. Phát hiện và việc cần làm
 
 ### P0 — hợp đồng và lỗi nhìn thấy được
@@ -308,10 +325,11 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
 - **Hiện tượng:** WPF vẽ viền khúc xạ màu cho Crystal/Glass (`PianoStage.cs:1416`); shader GPU **không** dùng
   `NoteRefraction` cho viền này — hợp đồng ghi rõ "WPF paints the crystal's refraction fringe; the GPU branch does
   not consume it" (`EffectContracts.cs:345`). Texture lửa/satin cũng là hai cách dựng khác nhau.
-- **Việc cần làm:** hoặc thêm fringe vào shader (một nhánh nhỏ trong `ShadeNoteMaterial`), hoặc đổi nhãn control
-  thành "WPF" và bỏ khỏi preset GPU; ghi bảng khác biệt có chủ đích.
-- **Nghiệm thu:** ảnh 6 style × 3 mức `NoteRefraction`, có bảng "giống/khác có chủ ý".
-- **Cỡ:** M · **Phụ thuộc:** N9.
+- **Đã chốt: khác có chủ ý** — bảng §3.6. `NoteRefraction` **vẫn** đổi cả hai bên (GPU dùng `NoteB.w` cho sheen
+  và spec ở bốn nhánh vật liệu), chỉ **hình viền** là WPF-only. Không thêm fringe vào shader: nó sẽ đổi hình của
+  preset đã duyệt để đổi lấy một chi tiết chỉ thấy khi phóng to.
+- **Nghiệm thu:** bảng §3.6 đã có; còn ảnh 6 style × 3 mức `NoteRefraction` trên máy GPU (thủ công).
+- **Cỡ:** S (đã thu về tài liệu) · **Phụ thuộc:** không.
 
 #### N9. Chưa có benchmark khung hình cho nốt/hiệu ứng
 
@@ -370,24 +388,32 @@ có trần riêng theo ngân sách khung hình, và đó là lý do bảng này 
 
 - **Hiện tượng:** stage nhìn trước 2,77–4,70 s tuỳ cửa sổ; AR cố định 3,0 s (`ArLookahead`). Ở 1440p nốt stage
   xuất hiện sớm hơn AR 1,7 s.
-- **Việc cần làm:** nếu người dùng chuyển qua lại AR/stage, suy ra tốc độ stage từ lookahead (hoặc ngược lại);
-  nếu không, ghi rõ "lookahead của AR là riêng".
-- **Nghiệm thu:** cùng bài, cùng setting: thời điểm nốt xuất hiện ở hai chế độ lệch ≤0,1 s.
+- **Đã chốt (b): lookahead của AR là riêng và chỉnh được** — slider `ArLookahead` 1–6 s, mặc định 3 s
+  (`ArOptions.cs:46`), trong khi stage suy từ `hitY/speed + 1` (`GpuStageSimulation.cs:655`). Ép hai bên bằng nhau
+  sẽ buộc tốc độ rơi của stage phụ thuộc cấu hình AR, tức là đổi đúng thứ người chơi tự đặt; công thức và hệ quả
+  đã ghi ở §3.6.
+- **Nghiệm thu:** công thức + slider có trong tài liệu; bỏ tiêu chí "lệch ≤0,1 s" vì nó mâu thuẫn với quyền đặt
+  tốc độ rơi. Ảnh so sánh hai chế độ vẫn là việc thủ công.
 - **Cỡ:** S · **Phụ thuộc:** N2.
 
 #### N14. Nhãn nốt ở AR phẳng và độ dễ đọc
 
 - **Hiện tượng:** `ShowNoteLabels` chỉ có ở AR 3D; WPF/GPU có ngưỡng `w≥11, h≥15`, không có kiểm tra tương phản.
-- **Việc cần làm:** hiện nhãn ở phẳng hoặc vô hiệu hoá; kiểm tra cỡ chữ/tương phản trên nền camera sáng.
-- **Nghiệm thu:** ảnh 3 nền (tối/trung bình/sáng), đọc được tên nốt.
-- **Cỡ:** S · **Phụ thuộc:** N3.
+- **Đã chốt: phẳng bỏ nhãn là hành vi có chủ ý và đã được nói rõ** trong tooltip "Perspective notes" ("the legacy
+  flat overlay ... omits ... note names"). Vô hiệu hoá control thì không được: nó còn điều khiển nhãn trên stage.
+  AR 3D vẽ nhãn qua atlas với cùng ngưỡng 11×15 px (`GpuArLayer.Effects.cs:149`).
+- **Nghiệm thu:** còn ảnh 3 nền (tối/trung bình/sáng) để kiểm tương phản trên máy có camera (thủ công).
+- **Cỡ:** S (đã thu về tài liệu) · **Phụ thuộc:** N3.
 
 #### N15. Nợ tài liệu và trạng thái
 
 - **Hiện tượng:** audit còn câu "chờ CI", một số bảng đếm theo ngày. (Link từ hai roadmap đã thêm trong lần này;
   phần còn lại vẫn mở.)
-- **Việc cần làm:** cập nhật `EFFECT-COVERAGE-AUDIT.md` sau mỗi lần chạy CI; giữ
-  `tools/note_effects_report.py --check` trong CI tĩnh cùng `tools/check_sources.py`.
+- **Đã làm:** job `static` của `build.yml` chạy `note_effects_report.py --check` và ba checker prototype
+  (note-view, damper, particle-motion) ngay cạnh `check_sources.py`, nên một hằng số trôi hoặc một lab lệch shader
+  làm đỏ làn nhanh trước khi build. `EFFECT-COVERAGE-AUDIT.md` đã cập nhật các câu "đang chờ CI" bằng run
+  [39173459709](https://github.com/lxmtuu/PianoPath/actions/runs/39173459709).
+- **Còn lại:** cập nhật audit sau mỗi lần CI đổi kết quả; bảng đếm theo ngày vẫn cần một lượt rà.
 - **Cỡ:** S.
 
 ## 5. Danh sách hợp nhất
@@ -403,14 +429,14 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N5 | Bảng ngân sách hiệu ứng WPF/GPU | **đã xong**: hợp đồng thời gian sống, bảng §3.4, tool + `--verify` ghim | S/M | tài liệu này |
 | N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; 3 Fact + một assert `--verify` | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, trail/nhãn/shimmer cùng hệ số; test + tool ghim; motion blur để sau | S | tài liệu này |
-| N8 | Refraction/texture parity | bảng giống/khác có chủ ý | M | tài liệu này |
+| N8 | Refraction/texture parity | **đã chốt: khác có chủ ý** (§3.6); còn ảnh nghiệm thu | S | tài liệu này |
 | N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
 | N12 | Ma trận capture từng option | 87 ID có ảnh; CI xanh | L | audit |
-| N13 | Lookahead stage ↔ AR | lệch ≤0,1 s khi chuyển chế độ | S | tài liệu này |
-| N14 | Nhãn nốt AR phẳng | đọc được trên 3 nền | S | tài liệu này |
-| N15 | Nợ tài liệu/trạng thái | audit/roadmap khớp; tool trong CI | S | tài liệu này |
+| N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
+| N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
+| N15 | Nợ tài liệu/trạng thái | **đã xong phần CI**: tool + 3 checker trong làn tĩnh; audit cập nhật | S | tài liệu này |
 | D0 | CC64 liên tục vào hình | **đã xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%, mượt 55/75 ms | S | DAMPER §7 |
 | D1 | Lõi sáng chạy theo lift | **đã xong**: 8,2 px @45°, 6,6 px @90°; vạch WPF 6 px, halo GPU 5 px | S | DAMPER §7 |
 | D2 | 88 ô LED + tick theo phím | **đã xong**: ô `0,70/0,46` phím, thân `0,05+0,42v`, mép `0,16+0,54v`; pin co theo phép chiếu (`≤15 px`, `≤2,4 px` ở 1080p) + crossbar, τ 30/40 ms; tối đa 265 quad, tắt ở Lite | M | DAMPER §7 |

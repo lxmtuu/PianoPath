@@ -41,6 +41,16 @@ jobs:
       - name: Static source check
         run: python3 tools/check_sources.py
 
+      # The effect plan quotes 27 measurements taken from the shipping sources, and the three A/B labs the
+      # documents link to carry their own assertions. They run beside check_sources.py so a constant that
+      # drifts, or a lab that stops matching its shader, turns the fast lane red before any build starts.
+      - name: Effect plan and prototype checks
+        run: |
+          python3 tools/note_effects_report.py --check
+          node tools/check_note_view_lab.cjs
+          node tools/check_damper_light.cjs
+          node tools/check_particle_motion_lab.cjs
+
       # Input-fixture validation only; does not claim Windows/GPU/AR render evidence.
       - name: Prism Flow baseline input checks
         if: >-
