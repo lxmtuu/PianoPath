@@ -611,3 +611,5 @@ Kết luận rút ra:
 **Review chuyển động hạt (2026-10-19):** [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) — số đo cho trường gió, nón phát của sustain và lệch wisp GPU/WPF; prototype [Particle Motion Lab](prototypes/particle-motion-lab/index.html) để review A/B trước khi động vào mã; lộ trình W0–W3. Tài liệu này **không** thay đổi trạng thái kiểm chứng nào ở trên.
 
 **Tham chiếu SeeMusic (2026-10-19):** [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) — kiểu chuyển động hạt của một sản phẩm cùng loại, đối chiếu từng kiểu với PianoPath. Chỉ là tham chiếu ý tưởng; không sao chép giá trị, tên preset hay asset.
+
+**Phân tích thanh damper (2026-10-19):** [DAMPER-BAR-LIGHT-ANALYSIS.md](DAMPER-BAR-LIGHT-ANALYSIS.md) — ánh sáng damper theo pedal: hình học đo được, ba đường vẽ không cùng đồng hồ, lỗ hổng half-pedal CC64 và đề xuất D0–D3; prototype [damper.html](prototypes/particle-motion-lab/damper.html), 28 kiểm tra headless. Tài liệu này **không** thay đổi trạng thái kiểm chứng nào ở trên.

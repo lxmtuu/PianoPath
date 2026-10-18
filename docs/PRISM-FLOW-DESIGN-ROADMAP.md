@@ -327,4 +327,6 @@ Follow-up P3b: [held lighting/palette/chord/pose controls](KEY-PARTICLES-HELD-CO
 
 Review chuyển động hạt (2026-10-19): [PARTICLE-MOTION-REVIEW.md](PARTICLE-MOTION-REVIEW.md) — đánh giá công thức hiện tại bằng số đo, prototype A/B chạy bằng trình duyệt ([Particle Motion Lab](prototypes/particle-motion-lab/index.html)) và lộ trình bốn lát cắt W0–W3 cho phần motion của P3b. Chưa sửa mã sản phẩm, chưa nghiệm thu hình ảnh.
 
-Tham chiếu SeeMusic (2026-10-19): [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) — ngữ pháp chuyển động hạt của SeeMusic (ba lớp Particles/Streaklets/Smoke, bảy preset, wind/turbulence/magnetism) và danh sách kiểu PianoPath còn thiếu; playground [seemusic.html](prototypes/particle-motion-lab/seemusic.html).
+Tham chiếu SeeMusic (2026-10-19): [PARTICLE-MOTION-SEEMUSIC-REFERENCE.md](PARTICLE-MOTION-SEEMUSIC-REFERENCE.md) — ngữ pháp chuyển động hạt của SeeMusic (ba lớp Particles/Streaklets/Smoke, tám preset, wind/turbulence/magnetism) và danh sách kiểu PianoPath còn thiếu; playground [seemusic.html](prototypes/particle-motion-lab/seemusic.html).
+
+Phân tích thanh damper (2026-10-19): [DAMPER-BAR-LIGHT-ANALYSIS.md](DAMPER-BAR-LIGHT-ANALYSIS.md) — ba đường vẽ damper light (dải AR, vạch WPF, halo GPU), hình học 7,2 → 19,2 px ở 90° và 9,0 → 23,8 px ở 45°, chuyện half-pedal bị mất trước khi tới hình, đề xuất D0–D3 cùng prototype A/B [damper.html](prototypes/particle-motion-lab/damper.html). Chưa sửa mã sản phẩm.
