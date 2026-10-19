@@ -344,9 +344,16 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Cách chạy (máy có GPU):**
   `PianoPath.exe --bench-detail --bench=240 --bench-out=notes-matrix.json`
   rồi đọc p95 từng ô trong file (hoặc các dòng `NOTE perf: notes-…` trong console).
-- **Còn lại:** điền bảng p95 vào đây sau khi chạy trên máy thật (WARP của CI không thay được số phần cứng), và đo
-  nhánh **WPF** bằng `--verify` thủ công vì kịch bản này đo engine GPU. Ngưỡng "WPF tụt dưới 60 fps ở bao nhiêu nốt"
-  vẫn phải lấy từ máy thật.
+- **Nhánh WPF: đã đo tự động.** `VerifyWpfNoteDensity` (chạy trong mọi lượt `--verify`) dựng sân khấu phần mềm ở
+  **cùng 18 ô** (3 cỡ × 1/20/60 nốt × plain/fx), tắt shading bàn phím, ambient, impact và hạt y như bản GPU, rồi lấy
+  **median của 8 lượt vẽ** (3 lượt warm-up trước). Kết quả in ra một dòng `PASS wpf note density` với 18 cặp số
+  plain/fx, nên bảng dưới điền được ngay từ log CI — nhưng là số của **runner phần mềm**, chỉ dùng để so tương đối
+  giữa các ô và giữa các lần chạy, không phải số của card đồ hoạ.
+- **Kiểm đi kèm (không phải kiểm thời gian):** mỗi ô phải thật sự vẽ nốt (>20 px đổi) và bản `fx` phải **thêm** pixel
+  so với `plain` — nếu không thì một trong ba hiệu ứng đang không được vẽ. Thời gian chỉ được **báo**, không được
+  xét đạt/không đạt, vì runner CI dao động lớn hơn chênh lệch giữa hai ô cạnh nhau.
+- **Còn lại:** điền bảng dưới bằng số từ **máy có card đồ hoạ** (`--bench-detail`) và ngưỡng "WPF tụt dưới 60 fps ở
+  bao nhiêu nốt" — suy từ cột WPF của runner là sai, vì máy đó vẽ bằng phần mềm.
 - **Nghiệm thu:** bảng dưới đây đủ 18 ô; hàng `fx` cao hơn `plain` ở cùng số nốt (nếu không, một trong ba hiệu ứng
   đang không được vẽ).
 
@@ -457,7 +464,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; 3 Fact + một assert `--verify` | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, trail/nhãn/shimmer cùng hệ số; test + tool ghim; motion blur để sau | S | tài liệu này |
 | N8 | Refraction/texture parity | **đã chốt: khác có chủ ý** (§3.6); còn ảnh nghiệm thu | S | tài liệu này |
-| N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail`, 18 ô, không gate; còn số p95 trên máy GPU | M | tài liệu này |
+| N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail` (GPU, 18 ô) + `VerifyWpfNoteDensity` (WPF, cùng 18 ô, tự chạy); còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
 | N12 | Ma trận capture từng option | 87 ID có ảnh; CI xanh | L | audit |
