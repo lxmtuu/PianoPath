@@ -144,7 +144,7 @@ Phase 1 gồm mapping recipe và wiring cần thiết cho fresh-install/reset; k
 - [ ] Sau khi ba profile chuẩn được review và chấp thuận, mới mở rộng fixed-scene checkpoint review cho đủ 17 preset.
 - [ ] Duyệt bố cục Visual Effects Studio ba pane và **Quick / Advanced** bằng wireframe riêng; đây chưa phải UI đã triển khai.
 - [ ] Chấp thuận scene 12 giây + tempo map + seed làm fixture dùng chung cho Phase 3 trở đi.
-- [x] Những CI gates cũ đã pass build, portable xUnit và `--verify`; gate mới 48 ảnh chưa được Windows CI xác nhận.
+- [x] Những CI gates cũ đã pass build, portable xUnit và `--verify`; gate 48 ảnh **đã được Windows CI render và assert** (`VerifyPhase1VisualReview` đòi đúng 48 ảnh mỗi lượt `--verify-review-out`, mới nhất [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913)). Việc còn lại là **review thủ công** từng ảnh, không phải chạy được hay chưa.
 - [ ] Sau khi review thị giác/accessibility và các mục còn lại được xác nhận, mới đóng Phase 1 rồi mở Effect Contract / compatibility.
 
-Prototype HTML vẫn chỉ là minh họa; không dùng nó để chứng minh renderer. Harness runtime đã được nối vào code/workflow nhưng chưa chạy trên Windows trong lượt này. WARP chỉ xác nhận code path; **chưa xác nhận hardware performance/AR** và chưa tuyên bố quality review đầy đủ.
+Prototype HTML vẫn chỉ là minh họa; không dùng nó để chứng minh renderer. Harness runtime (`Phase1VisualReview` qua `--verify-review-out`) đã được nối vào code/workflow và chạy trong mỗi lượt `--verify` của Windows CI, mới nhất [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913). WARP chỉ xác nhận code path; **chưa xác nhận hardware performance/AR** và chưa tuyên bố quality review đầy đủ.

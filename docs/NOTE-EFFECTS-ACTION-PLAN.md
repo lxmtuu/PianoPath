@@ -343,9 +343,12 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
   hiệu số giữa hai ô chính là lớp nốt. Playhead mở ở đúng một cửa sổ nhìn (`hitY / tốc độ rơi`) để khung đầu tiên
   đã có đủ N thanh, không phải chờ lấp đầy. Các ô này **không có ngưỡng** (`P95LimitMs = 0`) nên không bao giờ làm
   đỏ CI, và **không nằm trong lượt `--bench` của CI**.
-- **Cách chạy (máy có GPU):**
+- **Cách chạy (máy có GPU), hai lệnh:**
   `PianoPath.exe --bench-detail --bench=240 --bench-out=notes-matrix.json`
-  rồi đọc p95 từng ô trong file (hoặc các dòng `NOTE perf: notes-…` trong console).
+  rồi `python3 tools/bench_matrix_table.py notes-matrix.json` — in đúng 9 dòng bảng dưới (kèm `adapter`,
+  WARP hay card thật, và thời điểm đo ra stderr). Script **từ chối** nếu thiếu ô nào trong 18 (bảng thiếu ô
+  trông giống như đo được cả 18 ô), từ chối p95 không phải số dương, và có `--self-test` chạy được trên máy
+  không có Windows. Số in bằng **dấu phẩy thập phân** như các bảng khác trong tài liệu; `--dot` đổi sang dấu chấm, `--out bang.md` để lưu bảng, `--no-description` bỏ dòng máy đo.
 - **Nhánh WPF: đã đo tự động.** `VerifyWpfNoteDensity` (chạy trong mọi lượt `--verify`) dựng sân khấu phần mềm ở
   **cùng 18 ô** (3 cỡ × 1/20/60 nốt × plain/fx), tắt shading bàn phím, ambient, impact và hạt y như bản GPU, rồi lấy
   **median của 8 lượt vẽ** (3 lượt warm-up trước). Kết quả in ra một dòng `PASS wpf note density` với 18 cặp số
@@ -406,10 +409,10 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 #### N12. Bằng chứng hiệu ứng mới ở mức family, chưa mức option
 
 - **Hiện tượng:** 87 mục, 86 `Available`, 1 `Planned`; AR 24 family (6 `Native`, 14 `Unverified`, 4
-  `Unsupported`: `falling.trail`, `falling.pulse`, `falling.shimmer`, `atmosphere.stars`). Audit ghi nhiều assertion
-  mới **chưa chạy trên Windows CI**; kiểm thử chỉ theo family/giá trị đại diện.
+  `Unsupported`: `falling.trail`, `falling.pulse`, `falling.shimmer`, `atmosphere.stars`). Các assertion từng ghi "chưa chạy" nay **đã chạy và PASS** trong CI
+  [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913); phần còn thiếu là **coverage** theo family/giá trị đại diện.
 - **Nguồn:** `docs/EFFECT-COVERAGE-AUDIT.md` §2, §6; `EffectContracts.cs`.
-- **Việc cần làm:** (a) chạy lại CI Windows cho các assertion đang chờ; (b) sinh ma trận capture cho từng option
+- **Việc cần làm:** (a) **xong** — CI Windows 2026-10-20 xanh, mọi assertion từng chờ đã chạy; (b) sinh ma trận capture cho từng option
   (ít nhất default + một cực trị) và lưu ảnh/checksum; (c) đưa trạng thái AR 4 family `Unsupported` lên UI hoặc
   implement.
 - **Nghiệm thu:** mỗi ID có ảnh/kiểm tra; CI xanh; không còn dòng "chờ chạy".
@@ -445,7 +448,8 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Đã làm:** job `static` của `build.yml` chạy `note_effects_report.py --check` và ba checker prototype
   (note-view, damper, particle-motion) ngay cạnh `check_sources.py`, nên một hằng số trôi hoặc một lab lệch shader
   làm đỏ làn nhanh trước khi build. `EFFECT-COVERAGE-AUDIT.md` đã cập nhật các câu "đang chờ CI" bằng run
-  [39173459709](https://github.com/lxmtuu/PianoPath/actions/runs/39173459709).
+  [39294579913](https://github.com/lxmtuu/PianoPath/actions/runs/39294579913) — **đính chính:** bản trước trích `39173459709`, nhưng đó là run **bị huỷ** bởi lượt push sau,
+  không phải bằng chứng PASS.
 - **Lượt CI xanh đầu tiên của đợt:** run [39192917993](https://github.com/lxmtuu/PianoPath/actions/runs/39192917993)
   — `static`, `test`, `build`, `keyboard-light` đều **pass**; N7 (fade trail/nhãn/shimmer), N11
   (MotionBudget + quét 14 preset) và pin damper D2 đều đã qua Verification suite thật. Trước đó mọi lượt đỏ đều vì
@@ -473,7 +477,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N12 | Ma trận capture từng option | 87 ID có ảnh; CI xanh | L | audit |
 | N13 | Lookahead stage ↔ AR | **đã chốt (b)**: AR có slider riêng 1–6 s; công thức stage ở §3.6 | S | tài liệu này |
 | N14 | Nhãn nốt AR phẳng | **đã chốt**: phẳng bỏ nhãn có chủ ý + tooltip; còn ảnh 3 nền | S | tài liệu này |
-| N15 | Nợ tài liệu/trạng thái | **đã xong phần CI**: tool + 3 checker trong làn tĩnh; audit cập nhật | S | tài liệu này |
+| N15 | Nợ tài liệu/trạng thái | **đã xong**: tool + 3 checker trong làn tĩnh; audit đối chiếu CI 2026-10-20, hết câu "chờ chạy" | S | tài liệu này |
 | D0 | CC64 liên tục vào hình | **đã xong**: 34 mức từ 128 giá trị CC64 (51 mẫu trên thang 0..1), dead zone 25%, đầy ở 50%, mượt 55/75 ms | S | DAMPER §7 |
 | D1 | Lõi sáng chạy theo lift | **đã xong**: 8,2 px @45°, 6,6 px @90°; vạch WPF 6 px, halo GPU 5 px | S | DAMPER §7 |
 | D2 | 88 ô LED + tick theo phím | **đã xong**: ô `0,70/0,46` phím, thân `0,05+0,42v`, mép `0,16+0,54v`; pin co theo phép chiếu (`≤15 px`, `≤2,4 px` ở 1080p) + crossbar, τ 30/40 ms; tối đa 265 quad, tắt ở Lite | M | DAMPER §7 |
@@ -515,7 +519,7 @@ khung hình.
 | Bề rộng/chiều cao/tốc độ/caps/flash life | mã nguồn, đọc trực tiếp | **cao** (số nguyên văn) |
 | Số px và bảng nốt dài | công thức + layout 88 phím, 1 DIP = 1 px | **trung bình** (tính toán, chưa chụp) |
 | AR phẳng thiếu hiệu ứng, release 0,35 vs 3,0 s | nhánh code + hằng số | **cao** |
-| 87 mục/24 family/6-14-4/Unsupported | `EFFECT-COVERAGE-AUDIT.md` + `EffectContracts.cs` | **trung bình–cao** (tài liệu, chưa chạy lại CI) |
+| 87 mục/24 family/6-14-4/Unsupported | `EFFECT-COVERAGE-AUDIT.md` + `EffectContracts.cs` | **cao** (đối chiếu CI run 39294579913, 2026-10-20) |
 | Hiệu năng p95 | benchmark GPU một nốt tĩnh; WPF/AR chưa đo | **thấp cho khung hình** |
 | "Nhìn thấy" khác nhau | suy ra từ hình học, không có ảnh chụp | **trung bình** |
 
