@@ -87,6 +87,78 @@ class BenchMatrixTableTests(unittest.TestCase):
         self.assertIn("WARP forced", b.describe({**run_of(), "warp": True}))
         self.assertEqual("", b.describe(None))
 
+    # ---- the WPF half, read back from the --verify log ----
+
+    @staticmethod
+    def wpf_line(rows=None):
+        rows = rows if rows is not None else [
+            f"{height}p·{count}: {2 + height / 1000:.2f} / {3 + height / 1000:.2f} ms"
+            for height in (720, 1080, 1440) for count in (1, 20, 60)]
+        return ("PASS WPF note density (N9): median draw time of the software roll per cell, "
+                "plain / fx — " + ", ".join(rows)
+                + ". Every cell drew its bars and the effects added pixels; "
+                  "the numbers are reported for the plan's table, not judged.")
+
+    def test_the_wpf_line_reads_back_as_eighteen_cells(self):
+        cells = b.parse_log(self.wpf_line())
+        self.assertEqual(18, len(cells))
+        self.assertEqual(2.72, cells[(720, 1, False)]["p95"])
+        self.assertEqual(3.72, cells[(720, 1, True)]["p95"])
+        verified = "NOTE something\n" + self.wpf_line() + "\nPASS other\n"
+        self.assertEqual(cells, b.parse_log(verified))
+
+    def test_the_wpf_table_uses_medians_not_p95(self):
+        text = b.table(b.parse_log(self.wpf_line()), header=b.WPF_HEADER).strip().splitlines()
+        self.assertIn("median", text[0])
+        self.assertNotIn("p95", text[0])
+        self.assertEqual("| 1080p | 1 | 3,08 | 4,08 | 245,1 |", text[5])
+
+    def test_a_log_without_the_line_is_refused(self):
+        for broken in ("", "NOTE unrelated", "PASS Phase 1 visual review: 48 images"):
+            with self.assertRaises(b.MatrixError) as caught:
+                b.parse_log(broken)
+            self.assertIn("not a --verify log", str(caught.exception))
+
+    def test_a_log_with_two_runs_is_refused(self):
+        with self.assertRaises(b.MatrixError) as caught:
+            b.parse_log(self.wpf_line() + "\n" + self.wpf_line())
+        self.assertIn("2", str(caught.exception))
+
+    def test_a_ragged_wpf_line_is_refused(self):
+        rows = [f"{height}p·{count}: 4.00 / 5.00 ms"
+                for height in (720, 1080, 1440) for count in (1, 20, 60)]
+        with self.assertRaises(b.MatrixError) as caught:
+            b.parse_log(self.wpf_line(rows[:-1]))
+        self.assertIn("1440p/60", str(caught.exception))
+        with self.assertRaises(b.MatrixError) as caught:
+            b.parse_log(self.wpf_line(rows + ["2160p·1: 4.00 / 5.00 ms"]))
+        self.assertIn("2160p/1", str(caught.exception))
+
+    def test_a_zero_draw_time_is_refused(self):
+        rows = [f"{height}p·{count}: 4.00 / 5.00 ms"
+                for height in (720, 1080, 1440) for count in (1, 20, 60)]
+        rows[0] = "720p·1: 0.00 / 5.00 ms"
+        with self.assertRaises(b.MatrixError) as caught:
+            b.parse_log(self.wpf_line(rows))
+        self.assertIn("was not drawn", str(caught.exception))
+
+    def test_cli_reads_a_log_and_names_it_software(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "keyflow-verification.log"
+            log.write_text("NOTE noise\n" + self.wpf_line() + "\n", encoding="utf-8")
+            out = Path(directory) / "wpf.md"
+            self.assertEqual(0, b.main(["--from-log", str(log), "--out", str(out)]))
+            self.assertIn("| 720p | 1 | 2,72 | 3,72 |", out.read_text(encoding="utf-8"))
+
+    def test_cli_refuses_two_sources_at_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            log = Path(directory) / "log.txt"
+            log.write_text(self.wpf_line(), encoding="utf-8")
+            matrix = Path(directory) / "m.json"
+            matrix.write_text(json.dumps(run_of()), encoding="utf-8")
+            with self.assertRaises(SystemExit):
+                b.main([str(matrix), "--from-log", str(log)])
+
     def test_cli_writes_the_table_and_refuses_a_broken_file(self):
         with tempfile.TemporaryDirectory() as directory:
             good = Path(directory) / "notes-matrix.json"

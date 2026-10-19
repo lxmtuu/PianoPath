@@ -352,9 +352,16 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Nhánh WPF: đã đo tự động.** `VerifyWpfNoteDensity` (chạy trong mọi lượt `--verify`) dựng sân khấu phần mềm ở
   **cùng 18 ô** (3 cỡ × 1/20/60 nốt × plain/fx), tắt shading bàn phím, ambient, impact và hạt y như bản GPU, rồi lấy
   **median của 8 lượt vẽ** (3 lượt warm-up trước). Kết quả in ra một dòng `PASS wpf note density` với 18 cặp số
-  plain/fx. Dòng đó nằm trong artifact `keyflow-verification-log` của lượt CI (job `build`, tải ở trang run rồi
-  tìm `wpf note density`); bảng dưới điền được ngay từ đó — nhưng là số của **runner phần mềm**, chỉ dùng để so
-  tương đối giữa các ô và giữa các lần chạy, không phải số của card đồ hoạ.
+  plain/fx. Dòng đó nằm trong artifact `keyflow-verification-log` của lượt CI (job `build`). Không phải grep tay:
+
+  ```
+  gh run download <run-id> -n keyflow-verification-log -D logs
+  python3 tools/bench_matrix_table.py --from-log logs/keyflow-verification.log
+  ```
+
+  in ra cùng 9 dòng với tiêu đề `plain median / fx median`, và script **từ chối** nếu log không có dòng đó, có hai
+  lượt chạy trong một file, hay thiếu/thừa ô — nên bảng không thể được điền bằng một nửa phép đo. Đây là số của
+  **runner phần mềm**, chỉ dùng để so tương đối giữa các ô và giữa các lần chạy, không phải số của card đồ hoạ.
 - **Kiểm đi kèm (không phải kiểm thời gian):** mỗi ô phải thật sự vẽ nốt (>20 px đổi) và bản `fx` phải **thêm** pixel
   so với `plain` — nếu không thì một trong ba hiệu ứng đang không được vẽ. Thời gian chỉ được **báo**, không được
   xét đạt/không đạt, vì runner CI dao động lớn hơn chênh lệch giữa hai ô cạnh nhau.
