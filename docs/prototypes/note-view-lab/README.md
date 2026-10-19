@@ -15,10 +15,13 @@ hiệu ứng mà panel phẳng bỏ qua.
 ## Chạy
 
 ```bash
-# từ thư mục gốc repo — phục vụ cả repo để link tới docs/ hoạt động
-python3 -m http.server 8081 --bind 0.0.0.0
-# mở http://localhost:8081/docs/prototypes/note-view-lab/
+# từ thư mục gốc repo — một cổng cho cả ba lab, link tới docs/ hoạt động
+python3 tools/serve_prototypes.py            # --port 8090 nếu 8080 đang bận
+# mở http://localhost:8080/note-view-lab/
 ```
+
+Mở thẳng `index.html` bằng trình duyệt cũng chạy, nhưng khi đó các link `../../*.md` và
+`../particle-motion-lab/` sẽ không mở được — server ở trên tồn tại chính vì thế.
 
 Trang tĩnh, không cần build, không gọi mạng.
 

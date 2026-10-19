@@ -359,7 +359,9 @@ ghim bằng test và checker từ D0/D1.
 ```bash
 # mở trực tiếp
 docs/prototypes/particle-motion-lab/damper.html
-# hoặc qua server đang chạy
+# hoặc qua server của repo (một cổng cho cả ba lab)
+python3 tools/serve_prototypes.py
+# rồi mở
 http://localhost:8080/damper.html
 ```
 

@@ -1,7 +1,8 @@
 # Particle Motion Lab
 
 Prototype thiết kế cho phần **chuyển động hạt** của Keyflow. Mở `index.html` bằng trình duyệt là chạy;
-không cần build, không cần server, không có dependency.
+không cần build, không cần server, không có dependency. Muốn đi qua lại giữa các lab và mở các link tài liệu
+thì chạy `python3 tools/serve_prototypes.py` từ gốc repo rồi vào `http://localhost:8080/`.
 
 Lab này **mô phỏng lại** công thức trong `Gpu/GpuStageSimulation.Step()` (và bản WPF trong
 `Stage/PianoStage.Advance()`) bằng JavaScript, để so sánh nhanh trước khi sửa mã C#. Nó **không phải**
