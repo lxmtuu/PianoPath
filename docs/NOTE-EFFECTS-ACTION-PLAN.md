@@ -508,7 +508,8 @@ khung hình.
   để test 88/76/61 phím × 900p/1080p/1440p × `NoteWidth` 30–100; AR flat/projected dùng cùng hàm.
 - **Golden frames:** 6 style × 3 mức `NoteRefraction`; 4 đoạn MIDI (2/3/4/6 s) ở 3 khung; AR phẳng vs 3D.
 - **Ngân sách:** **đã làm** — `tools/note_effects_report.py --check` đọc `EffectBudget.cs`; khối `VerifyEffectBudget` đo 16 nốt cùng lúc trên simulation thật.
-- **Hiệu năng:** p95 khung hình 12 tổ hợp; ghi rõ CPU/GPU, WARP hay hardware.
+- **Hiệu năng:** p95 khung hình **18 ô** của N9 (3 cỡ × 1/20/60 nốt × plain/fx) cộng các scene `--bench`
+  thường; luôn ghi rõ CPU/GPU, WARP hay hardware — `bench_matrix_table.py` in sẵn dòng đó.
 - **AR/recording:** ảnh capture từng option; video 10 s có tay; bản ghi WPF fallback với 3 toggle GPU-only.
 - **Tài liệu:** `python3 tools/note_effects_report.py --check` trong CI tĩnh cùng `tools/check_sources.py`.
 
