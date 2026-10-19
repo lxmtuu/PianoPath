@@ -50,7 +50,9 @@ public partial class MainWindow
         if (string.IsNullOrWhiteSpace(videoPath) || !File.Exists(videoPath)) missing.Add(Loc.T("choose a camera video file (Camera page)"));
         var calibration = _arCalibration?.Current;
         if (calibration is null) missing.Add(Loc.T("calibrate the keyboard on that source (Camera page)"));
-        if (missing.Count > 0) { SetArExportStatus(Loc.F("Not yet: {0}.", string.Join("; ", missing))); return; }
+        // Naming the calibration in the guard shows the compiler what the list above already proves; the
+        // condition is redundant at runtime because a null calibration always adds its own line to `missing`.
+        if (missing.Count > 0 || calibration is null) { SetArExportStatus(Loc.F("Not yet: {0}.", string.Join("; ", missing))); return; }
 
         var dialog = new SaveFileDialog
         {

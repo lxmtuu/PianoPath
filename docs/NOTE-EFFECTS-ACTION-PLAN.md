@@ -181,7 +181,7 @@ shader thủ tục. Bảng này chốt phần **cố ý khác**, để lần sau
 
 | Lớp | WPF | GPU | Khác biệt |
 |---|---|---|---|
-| Khúc xạ `NoteRefraction` | viền fringe vẽ thật (`PianoStage.cs:1496–1499`) + sheen (`:1668`) | `NoteB.w` nhân sheen/spec ở 4 nhánh vật liệu (`StageShaders.hlsl:1128/1145/1169/1215`) | **chỉ hình viền là WPF-only**; tham số vẫn đổi cả hai |
+| Khúc xạ `NoteRefraction` | viền fringe vẽ thật (`PianoStage.cs:1496–1499`) + sheen (`:1668`) | `NoteB.w` nhân sheen/spec ở 4 nhánh Solid/Satin/Glass/Gem (`StageShaders.hlsl:1128/1145/1169/1215`); **Crystal Outline bỏ hẳn** (chỉ đọc `NoteB.y`/`NoteB.x`) | **cả tham số**: Crystal Outline chỉ WPF dùng; bốn vật liệu kia đổi cả hai, chỉ *hình viền* là WPF-only |
 | Satin `NoteSatin` | `DrawSatinNote` — "xấp xỉ GPU" (`:1641`) | dựng thủ tục trong `ShadeNoteMaterial` | cố ý: brush không làm được grain của shader |
 | Texture lửa/giấy | gradient + grain (`:1396–1399`) | thủ tục | cố ý |
 | Nhãn nốt trên stage | chữ WPF | sprite atlas (`GpuStageSimulation.Effects.cs:36`), cùng ngưỡng 11×15 px | cùng ngưỡng |
@@ -325,9 +325,11 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Hiện tượng:** WPF vẽ viền khúc xạ màu cho Crystal/Glass (`PianoStage.cs:1416`); shader GPU **không** dùng
   `NoteRefraction` cho viền này — hợp đồng ghi rõ "WPF paints the crystal's refraction fringe; the GPU branch does
   not consume it" (`EffectContracts.cs:345`). Texture lửa/satin cũng là hai cách dựng khác nhau.
-- **Đã chốt: khác có chủ ý** — bảng §3.6. `NoteRefraction` **vẫn** đổi cả hai bên (GPU dùng `NoteB.w` cho sheen
-  và spec ở bốn nhánh vật liệu), chỉ **hình viền** là WPF-only. Không thêm fringe vào shader: nó sẽ đổi hình của
-  preset đã duyệt để đổi lấy một chi tiết chỉ thấy khi phóng to.
+- **Đã chốt: khác có chủ ý** — bảng §3.6. Ở Solid/Satin/Glass/Gem, `NoteRefraction` **đổi cả hai bên** (GPU đọc
+  `NoteB.w` cho sheen/spec), chỉ **hình viền** là WPF-only. Riêng **Crystal Outline**, GPU bỏ hẳn tham số — nhánh đó
+  chỉ đọc `NoteB.y` cho viền và `NoteB.x` cho tint — còn WPF vẫn vẽ cả fringe lẫn sheen; `VerificationSuite.Gpu`
+  ghim đúng điều này (`crystalWithRefraction == crystal2D`). Không thêm fringe vào shader: nó sẽ đổi hình của preset
+  đã duyệt để đổi lấy một chi tiết chỉ thấy khi phóng to.
 - **Nghiệm thu:** bảng §3.6 đã có; còn ảnh 6 style × 3 mức `NoteRefraction` trên máy GPU (thủ công).
 - **Cỡ:** S (đã thu về tài liệu) · **Phụ thuộc:** không.
 
@@ -347,8 +349,9 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Nhánh WPF: đã đo tự động.** `VerifyWpfNoteDensity` (chạy trong mọi lượt `--verify`) dựng sân khấu phần mềm ở
   **cùng 18 ô** (3 cỡ × 1/20/60 nốt × plain/fx), tắt shading bàn phím, ambient, impact và hạt y như bản GPU, rồi lấy
   **median của 8 lượt vẽ** (3 lượt warm-up trước). Kết quả in ra một dòng `PASS wpf note density` với 18 cặp số
-  plain/fx, nên bảng dưới điền được ngay từ log CI — nhưng là số của **runner phần mềm**, chỉ dùng để so tương đối
-  giữa các ô và giữa các lần chạy, không phải số của card đồ hoạ.
+  plain/fx. Dòng đó nằm trong artifact `keyflow-verification-log` của lượt CI (job `build`, tải ở trang run rồi
+  tìm `wpf note density`); bảng dưới điền được ngay từ đó — nhưng là số của **runner phần mềm**, chỉ dùng để so
+  tương đối giữa các ô và giữa các lần chạy, không phải số của card đồ hoạ.
 - **Kiểm đi kèm (không phải kiểm thời gian):** mỗi ô phải thật sự vẽ nốt (>20 px đổi) và bản `fx` phải **thêm** pixel
   so với `plain` — nếu không thì một trong ba hiệu ứng đang không được vẽ. Thời gian chỉ được **báo**, không được
   xét đạt/không đạt, vì runner CI dao động lớn hơn chênh lệch giữa hai ô cạnh nhau.

@@ -342,7 +342,9 @@ internal static class EffectContractCatalog
         Percentage("NoteGlow", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdge", 0, 200, ArMaterialParameterBindings),
         Percentage("NoteEdgeWidth", 0, 100, ArMaterialParameterBindings),
-        // WPF paints the crystal's refraction fringe; the GPU branch does not consume it. AR binding remains Unverified.
+        // Crystal Outline is the one family where the GPU ignores NoteRefraction: that branch reads NoteB.y for
+        // its rim and NoteB.x for its tint, while WPF draws both a fringe and a sheen from the same setting.
+        // Gem, Solid, Satin and Glass do read NoteB.w, so this profile belongs to the family, not to the parameter.
         Percentage("NoteRefraction", 0, 100, WpfOnlyRefractionBindings),
     });
 
