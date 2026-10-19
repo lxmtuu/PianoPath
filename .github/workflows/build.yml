@@ -959,12 +959,15 @@ jobs:
             ${{ runner.temp }}/keyflow-prism-verification.log
             ${{ runner.temp }}/keyflow-arvideo-failure-*.avi
           if-no-files-found: warn
+          overwrite: true
 
       # Human review gate: the fixture is rendered through the real WPF stage and the app's GPU renderer
       # forced to WARP. The 960×540 files are 2×2 averages of the matching 1080p pixels, not fresh layouts.
       # Arena branch pushes also trigger a PR run for the same revision; keep this 1+ GiB review bundle on
-      # the PR run (and main/manual runs), not twice for every commit. Two days leaves a useful review window
-      # without letting repeated WARP captures exhaust the repository's Actions artifact quota.
+      # the PR run (and main/manual runs), not twice for every commit. A session pushes a dozen commits an
+      # hour, so the artifact is overwritten rather than accumulated: one review window, always the newest
+      # revision. Accumulating one 1.4 GB bundle per commit is what exhausted the repository's storage
+      # quota and started failing every upload from the verification log on.
       - name: Publish Phase 1 visual review
         if: always() && (github.event_name != 'push' || github.ref == 'refs/heads/main')
         uses: actions/upload-artifact@v7
@@ -972,6 +975,7 @@ jobs:
           name: phase1-visual-review
           path: ${{ runner.temp }}/phase1-visual-review
           if-no-files-found: warn
+          overwrite: true
           retention-days: 2
 
       # The perf gate (P3 #3): --bench runs the app's own render loop at 1080p for two budgeted scenes (and, with --bench-ar,
@@ -1308,6 +1312,7 @@ jobs:
             docs/previews/presets.jpg
             docs/previews/note-styles.jpg
           if-no-files-found: warn
+          overwrite: true
           retention-days: 2
 
       # Only when the second render disagreed with the first: both pictures, so the difference can be
