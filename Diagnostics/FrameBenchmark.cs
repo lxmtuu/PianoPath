@@ -60,9 +60,14 @@ internal static class FrameBenchmark
         var adapterRequest = Value(args, "--bench-adapter=");
         // --bench-ar adds the AR overlay scene to the run (and is a run of its own, with that one scene, when --bench is not there).
         var withAr = args.Contains("--bench-ar");
-        IReadOnlyList<FrameBudget> budgets = withAr
-            ? (args.Contains("--bench") || args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal)) ? FrameBudget.AllWithAr : [FrameBudget.ArLook])
-            : FrameBudget.All;
+        var gate = args.Contains("--bench") || args.Any(argument => argument.StartsWith("--bench=", StringComparison.Ordinal));
+        // --bench-detail adds N9's eighteen note-density scenes: a matrix, not a gate, so it is never in the CI
+        // run. Alone it measures only that matrix; beside --bench it runs after the budgeted scenes.
+        var withDetail = args.Contains("--bench-detail");
+        IReadOnlyList<FrameBudget> budgets;
+        if (withDetail && !gate) budgets = FrameBudget.Detail;
+        else if (withDetail) budgets = withAr ? [.. FrameBudget.AllWithAr, .. FrameBudget.Detail] : [.. FrameBudget.All, .. FrameBudget.Detail];
+        else budgets = withAr ? (gate ? FrameBudget.AllWithAr : [FrameBudget.ArLook]) : FrameBudget.All;
 
         var scenes = new List<FrameBenchReport>();
         var notes = MainWindow.CreateDemoSong();
@@ -127,6 +132,10 @@ internal static class FrameBenchmark
         var settings = string.IsNullOrWhiteSpace(budget.Preset)
             ? VisualPresets.CreateDefaultSettings()
             : VisualPresets.FindBuiltIn(budget.Preset)?.Settings.Clone() ?? VisualPresets.CreateDefaultSettings();
+        // A detail cell measures the note layer alone: ambient, impacts and particles are switched off in every
+        // cell, so the difference between "plain" and "fx" is the trail, the ghosts and the landing glow.
+        if (budget.NoteCount > 0) ApplyNoteIsolation(settings, budget.NoteEffects);
+        var sceneNotes = budget.NoteCount > 0 ? DensityNotes(budget, settings) : notes;
         // Note colours are data the stage uploads as a table either way, so the bench uses a fixed ramp
         // instead of reaching into the WPF stage for the user's palette: the frame cost does not depend on it.
         feed.SetLook(GpuLook.From(settings, (pitch, track) => System.Windows.Media.Color.FromRgb((byte)(pitch * 2), (byte)(40 + track * 60), 200), .205, null, overCamera: budget.Camera));
@@ -134,7 +143,12 @@ internal static class FrameBenchmark
         feed.ClearTransient();
         loop.SetEmbedded(true, budget.Width, budget.Height);
         loop.TargetFps = 0; // the loop still does not pace itself while sampling; this keeps it unpaced before and after
-        var transport = new BenchTransport(notes);
+        // A density scene starts its playhead one visible window into the song: the window is exactly how much
+        // music the stage shows above the keys, so the first measured frame already has all N bars on screen
+        // instead of filling up from one while the warm-up runs.
+        // A density cell presses nothing: its bars are the song's, and a press would add live trails and impacts
+        // on top of the layer being measured.
+        var transport = new BenchTransport(sceneNotes, budget.NoteCount > 0 ? VisibleSeconds(budget, settings) : 0, press: budget.NoteCount == 0);
         using var camera = budget.Camera ? new BenchCamera() : null;
         if (camera is not null)
         {
@@ -198,12 +212,65 @@ internal static class FrameBenchmark
     }
 
     /// <summary>
+    /// Seconds of song the stage shows above the keys: the fall height divided by the song's fall speed, with
+    /// the keyboard taking the same share of the frame the layout gives it in every scene.
+    /// </summary>
+    private static double VisibleSeconds(FrameBudget budget, PianoVisualSettings settings)
+    {
+        var speed = Math.Max(1, 258 * settings.NoteFallSpeed / 550);
+        return Math.Max(1, budget.Height * (1 - .205)) / speed;
+    }
+
+    /// <summary>
+    /// N simultaneous bars, repeated far past any measurement window. A bar is visible for
+    /// <see cref="VisibleSeconds"/> seconds, so bars spaced that window apart over N slices fill it exactly;
+    /// pitches walk upward from C3 so every bar is a different key. The notes are long enough to read as
+    /// bars and short enough not to overlap the next one on the same key.
+    /// </summary>
+    private static IReadOnlyList<NoteEvent> DensityNotes(FrameBudget budget, PianoVisualSettings settings)
+    {
+        var count = Math.Max(1, budget.NoteCount);
+        var spacing = Math.Max(.02, VisibleSeconds(budget, settings) / count);
+        var duration = Math.Max(.05, Math.Min(spacing * .9, 4));
+        var cycle = count * spacing;
+        var notes = new List<NoteEvent>(count * 12);
+        for (var repeat = 0; repeat < 12; repeat++)
+            for (var i = 0; i < count; i++)
+                notes.Add(new NoteEvent { Pitch = 48 + i, Start = repeat * cycle + i * spacing, Duration = duration, Velocity = 90 });
+        return notes;
+    }
+
+    /// <summary>
+    /// Turns everything except the note layer off, then sets the three note effects for the cell. The toggles
+    /// are the preset's own, so a "plain" cell is the same look with its decorations removed, not a new look.
+    /// </summary>
+    private static void ApplyNoteIsolation(PianoVisualSettings settings, bool effects)
+    {
+        settings.ParticleAmount = 0;
+        settings.ShowImpactFlash = false;
+        settings.ShowImpactRings = false;
+        settings.ImpactMorph = "None";
+        settings.ReleaseEffect = "None";
+        settings.BackgroundMotion = "None";
+        settings.ShowStars = false; settings.ShowPetals = false; settings.ShowEmbers = false;
+        settings.ShowFlame = false; settings.ShowWisps = false; settings.ShootingStars = false;
+        settings.NoteShimmer = false;
+        settings.HoldBreath = false; settings.HaloPulse = false; settings.FallingPulse = false; settings.HoldColorCycle = false;
+        settings.FallingTrail = effects ? "Glow" : "None";
+        settings.FallingTrailIntensity = effects ? 70 : 0;
+        settings.FallingGhost = effects;
+        settings.FallingGhostAmount = effects ? 60 : 0;
+        settings.NoteLandingGlow = effects;
+    }
+
+    /// <summary>
     /// Plays the demo song into the feed on wall-clock time, the way the UI thread does: the render thread
     /// only extrapolates the playhead for up to 50 ms between updates, so a bench that set the position once
     /// would measure an empty stage. Notes crossing the playhead fire an impact and hold their key, which is
-    /// what puts bursts, rings, flashes and trails into the measured frames.
+    /// what puts bursts, rings, flashes and trails into the measured frames. <paramref name="startAt"/> puts the
+    /// playhead inside a song that has already started, which is how a density scene opens at full count.
     /// </summary>
-    private sealed class BenchTransport(IReadOnlyList<NoteEvent> notes)
+    private sealed class BenchTransport(IReadOnlyList<NoteEvent> notes, double startAt = 0, bool press = true)
     {
         private readonly Stopwatch _clock = Stopwatch.StartNew();
         private readonly HashSet<int> _pressed = new();
@@ -213,11 +280,12 @@ internal static class FrameBenchmark
 
         internal void Advance(GpuStageFeed feed)
         {
-            var time = _clock.Elapsed.TotalSeconds;
+            var time = _clock.Elapsed.TotalSeconds + startAt;
             if (time >= _length) { time %= _length; Restart(); }
             while (_next < notes.Count && notes[_next].Start <= time)
             {
                 var note = notes[_next++];
+                if (!press) continue;
                 feed.Impact(note.Pitch, .9);
                 feed.LiveNote(note.Pitch, true, .9);
                 _pressed.Add(note.Pitch);

@@ -336,10 +336,33 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
 - **Hiện tượng:** chỉ có benchmark GPU cho **một nốt tĩnh** (p95 0,02356 / 0,02688 / 0,0268 ms cho Solid/Gem/
   Crystal); WPF, AR, recording và nhiều nốt đồng thời đều `Unmeasured`.
 - **Nguồn:** `docs/NOTE-MATERIAL-GPU-BENCHMARK.md`; `EffectContracts.cs` (`GpuStage = Measured`, còn lại `Unmeasured`).
-- **Việc cần làm:** thêm probe khung hình: 3 độ phân giải × 1/20/60 nốt × (trail/ghost/landing bật/tắt), đo p95
-  CPU+GPU; ghi vào contract. Đặc biệt kiểm tra 4 lớp bloom của WPF (mỗi nốt 4 hình bo tròn, :1290–1295).
-- **Nghiệm thu:** bảng p95 cho 12 tổ hợp; xác định ngưỡng số nốt mà WPF tụt dưới 60 fps.
-- **Cỡ:** M · **Phụ thuộc:** không.
+- **Đã làm — kịch bản đo có sẵn:** `--bench-detail` chạy **18 ô** = 3 cỡ (720p/1080p/1440p) × 1/20/60 nốt ×
+  (plain / fx, tức trail Glow + ghost + landing glow). Mỗi ô tắt hết ambient, impact, hạt và **không bấm phím**, nên
+  hiệu số giữa hai ô chính là lớp nốt. Playhead mở ở đúng một cửa sổ nhìn (`hitY / tốc độ rơi`) để khung đầu tiên
+  đã có đủ N thanh, không phải chờ lấp đầy. Các ô này **không có ngưỡng** (`P95LimitMs = 0`) nên không bao giờ làm
+  đỏ CI, và **không nằm trong lượt `--bench` của CI**.
+- **Cách chạy (máy có GPU):**
+  `PianoPath.exe --bench-detail --bench=240 --bench-out=notes-matrix.json`
+  rồi đọc p95 từng ô trong file (hoặc các dòng `NOTE perf: notes-…` trong console).
+- **Còn lại:** điền bảng p95 vào đây sau khi chạy trên máy thật (WARP của CI không thay được số phần cứng), và đo
+  nhánh **WPF** bằng `--verify` thủ công vì kịch bản này đo engine GPU. Ngưỡng "WPF tụt dưới 60 fps ở bao nhiêu nốt"
+  vẫn phải lấy từ máy thật.
+- **Nghiệm thu:** bảng dưới đây đủ 18 ô; hàng `fx` cao hơn `plain` ở cùng số nốt (nếu không, một trong ba hiệu ứng
+  đang không được vẽ).
+
+| Cỡ | Nốt | plain p95 (ms) | fx p95 (ms) | fps ở fx |
+|---|---|---|---|---|
+| 720p | 1 | — | — | — |
+| 720p | 20 | — | — | — |
+| 720p | 60 | — | — | — |
+| 1080p | 1 | — | — | — |
+| 1080p | 20 | — | — | — |
+| 1080p | 60 | — | — | — |
+| 1440p | 1 | — | — | — |
+| 1440p | 20 | — | — | — |
+| 1440p | 60 | — | — | — |
+
+- **Cỡ:** M (phần mã đã xong; phần số liệu cần máy GPU) · **Phụ thuộc:** không.
 
 #### N10. AR vẽ hiệu ứng lên tay người chơi
 
@@ -413,6 +436,10 @@ Hệ quả cho N8/N13/N14: ba mục này **không cần làm cho giống**; vi�
   (note-view, damper, particle-motion) ngay cạnh `check_sources.py`, nên một hằng số trôi hoặc một lab lệch shader
   làm đỏ làn nhanh trước khi build. `EFFECT-COVERAGE-AUDIT.md` đã cập nhật các câu "đang chờ CI" bằng run
   [39173459709](https://github.com/lxmtuu/PianoPath/actions/runs/39173459709).
+- **Lượt CI xanh đầu tiên của đợt:** run [39192917993](https://github.com/lxmtuu/PianoPath/actions/runs/39192917993)
+  — `static`, `test`, `build`, `keyboard-light` đều **pass**; N7 (fade trail/nhãn/shimmer), N11
+  (MotionBudget + quét 14 preset) và pin damper D2 đều đã qua Verification suite thật. Trước đó mọi lượt đỏ đều vì
+  **hết quota artifact** (38 bản review × 1,4 GB); `overwrite: true` nay giữ mỗi artifact một bản.
 - **Còn lại:** cập nhật audit sau mỗi lần CI đổi kết quả; bảng đếm theo ngày vẫn cần một lượt rà.
 - **Cỡ:** S.
 
@@ -430,7 +457,7 @@ Ngoài 15 việc trên, đây là các việc đã có kế hoạch ở tài li�
 | N6 | GPU-only effects khi ghi/ở WPF | **đã xong (b)**: cảnh báo ở dòng recording + log; 3 Fact + một assert `--verify` | M | tài liệu này |
 | N7 | Fade mép trên/motion blur | **đã xong phần fade**: 6% roll, WPF mask + GPU shader, trail/nhãn/shimmer cùng hệ số; test + tool ghim; motion blur để sau | S | tài liệu này |
 | N8 | Refraction/texture parity | **đã chốt: khác có chủ ý** (§3.6); còn ảnh nghiệm thu | S | tài liệu này |
-| N9 | Benchmark khung hình nốt/hiệu ứng | p95 12 tổ hợp, ngưỡng 60 fps | M | tài liệu này |
+| N9 | Benchmark khung hình nốt/hiệu ứng | **đã có kịch bản**: `--bench-detail`, 18 ô, không gate; còn số p95 trên máy GPU | M | tài liệu này |
 | N10 | Occlusion bàn tay AR | không vẽ xuyên tay | L | AR roadmap |
 | N11 | Reduced Motion/giảm flash toàn cục | **đã xong**: hệ thống có sẵn từ Phase 2; P1 chốt tần số pulse 1,67 Hz + test toàn bộ preset | S | master roadmap |
 | N12 | Ma trận capture từng option | 87 ID có ảnh; CI xanh | L | audit |

@@ -136,6 +136,37 @@ public class FrameBudgetTests
         Assert.NotNull(FrameBudget.Find(name));
     }
 
+    // ---------------------------------------------------------------------------------------------
+    // N9: the note-density matrix
+    // ---------------------------------------------------------------------------------------------
+
+    [Fact]
+    public void The_detail_matrix_is_three_sizes_by_three_counts_by_two_effect_states()
+    {
+        Assert.Equal(18, FrameBudget.Detail.Count);
+        Assert.Equal(18, FrameBudget.Detail.Select(scene => scene.Scene).Distinct().Count());
+        Assert.Equal(3, FrameBudget.Detail.Select(scene => (scene.Width, scene.Height)).Distinct().Count());
+        Assert.Equal(new[] { 1, 20, 60 }, FrameBudget.Detail.Select(scene => scene.NoteCount).Distinct().OrderBy(count => count));
+        Assert.Equal(9, FrameBudget.Detail.Count(scene => scene.NoteEffects));
+        Assert.Equal(9, FrameBudget.Detail.Count(scene => !scene.NoteEffects));
+        Assert.All(FrameBudget.Detail, scene => Assert.True(scene.Description.Length > 40));
+        // A detail cell is a measurement, not a gate: a budget of zero can never pass or fail a build.
+        Assert.All(FrameBudget.Detail, scene => Assert.Equal(0, scene.P95LimitMs));
+        Assert.All(FrameBudget.Detail, scene => Assert.Equal(FrameVerdict.NotApplicable, scene.Judge(false, 4, "GeForce").Verdict));
+    }
+
+    [Fact]
+    public void A_detail_scene_is_found_by_its_id_and_never_by_the_gate_lookup()
+    {
+        Assert.Equal(60, FrameBudget.FindDetail(" NOTES-1080P-60-FX ")!.NoteCount);
+        Assert.True(FrameBudget.FindDetail("notes-1080p-60-fx")!.NoteEffects);
+        Assert.False(FrameBudget.FindDetail("notes-1080p-60-plain")!.NoteEffects);
+        Assert.Null(FrameBudget.FindDetail("notes-1080p-42-fx"));
+        // The gate's own lookup must not start resolving the matrix: its table is what CI applies budgets from.
+        Assert.Null(FrameBudget.Find("notes-1080p-60-fx"));
+        Assert.Null(FrameBudget.FindDetail("heavy"));
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
